@@ -5,13 +5,9 @@ import { afterAll, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { installChangeFeed } from "../packages/db/src/change-feed.js";
 import { useVenueDb } from "../packages/db/src/testing/venue-db.js";
-import {
-  applyMigrations,
-  manifestSets,
-  migrationOptionsFor,
-} from "../packages/migrations/src/index.js";
+import { applyMigrations } from "../packages/migrations/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { historicalSet } from "./fixtures/a760-history/historical-set.mjs";
+import { historicalSet, historicalSets } from "./fixtures/a760-history/historical-set.mjs";
 import { appendPreReplacementRecord } from "../packages/fiscal-verifactu/test/pre-replacement-fixture.js";
 import { openFilingCase, recordCaseEvent } from "../packages/fiscal-verifactu/src/filing-cases.js";
 import {
@@ -32,7 +28,7 @@ const journal = JSON.parse(readFileSync(join(source, "meta/_journal.json"), "utf
 const target = journal.entries.findIndex((entry) => entry.tag === "0007_certificate_installs");
 if (target === -1)
   throw new Error("migration 0007_certificate_installs is not in the fiscal journal");
-const options = migrationOptionsFor(manifestSets(), null);
+const options = historicalSets();
 
 const scratch = mkdtempSync(join(tmpdir(), "waitron-certificate-upgrade-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));

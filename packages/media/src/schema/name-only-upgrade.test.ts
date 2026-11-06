@@ -3,15 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { menuPublications, menuVersionImages, menuVersions, sections } from "@waitron/catalogue";
 import {
-  CATALOGUE_MIGRATIONS,
-  menuPublications,
-  menuVersionImages,
-  menuVersions,
-  sections,
-} from "@waitron/catalogue";
-import {
-  CORE_MIGRATIONS,
   catalogues,
   installChangeFeed,
   openVenueDatabase,
@@ -21,7 +14,6 @@ import {
 } from "@waitron/db";
 import { applyMigrations, type VenueMigrationOptions } from "@waitron/migrations";
 import { historicalSet } from "../../../../scripts/fixtures/a760-history/historical-set.mjs";
-import { MEDIA_MIGRATIONS } from "../migrations.js";
 import { MEDIA_CHANGE_SOURCES } from "../module.js";
 
 /**
@@ -58,9 +50,9 @@ const db = (): Database => store!.venue;
 
 function setsUpTo(mediaFolder: string): VenueMigrationOptions[] {
   return [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    { ...MEDIA_MIGRATIONS, migrationsFolder: mediaFolder },
+    historicalSet("core"),
+    historicalSet("catalogue"),
+    { ...historicalSet("media"), migrationsFolder: mediaFolder },
   ];
 }
 

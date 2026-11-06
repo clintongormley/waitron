@@ -6,8 +6,8 @@ import { afterAll, expect, it } from "vitest";
 import { openVenueDatabase, type Database } from "@waitron/db";
 import { isAppError, sqliteFailureOf } from "@waitron/shared";
 import { applyMigrations } from "./apply.js";
-import { manifestSets, migrationOptionsFor, type VenueMigrationOptions } from "./manifest.js";
-import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
+import type { VenueMigrationOptions } from "./manifest.js";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const OPEN_DASHBOARD = "dddddddd-0000-4000-8000-000000000001";
 const OPEN_FILING = "dddddddd-0000-4000-8000-000000000002";
@@ -38,7 +38,7 @@ function coreBeforeRebuild(core: VenueMigrationOptions): VenueMigrationOptions {
   expect(journal.entries[rebuild + 1]?.tag).toMatch(/_incident_backup_source_restore_index$/);
   journal.entries = journal.entries.slice(0, rebuild);
   writeFileSync(path, JSON.stringify(journal));
-  // Today's append-only list names tables later migrations create; keep only the cut's own.
+  // The set's append-only list names tables later migrations create; keep only the cut's own.
   const created = new Set(
     journal.entries.flatMap(({ tag }) =>
       [...readFileSync(join(staged, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE `(\w+)`/g)].map(
@@ -68,12 +68,11 @@ function insertIncident(db: Database, id: string, source: string, acknowledgedAt
 }
 
 async function venueBeforeRebuild() {
-  const sets = migrationOptionsFor(manifestSets(), null);
-  const current = sets.find((set) => set.migrationsTable === "__drizzle_migrations_db")!;
-  const core = { ...current, migrationsFolder: historicalSet("core").migrationsFolder };
+  const sets = historicalSets();
+  const core = sets.find((set) => set.name === "core")!;
   const directory = scratchDir("wt-incident-source-venue-");
   await applyMigrations(directory, [coreBeforeRebuild(core)]);
-  return { directory, sets: sets.map((set) => (set === current ? core : set)) };
+  return { directory, sets };
 }
 
 it("carries open and handled incidents across the rebuild and the index's return in one start", async () => {

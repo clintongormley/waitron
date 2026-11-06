@@ -5,13 +5,9 @@ import { afterAll, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { installChangeFeed } from "../packages/db/src/change-feed.js";
 import { useVenueDb } from "../packages/db/src/testing/venue-db.js";
-import {
-  applyMigrations,
-  manifestSets,
-  migrationOptionsFor,
-} from "../packages/migrations/src/index.js";
+import { applyMigrations } from "../packages/migrations/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { historicalSet } from "./fixtures/a760-history/historical-set.mjs";
+import { historicalSet, historicalSets } from "./fixtures/a760-history/historical-set.mjs";
 import { appendPreReplacementRecord } from "../packages/fiscal-verifactu/test/pre-replacement-fixture.js";
 import { altaFor, seedSale, seedNode } from "../packages/fiscal-verifactu/src/testing/seed.js";
 
@@ -28,7 +24,7 @@ if (target === -1)
   throw new Error("migration 0006_numerous_roughhouse is not in the fiscal journal");
 const latest = journal.entries[target]!;
 const migration = readFileSync(join(source, `${latest.tag}.sql`), "utf8");
-const options = migrationOptionsFor(manifestSets(), null);
+const options = historicalSets();
 
 for (const kind of ["empty", "populated", "orphan", "unchecked-orphan"] as const) {
   const scratch = mkdtempSync(join(tmpdir(), "waitron-allocation-upgrade-"));

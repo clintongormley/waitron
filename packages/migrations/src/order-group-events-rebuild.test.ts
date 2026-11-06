@@ -5,8 +5,8 @@ import { sql } from "drizzle-orm";
 import { afterAll, expect, it } from "vitest";
 import { captureError, openVenueDatabase, triggerRaised, type Database } from "@waitron/db";
 import { applyMigrations } from "./apply.js";
-import { manifestSets, migrationOptionsFor, type VenueMigrationOptions } from "./manifest.js";
-import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
+import type { VenueMigrationOptions } from "./manifest.js";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const PARTY = "cccccccc-0000-4000-8000-000000000001";
 const EVENT = "cccccccc-0000-4000-8000-000000000002";
@@ -34,7 +34,7 @@ function coreCut(
   const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: { tag: string }[] };
   journal.entries = journal.entries.slice(0, cut(journal.entries));
   writeFileSync(path, JSON.stringify(journal));
-  // Today's append-only list names tables later migrations create; keep only the cut's own.
+  // The set's append-only list names tables later migrations create; keep only the cut's own.
   const created = new Set(
     journal.entries.flatMap(({ tag }) =>
       [...readFileSync(join(staged, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE `(\w+)`/g)].map(
@@ -79,9 +79,8 @@ async function inVenue<T>(directory: string, body: (db: Database) => Promise<T> 
 }
 
 it("keeps an event written before the rebuild, and a start's migrate still refuses its update and delete", async () => {
-  const sets = migrationOptionsFor(manifestSets(), null);
-  const current = sets.find((set) => set.migrationsTable === "__drizzle_migrations_db")!;
-  const core = { ...current, migrationsFolder: historicalSet("core").migrationsFolder };
+  const sets = historicalSets();
+  const core = sets.find((set) => set.name === "core")!;
   const directory = scratchDir("wt-order-group-events-venue-");
   await applyMigrations(directory, [coreBeforeRebuild(core)]);
   const now = new Date().toISOString();
@@ -96,7 +95,7 @@ it("keeps an event written before the rebuild, and a start's migrate still refus
 
   await applyMigrations(
     directory,
-    sets.map((set) => (set === current ? coreBeforeMainBillRetired(core) : set)),
+    sets.map((set) => (set === core ? coreBeforeMainBillRetired(core) : set)),
   );
 
   await inVenue(directory, async (db) => {

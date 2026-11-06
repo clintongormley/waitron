@@ -10,7 +10,6 @@ import { CORE_CHANGE_SOURCES } from "../classification.js";
 import { installChangeFeed } from "../change-feed.js";
 import { runMigrations } from "../migrate.js";
 import type { Database } from "../client.js";
-import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
@@ -32,7 +31,7 @@ async function migrateThroughTiming(db: Database, includeTiming: boolean): Promi
     expect(journal.entries.at(-1)?.tag).toMatch(/_kitchen_timing_inheritance$/);
     if (!includeTiming) journal.entries.pop();
     writeFileSync(path, JSON.stringify(journal));
-    await runMigrations(db, { ...CORE_MIGRATIONS, migrationsFolder: staged });
+    await runMigrations(db, { ...historicalSet("core"), migrationsFolder: staged });
   } finally {
     rmSync(staged, { recursive: true, force: true });
   }
@@ -89,7 +88,7 @@ it("adds timing storage without rewriting populated stations, mappings, keys or 
   );
   installAppendOnlyTriggers(
     db,
-    CORE_MIGRATIONS.appendOnlyTables.filter((table) => tables.includes(table)),
+    historicalSet("core").appendOnlyTables.filter((table) => tables.includes(table)),
   );
   const beforeRows = Object.fromEntries(
     tables.map((name) => [

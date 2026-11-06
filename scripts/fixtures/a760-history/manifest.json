@@ -1,5 +1,6 @@
 {
   "baseCommit": "59be31e3b72b2db0bc5e26f47a1ef305ea052d4c",
+  "oldManifestSha256": "a87a6e3d9070825d468452543e1e99e957b2856802592d6ba226217f926bd7c5",
   "sets": [
     {
       "name": "core",
@@ -215,7 +216,8 @@
         "0204_requested_release.sql": "2c2674ee6bba075f34009d2e5ee318cd09fe3a48f5355aca2b571a1243f4728b",
         "0205_retire_pass_item_marks.sql": "7b4194a74c92b6a0581685d97e140241ac9939928e5dfd95d4813f1d65af6946",
         "0206_retire_away_at.sql": "f36fa2a423d0807207145f52f462d6f61945a68a7fdf425eb23a6e213ad6f698"
-      }
+      },
+      "requires": []
     },
     {
       "name": "node",
@@ -226,7 +228,8 @@
       "sql": {
         "0000_adorable_zarek.sql": "a88033073bba6ff652258f0d3a0bc88b42e238cf1c35b86c8c05d3cf12c32394",
         "0001_chubby_dust.sql": "b4d80e111967b9fc0cccce07bc0cfad71d88c59811af7100bdd88daece5e6d2c"
-      }
+      },
+      "requires": []
     },
     {
       "name": "handover",
@@ -236,7 +239,8 @@
       "journalSha256": "8c8cf83a96589f6044fd6143a88620ba2783b45ad726489436649c1aae9b9c92",
       "sql": {
         "0000_baseline.sql": "85d141ad3e58b45c52fb5375f657cdd137989cca0b1146110d5d8a3624db83c9"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "catalogue",
@@ -281,7 +285,8 @@
         "0033_unit_measure.sql": "e434871cae42446305d16dfbe38bd5fb050fe243a90c06955dad4ba05d9b933b",
         "0034_content_suggestion_collect_cursor.sql": "655917bae83442f83a0c90be3a71f318f4b5dcd4704b8661d091e1549fe6e37e",
         "0035_unit_staff_identity.sql": "2c7fc7e4a48e92006ae74f5170a31f19afa46ba62c9bcbeb52175e637d1a9505"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "venue-service",
@@ -364,7 +369,8 @@
         "0071_late_send.sql": "004af25f40f540d69383b7906ae8b7c95e19487b683a09b58da26eaedbbe218b",
         "0072_abnormal_kylun.sql": "3881470c402f637b7d42b5355d3106fc7232f183fff6a60aef1df733dfa8d536",
         "0073_brief_silver_samurai.sql": "f01f81a164f68a5c068e0ab545fc10a49b1128d31d27afdff73aa4196be275e4"
-      }
+      },
+      "requires": ["core", "catalogue"]
     },
     {
       "name": "media",
@@ -384,7 +390,8 @@
         "0008_queued_edition_image_references.sql": "c61ffdd1e8a84e6f2adf8f16790f5e12ee2d3820418adee2e8246df16a200f1e",
         "0009_include_folder_image_references.sql": "f0c65fb1811efcc4c2870db01b4650483b5b53870e91a170f0e22a193a822a1b",
         "0010_photo_framing.sql": "0a9b61afdb011d638091544d40092575c0482922df9a720d5de81194c91cc8f2"
-      }
+      },
+      "requires": ["core", "catalogue", "venue-service"]
     },
     {
       "name": "identity",
@@ -404,7 +411,8 @@
         "0008_webauthn_challenges_clear.sql": "7e29c535e8ff84f8c145ec2744e37bd7c1bc78889c2aa761f705a7e9c04e1323",
         "0009_webauthn_challenge_purpose.sql": "9c3086134a440c19e53ec293d18a8d855b30236790662d38276acab370732c77",
         "0010_webauthn_challenge_purpose_check.sql": "d7ed5c9b78cd4330c4ea23e4d9d3001829993ec2884abd28eab62297aa953afd"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "workforce",
@@ -427,7 +435,8 @@
         "0011_person_chain_index.sql": "d4dfa45c4cbdf6014f12abf7385ce489cce313d4d5419304b0f1eb925a702692",
         "0012_time_entries_person_entry_key.sql": "9d64a98fd974d937a1122ea49e1b2113a4014939170254b36ee0595250699551",
         "0013_working_time_per_venue.sql": "96007f3de9b921a6b48482d53f46a872cc19104d6e943f222a37fd314df3c732"
-      }
+      },
+      "requires": ["core", "identity"]
     },
     {
       "name": "workforce-es",
@@ -437,7 +446,8 @@
       "journalSha256": "6e6dc90b080ecf5b0f257cdec191f01adffde858ad627e0568309247c26c1cdc",
       "sql": {
         "0000_baseline.sql": "afd0644f982c7c5600aa80812700aff36c86cc9b566529807e535074291aeb89"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "payments",
@@ -457,7 +467,8 @@
         "0008_automatic_payment_resolution.sql": "17b13e333214d9f7dcb608f76a4aaf546b1ea8fe878d208adbb619bef7f1a520",
         "0009_payment_holds.sql": "b73f3daa56de8b05d3618bfc34266b1e1269640509269248a435b2f0141a181b",
         "0010_a739_reader_slip_setting.sql": "be8c25765f3ec5f1d85cbf0f71297e7b2299fe55c67928f8031cdb957e98bcf6"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "scheduler",
@@ -467,7 +478,8 @@
       "journalSha256": "64a42e5b3002beef030bc07c1ac7eaba35dd4c1ee788ee7adcbf2e3a4569d9d0",
       "sql": {
         "0000_baseline.sql": "ac8643b2040ee5cf7cc8186db54f41750c3cad32bca04cdaf9f60bb65c9233d3"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "credentials",
@@ -477,7 +489,8 @@
       "journalSha256": "b95b9ce7b860eab3678ae0ab722ab5c9a31e05f132add51fa6031992afece2e9",
       "sql": {
         "0000_baseline.sql": "0162aa6829b3f23916166a94f622737012d52e0a7a9a6dda9fce5d054434a32c"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "fiscal-verifactu",
@@ -504,7 +517,8 @@
         "0015_w41s8_remedy_markers.sql": "bf336170659aa6e2b3ded8e3d7e3900d8e9693c6bb510b80c77a2fd02f1d3a36",
         "0016_numerous_phalanx.sql": "3cda15e2bcc99daad22158fb518da49f5e8e469390eef3cc79d21fb0599b9204",
         "0017_daffy_havok.sql": "5c38f6273117fe43893c4bddb8f371be6f29ed5ebc1e119cadeb2afac9752705"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "bookings",
@@ -515,7 +529,8 @@
       "sql": {
         "0000_baseline.sql": "a7be2914d7b2695940a18d8dab09de0c15daeaae47ff04bfa1ec5b0259ea220e",
         "0001_yummy_rage.sql": "c440ca3ab57650915970cc8ff3fb335bab235b809df8afac6b45a31c5c06a952"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "adjustments",
@@ -535,7 +550,8 @@
         "0008_harsh_kulan_gath.sql": "a5873019dbed7a07d68a181281fd07f1c55206df1fcd5da981d844edf1dd2a5f",
         "0009_personal_data_person_indexes.sql": "24592f647b074deadedc3c164ce78288a1d61baef28c445de4815f43ffdd8a2b",
         "0010_ordinary_colossus.sql": "414205198541f7291a8dc5783959ed257a441a7beb94c1880894269b04b515ee"
-      }
+      },
+      "requires": ["core"]
     },
     {
       "name": "staffing",
@@ -548,7 +564,8 @@
         "0001_staffing_days_blocks_assignments.sql": "cf54d01c5dd54e73b13da9ee07ca608b412e3e2517c329562cfb3417b4008eb2",
         "0002_charming_black_widow.sql": "829803b05fcd6edcb937b4d7e87239dfc2743215675b6fd9f60890656d00668a",
         "0003_huge_william_stryker.sql": "fbf89c9eb4bd795db80ef01450efa4de46d0bea556e5fa8fd769e488e8381a04"
-      }
+      },
+      "requires": ["core", "identity", "venue-service", "workforce"]
     }
   ]
 }

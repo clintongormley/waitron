@@ -12,13 +12,22 @@ old history. This folder keeps it, frozen.
   were not copied: drizzle's `readMigrationFiles` (in `drizzle-orm/migrator.js`) reads only the
   journal and the `<tag>.sql` file each journal entry names. The journals keep their original
   `when` dates.
+- **`old-migrations.manifest.json`** is `packages/migrations/migrations.manifest.json` from that
+  commit, byte for byte: each old set's journal table, append-only tables and database, in the
+  order the old runner applied them.
 - **`manifest.json`** records, for each set, the folder it came from, its migrations table, how
-  many journal entries it had, and the SHA-256 of its journal and of every SQL file.
-  `scripts/a760-history-fixture.test.ts` checks those hashes, and checks that nothing that builds
-  the server's `dist/drizzle/` or the image copies this folder.
+  many journal entries it had, the SHA-256 of its journal and of every SQL file, and the sets its
+  old module descriptor `requires` (copied from `packages/composition/src/modules.ts` and
+  `packages/media/src/module.ts` at that commit). It also holds the SHA-256 of
+  `old-migrations.manifest.json`. `scripts/a760-history-fixture.test.ts` checks those hashes and
+  that the two manifests agree, and checks that nothing that builds the server's `dist/drizzle/`
+  or the image copies this folder.
 - **Test-only.** It is never shipped and never run against a venue. Do not edit it: a changed byte
   no longer describes what venues ran.
 
-A test asks for an old set with `historicalSet("<old set name>")` from `historical-set.mjs`, which
-returns `{ migrationsFolder, migrationsTable }`. Copy the folder somewhere temporary before cutting
-its journal; never write into this one.
+A test asks for one old set with `historicalSet("<old set name>")`, or for the whole old world
+with `historicalSets()`, from `historical-set.mjs`. Each set comes back shaped as `applyMigrations`
+takes it: `{ name, migrationsFolder, migrationsTable, appendOnlyTables, database?, requires }`.
+`historicalSets()` leaves out `fiscal-none`: a venue ran it or `fiscal-verifactu`, never both. A
+test that applies several sets takes them all from here, never mixing in today's. Copy a folder
+somewhere temporary before cutting its journal; never write into this one.

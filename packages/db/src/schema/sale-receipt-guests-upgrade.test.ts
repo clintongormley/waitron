@@ -7,7 +7,6 @@ import { expect, it } from "vitest";
 import { installAppendOnlyTriggers } from "@waitron/store";
 import type { Database } from "../client.js";
 import { runMigrations } from "../migrate.js";
-import { CORE_MIGRATIONS } from "../migrations.js";
 import { TRIGGER_ABORT } from "../sql-state.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
@@ -28,7 +27,7 @@ async function migrateBeforeRename(db: Database): Promise<void> {
     expect(renameIndex).toBeGreaterThanOrEqual(0);
     journal.entries = journal.entries.slice(0, renameIndex);
     writeFileSync(path, JSON.stringify(journal));
-    await runMigrations(db, { ...CORE_MIGRATIONS, migrationsFolder: staged });
+    await runMigrations(db, { ...historicalSet("core"), migrationsFolder: staged });
   } finally {
     rmSync(staged, { recursive: true, force: true });
   }
@@ -82,7 +81,7 @@ it("renames guests to guest_count on a database carrying the append-only trigger
     .map(({ name }) => name);
   installAppendOnlyTriggers(
     db,
-    CORE_MIGRATIONS.appendOnlyTables.filter((table) => tables.includes(table)),
+    historicalSet("core").appendOnlyTables.filter((table) => tables.includes(table)),
   );
   expect(appendOnlyTriggersOn(db, "sale_receipt_guests")).toEqual([
     "sale_receipt_guests_append_only_delete",
@@ -95,11 +94,8 @@ it("renames guests to guest_count on a database carrying the append-only trigger
     ),
   ).toEqual([]);
 
-  await runMigrations(db, {
-    ...CORE_MIGRATIONS,
-    migrationsFolder: historicalSet("core").migrationsFolder,
-  });
-  installAppendOnlyTriggers(db, CORE_MIGRATIONS.appendOnlyTables);
+  await runMigrations(db, historicalSet("core"));
+  installAppendOnlyTriggers(db, historicalSet("core").appendOnlyTables);
 
   expect(db.all(sql`pragma foreign_key_check`)).toEqual([]);
 
