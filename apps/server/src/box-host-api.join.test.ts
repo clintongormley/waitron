@@ -17,6 +17,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { mountBoxHostApi } from "./box-host-api.js";
+import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { boxHostRequests, type BoxHostRequests, type WifiJoin } from "./box-host-client.js";
 import type { Logger } from "./logger.js";
 import { requestIdMiddleware } from "./request-id.js";
@@ -100,6 +101,10 @@ function mount(host: BoxHostRequests, log: Logger = () => {}, db: Database = sui
   app.use(
     "*",
     requestIdMiddleware(log, () => new Date()),
+  );
+  app.use(
+    "*",
+    requireManagementChangeFromOwnPage(async () => false, log),
   );
   mountBoxHostApi(app, { db, host }, log);
   return app;

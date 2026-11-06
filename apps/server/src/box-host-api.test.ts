@@ -16,6 +16,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { mountBoxHostApi } from "./box-host-api.js";
+import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import {
   boxHostRequests,
   type BoxHostRequests,
@@ -106,6 +107,10 @@ function mount(
       await withPassiveManagementRead(next);
     } else await next();
   });
+  app.use(
+    "*",
+    requireManagementChangeFromOwnPage(async () => false, log),
+  );
   mountBoxHostApi(app, { db, host }, log);
   return { app, host };
 }
@@ -764,21 +769,25 @@ describe("a change sent by a page other than the box's own", () => {
       const response = await post(app, path, manager.cookie, body, headers);
       expect(response.status).toBe(403);
       expect(await response.json()).toEqual({
-        error: { code: "box_host.origin_refused", params: {} },
+        error: { code: "management.origin_refused", params: {} },
       });
       expect(changeAsked(host)).toBe(0);
-      expect(log).toHaveBeenCalledWith("warn", "box_host.origin_refused", {
+      const sent: { origin?: string; "sec-fetch-site"?: string } = headers;
+      expect(log).toHaveBeenCalledWith("warn", "management.origin_refused", {
         requestId: undefined,
+        method: "POST",
+        origin: sent.origin ?? null,
+        site: sent["sec-fetch-site"] ?? null,
       });
     });
 
-    it("from another port is refused before the session is checked", async () => {
+    it("from another port without a cookie asks the host nothing", async () => {
       const host = fakeHost();
       const { app } = mount(suite.db, host);
       const response = await post(app, path, undefined, body, { origin: `${BOX}:8443` });
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(401);
       expect(await response.json()).toEqual({
-        error: { code: "box_host.origin_refused", params: {} },
+        error: { code: "management_session.required", params: {} },
       });
       expect(changeAsked(host)).toBe(0);
     });
@@ -816,7 +825,7 @@ describe("a change sent by a page other than the box's own", () => {
     });
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
-      error: { code: "box_host.origin_refused", params: {} },
+      error: { code: "management.origin_refused", params: {} },
     });
     expect(pulls).toBe(0);
     expect(changeAsked(host)).toBe(0);

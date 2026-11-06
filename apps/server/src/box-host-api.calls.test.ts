@@ -8,6 +8,7 @@ import { hashPin, persons, startManagementSession, type PersonRoleValue } from "
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { BOX_HOST_ROUTE_CALLS, mountBoxHostApi } from "./box-host-api.js";
+import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import type { BoxHostRequests, NetworkSnapshot } from "./box-host-client.js";
 import "./errors.js";
 
@@ -92,6 +93,13 @@ function hold(host: Host, method: RouteMethod): () => void {
 
 function mount(host: BoxHostRequests): Hono {
   const app = new Hono();
+  app.use(
+    "*",
+    requireManagementChangeFromOwnPage(
+      async () => false,
+      () => {},
+    ),
+  );
   mountBoxHostApi(app, { db: suite.db, host }, () => {});
   return app;
 }
@@ -284,7 +292,7 @@ describe("refusals take no place", () => {
         });
         expect(otherPort.status).toBe(403);
         expect(await otherPort.json()).toEqual({
-          error: { code: "box_host.origin_refused", params: {} },
+          error: { code: "management.origin_refused", params: {} },
         });
       }
       expect(host.screenRead).toHaveBeenCalledTimes(0);

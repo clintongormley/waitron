@@ -33,7 +33,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "box_host.unavailable": 409,
   "box_host.failed": 502,
   "box_host.busy": 409,
-  "box_host.origin_refused": 403,
   "box_network.busy": 409,
   "box_network.no_wifi": 409,
   "box_network.not_saved": 409,
@@ -165,13 +164,6 @@ function requireSecureJoin(log: Logger): MiddlewareHandler {
   };
 }
 
-function requireOwnPage(log: Logger): MiddlewareHandler {
-  return async (c, next) => {
-    if (!fromOtherPage(c)) return next();
-    return refuse(c, log, new AppError("box_host.origin_refused", {}));
-  };
-}
-
 function isJson(c: Context): boolean {
   return c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() === "application/json";
 }
@@ -188,11 +180,6 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
       c.json({ error: { code: "management.request_invalid", params: { field: "body" } } }, 400),
   });
   app.use("/api/box/network/join", requireSecureJoin(log));
-  app.on(
-    "POST",
-    ["/api/box/network/scan", "/api/box/network/forget", "/api/box/screen"],
-    requireOwnPage(log),
-  );
   app.use("/api/box/network/*", limit);
   app.use("/api/box/screen", limit);
   app.get("/api/box/network", (c) =>
