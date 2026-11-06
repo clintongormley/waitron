@@ -5,6 +5,8 @@ locked confirmation and **Check again** until the box answers. An empty balance 
 the payment. This replaces the unheld server-error rule in default 7 below. The status title is
 now **Payment not confirmed** / **Cobro sin confirmar**, covering both network and server errors.
 
+The full-disk boundaries and reader-release limit clarified on 2026-11-07 are in
+[Payments — Decisions and deliberate limits](../../backlog/payments.md#decisions-and-deliberate-limits).
 
 Status: **design decided; no owner questions open (§9).**
 

@@ -4,6 +4,8 @@
 locked confirmation and **Check again**. Repeated server errors keep that payment held until the
 box answers; an empty balance does not release it. This supersedes Revision 5's B5 decision below.
 
+The full-disk boundaries and reader-release limit clarified on 2026-11-07 are in
+[Payments — Decisions and deliberate limits](../../backlog/payments.md#decisions-and-deliberate-limits).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

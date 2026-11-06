@@ -1653,11 +1653,11 @@ export const en = {
   "bill_pay.next": "Take the next",
   "bill_pay.next_share": "Take the next ({n} of {m})",
   "bill_pay.unconfirmed":
-    "This payment could not be confirmed. Press Check again to check this same payment without recording it twice.",
+    "This payment could not be confirmed. Check again continues this same payment: if it was not recorded, it may charge the card or record the cash payment.",
   "bill_pay.unconfirmed_elsewhere":
-    "A payment on this bill could not be confirmed. On the bill, press Pay items, then Check again to check that same payment without recording it twice.",
+    "A payment on this bill could not be confirmed. On the bill, press Pay items, then Check again to continue that same payment.",
   "bill_pay.unconfirmed_elsewhere_handheld":
-    "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to check that same payment without recording it twice.",
+    "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to continue that same payment.",
   "bill_pay.unanswered_title": "Payment not confirmed",
   "bill_pay.recheck": "Check again",
   "bill_pay.sending_title": "Waiting for the server",
@@ -1666,9 +1666,9 @@ export const en = {
   "bill_pay.reader_not_held":
     "This phone no longer has that card reader. Choose the reader in your hand. No card was charged.",
   "bill_pay.reader_not_held_unknown":
-    "This phone no longer has that card reader. Choose the reader in your hand. An earlier card on this bill got no answer: before charging again, ask a manager to check Card payments.",
+    "This phone no longer has that card reader. Choose the reader in your hand. The first payment may have gone through: look at the bill’s payments before taking it again.",
   "bill_pay.not_checked":
-    "The server could not check this payment. Look at the bill's payments before taking it again.",
+    "The server could not check this payment. The first payment may have gone through: look at the bill's payments before taking it again.",
   "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
   "bill_pay.choose_later":
     "These items cost more than is left to pay on the bill. Choose how to pay for them.",
@@ -3555,11 +3555,11 @@ export const es: Record<StringKey, string> = {
   "bill_pay.next": "Cobrar al siguiente",
   "bill_pay.next_share": "Cobrar al siguiente ({n} de {m})",
   "bill_pay.unconfirmed":
-    "No se ha podido confirmar este cobro. Pulsa Comprobar de nuevo para comprobar este mismo cobro sin registrarlo dos veces.",
+    "No se ha podido confirmar este cobro. Comprobar de nuevo continúa ese mismo cobro: si no estaba registrado, puede cobrar la tarjeta o registrar el efectivo.",
   "bill_pay.unconfirmed_elsewhere":
-    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para comprobar ese mismo cobro sin registrarlo dos veces.",
+    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para continuar ese mismo cobro.",
   "bill_pay.unconfirmed_elsewhere_handheld":
-    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para comprobar ese mismo cobro sin registrarlo dos veces.",
+    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para continuar ese mismo cobro.",
   "bill_pay.unanswered_title": "Cobro sin confirmar",
   "bill_pay.recheck": "Comprobar de nuevo",
   "bill_pay.sending_title": "Esperando al servidor",
@@ -3568,9 +3568,9 @@ export const es: Record<StringKey, string> = {
   "bill_pay.reader_not_held":
     "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. No se ha cobrado ninguna tarjeta.",
   "bill_pay.reader_not_held_unknown":
-    "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. Una tarjeta anterior de esta cuenta no ha tenido respuesta: antes de cobrar otra vez, pide a un encargado que lo consulte en Pagos con tarjeta.",
+    "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. El primer cobro puede haberse realizado: mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.not_checked":
-    "El servidor no ha podido comprobar este cobro. Mira los pagos de la cuenta antes de volver a cobrarlo.",
+    "El servidor no ha podido comprobar este cobro. El primer cobro puede haberse realizado: mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",
   "bill_pay.choose_later":
     "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",

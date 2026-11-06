@@ -13,15 +13,6 @@ import { codeMessage } from "../i18n/codes.js";
 import { isTakePaymentRefusal } from "../state/bill-payment.js";
 import { recoveryRefusalText } from "./recovery-refusal.js";
 
-/** A refusal's code, the request field it names when it names one, for a tip the venue does not
- * take the most the card can be charged, and the permission an `authorization.not_permitted`
- * names. The app's own codes: `network`, a payment that got no answer; `sending`, a payment on the
- * bill still waiting for the server; `not_checked`, a payment the server could not check;
- * `payment_failed`, a payment recorded as not taken; `unread`, a balance that could not be read
- * again; `declined` and `card_network`, a card the reader did not charge; `card_timeout`, a card
- * the reader did not answer for;
- * `sale.unconfirmed`, `sale.refused` and `bill.pay_with_bill_payments`, a presented bill's payment
- * in the till's own sentences. `text`, when given, is what to say, worded by the caller. */
 export interface PayRefusal {
   code: string;
   recoveryUrl?: string;

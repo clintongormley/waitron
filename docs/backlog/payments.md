@@ -476,7 +476,13 @@ and shows a clear message.
   2026-11-06 23:12). A server error or code-less answer that does not prove the payment was refused
   uses the existing hold and **Check again**, with the same complete request. An empty balance
   read never releases it. Repeated server errors keep the bill held until the box answers; there
-  is no timeout or forced release.
+  is no timeout. The watcher’s 2026-11-07 00:09 answer keeps known-charge advice while its row
+  is pending, including after reopening or rechecking. A coded refusal whose balance names the
+  retained pending submission also holds that confirmation until a recorded end. Cash and
+  hand-keyed full-disk refusals with no row keep their specific refusal without a new hold.
+  A recheck refused before lookup (such as `reader.not_held`) retains the existing release with
+  a warning: the first payment may have gone through, so inspect the bill’s payments before
+  taking it again. That answer does not establish the first payment’s outcome.
 
 - **Handheld reader selection** (owner decisions 2026-09-18)
   ([2026-09-18-handheld-and-till-hardware-decisions.md](../superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
