@@ -435,16 +435,16 @@ describe("A803 move dishes route:", () => {
       expect(paid.status, JSON.stringify(paid.json)).toBe(200);
       const before = await paymentsRead(destination);
       expect(before.json).toMatchObject({ total: "38.00", received: "35.00", outstanding: "3.00" });
-      const [, tarta] = lineIdsOf(tabId);
+      const [, cakeLineId] = lineIdsOf(tabId);
 
-      const moved = await post(tabId, await wellFormed(partyId, tabId, [tarta!], destination));
+      const moved = await post(tabId, await wellFormed(partyId, tabId, [cakeLineId!], destination));
 
       expect(moved.status, JSON.stringify(moved.json)).toBe(200);
       const after = await paymentsRead(destination);
       expect(after.json).toMatchObject({ total: "56.00", received: "35.00", outstanding: "21.00" });
       expect(after.json.payments).toEqual(before.json.payments);
       expect(after.json.paidLines).toEqual(before.json.paidLines);
-      expect(lineIdsOf(destination)).toContain(tarta);
+      expect(lineIdsOf(destination)).toContain(cakeLineId);
       expect(registroCount(venue, destination)).toBe(0);
 
       const rest = await pay(destination, {

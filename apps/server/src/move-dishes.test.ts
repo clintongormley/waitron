@@ -869,8 +869,7 @@ async function recallIntoDraft(partyId: string, billId: string, lineId: string) 
   });
 }
 
-/** `operatorId`'s saved, unsent Tarta on the bill: that person is now its editor. */
-async function saveTarta(partyId: string, billId: string, operatorId: string) {
+async function saveCakeDraft(partyId: string, billId: string, operatorId: string) {
   const expectedEdit = await inTx(v, (tx) => readBillEditState(tx, billId));
   return inTx(v, (tx) =>
     saveDraft(tx, v.cfg, partyId, operatorId, {
@@ -1166,7 +1165,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   it("A803 move dishes refuses: another person's unsent dishes on the destination are draft.taken_over naming them", async () => {
     const p = await party([dish("Caña")]);
     const [beerLine] = await dishIds(p.bill1);
-    await saveTarta(p.partyId, p.bill2, adminId());
+    await saveCakeDraft(p.partyId, p.bill2, adminId());
     const [edit] = await editsOf(p.bill2);
     await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "draft.taken_over", {
       billId: p.bill2,
@@ -1179,7 +1178,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     const p = await party([dish("Caña")]);
     const [beerLine] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, p.bill2, adminId());
-    await saveTarta(p.partyId, p.bill1, adminId());
+    await saveCakeDraft(p.partyId, p.bill1, adminId());
     await refused(() => sendMove(p.bill1, p.bill2, [beerLine!], ask), "draft.out_of_date", {
       billId: p.bill1,
     });
@@ -1231,7 +1230,7 @@ describe("A803 move dishes race: the second of two writes is refused, changing n
     const p = await party([dish("Caña")]);
     const [beerLine] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, p.bill2);
-    await saveTarta(p.partyId, p.bill2, adminId());
+    await saveCakeDraft(p.partyId, p.bill2, adminId());
     await refused(() => sendMove(p.bill1, p.bill2, [beerLine!], ask), "draft.taken_over", {
       billId: p.bill2,
       ownerId: adminId(),
