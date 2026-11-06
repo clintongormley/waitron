@@ -339,20 +339,10 @@ same sentence answers module version mismatches in both directions (`describeCon
 `apps/setup/src/setup-app.ts`), so the fix is to word the too-new case on its own. Found by A980
 S1a2's plan review.
 
-## The first-setup record store still accepts the `retire` and `select-workspace` actions and `nextWorkspace`, which nothing writes since A1042
+## The repair page's Continue sits tight against the password field at phone width
 
-Left open by A1042 (D4). `packages/provisioning/src/first-setup-resolution.ts` still declares and
-validates both actions and the `nextWorkspace` field (`:43-48`, `:195-267`); every writer passes
-`nextWorkspace: null` (`first-setup-finish-audit.ts`, `first-setup-owner-audit.ts`) and none
-writes either action. Remove them, with the tests that pin them.
-
-## The repair page's Start again oddities from #1752
-
-Three things on the setup app's repair page, all on main since 4e318802f (#1752): after Start
-again the heading still reads "First setup was interrupted" above "The old attempt is deleted.
-Reconnect to continue."; two "Start again" buttons are drawn at once, the one that opens the
-confirmation and the one that confirms; and Continue sits tight against the password field at
-phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
+On the setup app's repair page, on main since 4e318802f (#1752), Continue sits tight against the
+password field at phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
 
 ## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 
@@ -482,20 +472,6 @@ finishing, the connection closing, or a connection already over. For the Retry t
 run; pressing Retry again would ask for the restart again. Wanted: the Retry uses the same
 once-only restart, with a test that closes the connection before the answer is written.
 
-## On a full disk, Start again's summary may need room for a copy of the setup database
-
-Start again no longer goes through the password step (A1131bc slice 2). Its summary reads the setup
-database in place, and copies it to a scratch folder only when a `-journal` file, or a `-wal` file
-holding pages, sits beside it (`readSetupDatabase`, `apps/server/src/first-setup-database-holdings.ts`;
-read, not run on a full disk). Continue's password step still keeps a whole copy, encoded as text
-(`captureFirstSetupOriginals`, `packages/provisioning/src/first-setup-resolution-inspection.ts`). On
-a full disk either copy has only the box's spare file (8 MiB) to use, and no step of the repair
-page gives the spare up. So beside a held setup database, which this slice newly offers, the summary and Start again answer 507
-`storage.disk_full` on a full disk and delete nothing (`apps/server/src/start-again-full-disk.e2e.test.ts`,
-the held case). Wanted: give the spare up for every Start again the page offers,
-measure the largest setup database an unfinished setup can leave, and either keep a copy within the
-spare or say on the full-disk page what to do.
-
 ## A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series name
 
 Left open by A1042; the behaviour predates it. Taking an invoice series name needs a second clock,
@@ -569,15 +545,13 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   confirm that deleting this setup is safe…" for it beside the "Set up secure connection" link.
   Wanted: words saying a secure connection is needed. Left open by A1131bc slice 2 (plan, D13, N5).
 
-## No Recover from backup when the setup's own record cannot be read or needs repair
+## No Recover from backup when the setup's own record cannot be read
 
-- **No Recover from backup when the setup's own record cannot be read or needs repair.** Since
-  A1131bc slice 3, Recover from backup is drawn disabled wherever Start again is disabled, including a setup
-  record whose password cannot be checked and one whose claim mark needs repair; before, it opened
-  the old recovery in both. The only way out is then a reinstall, unless the setup had saved nothing
-  yet (Continue with the setup password repairs the mark only for a present, empty setup database
-  with nothing else left behind: `repairEligible`, `packages/provisioning/src/first-setup-owner.ts`).
-  Left open by A1131bc slice 3 (plan, N2).
+- **No Recover from backup when the setup's own record cannot be read.** Since A1131bc slice 3,
+  Recover from backup is drawn disabled wherever Start again is disabled, including a setup record
+  whose password cannot be checked; before, it opened the old recovery. The only way out is then a
+  reinstall. A record whose claim mark needs repair is offered both since A1379's first pull
+  request. Left open by A1131bc slice 3 (plan, N2).
 
 ## The bucket and Waitron Cloud restores have not been run after Start again's deletion
 
@@ -652,26 +626,19 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle A1379: A failed setup always offers Start again
 
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size M. From the backlog review of 2026-11-06; A1379's first pull request finished two and narrowed two.
 
 - **A1322. A failed setup always offers Start again; remove "Continue with your setup password" (owner, 2026-11-04).**
   Today, once a setup has saved the settings the box sells with, Start again is refused and Continue is the only choice, so a lost password means reinstalling.
   Remove Continue and its password step, and let Start again delete such a setup, still refusing when the database holds an invoice or another record Waitron never deletes.
   This replaces the owner's 16 October order (Continue first). Not yet checked: what else depends on Continue, including its repair of a damaged setup record.
-- **The first-setup record store still accepts the `retire` and `select-workspace` actions and
-  `nextWorkspace`, which nothing writes since A1042.**
-  [Detail](setup.md#the-first-setup-record-store-still-accepts-the-retire-and-select-workspace-actions-and-nextworkspace-which-nothing-writes-since-a1042)
-- **The repair page's Start again oddities from #1752** — a stale heading after Start again, two
-  "Start again" buttons, and Continue tight against the password field at phone width.
-  [Detail](setup.md#the-repair-pages-start-again-oddities-from-1752)
+- **The repair page's Continue sits tight against the password field at phone width.**
+  [Detail](setup.md#the-repair-pages-continue-sits-tight-against-the-password-field-at-phone-width)
 - **The repair page draws a Start-again error twice**, under the password and under the tick box.
   [Detail](setup.md#the-repair-page-draws-a-start-again-error-twice)
-- **On a full disk, Start again's summary may need room for a copy of the setup database.** The box
-  keeps its spare beside a held setup database, so Start again answers that the disk is full. Left open by A1131 and A1131bc slice 2.
-  [Detail](setup.md#on-a-full-disk-start-agains-summary-may-need-room-for-a-copy-of-the-setup-database)
-- **No Recover from backup when the setup's own record cannot be read or needs repair.** The only
-  way out is a reinstall, unless the setup had saved nothing yet. Left open by A1131bc slice 3.
-  [Detail](setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read-or-needs-repair)
+- **No Recover from backup when the setup's own record cannot be read.** The only way out is a
+  reinstall. Left open by A1131bc slice 3.
+  [Detail](setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read)
 
 ## Bundle A1384: Words on setup's refusals
 

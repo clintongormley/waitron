@@ -400,7 +400,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
   [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
 
-- **A1379. A failed setup always offers Start again** (bundle of 6, 1 go-live, 2 important, size M). Holds A1322. [Detail](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
+- **A1379. A failed setup always offers Start again** (bundle of 4, 1 go-live, 2 important, size M). Holds A1322. [Detail](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**
   **Build remains open**; Cloud's qualified trial journey is prerequisite G1 in the plan.
