@@ -668,7 +668,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Loose ends left by A720.**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
-- **One rule for zone closures and department hours, after A760's opening_hours** (bundle of 8, size M, waits for A760). [Detail](backlog/service-periods.md#bundle-one-rule-for-zone-closures-and-department-hours-after-a760s-opening_hours)
+- **One rule for zone closures and department hours, after A760's opening_hours** (bundle of 8, size M, waits for A760). The owner's answer: a closure outside its department's hours is ignored when read, and stops being an error. [Detail](backlog/service-periods.md#bundle-one-rule-for-zone-closures-and-department-hours-after-a760s-opening_hours)
 
 - **Calendar marks** (bundle of 2, size S). [Detail](backlog/service-periods.md#bundle-calendar-marks)
 
@@ -2478,11 +2478,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   (`apps/dashboard/src/dashboard-app.ts`); Servers (`mirror.create`) is the first to use it.
 
 ### Data protection and legal compliance
-
-- **A1324. Waitron does not encrypt the bucket copy (owner, 2026-11-04).**
-  Backup archives are encrypted on the box, but the live copy to the owner's bucket is not: Litestream 0.5 removed its encryption, and the 2026-09-16 topology design (§7.4) accepted the provider's encryption instead.
-  That design argued from fiscal records, which AEAT already holds; it does not cover the staff and customer data in the same file, and no code asks the provider for encryption.
-  Decide with A980 whether the box must encrypt before upload, and how.
 
 _Formerly entries spread across the old sections._
 

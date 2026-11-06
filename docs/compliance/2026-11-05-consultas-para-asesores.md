@@ -128,6 +128,12 @@ El restaurante emitiría tiques sin datos del cliente y recogería nombre, NIF y
 
 ¿Basta ese procedimiento y en qué momento debe mostrarse cada información? ¿Es necesaria alguna leyenda en el tique sin datos del cliente? ¿Debe o conviene imprimir una línea en la factura nominativa y en el PDF enviado por correo, también si se factura a una sociedad? Proponga el texto breve.
 
+### Copia continua de la base de datos [Q62]
+
+El servidor del restaurante copia de forma continua toda su base de datos, con datos de clientes y de personal, al almacenamiento externo que elige el restaurante. No la cifra antes de enviarla: depende del cifrado del proveedor, que no protege frente a quien acceda con credenciales válidas. Hemos decidido mantenerlo así, porque la clave tendría que guardarse en el mismo servidor que esas credenciales.
+
+¿Es adecuada esta medida según el artículo 32 del RGPD? Si esa copia se filtrara, ¿habría que informar a los afectados, al no aplicarse la excepción del artículo 34.3.a para datos ininteligibles?
+
 ### Fichaje sin biometría [L3]
 
 Proponemos mantener el fichaje mediante PIN o tarjeta, sin biometría. ¿Hay alguna exigencia concreta de este restaurante que haga insuficiente ese sistema o justifique siquiera estudiar una alternativa biométrica? Si surgiera esa necesidad, ¿qué alcance y criterios tendría que cubrir la evaluación de impacto antes de activarla?

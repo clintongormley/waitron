@@ -504,6 +504,8 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
+The owner decided the rule on 2026-11-06: a closure outside its department's hours is ignored when read, and stops being an error. Start with a small check that this reading changes nothing a person sees, then take the entries below that the rule makes unnecessary, which should be most of them.
+
 - **A server write that changes a department's hours leaves its zones' closures outside them**
   [Detail](service-periods.md#a-server-write-that-changes-a-departments-hours-leaves-its-zones-closures-outside-them)
 - **The zone-closure hours check runs at the routes, not inside the writers**
@@ -582,6 +584,10 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Decisions and deliberate limits
 
+- **A zone closure outside its department's hours is ignored when read (owner, 2026-11-06).** It
+  stops being an error, so it no longer blocks the next save of the zone. Example: the Terrace closed
+  23:00 to 01:00, in a department whose hours end at 22:00. Nobody has tested that reading yet, so the
+  work starts with a small check that a closure outside the hours changes nothing a person sees.
 - **One legal seller for the first venue (owner, 2026-10-21, A898).** Every department
   sells under the same company and tax identity. A different legal seller needs its own venue.
 

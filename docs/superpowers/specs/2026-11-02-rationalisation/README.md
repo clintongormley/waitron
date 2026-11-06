@@ -319,8 +319,8 @@ Waitron Cloud managed restore drops the archive's `backup.env`,
 `apps/server/src/restore.ts:557-561, 795-812`). Settings that are sealed today but are not secret
 (the SMTP sender, Stripe's return addresses, the bucket's name and region, the backup settings) move
 to their module's settings document; only the secret values stay sealed (`tables-venuebox.md` §1.16).
-Three later items change this: A1322, A1323 (one master key, with the box's secrets sealed to it) and
-A1324 (the bucket copy is not encrypted by the backup key).
+Two later items change this: A1322 and A1323 (one master key, with the box's secrets sealed to it).
+The bucket copy stays unencrypted by the box (A1324, accepted by the owner, 2026-11-06).
 
 **U8. A1301 (removing "location") continues, except slice S23.** Its column-stripping slices go
 ahead as designed. S23's new `venue_settings`, `venue_catalogues` and `business_day_settings`
