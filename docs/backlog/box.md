@@ -1037,7 +1037,7 @@ NetworkManager.
   `host_failed` for any adapter failure or wrong answer, with no adapter error text in it. A canary
   sweep finds the Wi-Fi password only in the join adapter's argument.
 
-**Built so far (2026-11-06), PR 8.** [PR 8](../superpowers/plans/2026-11-06-b3-8-host-client.md)
+**Built so far (2026-11-06), PR 8 (#2495).** [PR 8](../superpowers/plans/2026-11-06-b3-8-host-client.md)
 adds `boxHostRequests()` to `apps/server/src/box-host-client.ts`, beside the clock client, called by
 nothing yet: one typed method for each of PR 7's seven requests.
 

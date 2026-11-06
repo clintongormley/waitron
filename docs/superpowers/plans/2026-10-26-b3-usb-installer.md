@@ -1,4 +1,4 @@
-> 2026-11-06: PR 8's plan (the server's client for the host's seven requests, unwired): [2026-11-06-b3-8-host-client.md](2026-11-06-b3-8-host-client.md); it imports PR 7's module and declares its types in the server (its D1).
+> 2026-11-06: PR 8's plan (#2495; the server's client for the host's seven requests, unwired): [2026-11-06-b3-8-host-client.md](2026-11-06-b3-8-host-client.md); it imports PR 7's module and declares its types in the server (its D1).
 
 > 2026-11-05: PR 7's plan (the box host protocol: B3's requests, their actor and replies, as a pure module) (#2474): [2026-11-05-b3-7-host-protocol.md](2026-11-05-b3-7-host-protocol.md); the clock requests stay on slice 9b's wire and shell handler (its D1), and the host knows its caller by the socket alone, the actor being ids the server reports (its D2).
 
@@ -177,7 +177,7 @@ obtain an owner decision before changing that behavior.
 
 > 2026-11-05: [PR 7's plan](2026-11-05-b3-7-host-protocol.md) builds seven of these requests (`first-start.status` is left to slice 1's recipe), as `handleHostRequest(line, adapters)` answering one reply line; `network.read` answers no network list, which `network.scan` answers instead, and SSIDs travel as hex; the host checks the actor's form, not a permission (its D3, D6, D7, D10, D13, D15).
 
-> 2026-11-06: [PR 8's plan](2026-11-06-b3-8-host-client.md) builds the server client as `boxHostRequests()`, one typed method per request instead of `boxHostCall<T>`, in `box-host-client.ts` beside the clock client (its D2, D3).
+> 2026-11-06: [PR 8's plan](2026-11-06-b3-8-host-client.md) (#2495) builds the server client as `boxHostRequests()`, one typed method per request instead of `boxHostCall<T>`, in `box-host-client.ts` beside the clock client (its D2, D3).
 
 **The clock requests slice 9b shipped** (A798-B slice 9b, #2331, added 2026-11-01): a contract
 between the server and the host that B3 keeps or migrates. `waitron.sh install` installs a socket
