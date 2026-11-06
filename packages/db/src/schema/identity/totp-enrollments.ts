@@ -7,7 +7,7 @@ export const totpEnrollments = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     // No key to `persons`: none was restored when the table became `state` (docs/backlog.md,
-    // slice-2 Task 1b). Only `profile.ts` inserts or reads a row, and only for the person
+    // slice-2 Task 1b). Only `packages/identity/src/profile.ts` inserts or reads a row, and only for the person
     // `ownPerson` found.
     personId: id("person_id").notNull(),
     encryptedSecret: label("encrypted_secret").notNull(),

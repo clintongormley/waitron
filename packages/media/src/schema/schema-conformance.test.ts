@@ -7,8 +7,6 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { MEDIA_MIGRATIONS } from "../migrations.js";
-// The set's one schema file, which is also what `drizzle.config.ts` generates from; the package
-// has no `src/schema/index.ts` barrel.
 import * as declarations from "@waitron/db/schema/media.js";
 
 describeSchemaConformance({

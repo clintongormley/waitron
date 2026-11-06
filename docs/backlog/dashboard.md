@@ -345,7 +345,7 @@ Preserve the dated discussion below as the background to this now-answered catal
   permissions to merge, the names, and which role holds each, and then rename the call sites in one
   change. **Renaming is allowed now:** the file's header says permission ids are "never renamed once
   shipped", but a search (2026-09-26, reading, not running) found them stored nowhere — the database
-  stores a person's ROLE (`packages/identity/src/schema/persons.ts`), and the names appear only in
+  stores a person's ROLE (`packages/db/src/schema/identity/persons.ts`), and the names appear only in
   code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
   backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
   by running it, then drop or narrow that header sentence. **Do it before the editable-roles item

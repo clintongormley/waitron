@@ -36,7 +36,7 @@ export const persons = table(
     firstNames: label("first_names"),
     lastNames: label("last_names"),
     telephone: label("telephone"),
-    /** Hashed by ./verify-pin.ts (scrypt, salted) — never plaintext. */
+    /** Hashed by `packages/identity/src/verify-pin.ts` (scrypt, salted) — never plaintext. */
     pinHash: label("pin_hash"),
     passwordHash: label("password_hash"),
     /** AES-256-GCM ciphertext of the TOTP secret (`packages/identity/src/mfa.ts`). */

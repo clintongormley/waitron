@@ -29,7 +29,7 @@ export const tenantCredentials = table(
   (t) => [
     primaryKey({ columns: [t.purpose], name: "tenant_credentials_pk" }),
     check("tenant_credentials_key_version_ck", sql`${t.keyVersion} >= 1`),
-    // 12 bytes is the GCM standard nonce length, and the only length `cipher.ts` ever writes. A row
+    // 12 bytes is the GCM standard nonce length, and the only length `packages/credentials/src/cipher.ts` ever writes. A row
     // with a different length did not come from this code path.
     check("tenant_credentials_iv_len_ck", sql`octet_length(${t.iv}) = 12`),
     // 16 bytes is the full GCM tag. A truncated tag weakens forgery resistance, so the column
