@@ -407,3 +407,19 @@ it("refuses a symlink request and keeps the linked file untouched", async () => 
     await f.close();
   }
 });
+
+it("keeps a fresh installed certificate when Cloud changes another configuration revision", async () => {
+  const f = await fixture();
+  try {
+    f.ready();
+    await f.client.staffCertificate(hostname);
+    const certificate = await readFile(join(f.stateDir, "cloud-staff.crt"), "utf8");
+    f.patch({ revision: 1 });
+    await f.client.refresh();
+    await f.client.staffCertificate(hostname);
+    expect(f.calls).toHaveLength(1);
+    expect(await readFile(join(f.stateDir, "cloud-staff.crt"), "utf8")).toBe(certificate);
+  } finally {
+    await f.close();
+  }
+});

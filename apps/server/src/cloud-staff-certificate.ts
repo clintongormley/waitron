@@ -108,7 +108,12 @@ export async function refreshStaffCertificate(
   const path = join(stateDir, "staff-certificate-request.json");
   let request = await load(path);
   const changed = request && (request.hostname !== hostname || request.revision !== revision);
-  if (request?.installed && !changed && !(await needsRenewal(stateDir, hostname))) return true;
+  if (
+    request?.installed &&
+    request.hostname === hostname &&
+    !(await needsRenewal(stateDir, hostname))
+  )
+    return true;
   if (!request || changed || request.installed) {
     request = {
       operationId: randomUUID(),
