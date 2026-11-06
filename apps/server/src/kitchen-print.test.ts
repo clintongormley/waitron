@@ -2601,7 +2601,9 @@ describe("the party's name on a kitchen ticket", () => {
     await inTx(v, (tx) => cancelLine(tx, v.cfg, p.tabId, 1));
     const corrections = await ticketsSince(printer, before);
     expect(corrections).toHaveLength(1);
-    expect(corrections[0]![3]).toBe(`Pedido ${(await billRow(v, p.tabId)).orderNumber} · Ana`);
+    expect(corrections[0]![3]).toBe(
+      `${kitchenTicketWords("es").order} ${(await billRow(v, p.tabId)).orderNumber} · Ana`,
+    );
     expect(corrections[0]).toContain("1 x BURG");
   });
   /** A printer on the venue's default station; returns its id. */

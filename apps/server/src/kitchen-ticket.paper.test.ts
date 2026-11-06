@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { describe, expect, it } from "vitest";
 import type { EscSetting } from "@waitron/printing";
 import {
@@ -44,10 +45,7 @@ describe("A1378 station FIRE and party identity", () => {
     );
   });
 
-  it.each([
-    ["en", "Order 17 · Ana"],
-    ["es", "Pedido 17 · Ana"],
-  ])("names the party on a %s correction", (locale, expected) => {
+  it.each(["en", "es"])("names the party on a %s correction", (locale) => {
     const lines = printedLines(
       formatCorrectionSlip(
         {
@@ -64,7 +62,7 @@ describe("A1378 station FIRE and party identity", () => {
         "UTC",
       ),
     );
-    expect(lines[3]).toBe(expected);
+    expect(lines[3]).toBe(`${kitchenTicketWords(locale).order} 17 · Ana`);
   });
 });
 

@@ -83,9 +83,6 @@ from the instructions you confirm for that send.
 On kitchen paper, a group's heading names the courses of the dishes printed under it, in course
 order: **GROUP 3 · STARTERS, MAINS**. A reprint shows them as they are when you reprint.
 
-MOVED slips use the station's combined or separate dish setting too. A combined line such as
-**3 x Steak** covers three identical whole portions in that group.
-
 ## Reprint the original, then check its notices {#reprints}
 
 A reprint repeats the original allergy block. It does not issue another correction notice, so

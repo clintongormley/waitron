@@ -1,5 +1,10 @@
 # A803 slice 4b: waiting dishes leave with their own copy of the course — task plan
 
+> **2026-11-06, A1378:** MOVED now follows the station's combined/separate choice. Identical
+> whole portions combine within their group; measured and printed-as-sold items stay separate.
+> References below to A1192 being open describe the earlier implementation.
+
+
 > **2026-11-06, A1378:** kitchen paper now prints whole quantities without `.000` and
 > takes its hours from the venue's saved time zone. Paper examples and measured output below
 > record the earlier implementation.

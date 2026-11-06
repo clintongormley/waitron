@@ -93,9 +93,6 @@ En el papel de cocina, el encabezado de un grupo nombra los cursos de los platos
 el orden de los cursos: **GRUPO 3 · ENTRANTES, PRINCIPALES**. Una reimpresión los muestra como estén
 al reimprimir.
 
-Los tickets MOVIDO también usan el ajuste de platos combinados o separados de la estación. Una
-línea combinada como **3 x Filete** abarca tres porciones enteras iguales de ese grupo.
-
 ## Reimprime el original y comprueba sus avisos {#reprints}
 
 Una reimpresión repite el bloque de alergias original. No genera otro aviso de corrección, así que

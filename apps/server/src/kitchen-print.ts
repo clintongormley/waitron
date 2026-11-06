@@ -1498,9 +1498,6 @@ export async function enqueueAllergyCorrectionSlips(
   );
 }
 
-/**
- * Identical portions share a correction; each station uses its own printer routes.
- */
 async function printCorrectionSlips(
   tx: Transaction,
   cfg: TradingContext,

@@ -364,7 +364,6 @@ function emitGrouped(
   }
 }
 
-/** `order`, then ` · ` and the party's name, wrapping the name under itself. */
 function emitOrderLine(
   b: ReturnType<typeof esc>,
   order: string,
@@ -626,12 +625,6 @@ export interface KitchenNoteChangeSlip {
   orderNoteChange: KitchenNoteChange;
 }
 
-/**
- * A kitchen-note change at one printer: the affected orders and party, then
- * each station's dishes, under the station's name when there is more than one. Dishes that share
- * one group name it once under the note lines; otherwise each group's run is headed, as a ticket
- * heads them, with no late-send marks.
- */
 export function formatKitchenNoteChangeSlip(
   slip: KitchenNoteChangeSlip,
   layout: EscSetting,

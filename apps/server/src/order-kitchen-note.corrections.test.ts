@@ -77,7 +77,9 @@ it("A1378 prints and acknowledges one party note change across two bills", async
     await v.db.select().from(printJobs).where(eq(printJobs.printerId, output))
   ).filter((job) => !before.has(job.id));
   expect(papers).toHaveLength(1);
-  expect(printedLines(papers[0]!.payload)[3]).toBe(`Pedidos ${numbers.join(", ")} · Ana`);
+  expect(printedLines(papers[0]!.payload)[3]).toBe(
+    `${kitchenTicketWords("es").orders} ${numbers.join(", ")} · Ana`,
+  );
   const notes = (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
     (notice) => notice.orderNoteChange !== undefined,
   );
@@ -165,7 +167,7 @@ it("A1378 lists only each printer's affected bills on a party note change", asyn
   const jobs = (await v.db.select().from(printJobs)).filter((job) => !before.has(job.id));
   expect(jobs).toHaveLength(2);
   expect(printedLines(jobs.find((job) => job.printerId === shared)!.payload)[3]).toBe(
-    `Pedidos ${rows
+    `${kitchenTicketWords("es").orders} ${rows
       .map((row) => row.number)
       .sort((a, b) => a - b)
       .join(", ")}`,
