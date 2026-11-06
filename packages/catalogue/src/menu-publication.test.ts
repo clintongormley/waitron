@@ -1770,6 +1770,89 @@ describe("previewMenu", () => {
     });
   });
 
+  describe("says what this menu would inherit now on its own price change", () => {
+    const priceChanges = async (menuId: string) =>
+      changeBodies((await app((tx) => previewMenu(tx, menuId))).changes).filter(
+        (change) => change.kind === "price_changed",
+      );
+
+    it("names Burger's product price while Dinner sets its own, following a product price change", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), {
+          grossPrice: "11.00",
+        }),
+      );
+      expect(await priceChanges(f.dinner)).toEqual([
+        {
+          kind: "price_changed",
+          productId: f.burger,
+          name: "Burger",
+          from: "12.00",
+          to: "11.00",
+          source: "this_menu",
+          inheritedPrice: "12.00",
+        },
+      ]);
+      await app((tx) => updateProduct(tx, f.burger, { unitPrice: "13.50" }));
+      expect((await priceChanges(f.dinner)).map((change) => change.inheritedPrice)).toEqual([
+        "13.50",
+      ]);
+    });
+
+    it("leaves it out when Dinner clears a price it had live", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), {
+          grossPrice: "11.00",
+        }),
+      );
+      await publish(f.dinner);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), { grossPrice: null }),
+      );
+      const [change] = await priceChanges(f.dinner);
+      expect(change).toMatchObject({ source: "this_menu", from: "11.00", to: "12.00" });
+      expect(change).not.toHaveProperty("inheritedPrice");
+    });
+
+    it("leaves it out of a shared product's price change", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      await app((tx) => updateProduct(tx, f.burger, { unitPrice: "13.50" }));
+      const [change] = await priceChanges(f.dinner);
+      expect(change).toMatchObject({ source: "shared_product", from: "12.00", to: "13.50" });
+      expect(change).not.toHaveProperty("inheritedPrice");
+    });
+
+    it("says null when the places Dinner would inherit Lemonade's price from disagree", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      await app(async (tx) => {
+        // Dinner places Lemonade itself (3.00) and reaches it through Drinks, which sets 3.40.
+        await addMember(tx, f.dinnerRoot, product(f.lemonade));
+        await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: "3.40",
+        });
+        await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lemonade), {
+          grossPrice: "3.10",
+        });
+      });
+      expect(await priceChanges(f.dinner)).toEqual([
+        {
+          kind: "price_changed",
+          productId: f.lemonade,
+          name: "Lemonade",
+          from: "3.00",
+          to: "3.10",
+          source: "this_menu",
+          inheritedPrice: null,
+        },
+      ]);
+    });
+  });
+
   it("names sulphites on Lemonade and on its extra as shared product changes (Review Focus 1)", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);

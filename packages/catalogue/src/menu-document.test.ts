@@ -926,6 +926,17 @@ describe("diffMenuDocuments", () => {
     expect(diffMenuDocuments(document, document)).toEqual([]);
   });
 
+  it("says nothing about an inherited price, having no combined offers", async () => {
+    const f = await menusFixture(fx.db);
+    const live = await build(f.dinner);
+    await app(async (tx) =>
+      updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), { grossPrice: "11.00" }),
+    );
+    const [change] = diffMenuDocuments(live, await build(f.dinner));
+    expect(change).toMatchObject({ kind: "price_changed", source: "this_menu", to: "11.00" });
+    expect(change).not.toHaveProperty("inheritedPrice");
+  });
+
   it("names a reorder of the top level as this menu's change", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);

@@ -1012,8 +1012,16 @@ export function diffEntries(
         from: was.unitPrice,
         to: offer.unitPrice,
         ...(() => {
-          if (was.grossPrice !== offer.grossPrice) return { source: "this_menu" as const };
           const price = combined.get(productId)?.price;
+          if (was.grossPrice !== offer.grossPrice) {
+            if (price?.state !== "decided" || price.source.kind !== "own")
+              return { source: "this_menu" as const };
+            const otherwise = price.otherwise;
+            return {
+              source: "this_menu" as const,
+              inheritedPrice: otherwise?.state === "decided" ? otherwise.value : null,
+            };
+          }
           if (price?.state !== "decided" || price.source.kind !== "menu")
             return { source: "shared_product" as const };
           let setAt: ValueSource = price.source.from;

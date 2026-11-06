@@ -207,7 +207,16 @@ export type MenuChangeBody = {
     }
   | { kind: "product_deleted"; productId: string; name: string }
   | { kind: "product_moved"; productId: string; name: string; from: string[][]; to: string[][] }
-  | { kind: "price_changed"; productId: string; name: string; from: string; to: string }
+  | {
+      kind: "price_changed";
+      productId: string;
+      name: string;
+      from: string;
+      to: string;
+      /** On a this-menu change while this menu sets a price: what it would charge with none; null
+       * when the places it would inherit from disagree. */
+      inheritedPrice?: string | null;
+    }
   | { kind: "product_changed"; productId: string; name: string; fields: ProductChangeField[] }
   | {
       kind: "extra_unit_changed";
