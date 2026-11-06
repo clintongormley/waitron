@@ -259,7 +259,7 @@ it("consults an exact committed restore without changing counters or evidence", 
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
 });
 
-it("gives a restore the backup's newest fiscal record time as its floor", async () => {
+it("gives a restore's history no time floor", async () => {
   await seed();
   const clock = {
     ...steadyClock,
@@ -283,13 +283,11 @@ it("gives a restore the backup's newest fiscal record time as its floor", async 
     ),
   );
   const facts = await read();
+  expect(facts.history[0]).not.toHaveProperty("timeFloorMs");
   expect(
     projectHourHistory({
       scope: { taxpayerNif: "89890001K", environment: "preproduction" },
       sources: facts.history,
     }),
-  ).toMatchObject({
-    recordedTimeFloorMs: Date.parse("2026-10-22T20:15:00Z"),
-    contradictions: [],
-  });
+  ).toMatchObject({ contradictions: [] });
 });
