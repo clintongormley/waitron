@@ -574,6 +574,8 @@ The change list is rebuilt for every new preview object — `#renderChanges` wra
   only). Drawing Undo changes the two whole-row pins in `menus-screen.test.ts` ("keeps the Preview
   tab in the address…" and "previews again and says the menu changed…") again, the same way Task
   1.7 did: the new link's word goes before "Hide".
+  *Correction (as built):* neither pin needed to change — their fixture `lunchPreview()` has
+  `live: null`, so no Undo is drawn.
 - [ ] Run the three widget suites as in Task 1.7. Root guards as in Task 1.7, plus
   `scripts/native-form-fields.test.ts` (expect no new finding: a button is not a field).
 
@@ -601,7 +603,7 @@ return unless `undo`. Set `busy`, `undoOut`, clear this change's refusal and `un
 menu's Preview tab is shown (`this.menuId === menuId && this.view === "preview"`, as `#savePrice`
 judges it, `:2099-2109`): a refusal sets `undoRefusals[changeId] = undoRefusalText(…)`, a success
 sets `undoResult`. When it is not shown, a refusal sets `memberError` with
-`menu_preview.undo_refused_change` ("{change}: not undone. {reason}", `{reason}` from
+`menu_preview.undo_refused_change` ("Not undone: {change}. {reason}", `{reason}` from
 `undoRefusalText`) and a success sets nothing. After a rename success also `await this.#watchMenus().catch(() => undefined)`
 as `#saveMenu` does (`:1427`); after a success `await this.#refresh()`. Clear `busy` and
 `undoOut` in a `finally` around the task's body. `#publish` returns while `undoOut`'s menu is the
@@ -617,7 +619,7 @@ listen for `wt-menu-undo`.
   - A write that succeeds followed by a failed re-read: the success line stays and the preview's
     read error shows; nothing says the Undo failed.
   - Two quick clicks send one write.
-  - Refused after the person switched to Structure: `memberError` reads "{change}: not undone.
+  - Refused after the person switched to Structure: `memberError` reads "Not undone: {change}.
     {reason}", never "was not saved".
   - An Undo held unanswered on one menu, another menu opened (its change with the same id shows
     "Undo", not "Undoing…"), the first reopened: its Publish is drawn disabled, and a publish

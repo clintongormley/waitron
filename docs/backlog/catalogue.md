@@ -477,12 +477,17 @@ names; folding them into the one helper was not part of W77a.
 ## A353 — Preview's changes: an "Undo" link that puts one change back to the live version
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
-  2026-10-07: "would it be possible to have an 'Undo' link as well?"; PARKED, not queued — owner
-  2026-10-08: take it from here when a lane has room).** Started in lane D, then parked for A366.
-  Its work so far is on a LOCAL branch only — `feat/menu-preview-undo` at `e04b3abe7`, in the
-  worktree `waitron-feat-menu-preview-undo` (no push, no pull request): the plan, and the scalar
-  and presentation Undo checkpoint. What was left at the park: the rest of its Task 2's controls,
-  the structural Undo commands, and the server and dashboard wiring.
+  2026-10-07: "would it be possible to have an 'Undo' link as well?").** In progress on
+  `feat/a353-preview-undo`, in five pull requests
+  ([plan](../superpowers/plans/2026-11-06-a353-preview-undo.md)). PR 1 credits each price change
+  to the menu whose price setting moved; gives Undo to a menu's name, its Home display settings,
+  an own section's name, photo or colour, a dish's price on the menu, and one variant's price on
+  the menu; and links each shared-product change to Edit product (or Edit extras list) and each
+  included-menu change to that menu. Still to come: PR 2, Undo for what this menu's include of
+  another menu fixes, and whether it shows as a folder; PR 3, products added, moved and removed in
+  this menu's own lists; PR 4, includes added and removed, own sections moved, and a new own section
+  that is empty; PR 5, one-move order changes and one-write shortcut changes, after which this
+  entry is deleted and the changes left without Undo (the plan's section 2) become their own entry.
 
 ## A1373 — The Preview credits a product's own price change seen through an include to the included menu
 

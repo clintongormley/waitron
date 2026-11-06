@@ -5408,6 +5408,22 @@ them and is disabled when nothing is hidden. Show the hidden count below the hea
 Publish still includes every change. Keep hidden IDs in component state for the same menu,
 intersecting them with each refreshed change list; leaving the menu forgets them.
 
+Each bullet's action sits after View and before Hide, and depends on where the change came from.
+A change made in this menu gets an Undo button where one existing write puts the whole change
+back to the published version: the menu's name, a Home display setting, an own section's name,
+photo or colour, a dish's price here, or one variant's price here; nothing on a menu never
+published. A shared product's change links to Edit product, or Edit extras list for an extras
+item's portion or maximum quantity. An included menu's change links to Edit {menu}, on its Price
+overrides tab for a price and its Structure tab otherwise. A deleted product, and every other
+change, gets none. Undo reads Undoing… while its write is out and is drawn muted while another
+write, a Home save or a publish is out; both states ignore clicks. While an Undo of a menu is out,
+that menu's Publish and Schedule are disabled. A refusal shows inside its bullet as "Not undone.
+{reason}"; once the person has left that menu's Preview tab it shows in the error line under the
+screen's heading as "Not undone: {change}. {reason}". A success shows one status line under the
+Unpublished changes heading, "Undone: {change}.", and the preview is read again. Undo never asks
+for confirmation. Checks: `apps/dashboard/src/widgets/menu-preview.undo.test.ts` and
+`apps/dashboard/src/screens/menus-screen.preview-undo.test.ts`.
+
 Widget checks: `apps/dashboard/src/widgets/menu-preview-tree.test.ts` and
 `menu-preview-navigation.test.ts` beside it; publication and accessibility checks remain beside
 them. Screen freshness checks in `apps/dashboard/src/screens/menus-screen.test.ts` keep the
