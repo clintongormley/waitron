@@ -6,6 +6,7 @@ import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   enabledModules,
+  modulesWithSets,
   type ConfigurationTransferTable,
   type WaitronModule,
 } from "@waitron/module";
@@ -582,6 +583,23 @@ it("exports the venue's own fields and the default menu outside them", async () 
     ].sort(),
   );
   expect(bundle.defaultCatalogueId).toBe(defaultCatalogueId);
+});
+
+it("lists only the exported modules' versions, so setup accepts a box's export that names its switched-off modules", async () => {
+  const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
+  const target = await applyVenue(planVenue(gbVenue, modules), { db: suite.db, modules });
+  const everyVersion = Object.fromEntries(modulesWithSets(ALL_MODULES).map((m) => [m.name, 1]));
+  expect(everyVersion).toHaveProperty("fiscal-verifactu");
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    target,
+    modules,
+    new Date("2026-10-16T11:40:00Z"),
+    everyVersion,
+  );
+  const enabledVersions = Object.fromEntries(modulesWithSets(modules).map((m) => [m.name, 1]));
+  expect(bundle.modules).toEqual(enabledVersions);
+  expect(() => validateConfigurationBundle(bundle, modules, enabledVersions)).not.toThrow();
 });
 
 it("puts every row under the importing venue whatever location id it names", async () => {
