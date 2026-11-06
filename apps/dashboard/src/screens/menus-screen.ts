@@ -1492,8 +1492,9 @@ export class MenusScreen extends LitElement {
           await sendMenuUndo(this.api, command);
         } catch (error) {
           const reason = undoRefusalText(error, command);
-          // The Preview is asked only once it and the screen have drawn what they hold, a preview
-          // taken just before the refusal included, and in the same turn as the refusal is placed.
+          // `drawsUndo` answers from what the Preview last drew, so ask it only once neither the
+          // screen nor the Preview has a redraw pending, and place the refusal in the same turn as
+          // that answer.
           let panel = this.renderRoot.querySelector("dashboard-menu-preview");
           while (this.isUpdatePending || panel?.isUpdatePending) {
             await this.updateComplete;

@@ -610,8 +610,8 @@ return unless `undo`. Set `busy`, `undoOut`, clear this change's refusal and `un
 `#writes.run("undo:" + menuId)`. Inside: `await sendMenuUndo(this.api, command)`. While the same
 menu's Preview tab is shown (`this.menuId === menuId && this.view === "preview"`, as `#savePrice`
 judges it, `:2099-2109`): a success sets `undoResult`, and a refusal sets
-`undoRefusals[changeId] = undoRefusalText(…)` when the Preview widget's `drawsUndo(changeId)`
-answers true (its read has not failed and it draws that change, not hidden, with its Undo).
+`undoRefusals[changeId] = undoRefusalText(…)` when the Preview widget's `drawsUndo(changeId)`,
+asked once neither the screen nor the Preview has a redraw pending, answers true (its read has not failed and it draws that change, not hidden, with its Undo).
 Otherwise a refusal sets `memberError` with
 `menu_preview.undo_refused_change` ("Not undone on {menu}: {change}. {reason}", `{menu}` the
 menu list's name for the menu the Undo was sent from, or the name taken when it was sent once
@@ -662,7 +662,8 @@ Schedule is drawn `secondary` and disabled rather than hidden (today it is drawn
 `undoRefusals` and `undoResult`, and nothing about `undoOut`: the record must outlive the menu
 being left, or Publish could run on a menu whose Undo is still out. `#showView` (`:1249-1262`)
 clears `undoRefusals` and `undoResult` when leaving the Preview tab; `#publish` clears
-`undoResult`. A refreshed preview drops refusals whose id it no longer lists, nothing else.
+`undoResult`. A refreshed preview, or a change to the content languages, drops each refusal whose
+change no longer offers Undo (`#forgetStaleRefusals`); hiding a change keeps its refusal.
 
 - [ ] Failing tests, one at a time:
   - An Undo held unanswered → Schedule is drawn disabled (the Publish half is Task 1.9's).
