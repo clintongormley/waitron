@@ -567,6 +567,11 @@ The change list is rebuilt for every new preview object — `#renderChanges` wra
   bullet's `<span>`).
 - [ ] A11y in both themes: ready, undoing, blocked, refused, with the success line, and failed
   with the success line.
+- [ ] Work every change's action out again when the switched-on content languages change, not only
+  on a new preview: a section-name Undo depends on them (Task 1.7's actions are redone per preview
+  only). Drawing Undo changes the two whole-row pins in `menus-screen.test.ts` ("keeps the Preview
+  tab in the address…" and "previews again and says the menu changed…") again, the same way Task
+  1.7 did: the new link's word goes before "Hide".
 - [ ] Run the three widget suites as in Task 1.7. Root guards as in Task 1.7, plus
   `scripts/native-form-fields.test.ts` (expect no new finding: a button is not a field).
 
