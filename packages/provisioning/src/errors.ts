@@ -18,7 +18,8 @@ declare module "@waitron/shared" {
     "setup.fiscal_test_required": { module: string };
     "setup.email_required": { field: "email" };
     "setup.already_provisioned": Record<string, never>;
-    "setup.not_ready": Record<string, never>;
+    /** A log-safe name for what stopped setup; the setup page words each. */
+    "setup.not_ready": { cause?: "may-have-filed" | "unexpected" | "too-large" | "unreadable" };
     "setup.operation_conflict": Record<string, never>;
     "setup.already_provisioning": Record<string, never>;
     "password.throttled": { retryAfterSeconds: number };
