@@ -25,6 +25,7 @@ declare module "*/scripts/box/host-protocol.mjs" {
 
 declare module "*/scripts/box/wifi-record.mjs" {
   export const WIFI_NO_COPY_REASONS: readonly string[];
+  export function isSsidHex(value: unknown): boolean;
 }
 
 declare module "*/scripts/box/wifi-boot-copy.mjs" {

@@ -1,4 +1,10 @@
-import { boxHostClient, type BoxHostClient, type ClockServiceStatus } from "./box-host-client.js";
+import {
+  boxHostClient,
+  boxHostRequests,
+  type BoxHostClient,
+  type BoxHostRequests,
+  type ClockServiceStatus,
+} from "./box-host-client.js";
 import { clearStagedRecoveries, createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { createLiveModuleOperation } from "./live-module-operation.js";
@@ -357,6 +363,7 @@ import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
+import { mountBoxHostApi } from "./box-host-api.js";
 import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
 import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
@@ -974,6 +981,8 @@ export interface StartServerSeams {
   requestFromBox?: (c: Context) => boolean;
   /** The box's clock service; unset, the server talks to the host's socket. */
   boxHost?: BoxHostClient;
+  /** The box's host requests; unset, the server talks to the host's socket. */
+  boxHostRequests?: BoxHostRequests;
   /** Every card provider the till and the card sweeps reach, built on the server's own handle. */
   cardPool?: (deps: { db: Database }) => CardProviderPool;
   /**
@@ -3181,6 +3190,7 @@ async function bootServer(
     },
     log,
   );
+  mountBoxHostApi(app, { db, host: seams.boxHostRequests ?? boxHostRequests() }, log);
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);

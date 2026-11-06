@@ -729,6 +729,26 @@ A1017 qualified the existing [authorised ordinary-restore fixture](../developers
 separately. Cloud still needs its own same-run proof and
 must distinguish verifier non-activation from the ordinary restore's authorised fiscal recovery.
 
+## Management changes do not check which page sent them
+
+OPEN, a server-wide decision (found by B3 PR 9's review, 2026-11-06). SameSite ignores the port (the
+HTML standard's "Sites" section, read 2026-11-06: "A site is an opaque origin or a scheme-and-host",
+obtained as "(origin's scheme, origin's host's registrable domain)" or, with no registrable domain,
+"(origin's scheme, origin's host)", so no port; the cookie draft draft-ietf-httpbis-rfc6265bis-20,
+§5.2, read the same day: "Two origins are same-site if they satisfy the "same site" criteria defined
+in [SAMESITE]", which is HTML's; shown in Chromium by the run below), so a page on another port of
+the box's own name is sent a signed-in manager's cookie, and a POST whose body is plain text, or
+that has no body, reaches the route with no preflight. PR 9's own box routes now refuse another page
+by `Origin` and `Sec-Fetch-Site` and take a body only as JSON; the other management POST routes read
+for this entry check neither. Shown in real Chromium only for PR 9's forget and start screen, before
+the fix. The same shape, by reading and not run: `POST /api/box/free-space` (since #1987) and
+`POST /api/box/retire` (no body, no page check), `POST /api/box/clock-challenge` (no body;
+`clock-confirm` (since #2025) and `clock-set` (since #2331) take a body of any type and check no
+page, but need the challenge id only `clock-challenge`'s answer carries, which another page cannot
+read), and `POST /management-api/catalogues` (any body type, through `readJsonBody`). Decide whether
+every management route that changes something checks `Origin` and `Sec-Fetch-Site` (one middleware,
+like `requireOwnPage` in `apps/server/src/box-host-api.ts`), requires JSON, or both.
+
 ## A917 — the owner chooses the server's `.local` name instead of `waitron.local`
 
 DESIGNED
@@ -994,9 +1014,9 @@ between the 32 bytes the box keeps and the 64 letters a person reads and types, 
   checked as the unlock gate checks them, and anything else throws `disk_recovery_key.invalid`.
 
 **Built so far (2026-11-05), PR 7.** [PR 7](../superpowers/plans/2026-11-05-b3-7-host-protocol.md)
-(#2474) adds `scripts/box/host-protocol.mjs`, called by nothing yet: what the server may ask B3's
-host service and what the host may answer, as a pure module with no socket, root or
-NetworkManager.
+(#2474) adds `scripts/box/host-protocol.mjs`, called by nothing yet (2026-11-06: PR 8's client calls
+its request writer and reply reader; PR 9's routes call that client): what the server may ask B3's
+host service and what the host may answer, as a pure module with no socket, root or NetworkManager.
 
 - Seven requests from Task 3.1's list (`HOST_VERBS`; `first-start.status` is left to slice 1's
   recipe); `clock.status` and `clock.set` stay slice 9b's shell handler's (`SHELL_VERBS`), and this
@@ -1066,7 +1086,8 @@ nothing yet: one typed method for each of PR 7's seven requests.
   the exports the server uses; TypeScript does not check it against the module's code (the plan's
   D1): the server's build refuses an export `box-host-client.ts` uses that the module lacks, and the
   types test reads each list it declares. `box-scripts.d.ts` also declares `wifi-record.mjs` and
-  `wifi-boot-copy.mjs`, which only the types test imports.
+  `wifi-boot-copy.mjs`, which only the types test imports (2026-11-06: PR 9's `box-host-api.ts`
+  imports `wifi-record.mjs`'s `isSsidHex`).
 - `host-protocol.mjs` now exports its reply value lists, frozen.
   `apps/server/src/box-host-client.types.test.ts` holds each of the server's value types to the
   matching list, in any order, both through the typecheck and at run time, and sends every listed
@@ -1077,6 +1098,74 @@ nothing yet: one typed method for each of PR 7's seven requests.
 - `boot.ts` imports the clock client from the same file, so the server's bundle now carries
   `host-protocol.mjs` and the five modules it reaches (`pnpm --filter @waitron/server build`, then
   `/usr/bin/grep -n "^// \.\./\.\./scripts/box" apps/server/dist/server.js`, on 2026-11-06).
+
+**Built so far (2026-11-06), PR 9.** [PR 9](../superpowers/plans/2026-11-06-b3-9-host-routes.md)
+adds six routes in `apps/server/src/box-host-api.ts` that ask the box's host service through PR 8's
+client. No screen calls them yet.
+
+- `GET /api/box/network` (`network.read`, answers `{ wired, wifi, change, bootCopy }`),
+  `POST /api/box/network/scan` (`{ networks }`), `POST /api/box/network/join`
+  (body `{ ssidHex, keyMgmt, psk, hidden }`, answers `{}`), `POST /api/box/network/forget`
+  (`{ ssidHex }`, answers `{}`), `GET /api/box/screen` (`{ start }`) and `POST /api/box/screen`
+  (`{ start }`, answers `{ start }`).
+- All six, the reads included, need a session holding `system.manage`, checked through
+  `authorizeSystemManager` before the body's type and keys are checked and before the host is asked
+  (on the four POST routes, after the page checks below and the 4096-byte limit), now exported from
+  `box-health-api.ts` unchanged, so the full-disk fallback (the same checks again as reads only)
+  covers these routes too. Each request names the signed-in person as its actor; a person id that is
+  not a UUID is a fault (500) and reaches no host.
+- Each body must be a JSON object with exactly its keys, sent as `Content-Type: application/json`;
+  anything else answers `management.request_invalid` with `field` set to the first missing or
+  wrong key, or to `body` (an extra key's own name never reaches the log, and a body of another type
+  names `body`). The type is checked after the session, on the join, the forget and the start
+  screen; the scan reads no body and checks no type. The SSID is checked with `isSsidHex`, now
+  declared in `box-scripts.d.ts`. Bodies over 4096 bytes are refused the same way.
+- The client's answers map to these codes: `missing` and `unsupported` answer 409
+  `box_host.unavailable` (`reason` and `detail` kept); `lost`, `timeout`, `malformed` and the
+  protocol's four refusals answer 502 `box_host.failed` with that word as `reason`; the host's own
+  `busy`, `no_wifi` and `not_saved` answer 409 `box_network.busy`, `box_network.no_wifi` and
+  `box_network.not_saved`; `invalid` on the join answers 400 `box_network.password_invalid`
+  `{ field: "psk", keyMgmt }`, and on any other route is a 500 fault.
+- The join is taken only over an encrypted connection from the box's own page: a socket that is not
+  an encrypted `TLSSocket`, another `Origin`, or a `Sec-Fetch-Site` other than `same-origin` or
+  `none` answers 403 `box_network.join_connection_insecure` `{ reason: "unencrypted" |
+  "other_origin" }`. That check is a middleware that runs before the body-size limit and the session
+  check, so a refused join has read none of its body; a test counts the body stream's reads at zero
+  both on the routes alone and in a started server, where boot's own middleware runs first. A
+  `Content-Type` other than `application/json` is refused after the session check, as
+  `management.request_invalid` `{ field: "body" }`.
+- The other three changes (the scan, the forget and the start screen) are refused from a page other
+  than the box's own by the same `Origin` and `Sec-Fetch-Site` test, answering 403
+  `box_host.origin_refused` and logged at warn; they need no encrypted connection, since none
+  carries a secret. That check too is a middleware before the body-size limit and the session
+  check, so a refused change has asked the host nothing, taken no host-call place and read none of
+  its body. The reads are not checked: another page cannot read their answers. Why: SameSite
+  ignores the port, so a page served on another port of the box's own name is sent the manager's
+  cookie; a review run in real Chromium showed such a page changing the start screen and forgetting
+  the saved network with a plain-text body, which no preflight stops, before these checks. In a
+  started server, boot's CORS middleware answers that page's preflight with no
+  `Access-Control-Allow-Origin` (a test asks for each of the three).
+- No part of the join's body is logged or answered. A canary sweep sends a password through every
+  outcome (success through a stand-in and through the real client, `busy`, `missing`, `lost`,
+  `host_failed`, a refused short password, a stand-in that throws with the password as its message,
+  no session, a supervisor, plain HTTP, another origin, an extra key, a refused SSID, a body over the
+  limit, malformed JSON and a text body), and finds neither the password, its first 6 or last 8
+  characters, nor the short password in any log call or answer, and no console call at all; through
+  the real client the password appears once, in the line the host received.
+- At most two host calls from the routes at once (`BOX_HOST_ROUTE_CALLS = 2`): a third answers 409
+  `box_host.busy` without asking the host, a call frees its place however it ends, and a request
+  refused before the host is asked takes no place. No host call runs inside a transaction or a write
+  lock: tests take both while a host call waits.
+- `boot.ts` builds `boxHostRequests()` (seam `boxHostRequests`) and mounts the routes after
+  `mountBoxHealthApi`. A started server with no stand-in answers `GET /api/box/network` with
+  `box_host.unavailable` `{ reason: "missing", detail: "ENOENT" }` on a machine with no
+  `/run/waitron-box/box.sock`.
+- On a mirror or a fenced box the read-only gate refuses the four POST routes with `node.read_only`;
+  no exemption was added, and no test of this pull request runs them there.
+- Left in the code, for whoever touches it next: `askHost` keeps one cast, `refusal as
+  ProtocolRefusal`, where the protocol's refusals go to `box_host.failed`; and on a route whose own
+  refusal set is empty (the reads and the start screen), an extra own word passed to `askHost` still
+  compiles, where on the scan, join and forget it does not.
 
 **A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
@@ -1260,9 +1349,9 @@ nothing yet: one typed method for each of PR 7's seven requests.
 - The Linux adapters are called as plain functions, never with `this` (the dispatcher reads each
   once and calls what it checked), so none may rely on `this`: an adapter that needs state takes
   it through a closure or a bound function.
-- The server's routes check `system.manage` for every person request; `tag.write` runs as the
-  server's own duty at handoff and after a rename or a move to Live commits, sending `null` for a
-  name the tag cannot hold.
+- `tag.write` runs as the server's own duty at handoff and after a rename or a move to Live
+  commits, sending `null` for a name the tag cannot hold: the name-tag pull request (PR 9's list
+  below).
 - The host service holds the latest change, serialises changes (one at a time, `busy` otherwise)
   and publishes the boot copy after each, keeping the two outcomes separate in `network.read`.
 - Nothing zeroes the Wi-Fi password end to end (PR 7's note above), so the host service and its
@@ -1283,33 +1372,22 @@ nothing yet: one typed method for each of PR 7's seven requests.
 
 **For later slices, from PR 8's [re-map against main](../superpowers/plans/2026-11-06-b3-8-host-client.md#re-map-against-main-on-2026-11-06):**
 
-- The routes pull request builds `boxHostRequests()` in `boot.ts`; makes the `PersonActor` from
-  the signed-in person after checking `system.manage`; gives each of the client's answers a route
-  answer and an error code (`unsupported` and `missing` mean "this box cannot do this", not a
-  fault); never logs a `networkJoin` argument; and runs `tagWrite` as the server's own duty.
-- The same pull request: sending `null` for a venue name the tag cannot hold (PR 7's D12) needs
-  `usableVenueName` from `scripts/box/name-tag.mjs`, unless the route reads this client's `invalid`
+- The name-tag pull request runs `tagWrite` as the server's own duty (see PR 9's list below).
+- The name-tag pull request: sending `null` for a venue name the tag cannot hold (PR 7's D12) needs
+  `usableVenueName` from `scripts/box/name-tag.mjs`, unless the duty reads this client's `invalid`
   and sends `null` again. Importing it needs a declaration and a `ROOT_SCOPE_CONSUMERS` entry, which
   would also close the CI gap below for `name-tag.mjs`.
-- The same pull request: the socket accepts at most four connections at once (`MaxConnections=4`,
-  `deploy/box/waitron-box.socket:10`). A dashboard re-reading `network.read` while a change runs,
-  beside the clock watch's status reads and sets, has to stay inside that; nobody has measured what
-  a fifth connection meets.
-- The same pull request: if the socket path comes from an environment variable, the client already
-  treats an empty value as no value and uses the default (`isUnset`,
-  `apps/server/src/env-value.ts:5`, called at `apps/server/src/box-host-client.ts:147` and `:348`),
-  so the route can hand the value over as read. Today nothing passes a path, so both clients use
-  `/run/waitron-box/box.sock` (`box-host-client.ts:42`).
-- The same pull request: CI's `bundle-smoke` already builds and starts a server bundle carrying the
-  host protocol, so an export `box-host-client.ts` uses that the module lacks fails that build (the
-  plan's finding 13), but no method of `boxHostRequests()` runs there until something calls one.
+- The socket's four connections (`MaxConnections=4`): PR 9's routes take at most two (its D7);
+  what a connection over four meets is a Linux measurement, in PR 9's list below.
+- CI's `bundle-smoke` builds and starts a server bundle carrying the host protocol, so an export
+  `box-host-client.ts` uses that the module lacks fails that build (the plan's finding 13). The
+  routes now call the client, but `bundle-smoke` requests none of them: it waits for
+  `server.listening` and stops the bundle (`.github/workflows/ci.yml`, the job's two start steps).
 - The forwarding pull request (Linux): once the shell handler lets B3 lines past 700 characters,
   decide whether the 700-character rule stays (it also reads a lagging host's `request_invalid` to a
   long line as `unsupported`); measure a forwarded read, scan and change against the 5 and 20
   seconds; and if the Node host runs as its own service, stopping the shell's instance at 15 seconds
   no longer stops a change, so the reason for 20 seconds needs revisiting (the plan's D6).
-- The "This box" screen pull request: words for `unsupported`, `missing`, `lost`, `timeout`,
-  `malformed` and each refusal, in English and Spanish.
 - Open: the clock client still answers `lost` to a whole reply followed by a broken connection
   (the plan's D5). Its lines stay under 700 characters, so the shell handler reads them whole, but a
   later host could break the connection after answering; whether the clock client should read that
@@ -1321,6 +1399,46 @@ nothing yet: one typed method for each of PR 7's seven requests.
   `allowJs`, a package or a TypeScript twin (D1); `unsupported` and `invalid` as the client's own
   words (D3); reading a reply before a broken connection for B3's requests only (D5); the 5- and
   20-second waits (D6).
+
+**For later slices, from PR 9's [re-map against main](../superpowers/plans/2026-11-06-b3-9-host-routes.md#re-map-against-main-on-2026-11-06):**
+
+- The name-tag pull request: `tagWrite` as the server's own duty at handoff, after a rename commits
+  and after a move to Live, sending `null` for a name the tag cannot hold (PR 7's D12). It needs
+  `usableVenueName` from `scripts/box/name-tag.mjs` (a declaration in `box-scripts.d.ts` and a
+  `ROOT_SCOPE_CONSUMERS` entry, which also closes PR 8's CI gap for `name-tag.mjs`); a source for
+  "Live" (today only `practiceMode`, from `onboardingIntent`, `apps/server/src/boot.ts:2082`, until
+  slice 8's modes); and what a refused or failed write does (retry, alert). It is a third server
+  user of the socket, so recount PR 9's two places (its D7) against `MaxConnections=4`.
+- The screen pull request (Task 3.2): English and Spanish words for `box_host.unavailable` (both
+  reasons), `box_host.failed` (saying that after `lost` or `timeout` a change may still have
+  happened), `box_host.busy`, `box_host.origin_refused`, `box_network.busy`, `box_network.no_wifi`,
+  `box_network.not_saved`, `box_network.password_invalid` (per `keyMgmt`) and
+  `box_network.join_connection_insecure`; keeping a read's and an action's failure apart on one
+  screen (the parent plan's "preserved action failure across read recovery"). When a real box
+  refuses a join with `box_network.join_connection_insecure` (a box with no certificate, or a page
+  not opened over HTTPS), the page says what happened and what each choice it offers does, per
+  CLAUDE.md's refusal rule. A dev stack served over plain HTTP answers every join with that code.
+- The Linux and kiosk pull requests: the box's own screen must open Waitron over HTTPS with the
+  box's certificate authority trusted, or its manager cannot join Wi-Fi from it (PR 9's D6).
+  Measure what a connection over `MaxConnections=4` meets, and whether the client reads it as
+  `lost` (for a join, a false "a change may have happened"); whether the clock side ever holds more
+  than two connections (a read started after a set clears the cache, PR 9's re-map finding 11); and
+  how long handler instances outlive the client's timeout (up to `RuntimeMaxSec=15` against a read's
+  5 seconds), which lets the routes' two places and the socket's four drift apart (PR 9's D7).
+  `EACCES` on a real box reaches the screen only as `box_host.unavailable`'s `detail`, so a box
+  whose app is not in the socket's group looks like a box without the service.
+- Open: whether a fenced physical box needs Red (today the read-only gate refuses its network
+  changes; an exemption would be a row in `READ_ONLY_EXEMPTIONS`). The SMTP and bucket settings
+  routes take credentials over any connection, where the join refuses one that is not encrypted.
+- Open, optional: the join's three connection conditions repeat those in `requireSecurePackRequest`
+  (`apps/server/src/backup-recovery-pack-api.ts:154-170`), `requireNodeOperationHttps`,
+  `assertOwnerTransport`, `recovery-start-again.ts`'s `isSecure` and `fromThisPage`, and
+  `setup-first-fiscal-api.ts`'s `assertFirstFiscalRequest` with its routes' own encrypted-connection
+  checks; one shared helper would stop them drifting apart.
+- Decisions recorded for review: reads under `system.manage`, with the person as actor (D2); the
+  answer table (D4); the protocol owning the password rules, with the route naming the field (D5);
+  the join's encrypted same-page connection (D6); two places, refused rather than queued (D7); no
+  socket-path setting (D8); no read-only exemption (D9); no server-side change log (D10).
 
 **Left open by PR 1's review (#2370):**
 
@@ -1430,6 +1548,7 @@ The owner's four answers: no reserved
 
 - **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
 - **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the clock-behind stop and the clock confirmation use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
+- **The box's network and screen routes send at most two requests to the host service at once, and refuse a third with `box_host.busy` rather than queue it (B3 PR 9's D7; the lane's decision of 2026-11-06, open to the owner).** The host's socket serves four connections (`deploy/box/waitron-box.socket`, `MaxConnections=4`) and how many the clock side holds at once is not measured (PR 9's plan, finding 11). Two rather than one, so a page's read is not refused while a scan runs; refused rather than queued, so no request waits behind a change, which can hold its place for up to 20 seconds. Two places do not hold the total to four; what is still to measure on Linux is in [PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md), D7.
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
   disposable venue copy omits its watchdog; it still takes the venue lock. Ordinary server and
   restore opens retain monitoring. Cloud must pin the implementing release and requalify its

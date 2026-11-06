@@ -1630,6 +1630,42 @@ declare module "@waitron/shared" {
      * `unverified`, it moved further, but the box could not confirm it landed where it was asked
      * to. */
     "clock.set_failed": { reason: "refused" | "unverified" };
+    /** The box's host service cannot take this request: `missing`, no connection to its socket
+     * was made (`detail` is the connection error's code); `unsupported`, the host does not take the
+     * request (`detail` is the host's word). */
+    "box_host.unavailable":
+      | { reason: "missing"; detail: string }
+      | { reason: "unsupported"; detail: "unknown_request" | "request_invalid" };
+    /** The box's host service failed a request: the connection was lost, timed out or answered
+     * something unreadable, or the host refused it with one of the protocol's own words. */
+    "box_host.failed": {
+      reason:
+        | "lost"
+        | "timeout"
+        | "malformed"
+        | "request_invalid"
+        | "actor_invalid"
+        | "fields_invalid"
+        | "host_failed";
+    };
+    /** The network and screen routes already have as many requests open to the box's host service
+     * as they allow, so this one was not sent. */
+    "box_host.busy": Record<string, never>;
+    /** A scan, forget or start-screen change was sent by a page other than the box's own
+     * (`Origin` or `Sec-Fetch-Site`), so nothing was sent to the host. */
+    "box_host.origin_refused": Record<string, never>;
+    /** The box's host service answered `busy` to a scan, join or forget. */
+    "box_network.busy": Record<string, never>;
+    /** The box's host service answered `no_wifi` to a scan or join. */
+    "box_network.no_wifi": Record<string, never>;
+    /** The box's host service answered `not_saved` to a forget: the network named is not the one
+     * the box has saved. */
+    "box_network.not_saved": Record<string, never>;
+    /** The Wi-Fi password breaks the host protocol's rules for its key type, so nothing was sent
+     * to the host. */
+    "box_network.password_invalid": { field: "psk"; keyMgmt: "wpa-psk" | "sae" };
+    /** A Wi-Fi join was not sent over an encrypted connection from the box's own page. */
+    "box_network.join_connection_insecure": { reason: "unencrypted" | "other_origin" };
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */
