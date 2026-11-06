@@ -53,7 +53,12 @@ async function fixture() {
   });
 }
 
-async function measuredClaim(tx: Transaction, agentId: string, printerId: string | undefined) {
+async function measuredClaim(
+  tx: Transaction,
+  agentId: string,
+  printerId: string | undefined,
+  invoice = false,
+) {
   const statements = vi.spyOn(tx, "execute");
   const candidates = new Set<string>();
   const prepare = DatabaseSync.prototype.prepare;
@@ -71,7 +76,16 @@ async function measuredClaim(tx: Transaction, agentId: string, printerId: string
   let jobs;
   const calls: Parameters<Transaction["execute"]>[0][] = [];
   try {
-    jobs = await claimPrintJobs(tx, agentId, { visibleKeys: [], printerId });
+    jobs = await claimPrintJobs(tx, agentId, {
+      visibleKeys: [],
+      printerId,
+      ...(invoice
+        ? {
+            invoiceReceiptsAt: "2026-11-06T12:00:00.000Z",
+            invoiceReceiptsAheadAt: "2026-11-06T12:01:00.000Z",
+          }
+        : {}),
+    });
   } finally {
     calls.push(...statements.mock.calls.map(([query]) => query));
     observer.mockRestore();
@@ -91,18 +105,38 @@ async function measuredClaim(tx: Transaction, agentId: string, printerId: string
 }
 
 describe("print claims with delivered history", () => {
-  it.each([
-    { specific: false, statistics: false },
-    { specific: true, statistics: false },
-    { specific: false, statistics: true },
-    { specific: true, statistics: true },
-  ])(
-    "uses both printer and status keys for an empty pull ($specific, statistics: $statistics)",
-    async ({ specific, statistics }) => {
-      const { agentId, printerId } = await fixture();
+  it.each(
+    [
+      { specific: false, statistics: false },
+      { specific: true, statistics: false },
+      { specific: false, statistics: true },
+      { specific: true, statistics: true },
+    ].flatMap((variant) => [
+      { ...variant, invoice: false },
+      { ...variant, invoice: true },
+    ]),
+  )(
+    "bounds empty pulls by printer and status ($specific, statistics: $statistics, invoice: $invoice)",
+    async ({ specific, statistics, invoice }) => {
+      const { agentId, printerId, venueId } = await fixture();
       await withTransaction(suite.db, async (tx) => {
+        const other = await createPrinter(tx, {
+          name: "Other",
+          transport: "network_tcp",
+          host: "other-printer.test",
+        });
+        if (specific)
+          await tx
+            .insert(printJobs)
+            .values({
+              locationId: venueId,
+              printerId: other.id,
+              payload: Buffer.from([1]),
+              status: "queued",
+              createdAt: "2025-01-01T00:00:00.000Z",
+            });
         if (statistics) tx.execute(sql`analyze`);
-        const result = await measuredClaim(tx, agentId, specific ? printerId : undefined);
+        const result = await measuredClaim(tx, agentId, specific ? printerId : undefined, invoice);
         expect(result.jobs).toEqual([]);
         expect([...result.candidates]).toEqual([]);
         expect(result.plan.join("\n")).toMatch(
