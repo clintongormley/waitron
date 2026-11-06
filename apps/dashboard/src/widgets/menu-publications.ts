@@ -231,6 +231,8 @@ export class MenuPublicationsPanel extends LitElement {
   @property() menuId = "";
   @property() menuName = "";
   @property({ attribute: false }) preview: MenuPreview | null = null;
+  /** Set while a write that would change the preview is out, such as the Preview's Undo. */
+  @property({ type: Boolean }) blocked = false;
 
   @state() private answer: MenuPublicationsAnswer | null = null;
   @state() private loading = true;
@@ -883,7 +885,10 @@ export class MenuPublicationsPanel extends LitElement {
               <wt-button
                 variant="secondary"
                 data-test="schedule-open"
-                @click=${() => this.#openSchedule(null)}
+                .disabled=${this.blocked}
+                @click=${() => {
+                  if (!this.blocked) this.#openSchedule(null);
+                }}
                 >${t("menu_publications.schedule")}</wt-button
               >
             </div>`

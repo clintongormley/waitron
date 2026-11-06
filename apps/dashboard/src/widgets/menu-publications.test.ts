@@ -1872,3 +1872,20 @@ it("A498 shows only waiting schedules without a status column and opens a compac
     schedule.shadowRoot!.querySelector("dialog")!.getBoundingClientRect().width,
   ).toBeLessThanOrEqual(480);
 });
+
+describe("while the screen blocks scheduling", () => {
+  it("draws Publish later secondary and disabled, and a click opens nothing", async () => {
+    const el = await mount(stubApi(), { preview: draftPreview(), blocked: true });
+    const button = inShadow(el, "schedule-open") as HTMLElementTagNameMap["wt-button"] | null;
+    expect(button).not.toBeNull();
+    expect(button!.variant).toBe("secondary");
+    expect(button!.disabled).toBe(true);
+    button!.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(scheduleDialog(el).open).toBe(false);
+
+    el.blocked = false;
+    await flush(el);
+    expect(button!.disabled).toBe(false);
+  });
+});
