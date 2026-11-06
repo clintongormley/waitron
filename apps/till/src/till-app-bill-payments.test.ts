@@ -5621,23 +5621,26 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(new Set(sent().map((request) => request.submissionId)).size).toBe(1);
   });
 
-  it("tries the card again as a new payment after the device changed profile while it was starting", async () => {
-    const takeBillPayment = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "device.profile_changed", status: 409 })
-      .mockResolvedValueOnce(
-        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
-      );
-    const el = await takeOnReader(takeBillPayment);
-    expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("device.profile_changed"));
+  it.each([409, 500])(
+    "tries the card again as a new payment after a definitive profile-change refusal with status %s",
+    async (status) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.profile_changed", status })
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        );
+      const el = await takeOnReader(takeBillPayment);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("device.profile_changed"));
 
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
 
-    expect(sent()).toHaveLength(2);
-    expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
-    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
-  });
+      expect(sent()).toHaveLength(2);
+      expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    },
+  );
 
   it.each(["reader.not_held", "reader.payment_in_progress"])(
     "tries the card again as a new payment after the reader refused to start it with %s",
