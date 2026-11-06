@@ -1,5 +1,12 @@
 import { eq, sql } from "drizzle-orm";
-import { customThemes, nowIso, type Transaction } from "@waitron/db";
+import {
+  customThemes,
+  nowIso,
+  type Transaction,
+  mediaImageBlobs,
+  mediaImageEdits,
+  mediaImages,
+} from "@waitron/db";
 import { departmentReceipts } from "@waitron/venue-service";
 import { AppError, type ReceiptLogoRasters } from "@waitron/shared";
 import { validateFraming, type ImageEditInput } from "./framing.js";
@@ -10,7 +17,6 @@ import {
   validateImageMetadata,
   type ImageRecord,
 } from "./images.js";
-import { mediaImageBlobs, mediaImageEdits, mediaImages } from "./schema/images.js";
 import { imageFilename } from "./stored-filename.js";
 import type { PreparedImage } from "./prepare.js";
 import "./errors.js";

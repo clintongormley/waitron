@@ -3,7 +3,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
-import { loginEmailKey, persons } from "./schema/persons.js";
+import { loginEmailKey, persons } from "@waitron/db";
 import { normalizeEmail } from "./email.js";
 import { foldForUniqueness } from "./fold.js";
 import { hashPassword, verifyPassword } from "./verify-password.js";

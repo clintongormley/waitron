@@ -76,7 +76,7 @@ async function provisionTenant(): Promise<{ nodeId: string; managerId: string }>
 
   const managerId = await withTransaction(suite.db, async (tx) => {
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
-    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts`) that raw SQL never reaches.
+    // `$defaultFn` generators (`packages/db/src/schema/identity/persons.ts`) that raw SQL never reaches.
     const [manager] = await tx
       .insert(persons)
       .values({

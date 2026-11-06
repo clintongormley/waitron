@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, persons } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import type { PersonRoleValue } from "@waitron/shared";
 import { hashPin } from "./verify-pin.js";
-import { persons } from "./schema/persons.js";
 import { listActivePersonsWithRoles } from "./staff.js";
 
 const PIN = hashPin("1234");

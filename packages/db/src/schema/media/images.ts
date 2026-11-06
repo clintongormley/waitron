@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
-import { binary, count, id, json, label, newId, now, table, ts } from "@waitron/db";
+import { binary, count, id, json, label, newId, now, table, ts } from "../columns.js";
 
 export const mediaImages = table(
   "media_images",

@@ -3,7 +3,7 @@
 // nothing here; and nothing in this package declares a `unique()`.
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { CREDENTIALS_MIGRATIONS } from "../migrations.js";
-import * as barrel from "./index.js";
+import * as barrel from "@waitron/db/schema/credentials.js";
 
 describeSchemaConformance({
   subjectName: "credentials",

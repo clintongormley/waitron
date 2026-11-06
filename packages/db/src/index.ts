@@ -370,3 +370,26 @@ export {
 
 export { tenderRefunds, tenderRefundState } from "./schema/tender-refunds.js";
 export { nextStationColour } from "./station-colour.js";
+
+// Tables a module's own migration set creates (`./schema/hosted.ts`), listed by hand so each
+// module package re-exports the same objects and its importers do not change.
+export { tenantCredentials } from "./schema/hosted.js";
+export { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "./schema/hosted.js";
+export { handoverActivations, handoverScenario } from "./schema/hosted.js";
+export {
+  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
+  googleOidcStates,
+  managementAccountActions,
+  managementSessions,
+  personRole,
+  persons,
+  personStatus,
+  recoveryCodes,
+  sessions,
+  totpEnrollments,
+  webauthnChallenges,
+  webauthnCredentials,
+} from "./schema/hosted.js";
+export { liveDisplayNameKey, loginEmailKey, pendingEmailKey } from "./schema/identity/persons.js";
+export { challengePurpose } from "./schema/identity/webauthn.js";

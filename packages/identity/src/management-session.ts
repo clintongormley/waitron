@@ -1,11 +1,9 @@
 import "./errors.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
-import { nowIso } from "@waitron/db";
+import { nowIso, managementSessions, persons } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
-import { managementSessions } from "./schema/management-sessions.js";
-import { persons } from "./schema/persons.js";
 import type { PersonRoleValue } from "@waitron/shared";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
 

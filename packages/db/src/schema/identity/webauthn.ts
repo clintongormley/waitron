@@ -9,7 +9,7 @@ import {
   nowIso,
   table,
   tsString,
-} from "@waitron/db";
+} from "../columns.js";
 import { persons } from "./persons.js";
 
 /**
@@ -58,7 +58,7 @@ export const webauthnCredentials = table(
 export const challengePurpose = enumType(["registration", "login", "check"]);
 
 /**
- * Consumed by `consumeChallenge` (`../passkey.ts`). An expired challenge is refused at consume time
+ * Consumed by `consumeChallenge` (`packages/identity/src/passkey.ts`). An expired challenge is refused at consume time
  * by the `CHALLENGE_TTL_MS` check, not swept: there is no sweep job.
  */
 export const webauthnChallenges = table(

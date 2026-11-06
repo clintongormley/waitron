@@ -1,8 +1,8 @@
 import { sql, type SQL } from "drizzle-orm";
 import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import { enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "@waitron/db";
+import { enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "../columns.js";
 
-/** Call sites gate on a permission; `../permissions.ts` maps each role to its permission set. */
+/** Call sites gate on a permission; `packages/identity/src/permissions.ts` maps each role to its permission set. */
 export const personRole = enumType(["staff", "supervisor", "manager", "admin"]);
 
 /** `suspended` keeps the row, and any history that references it, while refusing login. */
@@ -29,8 +29,8 @@ export const persons = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     displayName: label("display_name").notNull(),
-    /** `foldForUniqueness(display_name)` (`../fold.ts`), set by every write path in this package in
-     * the statement that sets `display_name`. Nullable because code outside this package writes
+    /** `foldForUniqueness(display_name)` (`packages/identity/src/fold.ts`), set by every write path in `@waitron/identity` in
+     * the statement that sets `display_name`. Nullable because code outside `@waitron/identity` writes
      * `persons` rows straight through the table definition. */
     displayNameFolded: label("display_name_folded"),
     firstNames: label("first_names"),
@@ -39,13 +39,13 @@ export const persons = table(
     /** Hashed by ./verify-pin.ts (scrypt, salted) — never plaintext. */
     pinHash: label("pin_hash"),
     passwordHash: label("password_hash"),
-    /** AES-256-GCM ciphertext of the TOTP secret (`../mfa.ts`). */
+    /** AES-256-GCM ciphertext of the TOTP secret (`packages/identity/src/mfa.ts`). */
     totpSecret: label("totp_secret"),
     /** A SUPPORTED_LOCALES code, or null for no preference (the venue default applies). Validated
      * by the writers, not by a DB enum, so a new locale needs no migration; the only constraint
      * here is non-empty. */
     locale: label("locale"),
-    /** Null = never offered a passkey at sign-in (`../passkey-offer.ts`). */
+    /** Null = never offered a passkey at sign-in (`packages/identity/src/passkey-offer.ts`). */
     passkeyOfferedAt: tsString("passkey_offered_at"),
     /** Required at every human-account boundary; nullable for internal principals and low-level
      * fixtures. */
@@ -67,7 +67,7 @@ export const persons = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // A row without a folded value (written by code outside this package) falls back to `lower()`,
+    // A row without a folded value (written by code outside `@waitron/identity`) falls back to `lower()`,
     // which on this engine folds ASCII only: the fallback keeps such a row in the index rather than
     // closing the accented-letter gap for it. The migration that added the folded columns leaves
     // existing rows NULL: with a backfill, its `CREATE UNIQUE INDEX` fails on a database already

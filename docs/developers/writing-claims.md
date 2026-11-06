@@ -34,7 +34,7 @@ controller who was supposed to be watching for it. The instances:
    not yet true of the command line, which the author had not opened. Two new name flags were
    reaching the planner raw: neither trimmed, and neither read a blank as "not given", so
    `--admin-last-names ""` — how a script says "no last name" — arrived at the database as an empty
-   string, where `persons_last_names_ck` (`packages/identity/src/schema/persons.ts`) refused it as a
+   string, where `persons_last_names_ck` (`packages/db/src/schema/identity/persons.ts`) refused it as a
    raw database error instead of a refusal naming the flag. The same task's review caught it and a
    named sibling helper, `resolveWithoutPrompt`, closed it before the commit landed.
 

@@ -1,10 +1,9 @@
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, webauthnCredentials } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
-import { webauthnCredentials } from "./schema/webauthn.js";
 import { seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({

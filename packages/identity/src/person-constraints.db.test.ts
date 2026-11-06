@@ -4,12 +4,11 @@
  * the index's.
  */
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction, persons } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { persons } from "./schema/persons.js";
 import { hashPin } from "./verify-pin.js";
 import { asEmailTaken, asPersonUniqueViolation } from "./staff.js";
 

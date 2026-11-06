@@ -1,10 +1,11 @@
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { enumCheck, enumType, id, json, nodes, table, tsString } from "@waitron/db";
-import type { SignedHandoverEnvelope } from "../envelope.js";
+import { enumCheck, enumType, id, json, table, tsString } from "../columns.js";
+import { nodes } from "../nodes.js";
+import type { SignedHandoverEnvelope } from "@waitron/shared";
 
 export const handoverScenario = enumType(["controlled", "emergency"]);
 
-/** One row for each box that took over filing. Declared `appendOnly()` in `../classification.ts`. */
+/** One row for each box that took over filing. Declared `appendOnly()` in `packages/handover/src/classification.ts`. */
 export const handoverActivations = table(
   "handover_activations",
   {

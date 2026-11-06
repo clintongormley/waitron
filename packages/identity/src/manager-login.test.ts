@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, managementSessions, persons } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isUuid } from "@waitron/shared";
@@ -22,8 +22,6 @@ import {
 } from "./manager-login.js";
 import { verifyPassword } from "./verify-password.js";
 import { encryptTotpSecret } from "./mfa.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { persons } from "./schema/persons.js";
 import { hashSessionToken } from "./session-token.js";
 
 // Spy on verifyPassword while delegating to the real KDF, so the timing-equalization KDF runs are

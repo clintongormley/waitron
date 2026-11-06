@@ -1,5 +1,6 @@
 import { check, foreignKey, primaryKey } from "drizzle-orm/sqlite-core";
-import { deviceProfiles, enumCheck, flag, id, table } from "@waitron/db";
+import { enumCheck, flag, id, table } from "../columns.js";
+import { deviceProfiles } from "../device-profiles.js";
 import { personRole, persons } from "./persons.js";
 
 /**

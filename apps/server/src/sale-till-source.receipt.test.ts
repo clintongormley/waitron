@@ -177,7 +177,7 @@ async function setupVenue(): Promise<{
       noPreparation: true,
     });
     // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
-    // generators (`persons` in `packages/identity/src/schema/persons.ts`), which a raw statement
+    // generators (`persons` in `packages/db/src/schema/identity/persons.ts`), which a raw statement
     // never reaches.
     const [person] = await tx
       .insert(persons)

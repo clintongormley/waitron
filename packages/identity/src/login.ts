@@ -1,8 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { devices, nowIso } from "@waitron/db";
+import { devices, nowIso, sessions } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { sessions } from "./schema/sessions.js";
 import { verifyPersonCredential } from "./credential.js";
 import { canUseDeviceProfile } from "./profile-admission.js";
 import type { PersonRoleValue } from "@waitron/shared";

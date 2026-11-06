@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, id, label, newId, nowIso, table, tsString } from "@waitron/db";
+import { count, id, label, newId, nowIso, table, tsString } from "../columns.js";
 import { persons } from "./persons.js";
 
 /**

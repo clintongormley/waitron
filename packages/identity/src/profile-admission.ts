@@ -1,14 +1,15 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { deviceProfiles } from "@waitron/db";
+import {
+  deviceProfiles,
+  personRole,
+  persons,
+  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import type { PersonRoleValue } from "@waitron/shared";
-import { personRole, persons } from "./schema/persons.js";
-import {
-  deviceProfileAdmissionPersons,
-  deviceProfileAdmissionRoles,
-} from "./schema/profile-admission.js";
 import type { StaffListEntry } from "./staff.js";
 
 /** The roles a profile admits, `"every"` when it names none; `null` when the profile does not exist. */

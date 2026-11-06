@@ -12,18 +12,19 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { AppError } from "@waitron/shared";
-import { isUniqueViolation, nowIso } from "@waitron/db";
+import {
+  isUniqueViolation,
+  nowIso,
+  persons,
+  webauthnChallenges,
+  webauthnCredentials,
+  type challengePurpose,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { and, eq, sql } from "drizzle-orm";
 import type { TotpKeyRing } from "./mfa.js";
 import { requireEnrolledCode } from "./profile.js";
 import { passkeyProviderName } from "./passkey-providers.js";
-import { persons } from "./schema/persons.js";
-import {
-  webauthnChallenges,
-  webauthnCredentials,
-  type challengePurpose,
-} from "./schema/webauthn.js";
 import {
   resolveManagementSession,
   startManagementSession,

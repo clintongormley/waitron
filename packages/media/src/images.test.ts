@@ -9,6 +9,8 @@ import {
   tenantReceipts,
   workingOrderLines,
   type Transaction,
+  mediaImageData,
+  mediaImages,
 } from "@waitron/db";
 import {
   CATALOGUE_MIGRATIONS,
@@ -44,7 +46,6 @@ import {
   listImages,
 } from "./images.js";
 import { datedImagePageQuery } from "./image-page-query.js";
-import { mediaImageData, mediaImages } from "./schema/images.js";
 import type { PreparedImage } from "./prepare.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";

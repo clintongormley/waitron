@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { id, label, newId, nowIso, table, tsString } from "@waitron/db";
+import { id, label, newId, nowIso, table, tsString } from "../columns.js";
 import { persons } from "./persons.js";
 
 export const recoveryCodes = table(

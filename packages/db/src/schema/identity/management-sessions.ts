@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { id, label, newId, nowIso, table, tsString } from "@waitron/db";
+import { id, label, newId, nowIso, table, tsString } from "../columns.js";
 
 /**
  * A person signed into the management dashboard from a browser, distinct from a till's PIN
  * shift-login (`sessions`). A session is ENDED by stamping `ended_at` rather than deleted — the
  * callers' rule alone; nothing in the database refuses a DELETE. The row stores only the cookie
- * token's hash (`../session-token.ts`).
+ * token's hash (`packages/identity/src/session-token.ts`).
  */
 export const managementSessions = table(
   "management_sessions",

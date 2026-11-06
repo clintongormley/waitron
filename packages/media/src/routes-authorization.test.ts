@@ -2,7 +2,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, type Database, mediaImageData, mediaImages } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -15,7 +15,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { mediaImageData, mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 import { sampleImage } from "./testing/sample-image.js";

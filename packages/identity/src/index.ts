@@ -15,10 +15,19 @@ export {
   setProfileAdmission,
 } from "./profile-admission.js";
 export type { ProfileAdmission } from "./profile-admission.js";
+// The tables are defined in `@waitron/db`; this package goes on exporting them under its own name.
 export {
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
-} from "./schema/profile-admission.js";
+  managementAccountActions,
+  managementSessions,
+  personRole,
+  persons,
+  personStatus,
+  sessions,
+  webauthnChallenges,
+  webauthnCredentials,
+} from "@waitron/db";
 export type { Session } from "./login.js";
 export {
   IDLE_TIMEOUT_MS,
@@ -56,7 +65,6 @@ export {
 } from "./permissions.js";
 export type { Permission } from "./permissions.js";
 export type { PersonRoleValue } from "@waitron/shared";
-export { persons, personStatus, personRole } from "./schema/persons.js";
 export {
   readOwnProfile,
   saveOwnProfile,
@@ -73,10 +81,6 @@ export {
   checkOwnPassword,
   removeOwnPasskey,
 } from "./profile.js";
-export { sessions } from "./schema/sessions.js";
-export { managementSessions } from "./schema/management-sessions.js";
-export { managementAccountActions } from "./schema/management-account-actions.js";
-export { webauthnCredentials, webauthnChallenges } from "./schema/webauthn.js";
 export { MIN_PIN_LENGTH, assertPinLength } from "./verify-pin.js";
 export { isValidEmail } from "./email.js";
 export {

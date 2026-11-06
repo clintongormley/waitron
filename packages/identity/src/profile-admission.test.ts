@@ -1,4 +1,10 @@
-import { CORE_MIGRATIONS, deviceProfiles, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  deviceProfiles,
+  withTransaction,
+  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { and, eq, sql } from "drizzle-orm";
@@ -13,10 +19,6 @@ import {
   setProfileAdmission,
   type ProfileAdmission,
 } from "./profile-admission.js";
-import {
-  deviceProfileAdmissionPersons,
-  deviceProfileAdmissionRoles,
-} from "./schema/profile-admission.js";
 import type { PersonRoleValue } from "@waitron/shared";
 import { seedPerson } from "../test/fixtures.js";
 

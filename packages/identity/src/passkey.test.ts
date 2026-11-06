@@ -4,6 +4,10 @@ import {
   NOT_NULL_VIOLATION,
   refusalOn,
   withTransaction,
+  managementSessions,
+  persons,
+  webauthnChallenges,
+  webauthnCredentials,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,9 +15,6 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { deactivatePerson, resetPersonLogin } from "./staff.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { persons } from "./schema/persons.js";
-import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { generateSync } from "otplib";
 import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
 import { codeOf, openManagementSession, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";

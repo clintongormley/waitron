@@ -1,11 +1,15 @@
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withTransaction,
+  type Transaction,
+  persons,
+  webauthnCredentials,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { openManagementSession, seedPerson } from "../test/fixtures.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { persons } from "./schema/persons.js";
-import { webauthnCredentials } from "./schema/webauthn.js";
 import {
   completeAccountAction,
   inspectAccountAction,

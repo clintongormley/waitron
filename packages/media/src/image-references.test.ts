@@ -1,7 +1,14 @@
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, catalogues, products, withTransaction, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  catalogues,
+  products,
+  withTransaction,
+  type Database,
+  mediaImages,
+} from "@waitron/db";
 import {
   activateDueMenuPublications,
   addMember,
@@ -25,7 +32,6 @@ import {
 } from "@waitron/catalogue";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**

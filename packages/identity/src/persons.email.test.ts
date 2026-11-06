@@ -10,13 +10,13 @@ import {
   isUniqueViolation,
   refusalError,
   withTransaction,
+  persons,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { hashPin } from "./verify-pin.js";
-import { persons } from "./schema/persons.js";
 
 const PIN = hashPin("1234");
 

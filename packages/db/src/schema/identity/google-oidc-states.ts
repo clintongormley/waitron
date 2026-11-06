@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/sqlite-core";
-import { id, label, newId, table, tsString } from "@waitron/db";
+import { id, label, newId, table, tsString } from "../columns.js";
 
 /** One short-lived, single-use Google authorization-code ceremony. The state is stored only as its
  * hash. */

@@ -1517,7 +1517,7 @@ _2026-09-24:_ five of the six keys were on identity tables that slice-2 Task 1b 
 `google_oidc_states` to `persons`). Their keys were not restored; `docs/backlog.md` lists that as
 open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` now holds a
 `restrict` key to `devices`, and `sessions` still has none to `persons`
-(`packages/identity/src/schema/sessions.ts`).
+(`packages/db/src/schema/identity/sessions.ts`).
 
 _2026-11-03 (A1301 S12b):_ `join_requests.location_id` is now stamped with the venue's id, and
 nothing reads it: accept stamps the venue on the new `devices` or `print_agents` row itself.

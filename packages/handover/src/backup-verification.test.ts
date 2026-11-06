@@ -1,12 +1,11 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, nodes, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, nodes, type Database, handoverActivations } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { openBackupQuery } from "@waitron/store";
 import { HANDOVER_MIGRATIONS } from "./migrations.js";
-import { handoverActivations } from "./schema/index.js";
 import * as api from "./index.js";
 
 const original = useVenueDb({ migrations: [CORE_MIGRATIONS, HANDOVER_MIGRATIONS] });

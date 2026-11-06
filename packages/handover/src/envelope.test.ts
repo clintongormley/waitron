@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   HANDOVER_KINDS,
+  type HandoverKind,
   envelopeDigest,
   isSha256Hex,
   sha256Hex,
@@ -73,6 +74,10 @@ describe("signEnvelope", () => {
       "return-receipt",
       "health",
     ]);
+  });
+
+  it("lists every kind the shared type names, and no other", () => {
+    expectTypeOf<(typeof HANDOVER_KINDS)[number]>().toEqualTypeOf<HandoverKind>();
   });
 });
 

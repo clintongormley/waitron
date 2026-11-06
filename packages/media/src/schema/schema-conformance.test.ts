@@ -9,7 +9,7 @@ import { describeSchemaConformance } from "@waitron/db/testing/schema-conformanc
 import { MEDIA_MIGRATIONS } from "../migrations.js";
 // The set's one schema file, which is also what `drizzle.config.ts` generates from; the package
 // has no `src/schema/index.ts` barrel.
-import * as declarations from "./images.js";
+import * as declarations from "@waitron/db/schema/media.js";
 
 describeSchemaConformance({
   subjectName: "media",

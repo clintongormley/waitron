@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, primaryKey } from "drizzle-orm/sqlite-core";
-import { binary, count, label, nowIso, table, tsString } from "@waitron/db";
+import { binary, count, label, nowIso, table, tsString } from "../columns.js";
 
 /**
  * The credentials for one purpose, sealed. The row carries no plaintext, not even field names:
@@ -12,7 +12,7 @@ export const tenantCredentials = table(
   "tenant_credentials",
   {
     /** A stable identifier, not a description: renaming a purpose orphans every row under the old
-     * name. `PURPOSES` in ../purposes.ts is the authority on which values are legal. */
+     * name. `PURPOSES` in packages/credentials/src/purposes.ts is the authority on which values are legal. */
     purpose: label("purpose").notNull(),
     /** AES-256-GCM over the UTF-8 JSON payload, with the AAD bound to `purpose`. */
     ciphertext: binary("ciphertext").notNull(),

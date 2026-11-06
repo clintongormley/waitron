@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, index } from "drizzle-orm/sqlite-core";
-import { id, label, newId, nowIso, table, tsString } from "@waitron/db";
+import { id, label, newId, nowIso, table, tsString } from "../columns.js";
 
 export const totpEnrollments = table(
   "totp_enrollments",

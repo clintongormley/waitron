@@ -7,13 +7,13 @@ import {
   type Database,
   type NodeDatabase,
   type Transaction,
+  tenantCredentials,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { aadFor, open, seal } from "./cipher.js";
 import { keyForVersion, type KeyRing } from "./keyring.js";
 import { rotateNodeSigningKeys } from "./node-signing-key.js";
 import { isPurpose, validatePayload, type Purpose } from "./purposes.js";
-import { tenantCredentials } from "./schema/tenant-credentials.js";
 import "./errors.js";
 
 export interface CredentialRef {

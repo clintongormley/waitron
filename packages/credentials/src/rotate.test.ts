@@ -6,13 +6,13 @@ import {
   withTransaction,
   type Database,
   type NodeDatabase,
+  tenantCredentials,
 } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { tenantCredentials } from "./schema/tenant-credentials.js";
 import { readNodeSigningKey, sealNodeSigningKeyTx } from "./node-signing-key.js";
 import { getCredential, putCredential, rotateCredentials } from "./store.js";
 import { captured } from "./testing/captured.js";

@@ -1,5 +1,20 @@
 import { createHash } from "node:crypto";
-import { CORE_MIGRATIONS, deviceProfiles, withTransaction, venueLocationId } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  deviceProfiles,
+  withTransaction,
+  venueLocationId,
+  persons,
+  webauthnChallenges,
+  webauthnCredentials,
+  recoveryCodes,
+  sessions,
+  managementSessions,
+  managementAccountActions,
+  totpEnrollments,
+  googleOidcStates,
+  deviceProfileAdmissionPersons,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -7,16 +22,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { IDENTITY_PERSONAL_DATA } from "./personal-data.js";
-import { persons } from "./schema/persons.js";
 import { SECRET_HASH_PREFIX } from "./secret-hash.js";
-import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
-import { recoveryCodes } from "./schema/recovery-codes.js";
-import { sessions } from "./schema/sessions.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { managementAccountActions } from "./schema/management-account-actions.js";
-import { totpEnrollments } from "./schema/totp-enrollments.js";
-import { googleOidcStates } from "./schema/google-oidc-states.js";
-import { deviceProfileAdmissionPersons } from "./schema/profile-admission.js";
 import { codeOf } from "../test/fixtures.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });

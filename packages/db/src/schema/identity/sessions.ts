@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { devices, id, label, newId, nowIso, table, tsString } from "@waitron/db";
+import { id, label, newId, nowIso, table, tsString } from "../columns.js";
+import { devices } from "../devices.js";
 
 /**
  * A shift login on a device. Ended by stamping `ended_at`, not by deleting the row. The shift cookie
- * carries a random token and this row stores only its hash (`../session-token.ts`), so neither the
+ * carries a random token and this row stores only its hash (`packages/identity/src/session-token.ts`), so neither the
  * row id nor the stored hash, read from a copy of the database, signs anybody in.
  */
 export const sessions = table(

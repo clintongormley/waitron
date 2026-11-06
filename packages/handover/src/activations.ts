@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
-import { handoverActivations } from "./schema/index.js";
+import { handoverActivations } from "@waitron/db";
 
 export type HandoverActivationRow = typeof handoverActivations.$inferInsert;
 export type HandoverActivation = typeof handoverActivations.$inferSelect;
