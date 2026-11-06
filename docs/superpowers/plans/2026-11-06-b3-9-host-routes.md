@@ -1,0 +1,323 @@
+# B3, ninth pull request: the server's routes for the box host's requests
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
+
+**Goal:** Let a signed-in person who holds `system.manage` read and change the box's network and start screen through Waitron's server, which asks the box's host service (the small root service outside Docker that changes the box itself) through PR 8's client. Six routes in a new `apps/server/src/box-host-api.ts`:
+
+| Route | Asks the host | Answers 200 with |
+| --- | --- | --- |
+| `GET /api/box/network` | `network.read` | `{ wired, wifi, change, bootCopy }` |
+| `POST /api/box/network/scan` | `network.scan` | `{ networks }` |
+| `POST /api/box/network/join` | `network.join` | `{}` |
+| `POST /api/box/network/forget` | `network.forget` | `{}` |
+| `GET /api/box/screen` | `screen.read` | `{ start }` |
+| `POST /api/box/screen` | `screen.set` | `{ start }` |
+
+Each checks the session and `system.manage` first, sends the signed-in person's id as the request's actor, and turns every answer of the client into either that 200 or one error code (D4). "This box cannot do this" (no host service, or a host that does not take the request) gets its own code, apart from a fault. The Wi-Fi password travels only from the request body to the client: it is in no log line, no answer and no error. `boot.ts` builds `boxHostRequests()` and mounts the routes.
+
+**Architecture:** One route file beside `box-health-api.ts`, mounted by `boot.ts` next to it, reusing that file's session-and-permission check (exported, unchanged). The routes take a `BoxHostRequests` (PR 8's interface) as a dependency, so tests hand them a fake and boot hands them the real client. No new package, no new dependency, no screen.
+
+**Tech Stack:** Node 26 (`node --version` printed `v26.13.0` on 2026-11-06), Hono, TypeScript 7 in `apps/server`, Vitest 4.1.12.
+
+**Spec:** [B3 design](../specs/2026-10-21-b3-usb-installer-design.md) §10 (the "Este equipo" settings page: Red and the start screen under `system.manage`, lines 1036–1052) and §8 (the host service accepts "a fixed list of requests and nothing else", lines 913–922); §7.5's "No … password-bearing command arguments/logs are allowed" (lines 733–734).
+
+**Parent plan:** [six-slice plan](2026-10-26-b3-usb-installer.md), Slice 3 Task 3.1: the file map (line 67: "new `apps/server/src/box-host-client.ts`, `box-host-api.ts`, sibling tests") and the step at line 221 ("new `apps/server/src/box-host-api.test.ts` checks unauthenticated/session-expired refusal, `system.manage` on network/screen mutations, no password in logs, passive reads, preserved action failure across read recovery … after adding narrow routes/client/boot mount").
+
+**Previous pull requests:** [PR 8's plan](2026-11-06-b3-8-host-client.md) (#2495), the client these routes call, especially its D3 (the answer words) and D8 (who may be the actor); [PR 7's plan](2026-11-05-b3-7-host-protocol.md) (#2474), especially D6 (the host checks the actor's form, never a permission, and logs the person) and D14 (each request's refusals). What they left for this pull request is `docs/backlog/box.md`, "For later slices, from PR 8's re-map" (lines 1284–1323 on main).
+
+**Build authority:** the owner's "Yes, build it", 2026-11-01, one pull request at a time ([PR 1's plan](2026-11-01-b3-1-encrypted-disk.md), "Build authority").
+
+## Global Constraints
+
+- **The A1308 hold (owner, binding):** no migration, no schema file, no new or changed table, column, index or trigger. The routes read `persons` and `management_sessions` through `authorizeManager`, which also moves a session's last-seen time, as every management route does. Nothing else touches the database.
+- **Nothing keyed per location** (the owner is removing that concept).
+- **No screen, no Linux adapter, no host service, no `deploy/` change.** The dashboard's "This box" screen is Task 3.2's pull request; the routes are not reachable from any screen until then.
+- **PR 8's client is not edited.** `apps/server/src/box-host-client.ts` and its four test files stay as they are; `git diff --exit-code main -- apps/server/src/box-host-client.ts 'apps/server/src/box-host-client*.test.ts'` prints nothing after every task.
+- **The password stays in the body.** A Wi-Fi password reaches `host.networkJoin` and nothing else: no `log(...)` call, no error's params, no answer, no console output. The route never builds a log field from the body.
+- **Coverage:** `apps/server` holds `98/98/98/95` (`apps/server/vitest.config.ts:44`). No exclude, no ignore comment, no code moved into `src/testing/` to dodge it. `apps/server` is not mutation-tested (CLAUDE.md §2), so every behaviour test names the assertion that fails when the behaviour is deleted, and each task runs the deletion controls it lists.
+- **Error codes:** each new code names a domain concept (`box_host` for the box's host service, `box_network` for the box's network), is declared in `apps/server/src/errors.ts` with a one-line comment, carries no secret in its params, and is thrown only from files that `import "./errors.js"`. None is recorded as an incident, so `scripts/alert-codes.test.ts` is not affected; it still runs once in Task 1 to show it.
+- **Code style:** English only. Comments only for an invariant or a reason the code cannot show; no decision numbers from this plan in code.
+- **Tests:** no existing assertion changes; counts only grow.
+- **Commits:** `git commit -s`, staging only named paths, never `git add -A`.
+- **Review weight:** this pull request touches auth and permissions (who may change the box's network) and a cross-package contract (server and host), both risk triggers, so the branch takes the FULL `/finish-branch` path: per-task reviews, the full wave, and **two** Codex run-it reviews side by side, the second told to set this plan's checklist aside and test what it does not name.
+
+## Review Focus
+
+1. **No route reaches the host without a session holding `system.manage`.** Expected: with no session, an ended or idle session, a suspended person or a supervisor, all six routes answer the session or permission refusal and the fake host was never called; on a full disk the check still runs (as reads only) and still refuses. Tasks 1–3.
+2. **The password never leaves the body.** Expected: a canary password sent through every outcome of the join route, refusals and faults included, is absent from every log call, every answer and every console method; on a request that is not over an encrypted connection from the box's own page, the body is not even read. Task 3.
+3. **"This box cannot do this" is not a fault, and a fault is not "cannot".** Expected: `missing` and `unsupported` answer `box_host.unavailable` (409) on every route; `lost`, `timeout`, `malformed` and the protocol's four refusals answer `box_host.failed` (502) with the word as `reason`; the client's `invalid` answers `box_network.password_invalid` on the join only after the route has checked every other field, and is a 500 fault elsewhere. Tasks 1–3.
+4. **A slow host does not hold the database or flood the socket.** Expected: while a host call is pending, a write lock on the venue database is granted; a third concurrent host call from the routes is refused `box_host.busy` without reaching the host, and a call that throws frees its place. Task 4.
+5. **Boot hands the routes the real client.** Expected: a server started with no stand-in answers `GET /api/box/network` with `box_host.unavailable`, `reason: "missing"`, `detail: "ENOENT"` on a machine with no `/run/waitron-box/box.sock`; with a stand-in, the stand-in is asked with the signed-in manager's own id. Task 5.
+
+---
+
+## What this pull request builds, and what it leaves out
+
+**In:**
+
+| Task | Files | Source |
+| --- | --- | --- |
+| 1 | `box-host-api.ts` with the two read routes and the answer mapping; `errors.ts` (`box_host.unavailable`, `box_host.failed`); `box-health-api.ts` (export `authorizeSystemManager`) | parent line 221 (refusals, passive reads); box.md PR 8 re-map; D1–D4 |
+| 2 | the scan, forget and screen-set routes; `box_network.busy`, `box_network.no_wifi`, `box_network.not_saved` | parent line 221 (`system.manage` on mutations); D4, D5, D14 |
+| 3 | the join route: encrypted same-page connection, field checks, the password's own code, the canary sweep; `box_network.password_invalid`, `box_network.connection_insecure`; `box-scripts.d.ts` gains `isSsidHex` | parent line 221 ("no password in logs"); spec lines 733–734; D5, D6 |
+| 4 | at most two host calls from the routes at once (`box_host.busy`), and no host call inside a database lock | box.md PR 8 re-map (`MaxConnections=4`); D3, D7 |
+| 5 | `boot.ts`: the `boxHostRequests` seam, building the client, mounting the routes; a boot test | box.md PR 8 re-map ("builds `boxHostRequests()` in `boot.ts`"); D8, D9 |
+| 6 | `docs/backlog/box.md`, `docs/backlog.md`, the parent plan, `docs/developers/conventions-data.md` | — |
+
+**Out, and where each goes next:**
+
+- **`tagWrite` as the server's own duty** (at installation handoff, after a venue rename commits, after a move to Live): a following pull request, the name-tag duty (D11). Reasons: (a) "Live" has no settled source on the server until slice 8's Prepare and Live modes (parent Task 8.1); the nearest fact today is `practiceMode`, derived from `onboardingIntent` at `apps/server/src/boot.ts:2073`, and mapping it onto the tag's `live` is a decision about an unbuilt concept; (b) installation handoff belongs to slice 1's recipe; (c) it needs its own answer for a refused or failed write (`busy`, `no_space`, `header_unreadable`), retries and possibly an alert, none of which the six person routes need; (d) it needs `usableVenueName` from `scripts/box/name-tag.mjs`, with a declaration in `apps/server/src/box-scripts.d.ts` and a `ROOT_SCOPE_CONSUMERS` entry in `scripts/changed-scope.mjs`. No table change is needed for it as far as this re-map read, so the A1308 hold is not the reason.
+- **"Preserved action failure across read recovery"** (parent line 221): a screen behaviour (CLAUDE.md §3, "A screen that shows a read's and an action's failure in one field remembers which one set it"), so it is Task 3.2's. The server's part is that a read and an action answer separately and a read never answers an action's code; Task 1's and 2's cases pin that each route answers only its own request's outcome (D12).
+- **Words for every new code**, in English and Spanish, in `apps/dashboard/src/i18n/codes.ts` and `strings.ts`: the screen pull request, which is where a person first meets them.
+- **Network changes on a mirror or a fenced box:** the read-only gate refuses the four POST routes there with `node.read_only` (D9); whether a fenced physical box needs Red is a backlog question (Task 6).
+- **What systemd does with a fifth connection**, the real host service, socket permissions (`EACCES`) on a real box, and the Linux adapters: slice 3's Linux pull requests. Stubs cannot prove Unix permissions (parent line 221).
+- **Guides:** no English or Spanish guide changes. Nothing a person sees changes until the screen pull request, which adds `this-box.md` in both languages (parent Task 3.2).
+
+## Re-map against main on 2026-11-06
+
+Main at `47f4d01ce5` (`git rev-parse HEAD` in the worktree and `origin/main` printed the same).
+
+1. **PR 8's client, as built.** `boxHostRequests(deps)` (`apps/server/src/box-host-client.ts:347-363`) answers `HostAnswer<Value, Refusal>` (`:213-214`): `{available:true, ...value}`, or `available:false` with `reason` `refused` (and `refusal`), `unsupported` (and `detail` `unknown_request` or `request_invalid`), `missing` (and `detail`, the connection error's code), `lost`, `timeout`, `malformed` or `invalid` (`:208-212`). `BoxHostRequests` (`:276-296`): `networkRead(actor: HostActor)`, `networkScan(actor: PersonActor)`, `networkJoin(join: WifiJoin, actor)`, `networkForget({ssidHex}, actor)`, `screenRead(actor: HostActor)`, `screenSet({start}, actor)`, `tagWrite(tag)`. `HostActor` is `{source:"person"; person: string} | {source:"server"}` (`:204`). Each request's own refusals: scan and join `busy`, `no_wifi`; forget `busy`, `not_saved`; the reads and `screenSet` none beyond the protocol's four `request_invalid`, `actor_invalid`, `fields_invalid`, `host_failed` (`:206-207`, `:270-272`). It never throws (PR 8's D3).
+2. **Boot builds the clock client and nothing else.** `boot.ts:1` imports `boxHostClient`; the seam `boxHost?: BoxHostClient` is at `:975-976` ("The box's clock service; unset, the server talks to the host's socket"); `:2255` builds `seams.boxHost ?? boxHostClient()`. `boxHostRequests` is imported nowhere outside its own file and tests (`git grep -n boxHostRequests -- apps/server/src ':!*.test.ts'` printed only `box-host-client.ts`).
+3. **The closest sibling route file is `apps/server/src/box-health-api.ts`.** Its private `authorizeSystemManager(db, c)` (`:75-85`) reads the cookie with `requireManagementSession`, runs `authorizeManager(…, permission: "system.manage")` in `withTransaction`, and on a full disk (`diskFullIn`) runs the same check again as a read with `touch: false`, returning the person's id (`authorizedBy`). Its status map (`:57-71`) maps `management_session.required`/`.expired` to 401, `person.suspended` and `authorization.not_permitted` to 403, `management.request_invalid` to 400, `clock.set_failed` to 502. It mounts under `/api/box/` (`:131-324`) and is mounted by `boot.ts:3116-3183`. Its test (`apps/server/src/box-health-api.test.ts`, 20 tests on 2026-11-06) is the template for every refusal and last-seen case below: `seedPerson` (`:47-56`), the passive middleware copied from boot (`:82-87`), `setLastSeen`/`lastSeen` (`:109-122`), `lockRefusingDb` (`:126-140`), and the five refusals each run "with room" and "on a full disk" (`:144-210`).
+4. **Passive reads are global.** `boot.ts:1299-1305` runs every `GET` carrying `x-waitron-live: 1` inside `withPassiveManagementRead`, which `resolveManagementSession` reads to leave the session's last-seen time alone (`packages/identity/src/management-session.ts:12-20`). A GET route needs nothing of its own; a POST is never passive.
+5. **Who holds `system.manage`:** `manager` and `admin`, not `supervisor` or `staff` (`packages/identity/src/permissions.ts:47-79`). Person ids are `randomUUID()` (`packages/db/src/schema/columns.ts:178`), 36 characters of `0-9 a-f -`, inside the protocol's actor rule (1–64 of `A–Z a–z 0–9 -`, box.md PR 7).
+6. **What gets logged.** The error boundary (`packages/server-kit/src/error-boundary.ts:42-46`) logs an `AppError`'s code and every param at `warn` and answers `{error:{code, params}}`; anything else is logged under the route's tag with only `codeOf(cause)`, never its message, and answered `server.internal` 500 (`:47-48`). The request log records method, matched route pattern and status, never the path's values or the body (`apps/server/src/request-id.ts:27-33`). `redactSecrets` masks only a password in a URL (CLAUDE.md §3), so it is no protection for a body field; the only protection is that no code hands the body to the logger.
+7. **Encrypted connections.** The box's trading listener is HTTPS over the box's own leaf, and "a leaf-less box keeps plain HTTP" (`boot.ts:839-842`); the plain-HTTP landing listener serves only public connection setup, "application and recovery inputs stay on HTTPS" (`apps/server/src/landing-app.ts:8`). Routes that take a person's secret check the socket themselves: `requireSecurePackRequest` (`apps/server/src/backup-recovery-pack-api.ts:154-170`) refuses a socket that is not an encrypted `TLSSocket`, an `Origin` other than the request's own, and a `Sec-Fetch-Site` other than `same-origin` or `none`; `requireNodeOperationHttps` (`apps/server/src/node-operation-https.ts`) the same. The SMTP and bucket settings routes take credentials with no such check (`grep -n "TLSSocket" apps/server/src/email-settings-api.ts` printed nothing). A test hands a route an encrypted socket as `app.request(path, init, { incoming: { socket: new TLSSocket(new Socket()) } })` (`apps/server/src/backup-recovery-pack-api.make.test.ts:188`); `node -e` on 2026-11-06 printed `true true` for `instanceof TLSSocket` and `.encrypted` of such a socket. The management cookie is `SameSite=Strict` (`packages/server-kit/src/management-cookie.ts:15`) and is not `secure` "where there is no TLS … as on loopback dev" (`:10`).
+8. **Read-only boxes.** On a mirror or a fenced box, `readOnlyGate` refuses every non-GET verb with `node.read_only` 403 unless `READ_ONLY_EXEMPTIONS` names the route (`boot.ts:2019-2029`, `apps/server/src/read-only-gate.ts`, `apps/server/src/read-only-exemptions.ts:21`); a new row is pinned by `read-only-exemptions.test.ts`'s "the exempt set is exactly this list" (`:66`).
+9. **Body limits and body reading.** `cloud-api.ts:61-67` caps its routes' bodies with Hono's `bodyLimit({ maxSize: 4096, onError })`, answering its own `request_invalid` 400. `readRawJsonBody` (`packages/server-kit/src/read-json-body.ts:20-25`) answers `null` for an empty or malformed body. `management.request_invalid` is declared in `@waitron/shared` with `{ field: string }` (`packages/shared/src/errors.ts:62`). A throwaway script on 2026-11-06 mounting `bodyLimit({ maxSize: 4096 })` from the server's own `hono` in front of a route echoing `c.req.json()` answered 200 `{"ssidHex":"ff"}` to `{"ssidHex":"ff"}` padded with spaces to 4096 bytes, and the `onError` 400 to the same padded to 4097: the limit is inclusive, and trailing spaces leave the body valid JSON.
+10. **What the protocol refuses in a join, by experiment.** `node --input-type=module -e` over the real `formatHostRequest` and `isSsidHex` on 2026-11-06, person id `0b9c4a1e-6f1d-4c55-9a83-2f7d1e5c0a11`, SSID `4361666550657065`, `hidden: false`: `wpa-psk` with `abcdefgh` wrote a 171-character line; it threw `host_request.invalid` for the password `abcdefg` (7), `abcdefgé`, `g`×64, `a`×65, and for `sae` with `""`, `a`×257 and `abc\tdefg`; `sae` with `é`×128 (256 bytes) wrote 927 characters; `a`×64 and `0`×64 passed as `wpa-psk` (64 hex digits). An SSID of `FF` threw; `isSsidHex("FF")` was `false`, `isSsidHex("ff")` `true`. `screen.set` with `Panel` and `network.forget` with `FF` threw. So once a route has checked the SSID with `isSsidHex`, `keyMgmt` against the two values, `hidden` as a boolean and `psk` as a string, a join the protocol still refuses was refused for its password (D5).
+11. **The socket and its other user.** `deploy/box/waitron-box.socket:10` is `MaxConnections=4`, with `Accept=yes` (`:6`). The clock side's host calls, as read (not measured): the status read goes through one 60-second cache that stores the pending promise before awaiting it (`apps/server/src/ttl-cache.ts:14-20`, `boot.ts:2987-2988`), so concurrent readers share one connection, except that a clock set clears the cache (`boot.ts:2997-3003`) and a read started after the clear opens a second; a set asks `clockStatus` then `setClock` in turn (`apps/server/src/clock-correction.ts:250`, `:294`). Nobody has measured what a fifth connection meets.
+12. **Guards that read error codes.** `scripts/errors-reachable.test.ts` walks `packages/*` only (its header and `packagesWithBarrelAndErrors`), so it does not read `apps/server`; there, reachability is the `import "./errors.js"` convention stated in `apps/server/src/errors.ts:21-23`. `scripts/personal-log-params.test.ts` reads every registry's param keys as text against a word list for people's names, emails and tax numbers. No guard requires a dashboard wording for a server code (`git grep -ln "i18n/codes" -- scripts` printed nothing).
+13. **Baselines, 2026-11-06:** `pnpm --filter @waitron/server exec vitest run src/box-health-api.test.ts` printed `Tests  20 passed (20)`; `src/box-host-client.test.ts` `31 passed (31)`; `src/box-host-client.requests.test.ts` `106 passed (106)`. `apps/server/src/testing/fake-box-host.ts` exports `fakeBoxHost`, `answer`, `shellBoxHost`, `noBoxHostPath`, `closeFakeBoxHosts`. A boot test that starts the whole server with a stand-in client is `apps/server/src/boot.clock-correction.test.ts:60-112` (`ephemeralServerFixture`, `setupVenue`, `freePorts`, the env block); `setupVenue`'s `managerCookie` is a `manager`'s session (`apps/server/src/testing/venue-fixtures.ts:35`).
+14. **Where the docs say nothing calls the client yet:** `docs/developers/conventions-data.md:4324-4327` ("nothing calls it yet") and `docs/backlog.md:5313` ("called by nothing yet … Slice 3's routes pull request is to build it in `boot.ts`"). `docs/backlog/box.md:1040` is PR 8's dated "Built so far" and stays as history.
+
+## Decisions
+
+- **D1. Six routes under `/api/box/`, the scan a POST.** Beside `/api/box/health` and `/api/box/clock-set` (finding 3). Reads are `GET`, so the dashboard can poll them passively (finding 4); the scan is `POST` because it is something a person asks for, takes the radio and may wait 20 seconds, so it must never run as an automatic poll. Bodies: join `{ssidHex, keyMgmt, psk, hidden}`, forget `{ssidHex}`, screen `{start}`, exactly the client's field names (finding 1), so no renaming layer sits between the body and the request line.
+- **D2. Every route, reads included, needs `system.manage`, and every request names the signed-in person.** *Answer any to override (FYI).* The spec puts Red and the start screen under `system.manage` (§10's table), and the network read lists network names and the box's address. The parent's line 221 names mutations only; reading under the same permission is the narrower choice. The actor is always `{ source: "person", person: authorizedBy }`, reads too (PR 8's D8 allows either for reads), so the host's log names who looked as well as who changed.
+- **D3. One session check, shared, and no host call inside a database lock.** `authorizeSystemManager` is exported from `box-health-api.ts` unchanged and called first by every route, so the full-disk fallback (finding 3) covers these routes too: a box whose disk is full can still have its network changed by a manager. Its transaction ends before the host is asked; the host call (up to 20 seconds, PR 8's D6) never runs inside `withTransaction` or `withWriteLock`, or a slow host would hold every sale's write behind it. Task 4 pins this.
+- **D4. Every answer of the client maps to one route answer.** *Answer any to override (FYI).*
+
+  | Client answer | Route answer |
+  | --- | --- |
+  | `available: true` | 200, the value without `available` |
+  | `missing` (`detail`) | 409 `box_host.unavailable` `{reason:"missing", detail}` |
+  | `unsupported` (`detail`) | 409 `box_host.unavailable` `{reason:"unsupported", detail}` |
+  | `lost`, `timeout`, `malformed` | 502 `box_host.failed` `{reason}` |
+  | refused `request_invalid`, `actor_invalid`, `fields_invalid`, `host_failed` | 502 `box_host.failed` `{reason: <that word>}` |
+  | refused `busy` (scan, join, forget) | 409 `box_network.busy` |
+  | refused `no_wifi` (scan, join) | 409 `box_network.no_wifi` |
+  | refused `not_saved` (forget) | 409 `box_network.not_saved` |
+  | `invalid`, join | 400 `box_network.password_invalid` `{field:"psk", keyMgmt}` (D5) |
+  | `invalid`, any other route | a plain `Error` → 500 `server.internal` |
+
+  Reasons: `missing` and `unsupported` mean this box has no host service, or one that does not take the request (a laptop, Docker Desktop, a box with only the clock handler, PR 8's D4), which a screen shows as a state, so they share one code apart from every fault, with `reason` and `detail` kept for the screen and the log. `lost` and `timeout` keep their word because after either a change may still have happened (`box-host-client.ts:16-19`), which the screen must say. The protocol's four refusals mean server and host disagree, a version skew or a host fault, not something the person did. `box_network.*` are the host's answers about the network, each a different thing for a person to do. `invalid` on any route but the join can only follow a route check that passed a value the protocol refuses, a fault in Waitron, so it is a 500, as `setRefusal`'s impossible reasons are (`box-health-api.ts:383-390`). Statuses follow the siblings: 409 for a state (`cloud.not_configured`, `cloud-api.ts:38`), 502 for a fault behind the server (`clock.set_failed`, `box-health-api.ts:69`). Every `AppError` is logged once at `warn` by the boundary (finding 6), including `box_host.unavailable` on each read of a laptop's page; that is accepted as the price of one rule for every route.
+- **D5. The route checks shapes; the protocol owns the password rules.** Each body must be a JSON object with exactly its keys, else `management.request_invalid` with `field` the first key that is wrong, missing or, for an extra key, `"body"` (a caller's key name never reaches the log). Values: `ssidHex` by `isSsidHex` (imported from `scripts/box/wifi-record.mjs`, already a server consumer in `ROOT_SCOPE_CONSUMERS`, `scripts/changed-scope.mjs:98`), `keyMgmt` one of `"wpa-psk"`, `"sae"`, `hidden` a boolean, `psk` a string, `start` one of `START_SCREENS` (already declared in `box-scripts.d.ts`). The route does not restate the password rules (8–63 printable or 64 hex for WPA2, 1–256 bytes without control characters for WPA3, finding 10): once every other field has passed, a join the client answers `invalid` was refused for its password (finding 10), and answers `box_network.password_invalid` with `field: "psk"` so the screen puts it beside the password field, and `keyMgmt` so it can say which rule. No param carries the password or its length.
+- **D6. The join is taken only over an encrypted connection from the box's own page.** *Answer any to override (FYI).* Before the session check and before the body is read, the join refuses a socket that is not an encrypted `TLSSocket`, an `Origin` other than the request URL's origin, or a `Sec-Fetch-Site` other than `same-origin` or `none`, with 403 `box_network.connection_insecure` `{reason: "unencrypted" | "other_origin"}`, the check `requireSecurePackRequest` makes (finding 7). Reason: it is the only route that carries a secret a person typed, and CLAUDE.md's recovery-page rule records the cost of the alternative ("a password sent in plain text on the venue's network"). On a box the application listener is already HTTPS (finding 7), so the check refuses nothing there; it refuses a leaf-less box and the loopback dev stack, which has no host service, so a dev join answers this code rather than `box_host.unavailable`. The SMTP and bucket settings routes do not check (finding 7); they are left as they are.
+- **D7. At most two host calls from the routes at once; a third is refused at once.** *Answer any to override (FYI).* A counter in `mountBoxHostApi` allows `BOX_HOST_ROUTE_CALLS = 2` client calls in flight; a route that finds both taken answers 409 `box_host.busy` without calling the client, and every call frees its place in a `finally`. Reasons: the socket serves four connections at once (finding 11); the clock side uses one or two as read; two for the routes keeps the total at four in the paths read, with the cache-clear case of finding 11 the known exception. Two rather than one so a page's read is not refused while a scan (up to 20 seconds) runs. Refused rather than queued so no HTTP request waits behind a 20-second change and no queue grows without bound. The places are counted per server process, which is one per box.
+- **D8. Boot builds the client with its defaults, behind a seam.** `StartServerSeams` gains `boxHostRequests?: BoxHostRequests` beside `boxHost`; boot builds `seams.boxHostRequests ?? boxHostRequests()` and mounts `mountBoxHostApi` right after `mountBoxHealthApi`. No environment variable for the socket path: nothing on a box sets one today (`box-host-client.ts:42` is the only path, and the clock client takes none from boot, finding 2), and the client already reads an empty path as the default (box.md, PR 8). A path setting arrives with whatever needs it.
+- **D9. No exemption from the read-only gate.** On a mirror or a fenced box the four POST routes answer `node.read_only` (finding 8), and the two reads work. A mirror is not the venue's box; whether a fenced box needs Red is left to the backlog rather than decided by adding a security exemption here.
+- **D10. The server writes no log line of its own for a host change.** The host's log names the verb and the person for every request (PR 7's D6), and the server's request log records the route and status (finding 6). A server-side record of who changed the network is not asked for by the spec or the parent plan; adding one later is cheap.
+- **D11. `tagWrite`'s duty waits for its own pull request** (reasons in "Out"). Nothing in this pull request calls `tagWrite`.
+- **D12. A read answers only its own outcome.** Each route's answer comes from its own client call alone; no route remembers or replays another route's failure. Keeping a read's and an action's failure apart on one screen is the screen's job (CLAUDE.md §3).
+- **D13. No guide change** (nothing a person sees changes).
+- **D14. Bodies over 4096 bytes are refused before anything else.** `bodyLimit({ maxSize: 4096 })` on `/api/box/network/*` and `/api/box/screen`, answering 400 `management.request_invalid` `{field:"body"}`, as `cloud-api.ts:61-67` caps its own. The longest join body the protocol accepts is well under it: a 256-byte WPA3 password written with `\u` escapes is at most 768 characters, and an SSID at most 64.
+
+## Execution notes for every task
+
+- Work in `/Users/clintongormley/workspace/worktrees/waitron-feat-b3-9-host-routes`, branch `feat/b3-9-host-routes`. Every command below runs from that folder.
+- Focused command: `pnpm --filter @waitron/server exec vitest run src/<file> [src/<file> …]`, naming each file. A run with no `Tests` count is no evidence; read the count.
+- Typecheck: `pnpm --filter @waitron/server typecheck`.
+- One-file coverage: `pnpm --filter @waitron/server exec vitest run src/box-host-api.test.ts src/box-host-api.join.test.ts src/box-host-api.calls.test.ts --coverage --coverage.include=src/box-host-api.ts --coverage.reportsDirectory="$(mktemp -d)"`, naming the test files that exist by then. Each of the four summary lines should read 100%, or the gap is named to the reviewer.
+- Client guard after every task: `git diff --exit-code main -- apps/server/src/box-host-client.ts 'apps/server/src/box-host-client*.test.ts'` prints nothing; `pnpm --filter @waitron/server exec vitest run src/box-health-api.test.ts` prints `Tests  20 passed (20)`.
+- Before each commit: `pnpm exec prettier --check <changed files>` and `pnpm exec eslint <changed code files>`.
+- Test set-up copies `box-health-api.test.ts` (finding 3): `useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) })`; `seedPerson` for `manager`, `admin`, `supervisor` in `beforeEach`; the passive middleware copied from boot in the test's `mount`; `lockRefusingDb(new AppError("storage.disk_full", {}))` for the full-disk runs.
+- The fake host is a `BoxHostRequests` whose seven methods are `vi.fn`s, each answering what the case sets (default: a success). Shared values: `SNAPSHOT = { wired: { connected: true, address: "192.168.1.10" }, wifi: { connectedSsidHex: "4361666550657065", savedSsidHex: "4361666550657065" }, change: null, bootCopy: { state: "current", reason: null, failure: null } }`, `JOIN = { ssidHex: "4361666550657065", keyMgmt: "wpa-psk", psk: "abcdefgh", hidden: false }`.
+- Every expected status and code is a literal in the test. Every refusal case also asserts the fake host's method was not called (`toHaveBeenCalledTimes(0)`), since a refusal that still asked the host is the failure that matters.
+- **Deletion controls:** remove the named check, run the focused command, confirm the named test fails for that reason (read the message), restore, and list each control's failing test name in the handover. Commit none of them.
+- Encrypted-socket cases build `new TLSSocket(new Socket())` and destroy every one in `afterEach`, as `backup-recovery-pack-api.make.test.ts` does.
+
+### Task 1: the two read routes and the answer mapping
+
+**Files:** create `apps/server/src/box-host-api.ts`, `apps/server/src/box-host-api.test.ts`; modify `apps/server/src/errors.ts`, `apps/server/src/box-health-api.ts` (add `export` to `authorizeSystemManager`, nothing else).
+
+**Interfaces:**
+
+```ts
+// box-host-api.ts
+export interface BoxHostApiDeps {
+  db: Database;
+  host: BoxHostRequests; // from ./box-host-client.js
+}
+/** `GET /api/box/network`, `GET /api/box/screen` (Task 1); `POST /api/box/network/scan`,
+ * `/forget`, `POST /api/box/screen` (Task 2); `POST /api/box/network/join` (Task 3); all
+ * `system.manage`. */
+export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): void;
+
+// errors.ts, added
+"box_host.unavailable":
+  | { reason: "missing"; detail: string }
+  | { reason: "unsupported"; detail: "unknown_request" | "request_invalid" };
+"box_host.failed": {
+  reason: "lost" | "timeout" | "malformed" | "request_invalid" | "actor_invalid" | "fields_invalid" | "host_failed";
+};
+```
+
+One private helper turns a client answer into the 200 body or a throw, per D4's table, taking the route's own refusal-to-code map (empty for the reads); one `createErrorBoundary(STATUS, "box-host-route.failed")` with `box_host.unavailable: 409`, `box_host.failed: 502` and the session, permission and `management.request_invalid` entries of finding 3.
+
+- [ ] **Step 1: Write the failing tests** in `box-host-api.test.ts`:
+  - **The person reads.** A manager's `GET /api/box/network` → 200, body `toEqual(SNAPSHOT)` (no `available` key); `host.networkRead` called once with exactly `{ source: "person", person: manager.id }`. The same for an admin. `GET /api/box/screen` with the fake answering `{available:true, start:"till"}` → 200 `{ start: "till" }`, `screenRead` called with the manager's actor.
+  - **Refusals, each "with room" and "on a full disk"** (`describe.each`, as finding 3): no cookie → 401 `management_session.required`; supervisor → 403 `authorization.not_permitted`; ended session → 401 `management_session.required`; idle 31 minutes → 401 `management_session.expired`; suspended → 403 `person.suspended`; for both routes, plain and passive; the fake host's `networkRead` and `screenRead` called 0 times.
+  - **Passive reads.** Last-seen left alone by `GET` with `x-waitron-live: 1` and moved by one without it, for both routes; left alone on a full disk either way (finding 3's two cases).
+  - **The mapping, on `GET /api/box/network`**, one case per row: `{available:false, reason:"missing", detail:"ENOENT"}` → 409 `{error:{code:"box_host.unavailable", params:{reason:"missing", detail:"ENOENT"}}}`; `detail:"EACCES"` likewise; `unsupported` with `unknown_request` and with `request_invalid` → 409 with that `detail`; `lost`, `timeout`, `malformed` → 502 `box_host.failed` `{reason}`; refused `request_invalid`, `actor_invalid`, `fields_invalid`, `host_failed` → 502 `box_host.failed` with that word; `invalid` → 500 `{error:{code:"server.internal"}}`. Each also on `GET /api/box/screen` for `missing`, `unsupported` and `host_failed`.
+  - **Through the real client.** `mountBoxHostApi` with `host: boxHostRequests({ socketPath: fake.path })` against `fakeBoxHost(answer('{"ok":true,"wired":{"connected":true,"address":"192.168.1.10"},"wifi":{"connectedSsidHex":"4361666550657065","savedSsidHex":"4361666550657065"},"change":null,"bootCopy":{"state":"current","reason":null,"failure":null}}\n'))` (PR 8's reply line for this snapshot): the manager's GET → 200 `SNAPSHOT`, and `fake.lines` is exactly `[\`network.read {"actor":{"source":"person","person":"${manager.id}"}}\`]`. With `noBoxHostPath()`: 409 `box_host.unavailable` `{reason:"missing", detail:"ENOENT"}`. `closeFakeBoxHosts()` in `afterEach`.
+  - **The log.** A `vi.fn` logger: the `missing` case logs exactly one call, at `warn`, event `box_host.unavailable`, whose fields `toEqual({ reason: "missing", detail: "ENOENT", requestId: undefined })` (the boundary's shape, finding 6; the test mounts no request-id middleware); the 200 case logs none.
+- [ ] **Step 2:** Run `pnpm --filter @waitron/server exec vitest run src/box-host-api.test.ts`. Expected: the file fails to load because `./box-host-api.js` does not exist, so no case runs; after an empty `mountBoxHostApi` stub, every case fails with status `404` where `200`, `401`, `403`, `409`, `502` or `500` was expected.
+- [ ] **Step 3: Implement** the two routes, the helper, the status map, the two codes in `errors.ts` (each with a one-line comment: who answers it and that `detail` is a connection error's code or the host's word), and the `export` in `box-health-api.ts`.
+- [ ] **Step 4:** Focused command green; typecheck; one-file coverage; the client guard; `pnpm exec vitest run scripts/personal-log-params.test.ts scripts/errors-reachable.test.ts scripts/alert-codes.test.ts` green (the last two unaffected by design, finding 12; run once to show it); prettier and eslint clean.
+- [ ] **Step 5: Deletion controls.** One at a time: the `authorizeSystemManager` call in the network read (the five refusal cases fail with 200, and the fake was called); the `unsupported` row folded into `box_host.failed` (the two `unsupported` cases answer 502); `detail` dropped from the `missing` params (the `ENOENT` case's `toEqual` fails); the `invalid` row mapped to `box_host.failed` (the `invalid` case answers 502, not 500).
+- [ ] **Step 6: Commit:** `git add apps/server/src/box-host-api.ts apps/server/src/box-host-api.test.ts apps/server/src/errors.ts apps/server/src/box-health-api.ts && git commit -s -m "feat(server): let a system manager read the box's network and start screen"`.
+
+### Task 2: scan, forget and the start screen
+
+**Files:** modify `apps/server/src/box-host-api.ts`, `apps/server/src/box-host-api.test.ts`, `apps/server/src/errors.ts`.
+
+**Interfaces:** routes `POST /api/box/network/scan` (no body read), `POST /api/box/network/forget` (`{ssidHex}`), `POST /api/box/screen` (`{start}`). Codes added: `"box_network.busy": Record<string, never>`, `"box_network.no_wifi": Record<string, never>`, `"box_network.not_saved": Record<string, never>`, all 409. `bodyLimit` (D14) on `/api/box/network/*` and `/api/box/screen`. A private `bodyOf(c, keys)` reading `readRawJsonBody` and refusing per D5 (Task 3 reuses it).
+
+- [ ] **Step 1: Write the failing tests:**
+  - **Success.** Scan → 200 `{ networks: [{ssidHex:"4361666550657065", signal:71, security:"wpa-psk"}] }` from the fake's answer, `networkScan` called with the manager's actor; forget `{ssidHex:"4361666550657065"}` → 200 `{}`, `networkForget` called with `({ ssidHex: "4361666550657065" }, actor)`; screen `{start:"till"}` → 200 `{ start: "till" }`, `screenSet` called with `({ start: "till" }, actor)`.
+  - **The five refusals** of Task 1, with room and on a full disk, for each of the three routes; the fake's three methods called 0 times. **A supervisor's malformed body** (`{nope:1}` to forget) → 403, not 400: the permission is checked before the body is read.
+  - **The host's own words:** scan `busy` → 409 `box_network.busy`, `no_wifi` → 409 `box_network.no_wifi`; forget `busy` → `box_network.busy`, `not_saved` → 409 `box_network.not_saved`. **The shared rows** for each of the three routes: `missing` → 409 `box_host.unavailable`, `unsupported` (`unknown_request`) → 409, `timeout` → 502 `box_host.failed {reason:"timeout"}`, refused `fields_invalid` → 502, `invalid` → 500 `server.internal`.
+  - **Bodies refused before the host** (each 400 `management.request_invalid` with the `field` named, host not called): forget `{}` → `ssidHex`; `{ssidHex:"FF"}` → `ssidHex`; `{ssidHex:"ff", extra:1}` → `body`; body `[]`, `null`, `"x"`, no body, and `not json` → `body`; screen `{start:"Panel"}` → `start`; `{start:"dashboard", note:"x"}` → `body`. A forget body of exactly 4097 bytes made of the valid `{"ssidHex":"ff"}` followed by spaces (still valid JSON with exactly its keys) → 400 `management.request_invalid` `{field:"body"}`, host not called; the same padded to exactly 4096 bytes → 200, host called once (the limit is inclusive).
+  - **Passivity.** A `POST` scan with `x-waitron-live: 1` still moves last-seen (the global middleware covers only `GET`, finding 4).
+- [ ] **Step 2:** Focused command. Expected: the new cases fail with `404` (no such route), Task 1's pass.
+- [ ] **Step 3: Implement** the three routes, `bodyOf`, the limit and the three codes.
+- [ ] **Step 4:** As Task 1's step 4 (personal-log-params again for the new codes).
+- [ ] **Step 5: Deletion controls.** One at a time: the `isSsidHex` check in forget (the `FF` case reaches the host and answers 500 from the fake's `invalid`, or 200 from its default success — either way not 400); the `START_SCREENS` check (the `Panel` case reaches the host); the exact-key check (the `extra` cases reach the host); `bodyLimit` (the 4097-byte case reaches the host and answers 200); the `not_saved` row (answers 502).
+- [ ] **Step 6: Commit:** `git add apps/server/src/box-host-api.ts apps/server/src/box-host-api.test.ts apps/server/src/errors.ts && git commit -s -m "feat(server): let a system manager scan for networks, forget one and choose the box's start screen"`.
+
+### Task 3: joining a network, and the password
+
+**Files:** modify `apps/server/src/box-host-api.ts`, `apps/server/src/errors.ts`, `apps/server/src/box-scripts.d.ts` (add `export function isSsidHex(value: unknown): boolean;` to the `wifi-record.mjs` declaration); create `apps/server/src/box-host-api.join.test.ts`.
+
+**Interfaces:** `POST /api/box/network/join`, body `{ssidHex, keyMgmt, psk, hidden}`; in order: the encrypted same-page check (D6), `authorizeSystemManager`, `bodyOf` with the D5 value checks, the client, D4's mapping. Codes added:
+
+```ts
+"box_network.password_invalid": { field: "psk"; keyMgmt: "wpa-psk" | "sae" }; // 400
+"box_network.connection_insecure": { reason: "unencrypted" | "other_origin" }; // 403
+```
+
+- [ ] **Step 1: Write the failing tests** in `box-host-api.join.test.ts`, every request over an encrypted socket unless named:
+  - **Success.** `JOIN` → 200 `{}`; `networkJoin` called once with exactly `(JOIN, { source: "person", person: manager.id })`. A `sae` join with `psk` `"é".repeat(128)` and `hidden: true` → 200, the fake given that password unchanged.
+  - **The connection.** No socket (plain `app.request`) → 403 `box_network.connection_insecure` `{reason:"unencrypted"}`; a plain `new Socket()` → the same; `Origin: https://elsewhere.example` → `{reason:"other_origin"}`; `Sec-Fetch-Site: cross-site` → `other_origin`; `Origin` equal to the request URL's origin and `Sec-Fetch-Site: same-origin` → 200. Each refused case: no cookie sent, and still 403 for the connection, so it is checked first; the fake was not called.
+  - **The five refusals,** with room and on a full disk; and a supervisor's join with body `{}` → 403, not 400.
+  - **Fields:** missing or wrong-typed `ssidHex` (`"FF"`, `1`), `keyMgmt` (`"wpa-eap"`, `null`), `psk` (`8`), `hidden` (`"false"`) → 400 `management.request_invalid` with that `field`; an extra key → `body`; host not called.
+  - **The password's own code.** The fake answering `{available:false, reason:"invalid"}`: `JOIN` with `psk: "abcdefg"` → 400 `{error:{code:"box_network.password_invalid", params:{field:"psk", keyMgmt:"wpa-psk"}}}`; a `sae` join → `keyMgmt:"sae"`. Then **through the real client** against `fakeBoxHost(answer('{"ok":true}\n'))` (as Task 1): `psk` `"abcdefg"`, `"g".repeat(64)` and, as `sae`, `"abc\tdefg"` each answer `box_network.password_invalid` with `fake.lines` empty (the protocol refused it, so nothing was sent); `psk` `"abcdefgh"` answers 200 with one line received.
+  - **The host's words:** `busy` → 409 `box_network.busy`; `no_wifi` → 409 `box_network.no_wifi`; `missing` → 409 `box_host.unavailable`; `lost` → 502 `box_host.failed {reason:"lost"}`.
+  - **The canary sweep.** `CANARY = "Canary-psk-7f3a91"` (17 printable characters, a valid WPA2 password) and `SHORT = "Cnry7f3"` (7, refused). A `vi.fn` logger and `vi.spyOn` on the six console methods (`log`, `info`, `warn`, `error`, `debug`, `trace`). Runs: success; `busy`; `missing`; `lost`; `host_failed`; the fake's `invalid` with `SHORT`; the real client and a `fakeBoxHost` with `SHORT`; the fake throwing `new Error(CANARY)` (→ 500 `server.internal`); no cookie; a supervisor; plain HTTP; `other_origin`; an extra key `note: CANARY`; `ssidHex: "FF"`; a valid join body holding `CANARY`, padded with spaces to 4097 bytes. In every run: `JSON.stringify(logger.mock.calls)` and the response text contain neither `CANARY` nor `SHORT`, and no console method was called. In the run through the real client with `CANARY`, the fake host's one line holds `CANARY` exactly once (`line.split(CANARY).length === 2`), so the sweep would see it if it leaked anywhere else.
+- [ ] **Step 2:** Run `pnpm --filter @waitron/server exec vitest run src/box-host-api.join.test.ts`. Expected: every case fails with `404` (no join route). Once the route imports `isSsidHex` and before the declaration gains it, `pnpm --filter @waitron/server typecheck` fails with "has no exported member 'isSsidHex'".
+- [ ] **Step 3: Implement** the route, the check (one private function in `box-host-api.ts` with `requireSecurePackRequest`'s three conditions, throwing `box_network.connection_insecure` with the reason), the declaration and the two codes (statuses 400 and 403 in the map).
+- [ ] **Step 4:** Focused command on both API test files; typecheck; one-file coverage; the client guard; personal-log-params; prettier and eslint clean.
+- [ ] **Step 5: Deletion controls.** One at a time: the connection check (the plain-HTTP and other-origin cases answer 200 or 401); the connection check moved after `authorizeSystemManager` (the no-cookie insecure cases answer 401); the `keyMgmt` check (the `wpa-eap` case reaches the fake and answers 200, not 400 `field: "keyMgmt"`); `keyMgmt` dropped from the `password_invalid` params (its `toEqual` fails); a `log("info", "box_network.join", { ...body })` added before the client call (the canary sweep fails on the logger).
+- [ ] **Step 6: Commit:** `git add apps/server/src/box-host-api.ts apps/server/src/box-host-api.join.test.ts apps/server/src/errors.ts apps/server/src/box-scripts.d.ts && git commit -s -m "feat(server): let a system manager join the box to a Wi-Fi network over the box's secure connection"`.
+
+### Task 4: two host calls at a time, and none inside a database lock
+
+**Files:** modify `apps/server/src/box-host-api.ts`, `apps/server/src/errors.ts`; create `apps/server/src/box-host-api.calls.test.ts`.
+
+**Interfaces:** `export const BOX_HOST_ROUTE_CALLS = 2;` a counter inside `mountBoxHostApi`, taken by the helper of Task 1 immediately before each client call and released in `finally`; when it is at the limit the helper throws `"box_host.busy": Record<string, never>` (409) and does not call the client.
+
+- [ ] **Step 1: Write the failing tests** with a fake whose methods each wait on a promise the test resolves:
+  - **The limit.** `BOX_HOST_ROUTE_CALLS` is `2`. Start a manager's scan and a network read and leave both pending (wait until both fake methods have been called); a third request (a screen read) → 409 `box_host.busy`, `screenRead` not called; a fourth (a forget) → the same. Resolve the scan; the next screen read → 200. Every one of the six routes (the join over an encrypted socket) is refused `box_host.busy` while two calls are pending.
+  - **A place is freed whatever happens.** A fake method that rejects with `new Error("x")` (→ 500) then a fake answering `missing` (→ 409): after each, two new calls are taken at once without `box_host.busy`.
+  - **Refusals take no place.** With both places taken, a supervisor's read → 403 (not 409), and an unencrypted join → 403 `connection_insecure`: the session and connection checks come first.
+  - **No database lock around the host.** While a fake `networkJoin` is pending, `await suite.db.withWriteLock(async () => 1)` resolves within 1000 ms (`vi.waitFor` with a 1000 ms timeout), and so does `withTransaction(suite.db, async () => 1)`.
+- [ ] **Step 2:** Run `pnpm --filter @waitron/server exec vitest run src/box-host-api.calls.test.ts`. Expected: the limit cases fail (`expected 200 to be 409`, `expected undefined to be 2`); the freed-place, refusal-order and lock cases pass already (they pin Tasks 1–3's order and D3, and must keep passing).
+- [ ] **Step 3: Implement** the counter and the code.
+- [ ] **Step 4:** All three API test files green; typecheck; one-file coverage; the client guard; personal-log-params; prettier and eslint clean.
+- [ ] **Step 5: Deletion controls.** One at a time: the `finally` (the freed-place case answers 409 after a rejection); the counter taken before `authorizeSystemManager` instead of before the client call (the refusal-order case answers 409 for the supervisor); the join's client call wrapped in `withTransaction(deps.db, () => …)` (the lock case times out).
+- [ ] **Step 6: Commit:** `git add apps/server/src/box-host-api.ts apps/server/src/box-host-api.calls.test.ts apps/server/src/errors.ts && git commit -s -m "feat(server): keep the box routes to two host requests at a time"`.
+
+### Task 5: boot builds the client and mounts the routes
+
+**Files:** modify `apps/server/src/boot.ts`; create `apps/server/src/boot.box-host.test.ts`.
+
+**Interfaces:** `StartServerSeams` gains, after `boxHost`:
+
+```ts
+/** The box's host requests; unset, the server talks to the host's socket. */
+boxHostRequests?: BoxHostRequests;
+```
+
+`boot.ts:1`'s import gains `boxHostRequests` and `type BoxHostRequests`; after `mountBoxHealthApi(…)` (`:3116-3183`): `mountBoxHostApi(app, { db, host: seams.boxHostRequests ?? boxHostRequests() }, log);`.
+
+- [ ] **Step 1: Write the failing tests** in `boot.box-host.test.ts`, starting the server as `boot.clock-correction.test.ts:60-112` does (finding 13), each case its own start:
+  - **With a stand-in.** A fake `BoxHostRequests` whose `networkRead` answers `{available:true, ...SNAPSHOT}` and whose `screenSet` answers `{available:true, start:"till"}`. `GET /api/box/network` with `venue.managerCookie` → 200 `SNAPSHOT`; the fake was asked once, with `{source:"person", person: <the id of the venue's one manager, read from persons where role = 'manager'>}`. `POST /api/box/screen` `{"start":"till"}` with the cookie and `content-type: application/json` → 200 `{start:"till"}`. With `venue.staffCookie` → 403 `authorization.not_permitted`, the fake asked no more.
+  - **Without one.** `GET /api/box/network` with the manager's cookie → 409, `{error:{code:"box_host.unavailable", params:{reason:"missing", detail:"ENOENT"}}}`. This holds only where `/run/waitron-box/box.sock` does not exist, as on this Mac and on CI's runners (which run no box service); the test checks `existsSync("/run/waitron-box/box.sock")` first and fails with that message rather than passing or skipping if it exists.
+- [ ] **Step 2:** Run `pnpm --filter @waitron/server exec vitest run src/boot.box-host.test.ts`. Expected: both cases answer 404 (no route), and the typecheck fails with `TS2353` (`'boxHostRequests' does not exist in type 'StartServerSeams'`).
+- [ ] **Step 3: Implement** the seam, the import and the mount.
+- [ ] **Step 4:** The boot test, `src/boot.clock-correction.test.ts` (the other seam's suite, unchanged) and the three API test files green; typecheck; the client guard; prettier and eslint clean.
+- [ ] **Step 5: Deletion controls.** One at a time: `seams.boxHostRequests ??` dropped (the stand-in case answers 409 `box_host.unavailable`, not 200); the mount removed (both cases 404).
+- [ ] **Step 6: Commit:** `git add apps/server/src/boot.ts apps/server/src/boot.box-host.test.ts && git commit -s -m "feat(server): build the box host client at boot and mount its routes"`.
+
+### Task 6: backlog, pointers and the data conventions
+
+> The drafts below are what to write. If review narrows anything, write what landed, not the draft.
+
+**Files:** `docs/backlog/box.md`, `docs/backlog.md`, `docs/superpowers/plans/2026-10-26-b3-usb-installer.md`, `docs/developers/conventions-data.md`.
+
+- [ ] **Step 1: "Built so far (date), PR 9 (#n)."** in `docs/backlog/box.md`, after PR 8's paragraph (which ends before "**A box that already holds Waitron, with its TPM**", line 1081 on main): the six routes and their bodies; `system.manage` on all six, reads included, with the signed-in person as the actor; the full-disk fallback shared with `box-health-api.ts`; the answer table (D4) with each code and status; the join only over an encrypted connection from the box's own page, its body never logged, and a refused password answered `box_network.password_invalid` beside the password field; at most two host calls from the routes at once (`box_host.busy`), none inside a database lock; `boot.ts` builds `boxHostRequests()` (seam `boxHostRequests`) and mounts the routes; a mirror or fenced box refuses the four POST routes (`node.read_only`).
+- [ ] **Step 2: "For later slices, from PR 9's re-map"** after PR 8's list (which ends before "**Left open by PR 1's review (#2370):**", line 1325 on main):
+  - *Name-tag pull request:* `tagWrite` as the server's own duty at handoff, after a rename commits and after a move to Live, sending `null` for a name the tag cannot hold (PR 7's D12): needs `usableVenueName` from `scripts/box/name-tag.mjs` (a declaration in `box-scripts.d.ts` and a `ROOT_SCOPE_CONSUMERS` entry, which also closes PR 8's CI gap for `name-tag.mjs`); a source for "Live" (today only `practiceMode` from `onboardingIntent`, `apps/server/src/boot.ts:2073`, until slice 8's modes); what a refused or failed write does (retry, alert). A third server user of the socket: recount D7's two places against `MaxConnections=4`.
+  - *Screen pull request (Task 3.2):* English and Spanish words for `box_host.unavailable` (both reasons), `box_host.failed` (saying that after `lost` or `timeout` a change may still have happened), `box_host.busy`, `box_network.busy`, `box_network.no_wifi`, `box_network.not_saved`, `box_network.password_invalid` (per `keyMgmt`), `box_network.connection_insecure`; keeping a read's and an action's failure apart on one screen (the parent's "preserved action failure across read recovery"); a dev stack served over plain HTTP answers the join `box_network.connection_insecure`.
+  - *Linux pull requests:* what systemd does with a fifth connection, and whether the clock side ever holds more than two (a read after a cache clear, PR 9's re-map finding 11); `EACCES` on a real box reaches the screen only as `box_host.unavailable`'s `detail`, so a box whose app is not in the socket's group looks like a box without the service.
+  - *Open:* whether a fenced physical box needs Red (today the read-only gate refuses its network changes; an exemption would be a row in `READ_ONLY_EXEMPTIONS`). The SMTP and bucket settings routes take credentials over any connection, where the join now refuses one that is not encrypted.
+  - *Decisions recorded for review:* reads under `system.manage` with the person as actor (D2); the answer table (D4); the protocol owning the password rules, with the route naming the field (D5); the join's encrypted same-page connection (D6); two places, refused rather than queued (D7); no socket-path setting (D8); no read-only exemption (D9); no server-side change log (D10).
+- [ ] **Step 3: Narrow PR 8's re-map list** (lines 1284–1323 on main), as CLAUDE.md's docs rule asks: delete the first bullet's points this pull request did (building in `boot.ts`, the `PersonActor`, the answers and codes, never logging a join argument), leaving "runs `tagWrite` as the server's own duty" and pointing it at the name-tag pull request; reword the `usableVenueName` bullet's "The same pull request" to "The name-tag pull request"; replace the `MaxConnections` bullet with one line pointing at PR 9's D7 and the Linux measurement left open; delete the socket-path bullet (D8 settles it: no setting); reword the `bundle-smoke` bullet to say the routes now call the client, and `bundle-smoke` requests none of them (it builds the bundle and checks its files, `.github/workflows/ci.yml:589-620`); delete the "This box" screen bullet's words list only if Step 2 carries it, keeping one list.
+- [ ] **Step 4: `docs/backlog.md`,** the B3 entry (line 5313 on main): replace "Slice 3's routes pull request is to build it in `boot.ts` and answer it behind `system.manage`; the plan does not order that against slice 3's Linux pull request." with "PR 9 ([plan](superpowers/plans/2026-11-06-b3-9-host-routes.md)) builds it in `boot.ts` and answers six of those requests through routes behind `system.manage`, with the signed-in person as the actor; the name tag's duty and the screen are later pull requests."
+- [ ] **Step 5: Pointers in the parent plan.** At the top, above PR 8's line: `> 2026-11-06: PR 9's plan (the server's routes for six of the host's requests, behind \`system.manage\`, built and mounted at boot): [2026-11-06-b3-9-host-routes.md](2026-11-06-b3-9-host-routes.md); \`tag.write\`'s duty is left to its own pull request (its D11).` Under Task 3.1's `box-host-api.test.ts` step (line 221 on main): `> 2026-11-06: [PR 9's plan](2026-11-06-b3-9-host-routes.md) builds these routes; "preserved action failure across read recovery" is left to Task 3.2's screen (its D12), and reads also need \`system.manage\` (its D2).`
+- [ ] **Step 6: `docs/developers/conventions-data.md`,** lines 4324–4327: replace "; nothing calls it yet ([B3 PR 8's plan](…))" with "; the routes in `apps/server/src/box-host-api.ts` call it for every request but `tag.write`, behind `system.manage` ([B3 PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md))". Then `git grep -n -i "nothing calls it\|called by nothing" -- docs/developers docs/backlog.md` and read each hit about the host client; fix any other that this pull request made false.
+- [ ] **Step 7: Guides and CLAUDE.md.** No guide changes (D13). No CLAUDE.md line unless an implementing task paid for a new trap; if one did, one line plus a pointer.
+- [ ] **Step 8:** `pnpm exec prettier --file-info docs/backlog/box.md` prints `"ignored": true`. Commit: `git add docs/backlog.md docs/backlog/box.md docs/superpowers/plans/2026-10-26-b3-usb-installer.md docs/developers/conventions-data.md && git commit -s -m "docs(backlog): record B3's routes for the box host's requests"`.
+
+---
+
+## Self-review
+
+**Parent plan, spec and box.md coverage.**
+
+| Sentence | Where |
+| --- | --- |
+| Parent line 221: "unauthenticated/session-expired refusal" | Tasks 1–3, the five refusals with room and on a full disk |
+| Parent line 221: "`system.manage` on network/screen mutations" | D2 (reads too); Tasks 2, 3 |
+| Parent line 221: "no password in logs" | D5, D6; Task 3's canary sweep |
+| Parent line 221: "passive reads" | finding 4; Task 1's last-seen cases; Task 2's POST case |
+| Parent line 221: "preserved action failure across read recovery" | D12: the screen's; recorded for Task 3.2 (Task 6) |
+| Parent line 221: "narrow routes/client/boot mount" | Tasks 1–5 |
+| box.md PR 8: "builds `boxHostRequests()` in `boot.ts`" | D8; Task 5 |
+| box.md PR 8: "makes the `PersonActor` from the signed-in person after checking `system.manage`" | D2, D3; Tasks 1–3 |
+| box.md PR 8: "gives each of the client's answers a route answer and an error code (`unsupported` and `missing` … not a fault)" | D4; Tasks 1–3 |
+| box.md PR 8: "never logs a `networkJoin` argument" | Task 3 |
+| box.md PR 8: "runs `tagWrite` as the server's own duty"; `usableVenueName` | D11; Out; Task 6 |
+| box.md PR 8: `MaxConnections=4` | D7; Task 4 |
+| box.md PR 8: the socket path from an environment variable | D8: none |
+| Spec §10: Red and the start screen under `system.manage` | D2 |
+| Spec lines 733–734: no password-bearing logs | Task 3 |
+
+**Names.** New: `mountBoxHostApi`, `BoxHostApiDeps`, `BOX_HOST_ROUTE_CALLS`; codes `box_host.unavailable`, `box_host.failed`, `box_host.busy`, `box_network.busy`, `box_network.no_wifi`, `box_network.not_saved`, `box_network.password_invalid`, `box_network.connection_insecure`; boundary tag `box-host-route.failed`; seam `boxHostRequests`; exported `authorizeSystemManager`; declared `isSsidHex`. Test files: `box-host-api.test.ts`, `box-host-api.join.test.ts`, `box-host-api.calls.test.ts`, `boot.box-host.test.ts`.
+
+**Task size.** Task 1 is the largest (the file, the mapping, two routes, the refusal matrix); Tasks 2 and 3 add routes to it; Task 4 one counter; Task 5 three lines of boot and one test file.
+
+**What the planner ran (2026-11-06):** `node --version`; the join, screen and forget probes of finding 10 over the real `formatHostRequest` and `isSsidHex`; the `TLSSocket` probe of finding 7; the `bodyLimit` probe of finding 9; the three baselines of finding 13; `git rev-parse HEAD` and `origin/main`; the greps cited in findings 2, 7, 12 and 14.
+
+**What the planner only read:** `box-host-client.ts`, `box-health-api.ts` and its test, `boot.ts` at the lines cited, `cloud-api.ts`, `backup-recovery-pack-api.ts`, `node-operation-https.ts`, `recovery-start-again.ts:296-309`, `landing-app.ts`, `read-only-gate.ts`, `read-only-exemptions.ts`, `error-boundary.ts`, `request-id.ts`, `management-session.ts`, `management-cookie.ts`, `permissions.ts`, `ttl-cache.ts`, `clock-correction.ts` at the lines cited, `deploy/box/waitron-box.socket`, the bundle-smoke job's steps in `ci.yml`, `venue-fixtures.ts`, `boot.clock-correction.test.ts`, the spec's §7.5, §7.6, §8 and §10, the parent plan's Slice 3, PR 7's and PR 8's plans, and box.md's B3 section.
+
+**Not verified by running anything (labelled where used):**
+- That the clock side holds at most one or two socket connections at once (finding 11, D7) — read from the code, not measured.
+- That the box's application listener is HTTPS whenever the host service exists, so D6 refuses nothing on a box (finding 7) — read from `boot.ts:839-842` and `landing-app.ts:8`; no box was started.
+- That `bundle-smoke` requests none of the new routes (Task 6 step 3) — read from `ci.yml`, not run.
+- That `/run/waitron-box/box.sock` is absent on CI's runners (Task 5) — inferred from the runners having no box service; the test fails loudly if it is present.
+- What systemd does with a fifth connection — not measured by anyone.
+
+No test of the code above has run, because none of it exists yet.
