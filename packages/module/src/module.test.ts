@@ -3,6 +3,7 @@ import { isAppError } from "@waitron/shared";
 import { appendOnly, classify } from "@waitron/sync-enrolment";
 import type { MigrationSetSource } from "@waitron/migrations";
 import {
+  migrationSetsHolding,
   modulesWithSets,
   orderedMigrationSets,
   packageDirOf,
@@ -194,6 +195,15 @@ describe("a module with no set of its own", () => {
   it("modulesWithSets keeps only the modules that carry a set, in list order", () => {
     const mods = [mod("core"), setless("catalogue", { core: "*" }), mod("sync")];
     expect(modulesWithSets(mods).map((m) => m.name)).toEqual(["core", "sync"]);
+  });
+
+  it("migrationSetsHolding names each module's own set or its host's, once each, keeping unknown names", () => {
+    const mods = [mod("core"), setless("catalogue", { core: "*" }), mod("sync")];
+    expect(migrationSetsHolding(mods, ["catalogue", "sync", "core", "retired"])).toEqual([
+      "core",
+      "sync",
+      "retired",
+    ]);
   });
 
   it("orderedMigrationSets omits it, yet still orders the modules that depend on it after it", () => {

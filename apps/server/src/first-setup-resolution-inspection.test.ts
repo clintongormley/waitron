@@ -498,7 +498,7 @@ it("requires the configured module schema for empty-only restart", async () => {
   const host = createFirstSetupModuleHost({
     ...f,
     environment: {},
-    modules: ALL_MODULES.filter((module) => module.name === "scheduler"),
+    modules: ALL_MODULES.filter((module) => module.name === "bookings"),
   });
   const actions = createFirstSetupResolutionActions({ ...f, host });
   const inspection = await host.resolution.inspectFirstSetupResolution();

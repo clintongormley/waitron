@@ -1581,6 +1581,28 @@ export function modulesWithSets(
   );
 }
 
+/** The migration set holding `module`'s tables: its own, or its host's (`tablesIn`). */
+export function migrationSetOf(module: WaitronModule): string {
+  return module.tablesIn ?? module.name;
+}
+
+/** The migration sets holding the named modules' tables, de-duplicated in first-seen order. A
+ * name `modules` does not list is kept as it is, so a reader of set names still refuses it. */
+export function migrationSetsHolding(
+  modules: readonly WaitronModule[],
+  names: readonly string[],
+): string[] {
+  const byName = new Map(modules.map((module) => [module.name, module]));
+  return [
+    ...new Set(
+      names.map((name) => {
+        const module = byName.get(name);
+        return module === undefined ? name : migrationSetOf(module);
+      }),
+    ),
+  ];
+}
+
 /** Why `m` breaks "its tables live in exactly one set", or null when they do. A set-less module's
  * classification is refused because `orderedMigrationSets` reads append-only tables from set
  * owners only, so its tables would go unprotected. */

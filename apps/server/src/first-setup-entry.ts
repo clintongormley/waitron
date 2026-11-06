@@ -5,6 +5,7 @@ import { withFirstSetupPublication } from "./first-setup-publication.js";
 import { Hono } from "hono";
 import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
+import { migrationSetsHolding } from "@waitron/module";
 import {
   assertNoLegacyFirstSetupWorkspace,
   assertStartAgainNotKept,
@@ -32,7 +33,10 @@ async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHos
   const pair = await host.store.readResumable();
   if (pair === null) return { claimed: false, unresolved: false };
   const inspection = await host.resolution.inspectFirstSetupDatabase(
-    pair.state.frozen.modules.map((entry) => entry.module),
+    migrationSetsHolding(
+      host.modules,
+      pair.state.frozen.modules.map((entry) => entry.module),
+    ),
   );
   const unresolved = pair.publicationComplete
     ? inspection.database !== "occupied"

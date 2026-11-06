@@ -111,6 +111,7 @@ import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/
 import {
   enabledModules,
   fiscalSlot,
+  migrationSetOf,
   modulesWithSets,
   orderedMigrationSets,
   reconcile,
@@ -2278,9 +2279,7 @@ async function bootServer(
     log,
   });
   const tableRemovals = enabledTableRemovals(
-    ALL_MODULES.filter(
-      (module) => (appliedModuleVersions[module.tablesIn ?? module.name] ?? 0) > 0,
-    ),
+    ALL_MODULES.filter((module) => (appliedModuleVersions[migrationSetOf(module)] ?? 0) > 0),
   );
   const workforceEnabled =
     !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce");
