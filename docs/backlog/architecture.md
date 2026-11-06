@@ -678,6 +678,7 @@ The [operator procedure](../operations/a760-migration-squash.md)
   procedure where they differ, in three pull requests, only the last under the freeze. A790 Cut A,
   A802, A799 and A739 do not hold it up: they land afterwards with regenerated migrations (owner,
   2026-11-04). The owner approved setup-only edits to six named fiscal test files (2026-11-04).
+  Pull request 1 landed on 2026-11-06 (#2512); pull requests 2 and 3 remain.
 
 ## Loose ends left by A435's printer, reader and device delete (steps 2 to 4)
 
