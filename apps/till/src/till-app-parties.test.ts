@@ -9109,6 +9109,62 @@ describe("till-app: Current orders", () => {
     },
   );
 
+  describe("a held dish's split refused for its person", () => {
+    /** A held dish on the bill on screen, whose split stays out until `refuse` is called. */
+    async function splitOut() {
+      const current = structuredClone(orders);
+      current.groups[0]!.state = "held";
+      current.groups[0]!.rows[0]!.workingOrderId = "wo-4";
+      let refuse!: () => void;
+      const split = vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            refuse = () => reject({ code: "draft.person_not_signed_in", status: 409 });
+          }),
+      );
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(current),
+        splitHeldLineIntoUnits: split,
+      });
+      emit(await openMesa(el), "split-group-line", { lineId: "line-1" });
+      await flush(el);
+      expect(split).toHaveBeenCalledOnce();
+      return { el, refuse: () => refuse() };
+    }
+
+    it("locks the screen with no message, ending no server session and sending no read", async () => {
+      const { el, refuse } = await splitOut();
+      const reads = vi.mocked(api.listDrafts).mock.calls.length;
+
+      refuse();
+      await flush(el, 6);
+
+      expect(lock(el)).not.toBeNull();
+      expect(shell(el)).toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(vi.mocked(api.listDrafts).mock.calls.length).toBe(reads);
+    });
+
+    it.each([
+      ["the next person", "p2", "Luis"],
+      ["the same person again", "p1", "Ana"],
+    ])("leaves %s signed in when the refusal lands after a sign-out", async (_who, id, name) => {
+      const { el, refuse } = await splitOut();
+      emit(shell(el), "logout");
+      await flush(el, 6);
+      emit(lock(el), "logged-in", { personId: id, displayName: name, permissions: [] });
+      await flush(el, 6);
+
+      refuse();
+      await flush(el, 6);
+
+      expect(lock(el)).toBeNull();
+      expect(shell(el)).not.toBeNull();
+      expect(banner(el)).toBeNull();
+    });
+  });
+
   it.each(["editor version", "draft identity", "draft revision", "API replacement"])(
     "does not renew a held split's observation after %s while its kitchen note saves",
     async (changed) => {

@@ -2949,3 +2949,167 @@ describe("resendUnanswered: onUnanswered", () => {
     expect(onUnanswered).not.toHaveBeenCalled();
   });
 });
+
+describe("DraftSync: a request refused because it names someone not signed in", () => {
+  const refusedPerson = { code: "draft.person_not_signed_in", status: 409 };
+  const person = { refused: "draft.person_not_signed_in" };
+
+  const seedOther = (ownerId: string, ...products: TillProduct[]): Draft => {
+    const theirs = seed(ownerId, ...products);
+    theirs.billId = "wo-check";
+    return theirs;
+  };
+
+  /** Someone else's saved draft on the bill on screen, known to `draft` from a read. */
+  async function withTheirs(draft: DraftSync): Promise<Draft> {
+    const theirs = seed("p2", beer);
+    await draft.load();
+    return theirs;
+  }
+
+  /** The next take-over stays out until `refuse` is called. */
+  const holdTakeOver = () => {
+    let refuse!: (error: unknown) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<never>((_resolve, fail) => (refuse = fail)),
+    );
+    return (error: unknown) => refuse(error);
+  };
+
+  it("take-over: says so, sends no read under the other person's session, and stays locked until the next read", async () => {
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+    server.takeOverDraft.mockRejectedValueOnce(refusedPerson);
+
+    expect(await draft.takeOver("draft-of-theirs", 1)).toEqual(person);
+
+    expect(refused).toEqual(["draft.person_not_signed_in"]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(draft.store.sending).toBe(false);
+    expect(await draft.load()).toBe(true);
+    expect(server.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(draft.store.editsLocked).toBe(false);
+  });
+
+  it("take-over: a read that overlapped it does not hide the refusal", async () => {
+    const draft = sync();
+    const theirs = await withTheirs(draft);
+    const refuse = holdTakeOver();
+    const outcome = draft.takeOver(theirs.id, theirs.revision);
+    await vi.waitFor(() => expect(server.takeOverDraft).toHaveBeenCalledOnce());
+    await draft.load();
+
+    refuse(refusedPerson);
+
+    expect(await outcome).toEqual(person);
+    expect(refused).toEqual(["draft.person_not_signed_in"]);
+  });
+
+  it("take-over: says nothing once the sync has ended, since the next person may be signed in", async () => {
+    const draft = sync();
+    const theirs = await withTheirs(draft);
+    const reads = server.listDrafts.mock.calls.length;
+    const refuse = holdTakeOver();
+    const outcome = draft.takeOver(theirs.id, theirs.revision);
+    await vi.waitFor(() => expect(server.takeOverDraft).toHaveBeenCalledOnce());
+    void draft.close();
+
+    refuse(refusedPerson);
+
+    expect(await outcome).toBe("failed");
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+  });
+
+  it("take-over: keeps the person's unsaved lines for them", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(steak, "1");
+    server.takeOverDraft.mockRejectedValueOnce(refusedPerson);
+
+    expect(await draft.takeOver("draft-of-theirs", 1)).toEqual(person);
+
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    await settle();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("take-over on another bill: says so and sends no read under the other person's session", async () => {
+    const draft = sync();
+    const elsewhere = seedOther("p2", steak);
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+    server.takeOverDraft.mockRejectedValueOnce(refusedPerson);
+
+    expect(await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision)).toEqual(person);
+
+    expect(refused).toEqual(["draft.person_not_signed_in"]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+  });
+
+  it("take-over on another bill: says nothing once the sync has ended", async () => {
+    const draft = sync();
+    const elsewhere = seedOther("p2", steak);
+    await draft.load();
+    const refuse = holdTakeOver();
+    const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.waitFor(() => expect(server.takeOverDraft).toHaveBeenCalledOnce());
+    void draft.close();
+
+    refuse(refusedPerson);
+
+    expect(await outcome).toBe("failed");
+    expect(refused).toEqual([]);
+  });
+
+  it("command: says so, sends no read under the other person's session, and stays locked until the next read", async () => {
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = await draft.runCommand(async () => {
+      throw refusedPerson;
+    });
+
+    expect(outcome).toEqual(person);
+    expect(refused).toEqual(["draft.person_not_signed_in"]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(draft.store.sending).toBe(false);
+    expect(await draft.load()).toBe(true);
+    expect(server.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(draft.store.editsLocked).toBe(false);
+  });
+
+  it("command: says nothing once the sync has ended", async () => {
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = await draft.runCommand(async () => {
+      void draft.close();
+      throw refusedPerson;
+    });
+
+    expect(outcome).toBe("failed");
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+  });
+
+  it("any other refusal of a command still reads first", async () => {
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = await draft.runCommand(async () => {
+      throw { code: "draft.out_of_date", status: 409 };
+    });
+
+    expect(outcome).toEqual({ refused: "draft.out_of_date" });
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(draft.store.editsLocked).toBe(false);
+  });
+});

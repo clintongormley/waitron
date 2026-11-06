@@ -5177,6 +5177,39 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(banner(el)).toBeNull();
   });
 
+  it("locks the screen, ends no server session, and keeps Sam's lines for Sam, when a take-over is refused for Sam", async () => {
+    let refuse!: (error: unknown) => void;
+    const { el } = await mountApp({
+      takeOverDraft: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    });
+    await openAs(el, SAM, "Sam");
+    await tap(el, "Flan");
+    savedBy(ALEX, "Alex", "offer-beer");
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
+    await takeOver(el);
+    expect(api.takeOverDraft).toHaveBeenCalledOnce();
+    const reads = api.listDrafts.mock.calls.length;
+
+    refuse({ code: "draft.person_not_signed_in", status: 409 });
+    await flush(el, 6);
+
+    expect(lock(el)).not.toBeNull();
+    expect(shell(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+    expect(api.listDrafts.mock.calls.length).toBe(reads);
+
+    await openAs(el, "p-kim", "Kim");
+    expect(retainedCandidate(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    await openAs(el, SAM, "Sam");
+    await flush(el, 6);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+  });
+
   it("sends no takeover as the next person when it was waiting on Sam's already-sent save at sign-out", async () => {
     const { el } = await mountApp();
     await openAs(el, SAM, "Sam");
@@ -8437,6 +8470,21 @@ describe("recalled draft source splitting", () => {
     expect(rows(el)).toEqual(["Recorded steak ×1", "Recorded steak ×1"]);
   });
 
+  it("locks the screen and ends no server session when a recalled line's split is refused for its person", async () => {
+    const split = vi.fn().mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 });
+    const { el, button } = await opening(split);
+    const reads = api.listDrafts.mock.calls.length;
+
+    await userEvent.click(button);
+    await flush(el, 6);
+
+    expect(split).toHaveBeenCalledOnce();
+    expect(lock(el)).not.toBeNull();
+    expect(banner(el)).toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+    expect(api.listDrafts.mock.calls.length).toBe(reads);
+  });
+
   it("rereads ownership after a refused split and names the new owner without retrying", async () => {
     const split = vi.fn(async () => {
       server.drafts[0]!.ownerId = "p2";
@@ -8765,13 +8813,87 @@ describe("recalled draft source splitting", () => {
       }
     });
 
+    it("locks the screen, ends no server session, and leaves the saved lines for the person, when a recall is refused for them", async () => {
+      const { el, order } = await recallOpening({
+        recallToDraft: vi
+          .fn()
+          .mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 }),
+      });
+      await tap(el, "Beer");
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      await flush(el);
+      const reads = api.listDrafts.mock.calls.length;
+
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+
+      expect(api.recallToDraft).toHaveBeenCalledOnce();
+      expect(lock(el)).not.toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(api.listDrafts.mock.calls.length).toBe(reads);
+
+      await signIn(el, "p1", "Ana");
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el, 6);
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(banner(el)).toBeNull();
+    });
+
+    it("locks the screen with no message, sending no recall, and keeps the lines for the person, when the save before a recall is refused for them", async () => {
+      const { el, order } = await recallOpening();
+      await tap(el, "Beer");
+      api.saveDraft.mockRejectedValueOnce({ code: "draft.person_not_signed_in", status: 409 });
+
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      expect(lock(el)).not.toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.logout).not.toHaveBeenCalled();
+
+      await signIn(el, "p1", "Ana");
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el, 6);
+      expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    });
+
+    it("sends no recall as the next person when it was waiting on the person's already-sent save at sign-out", async () => {
+      const { el, order } = await recallOpening();
+      const answer = holdNextSave();
+      await tap(el, "Beer");
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+
+      emit(shell(el), "logout");
+      await flush(el);
+      await signIn(el, "p-kim", "Kim");
+      answer();
+      await flush(el, 8);
+
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(banner(el)).toBeNull();
+      expect(lock(el)).toBeNull();
+    });
+
     it("recalls the recorded family into its bill's draft and reads it before allowing edits", async () => {
       const { el, order } = await recallOpening();
-      const reads = api.listDrafts.mock.calls.length;
       await openSentDish(order, "source-7");
       await openSentMore(order);
       const button = order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-recall]");
       expect(button).not.toBeNull();
+      // Counted after the taps above: a page's first click gives it focus, and focus reads the drafts.
+      const reads = api.listDrafts.mock.calls.length;
       await userEvent.click(button!);
       await flush(el, 6);
       expect(api.recallToDraft).toHaveBeenCalledWith(

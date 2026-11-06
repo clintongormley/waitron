@@ -711,11 +711,17 @@ export class DraftSync {
         },
       );
     } catch (error) {
-      if (this.#ended || read !== this.#reads) return "failed";
+      if (this.#ended) return "failed";
+      const refusal = asRefusal(error);
+      if (refusal?.refused === DRAFT_PERSON_REFUSAL) {
+        this.#recoveryRequired = true;
+        this.#lockAuthority();
+        return this.#refusedPerson(refusal);
+      }
+      if (read !== this.#reads) return "failed";
       this.#recoveryRequired = true;
       await this.#load();
       this.#lockAuthority();
-      const refusal = asRefusal(error);
       return refusal ?? "failed";
     } finally {
       limit.done();
@@ -747,8 +753,10 @@ export class DraftSync {
       );
     } catch (error) {
       if (this.#ended) return "failed";
+      const refusal = asRefusal(error);
+      if (refusal?.refused === DRAFT_PERSON_REFUSAL) return this.#refusedPerson(refusal);
       await this.load();
-      return this.#ended ? "failed" : (asRefusal(error) ?? "failed");
+      return this.#ended ? "failed" : (refusal ?? "failed");
     } finally {
       limit.done();
     }
@@ -756,6 +764,12 @@ export class DraftSync {
     this.#recordTakeOver(taken, draftId);
     const reloaded = await this.load();
     return this.#ended ? "failed" : { taken: true, reloaded };
+  }
+
+  /** The device's session is someone else's, so a read now would run as them: none is sent. */
+  #refusedPerson(refusal: DraftRefused): DraftRefused {
+    this.#options.onRefused(refusal.refused);
+    return refusal;
   }
 
   #recordTakeOver({ draft, edit }: BillDraftSnapshot, draftId: string): void {
@@ -805,8 +819,10 @@ export class DraftSync {
         );
       } catch (error) {
         if (this.#ended) return "failed";
+        const refusal = asRefusal(error);
+        if (refusal?.refused === DRAFT_PERSON_REFUSAL) return this.#refusedPerson(refusal);
         await this.#load();
-        return asRefusal(error) ?? "failed";
+        return refusal ?? "failed";
       }
       if (this.#ended) return "failed";
       const reloaded = await this.#load();

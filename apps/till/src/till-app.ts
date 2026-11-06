@@ -13280,15 +13280,24 @@ export class TillApp extends LitElement {
     if (composition === null) return;
     const live = () =>
       this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
-    await this.#onGroupRequest(
-      (party, command) =>
-        composition.api.splitHeldLineIntoUnits(party.id, lineId, {
+    await this.#onGroupRequest(async (party, command) => {
+      try {
+        return await composition.api.splitHeldLineIntoUnits(party.id, lineId, {
           ...command,
           personId: composition.sync!.personId,
           expectedEdit,
-        }),
-      live,
-    );
+        });
+      } catch (error) {
+        const refusal = asRefusal(error);
+        // A later sign-in, even the same person's, is not what the server refused.
+        if (
+          refusal?.refused === DRAFT_PERSON_REFUSAL &&
+          composition.session === this.#operatorSession
+        )
+          this.#onDraftRefused(composition.sync!, refusal);
+        throw error;
+      }
+    }, live);
   }
 
   async #onSplitDraftSource(event: Event): Promise<void> {
