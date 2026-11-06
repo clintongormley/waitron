@@ -817,10 +817,16 @@ describe("choosing the Counter zone the counter is already on, with an order in 
     emit(shell(el), "screen-select", { screen: "floor" });
     await vi.waitFor(() => expect(counter(el)).toBeNull());
     expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+    const push = vi.spyOn(history, "pushState");
 
-    await pickZone(el, "bar");
+    try {
+      await pickZone(el, "bar");
 
-    await vi.waitFor(() => expect(counter(el)).not.toBeNull());
+      await vi.waitFor(() => expect(counter(el)).not.toBeNull());
+      expect(push).toHaveBeenCalledOnce();
+    } finally {
+      push.mockRestore();
+    }
     expect(counter(el)!.store).toBe(store);
     expect(store.lines).toHaveLength(1);
     expect(alert(el)).toBeNull();
@@ -860,16 +866,18 @@ describe("choosing the Counter zone the counter is already on, with an order in 
     expect(api.listZoneOffers).not.toHaveBeenCalled();
   });
 
-  it("adds no history entry when the menu is already showing", async () => {
-    const { el } = await mount(selection(["bar", "shop"], "bar"));
+  it("adds no history entry and re-reads no stations when the menu is already showing", async () => {
+    const { el, api } = await mount(selection(["bar", "shop"], "bar"));
     counter(el)!.store!.addProduct(counter(el)!.products[0]!, "1");
     await el.updateComplete;
+    const stationReads = api.listStations.mock.calls.length;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     try {
       await pickZone(el, "bar");
       expect(push).not.toHaveBeenCalled();
       expect(replace).not.toHaveBeenCalled();
+      expect(api.listStations).toHaveBeenCalledTimes(stationReads);
       expect(alert(el)).toBeNull();
       expect(counter(el)!.orderList).toBeNull();
     } finally {
