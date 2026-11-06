@@ -557,6 +557,12 @@ and shows a clear message.
 
 ## Decisions and deliberate limits
 
+- **An uncertain bill payment keeps its original confirmation** (A1399, watcher answer,
+  2026-11-06 23:12). A server error or code-less answer that does not prove the payment was refused
+  uses the existing hold and **Check again**, with the same complete request. An empty balance
+  read never releases it. Repeated server errors keep the bill held until the box answers; there
+  is no timeout or forced release.
+
 - **Handheld reader selection** (owner decisions 2026-09-18)
   ([2026-09-18-handheld-and-till-hardware-decisions.md](../superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
   §2–§3): the waiter carries the reader to the table and settles there; pairing is an NFC sticker, a
