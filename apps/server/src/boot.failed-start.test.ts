@@ -403,6 +403,53 @@ async function tradingEnv(venueDir: string, state: string, { landing = false } =
 }
 
 describe("a start that fails after the venue folder is opened gives the folder back", () => {
+  it("opens the staff socket after first issuance and closes that late socket with the server", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const [localPort, staffPort] = await freePorts(2);
+    let workerOptions: Parameters<typeof runCloudWorker>[0] | undefined;
+    vi.mocked(runCloudWorker).mockImplementationOnce(async (options) => {
+      workerOptions = options;
+      await new Promise<void>((resolve) =>
+        options.signal.addEventListener("abort", () => resolve(), { once: true }),
+      );
+    });
+    const server = await startServer({
+      WAITRON_VENUE_DIR: venueDir,
+      WAITRON_STATE_DIR: state,
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      ...TILL_ENV,
+      WAITRON_HTTP_PORT: String(localPort),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+      WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+      WAITRON_STAFF_PORT: String(staffPort),
+    });
+    try {
+      await bindAndRelease(staffPort);
+      const certificate = mintSelfSignedServerCert({
+        now: new Date(),
+        hostnames: ["staff.example.test"],
+        ipAddresses: [],
+      });
+      await writeFile(join(state, "cloud-staff.key"), certificate.serverKeyPem, { mode: 0o600 });
+      await writeFile(join(state, "cloud-staff.crt"), certificate.serverCertPem);
+      expect(workerOptions?.staffHostname).toBe("staff.example.test");
+      await workerOptions?.onStaffCertificate?.();
+      await vi.waitFor(async () => {
+        await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
+      });
+    } finally {
+      await server.close();
+    }
+    expect(workerOptions?.signal.aborted).toBe(true);
+    await bindAndRelease(staffPort);
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60000);
+
   it("closes the staff socket when a later boot step fails", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });

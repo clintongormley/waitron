@@ -2101,8 +2101,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   A manual browser signed in through the public gateway with normal certificate trust on
   6 November ([proof PR](https://github.com/clintongormley/waitron/pull/2525)); live certificate
   replacement also worked without a server restart. A separate managed demo recovered its app
-  and tunnel after controlled exits; physical reboot is untested. Left: the certificate worker and renewal,
-  managed tunnel container, signed connection details, Settings on/off/status, remaining isolation
+  and tunnel after controlled exits; physical reboot is untested. The certificate worker
+  now resumes pending requests, renews before expiry and opens the listener after first issuance;
+  its automated public-demo deployment is not yet qualified. Left: the managed tunnel container, signed connection details, Settings on/off/status, remaining isolation
   qualification and retirement of `@waitron/tunnel`. Translate all and address completion remain
   test-box trials.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)

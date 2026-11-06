@@ -9,6 +9,7 @@ export async function installationFixture(
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
     billing?: MachineHandler;
+    staffCertificate?: MachineHandler;
     translationState?: () => ServiceState;
   } = {},
 ) {
@@ -58,6 +59,10 @@ export async function installationFixture(
     }
     if (String(values[2]).startsWith("translation-") && options.translation) {
       await options.translation(values, saved, req, res, sent);
+      return;
+    }
+    if (String(values[2]).startsWith("staff-certificate-") && options.staffCertificate) {
+      await options.staffCertificate(values, saved, req, res, sent);
       return;
     }
     if (values[2] === "billing-display" && options.billing) {

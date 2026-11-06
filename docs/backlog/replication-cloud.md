@@ -1047,7 +1047,10 @@ physical box reboot remains untested. The owner's containers were untouched.
 
 Remaining work, following the owner's certificate-first order:
 
-- Add the box certificate worker over the existing signed exchange, including renewal.
+- Qualify the certificate worker on the managed public demo. The worker uses the existing signed
+  submit/status exchange, resumes pending requests after restart and renews before expiry. A local
+  TLS handshake observed the renewed chain without restarting the listener; no new public
+  certificate was issued for that synthetic test.
 - Add the managed outbound tunnel container, send box details over the existing signed connection,
   provide Settings on/off/status, and retire `@waitron/tunnel`.
 - Qualify the managed demo across a physical reboot.

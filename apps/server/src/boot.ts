@@ -3562,7 +3562,7 @@ async function bootServer(
   undoOnFailure.push(async () => appendOnlyWatch.stop());
 
   // A mirror's ambient administrator session must stay off the staff entrance.
-  const staffListener = isMirror ? undefined : startStaffListener(config, app, log);
+  let staffListener = isMirror ? undefined : startStaffListener(config, app, log);
   undoOnFailure.push(async () => {
     await staffListener?.close();
   });
@@ -3780,6 +3780,14 @@ async function bootServer(
         connection: cloudConnection,
         signal: cloudController.signal,
         isPrimary: cloudPrimary,
+        ...(config.staff && config.environment !== "production"
+          ? {
+              staffHostname: new URL(config.staff.origin).hostname,
+              onStaffCertificate: () => {
+                staffListener ??= startStaffListener(config, app, log);
+              },
+            }
+          : {}),
         onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
       })
     : undefined;
