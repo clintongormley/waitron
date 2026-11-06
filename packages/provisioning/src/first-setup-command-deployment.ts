@@ -25,7 +25,7 @@ import {
   verifyMembershipDocument,
 } from "@waitron/membership";
 import { appliedSchemaVersion } from "@waitron/migrations";
-import { enabledModules, serializeModuleConfig } from "@waitron/module";
+import { enabledModules, modulesWithSets, serializeModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { FirstSetupCommandDeployment } from "./first-setup-command-activation.js";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
@@ -92,7 +92,7 @@ export function createFirstSetupCommandDeployment(options: {
       venueFiscalSelection(runtime.modules, state.frozen.request.fiscalTerritory).config,
     );
     const versions: Record<string, number> = {};
-    for (const module of modules)
+    for (const module of modulesWithSets(modules))
       versions[module.name] = await appliedSchemaVersion({ venue: db, node }, module.migrations);
     validateConfigurationBundle(staged.bundle, modules, versions);
     return { bundle: staged.bundle, versions };
@@ -107,7 +107,7 @@ export function createFirstSetupCommandDeployment(options: {
     if (selected.contribution === undefined) conflict();
     const modules = enabledModules(runtime.modules, selected.config);
     const versions: Record<string, number> = {};
-    for (const module of modules)
+    for (const module of modulesWithSets(modules))
       versions[module.name] = await appliedSchemaVersion({ venue: db, node }, module.migrations);
     const input = fiscalReadinessInput({
       venue: state.frozen.request,

@@ -251,6 +251,27 @@ it.each([
   ).toThrow(expect.objectContaining(invalid(field)));
 });
 
+it("validates a bundle without a module that has no set of its own, and refuses one naming it", () => {
+  const setless: WaitronModule = {
+    name: "synthetic-setless",
+    version: "0.0.0",
+    tier: "toggleable",
+    tablesIn: "synthetic-transfer",
+    configurationTransfer: { kind: "none" },
+  };
+  const modules = [moduleWith([]), setless];
+  const versions = { "synthetic-transfer": 1 };
+  const bundle = { ...configurationBundle(), modules: { "synthetic-transfer": 1 } };
+  expect(() => validateConfigurationBundle(bundle, modules, versions)).not.toThrow();
+  expect(() =>
+    validateConfigurationBundle(
+      { ...bundle, modules: { ...bundle.modules, "synthetic-setless": 1 } },
+      modules,
+      versions,
+    ),
+  ).toThrow(expect.objectContaining(invalid("modules")));
+});
+
 it("checks an import's module version before replacing its existing rows", async () => {
   await scratch(async (tx) => {
     await tx.execute(sql`create table zz_parents (id text primary key)`);

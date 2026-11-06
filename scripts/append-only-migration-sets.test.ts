@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { packageDirOf } from "../packages/module/src/module.js";
+import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
 import { appendOnlyTablesIn } from "../packages/sync-enrolment/src/classification.js";
 
 /**
@@ -39,7 +39,7 @@ async function migrationDescriptors(packageDir: string): Promise<Record<string, 
 }
 
 const modules = await Promise.all(
-  ALL_MODULES.map(async (module) => {
+  modulesWithSets(ALL_MODULES).map(async (module) => {
     const packageDir = packageDirOf(module);
     return {
       name: module.name,

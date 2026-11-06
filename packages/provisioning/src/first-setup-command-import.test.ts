@@ -14,7 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createProduct } from "@waitron/catalogue";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { appliedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { enabledModules } from "@waitron/module";
+import { enabledModules, modulesWithSets, type WaitronModule } from "@waitron/module";
 import {
   completeFirstSetupCommand,
   createFirstSetupCommandDeployment,
@@ -62,7 +62,11 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundle) => void) {
+async function fixture(
+  newTaxpayer = false,
+  change?: (bundle: ConfigurationBundle) => void,
+  all: readonly WaitronModule[] = ALL_MODULES,
+) {
   const root = await mkdtemp(join(tmpdir(), "command-import-"));
   roots.push(root);
   const stateDir = join(root, "state");
@@ -72,12 +76,9 @@ async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundl
     WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
   };
   const ring = loadKeyRing(environment);
-  const modules = enabledModules(
-    ALL_MODULES,
-    venueFiscalSelection(ALL_MODULES, "ES-common").config,
-  );
+  const modules = enabledModules(all, venueFiscalSelection(all, "ES-common").config);
   const versions: Record<string, number> = {};
-  for (const module of modules)
+  for (const module of modulesWithSets(modules))
     versions[module.name] = await appliedSchemaVersion(
       { venue: source.db, node: source.node },
       module.migrations,
@@ -142,7 +143,7 @@ async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundl
     stateDir,
     venueDir: join(root, "venue"),
     environment,
-    modules: ALL_MODULES,
+    modules: all,
     database: () => target.db,
     freezeConfiguration: async () => ({ digest, newTaxpayer }),
   });
@@ -235,6 +236,29 @@ it.each([false, true])(
     });
   },
 );
+
+it("command completion imports a configuration when a module has no set of its own", async () => {
+  const setless: WaitronModule = {
+    name: "synthetic-setless",
+    version: "0.0.0",
+    tier: "toggleable",
+    requires: { core: "*" },
+    tablesIn: "core",
+    configurationTransfer: { kind: "none" },
+  };
+  const f = await fixture(false, undefined, [...ALL_MODULES, setless]);
+  expect(Object.keys(f.bundle.modules)).not.toContain("synthetic-setless");
+  await completeFirstSetupCommand(
+    f.runtime,
+    { venue: target.db, node: target.node },
+    f.owner,
+    f.deployment,
+  );
+  expect((await target.db.execute("select name from products")).rows).toEqual([
+    { name: "Imported gazpacho" },
+  ]);
+  expect((await f.runtime.store.read())!.status).toBe("complete");
+});
 
 it("command completion refuses a replaced retained artifact before stamping or activation", async () => {
   const f = await fixture();

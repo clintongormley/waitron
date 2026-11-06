@@ -390,6 +390,25 @@ describe("capturing a stepped-down box's final copy", () => {
     ]);
   });
 
+  it("lists a module with no set of its own among the modules but gives it no schema entry", async () => {
+    const self = await steppedDown();
+    const setless: WaitronModule = {
+      name: "synthetic-setless",
+      version: "0.1.0",
+      tier: "toggleable",
+      tablesIn: "core",
+    };
+    const envelope = await captureFinalCopy(deps(self, { modules: [...MODULES, setless] }), OP);
+    expect(envelope.body.snapshot.schema.map((entry) => entry.set)).toEqual([
+      "core",
+      "credentials",
+    ]);
+    expect(envelope.body.snapshot.modules).toContainEqual({
+      name: "synthetic-setless",
+      version: "0.1.0",
+    });
+  });
+
   it("carries the own-state manifest read from this box's state folder", async () => {
     const self = await steppedDown();
     const off = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;

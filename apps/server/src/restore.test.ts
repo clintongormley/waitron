@@ -358,6 +358,17 @@ setInterval(() => db, 1000);`;
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
   });
 
+  it("restores with a module that has no set of its own in the list", async () => {
+    const setless: WaitronModule = {
+      name: "synthetic-setless",
+      version: "0.0.0",
+      tier: "toggleable",
+      tablesIn: "core",
+    };
+    await restoreFromArtifact(deps({ modules: [...withHooks({}), setless] }));
+    await expectVenueRestored();
+  });
+
   it("creates its own destination roots (staging/state/venue) when they do not yet exist", async () => {
     // Both protected roots must exist before their first path guard runs, and the venue directory
     // before the database is placed in it.

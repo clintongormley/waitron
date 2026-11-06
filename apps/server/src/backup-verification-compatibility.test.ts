@@ -121,7 +121,7 @@ beforeEach(async () => {
   for (const m of baseModules)
     await runMigrations(suite.db, {
       migrationsFolder: join(root!, m.name),
-      migrationsTable: m.migrations.table,
+      migrationsTable: m.migrations!.table,
     });
   execute(
     "insert into locations values ('10000000-0000-4000-8000-000000000001'); insert into nodes values ('20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001'); insert into deployment values (1, 'preproduction');",
@@ -185,7 +185,7 @@ describe("strict backup compatibility", () => {
         ...base,
         tier: "mandatory",
         requires: undefined,
-        migrations: { ...base.migrations, database: "node" },
+        migrations: { ...base.migrations!, database: "node" },
         backup: {
           verification: policy(["node_things"], {
             entries: [{ name: "node.dump", presence: "required" }],

@@ -409,12 +409,12 @@ it("the built production command checks readiness and seals settings without sen
   );
   const { ALL_MODULES } = await import("@waitron/composition");
   const { venueFiscalSelection } = await import("./venue-fiscal.js");
-  const { enabledModules } = await import("@waitron/module");
+  const { enabledModules, modulesWithSets } = await import("@waitron/module");
   const { appliedSchemaVersion } = await import("@waitron/migrations");
   const { request } = await import("../test/first-setup-request.js");
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
   const versions: Record<string, number> = {};
-  for (const module of enabledModules(ALL_MODULES, selected.config))
+  for (const module of modulesWithSets(enabledModules(ALL_MODULES, selected.config)))
     versions[module.name] = await appliedSchemaVersion(
       { venue: venue.db, node: venue.node },
       module.migrations,
@@ -584,12 +584,12 @@ it("the built production command runs a confirmed isolated test and refuses acti
   );
   const { ALL_MODULES } = await import("@waitron/composition");
   const { venueFiscalSelection } = await import("./venue-fiscal.js");
-  const { enabledModules } = await import("@waitron/module");
+  const { enabledModules, modulesWithSets } = await import("@waitron/module");
   const { appliedSchemaVersion } = await import("@waitron/migrations");
   const { request } = await import("../test/first-setup-request.js");
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
   const versions: Record<string, number> = {};
-  for (const module of enabledModules(ALL_MODULES, selected.config))
+  for (const module of modulesWithSets(enabledModules(ALL_MODULES, selected.config)))
     versions[module.name] = await appliedSchemaVersion(
       { venue: venue.db, node: venue.node },
       module.migrations,

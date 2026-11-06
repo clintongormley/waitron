@@ -1,18 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { appendOnly, classify } from "@waitron/sync-enrolment";
+import type { MigrationSetSource } from "@waitron/migrations";
 import {
+  modulesWithSets,
   orderedMigrationSets,
   packageDirOf,
   type RestoreHook,
   type WaitronModule,
 } from "./index.js";
 
-const mod = (name: string, requires?: WaitronModule["requires"]): WaitronModule => ({
+const mod = (
+  name: string,
+  requires?: WaitronModule["requires"],
+): WaitronModule & { migrations: MigrationSetSource } => ({
   name,
   version: "0.0.0",
   tier: "toggleable",
   migrations: { name, table: `__drizzle_migrations_${name}`, from: `../${name}/drizzle` },
+  ...(requires ? { requires } : {}),
+});
+
+/** A module whose tables live in another module's set: no `migrations` of its own. */
+const setless = (name: string, requires?: WaitronModule["requires"]): WaitronModule => ({
+  name,
+  version: "0.0.0",
+  tier: "toggleable",
+  tablesIn: "core",
   ...(requires ? { requires } : {}),
 });
 
@@ -166,6 +180,32 @@ describe("orderedMigrationSets", () => {
         "module.start_again_deletable_invalid",
       );
     });
+  });
+});
+
+describe("a module with no set of its own", () => {
+  it("modulesWithSets keeps only the modules that carry a set, in list order", () => {
+    const mods = [mod("core"), setless("catalogue", { core: "*" }), mod("sync")];
+    expect(modulesWithSets(mods).map((m) => m.name)).toEqual(["core", "sync"]);
+  });
+
+  it("orderedMigrationSets omits it, yet still orders the modules that depend on it after it", () => {
+    const mods = [
+      mod("orders", { modules: { catalogue: "*" } }),
+      setless("catalogue", { modules: { media: "*" } }),
+      mod("media", { core: "*" }),
+      mod("core"),
+    ];
+    expect(orderedMigrationSets(mods).map((s) => s.name)).toEqual(["core", "media", "orders"]);
+  });
+
+  it("orderedMigrationSets still validates its requires", () => {
+    const mods = [mod("core"), setless("catalogue", { modules: { media: "*" } })];
+    expect(thrownCode(() => orderedMigrationSets(mods))).toBe("module.dependency_missing");
+  });
+
+  it("packageDirOf throws for it, so a guard has to filter first", () => {
+    expect(() => packageDirOf(setless("catalogue"))).toThrow(/catalogue.*no migration set/);
   });
 });
 

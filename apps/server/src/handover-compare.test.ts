@@ -686,6 +686,21 @@ describe("compareFinalCopy", () => {
       expect(await r.compareRow(r.resigned(change))).toEqual(refused("handover.modules_differ"));
     });
 
+    it("a module with no set of its own, held on both boxes, is accepted", async () => {
+      const r = await rig();
+      const setless: WaitronModule = {
+        name: "synthetic-setless",
+        version: "0.0.0",
+        tier: "toggleable",
+        tablesIn: "core",
+      };
+      const indicator = r.resigned(
+        (body) => void body.snapshot.modules.push({ name: setless.name, version: setless.version }),
+      );
+      const result = await r.compareRow(indicator, { modules: [...ALL_MODULES, setless] });
+      expect(result).toEqual({ ok: true });
+    });
+
     it("the order this box holds its modules in does not matter", async () => {
       const r = await rig();
       const result = await r.compareRow(r.indicator, { modules: [...ALL_MODULES].reverse() });

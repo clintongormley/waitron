@@ -33,7 +33,7 @@ import {
   manifestSets,
   migrationOptionsFor,
 } from "@waitron/migrations";
-import type { WaitronModule } from "@waitron/module";
+import { modulesWithSets, type WaitronModule } from "@waitron/module";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -275,7 +275,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
     });
     const core = ALL_MODULES.find((m) => m.name === "core")!;
     expect(manifest.modules.core).toBe(
-      expectedSchemaVersion(core.migrations, older ? olderMigrationsRoot : migrationsRoot) -
+      expectedSchemaVersion(core.migrations!, older ? olderMigrationsRoot : migrationsRoot) -
         (older ? 1 : 0),
     );
 
@@ -317,7 +317,7 @@ beforeAll(async () => {
   // the older restore gets its OWN root: the shipped sets plus one extra core step re-adding it.
   olderMigrationsRoot = join(scratchRoot, "migrations-older");
   await cp(migrationsRoot, olderMigrationsRoot, { recursive: true });
-  const coreSet = ALL_MODULES.find((m) => m.name === "core")!.migrations;
+  const coreSet = ALL_MODULES.find((m) => m.name === "core")!.migrations!;
   const extraTag = "9999_readd_retired_at";
   const olderCoreDir = join(olderMigrationsRoot, coreSet.name);
   await writeFile(
@@ -436,7 +436,10 @@ describe("fiscal restore, end to end", () => {
       expect(blocked?.message).toMatch(/registros_facturacion is append-only/);
       expect(await schemaVersionsByModule(store, ALL_MODULES)).toEqual(
         Object.fromEntries(
-          ALL_MODULES.map((m) => [m.name, expectedSchemaVersion(m.migrations, migrationsRoot)]),
+          modulesWithSets(ALL_MODULES).map((m) => [
+            m.name,
+            expectedSchemaVersion(m.migrations, migrationsRoot),
+          ]),
         ),
       );
     } finally {
@@ -454,7 +457,7 @@ describe("fiscal restore, end to end", () => {
     try {
       expect(await schemaVersionsByModule(store, ALL_MODULES)).toEqual(
         Object.fromEntries(
-          ALL_MODULES.map((m) => [
+          modulesWithSets(ALL_MODULES).map((m) => [
             m.name,
             expectedSchemaVersion(m.migrations, olderMigrationsRoot),
           ]),

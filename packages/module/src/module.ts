@@ -1494,9 +1494,9 @@ export type ModuleConfigurationTransfer =
  * never the descriptor itself.
  */
 export interface WaitronModule {
-  /** Stable id; equals the migration-set name (`migrations.name`). NOT the drizzle table suffix —
-   * that is `migrations.table`, usually `__drizzle_migrations_<name>` but not always (e.g. the `core`
-   * set's table is `__drizzle_migrations_db`). */
+  /** Stable id; equals the migration-set name (`migrations.name`) when the module has a set. NOT the
+   * drizzle table suffix — that is `migrations.table`, usually `__drizzle_migrations_<name>` but not
+   * always (e.g. the `core` set's table is `__drizzle_migrations_db`). */
   readonly name: string;
   readonly version: string;
   /** Migration sets this one depends on, with semver ranges; `orderedMigrationSets` orders by them. */
@@ -1505,10 +1505,13 @@ export interface WaitronModule {
     readonly modules?: Readonly<Record<string, string>>;
   };
   readonly tier: "mandatory" | "provision-only" | "toggleable";
-  /** The SOURCE half only, including the file the set is applied to (`database`): append-only
-   * table names come from `classification`, and `orderedMigrationSets` joins the two into a
-   * `MigrationSet`. */
-  readonly migrations: MigrationSetSource;
+  /** The module's own migration set, absent when its tables live in another module's set
+   * (`tablesIn`). The SOURCE half only, including the file the set is applied to (`database`):
+   * append-only table names come from `classification`, and `orderedMigrationSets` joins the two
+   * into a `MigrationSet`. */
+  readonly migrations?: MigrationSetSource;
+  /** For a module with no `migrations`: the name of the module whose set holds its tables. */
+  readonly tablesIn?: string;
 
   /** Every table this module's migrations create, classified `ledger`/`state`/`local` (meanings on
    * `TableClass`, `@waitron/sync-enrolment`). No foreign key may join a `local` table to a
@@ -1562,6 +1565,15 @@ export interface WaitronModule {
   };
 }
 
+/** The modules that carry a migration set of their own, in list order. */
+export function modulesWithSets(
+  modules: readonly WaitronModule[],
+): (WaitronModule & { migrations: MigrationSetSource })[] {
+  return modules.filter(
+    (m): m is WaitronModule & { migrations: MigrationSetSource } => m.migrations !== undefined,
+  );
+}
+
 /** Each declared dependency as `[dependencyName, semverRange]`; `requires.core` names "core". */
 function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
   if (m.requires?.core !== undefined) yield ["core", m.requires.core];
@@ -1570,7 +1582,8 @@ function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
 
 /**
  * Validate the `requires` graph and return the migration sets in dependency order, input order
- * breaking ties. One entry point validates and orders, so a caller cannot skip the check.
+ * breaking ties. Every module takes part in the ordering; only those with `migrations` yield a set.
+ * One entry point validates and orders, so a caller cannot skip the check.
  *
  * Each set's `appendOnlyTables` comes from the `appendOnly()` marker in its `classification`, never
  * from the `ledger` CLASS: some `ledger` tables are updated by product code, and an append-only table
@@ -1644,7 +1657,7 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
   }
 
   // A fresh object per set: the descriptors are shared by every caller.
-  return ordered.map((m) => ({
+  return modulesWithSets(ordered).map((m) => ({
     ...m.migrations,
     appendOnlyTables: appendOnlyTablesIn(m.classification ?? []),
   }));
@@ -1654,10 +1667,13 @@ const MIGRATIONS_FROM = /^\.\.\/([^/]+)\/drizzle$/;
 
 /**
  * The `packages/<dir>` a module lives in, parsed from `migrations.from` (`../<pkg>/drizzle`). Throws
- * on any other shape: the root guards map descriptors to directories through it, and a silent skip
- * would exempt nothing and scan nothing.
+ * for a module with no set, and on any other shape: the root guards map descriptors to directories
+ * through it, and a silent skip would exempt nothing and scan nothing.
  */
 export function packageDirOf(module: WaitronModule): string {
+  if (module.migrations === undefined) {
+    throw new Error(`module ${module.name}: has no migration set, so no package dir to derive`);
+  }
   const match = MIGRATIONS_FROM.exec(module.migrations.from);
   if (match === null) {
     throw new Error(

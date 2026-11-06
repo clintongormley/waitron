@@ -51,7 +51,7 @@ export function recoveryFiscalSelection(
     return;
   if (
     manifest.modules[owner.name] === 0 &&
-    expectedSchemaVersion(owner.migrations, migrationsRoot) !== 0
+    expectedSchemaVersion(owner.migrations!, migrationsRoot) !== 0
   )
     return;
   return { ...venue, module: owner.name };

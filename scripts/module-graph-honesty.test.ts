@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { packageDirOf } from "../packages/module/src/module.js";
+import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
 
 /**
  * Every module descriptor's `requires` must NAME every cross-module dependency its migrations
@@ -101,7 +101,7 @@ function* triggerRanges(sql: string): Iterable<{ start: number; end: number; bod
 /** Package DIR → module NAME, through `@waitron/module`'s `packageDirOf`; the name comes off the
  * descriptor, so a module whose name and directory differ resolves to the name it declares. */
 function packageDirToModule(): Map<string, string> {
-  return new Map(ALL_MODULES.map((module) => [packageDirOf(module), module.name]));
+  return new Map(modulesWithSets(ALL_MODULES).map((module) => [packageDirOf(module), module.name]));
 }
 
 interface DrizzlePackage {

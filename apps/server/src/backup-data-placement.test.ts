@@ -263,7 +263,7 @@ it("migrates the populated catalogue predecessor and preserves every original co
   const db = new DatabaseSync(join(f.venueDir, "venue.db"));
   try {
     expect(db.prepare("select count(*) as n from __drizzle_migrations_catalogue").get()).toEqual({
-      n: expectedSchemaVersion(modules[1]!.migrations, null),
+      n: expectedSchemaVersion(modules[1]!.migrations!, null),
     });
     expect(() => db.exec("update menu_versions set published_at = null")).toThrow(/append.only/i);
   } finally {

@@ -131,6 +131,21 @@ describe("backup verification inventory", () => {
     unsupported(() => backupVerificationInventory(modules), "target_incompatible");
   });
 
+  it("refuses a module with no set of its own", () => {
+    const setless: WaitronModule = {
+      name: "dependent",
+      version: "1.0.0",
+      tier: "toggleable",
+      requires: { core: "*" },
+      tablesIn: "core",
+      backup: { verification: semantics() },
+    };
+    unsupported(
+      () => backupVerificationInventory([descriptor("core"), setless]),
+      "target_incompatible",
+    );
+  });
+
   it("checks supported semantics even with a correctly typed declaration", () => {
     const invalid = { ...semantics(), version: 2 } as unknown as BackupVerificationContribution;
     unsupported(

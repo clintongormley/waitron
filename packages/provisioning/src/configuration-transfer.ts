@@ -16,7 +16,11 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import type { ConfigurationTransferTable, WaitronModule } from "@waitron/module";
+import {
+  modulesWithSets,
+  type ConfigurationTransferTable,
+  type WaitronModule,
+} from "@waitron/module";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
@@ -570,11 +574,12 @@ export function validateConfigurationBundle(
   targetVersions: Readonly<Record<string, number>>,
 ): void {
   const timeZone = requireCountryTimeZone(bundle.venue.country, bundle.venue.timeZone);
-  const expectedModules = new Set(modules.map((module) => module.name));
+  const versioned = modulesWithSets(modules);
+  const expectedModules = new Set(versioned.map((module) => module.name));
   if (Object.keys(bundle.modules).some((name) => !expectedModules.has(name))) {
     throw new AppError("setup.request_invalid", { field: "modules" });
   }
-  for (const module of modules) {
+  for (const module of versioned) {
     if (bundle.modules[module.name] !== targetVersions[module.name]) {
       throw new AppError("setup.request_invalid", { field: `module:${module.name}` });
     }

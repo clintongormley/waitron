@@ -1,6 +1,6 @@
 import type { Database, NodeDatabase } from "@waitron/db";
 import { appliedSchemaVersion, type MigrationFiles } from "@waitron/migrations";
-import type { WaitronModule } from "@waitron/module";
+import { modulesWithSets, type WaitronModule } from "@waitron/module";
 import type { DeploymentEnvironment } from "./config.js";
 
 /**
@@ -16,13 +16,15 @@ export type BackupManifest = {
 };
 
 /** Each module's applied schema version as read off the file it is applied to, never an expected
- * count. */
+ * count. A module with no set of its own has no key. */
 export async function schemaVersionsByModule(
   files: MigrationFiles,
   modules: readonly WaitronModule[],
 ): Promise<Record<string, number>> {
   const entries = await Promise.all(
-    modules.map(async (m) => [m.name, await appliedSchemaVersion(files, m.migrations)] as const),
+    modulesWithSets(modules).map(
+      async (m) => [m.name, await appliedSchemaVersion(files, m.migrations)] as const,
+    ),
   );
   return Object.fromEntries(entries);
 }

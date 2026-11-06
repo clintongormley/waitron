@@ -45,6 +45,7 @@ import {
 } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import {
+  modulesWithSets,
   orderedMigrationSets,
   type OperationBinding,
   type ProvisionedNode,
@@ -347,7 +348,10 @@ async function validateEntryMetadata(
   // (`expectedSchemaVersion`), never a hardcoded number — the same shape `buildManifest` builds from a
   // database, just off the shipped folders instead.
   const expectedVersions = Object.fromEntries(
-    deps.modules.map((m) => [m.name, expectedSchemaVersion(m.migrations, deps.migrationsRoot)]),
+    modulesWithSets(deps.modules).map((m) => [
+      m.name,
+      expectedSchemaVersion(m.migrations, deps.migrationsRoot),
+    ]),
   );
   checkRestoreCompatibility(manifest, { environment: deps.environment, expectedVersions });
 

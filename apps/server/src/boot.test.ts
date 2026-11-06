@@ -63,7 +63,7 @@ import {
   manifestSets,
   migrationOptionsFor,
 } from "@waitron/migrations";
-import { orderedMigrationSets } from "@waitron/module";
+import { modulesWithSets, orderedMigrationSets } from "@waitron/module";
 import {
   addMember,
   contentSuggestionJobs,
@@ -1103,12 +1103,12 @@ describe("startServer, against a migrated venue directory", () => {
       );
       expect(schedulerReg.rows[0]!.reg).toBeNull();
       // The filter kept every enabled set: `payments` is enabled by default.
-      const payments = ALL_MODULES.find((m) => m.name === "payments")!;
+      const payments = modulesWithSets(ALL_MODULES).find((m) => m.name === "payments")!;
       const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);
       expect(paymentsExpected).toBeGreaterThan(0);
       expect(await appliedSchemaVersion(probe, payments.migrations)).toBe(paymentsExpected);
       // `enabledModules` never drops `core`, whatever modules.json says.
-      const core = ALL_MODULES.find((m) => m.name === "core")!;
+      const core = modulesWithSets(ALL_MODULES).find((m) => m.name === "core")!;
       const coreExpected = expectedSchemaVersion(core.migrations, migrationsRoot);
       expect(coreExpected).toBeGreaterThan(0);
       expect(await appliedSchemaVersion(probe, core.migrations)).toBe(coreExpected);

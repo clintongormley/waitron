@@ -76,7 +76,7 @@ export type {
   Named,
   NarrowedDevice,
 } from "./module.js";
-export { orderedMigrationSets, packageDirOf } from "./module.js";
+export { modulesWithSets, orderedMigrationSets, packageDirOf } from "./module.js";
 export type {
   Alert,
   AlertEventClaim,

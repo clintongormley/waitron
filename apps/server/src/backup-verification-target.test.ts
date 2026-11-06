@@ -216,7 +216,7 @@ describe("bound backup target", () => {
     expect(actual.modules.map((m) => m.name)).toEqual(ALL_MODULES.map((m) => m.name).sort());
     for (const m of modules) {
       expect(actual.modules.find((x) => x.name === m.name)!.schema).toBe(
-        expectedSchemaVersion(m.migrations, null),
+        expectedSchemaVersion(m.migrations!, null),
       );
     }
   });
@@ -234,7 +234,7 @@ describe("bound backup target", () => {
   );
   it("refuses migration-set identity mismatch and unsafe journal tags", () => {
     unsupported(() =>
-      target([{ ...module(), migrations: { ...module().migrations, name: "extra" } }]),
+      target([{ ...module(), migrations: { ...module().migrations!, name: "extra" } }]),
     );
     writeFileSync(
       join(root!, "core/meta/_journal.json"),
@@ -380,7 +380,7 @@ describe("current binary backup target", () => {
       expect(current.runtime).toEqual(runtime);
       expect(current.modules.map((m) => m.name)).toEqual(ALL_MODULES.map((m) => m.name).sort());
       expect(current.modules.find((m) => m.name === "core")!.schema).toBe(
-        expectedSchemaVersion(ALL_MODULES.find((m) => m.name === "core")!.migrations, null),
+        expectedSchemaVersion(ALL_MODULES.find((m) => m.name === "core")!.migrations!, null),
       );
       expect(Object.isFrozen(current)).toBe(true);
     } finally {

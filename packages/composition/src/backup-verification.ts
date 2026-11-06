@@ -1,5 +1,7 @@
+import type { MigrationSetSource } from "@waitron/migrations";
 import {
   BackupVerificationUnsupported,
+  modulesWithSets,
   orderedMigrationSets,
   validateBackupVerificationContribution,
   type BackupVerificationContribution,
@@ -7,7 +9,7 @@ import {
 } from "@waitron/module";
 
 export function backupVerificationInventory(modules: readonly WaitronModule[]): readonly {
-  readonly module: WaitronModule;
+  readonly module: WaitronModule & { readonly migrations: MigrationSetSource };
   readonly verification: BackupVerificationContribution;
 }[] {
   if (modules.length === 0) throw new BackupVerificationUnsupported("module_missing");
@@ -35,8 +37,13 @@ export function backupVerificationInventory(modules: readonly WaitronModule[]): 
     }
     throw error;
   }
+  // A module with no set of its own has no journal to check its tables against.
+  const withSets = modulesWithSets(modules);
+  if (withSets.length !== modules.length) {
+    throw new BackupVerificationUnsupported("target_incompatible");
+  }
   return Object.freeze(
-    modules.map((module) =>
+    withSets.map((module) =>
       Object.freeze({
         module,
         verification: validateBackupVerificationContribution(module.backup?.verification),
