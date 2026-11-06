@@ -5,6 +5,7 @@ import {
   LEFT_VENUE,
   damageRecoveryRecord,
   handMade,
+  notReadyBecause,
 } from "../test/start-again-held-fixture.js";
 import {
   snapshot,
@@ -76,11 +77,13 @@ it("a setup database that is not empty but holds no rows (a view only) is not th
     database: "no-venue-rows",
     emptyDatabase: false,
   });
-  await expectRefused(f, { code: "setup.not_ready" });
+  await expectRefused(f, notReadyBecause("may-have-filed"));
   const { ids } = await f.signIn();
-  await expectStartAgainRefused(f, () => before.actions.startAgainFirstSetup(ids), {
-    code: "setup.not_ready",
-  });
+  await expectStartAgainRefused(
+    f,
+    () => before.actions.startAgainFirstSetup(ids),
+    notReadyBecause("may-have-filed"),
+  );
 });
 
 it("a setup database whose -wal holds no rows stays refused setup.not_ready when its main file alone still holds one, and nothing changes", async () => {
@@ -121,11 +124,13 @@ it("a setup database whose -wal holds no rows stays refused setup.not_ready when
     database: "no-venue-rows",
     emptyDatabase: false,
   });
-  await expectRefused(f, { code: "setup.not_ready" });
+  await expectRefused(f, notReadyBecause("may-have-filed"));
   const { ids } = await f.signIn();
-  await expectStartAgainRefused(f, () => before.actions.startAgainFirstSetup(ids), {
-    code: "setup.not_ready",
-  });
+  await expectStartAgainRefused(
+    f,
+    () => before.actions.startAgainFirstSetup(ids),
+    notReadyBecause("may-have-filed"),
+  );
 });
 
 it("in the held state, an invoice record refuses Start again kept-records even when the fiscal module lists its invoice table, and every other append-only table, as deletable, and nothing changes", async () => {

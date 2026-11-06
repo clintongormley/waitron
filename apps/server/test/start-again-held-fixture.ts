@@ -152,7 +152,11 @@ async function keptRecordsLogReason(f: Held) {
   return refusal?.fields?.logReason;
 }
 
-const notReady = { code: "setup.not_ready" };
+/** Start again's `setup.not_ready`, with the cause the setup page words. */
+const notReadyBecause = (cause: "may-have-filed" | "unexpected" | "too-large" | "unreadable") => ({
+  code: "setup.not_ready",
+  params: { cause },
+});
 
 /** Signs the owner in and asks for the summary; `run` sends Start again confirming it. */
 async function askStartAgain(f: Held, host: Held["host"] = f.host) {
@@ -343,7 +347,7 @@ export {
   copyFails,
   expectRefused,
   keptRecordsLogReason,
-  notReady,
+  notReadyBecause,
   askStartAgain,
   LEFT_VENUE,
   damageRecoveryRecord,

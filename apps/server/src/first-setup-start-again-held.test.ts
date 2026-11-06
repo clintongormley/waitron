@@ -2,7 +2,7 @@ import {
   holdingsRead,
   expectRefused,
   keptRecordsLogReason,
-  notReady,
+  notReadyBecause,
   handMade,
   venueDb,
   withoutSignIn,
@@ -155,8 +155,8 @@ it.each([
 );
 
 it.each([
-  ["unknown", {}, notReady],
-  ["partial", {}, notReady],
+  ["unknown", {}, notReadyBecause("unreadable")],
+  ["partial", {}, notReadyBecause("unreadable")],
   [
     "unknown",
     { tradingSettings: true },
@@ -182,3 +182,20 @@ it.each([
     await expectRefused(f, refusal, { host });
   },
 );
+
+it("a held setup whose database the inspection shows empty refuses the summary setup.not_ready may-have-filed, and nothing changes", async () => {
+  const f = await heldSetup();
+  const inspect = f.host.resolution.inspectFirstSetupResolution;
+  const host = {
+    ...f.host,
+    resolution: {
+      ...f.host.resolution,
+      inspectFirstSetupResolution: async () => ({
+        ...(await inspect()),
+        database: "no-venue-rows" as const,
+        emptyDatabase: true,
+      }),
+    },
+  } as Held["host"];
+  await expectRefused(f, notReadyBecause("may-have-filed"), { host });
+});
