@@ -1338,7 +1338,7 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
 
 ## Asesor questions to send
 
-The [Spanish next batch](../compliance/2026-11-05-consultas-para-asesores.md) is prepared for the owner to review and send. It separates fiscal/accounting, labour, privacy and consumer-law questions, retaining their stable references. It has not been sent by this campaign; adviser answers remain open.
+The [curated list](../compliance/2026-11-06-adviser-questions.md) replaces the Spanish batch of 5 November and is for the owner to review. The old batch: It separates fiscal/accounting, labour, privacy and consumer-law questions, retaining their stable references. It has not been sent by this campaign; adviser answers remain open.
 
 The owner records the earlier shortened list as sent around 15 October in [the question register](../compliance/asesor-questions.md). Q27–Q29 and Q32 belong to that earlier batch; follow up their answers rather than duplicating the enquiry. The new batch covers Q13(d), Q48–Q61 and the labour list, excluding points already answered by primary sources. Q19 also remains open in the earlier question register.
 

@@ -1,6 +1,8 @@
 # Questions for the asesor
 
-**2026-11-05:** The [next adviser batch](2026-11-05-consultas-para-asesores.md) is prepared in Spanish, grouped by recipient, for the owner to review and send. This preparation sends nothing.
+**2026-11-06:** The [curated list](2026-11-06-adviser-questions.md) replaces the Spanish batch of 5 November and is now the base version: four research passes reduced its 25 questions to seven points of real judgement plus confirmations. Nothing has been sent.
+
+**2026-11-05:** The [next adviser batch](2026-11-05-consultas-para-asesores.md) was prepared in Spanish, grouped by recipient. It is superseded by the curated list above.
 
 > **2026-11-04 (A1009):** The five standalone demo scripts and commands are retired.
 > Their checks now live in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`
@@ -3962,8 +3964,8 @@ the restaurant chooses, and does not encrypt it first: it relies on the provider
 does not protect against someone holding valid credentials. The owner kept this on 2026-11-06 (A1324),
 because the key would have to sit on the same box as those credentials. Is that adequate under GDPR
 article 32? If the copy leaked, would the people affected have to be told, since the article 34(3)(a)
-exception for unintelligible data would not apply? Part of the
-[batch of 2026-11-05](2026-11-05-consultas-para-asesores.md), which is not sent yet.
+exception for unintelligible data would not apply? Removed as a paid question by the
+[curated list](2026-11-06-adviser-questions.md): a venue cannot change this design, so it is the owner's decision.
 
 ### Sources checked for the 2026-10-04 revision
 

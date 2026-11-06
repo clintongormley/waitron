@@ -1,5 +1,7 @@
 # Consultas sobre Waitron para los asesores
 
+> **Do not send.** Replaced on 2026-11-06 by the English [curated list](2026-11-06-adviser-questions.md), which is now the base version. The Spanish will be rebuilt from it once the owner approves it.
+
 5 de noviembre de 2026
 
 Estamos preparando Waitron, un programa de venta y facturación para restaurantes. Necesitamos su criterio por escrito sobre las situaciones siguientes. Cada apartado indica su destinatario; pueden responder conservando la referencia entre corchetes. Por favor, señalen la norma o criterio que fundamenta cada respuesta y cualquier dato del restaurante que necesiten para concretarla.

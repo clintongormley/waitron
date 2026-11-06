@@ -87,7 +87,7 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 
 **1. The owner's sessions, which need no building.**
 
-- Send the [adviser batch](compliance/2026-11-05-consultas-para-asesores.md). It holds up 26 entries,
+- Send the [curated adviser list](compliance/2026-11-06-adviser-questions.md), once the owner has made its five decisions and the Spanish is rebuilt from it. It holds up 26 entries,
   seven of them go-live, including 0% VAT and free items on mixed-rate bills.
 - [The owner's yes-or-no read: built defaults that wait only for a nod](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
@@ -350,7 +350,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
 
-- **The next adviser batch awaits the owner sending it.** The [Spanish questions by recipient](compliance/2026-11-05-consultas-para-asesores.md) cover the additions after the shortened list and the labour questions. Adviser answers, including Q19, remain open. The owner records the earlier shortened list as sent around 15 October; do not send its questions again as a new batch.
+- **The next adviser batch awaits the owner's decisions, then sending.** The [curated English list](compliance/2026-11-06-adviser-questions.md) replaces the Spanish draft, which covered the additions after the shortened list and the labour questions. Adviser answers, including Q19, remain open. The owner records the earlier shortened list as sent around 15 October; do not send its questions again as a new batch.
   [Detail](backlog/fiscal.md#asesor-questions-to-send)
 
 - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows the original invoice total.** **PARKED (owner,

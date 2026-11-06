@@ -253,13 +253,13 @@ by the answers):
 
 ## Decisions and deliberate limits
 
-- **A1324. The box does not encrypt the bucket copy (owner, 2026-11-06).** Accepted as it is. A key
-  for it would sit on the box beside the bucket secret, so it protects nothing against someone who
-  reaches the box, and the database on the box's own disk is not encrypted either. It would help only
-  when someone reaches the bucket without the box, such as a stolen storage login or a bucket made
-  public by mistake. Litestream 0.5.17 has no encryption, so the box relies on the provider's, which
-  it does not check. Whether that is adequate is with the privacy adviser, as
-  [Q62](../compliance/2026-11-05-consultas-para-asesores.md).
+- **A1324. The box does not encrypt the bucket copy (under review).** The owner accepted this on
+  2026-11-06 on advice that Litestream 0.5.17 had no encryption. That was wrong: it accepts a
+  customer-supplied key, though nobody has run this. A key would sit on the box beside the bucket
+  secret, so it protects nothing against someone who reaches the box. It would help when someone
+  reaches the bucket without the box, such as a stolen storage login. The box relies on the provider's
+  encryption, which it does not check. The owner's second look, with the AEPD's guidance, is decision
+  1 of the [curated adviser list](../compliance/2026-11-06-adviser-questions.md).
 - **A980 S2c, decision 3:** no product path records a whole-sale void yet, so the voids list is
   empty on every box until one does. See the
   [S2c plan](../superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md).
