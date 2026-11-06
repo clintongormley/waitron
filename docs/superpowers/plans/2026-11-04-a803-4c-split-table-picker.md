@@ -1,5 +1,9 @@
 # A803 slice 4c: Split a table through the one dish picker — task plan
 
+> **2026-11-06, A1378:** kitchen paper now prints whole quantities without `.000` and
+> takes its hours from the venue's saved time zone. Paper examples and measured output below
+> record the earlier implementation.
+
 **Goal.** Today **Split a table** takes one bill or none. After 4c the waiter opens **Split a table**,
 taps the table that is leaving, and sees every bill of the table with its dishes, in the picker Move
 dishes… uses. They tick any whole bills plus any single ("loose") dishes from other bills. Loose

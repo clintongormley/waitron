@@ -1,5 +1,9 @@
 # A773-2 PR D: course headings on kitchen tickets, "Goes with kitchen food", and the retired pass storage — task plan
 
+> **2026-11-06, A1378:** kitchen paper now prints whole quantities without `.000` and
+> takes its hours from the venue's saved time zone. Paper examples and measured output below
+> record the earlier implementation.
+
 2026-11-04: the cue reads "Goes with {stations}" (Revision 5); the course heading has its own guide
 section `#group-headings` (EN and ES), and `headingCourses` is not exported.
 

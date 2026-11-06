@@ -1,5 +1,9 @@
 # A650 — MOVED slips say which order moved, from where, to where (build plan)
 
+> **2026-11-06, A1378:** kitchen paper now prints whole quantities without `.000` and
+> takes its hours from the venue's saved time zone. Paper examples and measured output below
+> record the earlier implementation.
+
 Status: build plan, written 2026-10-14 after the owner's rulings (§0). The build is four pull
 requests (§7); three small questions (§8) each carry the default the build proceeds on.
 

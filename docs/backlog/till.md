@@ -4063,7 +4063,7 @@ built); its refusal's words are on the copy sheet.
 
 **An edit that adds an extra at a waiting station.** If the dish's own station fires at once
 (Grill) while the extra's waits for the pass (Fryer), an edit adding onion rings to a burger
-already sent prints no `+1.000 x RINGS` on Fryer's HOLD paper; the pass's release ticket lists
+already sent prints no `+1 x RINGS` on Fryer's HOLD paper; the pass's release ticket lists
 them when it fires. Today's code gives Fryer nothing on this path either. Adding it means a new
 read after `fireLines` and reordering slips on a shared printer (B3's plan, "Review answers (H4)",
 Minor 3, option (c)).
