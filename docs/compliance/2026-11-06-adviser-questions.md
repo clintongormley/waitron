@@ -61,7 +61,9 @@ clock to within a minute. The advisers are told this is a choice.
 - A start with no internet, and a latest record in the future beyond the margin, needs the time
   confirmed before trading.
 
-Being unable to reach AEAT never stops trading. The margin is still to be chosen.
+Being unable to reach AEAT never stops trading. A box whose time service says it is in sync cannot set
+its own clock, and a disagreement there needs an administrator to confirm. The margin is still to be
+chosen.
 
 **3. Tips are held (owner, 2026-11-06).** T9 and T10 below stay out of what is sent until A793 is
 revived.
@@ -99,12 +101,6 @@ database, which waits for A760.
   with no public address and a download on request, is that enough, or is permanent remote access
   needed? No source says what satisfies this.
 
-- **T4b. A record AEAT refuses for a future date.** AEAT refuses an issue date later than its own date
-  (error 1112), and the date is part of the invoice's identity, so the refused record cannot be fixed by
-  a correcting record. Our earlier idea was to resend it unchanged when the date arrives, then correct
-  it, which fails if the date is months away. What is the right route: a corrective invoice, a new
-  invoice, or something else? What happens to later records chained after it?
-
 ### Confirmations: clocks
 
 - **T5.** A record may carry a time earlier than the previous record's when the new time is the exact
@@ -114,7 +110,10 @@ database, which waits for A760.
   simplified one, with the real operation date and no VAT change (V1665-22, V0902-22). One corrective
   may cover many invoices. The VAT period follows the day VAT fell due, and a return already filed
   wrongly is fixed with a complementary return.
-- **T8.** There is no duty or channel to tell AEAT.
+- **T8.** There is no duty or channel to tell AEAT. A record AEAT refused for a future date is corrected
+  at once with a corrective invoice naming the refused invoice. AEAT's developer FAQ §17 says the
+  refused record then needs nothing more: such errors «se dan por solucionadas» when the corrective's
+  record is received. AEAT's preproduction service can show this before anyone is paid.
 
 ### Confirmations: tips (hold, see decision 3)
 
@@ -286,7 +285,7 @@ These cost nothing, and the gestoría the venue already pays can answer most of 
 ## Free routes
 
 - **AEAT's preproduction service** can show what happens to a record dated earlier than the previous
-  one, and to a resent refused record. It needs one run with the owner's approval, and it would settle
+  one, and to a corrective naming an invoice AEAT refused. It needs one run with the owner's approval, and it would settle
   part of T5 and T8 before paying anyone.
 - **AEAT's general information line** can be asked about T8's "no duty to tell AEAT". It binds nobody.
 - **The AEPD's free channel will not help.** Instrucción 1/2021 says it takes no questions from
