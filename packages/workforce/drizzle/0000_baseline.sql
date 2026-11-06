@@ -84,7 +84,7 @@ CREATE INDEX `attendance_operation_facts_pending_idx` ON `attendance_operation_f
 --> statement-breakpoint
 CREATE INDEX `attendance_operation_facts_person_idx` ON `attendance_operation_facts` (`person_id`,`at`,`sequence`);
 --> statement-breakpoint
-CREATE TABLE "attendance_questions" (
+CREATE TABLE `attendance_questions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,
 	`location_id` text NOT NULL,
@@ -121,7 +121,7 @@ CREATE UNIQUE INDEX `attendance_questions_subject_uq` ON `attendance_questions` 
 --> statement-breakpoint
 CREATE INDEX `attendance_questions_own_idx` ON `attendance_questions` (`person_id`,`active`,`resolved_by_entry_id`,`business_day`,`start_at`,`id`);
 --> statement-breakpoint
-CREATE TABLE "attendance_response_commands" (
+CREATE TABLE `attendance_response_commands` (
 	`id` text PRIMARY KEY NOT NULL,
 	`requested_by_person_id` text NOT NULL,
 	`authorized_by_person_id` text NOT NULL,
@@ -201,7 +201,7 @@ CREATE TABLE `employments` (
 --> statement-breakpoint
 CREATE INDEX `employments_person_idx` ON `employments` (`person_id`);
 --> statement-breakpoint
-CREATE TABLE "pay_period_closures" (
+CREATE TABLE `pay_period_closures` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
 	`period_start` text NOT NULL,
@@ -320,7 +320,7 @@ CREATE INDEX `shifts_person_starts_idx` ON `shifts` (`person_id`,`starts_at`);
 --> statement-breakpoint
 CREATE INDEX `shifts_roster_version_idx` ON `shifts` (`roster_version_id`);
 --> statement-breakpoint
-CREATE TABLE "time_entries" (
+CREATE TABLE `time_entries` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,
 	`node_id` text NOT NULL,
@@ -409,7 +409,7 @@ CREATE INDEX `time_entries_corrects_entry_idx` ON `time_entries` (`corrects_entr
 --> statement-breakpoint
 CREATE UNIQUE INDEX `time_entries_chain_position_uq` ON `time_entries` (`node_id`,`sequence_no`);
 --> statement-breakpoint
-CREATE TABLE "workforce_chains" (
+CREATE TABLE `workforce_chains` (
 	`node_id` text PRIMARY KEY NOT NULL,
 	`sequence_no` integer DEFAULT 0 NOT NULL,
 	`last_entry_id` text,
@@ -442,7 +442,7 @@ CREATE TABLE `shift_assignments` (
 	CONSTRAINT "shift_assignments_one_area_ck" CHECK(("shift_assignments"."department_id" is null) <> ("shift_assignments"."station_id" is null))
 );
 --> statement-breakpoint
-CREATE TABLE "staff_roles" (
+CREATE TABLE `staff_roles` (
 	`id` text PRIMARY KEY NOT NULL,
 	`location_id` text NOT NULL,
 	`name` text NOT NULL,

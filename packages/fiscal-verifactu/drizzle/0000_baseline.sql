@@ -32,7 +32,7 @@ CREATE TABLE `clock_checks` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `clock_checks_seq_uq` ON `clock_checks` (`seq`);
 --> statement-breakpoint
-CREATE TABLE "clock_confirmations" (
+CREATE TABLE `clock_confirmations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`seq` integer NOT NULL,
 	`node_id` text NOT NULL,
@@ -83,7 +83,7 @@ CREATE TABLE `envio_flujo` (
 	CONSTRAINT "envio_flujo_singleton_ck" CHECK("envio_flujo"."id" = 1)
 );
 --> statement-breakpoint
-CREATE TABLE "envios" (
+CREATE TABLE `envios` (
 	`registro_id` text PRIMARY KEY NOT NULL,
 	`estado` text DEFAULT 'pendiente' NOT NULL,
 	`intentos` integer DEFAULT 0 NOT NULL,
@@ -256,7 +256,7 @@ CREATE TABLE `fiscal_series_conflicts` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `fiscal_series_conflicts_invoice_uq` ON `fiscal_series_conflicts` (`sif_id`,`invoice_identity`);
 --> statement-breakpoint
-CREATE TABLE "registro_sif" (
+CREATE TABLE `registro_sif` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
 	`nif` text NOT NULL,
@@ -272,7 +272,7 @@ CREATE UNIQUE INDEX `registro_sif_instalacion_uq` ON `registro_sif` (`nif`,`id_s
 --> statement-breakpoint
 CREATE UNIQUE INDEX `registro_sif_activo_uq` ON `registro_sif` (`node_id`) WHERE "registro_sif"."revocado_en" is null;
 --> statement-breakpoint
-CREATE TABLE "registros_facturacion" (
+CREATE TABLE `registros_facturacion` (
 	`id` text PRIMARY KEY NOT NULL,
 	`source` text NOT NULL,
 	`device_id` text,

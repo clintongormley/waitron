@@ -90,7 +90,7 @@ CREATE TABLE `payment_refunds` (
 --> statement-breakpoint
 CREATE INDEX `payment_refunds_payment_idx` ON `payment_refunds` (`payment_id`);
 --> statement-breakpoint
-CREATE TABLE "payment_resolutions" (
+CREATE TABLE `payment_resolutions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payment_id` text NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -109,7 +109,7 @@ CREATE UNIQUE INDEX `payment_resolutions_payment_key` ON `payment_resolutions` (
 --> statement-breakpoint
 CREATE INDEX `payment_resolutions_working_order_idx` ON `payment_resolutions` (`working_order_id`);
 --> statement-breakpoint
-CREATE TABLE "payments" (
+CREATE TABLE `payments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
 	`source` text NOT NULL,

@@ -9,7 +9,12 @@ import {
   type SchemaListFile,
 } from "../protection-list/compare.js";
 import { readSchema } from "../protection-list/read-schema.js";
-import { createdObject, normaliseSql, type CreatedObject } from "../protection-list/sql-tokens.js";
+import {
+  createdName,
+  createdObject,
+  normaliseSql,
+  type CreatedObject,
+} from "../protection-list/sql-tokens.js";
 
 const BREAKPOINT = "--> statement-breakpoint";
 /** Only `sql-only` holds what the SQL alone made; the later phases hold installers' triggers too. */
@@ -178,6 +183,20 @@ function meaningDeltas(generated: readonly Statement[], old: readonly OldObject[
 }
 
 /**
+ * The old text with the table's name spelled as generated: the engine stores a renamed (rebuilt)
+ * table's header as `"name"`, and readers of the baselines look for drizzle's `` `name` ``.
+ */
+function withGeneratedTableName(old: OldObject, generated: Statement): OldObject {
+  const stored = createdName(old.sql);
+  const wanted = createdName(generated.sql);
+  if (old.kind !== "table" || stored === null || wanted === null || stored.name !== wanted.name) {
+    return old;
+  }
+  const name = generated.sql.slice(wanted.start, wanted.end);
+  return { ...old, sql: old.sql.slice(0, stored.start) + name + old.sql.slice(stored.end) };
+}
+
+/**
  * Rewrites the one generated baseline in `folder` to the old sets' final stored text: each
  * generated table and index keeps its place and takes the old text, and the old triggers and views
  * follow in the old databases' creation order. Never writes `meta/`.
@@ -234,7 +253,9 @@ export function preserveBaseline(options: {
 
   const manual = [...old.values()].filter((o) => !isGenerated(o)).sort((a, b) => a.rowid - b.rowid);
   const written: OldObject[] = [
-    ...generated.map((statement) => old.get(keyOf(statement)) as OldObject),
+    ...generated.map((statement) =>
+      withGeneratedTableName(old.get(keyOf(statement)) as OldObject, statement),
+    ),
     ...manual,
   ];
   const result = written.map((object) => `${object.sql};`).join(`\n${BREAKPOINT}\n`);

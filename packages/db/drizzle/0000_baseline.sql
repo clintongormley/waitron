@@ -1,4 +1,4 @@
-CREATE TABLE "locations" (
+CREATE TABLE `locations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`invoice_locales` text NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE `nodes` (
 	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE "invoice_series" (
+CREATE TABLE `invoice_series` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
 	`code` text NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE "invoice_series" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `invoice_series_node_code_key` ON `invoice_series` (`node_id`,`code`);
 --> statement-breakpoint
-CREATE TABLE "working_order_lines" (
+CREATE TABLE `working_order_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
 	`line_no` integer NOT NULL,
@@ -113,7 +113,7 @@ CREATE INDEX `working_order_lines_course_idx` ON `working_order_lines` (`course_
 --> statement-breakpoint
 CREATE UNIQUE INDEX `working_order_lines_line_no_key` ON `working_order_lines` (`working_order_id`,`line_no`);
 --> statement-breakpoint
-CREATE TABLE "working_orders" (
+CREATE TABLE `working_orders` (
 	`id` text PRIMARY KEY NOT NULL,
 	`source` text NOT NULL,
 	`device_id` text,
@@ -146,7 +146,7 @@ CREATE INDEX `working_orders_opened_at_idx` ON `working_orders` (`opened_at`);
 --> statement-breakpoint
 CREATE INDEX `working_orders_party_idx` ON `working_orders` (`party_id`);
 --> statement-breakpoint
-CREATE TABLE "order_amendments" (
+CREATE TABLE `order_amendments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
 	`sequence_no` integer NOT NULL,
@@ -224,7 +224,7 @@ CREATE TABLE `working_line_portions` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `working_line_portions_portion_key` ON `working_line_portions` (`portion_id`);
 --> statement-breakpoint
-CREATE TABLE "dining_tables" (
+CREATE TABLE `dining_tables` (
 	`id` text PRIMARY KEY NOT NULL,
 	`location_id` text NOT NULL,
 	`label` text NOT NULL,
@@ -283,7 +283,7 @@ CREATE INDEX `floor_plan_table_parts_joined_idx` ON `floor_plan_table_parts` (`j
 --> statement-breakpoint
 CREATE UNIQUE INDEX `floor_plan_table_parts_part_key` ON `floor_plan_table_parts` (`part_table_id`);
 --> statement-breakpoint
-CREATE TABLE "floor_plan_table_sizes" (
+CREATE TABLE `floor_plan_table_sizes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`plan_id` text NOT NULL,
 	`plan_table_id` text NOT NULL,
@@ -297,7 +297,7 @@ CREATE TABLE "floor_plan_table_sizes" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `floor_plan_table_sizes_plan_table_key` ON `floor_plan_table_sizes` (`plan_id`,`plan_table_id`);
 --> statement-breakpoint
-CREATE TABLE "floor_plan_tables" (
+CREATE TABLE `floor_plan_tables` (
 	`id` text PRIMARY KEY NOT NULL,
 	`zone_id` text NOT NULL,
 	`label` text NOT NULL,
@@ -309,7 +309,7 @@ CREATE TABLE "floor_plan_tables" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `floor_plan_tables_zone_label_key` ON `floor_plan_tables` (`zone_id`,`label`);
 --> statement-breakpoint
-CREATE TABLE "floor_plans" (
+CREATE TABLE `floor_plans` (
 	`id` text PRIMARY KEY NOT NULL,
 	`zone_id` text NOT NULL,
 	`set_id` text NOT NULL,
@@ -439,7 +439,7 @@ CREATE TABLE `floor_today_zones` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `floor_today_zones_zone_key` ON `floor_today_zones` (`zone_id`);
 --> statement-breakpoint
-CREATE TABLE "parties" (
+CREATE TABLE `parties` (
 	`id` text PRIMARY KEY NOT NULL,
 	`guest_count` integer,
 	`state` text DEFAULT 'open' NOT NULL,
@@ -461,7 +461,7 @@ CREATE TABLE "parties" (
 --> statement-breakpoint
 CREATE INDEX `parties_merged_into_idx` ON `parties` (`merged_into_party_id`);
 --> statement-breakpoint
-CREATE TABLE "party_tables" (
+CREATE TABLE `party_tables` (
 	`id` text PRIMARY KEY NOT NULL,
 	"party_id" text NOT NULL,
 	`table_id` text NOT NULL,
@@ -475,7 +475,7 @@ CREATE UNIQUE INDEX `party_tables_active_table_uq` ON `party_tables` (`table_id`
 --> statement-breakpoint
 CREATE INDEX `party_tables_party_idx` ON `party_tables` (`party_id`);
 --> statement-breakpoint
-CREATE TABLE "service_commands" (
+CREATE TABLE `service_commands` (
 	`id` text PRIMARY KEY NOT NULL,
 	`scope_kind` text NOT NULL,
 	`scope_id` text NOT NULL,
@@ -489,7 +489,7 @@ CREATE TABLE "service_commands" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `service_commands_scope_submission_key` ON `service_commands` (`scope_kind`,`scope_id`,`submission_id`);
 --> statement-breakpoint
-CREATE TABLE "order_group_events" (
+CREATE TABLE `order_group_events` (
 	`id` text PRIMARY KEY NOT NULL,
 	`party_id` text NOT NULL,
 	`group_id` text,
@@ -509,7 +509,7 @@ CREATE INDEX `order_group_events_party_idx` ON `order_group_events` (`party_id`)
 --> statement-breakpoint
 CREATE INDEX `order_group_events_group_idx` ON `order_group_events` (`group_id`);
 --> statement-breakpoint
-CREATE TABLE "order_groups" (
+CREATE TABLE `order_groups` (
 	`id` text PRIMARY KEY NOT NULL,
 	`party_id` text NOT NULL,
 	`position` integer NOT NULL,
@@ -694,7 +694,7 @@ CREATE INDEX `ticket_items_waiting_idx` ON `ticket_items` (`station_id`,`state`,
 --> statement-breakpoint
 CREATE UNIQUE INDEX `ticket_items_working_order_line_id_key` ON `ticket_items` (`working_order_line_id`);
 --> statement-breakpoint
-CREATE TABLE "devices" (
+CREATE TABLE `devices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`location_id` text NOT NULL,
 	`device_profile_id` text NOT NULL,
@@ -735,7 +735,7 @@ CREATE TABLE `device_approved_profiles` (
 	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE TABLE "join_requests" (
+CREATE TABLE `join_requests` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
 	`location_id` text NOT NULL,
@@ -763,7 +763,7 @@ CREATE TABLE `print_agents` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `print_agents_tenant_node_key` ON `print_agents` (`node_id`);
 --> statement-breakpoint
-CREATE TABLE "printers" (
+CREATE TABLE `printers` (
 	`id` text PRIMARY KEY NOT NULL,
 	`location_id` text NOT NULL,
 	`name` text NOT NULL,
@@ -831,7 +831,7 @@ CREATE INDEX `receipt_reprints_sale_idx` ON `receipt_reprints` (`sale_id`);
 --> statement-breakpoint
 CREATE UNIQUE INDEX `receipt_reprints_job_uq` ON `receipt_reprints` (`print_job_id`);
 --> statement-breakpoint
-CREATE TABLE "sale_receipt_guests" (
+CREATE TABLE `sale_receipt_guests` (
 	`sale_id` text PRIMARY KEY NOT NULL,
 	`guest_count` integer,
 	`created_at` text NOT NULL,
@@ -885,7 +885,7 @@ CREATE TABLE `station_printers` (
 	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE "ticket_item_moves" (
+CREATE TABLE `ticket_item_moves` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_line_id` text NOT NULL,
 	`from_station_id` text NOT NULL,
@@ -902,7 +902,7 @@ CREATE TABLE "ticket_item_moves" (
 --> statement-breakpoint
 CREATE INDEX `ticket_item_moves_line_idx` ON `ticket_item_moves` (`working_order_line_id`);
 --> statement-breakpoint
-CREATE TABLE "drawer_opens" (
+CREATE TABLE `drawer_opens` (
 	`id` text PRIMARY KEY NOT NULL,
 	`device_id` text,
 	`printer_id` text,
@@ -942,14 +942,14 @@ CREATE TABLE `catalogues` (
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "categories" (
+CREATE TABLE `categories` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "products" (
+CREATE TABLE `products` (
 	`id` text PRIMARY KEY NOT NULL,
 	`catalogue_id` text NOT NULL,
 	`parent_id` text,
@@ -1064,7 +1064,7 @@ CREATE UNIQUE INDEX `purchase_invoices_supplier_number_key` ON `purchase_invoice
 --> statement-breakpoint
 CREATE INDEX `purchase_invoices_tenant_received_idx` ON `purchase_invoices` (`received_on`);
 --> statement-breakpoint
-CREATE TABLE "device_profiles" (
+CREATE TABLE `device_profiles` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`form_factor` text NOT NULL,
@@ -1079,7 +1079,7 @@ CREATE TABLE "device_profiles" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `device_profiles_live_name_key` ON `device_profiles` (`name`) WHERE "device_profiles"."retired_at" is null;
 --> statement-breakpoint
-CREATE TABLE "device_profile_printers" (
+CREATE TABLE `device_profile_printers` (
 	`id` text PRIMARY KEY NOT NULL,
 	`device_profile_id` text NOT NULL,
 	`printer_id` text,
@@ -1148,7 +1148,7 @@ CREATE TABLE `bill_payment_lines` (
 --> statement-breakpoint
 CREATE INDEX `bill_payment_lines_payment_idx` ON `bill_payment_lines` (`bill_payment_id`);
 --> statement-breakpoint
-CREATE TABLE "bill_payment_refunds" (
+CREATE TABLE `bill_payment_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`bill_payment_id` text NOT NULL,
 	`submission_id` text NOT NULL,
@@ -1184,7 +1184,7 @@ CREATE TABLE "bill_payment_refunds" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `bill_payment_refunds_submission_key` ON `bill_payment_refunds` (`bill_payment_id`,`submission_id`);
 --> statement-breakpoint
-CREATE TABLE "bill_payments" (
+CREATE TABLE `bill_payments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
 	`submission_id` text NOT NULL,
@@ -1221,7 +1221,7 @@ CREATE TABLE "bill_payments" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `bill_payments_submission_key` ON `bill_payments` (`working_order_id`,`submission_id`);
 --> statement-breakpoint
-CREATE TABLE "sale_lines" (
+CREATE TABLE `sale_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
 	`line_no` integer NOT NULL,
@@ -1283,7 +1283,7 @@ CREATE INDEX `sale_substitutions_substitution_idx` ON `sale_substitutions` (`sub
 --> statement-breakpoint
 CREATE UNIQUE INDEX `sale_substitutions_substituted_key` ON `sale_substitutions` (`substituted_sale_id`);
 --> statement-breakpoint
-CREATE TABLE "sales" (
+CREATE TABLE `sales` (
 	`id` text PRIMARY KEY NOT NULL,
 	`source` text NOT NULL,
 	`device_id` text,
@@ -1362,7 +1362,7 @@ CREATE INDEX `sale_voids_voided_at_idx` ON `sale_voids` (`voided_at`);
 --> statement-breakpoint
 CREATE UNIQUE INDEX `sale_voids_sale_id_key` ON `sale_voids` (`sale_id`);
 --> statement-breakpoint
-CREATE TABLE "unpaid_departures" (
+CREATE TABLE `unpaid_departures` (
 	`id` text PRIMARY KEY NOT NULL,
 	`party_id` text NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -1409,7 +1409,7 @@ CREATE UNIQUE INDEX `daily_closes_business_day_key` ON `daily_closes` (`node_id`
 --> statement-breakpoint
 CREATE UNIQUE INDEX `daily_closes_sequence_key` ON `daily_closes` (`node_id`,`sequence_no`);
 --> statement-breakpoint
-CREATE TABLE "incidents" (
+CREATE TABLE `incidents` (
 	`id` text PRIMARY KEY NOT NULL,
 	`source` text NOT NULL,
 	`device_id` text,
@@ -1442,7 +1442,7 @@ CREATE TABLE `change_log` (
 	`payload` text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "deployment" (
+CREATE TABLE `deployment` (
 	`id` integer PRIMARY KEY NOT NULL,
 	`environment` text NOT NULL,
 	`stamped_at` text NOT NULL,
@@ -1492,7 +1492,7 @@ CREATE TABLE `recovery_packs` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `recovery_packs_node_number_uq` ON `recovery_packs` (`node_id`,`number`);
 --> statement-breakpoint
-CREATE TABLE "invoice_deliveries" (
+CREATE TABLE `invoice_deliveries` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
 	`print_job_id` text,
@@ -1688,7 +1688,7 @@ CREATE TABLE `media_image_edits` (
 	CONSTRAINT "media_image_edits_filename_ck" CHECK("media_image_edits"."original_filename" is null or (length("media_image_edits"."original_filename") <= 255 and instr("media_image_edits"."original_filename", char(0)) = 0 and instr("media_image_edits"."original_filename", char(10)) = 0 and instr("media_image_edits"."original_filename", char(13)) = 0))
 );
 --> statement-breakpoint
-CREATE TABLE "media_images" (
+CREATE TABLE `media_images` (
 	`id` text PRIMARY KEY NOT NULL,
 	`filename` text NOT NULL,
 	`names` text NOT NULL,
@@ -1771,7 +1771,7 @@ CREATE UNIQUE INDEX `management_account_actions_token_hash_uq` ON `management_ac
 --> statement-breakpoint
 CREATE INDEX `management_account_actions_person_idx` ON `management_account_actions` (`person_id`,`purpose`);
 --> statement-breakpoint
-CREATE TABLE "management_sessions" (
+CREATE TABLE `management_sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`token_hash` text NOT NULL,
 	`person_id` text NOT NULL,
@@ -1836,7 +1836,7 @@ CREATE TABLE `recovery_codes` (
 --> statement-breakpoint
 CREATE INDEX `recovery_codes_person_idx` ON `recovery_codes` (`person_id`);
 --> statement-breakpoint
-CREATE TABLE "sessions" (
+CREATE TABLE `sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`token_hash` text NOT NULL,
 	`person_id` text NOT NULL,
@@ -1862,7 +1862,7 @@ CREATE TABLE `totp_enrollments` (
 --> statement-breakpoint
 CREATE INDEX `totp_enrollments_person_idx` ON `totp_enrollments` (`person_id`);
 --> statement-breakpoint
-CREATE TABLE "webauthn_challenges" (
+CREATE TABLE `webauthn_challenges` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text,
 	`challenge` text NOT NULL,
@@ -1907,7 +1907,7 @@ CREATE TABLE `menu_details` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `menu_details_root_uq` ON `menu_details` (`root_section_id`);
 --> statement-breakpoint
-CREATE TABLE "menu_items" (
+CREATE TABLE `menu_items` (
 	`id` text PRIMARY KEY NOT NULL,
 	`menu_id` text NOT NULL,
 	`product_id` text NOT NULL,
@@ -1957,7 +1957,7 @@ CREATE TABLE `units` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `units_seed_key_key` ON `units` (`seed_key`);
 --> statement-breakpoint
-CREATE TABLE "menu_item_variant_overrides" (
+CREATE TABLE `menu_item_variant_overrides` (
 	`menu_item_id` text NOT NULL,
 	`product_id` text NOT NULL,
 	`variant_id` text NOT NULL,
@@ -1992,7 +1992,7 @@ CREATE TABLE `option_lists` (
 	`active` integer DEFAULT true NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "extra_list_items" (
+CREATE TABLE `extra_list_items` (
 	`id` text PRIMARY KEY NOT NULL,
 	`list_id` text NOT NULL,
 	`product_id` text NOT NULL,
@@ -2042,7 +2042,7 @@ CREATE UNIQUE INDEX `product_modifiers_product_extra_uq` ON `product_modifiers` 
 --> statement-breakpoint
 CREATE UNIQUE INDEX `product_modifiers_product_option_uq` ON `product_modifiers` (`product_id`,`option_list_id`);
 --> statement-breakpoint
-CREATE TABLE "section_members" (
+CREATE TABLE `section_members` (
 	`id` text PRIMARY KEY NOT NULL,
 	`section_id` text NOT NULL,
 	`position` integer NOT NULL,
@@ -2067,7 +2067,7 @@ CREATE INDEX `section_members_product_idx` ON `section_members` (`product_id`);
 --> statement-breakpoint
 CREATE INDEX `section_members_folder_image_idx` ON `section_members` ("folder_overrides" ->> '$.image') WHERE "section_members"."folder_overrides" ->> '$.image' is not null;
 --> statement-breakpoint
-CREATE TABLE "sections" (
+CREATE TABLE `sections` (
 	`id` text PRIMARY KEY NOT NULL,
 	`internal_name` text NOT NULL,
 	`names` text DEFAULT '{}' NOT NULL,
@@ -2196,7 +2196,7 @@ CREATE INDEX `content_suggestions_job_idx` ON `content_suggestions` (`job_id`);
 --> statement-breakpoint
 CREATE UNIQUE INDEX `content_suggestions_item_language_key` ON `content_suggestions` (`kind`,`item_id`,`language`);
 --> statement-breakpoint
-CREATE TABLE "adjustment_reasons" (
+CREATE TABLE `adjustment_reasons` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`names` text NOT NULL,
@@ -2269,7 +2269,7 @@ CREATE INDEX `adjustments_requested_by_idx` ON `adjustments` (`requested_by`);
 --> statement-breakpoint
 CREATE INDEX `adjustments_approved_by_idx` ON `adjustments` (`approved_by`);
 --> statement-breakpoint
-CREATE TABLE "adjustment_settings" (
+CREATE TABLE `adjustment_settings` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`max_bill_comp` integer,
 	`bill_approver_roles` text DEFAULT '["manager","admin"]' NOT NULL,
@@ -2307,7 +2307,7 @@ CREATE UNIQUE INDEX `adjustment_lines_adjustment_line_key` ON `adjustment_lines`
 --> statement-breakpoint
 CREATE INDEX `adjustment_lines_line_idx` ON `adjustment_lines` (`line_id`);
 --> statement-breakpoint
-CREATE TABLE "department_sale_policies" (
+CREATE TABLE `department_sale_policies` (
 	`department_id` text PRIMARY KEY NOT NULL,
 	`order_start` text DEFAULT 'counter' NOT NULL,
 	`paid_when` text DEFAULT 'prepay' NOT NULL,
@@ -2321,7 +2321,7 @@ CREATE TABLE "department_sale_policies" (
 	CONSTRAINT "department_sale_policies_receipt_mode_ck" CHECK("department_sale_policies"."receipt_print_mode" in ('auto', 'on_request'))
 );
 --> statement-breakpoint
-CREATE TABLE "departments" (
+CREATE TABLE `departments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`location_id` text NOT NULL,
 	`name` text NOT NULL,
@@ -2354,7 +2354,7 @@ CREATE TABLE `device_profile_zones` (
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE "order_service_contexts" (
+CREATE TABLE `order_service_contexts` (
 	`working_order_id` text PRIMARY KEY NOT NULL,
 	`location_id` text NOT NULL,
 	`zone_id` text NOT NULL,
@@ -2399,7 +2399,7 @@ CREATE TABLE `working_line_contexts` (
 	CONSTRAINT "working_line_contexts_vat_class_ck" CHECK("working_line_contexts"."vat_class" in ('general','reduced','super_reduced','zero'))
 );
 --> statement-breakpoint
-CREATE TABLE "zone_sale_policies" (
+CREATE TABLE `zone_sale_policies` (
 	`zone_id` text PRIMARY KEY NOT NULL,
 	`order_start` text,
 	`paid_when` text,
@@ -2412,7 +2412,7 @@ CREATE TABLE "zone_sale_policies" (
 	CONSTRAINT "zone_sale_policies_receipt_mode_ck" CHECK("zone_sale_policies"."receipt_print_mode" in ('auto', 'on_request'))
 );
 --> statement-breakpoint
-CREATE TABLE "zone_service_policies" (
+CREATE TABLE `zone_service_policies` (
 	`location_id` text NOT NULL,
 	`zone_id` text PRIMARY KEY NOT NULL,
 	`department_id` text NOT NULL,
@@ -2424,7 +2424,7 @@ CREATE TABLE "zone_service_policies" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `zone_service_policies_one_counter_default_key` ON `zone_service_policies` (`location_id`) WHERE "zone_service_policies"."is_counter_default";
 --> statement-breakpoint
-CREATE TABLE "kitchen_notices" (
+CREATE TABLE `kitchen_notices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -2525,7 +2525,7 @@ CREATE UNIQUE INDEX `routing_cells_no_category_every_zone_key` ON `routing_cells
 --> statement-breakpoint
 CREATE UNIQUE INDEX `routing_cells_no_category_zone_key` ON `routing_cells` (`location_id`,`no_category`,`zone_id`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is not null;
 --> statement-breakpoint
-CREATE TABLE "station_day_states" (
+CREATE TABLE `station_day_states` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
 	`business_day` text NOT NULL,
@@ -2562,7 +2562,7 @@ CREATE TABLE `menu_period_staff_menus` (
 	FOREIGN KEY (`menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE "menu_periods" (
+CREATE TABLE `menu_periods` (
 	`id` text PRIMARY KEY NOT NULL,
 	`department_id` text NOT NULL,
 	`name` text NOT NULL,

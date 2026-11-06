@@ -433,6 +433,14 @@ export interface CreatedObject {
 
 /** What `CREATE [TEMP] [UNIQUE] TABLE|INDEX|TRIGGER|VIEW [IF NOT EXISTS] [schema.]name` makes; null otherwise. */
 export function createdObject(statement: string): CreatedObject | null {
+  const named = createdName(statement);
+  return named === null ? null : { kind: named.kind, name: named.name };
+}
+
+/** As `createdObject`, with where the name's token, quotes included, starts and ends. */
+export function createdName(
+  statement: string,
+): (CreatedObject & { readonly start: number; readonly end: number }) | null {
   const tokens = significantTokens(statement);
   if (!isWord(tokens[0], "CREATE")) return null;
   let index = 1;
@@ -445,5 +453,5 @@ export function createdObject(statement: string): CreatedObject | null {
   if (isSymbol(tokens[index + 1], ".")) index += 2;
   const name = tokens[index];
   if (name === undefined) return null;
-  return { kind, name: unquoted(name.text) };
+  return { kind, name: unquoted(name.text), start: name.start, end: name.end };
 }

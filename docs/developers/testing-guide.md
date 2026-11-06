@@ -3329,8 +3329,12 @@ report as well, as above.) None runs in CI; their unit tests run in `apps/server
   old one (a different column order alone is allowed), an old set that owns nothing, and a
   reference whose compositions disagree about the old objects, their text or their owners, or the
   order in which they create the triggers that share a table, timing and event. It never writes
-  the journal or snapshot, and a second run changes nothing. So far it has run only on the
-  small fixtures in `preserve.test.ts`, not on the real schema.
+  the journal or snapshot, and a second run changes nothing. The table name in each `CREATE TABLE`
+  header keeps the quoting of the file it rewrites, so a table the old history rebuilt, which the
+  engine stores as `"name"`, still reads `` `name` `` as drizzle wrote it; a run over a file an
+  earlier run already rewrote keeps that file's spelling. Index statements are copied whole: every
+  index in the seven sets A760 part 3 preserved already named its table in backticks. In that part,
+  generating the seven sets afresh and preserving them again gave the committed files byte for byte.
 - **`controls --reference <list dir> --out <empty dir>`** copies the reference's databases under
   `--out`, makes one change in each copy (dropping or editing a trigger, index, CHECK or foreign key,
   changing a column's type or default or a key's columns, adding a table, changing a seeded value)
