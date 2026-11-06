@@ -217,9 +217,13 @@ listener checks replacements every ten seconds and applies valid ones to new TLS
 connections without a restart. An invalid replacement keeps the loaded context
 and logs `cloud.certificate_reload_failed`.
 
-Venue devices continue to use the LAN address. The real gateway/browser,
-renewal and offline-sale checks for A951-S remain open; the gateway behavior
-below records the earlier local proof, not a completed A951-S qualification.
+Venue devices continue to use the LAN address. On 6 November a Mac browser signed
+in through the public gateway with normal certificate trust, and an issued
+replacement was installed without restarting the server
+([PR #2525](https://github.com/clintongormley/waitron/pull/2525)). That bounded test
+was stopped afterwards. Automatic renewal, a physically outside-home browser and
+offline-sale checks remain open. The gateway behavior below records the earlier
+local proof, not a completed A951-S qualification.
 
 The gateway removes revoked installations on its next signed configuration update.
 Its cached authority lasts at most ten minutes during a Cloud management outage;
