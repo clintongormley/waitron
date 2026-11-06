@@ -30,13 +30,7 @@ export function projectRepairHourHistory(recovery: Recovery): readonly HourHisto
   for (const evidence of recovery.publicEvidence) {
     if (record(evidence) && evidence.kind === "waitron-recovery-document") {
       try {
-        const document = parseRecoveryDocumentPublic(evidence);
-        sources.push({
-          reference: `recovery-document/${document.nodeKey.name}`,
-          complete: true,
-          records: [],
-          timeFloorMs: Date.parse(document.createdAt),
-        });
+        parseRecoveryDocumentPublic(evidence);
       } catch {
         invalid();
       }
@@ -97,7 +91,6 @@ export function projectRepairHourHistory(recovery: Recovery): readonly HourHisto
       records: current.records.map((row) =>
         Object.fromEntries(FIELDS.map((name) => [name, (row as Record<string, unknown>)[name]])),
       ),
-      ...(current.timeFloorMs === undefined ? {} : { timeFloorMs: current.timeFloorMs }),
     };
   });
 }

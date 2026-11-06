@@ -158,7 +158,6 @@ it("keeps incomplete scope evidence visibly incomplete", async () => {
 it("admits an empty migrated database as empty history without inventing an hour", async () => {
   expect(projectHourHistory({ scope, sources: await read() })).toMatchObject({
     greatestSpentMinute: null,
-    recordedTimeFloorMs: null,
     contradictions: [],
   });
 });

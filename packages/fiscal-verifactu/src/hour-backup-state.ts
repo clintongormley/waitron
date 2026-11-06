@@ -52,13 +52,9 @@ export const FISCAL_HOUR_BACKUP_STATE: NonDbSource = {
   project({ preparations, retained, recovery }): HourHistorySource {
     const current = publicHourSelectionHistory(preparations);
     const sources = [...retained.map(retainedHistory), ...projectRepairHourHistory(recovery)];
-    const floors = sources.flatMap((source) =>
-      source.timeFloorMs === undefined ? [] : [source.timeFloorMs],
-    );
     return {
       ...current,
       records: [...sources.flatMap((source) => source.records), ...current.records],
-      ...(floors.length === 0 ? {} : { timeFloorMs: Math.max(...floors) }),
     };
   },
 };

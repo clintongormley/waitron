@@ -74,7 +74,6 @@ it("exports abandoned and older-software intents without raw keys, PDFs or owner
   expect(JSON.stringify(source)).not.toMatch(/NEVER-BACK-UP|PDF-secret|private|owner|context/);
   expect(projectHourHistory({ scope, sources: [source] })).toMatchObject({
     greatestSpentMinute: 415441,
-    recordedTimeFloorMs: 1792152060000,
     contradictions: [],
   });
 });
@@ -144,6 +143,28 @@ it("combines each retained source without changing its taxpayer or environment",
     complete: true,
     records: [publicRow, { ...publicRow, taxpayerNif: "OTHER", environment: "production" }],
   });
+});
+it("accepts an older backup's record that carries timeFloorMs, and carries no floor on", () => {
+  expect(
+    project([
+      {
+        reference: "prepared-hours",
+        complete: true,
+        records: [publicRow],
+        timeFloorMs: 1792152105000,
+      },
+    ]),
+  ).toEqual({ reference: "prepared-hours", complete: true, records: [publicRow] });
+  expect(() =>
+    project([
+      { reference: "prepared-hours", complete: true, records: [publicRow], timeFloorMs: 1.5 },
+    ]),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "history_invalid" },
+    }),
+  );
 });
 it.each([
   null,
