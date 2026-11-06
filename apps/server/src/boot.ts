@@ -1858,6 +1858,7 @@ async function bootServer(
         environment: config.environment,
         readMembership: () => readNodeMembership(db),
         cors: corsForVenue(allowOrigin),
+        pageCheck: ownPageCheck,
         waitingOn: outcome.waitingOn ?? [],
         namesOf: (ids) => readPeerNames(db, ids),
         carryOn: {
