@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import type { ServiceStepStart } from "../schema/service-steps.js";
+import type { ServiceStepStart } from "@waitron/db";
 import { MAX_SERVICE_STEPS } from "../service-step-limits.js";
 import type { ServiceStepDraft } from "./service-step-draft.js";
 import { format } from "./hours-view.js";

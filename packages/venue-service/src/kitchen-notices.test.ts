@@ -13,10 +13,12 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  kitchenNotices,
   kitchenStations,
   locations,
   locationDayCutoverChanges,
   withTransaction,
+  workingLineContexts,
   workingOrderLines,
   venueLocationId,
 } from "@waitron/db";
@@ -25,8 +27,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { kitchenNotices } from "./schema/kitchen-notices.js";
-import { workingLineContexts } from "./schema/service.js";
 import {
   acknowledgeKitchenNotice,
   listStationNotices,

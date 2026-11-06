@@ -11,8 +11,15 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departmentDayRanges,
+  departmentDays,
   kitchenStations,
   locationBusinessDaySettings,
+  menuPeriods,
+  routingCellPeriods,
+  routingCells,
+  seasons as seasonsTable,
+  specialDayDates,
   withTransaction,
   type Database,
   type Transaction,
@@ -35,14 +42,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { menuPeriods } from "./schema/menus.js";
-import { routingCellPeriods, routingCells } from "./schema/routing.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  seasons as seasonsTable,
-  specialDayDates,
-} from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { saveSpecialDay } from "./special-days.js";
 import { starterSeasonName, type StarterSeason } from "./testing/starter-seasons.js";

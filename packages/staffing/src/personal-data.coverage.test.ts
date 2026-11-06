@@ -5,7 +5,7 @@
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/workforce/schema/staffing.js";
 
 const CLASSIFIED: Record<
   string,

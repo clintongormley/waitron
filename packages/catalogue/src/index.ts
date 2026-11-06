@@ -96,14 +96,40 @@ export {
 } from "@waitron/shared";
 export * from "./invoice-descriptions.js";
 export * from "./media.js";
-export * from "./schema/index.js";
+export {
+  catalogueSettings,
+  categoryDetails,
+  contentLanguages,
+  contentSuggestionJobs,
+  contentSuggestions,
+  extraListItems,
+  extraLists,
+  menuDetails,
+  menuItems,
+  menuItemVariantOverrides,
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
+  optionLabels,
+  optionLists,
+  productModifiers,
+  productUnits,
+  sectionMembers,
+  sections,
+  units,
+  unitSeedStates,
+  SUGGESTION_FAILURES,
+  SUGGESTION_JOB_STATES,
+  SUGGESTION_REFUSALS,
+} from "@waitron/db";
+export type { SuggestionJobRow, SuggestionRow } from "@waitron/db";
 export { CATALOGUE_MIGRATIONS } from "./migrations.js";
 export { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { CATALOGUE_PROVISIONING } from "./provisioning.js";
 export { CATALOGUE_CLASSIFICATION } from "./classification.js";
 export { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
 export * from "./categories.js";
-export * from "./schema/categories.js";
 export type {
   SectionRole,
   MemberRef,

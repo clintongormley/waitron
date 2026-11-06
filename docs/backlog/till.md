@@ -1218,7 +1218,7 @@ and 360 px in the till page and bring any zone under either limit back to the ow
 **A995 (left open by A757 slice 6).** As read on 2026-10-21: the floor's ready chip counts a dish as
 one only when its frozen `unit_precision` is above 0 (`apps/server/src/table-signals.ts:96-103`),
 and the held chip the same (`readHeldCounts`, `apps/server/src/order-groups.ts:1567`), and new
-venues get `g`, `mg` and `ml` at 0 places (`packages/catalogue/src/provisioning.ts:96-146`), so
+venues get `g`, `mg` and `ml` at 0 places (`packages/catalogue/src/provisioning.ts:27-51`), so
 150 g of a dish reads as 150 there while slice 6's rows read 1 item. The till's own draft count
 decides "whole units" with `soldByTheUnit`, which does not read `measure`
 (`apps/till/src/screens/till-table-order-screen.ts:214-215`,
@@ -3078,7 +3078,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   2).** Each new seating starts at Bill 1. A number is never given twice on one seated party, so a
   bill that merges away leaves a gap, and a bill that arrives from another table takes the party's
   next number. The numbers given are kept in `bill_number_allocations`
-  (`packages/venue-service/src/schema/bill-identities.ts`). Plan:
+  (`packages/db/src/schema/venue-service/bill-identities.ts`). Plan:
   [A803 slice 2](../superpowers/plans/2026-10-30-a803-2-named-bills.md).
 
 - **A bill's name never prints on a kitchen ticket (owner, 2026-10-30; A803 slice 2, answer 1).**

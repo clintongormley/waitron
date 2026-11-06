@@ -1,14 +1,19 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, kitchenStations, withTransaction, venueLocationId } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  departments,
+  kitchenStations,
+  withTransaction,
+  venueLocationId,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { listLateSendManagerDepartmentIds, readLateSendNeedsManager } from "./late-send.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
-import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

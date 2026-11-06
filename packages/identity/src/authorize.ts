@@ -2,8 +2,7 @@ import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { persons } from "./schema/persons.js";
-import { sessions } from "./schema/sessions.js";
+import { persons, sessions } from "@waitron/db";
 import { roleHasPermission, type Permission } from "./permissions.js";
 import type { PersonRoleValue } from "@waitron/shared";
 import {
@@ -44,8 +43,9 @@ export async function authorize(
   args: { sessionId: string; permission: Permission | (string & {}); override?: Override },
   attempts?: PinAttempts,
 ): Promise<Authorization> {
-  // `sessions` declares no key to `persons` (why: `schema/sessions.ts`), so a session whose person
-  // row is gone is absent from this join and reads as `session.not_open`, which fails closed.
+  // `sessions` declares no key to `persons` (why: `packages/db/src/schema/identity/sessions.ts`),
+  // so a session whose person row is gone is absent from this join and reads as `session.not_open`,
+  // which fails closed.
   const [row] = await tx
     .select({ personId: sessions.personId, role: persons.role })
     .from(sessions)

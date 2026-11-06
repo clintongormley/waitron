@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departments,
+  departmentSalePolicies,
   invoiceSeries,
+  orderServiceContexts,
+  saleReceiptHeaders,
   sales,
   floorZones,
   venueLocationId,
@@ -14,12 +18,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import {
-  departments,
-  departmentSalePolicies,
-  orderServiceContexts,
-  saleReceiptHeaders,
-} from "./schema/service.js";
 import { createDepartment, listDepartments } from "./operations.js";
 import * as receipts from "./index.js";
 

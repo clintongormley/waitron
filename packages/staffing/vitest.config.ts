@@ -54,7 +54,6 @@ export default defineConfig({
         "drizzle.config.ts",
         "drizzle/**",
         "src/index.ts",
-        "src/schema/index.ts",
       ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

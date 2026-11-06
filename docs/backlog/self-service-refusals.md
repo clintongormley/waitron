@@ -550,7 +550,7 @@ Message: `passkey.verification_failed`. Fix: [sign-in](#sign-in).
 
 Wording: `apps/dashboard/src/i18n/codes.ts:359`, `apps/dashboard/src/i18n/codes.ts:360`.
 
-State: The login screen displays this code (login-screen.ts:848 and :905). The producer refuses a non-active credential owner with this same code (packages/identity/src/passkey.ts:269), as well as invalid proofs. Waiting or repeating that credential cannot activate the account. Bug-only: no; non-active account status is an explicit branch.
+State: The login screen displays this code (login-screen.ts:848 and :905). The producer refuses a non-active credential owner with this same code (packages/identity/src/passkey.ts:292), as well as invalid proofs. Waiting or repeating that credential cannot activate the account. Bug-only: no; non-active account status is an explicit branch.
 
 Route: Existing: the login screen offers other sign-in methods. Missing: a neutral next step if retry fails, such as using another offered method or asking the administrator. Preserve the same answer for a suspended/pending account; never reveal its status.
 

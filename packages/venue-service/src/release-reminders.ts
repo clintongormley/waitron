@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { departments, zoneServicePolicies } from "./schema/service.js";
+import { departments, zoneServicePolicies } from "@waitron/db";
 
 export async function readReleaseReminderMinutesByZone(
   tx: Transaction,

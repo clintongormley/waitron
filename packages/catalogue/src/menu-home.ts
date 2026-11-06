@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import { menuDetails, products, sectionMembers, type Transaction } from "@waitron/db";
 import { AppError, homeDisplayProblem } from "@waitron/shared";
 import { batches } from "./batches.js";
 import type {
@@ -10,8 +10,6 @@ import type {
   SectionMember,
   TileRef,
 } from "@waitron/shared";
-import { menuDetails } from "./schema/menu.js";
-import { sectionMembers } from "./schema/sections.js";
 import {
   loadSectionGraph,
   reachableFrom,

@@ -4,7 +4,7 @@ import { compareBackupTables } from "@waitron/db";
 import type { BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
 import { ADJUSTMENTS_CLASSIFICATION } from "./classification.js";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/db/schema/adjustments.js";
 
 const tables = ADJUSTMENTS_CLASSIFICATION.map((c) => c.table);
 const immutableTables = ["adjustments", "adjustment_refunds", "adjustment_lines"];

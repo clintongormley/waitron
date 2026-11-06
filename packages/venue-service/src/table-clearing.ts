@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { diningTables, type Transaction } from "@waitron/db";
-import { departments, zoneServicePolicies } from "./schema/service.js";
+import { departments, diningTables, zoneServicePolicies, type Transaction } from "@waitron/db";
 
 export async function readTablesNeedingClearing(
   tx: Transaction,

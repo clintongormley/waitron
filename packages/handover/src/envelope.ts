@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalize, signBytes, verifyBytes } from "@waitron/membership";
 import type { CanonicalValue } from "@waitron/membership";
+import type { HandoverKind, HandoverPurpose, SignedHandoverEnvelope } from "@waitron/shared";
 
 export const HANDOVER_KINDS = [
   "query",
@@ -13,18 +14,9 @@ export const HANDOVER_KINDS = [
   "return-batch",
   "return-receipt",
   "health",
-] as const;
+] as const satisfies readonly HandoverKind[];
 
-export type HandoverKind = (typeof HANDOVER_KINDS)[number];
-
-export type HandoverPurpose = `waitron.handover.${HandoverKind}.v1`;
-
-export interface SignedHandoverEnvelope<B> {
-  readonly purpose: HandoverPurpose;
-  readonly signerNodeId: string;
-  readonly body: B;
-  readonly signature: string;
-}
+export type { HandoverKind, HandoverPurpose, SignedHandoverEnvelope };
 
 export type VerifyEnvelopeResult<B> =
   | { valid: true; body: B; signerNodeId: string }

@@ -42,12 +42,14 @@ its import compares such a date with the others in its first year only (`validat
   maps provinces and territorial areas, and `sources.ts` holds source addresses and hashes.
   The archived pages and their provenance remain in `packages/country-es/src/data/sources/`.
 - Special days live in `special_days` and `special_day_dates`, declared in
-  `packages/venue-service/src/schema/seasons.ts`; `saveSpecialDay` in `special-days.ts` validates
-  them. `packages/venue-service/drizzle/0038_clammy_klaw.sql` dropped `local_holidays`.
-- `holiday_geographies` in `packages/venue-service/src/schema/holidays.ts` retains the holiday-area
-  choice for an address. `readHolidayAreaModel` and `saveHolidayArea` in `holidays.ts` read and write
-  that choice; the area control is in the Year. The routes in `routes.ts` require `venue.view`
-  for reads and `venue_service.manage` for writes.
+  `packages/db/src/schema/venue-service/seasons.ts`; `saveSpecialDay` in
+  `packages/venue-service/src/special-days.ts` validates them.
+  `packages/venue-service/drizzle/0038_clammy_klaw.sql` dropped `local_holidays`.
+- `holiday_geographies` in `packages/db/src/schema/venue-service/holidays.ts` retains the
+  holiday-area choice for an address. `readHolidayAreaModel` and `saveHolidayArea` in
+  `packages/venue-service/src/holidays.ts` read and write that choice; the area control is in the
+  Year. The routes in `packages/venue-service/src/routes.ts` require `venue.view` for reads and
+  `venue_service.manage` for writes.
 
 ## Official dates follow your address; special days follow your venue
 

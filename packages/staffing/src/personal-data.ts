@@ -3,8 +3,13 @@ import { kitchenStations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import { departments } from "@waitron/venue-service";
-import { localWallClock, shifts } from "@waitron/workforce";
-import { personStaffRoles, shiftAssignments, staffRoles } from "./schema/staffing.js";
+import {
+  localWallClock,
+  personStaffRoles,
+  shiftAssignments,
+  shifts,
+  staffRoles,
+} from "@waitron/workforce";
 
 export const STAFFING_PERSONAL_DATA: ModulePersonalData = {
   files: ["staff-roles.json"],

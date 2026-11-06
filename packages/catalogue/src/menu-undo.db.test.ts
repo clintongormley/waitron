@@ -1,6 +1,14 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { products, withTransaction, type Transaction } from "@waitron/db";
+import {
+  menuItems,
+  menuItemVariantOverrides,
+  products,
+  sectionMembers,
+  sections,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
 import { readContentLanguages, writeContentLanguages } from "./content-languages.js";
@@ -10,9 +18,6 @@ import { readMenuStructure } from "./menu-structure.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
 import { menuChangeActions, type MenuChangeAction, type MenuUndoCommand } from "./menu-undo.js";
 import { updateMenuDetails, updateMenuItem, updateProduct } from "./operations.js";
-import { menuItems } from "./schema/menu.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
-import { sectionMembers, sections } from "./schema/sections.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { createSectionIn, updateSection } from "./sections.js";
 import { setMenuVariantPrice, setProductVariants } from "./variants.js";

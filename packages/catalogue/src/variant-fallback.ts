@@ -1,7 +1,6 @@
 import { and, eq, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { products } from "@waitron/db";
-import { productUnits } from "./schema/units.js";
+import { products, productUnits } from "@waitron/db";
 
 /**
  * The one place a variant's blanks are read as its parent's (how variants work:

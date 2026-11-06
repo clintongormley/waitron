@@ -11,6 +11,7 @@ import {
   openVenueDatabase,
   runMigrations,
   withNodeTransaction,
+  tenantCredentials,
 } from "@waitron/db";
 import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
 import { runBin } from "./bin.js";
@@ -18,7 +19,6 @@ import type { CliIo } from "./cli.js";
 import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { sealNodeSigningKeyTx } from "./node-signing-key.js";
-import { tenantCredentials } from "./schema/index.js";
 
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),

@@ -16,13 +16,17 @@ import {
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
-import { WorkforceBackend, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import {
+  WorkforceBackend,
+  WORKFORCE_MIGRATIONS,
+  shiftAssignments,
+  staffRoles,
+} from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { readStaffingMonth } from "./month.js";
 import { saveSeasonStaffing, saveSpecialDayStaffing } from "./paint.js";
-import { shiftAssignments, staffRoles } from "./schema/staffing.js";
 import type { AreaRef, StaffingBlock } from "./slots.js";
 
 const suite = useVenueDb({

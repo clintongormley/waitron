@@ -1,11 +1,16 @@
 import { eq, inArray } from "drizzle-orm";
-import { newId, type Transaction } from "@waitron/db";
+import {
+  menuDetails,
+  menuItems,
+  menuItemVariantOverrides,
+  newId,
+  sectionMembers,
+  sections,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { insertCatalogue, type Catalogue } from "./operations.js";
-import { menuDetails, menuItems } from "./schema/menu.js";
-import { sectionMembers, sections } from "./schema/sections.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { sectionPatchValues } from "./sections.js";
 import "./errors.js";
 

@@ -1,7 +1,14 @@
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction, type Transaction } from "@waitron/db";
+import {
+  menuDetails,
+  menuItems,
+  menuItemVariantOverrides,
+  sections,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import {
@@ -18,9 +25,6 @@ import {
 } from "./operations.js";
 import { createExtraList } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { menuDetails, menuItems } from "./schema/menu.js";
-import { sections } from "./schema/sections.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
 import { createCategory } from "./categories.js";
 import {

@@ -23,9 +23,9 @@ const repoRoot = join(import.meta.dirname, "..");
 
 /** The catalogue's extras, options, sections, product-modifier and sale-classification files. */
 const CATALOGUE_FILES = [
-  "packages/catalogue/src/schema/options.ts",
-  "packages/catalogue/src/schema/extras.ts",
-  "packages/catalogue/src/schema/sections.ts",
+  "packages/db/src/schema/catalogue/options.ts",
+  "packages/db/src/schema/catalogue/extras.ts",
+  "packages/db/src/schema/catalogue/sections.ts",
   "packages/shared/src/menu-document/section-types.ts",
   "packages/catalogue/src/section-graph.ts",
   "packages/catalogue/src/section-structure.ts",
@@ -38,8 +38,8 @@ const CATALOGUE_FILES = [
   "packages/shared/src/menu-document/menu-document-types.ts",
   "packages/catalogue/src/menu-document.ts",
   "packages/catalogue/src/menu-publication.ts",
-  "packages/catalogue/src/schema/publication.ts",
-  "packages/catalogue/src/schema/menu.ts",
+  "packages/db/src/schema/catalogue/publication.ts",
+  "packages/db/src/schema/catalogue/menu.ts",
   "packages/catalogue/src/options.ts",
   "packages/catalogue/src/extras.ts",
   "packages/catalogue/src/product-modifiers.ts",

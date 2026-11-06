@@ -1,5 +1,14 @@
 import { and, asc, eq, gte, inArray, isNotNull, ne, notExists } from "drizzle-orm";
-import { readVenueClock, type Transaction } from "@waitron/db";
+import {
+  departmentDayRanges,
+  departmentDays,
+  menuPeriods,
+  readVenueClock,
+  seasons,
+  specialDayDates,
+  specialDays,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -9,14 +18,6 @@ import {
 import type { LocalDate } from "./hours-types.js";
 import { readRoutingUses, requirePeriod } from "./menu-timetable.js";
 import type { PeriodRoutingUse } from "./menu-timetable-types.js";
-import { menuPeriods } from "./schema/menus.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  seasons,
-  specialDayDates,
-  specialDays,
-} from "./schema/seasons.js";
 import { joinTouching } from "./season-weeks.js";
 import { rangeSpan, serviceMomentAt } from "./service-day.js";
 import { inForceClock } from "./service-day-context.js";

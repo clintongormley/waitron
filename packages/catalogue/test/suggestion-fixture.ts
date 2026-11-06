@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { asc } from "drizzle-orm";
 import {
+  contentSuggestionJobs,
+  contentSuggestions,
   CORE_MIGRATIONS,
   products,
   withTransaction,
   type Database,
+  type SuggestionJobRow,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -20,11 +23,6 @@ import {
 } from "../src/content-suggestion-jobs.js";
 import type { SuggestionResult } from "../src/content-suggestion-types.js";
 import type { TranslationContext } from "../src/content-translation-targets.js";
-import {
-  contentSuggestionJobs,
-  contentSuggestions,
-  type SuggestionJobRow,
-} from "../src/schema/suggestions.js";
 
 export const context: TranslationContext = { fallbackLanguage: "ca", required: [] };
 

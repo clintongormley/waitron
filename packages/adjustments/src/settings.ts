@@ -1,4 +1,9 @@
-import { nowIso, type Transaction } from "@waitron/db";
+import {
+  adjustmentSettings,
+  DEFAULT_BILL_APPROVER_ROLES,
+  nowIso,
+  type Transaction,
+} from "@waitron/db";
 import type { PersonRoleValue } from "@waitron/identity";
 import {
   centsToDecimal,
@@ -8,7 +13,6 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { isRoleList } from "./policy.js";
-import { DEFAULT_BILL_APPROVER_ROLES, adjustmentSettings } from "./schema/settings.js";
 
 export interface AdjustmentSettings {
   /** What comps may take off one bill before someone on `billApproverRoles` must approve; null is

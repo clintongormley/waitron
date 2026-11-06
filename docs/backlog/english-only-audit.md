@@ -94,7 +94,7 @@ non-test files and about 1,150 test files to judge. After reading them:
 | `apps/server/README.md:315–348` | `sello`, `representante`, `consultar` | Values of fiscal-verifactu's certificate kinds and AEAT's query operation |
 | five demo scripts (`allergens-demo.ts:43`, `daily-close-demo.ts:92`, `daily-close-z-demo.ts:101`, `dev-setup.ts:212`, `modelo-303-demo.ts:260`) | «Venta en establecimiento» | The filed operation description; copies fiscal-verifactu's default (`packages/fiscal-verifactu/src/slot.ts:100`). Could import it instead of repeating it |
 | `apps/server/scripts/receipt-look.ts:87–88` | AEAT's QR address parameters; «QR tributario:» | AEAT's names and the required caption (home: `packages/fiscal-verifactu/src/backend.ts:163`) |
-| `packages/shared/src/locales.ts:8`, `packages/identity/src/fold.ts:14, 19`, `identity/src/schema/persons.ts:74` | «Español»; `López`, `José García` | A language's own name in the language picker (deliberate, comment at lines 4–5); accented examples in comments about case and accent folding |
+| `packages/shared/src/locales.ts:8`, `packages/identity/src/fold.ts:14, 19`, `packages/db/src/schema/identity/persons.ts:77` | «Español»; `López`, `José García` | A language's own name in the language picker (deliberate, comment at lines 4–5); accented examples in comments about case and accent folding |
 
 ## Bucket B — the three packages written for Spain (facts for the owner)
 
@@ -186,7 +186,7 @@ the provisioned station breaks that lookup; finding it by `is_default` (as `dev-
 | `apps/till/src/screens/till-ticket-view.ts:110, 141`, `widgets/counter-waiting.ts:16`, `table-targets.ts:66, 75`, `station-queue.ts:485`, `tender-pay.ts:47, 79` | «Descuento 12,5%», «fecha de expedición», «Mesa 4», «Entrantes», «(datáfono)» | English |
 | `packages/core/src/record-substitution.ts:43–67` | «factura de canje», «siempre debe llevar el destinatario» — quotes with no source named | Cite or drop |
 | `packages/db/src/schema/purchase-invoices.ts:18–51`, `purchasing/src/types.ts:5` | «factura recibida», «régimen general», «recargo de equivalencia» | English, or a cited term |
-| `packages/db/src/schema/floor-zones.ts:7`, `dining-tables.ts:19`, `venue-service/src/schema/menus.ts:19`, `venue-service/src/dashboard/hours-view.ts:66`, `catalogue/src/pricing.ts:142` | «Comedor», «Terraza 3», «Mañanas», a Spanish date example, «céntimo» | English |
+| `packages/db/src/schema/floor-zones.ts:7`, `dining-tables.ts:19`, `venue-service/src/dashboard/hours-view.ts:66`, `catalogue/src/pricing.ts:142` | «Comedor», «Terraza 3», a Spanish date example, «céntimo» | English |
 | demo scripts and seed | `caja1`, `AGUA`, `JAMON`, `MENU_DEL_DIA`, `cocina`, `diaId`, `clase`, `casilla`, key `período`, comments «cierre Z», «descuadre», «rectificativa»; 45 photos named after Spanish dishes (`demo-seed/media/jamon-iberico.png`…) | English names |
 
 ## Bucket F — other

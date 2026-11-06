@@ -10,14 +10,14 @@ import {
   isRefusal,
   nodes,
   triggerRaised,
+  handoverActivations,
 } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { HANDOVER_CLASSIFICATION } from "./classification.js";
 import { HANDOVER_MIGRATIONS } from "./migrations.js";
-import * as barrel from "./schema/index.js";
-import { handoverActivations } from "./schema/index.js";
+import * as barrel from "@waitron/db/schema/handover.js";
 
 describeSchemaConformance({
   subjectName: "handover",

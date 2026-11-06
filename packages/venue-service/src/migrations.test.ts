@@ -5,6 +5,7 @@ import {
   captureError,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
+  departments,
   deviceProfiles,
   engineErrorMessage,
   floorZones,
@@ -21,7 +22,6 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

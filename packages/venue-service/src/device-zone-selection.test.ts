@@ -6,6 +6,8 @@ import {
   CORE_MIGRATIONS,
   deviceProfiles,
   devices,
+  deviceZoneSelections,
+  deviceZoneSelectionZones,
   floorZones,
   withTransaction,
   type Transaction,
@@ -15,7 +17,6 @@ import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { readProfileServiceScopes, setProfileServiceAccess } from "./profile-access.js";
-import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
 import { VENUE_SERVICE } from "./service.js";
 
 const suite = useVenueDb({

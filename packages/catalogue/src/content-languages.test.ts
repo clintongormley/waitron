@@ -3,7 +3,13 @@ import { eq } from "drizzle-orm";
 import {
   catalogues,
   CORE_MIGRATIONS,
+  extraLists,
+  menuDetails,
+  optionLabels,
+  optionLists,
   products,
+  sections,
+  units,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -22,11 +28,6 @@ import { createCatalogue, createProduct } from "./operations.js";
 import { addMember } from "./sections.js";
 import { setProductVariants } from "./variants.js";
 import { createUnit } from "./units.js";
-import { optionLabels, optionLists } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { units } from "./schema/units.js";
-import { sections } from "./schema/sections.js";
-import { menuDetails } from "./schema/menu.js";
 
 // Every row below is written through its drizzle table: an `id` comes from the table's own
 // `$defaultFn` rather than from a SQL default. The serialisation cases are in

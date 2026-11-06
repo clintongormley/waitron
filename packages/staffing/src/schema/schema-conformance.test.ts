@@ -5,7 +5,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { STAFFING_MIGRATIONS } from "../migrations.js";
-import * as barrel from "./index.js";
+import * as barrel from "@waitron/workforce/schema/staffing.js";
 
 describeSchemaConformance({
   subjectName: "staffing",

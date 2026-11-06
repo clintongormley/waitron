@@ -8,7 +8,7 @@ import {
   TRANSLATION_GAP_KINDS,
 } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
-import { contentLanguages } from "./schema/menu.js";
+import { contentLanguages } from "@waitron/db";
 import { liveTranslationRows } from "./content-translation-candidates.js";
 import "./errors.js";
 

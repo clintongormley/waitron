@@ -1,5 +1,22 @@
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  departments,
+  departmentSalePolicies,
+  deviceProfileServiceAccess,
+  deviceProfileZones,
+  kitchenNotices,
+  locations,
+  orderServiceContexts,
+  routingCellPeriods,
+  routingCells,
+  saleReceiptHeaders,
+  stationDayStates,
+  withTransaction,
+  workingLineContexts,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
@@ -7,20 +24,6 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
-import {
-  departmentSalePolicies,
-  departments,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
-  orderServiceContexts,
-  saleReceiptHeaders,
-  workingLineContexts,
-  zoneSalePolicies,
-  zoneServicePolicies,
-} from "./service.js";
-import { kitchenNotices } from "./kitchen-notices.js";
-import { routingCellPeriods, routingCells } from "./routing.js";
-import { stationDayStates } from "./station-times.js";
 
 /**
  * The Drizzle declarations, read without a database. A foreign key's name exists only here: the

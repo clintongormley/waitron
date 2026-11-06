@@ -19,14 +19,27 @@ import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecy
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   catalogues,
+  departmentDayRanges,
+  departmentDays,
+  departments,
+  departmentSalePolicies,
   floorZones,
   insertInChunks,
+  menuPeriods,
+  menuPeriodStaffMenus,
+  orderServiceContexts,
   refusalOn,
+  routingCellPeriods,
+  routingCells,
+  saleReceiptHeaders,
   UNIQUE_VIOLATION,
   kitchenStations,
   readVenue,
   venueLocationId,
+  workingLineContexts,
   workingOrderLines,
+  zoneSalePolicies,
+  zoneServicePolicies,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -44,20 +57,8 @@ import {
 } from "@waitron/catalogue";
 import type { PreparedServiceDay, ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import {
-  departmentSalePolicies,
-  departments,
-  orderServiceContexts,
-  saleReceiptHeaders,
-  workingLineContexts,
-  zoneSalePolicies,
-  zoneServicePolicies,
-} from "./schema/service.js";
-import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
-import { departmentDayRanges, departmentDays } from "./schema/seasons.js";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
-import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
 

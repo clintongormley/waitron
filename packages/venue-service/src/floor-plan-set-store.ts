@@ -1,5 +1,12 @@
 import { and, asc, desc, eq, inArray, type SQL } from "drizzle-orm";
-import { floorZones, type Transaction } from "@waitron/db";
+import {
+  departmentFloorPlanSets,
+  departments,
+  floorZones,
+  menuPeriods,
+  zoneServicePolicies,
+  type Transaction,
+} from "@waitron/db";
 import type { FloorDeletion, FloorPlanSets, FloorPlanSetSummary } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -9,9 +16,6 @@ import type {
   PeriodFloorPlans,
 } from "./floor-plan-set-types.js";
 import { listDepartments } from "./operations.js";
-import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
-import { menuPeriods } from "./schema/menus.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
 
 export type { FloorPlanSetsModel, PeriodFloorPlans };
 

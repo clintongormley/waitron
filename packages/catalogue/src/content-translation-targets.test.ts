@@ -3,7 +3,14 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  extraLists,
+  menuDetails,
+  optionLabels,
+  optionLists,
   products,
+  sectionMembers,
+  sections,
+  units,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -15,11 +22,6 @@ import { writeContentLanguages } from "./content-languages.js";
 import { setProductVariants } from "./variants.js";
 import { addMember } from "./sections.js";
 import { setIncludeFolder } from "./include-folder.js";
-import { menuDetails } from "./schema/menu.js";
-import { sections, sectionMembers } from "./schema/sections.js";
-import { optionLists, optionLabels } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { units } from "./schema/units.js";
 import type { TranslationRef } from "./content-translation-types.js";
 import {
   listTranslationTargets,

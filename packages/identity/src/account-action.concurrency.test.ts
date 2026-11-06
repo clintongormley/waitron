@@ -6,11 +6,10 @@
  */
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, managementAccountActions } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { managementAccountActions } from "./schema/management-account-actions.js";
 import { seedManager } from "../test/fixtures.js";
 import { requestAccountRecoveryAction } from "./account-action.js";
 

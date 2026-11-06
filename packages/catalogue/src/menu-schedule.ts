@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, gt, lte, ne, or } from "drizzle-orm";
-import { now, type Transaction } from "@waitron/db";
+import { menuScheduledPublications, menuVersions, now, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { buildMenuDocument, menuDocumentHash } from "./menu-document.js";
 import {
@@ -10,7 +10,6 @@ import {
   refuseOvertaken,
   settleDue,
 } from "./menu-publication.js";
-import { menuScheduledPublications, menuVersions } from "./schema/publication.js";
 import type { MenuEdition, MenuPublications, QueuedEdition } from "@waitron/shared";
 import "./errors.js";
 

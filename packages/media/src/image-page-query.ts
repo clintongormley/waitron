@@ -1,6 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import { asc, desc, eq, sql } from "drizzle-orm";
-import { mediaImageEdits, mediaImages } from "./schema/images.js";
+import { mediaImageEdits, mediaImages } from "@waitron/db";
 
 export const IMAGE_LIST_COLUMNS = {
   id: mediaImages.id,

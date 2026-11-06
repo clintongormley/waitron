@@ -7,7 +7,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import type { AdjustmentAction } from "@waitron/shared";
-import { adjustmentRefunds } from "./schema/refund-links.js";
+import { adjustmentRefunds } from "@waitron/db";
 
 /** Records how much of a refund paid back each named cancel; writes nothing else. */
 export async function linkRefundToCancels(

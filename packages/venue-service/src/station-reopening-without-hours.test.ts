@@ -4,6 +4,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
+  stationDayStates,
   withTransaction,
   type Transaction,
   venueLocationId,
@@ -12,7 +13,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { loadRoutingRules, routingAt, routingModel, stationStates } from "./routing-store.js";
-import { stationDayStates } from "./schema/station-times.js";
 import { openStationForToday, setStationToday } from "./station-times.js";
 
 const suite = useVenueDb({

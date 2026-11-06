@@ -25,10 +25,9 @@ export default defineConfig({
         // The process entry point: its shim (the direct-invocation guard and the real stdio) is
         // unreachable without spawning a process. `bin.test.ts` still drives `runBin`.
         "src/bin.ts",
-        // Re-export barrels, on which v8 reports phantom uncovered branches. Their surface is
-        // asserted by index.test.ts and schema-ownership.test.ts.
+        // A re-export barrel, on which v8 reports phantom uncovered branches. Its surface is
+        // asserted by index.test.ts.
         "src/index.ts",
-        "src/schema/index.ts",
       ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

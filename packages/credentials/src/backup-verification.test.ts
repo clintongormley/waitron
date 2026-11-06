@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, tenantCredentials } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { tenantCredentials } from "./schema/tenant-credentials.js";
 import { seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { putCredential } from "./store.js";

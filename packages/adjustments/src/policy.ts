@@ -14,7 +14,7 @@ import {
   type PersonRoleValue,
   type ReasonKind,
 } from "@waitron/shared";
-import type { AdjustmentStage } from "./schema/adjustments.js";
+import type { AdjustmentStage } from "@waitron/db";
 
 export const COMP_ACTIONS = ["comp", "discount_percent", "discount_amount"] as const;
 

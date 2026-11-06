@@ -7,6 +7,7 @@ import {
 } from "@waitron/country";
 import { getCountryPack } from "@waitron/country-packs";
 import {
+  holidayGeographies,
   readTenant,
   readVenue,
   venueLocationId,
@@ -27,7 +28,6 @@ import { rangeDates } from "./hours-rules.js";
 import type { HolidayFact, LocalDate } from "./hours-types.js";
 import type { HolidayDates } from "./special-days.js";
 import type { HolidayReader } from "./hours.js";
-import { holidayGeographies } from "./schema/holidays.js";
 import "./errors.js";
 
 export type PackLookup = (country: string) => CountryPack | undefined;

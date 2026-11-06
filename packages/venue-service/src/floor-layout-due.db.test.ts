@@ -3,8 +3,10 @@ import { eq } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departmentFloorPlanSets,
   floorPlanSets,
   floorZones,
+  menuPeriods,
   withTransaction,
   type Transaction,
   venueLocationId,
@@ -17,8 +19,6 @@ import { localTimeOccurrences } from "./hours-occurrences.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
-import { menuPeriods } from "./schema/menus.js";
 import { VENUE_SERVICE } from "./service.js";
 
 const suite = useVenueDb({

@@ -11,7 +11,16 @@ import {
   staffPresentationName,
   validateContentTranslations,
 } from "@waitron/catalogue";
-import { catalogues, customThemes, products, type Transaction } from "@waitron/db";
+import {
+  catalogues,
+  customThemes,
+  products,
+  type Transaction,
+  mediaImageBlobs,
+  mediaImageData,
+  mediaImageEdits,
+  mediaImages,
+} from "@waitron/db";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import {
   AppError,
@@ -25,7 +34,6 @@ import {
 } from "@waitron/shared";
 import { and, asc, count, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "./schema/images.js";
 import { IMAGE_LIST_COLUMNS, datedImagePageQuery } from "./image-page-query.js";
 import type { PreparedImage } from "./prepare.js";
 import type { ImageFraming } from "./framing.js";

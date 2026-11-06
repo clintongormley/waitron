@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { stringToThousandths } from "@waitron/shared";
 import {
   catalogues,
+  contentLanguages,
   CORE_MIGRATIONS,
   products,
   withTransaction,
@@ -23,7 +24,6 @@ import {
   updateUnit,
 } from "./units.js";
 import { assertQuantityPrecision } from "./units.js";
-import { contentLanguages } from "./schema/menu.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);

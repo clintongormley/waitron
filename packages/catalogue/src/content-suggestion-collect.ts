@@ -1,5 +1,5 @@
 import type { TranslationTarget } from "./content-translation-targets.js";
-import { categories, products, tenants, type Transaction } from "@waitron/db";
+import { categories, contentSuggestions, products, tenants, type Transaction } from "@waitron/db";
 import type { ContentLanguages, TranslationGapKind } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
@@ -18,7 +18,6 @@ import {
 import type { TranslationRef } from "./content-translation-types.js";
 import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
 import { menuRoots } from "./menu-structure.js";
-import { contentSuggestions } from "./schema/suggestions.js";
 
 /** Cloud's bound on every text field, counted as JavaScript string length (contract, "Submit"). */
 export const TEXT_LIMIT = 500;

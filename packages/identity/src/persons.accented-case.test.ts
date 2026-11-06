@@ -6,7 +6,13 @@
  * cases are encoding cases, with an ASCII case-only control beside each.
  */
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, captureError, indexViolated, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  indexViolated,
+  withTransaction,
+  persons,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
@@ -15,7 +21,6 @@ import { createPerson, setEmail } from "./staff.js";
 import { saveOwnProfile } from "./profile.js";
 import { openManagementSession, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 import { foldForUniqueness } from "./fold.js";
-import { persons } from "./schema/persons.js";
 import { PERSONS_LIVE_DISPLAY_NAME } from "./person-constraints.js";
 import { startManagementSession } from "./management-session.js";
 

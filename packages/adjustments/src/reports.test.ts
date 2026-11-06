@@ -7,6 +7,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  type AdjustmentStage,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -32,7 +33,6 @@ import {
   type AdjustmentReport,
   type EntryCursor,
 } from "./reports.js";
-import type { AdjustmentStage } from "./schema/adjustments.js";
 import { seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
 import {
   seedRefundableSale,

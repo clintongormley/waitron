@@ -15,7 +15,7 @@ import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { IDENTITY_CLASSIFICATION } from "./classification.js";
 import { decryptTotpSecret, encryptTotpSecret } from "./mfa.js";
 import { hashSecret } from "./secret-hash.js";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/db/schema/identity.js";
 
 const original = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 const restored = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });

@@ -1,7 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
-import { statementChunks, type Transaction } from "@waitron/db";
+import { statementChunks, ticketItemAllergies, type Transaction } from "@waitron/db";
 import type { KitchenAllergyBlock, TicketAllergyCopy } from "@waitron/module";
-import { ticketItemAllergies } from "./schema/kitchen-allergy.js";
 
 export async function recordTicketAllergies(
   tx: Transaction,

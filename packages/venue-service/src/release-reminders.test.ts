@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departments,
   floorZones,
   kitchenStations,
   withTransaction,
@@ -14,7 +15,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone, updateDepartment } from "./operations.js";
-import { departments } from "./schema/service.js";
 import {
   listDepartmentReminderMinutes,
   readReleaseReminderMinutesByZone,

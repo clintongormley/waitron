@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { getTableName, is } from "drizzle-orm";
 import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/db/schema/identity.js";
 
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
 const OWNED = [

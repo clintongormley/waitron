@@ -12,7 +12,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { modulesWithSets, orderedMigrationSets } from "@waitron/module";
 import * as store from "@waitron/store";
-import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { withNodeTransaction } from "@waitron/db";
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { certificate } from "@waitron/server-kit/certificate.js";
@@ -61,23 +61,24 @@ const recoveryEntries = Object.entries({
   "tls/server.crt": forge.pki.certificateToPem(server),
   "tls/server.key": forge.pki.privateKeyToPem(pair.privateKey),
 }).map(([name, text]) => ({ name: "secrets/" + name, bytes: Buffer.from(text) }));
+async function seedSource(db: VenueDb["db"]) {
+  db.run(
+    `insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'private-tax-sentinel', 'Private company sentinel', '2026-10-20T00:00:00Z')`,
+  );
+  await db.run(
+    sql`insert into locations (id, name, invoice_locales, operation_description) values (${locationId}, 'Fixture location', '["en"]', 'Restaurant')`,
+  );
+  await db.run(
+    sql`insert into nodes (id, location_id, name, created_at) values (${sourceNodeId}, ${locationId}, 'Source node', '2026-10-20T00:00:00Z')`,
+  );
+  db.run(
+    `insert into deployment (id, environment, stamped_at) values (1, 'preproduction', '2026-10-20T00:00:00Z')`,
+  );
+}
 const suite = useVenueDb({
   migrations: migrationOptionsFor(orderedMigrationSets(modules), null),
   resetPerTest: false,
-  setup: async (db) => {
-    db.run(
-      `insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'private-tax-sentinel', 'Private company sentinel', '2026-10-20T00:00:00Z')`,
-    );
-    await db.run(
-      sql`insert into locations (id, name, invoice_locales, operation_description) values (${locationId}, 'Fixture location', '["en"]', 'Restaurant')`,
-    );
-    await db.run(
-      sql`insert into nodes (id, location_id, name, created_at) values (${sourceNodeId}, ${locationId}, 'Source node', '2026-10-20T00:00:00Z')`,
-    );
-    db.run(
-      `insert into deployment (id, environment, stamped_at) values (1, 'preproduction', '2026-10-20T00:00:00Z')`,
-    );
-  },
+  setup: seedSource,
 });
 const roots: string[] = [];
 afterEach(async () => {
@@ -85,28 +86,32 @@ afterEach(async () => {
   vi.mocked(fs.rm).mockImplementation(realFs.rm);
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-async function fixture() {
+async function fixture(source = { db: suite.db, node: suite.node, modules }) {
   const root = await mkdtemp(join(tmpdir(), "a850-verifier-"));
   roots.push(root);
   const scratchRoot = join(root, "scratch");
   await mkdir(scratchRoot, { mode: 0o700 });
   const databasePath = join(root, "source.db");
-  await suite.db.archiveTo(databasePath);
+  await source.db.archiveTo(databasePath);
   const manifest = await buildManifest({
-    db: suite.db,
-    node: suite.node,
-    modules,
+    db: source.db,
+    node: source.node,
+    modules: source.modules,
     environment: "preproduction",
     now: new Date(capturedAt),
   });
   const entries: ArchiveEntry[] = [
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     { name: "db.dump", bytes: await readFile(databasePath) },
-    await nodeDumpEntry(suite.node, root),
+    await nodeDumpEntry(source.node, root),
     ...recoveryEntries.map((e) => ({ name: e.name, bytes: Buffer.from(e.bytes) })),
   ];
   const artifactPath = join(root, "input.enc");
-  const target = buildBackupVerificationTarget({ modules, migrationsRoot: null, runtime });
+  const target = buildBackupVerificationTarget({
+    modules: source.modules,
+    migrationsRoot: null,
+    runtime,
+  });
   const request: BackupVerificationRequest = {
     protocol: "backup-data-restore/v1",
     captureId: "capture-1",
@@ -143,7 +148,7 @@ async function fixture() {
       artifactPath,
       recoveryKey: { ...request.backupKey, secret: key },
       scratchRoot,
-      modules,
+      modules: source.modules,
       migrationsRoot: null as string | null,
       runtime,
       signal: new AbortController().signal,
@@ -908,4 +913,59 @@ describe("complete backup verification", () => {
       expect(result.modules[0]!.checks).toContainEqual({ code: "source", status: sourceStatus });
     },
   );
+});
+
+function withRequired(names: readonly string[]) {
+  const wanted = new Set(names);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const m of ALL_MODULES.filter((module) => wanted.has(module.name))) {
+      for (const dep of Object.keys(m.requires?.modules ?? {})) {
+        if (wanted.has(dep)) continue;
+        wanted.add(dep);
+        grew = true;
+      }
+    }
+  }
+  return ALL_MODULES.filter((m) => wanted.has(m.name));
+}
+
+describe("a venue with workforce, with staffing on and off", () => {
+  const base = modules.map((m) => m.name);
+  const staffingOff = withRequired([...base, "workforce"]);
+  const staffingOn = withRequired([...base, "workforce", "staffing"]);
+  const off = useVenueDb({
+    migrations: migrationOptionsFor(orderedMigrationSets(staffingOff), null),
+    resetPerTest: false,
+    setup: seedSource,
+  });
+  const on = useVenueDb({
+    migrations: migrationOptionsFor(orderedMigrationSets(staffingOn), null),
+    resetPerTest: false,
+    setup: async (db) => {
+      await seedSource(db);
+      await db.run(
+        sql`insert into staff_roles (id, location_id, name) values ('30000000-0000-4000-8000-000000000003', ${locationId}, 'Floor')`,
+      );
+    },
+  });
+
+  it.each([
+    ["off", off, staffingOff],
+    ["on", on, staffingOn],
+  ] as const)("the full verifier accepts the backup with staffing %s", async (_, venue, set) => {
+    expect(set.some((m) => m.name === "staffing")).toBe(set === staffingOn);
+    const f = await fixture({ db: venue.db, node: venue.node, modules: set });
+    await seal(f);
+    const result = await verify(f);
+    expect(result.status).toBe("passed");
+    expect(result.reason).toBe("none");
+    expect(result.modules.map((m) => [m.name, m.status])).toEqual(
+      set
+        .filter((m) => m.backup?.verification !== undefined)
+        .map((m) => [m.name, "passed"])
+        .sort(([a], [b]) => a!.localeCompare(b!)),
+    );
+    expect(result.modules.some((m) => m.name === "staffing")).toBe(set === staffingOn);
+  });
 });

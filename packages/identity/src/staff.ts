@@ -1,15 +1,23 @@
 import "./errors.js";
 import { and, eq, isNull, ne, or } from "drizzle-orm";
-import { indexViolated, isUniqueViolation, nowIso } from "@waitron/db";
+import {
+  indexViolated,
+  isUniqueViolation,
+  nowIso,
+  liveDisplayNameKey,
+  loginEmailKey,
+  pendingEmailKey,
+  persons,
+  managementSessions,
+  managementAccountActions,
+  sessions,
+  webauthnChallenges,
+  webauthnCredentials,
+  recoveryCodes,
+  totpEnrollments,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
-import { liveDisplayNameKey, loginEmailKey, pendingEmailKey, persons } from "./schema/persons.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { managementAccountActions } from "./schema/management-account-actions.js";
-import { sessions } from "./schema/sessions.js";
-import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
-import { recoveryCodes } from "./schema/recovery-codes.js";
-import { totpEnrollments } from "./schema/totp-enrollments.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
@@ -81,8 +89,8 @@ function requiredText(value: string, field: string): string {
 }
 
 /** The predicate reads `liveDisplayNameKey()`, the expression `persons_tenant_live_display_name_uq`
- * is declared over (`./schema/persons.ts`), so this pre-check and the index cannot disagree about
- * which names collide. */
+ * is declared over (`packages/db/src/schema/identity/persons.ts`), so this pre-check and the index
+ * cannot disagree about which names collide. */
 export async function assertDisplayNameAvailable(
   tx: Transaction,
   displayName: string,

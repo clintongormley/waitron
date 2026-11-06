@@ -144,7 +144,7 @@ changing enforcement, keeping each legitimate mutation path.
 
 For `invoice_series`, inspect column-scoped updates and allocation separately; do not infer that
 number allocation should stop updating its counter. For `media_image_data`, deletion through the
-image's cascading foreign key is intentional (`packages/media/src/schema/images.ts`); the old
+image's cascading foreign key is intentional (`packages/db/src/schema/media/images.ts`); the old
 no-`UPDATE` restriction still needs a decision. For `incidents`, acknowledge/resolve updates are
 real writes (`packages/core/src/incidents.ts`); the record cannot specify which columns may change.
 Fiscal and working-time chain entries here are follow-ups only, with no authority to change their

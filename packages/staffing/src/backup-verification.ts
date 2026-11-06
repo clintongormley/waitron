@@ -4,7 +4,7 @@ import { compareBackupTables } from "@waitron/db";
 import type { BackupModuleStatus, BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue, BackupRow } from "@waitron/store";
 import { STAFFING_CLASSIFICATION } from "./classification.js";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/workforce/schema/staffing.js";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 
 const tables = STAFFING_CLASSIFICATION.map((c) => c.table);

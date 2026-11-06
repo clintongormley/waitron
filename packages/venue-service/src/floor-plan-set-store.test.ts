@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departmentFloorPlanSets,
+  departments,
   floorPlanSets,
   withTransaction,
   type Transaction,
@@ -14,8 +16,6 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { linkFloorPlanSet, readFloorPlanSets } from "./floor-plan-set-store.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
-import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
-import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

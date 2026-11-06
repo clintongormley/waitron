@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { withTransaction, type Transaction } from "@waitron/db";
+import {
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product, type MenusFixture } from "../test/menus-fixture.js";
 import { applyRecipeDerivation, createProduct, updateProduct } from "./operations.js";
@@ -7,12 +14,6 @@ import { previewMenu, publishMenu } from "./menu-publication.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { addMember } from "./sections.js";
-import {
-  menuVersions,
-  menuVersionImages,
-  menuScheduledPublications,
-  menuPublications,
-} from "./schema/publication.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

@@ -3,10 +3,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departments,
   deviceProfiles,
+  deviceProfileServiceAccess,
+  deviceProfileZones,
   floorZones,
   withTransaction,
   venueLocationId,
+  zoneServicePolicies,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
@@ -31,12 +35,6 @@ import {
   setProfileServiceScope,
   type ProfileServiceAccessInput,
 } from "./profile-access.js";
-import {
-  departments,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
-  zoneServicePolicies,
-} from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

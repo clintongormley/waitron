@@ -13,6 +13,7 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   locationBusinessDaySettings,
+  specialDays,
   withTransaction,
   type Database,
   type Transaction,
@@ -34,7 +35,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { specialDays } from "./schema/seasons.js";
 import { readSpecialDay, saveSpecialDay, type SpecialDayDetail } from "./special-days.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);

@@ -3,7 +3,7 @@ import type { CanonicalValue } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import { isSha256Hex, sha256Hex } from "./envelope.js";
 import "./errors.js";
-import type { handoverScenario } from "./schema/activations.js";
+import type { handoverScenario } from "@waitron/db";
 
 export type HandoverScenario = (typeof handoverScenario.enumValues)[number];
 

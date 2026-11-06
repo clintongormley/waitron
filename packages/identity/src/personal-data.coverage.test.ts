@@ -4,7 +4,7 @@
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/db/schema/identity.js";
 
 const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[] }> = {
   persons: {

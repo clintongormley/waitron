@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
-import { sectionMembers } from "./schema/sections.js";
+import { sectionMembers } from "@waitron/db";
 import { toSectionMember, type SectionGraph } from "./section-graph.js";
 import type { MemberRef, SectionMember, TileRef } from "@waitron/shared";
 import "./errors.js";

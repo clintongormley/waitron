@@ -2,7 +2,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
-import { persons } from "./schema/persons.js";
+import { persons } from "@waitron/db";
 import { hashPin, verifyPin } from "./verify-pin.js";
 import type { PersonRoleValue } from "@waitron/shared";
 import type { PinThrottle } from "./pin-throttle.js";

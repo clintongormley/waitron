@@ -3,6 +3,13 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  deviceKitchenScreenRemovals,
+  deviceKitchenScreens,
+  deviceKitchenScreenStations,
+  deviceKitchenScreenZones,
+  deviceProfileKitchenScreens,
+  deviceProfileKitchenScreenStations,
+  deviceProfileKitchenScreenZones,
   deviceProfiles,
   devices,
   floorZones,
@@ -35,15 +42,6 @@ import {
   setDeviceKitchenScreens,
   setProfileKitchenScreens,
 } from "./kitchen-screens.js";
-import {
-  deviceKitchenScreenRemovals,
-  deviceKitchenScreens,
-  deviceProfileKitchenScreens,
-  deviceProfileKitchenScreenStations,
-  deviceProfileKitchenScreenZones,
-  deviceKitchenScreenZones,
-  deviceKitchenScreenStations,
-} from "./schema/kitchen-screens.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

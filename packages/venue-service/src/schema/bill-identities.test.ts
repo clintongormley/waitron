@@ -3,6 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
+  billIdentities,
+  billNumberAllocations,
   captureError,
   checkFailed,
   CORE_MIGRATIONS,
@@ -17,7 +19,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
-import { billIdentities, billNumberAllocations } from "./bill-identities.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

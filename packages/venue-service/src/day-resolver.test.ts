@@ -10,10 +10,17 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departmentDayRanges,
+  departmentDays as departmentDayRows,
   floorZones,
   locations,
+  seasons,
+  specialDayDates,
+  specialDays,
   venueLocationId,
   withTransaction,
+  zoneDayRanges,
+  zoneDays as zoneDayRows,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -31,15 +38,6 @@ import {
 import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, menuState, readZoneClosingStates } from "./operations.js";
-import {
-  departmentDayRanges,
-  departmentDays as departmentDayRows,
-  seasons,
-  specialDayDates,
-  specialDays,
-  zoneDayRanges,
-  zoneDays as zoneDayRows,
-} from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { englishSeasonName } from "./testing/starter-seasons.js";

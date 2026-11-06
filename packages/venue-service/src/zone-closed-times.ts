@@ -5,7 +5,14 @@ import {
   sameScheduleRanges,
 } from "./business-day-schedule.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { floorZones, readVenueClock, type Transaction } from "@waitron/db";
+import {
+  departments,
+  floorZones,
+  readVenueClock,
+  zoneExtensions,
+  zoneServicePolicies,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { resolveZoneContext, wireTime } from "./operations.js";
 import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
@@ -21,8 +28,6 @@ import {
 } from "./season-weeks.js";
 import type { Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
-import { zoneExtensions } from "./schema/zone-extensions.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
 
 /** Writes a zone's closed week, then runs `afterWrite` with the clock and the zone's department

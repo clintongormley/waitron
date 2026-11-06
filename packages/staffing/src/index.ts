@@ -1,6 +1,12 @@
 import "./errors.js";
 
-export * from "./schema/index.js";
+export {
+  personStaffRoles,
+  shiftAssignments,
+  staffingBlocks,
+  staffingDays,
+  staffRoles,
+} from "@waitron/workforce";
 export type * from "./staffing-types.js";
 export { STAFFING_MIGRATIONS } from "./migrations.js";
 export { STAFFING_CLASSIFICATION, STAFFING_CHANGE_SOURCES } from "./classification.js";

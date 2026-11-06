@@ -10,15 +10,18 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departmentDays,
   floorZones,
   locationBusinessDaySettings,
   locationDayCutoverChanges,
   locations,
+  seasons,
   withTransaction,
   type Database,
   type Transaction,
   venueLocationId,
   readVenueClock,
+  zoneDays,
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -28,7 +31,6 @@ import { resolveDepartmentDays } from "./day-resolver.js";
 import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { departmentDays, seasons, zoneDays } from "./schema/seasons.js";
 import {
   DEFAULT_SEASONS,
   parseSeasonStart,

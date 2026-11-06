@@ -1,18 +1,21 @@
 import "./errors.js";
-import { deviceProfiles, devices } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  googleOidcStates,
+  managementAccountActions,
+  managementSessions,
+  persons,
+  deviceProfileAdmissionPersons,
+  recoveryCodes,
+  sessions,
+  totpEnrollments,
+  webauthnChallenges,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, sql, type AnyColumn, type SQL } from "drizzle-orm";
-import { googleOidcStates } from "./schema/google-oidc-states.js";
-import { managementAccountActions } from "./schema/management-account-actions.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { persons } from "./schema/persons.js";
-import { deviceProfileAdmissionPersons } from "./schema/profile-admission.js";
-import { recoveryCodes } from "./schema/recovery-codes.js";
-import { sessions } from "./schema/sessions.js";
-import { totpEnrollments } from "./schema/totp-enrollments.js";
-import { webauthnChallenges } from "./schema/webauthn.js";
 import { readPasskeys } from "./profile.js";
 import { SECRET_HASH_PREFIX } from "./secret-hash.js";
 

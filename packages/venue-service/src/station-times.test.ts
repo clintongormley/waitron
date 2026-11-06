@@ -7,6 +7,7 @@ import {
   kitchenStations,
   locations,
   locationDayCutoverChanges,
+  stationDayStates,
   tenants,
   type Database,
   type Transaction,
@@ -19,7 +20,6 @@ import { saveSpecialDay } from "./special-days.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { routingModel } from "./routing-store.js";
 import * as stationTimes from "./station-times.js";
-import { stationDayStates } from "./schema/station-times.js";
 import { setStationToday, venueMoment } from "./station-times.js";
 import { clockChangeAfter } from "./testing/clock-change.js";
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { products, withTransaction } from "@waitron/db";
+import { contentSuggestionJobs, contentSuggestions, products, withTransaction } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
@@ -14,7 +14,6 @@ import {
 } from "./content-suggestion-jobs.js";
 import { discardContentSuggestion, storeSuggestionPage } from "./content-suggestion-store.js";
 import type { SuggestionPage } from "./content-suggestion-types.js";
-import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 import {
   addOversizedFamily,
   addPlainProducts,

@@ -1,11 +1,17 @@
 import { listDepartmentReceiptReadiness } from "./department-receipts.js";
 import { and, eq } from "drizzle-orm";
-import { departments } from "./schema/service.js";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
-import { floorZones, withTransaction, type Transaction } from "@waitron/db";
+import {
+  departments,
+  floorZones,
+  SERVICE_STEP_STARTS,
+  withTransaction,
+  type ServiceStepStart,
+  type Transaction,
+} from "@waitron/db";
 import { authorizeManager, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
@@ -81,7 +87,6 @@ import { listNeedsClearingDepartmentIds } from "./table-clearing.js";
 import { listLateSendManagerDepartmentIds } from "./late-send.js";
 import { listDepartmentReminderMinutes } from "./release-reminders.js";
 import { listServiceSteps, listStepCourses, type ServiceStepInput } from "./service-steps.js";
-import { SERVICE_STEP_STARTS, type ServiceStepStart } from "./schema/service-steps.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,

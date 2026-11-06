@@ -8,15 +8,19 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
-import { indexViolated, type Transaction } from "@waitron/db";
+import {
+  indexViolated,
+  type Transaction,
+  managementAccountActions,
+  managementSessions,
+  loginEmailKey,
+  persons,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { startManagementSession, type ManagementSession } from "./management-session.js";
-import { managementAccountActions } from "./schema/management-account-actions.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { loginEmailKey, persons } from "./schema/persons.js";
 import { foldForUniqueness } from "./fold.js";
 import { PERSONS_EMAIL } from "./person-constraints.js";
 

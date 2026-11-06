@@ -6,12 +6,15 @@ import {
   captureError,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
+  departments,
   engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
   kitchenCourses,
   locations,
   parties,
+  serviceStepCompletions,
+  serviceSteps,
   withTransaction,
   type Database,
   venueLocationId,
@@ -19,8 +22,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
-import { departments } from "./service.js";
-import { serviceStepCompletions, serviceSteps } from "./service-steps.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

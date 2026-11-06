@@ -1,14 +1,19 @@
 import { asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { captureError, withTransaction, type Transaction } from "@waitron/db";
+import {
+  captureError,
+  menuItems,
+  sectionMembers,
+  sections,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, type MenusFixture } from "../test/menus-fixture.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { readMenuHome } from "./menu-home.js";
 import { readMenuStructure } from "./menu-structure.js";
-import { menuItems } from "./schema/menu.js";
-import { sectionMembers, sections } from "./schema/sections.js";
 import type { IncludeFolderInput } from "@waitron/shared";
 
 const fx = useCatalogueDb();

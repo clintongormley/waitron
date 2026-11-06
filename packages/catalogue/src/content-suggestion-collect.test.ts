@@ -3,7 +3,14 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   categories,
+  contentSuggestions,
+  extraLists,
+  menuDetails,
+  optionLabels,
+  optionLists,
   products,
+  sections,
+  units,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -29,12 +36,6 @@ import type { TranslationRef } from "./content-translation-types.js";
 import type { SuggestionItem } from "./content-suggestion-types.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember } from "./sections.js";
-import { menuDetails } from "./schema/menu.js";
-import { sections } from "./schema/sections.js";
-import { optionLabels, optionLists } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { units } from "./schema/units.js";
-import { contentSuggestions } from "./schema/suggestions.js";
 import {
   buildSuggestionJob,
   collectSuggestionItems,

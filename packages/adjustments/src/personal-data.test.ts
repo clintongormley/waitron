@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  adjustments,
+  CORE_MIGRATIONS,
+  withTransaction,
+  type AdjustmentStage,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { jsonFile } from "@waitron/module";
@@ -7,7 +14,6 @@ import { describe, expect, it } from "vitest";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { ADJUSTMENTS_PERSONAL_DATA } from "./personal-data.js";
 import type { AdjustmentAction } from "@waitron/shared";
-import { adjustments, type AdjustmentStage } from "./schema/adjustments.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
 

@@ -5,7 +5,9 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
+  departments,
   installChangeFeed,
+  kitchenNotices,
   kitchenStations,
   locations,
   subscribeToChanges,
@@ -21,8 +23,6 @@ import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { saveHolidayArea } from "./holidays.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { departments } from "./schema/service.js";
-import { kitchenNotices } from "./schema/kitchen-notices.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
 import { setStationToday } from "./station-times.js";
 

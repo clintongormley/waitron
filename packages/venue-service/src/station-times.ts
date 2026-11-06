@@ -1,8 +1,7 @@
 import { and, asc, eq, ne } from "drizzle-orm";
-import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
+import { kitchenStations, readVenueClock, stationDayStates, type Transaction } from "@waitron/db";
 import { venueMomentAt, type VenueMoment } from "@waitron/reporting";
 import { AppError, compareStationNames } from "@waitron/shared";
-import { stationDayStates } from "./schema/station-times.js";
 import { routingModel } from "./routing-store.js";
 import "./errors.js";
 

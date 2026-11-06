@@ -68,7 +68,7 @@ by the answers):
 
 - **Bill names, like party names (design §2.2 row c5).** Since A803 slice 2 a waiter can name a
   bill: free text up to 40 characters, often a guest's name, kept in `bill_identities.name`
-  (`packages/venue-service/src/schema/bill-identities.ts`). The register names it (the
+  (`packages/db/src/schema/venue-service/bill-identities.ts`). The register names it (the
   data-protection guide's "Table names and notes"); whatever the download or a deletion does with
   `parties.name` applies to it too. The slice puts it in no error's details and no log line, and
   the owner ruled it never goes on a kitchen ticket (2026-10-30).

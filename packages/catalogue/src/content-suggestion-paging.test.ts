@@ -1,10 +1,9 @@
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { products } from "@waitron/db";
+import { contentSuggestions, products } from "@waitron/db";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import { listContentSuggestions, storeSuggestionPage } from "./content-suggestion-store.js";
-import { contentSuggestions } from "./schema/suggestions.js";
 import {
   addPlainProducts,
   context,

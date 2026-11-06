@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { productUnits, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { createExtraList } from "./extras.js";
@@ -8,7 +8,6 @@ import {
   extraOfferUsageForUnitChange,
   extraOfferUsageForUnitPrecisionChange,
 } from "./extra-usage.js";
-import { productUnits } from "./schema/units.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { assignProductUnit, createUnit } from "./units.js";
 

@@ -5,13 +5,42 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  departmentDayRanges,
+  departmentDays,
+  departmentReceipts,
+  departments,
+  departmentSalePolicies,
+  departmentTransferDesks,
+  departmentTransferDestinations,
+  deviceKitchenScreenRemovals,
+  deviceKitchenScreens,
+  deviceKitchenScreenStations,
+  deviceKitchenScreenZones,
+  deviceProfileKitchenScreens,
+  deviceProfileKitchenScreenStations,
+  deviceProfileKitchenScreenZones,
   deviceProfiles,
+  deviceProfileServiceAccess,
+  deviceProfileZones,
   devices,
+  deviceZoneSelections,
+  deviceZoneSelectionZones,
   floorZones,
   kitchenStations,
+  menuPeriods,
+  menuPeriodStaffMenus,
+  routingCellPeriods,
+  routingCells,
+  seasons,
+  serviceSteps,
   withTransaction,
   type Transaction,
   venueLocationId,
+  zoneDayRanges,
+  zoneDays,
+  zoneExtensions,
+  zoneSalePolicies,
+  zoneServicePolicies,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
@@ -20,38 +49,6 @@ import {
   clearServiceDeleteSettings,
 } from "./service-delete-settings.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import {
-  departments,
-  departmentSalePolicies,
-  zoneServicePolicies,
-  zoneSalePolicies,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
-} from "./schema/service.js";
-import { routingCells, routingCellPeriods } from "./schema/routing.js";
-import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
-import { zoneExtensions } from "./schema/zone-extensions.js";
-import {
-  departmentTransferDesks,
-  departmentTransferDestinations,
-} from "./schema/department-transfers.js";
-import {
-  deviceKitchenScreenStations,
-  deviceProfileKitchenScreenStations,
-  deviceKitchenScreenZones,
-  deviceProfileKitchenScreenZones,
-  deviceKitchenScreenRemovals,
-  deviceKitchenScreens,
-  deviceProfileKitchenScreens,
-} from "./schema/kitchen-screens.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  seasons,
-  zoneDayRanges,
-  zoneDays,
-} from "./schema/seasons.js";
-import { departmentReceipts } from "./schema/department-receipts.js";
 import {
   readProfileZones,
   readProfileServiceScopes,
@@ -62,9 +59,7 @@ import { resolveNewOrderZone } from "./operations.js";
 import { replaceMenuWeek } from "./menu-timetable.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { VENUE_SERVICE } from "./service.js";
-import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
 import { ensureDefaultSeasons } from "./seasons.js";
-import { serviceSteps } from "./schema/service-steps.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

@@ -8,12 +8,7 @@ import {
   type ErrorParams,
 } from "@waitron/shared";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
-import {
-  personStaffRoles,
-  shiftAssignments,
-  staffingBlocks,
-  staffRoles,
-} from "./schema/staffing.js";
+import { personStaffRoles, shiftAssignments, staffingBlocks, staffRoles } from "@waitron/workforce";
 import type { CalendarColour, ListedStaffRole, StaffRole } from "./staffing-types.js";
 import "./errors.js";
 

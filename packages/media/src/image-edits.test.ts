@@ -1,7 +1,15 @@
 import { createHash } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  withTransaction,
+  mediaImageBlobs,
+  mediaImageData,
+  mediaImageEdits,
+  mediaImages,
+} from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -17,7 +25,6 @@ import {
   updateImage,
   uploadImage,
 } from "./images.js";
-import { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 

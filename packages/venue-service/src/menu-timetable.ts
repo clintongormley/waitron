@@ -9,9 +9,15 @@ import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import {
   catalogues,
   categories,
+  departmentFloorPlanSets,
+  departments,
   floorZones,
+  menuPeriods,
+  menuPeriodStaffMenus,
   products,
   readVenueClock,
+  routingCellPeriods,
+  routingCells,
   type Transaction,
 } from "@waitron/db";
 import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
@@ -38,10 +44,6 @@ import type {
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext } from "./operations.js";
-import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
-import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
-import { departments } from "./schema/service.js";
-import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { readZoneClosedTimes } from "./zone-closed-times.js";
 import { resolveDepartmentDays, type DayPlan } from "./day-resolver.js";
 import {

@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { menuItems } from "./schema/menu.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { listProductVariants, setMenuVariants, setProductVariants } from "./variants.js";
 import { applyLiveFields } from "./menu-document.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { menusFixture } from "../test/menus-fixture.js";
-import { products, withTransaction } from "@waitron/db";
+import { menuItems, products, withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";

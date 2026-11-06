@@ -7,13 +7,17 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withTransaction,
+  managementSessions,
+  webauthnChallenges,
+  webauthnCredentials,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
 vi.mock("@simplewebauthn/server", async (orig) => ({

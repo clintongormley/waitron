@@ -8,7 +8,7 @@
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { IDENTITY_MIGRATIONS } from "../migrations.js";
-import * as barrel from "./index.js";
+import * as barrel from "@waitron/db/schema/identity.js";
 
 describeSchemaConformance({
   subjectName: "identity",

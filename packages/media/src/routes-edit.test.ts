@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, mediaImageData, mediaImageEdits } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -22,7 +22,6 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 import { DEFAULT_FRAMING } from "./framing.js";
 import { readImage, readImageBytes, updateImage, uploadImage } from "./images.js";
-import { mediaImageData, mediaImageEdits } from "./schema/images.js";
 import { sampleImage, samplePreparedImage } from "./testing/sample-image.js";
 import * as renditionRendering from "./renditions.js";
 

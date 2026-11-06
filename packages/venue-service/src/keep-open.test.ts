@@ -7,9 +7,12 @@ import {
   locationDayCutoverChanges,
   floorZones,
   locations,
+  specialDayDates,
+  specialDays,
   withTransaction,
   type Transaction,
   venueLocationId,
+  zoneExtensions,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -17,10 +20,8 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, listZoneOffers, menuState } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
-import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { VENUE_SERVICE } from "./service.js";
 import * as keep from "./keep-open.js";
-import { zoneExtensions } from "./schema/zone-extensions.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { readKeepOpen } from "./keep-open.js";
 

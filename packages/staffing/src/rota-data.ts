@@ -1,8 +1,7 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { rosterVersions, shifts } from "@waitron/workforce";
+import { rosterVersions, shiftAssignments, shifts } from "@waitron/workforce";
 import { addDays } from "@waitron/venue-service";
-import { shiftAssignments } from "./schema/staffing.js";
 import type { RotaShift } from "./slots.js";
 
 export const mondayOf = (date: string): string =>

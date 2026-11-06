@@ -1,20 +1,24 @@
 import "./errors.js";
-import { nowIso } from "@waitron/db";
+import {
+  nowIso,
+  persons,
+  managementSessions,
+  managementAccountActions,
+  webauthnCredentials,
+  sessions,
+  totpEnrollments,
+  recoveryCodes,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { and, eq, gt, isNull, lte, ne } from "drizzle-orm";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
-import { persons } from "./schema/persons.js";
 import { foldForUniqueness } from "./fold.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { managementAccountActions } from "./schema/management-account-actions.js";
 import {
   confirmEmailChangeByCode,
   issueAccountAction,
   type IssuedAccountAction,
 } from "./account-action.js";
-import { webauthnCredentials } from "./schema/webauthn.js";
 import { passkeyProviderName } from "./passkey-providers.js";
-import { sessions } from "./schema/sessions.js";
 import { resolveManagementSession } from "./management-session.js";
 import {
   asPersonUniqueViolation,
@@ -26,8 +30,6 @@ import { assertPasswordLength, hashPassword, verifyPassword } from "./verify-pas
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { verifyTotp } from "./totp.js";
 import { generateTotpSecret, totpAuthUri } from "./totp.js";
-import { totpEnrollments } from "./schema/totp-enrollments.js";
-import { recoveryCodes } from "./schema/recovery-codes.js";
 import {
   consumeRecoveryCode,
   decryptTotpSecret,

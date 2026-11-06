@@ -9,7 +9,8 @@
     "./attendance-contract": "./src/attendance-contract.ts",
     "./test/fixtures.js": "./test/fixtures.ts",
     "./dashboard": "./src/dashboard/index.ts",
-    "./roster-validation": "./src/roster-validation.ts"
+    "./roster-validation": "./src/roster-validation.ts",
+    "./schema/staffing.js": "./src/schema/staffing/index.ts"
   },
   "scripts": {
     "test": "vitest run",

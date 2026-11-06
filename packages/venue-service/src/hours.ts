@@ -1,9 +1,8 @@
 import { eq } from "drizzle-orm";
-import { readVenueClock, type Transaction, type VenuePlace } from "@waitron/db";
+import { departments, readVenueClock, type Transaction, type VenuePlace } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
 import { rangeDates } from "./hours-rules.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
-import { departments } from "./schema/service.js";
 import type { Season } from "./season-rules.js";
 import { calendarCutAnchor } from "./calendar-cut.js";
 import { readDayPlan, resolveDepartmentsDays } from "./day-resolver.js";

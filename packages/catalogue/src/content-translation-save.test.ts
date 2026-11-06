@@ -4,7 +4,16 @@ import { contentLanguageChoices } from "@waitron/shared";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  contentLanguages,
+  contentSuggestions,
+  extraLists,
+  menuDetails,
+  optionLabels,
+  optionLists,
   products,
+  sectionMembers,
+  sections,
+  units,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -16,12 +25,6 @@ import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { addMember } from "./sections.js";
-import { sections, sectionMembers } from "./schema/sections.js";
-import { menuDetails, contentLanguages } from "./schema/menu.js";
-import { units } from "./schema/units.js";
-import { optionLists, optionLabels } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { contentSuggestions } from "./schema/suggestions.js";
 import type { TranslationCellEdit, TranslationCellRef } from "./content-translation-types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });

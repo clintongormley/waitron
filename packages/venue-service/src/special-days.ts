@@ -1,9 +1,19 @@
 import { and, asc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import {
+  departmentDayRanges,
+  departmentDays,
+  departments,
   floorZones,
+  menuPeriods,
   newId,
   readVenueClock,
+  specialDayDates,
+  specialDays,
   venueLocationId,
+  ZONE_PAINT_KINDS,
+  zoneDayRanges,
+  zoneDays,
+  zoneServicePolicies,
   type Transaction,
   type VenuePlace,
 } from "@waitron/db";
@@ -18,17 +28,6 @@ import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { nextOccurrence, occurrenceIn, repeatKey, standingInYear } from "./repeat-rules.js";
 import { storedTime, wireTime } from "./operations.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  specialDayDates,
-  specialDays,
-  ZONE_PAINT_KINDS,
-  zoneDayRanges,
-  zoneDays,
-} from "./schema/seasons.js";
-import { menuPeriods } from "./schema/menus.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
 import { readHolidayDates, readHolidayEnglishNames } from "./holidays.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
 import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";

@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { products, withTransaction, type Transaction } from "@waitron/db";
+import { menuVersions, products, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { createProduct, updateProduct } from "./operations.js";
@@ -9,7 +9,6 @@ import { writeProductModifiers } from "./product-modifiers.js";
 import { setProductVariants } from "./variants.js";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
-import { menuVersions } from "./schema/publication.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { newCustomerPresentation } from "@waitron/shared";
 

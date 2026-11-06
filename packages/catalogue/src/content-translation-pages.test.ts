@@ -1,14 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { contentLanguageChoices } from "@waitron/shared";
-import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
+import {
+  contentSuggestions,
+  CORE_MIGRATIONS,
+  products,
+  units,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { units } from "./schema/units.js";
-import { contentSuggestions } from "./schema/suggestions.js";
 import { listTranslationItems } from "./content-translation-pages.js";
 import type { TranslationQuery } from "./content-translation-types.js";
 

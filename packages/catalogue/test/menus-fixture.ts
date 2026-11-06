@@ -1,5 +1,11 @@
 import { and, eq } from "drizzle-orm";
-import { kitchenCourses, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  kitchenCourses,
+  menuItems,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { seedLegacySellingUnits, seedVenueWithSeries } from "./fixtures.js";
 import { createCatalogue, createProduct, updateMenuItem } from "../src/operations.js";
 import { createCategory } from "../src/categories.js";
@@ -9,7 +15,6 @@ import { writeProductModifiers } from "../src/product-modifiers.js";
 import { readMenuStructure } from "../src/menu-structure.js";
 import { addMember, createSectionIn } from "../src/sections.js";
 import { setProductVariants } from "../src/variants.js";
-import { menuItems } from "../src/schema/menu.js";
 import type { MemberRef } from "@waitron/shared";
 
 export const NO_ICE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

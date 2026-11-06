@@ -1,6 +1,6 @@
 // Measurement 4 (#540): how long a rebuild's restore takes, with a day of changes
 // on top of the last full copy, on a database carrying product images (they live in the database:
-// `media_image_data.bytes`, packages/media/src/schema/images.ts).
+// `media_image_data.bytes`, packages/db/src/schema/media/images.ts).
 //
 // Sizes: the owner's figure of up to 5,000 product images, each stored as the
 // shrunk copy an upload makes — 171 KiB on average and 338 KB at most over ten real photos — so

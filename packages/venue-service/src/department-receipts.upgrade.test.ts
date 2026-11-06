@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departmentReceipts,
+  departments,
   installChangeFeed,
   newId,
   nowIso,
@@ -17,8 +19,6 @@ import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
-import { departments } from "./schema/service.js";
-import { departmentReceipts } from "./schema/department-receipts.js";
 
 /** Removes `entries`' SQL from `folder`; answers the append-only tables less those it created. */
 function removeMigrations(folder: string, entries: readonly { tag: string }[]): string[] {

@@ -11,8 +11,10 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departmentFloorPlanSets,
   floorPlanSets,
   floorPlanTables,
+  menuPeriods,
   withTransaction,
   type Database,
   venueLocationId,
@@ -33,8 +35,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
-import { menuPeriods } from "./schema/menus.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 

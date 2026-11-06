@@ -5,6 +5,10 @@ import {
   checkFailed,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
   refusalOn,
   UNIQUE_VIOLATION,
   withTransaction,
@@ -32,12 +36,6 @@ import {
 import { BATCH_SIZE } from "./batches.js";
 import { addMember } from "./sections.js";
 import { updateMenuItem, updateProduct } from "./operations.js";
-import {
-  menuPublications,
-  menuScheduledPublications,
-  menuVersionImages,
-  menuVersions,
-} from "./schema/publication.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

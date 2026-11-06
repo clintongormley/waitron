@@ -1,8 +1,9 @@
 /**
  * The `persons` unique indexes this package translates a refusal on, each by the NAME the database
- * reports. All three are over an expression (`schema/persons.ts`, `foldedKey`), and this engine
- * reports a refusal on such an index as `UNIQUE constraint failed: index '<name>'`, with no
- * columns, so a caller asks `indexViolated` rather than `constraintTarget`.
+ * reports. All three are over an expression (`packages/db/src/schema/identity/persons.ts`,
+ * `foldedKey`), and this engine reports a refusal on such an index as `UNIQUE constraint failed:
+ * index '<name>'`, with no columns, so a caller asks `indexViolated` rather than
+ * `constraintTarget`.
  *
  * Each value must match the index name the migrations create; renaming an index without changing
  * it here would silently stop a translation. `person-constraints.db.test.ts` drives one real

@@ -1,11 +1,15 @@
-import { readVenueClock, type Transaction, type VenuePlace } from "@waitron/db";
+import {
+  readVenueClock,
+  zoneServicePolicies,
+  type Transaction,
+  type VenuePlace,
+} from "@waitron/db";
 import type { PreparedServiceDay } from "@waitron/module";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { layerPaint, layerZonePaint } from "./day-paint.js";
 import { cutToOwnDay } from "./calendar-cut.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import { zoneServicePolicies } from "./schema/service.js";
 import { serviceDayWallContext, type ServiceDayContext } from "./service-day-context.js";
 import { seasonOn, type Season } from "./season-rules.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks, type SeasonDays } from "./season-weeks.js";

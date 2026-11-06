@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { departments } from "./schema/service.js";
+import { departments } from "@waitron/db";
 import "./errors.js";
 
 export async function readLateSendNeedsManager(

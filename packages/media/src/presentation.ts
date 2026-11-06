@@ -2,7 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, MEDIA_FILENAME } from "@waitron/shared";
 import { IMAGE_LIST_COLUMNS } from "./image-page-query.js";
-import { mediaImageEdits, mediaImages } from "./schema/images.js";
+import { mediaImageEdits, mediaImages } from "@waitron/db";
 import { validateFraming, type ImageFraming } from "./framing.js";
 import type { RenditionShape } from "./renditions.js";
 import "./errors.js";

@@ -1,11 +1,10 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, tenantCredentials } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { tenantCredentials } from "./schema/tenant-credentials.js";
 import {
   credentialRevision,
   deleteCredential,

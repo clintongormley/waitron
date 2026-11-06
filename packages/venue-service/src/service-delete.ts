@@ -1,5 +1,18 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
-import { deviceProfiles, floorZones, workingOrders, type Transaction } from "@waitron/db";
+import {
+  departmentFloorPlanSets,
+  departments,
+  departmentTransferRequests,
+  deviceProfiles,
+  deviceProfileServiceAccess,
+  deviceProfileZones,
+  floorZones,
+  menuPeriods,
+  orderServiceContexts,
+  workingOrders,
+  zoneServicePolicies,
+  type Transaction,
+} from "@waitron/db";
 import type { FloorDeletion } from "@waitron/module";
 import {
   AppError,
@@ -8,17 +21,7 @@ import {
   type DeleteImpactRefusal,
   type DeleteTarget,
 } from "@waitron/shared";
-import {
-  departments,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
-  orderServiceContexts,
-  zoneServicePolicies,
-} from "./schema/service.js";
-import { departmentTransferRequests } from "./schema/department-transfers.js";
 import { removeFloorPlanSets } from "./floor-plan-set-store.js";
-import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
-import { menuPeriods } from "./schema/menus.js";
 import {
   clearServiceDeleteSettings,
   readServiceDeleteSettings,

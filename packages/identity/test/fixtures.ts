@@ -1,10 +1,9 @@
-import { captureError, locations, withTransaction } from "@waitron/db";
+import { captureError, locations, withTransaction, persons } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { loginWithPin } from "../src/login.js";
-import { persons } from "../src/schema/persons.js";
 import { loginManager } from "../src/manager-login.js";
 import { hashPin } from "../src/verify-pin.js";
 import { hashPassword } from "../src/verify-password.js";

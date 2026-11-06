@@ -1,4 +1,14 @@
-import { products } from "@waitron/db";
+import {
+  extraListItems,
+  menuDetails,
+  menuPublications,
+  menuVersionImages,
+  menuVersions,
+  products,
+  sectionMembers,
+  sections,
+  units,
+} from "@waitron/db";
 import { takeOffMenus } from "./menu-removal.js";
 import type { MenuChange, MenuChangeBody } from "@waitron/shared";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
@@ -45,9 +55,7 @@ import { updateCategory } from "./categories.js";
 import { saveCatalogueDefaultColor } from "./settings.js";
 import { moveCatalogueItems } from "./catalogue-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
-import { extraListItems } from "./schema/extras.js";
 import { createUnit, updateUnit, assignProductUnit } from "./units.js";
-import { units } from "./schema/units.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { listProductVariants, setProductVariants, setMenuVariants } from "./variants.js";
@@ -66,9 +74,6 @@ import {
   staffOptionSnapshotLabels,
 } from "./option-snapshot-labels.js";
 import { NO_ICE } from "../test/menus-fixture.js";
-import { menuDetails } from "./schema/menu.js";
-import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
-import { sectionMembers, sections } from "./schema/sections.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

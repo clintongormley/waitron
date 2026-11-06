@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { categories, products, withTransaction, type Transaction } from "@waitron/db";
+import {
+  categories,
+  extraListItems,
+  extraLists,
+  menuItems,
+  menuItemVariantOverrides,
+  menuPublications,
+  products,
+  sectionMembers,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product } from "../test/menus-fixture.js";
 import {
@@ -8,7 +19,6 @@ import {
   assertOffPublishedMenus,
   publishedMenusHolding,
 } from "./archive.js";
-import { menuPublications } from "./schema/publication.js";
 import { addMember, removeMember } from "./sections.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { insertVersion, previewMenu, publishMenu } from "./menu-publication.js";
@@ -17,12 +27,8 @@ import { eq } from "drizzle-orm";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { moveCatalogueItems, deleteCatalogueItems } from "./catalogue-items.js";
-import { extraListItems, extraLists } from "./schema/extras.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
-import { menuItems } from "./schema/menu.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { offerOf } from "../test/menus-fixture.js";
-import { sectionMembers } from "./schema/sections.js";
 import { deactivateCatalogue, deactivateProduct, updateProduct } from "./operations.js";
 
 import { setMainReportingCategory } from "./categories.js";

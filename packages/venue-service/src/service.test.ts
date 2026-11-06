@@ -4,6 +4,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
+  stationDayStates,
   withTransaction,
   type Transaction,
   venueLocationId,
@@ -11,7 +12,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { stationDayStates } from "./schema/station-times.js";
 import { setStationToday } from "./station-times.js";
 import { VENUE_SERVICE } from "./service.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";

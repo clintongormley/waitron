@@ -1,10 +1,14 @@
 import { asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import {
+  departments,
+  menuPeriods,
+  menuPeriodStaffMenus,
+  products,
+  type Transaction,
+} from "@waitron/db";
 import { loadSectionGraph, reachableProducts } from "@waitron/catalogue";
 import type { RoutingPeriod } from "./routing-types.js";
-import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { readDepartmentSeasonWeeks } from "./season-weeks.js";
-import { departments } from "./schema/service.js";
 import { rangeSpan } from "./service-day.js";
 
 type PeriodRow = Omit<RoutingPeriod, "productIds" | "departmentInactive"> & {

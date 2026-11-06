@@ -5,7 +5,12 @@
 import { createHash, generateKeyPairSync, randomBytes, sign, type KeyObject } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withTransaction,
+  managementSessions,
+  webauthnCredentials,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
@@ -17,8 +22,6 @@ import {
   finishPasskeyRegistration,
   verifyOwnPasskey,
 } from "./passkey.js";
-import { managementSessions } from "./schema/management-sessions.js";
-import { webauthnCredentials } from "./schema/webauthn.js";
 import { codeOf, openManagementSession, TOTP_KEY_RING } from "../test/fixtures.js";
 
 const RP_ID = "localhost";

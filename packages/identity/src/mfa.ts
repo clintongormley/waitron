@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { recoveryCodes } from "./schema/recovery-codes.js";
+import { recoveryCodes } from "@waitron/db";
 
 const PREFIX = "v1";
 const RECOVERY_CODE_COUNT = 10;

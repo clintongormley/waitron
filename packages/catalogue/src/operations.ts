@@ -26,10 +26,15 @@ import {
   categories,
   locationCatalogues,
   locations,
+  menuItems,
+  menuItemVariantOverrides,
   now,
   products,
+  productUnits,
   readVenue,
   readVenueInvoiceLocales,
+  sections,
+  units,
   venueLocationId,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
@@ -51,8 +56,6 @@ import type {
   MenuOfferVariant,
   MenuPriceRow,
 } from "@waitron/shared";
-import { menuItems } from "./schema/menu.js";
-import { sections } from "./schema/sections.js";
 import {
   createMenuShell,
   menuRoots,
@@ -64,8 +67,6 @@ import { assertMenuNameFree } from "./menu-names.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
 import { archiveProducts } from "./archive.js";
-import { productUnits, units } from "./schema/units.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
 import {

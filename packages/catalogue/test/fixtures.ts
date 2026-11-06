@@ -3,8 +3,11 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   categories,
+  categoryDetails,
   invoiceSeries,
+  productUnits,
   products,
+  units,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -22,8 +25,6 @@ import {
 import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { nameColumns } from "../src/product-names.js";
 import { createUnit } from "../src/units.js";
-import { productUnits, units } from "../src/schema/units.js";
-import { categoryDetails } from "../src/schema/categories.js";
 
 /** The unit a product's OWN `product_units` row names, or null when it has none (a
  * top-level product then reads as Each). A variant reads its parent's unit whatever row it stores.

@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import {
+  optionLabels,
+  optionLists,
+  productModifiers,
+  products,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, type ContentLanguages } from "@waitron/shared";
-import { optionLabels, optionLists } from "./schema/options.js";
-import { productModifiers } from "./schema/extras.js";
 import {
   parseOptionListInput,
   type OptionLabel,

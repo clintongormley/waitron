@@ -6,6 +6,7 @@ import {
   FOREIGN_KEY_VIOLATION,
   kitchenCourses,
   products,
+  productUnits,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -25,7 +26,6 @@ import { createExtraList } from "./extras.js";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { productUnits } from "./schema/units.js";
 import { createUnit, EACH_UNIT } from "./units.js";
 import {
   effectiveProductColumns,

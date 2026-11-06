@@ -21,10 +21,15 @@ import {
   CORE_MIGRATIONS,
   catalogues,
   categories,
+  departments,
   floorZones,
   kitchenStations,
   locations,
   products,
+  routingCellPeriods,
+  routingCells,
+  specialDayDates,
+  specialDays,
   withTransaction,
   type Database,
   type Transaction,
@@ -61,8 +66,6 @@ import {
 } from "./routing-store.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment, listZoneOffers } from "./operations.js";
-import { routingCellPeriods, routingCells } from "./schema/routing.js";
-import { departments } from "./schema/service.js";
 import {
   replaceMenuWeek,
   resolveDepartmentService,
@@ -73,7 +76,6 @@ import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
 import { closeStationForToday, setStationToday } from "./station-times.js";
 import { saveSpecialDay } from "./special-days.js";
 import { ensureDefaultSeasons } from "./seasons.js";
-import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
 const suite = useVenueDb({

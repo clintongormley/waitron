@@ -892,7 +892,7 @@ dashboard asks the browser to forget it (`signalUnknownCredential`, `apps/dashbo
 and says so. The answer says only whether that credential id has a row, and it is given before any
 signature check, so the id plus a challenge, which anyone can fetch without signing in
 (`POST /management-api/passkey/auth/options`), is enough to ask. A credential row has no status of
-its own (`webauthn_credentials` in `packages/identity/src/schema/webauthn.ts`), so a row that
+its own (`webauthn_credentials` in `packages/db/src/schema/identity/webauthn.ts`), so a row that
 still belongs to a suspended person answers the generic refusal. Disabling a person (the Disable
 action, `deactivatePerson`, or changing their status to inactive in the edit form,
 `updatePersonDetails`), an admin's login reset and a reactivation delete the person's passkeys

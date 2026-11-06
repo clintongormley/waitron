@@ -1,7 +1,11 @@
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
-import { workingOrders, type Transaction } from "@waitron/db";
+import {
+  billIdentities,
+  billNumberAllocations,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import type { BillIdentity } from "@waitron/module";
-import { billIdentities, billNumberAllocations } from "./schema/bill-identities.js";
 
 /**
  * Give a bill the party's next number. The next number is read from the history, not from the

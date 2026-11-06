@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, captureError, checkFailed, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  checkFailed,
+  withTransaction,
+  recoveryCodes,
+  totpEnrollments,
+  webauthnChallenges,
+  webauthnCredentials,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
@@ -18,9 +27,6 @@ import {
 import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
 import type { PersonRoleValue } from "@waitron/shared";
-import { recoveryCodes } from "./schema/recovery-codes.js";
-import { totpEnrollments } from "./schema/totp-enrollments.js";
-import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import {
   codeOf,
   openManagementSession,

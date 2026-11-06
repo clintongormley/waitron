@@ -1,11 +1,12 @@
 import { asc, eq, inArray } from "drizzle-orm";
-import { diningTables, type Transaction } from "@waitron/db";
-import { zoneServicePolicies } from "./schema/service.js";
 import {
+  diningTables,
   serviceStepCompletions,
   serviceSteps,
+  zoneServicePolicies,
   type ServiceStepStart,
-} from "./schema/service-steps.js";
+  type Transaction,
+} from "@waitron/db";
 
 export interface StepRule {
   id: string;

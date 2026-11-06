@@ -13,17 +13,18 @@ import {
   specialDays,
   specialDayDates,
 } from "@waitron/venue-service";
-import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
+import {
+  WORKFORCE_MIGRATIONS,
+  personStaffRoles,
+  shiftAssignments,
+  shifts,
+  staffingBlocks,
+  staffingDays,
+  staffRoles,
+} from "@waitron/workforce";
 import { STAFFING_BACKUP_VERIFICATION as OWNER } from "./index.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_CLASSIFICATION } from "./classification.js";
-import {
-  staffRoles,
-  personStaffRoles,
-  staffingDays,
-  staffingBlocks,
-  shiftAssignments,
-} from "./schema/staffing.js";
 const prerequisites = [
   CORE_MIGRATIONS,
   CATALOGUE_MIGRATIONS,

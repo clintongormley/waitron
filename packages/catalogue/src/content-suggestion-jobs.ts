@@ -15,7 +15,7 @@ import {
   type SUGGESTION_FAILURES,
   type SUGGESTION_REFUSALS,
   type SuggestionJobRow,
-} from "./schema/suggestions.js";
+} from "@waitron/db";
 import "./errors.js";
 
 export type SuggestionFailure = (typeof SUGGESTION_FAILURES)[number];

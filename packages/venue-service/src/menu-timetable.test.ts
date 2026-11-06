@@ -18,9 +18,16 @@ import {
   CORE_MIGRATIONS,
   catalogues,
   categories,
+  departmentDayRanges,
+  departmentDays as departmentDayRows,
   floorZones,
   kitchenStations,
   locations,
+  menuPeriods,
+  menuPeriodStaffMenus,
+  routingCellPeriods,
+  routingCells,
+  specialDayDates,
   withTransaction,
   workingOrderLines,
   type Database,
@@ -60,13 +67,6 @@ import {
   recordOrderServiceContext,
   recordWorkingLineContexts,
 } from "./operations.js";
-import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
-import {
-  departmentDayRanges,
-  departmentDays as departmentDayRows,
-  specialDayDates,
-} from "./schema/seasons.js";
-import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { starterSeasonName, type StarterSeason } from "./testing/starter-seasons.js";
