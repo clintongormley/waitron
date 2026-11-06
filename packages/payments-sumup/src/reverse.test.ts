@@ -1,3 +1,9 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { eq } from "drizzle-orm";
+import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
+import { sumupClient } from "./sumup-client.js";
+import { reverseViaSumUp } from "./reverse.js";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -78,5 +84,52 @@ describe("SumUpCloudProvider reversals", () => {
       paymentRef: c.paymentRef,
     });
     expect(fake.lastRefund).toBeUndefined();
+  });
+});
+
+describe("reversals through real HTTP", () => {
+  it.each([204, 404, 503])("handles SumUp HTTP %s without a JSON body", async (status) => {
+    const { provider, params, row } = await setup(suite);
+    const captured = await provider.collect(params);
+    const seen: string[] = [];
+    const server = createServer((request, response) => {
+      seen.push(request.method + " " + request.url);
+      request.resume();
+      response.writeHead(status, { "content-type": "text/html" });
+      response.end(status === 204 ? undefined : "<html>provider response</html>");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const client = sumupClient({
+        apiKey: "test-key",
+        merchantCode: "MC",
+        baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+      });
+      const reversal = reverseViaSumUp(suite.db, client, captured.paymentRef, "refund", undefined);
+      if (status === 503) {
+        await expect(reversal).rejects.toThrow("HTTP 503");
+      } else {
+        await expect(reversal).resolves.toMatchObject({
+          state: status === 204 ? "refunded" : "captured",
+          amount: "12.50",
+        });
+      }
+      const stored = await row(captured.paymentRef);
+      expect(stored.state).toBe(status === 204 ? "refunded" : "captured");
+      expect(seen).toEqual([`POST /v1.0/merchants/MC/payments/${stored.externalRef}/refunds`]);
+      expect(
+        await suite.db
+          .select({ amount: paymentRefunds.amount, state: paymentRefunds.state })
+          .from(paymentRefunds)
+          .where(eq(paymentRefunds.paymentRef, captured.paymentRef)),
+      ).toEqual(
+        status === 503 ? [] : [{ amount: 1250, state: status === 204 ? "succeeded" : "failed" }],
+      );
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 });

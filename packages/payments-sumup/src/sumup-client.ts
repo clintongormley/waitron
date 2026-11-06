@@ -219,13 +219,18 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       };
     },
     async refund(p: { transactionId: string; amount?: Decimal }) {
-      const r = await call(
+      const status = await callForStatus(
         "POST",
         `/v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds`,
         // Partial refunds use integer cents; see docs/research/2026-09-10-sumup-solo-experiments.md §10.3.
         p.amount === undefined ? {} : { amount: toMinorUnits(p.amount) },
       );
-      return { status: r.status >= 400 ? "refused" : "accepted" } as const;
+      if ((status >= 300 && status < 400) || status >= 500) {
+        throw new Error(
+          `sumup POST /v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds: HTTP ${status}`,
+        );
+      }
+      return { status: status >= 400 ? "refused" : "accepted" } as const;
     },
     async sendRefund(p: { transactionId: string; amount: Decimal }) {
       const httpStatus = await callForStatus(

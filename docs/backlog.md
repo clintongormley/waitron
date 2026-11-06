@@ -116,7 +116,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1391. Backup status tells the truth and leaks nothing](backlog/box.md#bundle-a1391-backup-status-tells-the-truth-and-leaks-nothing)
 - [A1392. Discard and Cancel fail on a table bill reached from the counter](backlog/till.md#bundle-a1392-discard-and-cancel-fail-on-a-table-bill-reached-from-the-counter)
 - [A1393. A table of every till route's device check, with a guard](backlog/till.md#bundle-a1393-a-table-of-every-till-routes-device-check-with-a-guard)
-- [A1394. SumUp's sweep and refund call stop throwing](backlog/payments.md#bundle-a1394-sumups-sweep-and-refund-call-stop-throwing)
 - [A1395. Cancelling or settling a placed order respects stored card payments](backlog/payments.md#bundle-a1395-cancelling-or-settling-a-placed-order-respects-stored-card-payments)
 - [A1396. A save refused after the person left must say so](backlog/dashboard.md#bundle-a1396-a-save-refused-after-the-person-left-must-say-so)
 - [A1397. Replace short random table labels](backlog/ci.md#bundle-a1397-replace-short-random-table-labels)
@@ -1343,7 +1342,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **A1381. A manager's stuck-payment actions cover placed orders and only this box's own payments** (bundle of 2, 1 go-live, 1 important, size S). [Detail](backlog/payments.md#bundle-a1381-a-managers-stuck-payment-actions-cover-placed-orders-and-only-this-boxs-own-payments)
 
-- **A1394. SumUp's sweep and refund call stop throwing** (bundle of 2, 2 important, size S). [Detail](backlog/payments.md#bundle-a1394-sumups-sweep-and-refund-call-stop-throwing)
 
 - **Stripe adapter upkeep** (bundle of 5, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
 

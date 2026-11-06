@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, compareDecimal, jobOrigin } from "@waitron/shared";
+import { AppError, compareDecimal, hasCode, jobOrigin } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -328,13 +328,31 @@ export class SumUpCloudProvider implements PaymentProvider {
     let declined = 0;
     let incidentsRaised = 0;
     let deferred = false;
+    // A listed attempt may already have been resolved when this pass reaches its write.
+    const resolve = async <T>(
+      key: { provider: string; paymentRef: string },
+      action: (tx: Transaction) => Promise<T>,
+    ): Promise<T | undefined> => {
+      try {
+        return await this.inTransaction(action);
+      } catch (error) {
+        if (
+          error instanceof AppError &&
+          hasCode(error, "payment.not_found") &&
+          error.params.provider === key.provider &&
+          error.params.paymentRef === key.paymentRef
+        )
+          return undefined;
+        throw error;
+      }
+    };
     /** `failAttempting` + (for an unactionable outcome) the incident, in ONE transaction. Returns
      * whether an incident was raised. */
     const failWith = (
       key: { provider: string; paymentRef: string },
       status: string | null,
-    ): Promise<boolean> =>
-      this.inTransaction(async (tx) => {
+    ): Promise<boolean | undefined> =>
+      resolve(key, async (tx) => {
         await failAttempting(tx, key);
         if (status === null) return false;
         return this.opts.incidents(tx, {
@@ -370,7 +388,9 @@ export class SumUpCloudProvider implements PaymentProvider {
           continue;
         }
         // A not-found we cannot correlate to a key SumUp recorded is an uncertain charge — surface it.
-        if (await failWith(key, "not_found")) incidentsRaised++;
+        const failed = await failWith(key, "not_found");
+        if (failed === undefined) continue;
+        if (failed) incidentsRaised++;
         declined++;
         continue;
       }
@@ -380,7 +400,7 @@ export class SumUpCloudProvider implements PaymentProvider {
         continue;
       }
       if (outcome.kind === "captured") {
-        await this.inTransaction((tx) =>
+        const captured = await resolve(key, (tx) =>
           captureAttempting(tx, {
             ...key,
             settledAt: outcome.settledAt,
@@ -388,12 +408,14 @@ export class SumUpCloudProvider implements PaymentProvider {
             card: outcome.card,
           }),
         );
-        forwarded++;
+        if (captured !== undefined) forwarded++;
         continue;
       }
       // failed → no incident; deferred (REFUNDED / unknown) → incident naming the status.
       const status = outcome.kind === "deferred" ? t.status : null;
-      if (await failWith(key, status)) incidentsRaised++;
+      const failed = await failWith(key, status);
+      if (failed === undefined) continue;
+      if (failed) incidentsRaised++;
       declined++;
     }
     return {
