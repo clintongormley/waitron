@@ -13,14 +13,16 @@ import {
   reissueBoxLeaf,
   tightenTlsDir,
   writeCredentialsRing,
+  writeVenueAuthority,
 } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
-// `access`, `copyFile`, `open` and `rename` are wrapped so a test can inject a failure for a single
-// path; every other call forwards to the real implementation.
-const { accessMock, copyFileMock, openMock, renameMock } = vi.hoisted(() => ({
+// `access`, `copyFile`, `mkdir`, `open` and `rename` are wrapped so a test can inject a failure for
+// a single path or record a call; every other call forwards to the real implementation.
+const { accessMock, copyFileMock, mkdirMock, openMock, renameMock } = vi.hoisted(() => ({
   accessMock: vi.fn(),
   copyFileMock: vi.fn(),
+  mkdirMock: vi.fn(),
   openMock: vi.fn(),
   renameMock: vi.fn(),
 }));
@@ -28,12 +30,14 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   accessMock.mockImplementation(actual.access);
   copyFileMock.mockImplementation(actual.copyFile);
+  mkdirMock.mockImplementation(actual.mkdir);
   openMock.mockImplementation(actual.open);
   renameMock.mockImplementation(actual.rename);
   return {
     ...actual,
     access: accessMock,
     copyFile: copyFileMock,
+    mkdir: mkdirMock,
     open: openMock,
     rename: renameMock,
   };
@@ -63,7 +67,74 @@ const deps = (stateDir: string) => ({
   listIpv4: () => ["192.168.1.50"],
 });
 
+/** Each sync of an opened file or folder, each rename and each `mkdir` that created a folder, in
+ * order, while `run` runs. */
+async function syncsAndRenames(run: () => Promise<unknown>): Promise<string[]> {
+  const events: string[] = [];
+  const mkdirThrough = mkdirMock.getMockImplementation()!;
+  mkdirMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+    const created = await (mkdirThrough as (...a: unknown[]) => Promise<unknown>)(p, ...rest);
+    if (created !== undefined) events.push(`mkdir ${String(p)}`);
+    return created;
+  });
+  const openThrough = openMock.getMockImplementation()!;
+  const renameThrough = renameMock.getMockImplementation()!;
+  openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+    const handle = (await (openThrough as (...a: unknown[]) => unknown)(p, ...rest)) as FileHandle;
+    const realSync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      events.push(`sync ${String(p)}`);
+      return realSync();
+    };
+    return handle;
+  });
+  renameMock.mockImplementation(async (from: string, to: string) => {
+    events.push(`rename ${from} ${to}`);
+    return renameThrough(from, to);
+  });
+  try {
+    await run();
+  } finally {
+    mkdirMock.mockImplementation(mkdirThrough);
+    openMock.mockImplementation(openThrough);
+    renameMock.mockImplementation(renameThrough);
+  }
+  return events;
+}
+
+/** Whether `file`'s working copy was synced before it was renamed into place, and its folder after. */
+function writtenDurably(events: string[], file: string, folder: string): boolean {
+  const synced = events.indexOf(`sync ${file}.tmp`);
+  const renamed = events.indexOf(`rename ${file}.tmp ${file}`);
+  return synced !== -1 && renamed > synced && events.indexOf(`sync ${folder}`, renamed) > renamed;
+}
+
 describe("ensureBoxSecrets", () => {
+  it("syncs every new file before it is renamed into place, and its folder after", async () => {
+    const d = await newDir();
+    const tls = join(d, "tls");
+    const events = await syncsAndRenames(() => ensureBoxSecrets(deps(d)));
+    for (const name of ["ca.crt", "ca.key", "server.crt", "server.key"]) {
+      expect(writtenDurably(events, join(tls, name), tls), name).toBe(true);
+    }
+    expect(writtenDurably(events, join(d, "secrets.env"), d), "secrets.env").toBe(true);
+  });
+
+  it("syncs the folder above each folder it creates, the state folder and its tls", async () => {
+    const above = await newDir();
+    const d = join(above, "state");
+    const events = await syncsAndRenames(() => ensureBoxSecrets(deps(d)));
+    const stateCreated = events.indexOf(`mkdir ${d}`);
+    const tlsCreated = events.indexOf(`mkdir ${join(d, "tls")}`);
+    expect(stateCreated).not.toBe(-1);
+    expect(tlsCreated).not.toBe(-1);
+    expect(events.indexOf(`sync ${above}`, stateCreated)).toBeGreaterThan(stateCreated);
+    const firstFile = events.indexOf(`sync ${join(d, "tls", "ca.crt")}.tmp`);
+    const stateSynced = events.indexOf(`sync ${d}`, tlsCreated);
+    expect(stateSynced).toBeGreaterThan(tlsCreated);
+    expect(stateSynced).toBeLessThan(firstFile);
+  });
+
   it("materialises the cert + secrets on first call and returns the TLS paths", async () => {
     const d = await newDir();
     const tls = await ensureBoxSecrets(deps(d));
@@ -273,6 +344,30 @@ describe("ensureBoxSecrets", () => {
   });
 });
 
+describe("writeVenueAuthority", () => {
+  it("syncs the state folder after creating tls in it", async () => {
+    const d = await newDir();
+    const events = await syncsAndRenames(() =>
+      writeVenueAuthority(d, { certPem: "cert", keyPem: "key" }),
+    );
+    const created = events.indexOf(`mkdir ${join(d, "tls")}`);
+    expect(created).not.toBe(-1);
+    expect(events.indexOf(`sync ${d}`, created)).toBeGreaterThan(created);
+  });
+
+  it("syncs both files before they are renamed into place, and the folder after", async () => {
+    const d = await newDir();
+    const tls = join(d, "tls");
+    const events = await syncsAndRenames(() =>
+      writeVenueAuthority(d, { certPem: "cert", keyPem: "key" }),
+    );
+    expect(writtenDurably(events, join(tls, "venue-ca.crt"), tls)).toBe(true);
+    expect(writtenDurably(events, join(tls, "venue-ca.key"), tls)).toBe(true);
+    expect(await readFile(join(tls, "venue-ca.key"), "utf8")).toBe("key");
+    expect((await stat(join(tls, "venue-ca.key"))).mode & 0o777).toBe(0o600);
+  });
+});
+
 describe("reissueBoxLeaf", () => {
   const reissue = (stateDir: string) =>
     reissueBoxLeaf({
@@ -284,6 +379,22 @@ describe("reissueBoxLeaf", () => {
   const pairOf = async (stateDir: string) => ({
     cert: await readFile(join(stateDir, "tls", "server.crt"), "utf8"),
     key: await readFile(join(stateDir, "tls", "server.key"), "utf8"),
+  });
+
+  it("syncs both new files before renaming them into place, and the folder after both", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    const tls = join(d, "tls");
+    const events = await syncsAndRenames(() => reissue(d));
+    expect(writtenDurably(events, join(tls, "server.crt"), tls)).toBe(true);
+    expect(writtenDurably(events, join(tls, "server.key"), tls)).toBe(true);
+    const keyRenamed = events.indexOf(
+      `rename ${join(tls, "server.key.tmp")} ${join(tls, "server.key")}`,
+    );
+    expect(events.indexOf(`sync ${join(tls, "server.key.tmp")}`)).toBeLessThan(
+      events.indexOf(`rename ${join(tls, "server.crt.tmp")} ${join(tls, "server.crt")}`),
+    );
+    expect(events.lastIndexOf(`sync ${tls}`)).toBeGreaterThan(keyRenamed);
   });
 
   it("replaces the pair and leaves no working file behind", async () => {
@@ -436,6 +547,36 @@ describe("reissueBoxLeaf", () => {
     const after = await pairOf(d);
     expect(after.key).toBe(before.key);
     expect(after.cert).not.toBe(before.cert);
+  });
+
+  it("keeps the new pair and the old certificate aside when the folder sync after both renames fails", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    const before = await pairOf(d);
+    const tls = join(d, "tls");
+    const syncFailure = Object.assign(new Error("injected folder sync failure"), { code: "EIO" });
+    let keyRenamed = false;
+    const renameThrough = renameMock.getMockImplementation()!;
+    const openThrough = openMock.getMockImplementation()!;
+    renameMock.mockImplementation(async (from: string, to: string) => {
+      await renameThrough(from, to);
+      if (to === join(tls, "server.key")) keyRenamed = true;
+    });
+    openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+      if (keyRenamed && p === tls) throw syncFailure;
+      return (openThrough as (...a: unknown[]) => Promise<FileHandle>)(p, ...rest);
+    });
+    try {
+      await expect(reissue(d)).rejects.toBe(syncFailure);
+    } finally {
+      renameMock.mockImplementation(renameThrough);
+      openMock.mockImplementation(openThrough);
+    }
+    const after = await pairOf(d);
+    expect(after.cert).not.toBe(before.cert);
+    expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
+    expect(await readFile(join(tls, "server.crt.previous"), "utf8")).toBe(before.cert);
+    expect((await readdir(tls)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 });
 

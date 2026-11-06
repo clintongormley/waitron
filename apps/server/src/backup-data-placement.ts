@@ -78,5 +78,6 @@ export async function placeBackupData(
     entries: validated.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),
     stateDir: input.stateDir,
     log: input.log,
+    durable: false,
   });
 }

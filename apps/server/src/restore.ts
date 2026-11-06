@@ -795,16 +795,17 @@ export async function clearReplacedDatabases(
 
 /**
  * Restore every `secrets/<path>` entry into `stateDir`, prefix stripped, via `unpackBundleToDir` —
- * which re-applies the same traversal guard AND writes each file 0600 atomically, exactly as the
- * recovery-bundle unpack does. Secret contents are utf8 text (`RECOVERY_FILES` are `.env`/PEM),
- * matching the utf8 they were read as into the archive. `trading.env` is written last, after every
- * other secret succeeds; failure during that final atomic write can leave a temporary file, but
- * cannot publish a partial identity.
+ * which re-applies the same traversal guard AND writes each file 0600, durably unless `durable` is
+ * `false`, exactly as the recovery-bundle unpack does. Secret contents are utf8 text
+ * (`RECOVERY_FILES` are `.env`/PEM), matching the utf8 they were read as into the archive.
+ * `trading.env` is written last, after every other secret succeeds, so a failure cannot publish a
+ * partial identity.
  */
 export async function restoreSecrets(args: {
   entries: readonly ArchiveEntry[];
   stateDir: string;
   log: Logger;
+  durable?: boolean;
 }): Promise<void> {
   const files: BundleFiles = {};
   for (const entry of args.entries) {
@@ -814,7 +815,7 @@ export async function restoreSecrets(args: {
   const identity = args.entries.find((entry) => entry.name === TRADING_ENV_ENTRY);
   if (identity !== undefined)
     files[TRADING_ENV_FILE] = Buffer.from(identity.bytes).toString("utf8");
-  await unpackBundleToDir(files, args.stateDir);
+  await unpackBundleToDir(files, args.stateDir, { durable: args.durable ?? true });
   args.log("info", "restore.secrets.done", { count: args.entries.length });
 }
 

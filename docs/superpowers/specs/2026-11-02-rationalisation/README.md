@@ -514,7 +514,8 @@ slice 3b.
   off during setup is redone, not resumed.
 - *Everything temporary goes under `<state>/scratch/`,* emptied at every start; today two of seven
   kinds of leftover are swept.
-- *One durable write everywhere:* the most used helper today does not flush to disk (A1329).
+- *One durable write everywhere:* the most used helper today does not flush to disk
+  (A1329, 2026-11-06: the box's key files done; the rest remain).
 - *The TLS repair archive keeps only its newest copy,* not every old private key forever.
 - *A plain reset keeps exactly two folders,* `tls/` and `records/`. Start-again confirmations stop
   being written: nothing reads them, and they hold a person's name and email. CLAUDE.md §3 and

@@ -35,6 +35,17 @@ describe("assertSafeEntryName", () => {
     expect(await readdir(outside)).toEqual([]);
   });
 
+  it("creates no folder through a symlink escaping destRoot to a folder below it", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "restore-guard-deep-symlink-"));
+    const outside = mkdtempSync(join(tmpdir(), "restore-guard-deep-outside-"));
+    await symlink(outside, join(dest, "tls"));
+    await expect(assertSafeEntryName("tls/sub/ca.crt", dest)).rejects.toMatchObject({
+      code: "restore.unsafe_entry_path",
+      params: { name: "tls/sub/ca.crt" },
+    });
+    expect(await readdir(outside)).toEqual([]);
+  });
+
   it("rejects a sibling dir that shares a name prefix with destRoot (the sep boundary)", async () => {
     // `<parent>/bad/x` starts with `<parent>/b`: a containment check without the trailing separator
     // would accept it.

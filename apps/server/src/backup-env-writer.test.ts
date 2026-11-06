@@ -1,11 +1,40 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertStorableKey } from "./backup-api.js";
 import { assertStorableRecord, writeRecoveryKey } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
+
+vi.mock("node:fs/promises", { spy: true });
+
+/** Each sync of an opened file or folder and each rename, in order, while `run` runs. */
+async function syncsAndRenames(run: () => Promise<unknown>): Promise<string[]> {
+  const events: string[] = [];
+  const real = await vi.importActual<typeof fs>("node:fs/promises");
+  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+    const handle = await real.open(...args);
+    const realSync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      events.push(`sync ${String(args[0])}`);
+      return realSync();
+    };
+    return handle;
+  });
+  vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+    events.push(`rename ${String(from)} ${String(to)}`);
+    return real.rename(from, to);
+  });
+  try {
+    await run();
+  } finally {
+    vi.mocked(fs.open).mockReset();
+    vi.mocked(fs.rename).mockReset();
+  }
+  return events;
+}
 
 const tempDirs: string[] = [];
 
@@ -78,6 +107,15 @@ describe("assertStorableRecord — values the env file would read back different
 });
 
 describe("writeRecoveryKey", () => {
+  it("syncs backup.env before renaming it into place, and the folder after", async () => {
+    const dir = tempDir();
+    const path = join(dir, "backup.env");
+    const events = await syncsAndRenames(() =>
+      writeRecoveryKey(dir, { recoveryKey: "abcDEF-_1234567890", keyRotatedAt: undefined }),
+    );
+    expect(events).toEqual([`sync ${path}.tmp`, `rename ${path}.tmp ${path}`, `sync ${dir}`]);
+  });
+
   it("creates backup.env holding only the key when there is none, 0600", async () => {
     const dir = tempDir();
     await writeRecoveryKey(dir, { recoveryKey: "abcDEF-_1234567890", keyRotatedAt: undefined });
