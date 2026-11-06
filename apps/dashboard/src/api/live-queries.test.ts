@@ -294,7 +294,7 @@ it.each([
     ["menu_details", "sections", "section_members", "products", "catalogues"],
   ],
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
-  // their profile, and the profile's department through the venue-service scope. Not `devices`,
+  // their profile, and the profile's department. Not `devices`,
   // which a device's heartbeat changes every minute.
   [
     "listPrinterProfiles",

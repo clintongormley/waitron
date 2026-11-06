@@ -651,6 +651,7 @@ PR 2:
   the department fields; the permission case (`:744`) is unchanged.
 - `printers-screen.test.ts` cases reading `printer-profiles` (the "Offered on profiles" fact) read
   the Used by group.
+- `printers-screen.test.ts` "shows each fact once…" — its heading list gains `printers.used_by`.
 
 PR 3:
 - `page-printers-panel.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts` — the widget is deleted; each
@@ -1089,7 +1090,7 @@ as plain text. Departments are the distinct departments of the listed profiles, 
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the printers files and `src/dashboard-app.test.ts -t "printer"` — pass;
   change the "Offered on profiles" assertions listed for PR 2.
-- [ ] **Step 5: Commit** — `git commit -s -m "Printer details say where the printer is used, each name a link to its screen (A405 point 5)"`.
+- [ ] **Step 5: Commit** — `git commit -s -m "Printer details say where the printer is used (A405 point 5)"`.
 
 ### Task 11: PR 2's guide, backlog and look
 

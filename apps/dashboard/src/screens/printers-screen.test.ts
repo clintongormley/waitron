@@ -4207,7 +4207,7 @@ it("does not rewrite a route outside Printers while a name draft is open", async
   expect(location.pathname).toBe("/manage/devices");
 });
 
-it("shows each fact once, label beside value, in Status, Connection and Paper and drawer", async () => {
+it("shows each fact once, label beside value, in Status, Connection, Paper and drawer, and Used by", async () => {
   await page.viewport(1280, 800);
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
