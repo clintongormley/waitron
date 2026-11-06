@@ -87,7 +87,7 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 
 **1. The owner's sessions, which need no building.**
 
-- Send the [curated adviser list](compliance/2026-11-06-adviser-questions.md), once the A1324 and blocking decisions are made and the Spanish is rebuilt from it. It holds up 26 entries,
+- Send the [curated adviser list](compliance/2026-11-06-adviser-questions.md), once the Spanish is rebuilt from it. It holds up 26 entries,
   seven of them go-live, including 0% VAT and free items on mixed-rate bills.
 - [The owner's yes-or-no read: built defaults that wait only for a nod](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
@@ -1633,6 +1633,8 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
+- **A1406. The working-time defaults are wrong for the first venue (go-live).** Under the Barcelona, Girona and Tarragona agreement 2025 to 2028, weekly rest is two days, not the built 36 hours, and the paid break starts at five hours and lasts 20 minutes, not six hours and 15. `convenio_config` has no yearly-hours limit or split-shift rule, and a part-timer's extra hours show as overtime, which is the wrong legal label. [Findings](compliance/research/2026-11-06-adviser-labour.md)
+
 - **Staffing reads the day start in force on each date** (bundle of 3, 1 important, size M, needs the owner). Holds A851, A644, A708. [Detail](backlog/workforce.md#bundle-staffing-reads-the-day-start-in-force-on-each-date)
 
 - **A780. The staffing painters read holder names they never show (left open by #1828).**
@@ -1899,6 +1901,8 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   (slice 9 decision 14). Left open by A798-B slice 9 (#2025).
 
 - **Requests through the tunnel look like the box itself** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/box.md#bundle-requests-through-the-tunnel-look-like-the-box-itself)
+
+- **A1407. A wrong date needs a corrective invoice, and Waitron cannot yet issue the right one.** Research found the remedy is R4 on a full invoice and R5 on a simplified one, and `recordCorrection` handles only F2 to R5. `computeVatReturn` sorts by issue date, so a misdated sale lands in the wrong period in that report. Three identical refusals hold the rest of a chain, so a clock a day ahead could stop later filings. Clocks running behind are not listed for the owner. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
 
 - **Correct the sales dated wrongly once the tax adviser answers Q60.** What the correction is
   waits on [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24);
@@ -2475,6 +2479,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 ### Data protection and legal compliance
 
 _Formerly entries spread across the old sections._
+
+- **A1404. Encrypt the bucket copy with a key the box derives (owner, 2026-11-06, A1324).** A customer-supplied key worked on real Amazon S3: the bucket login alone was refused and the right key restored every row ([receipt](receipts/a1324/README.md)). Build: derive the key from the recovery key, so there is no new secret; change the bucket setting during setup, since Amazon blocks these keys on new buckets; say plainly when a provider refuses. Check a real restore through a recovery pack, and how long a provider takes to refuse. It adds no tables.
+
+- **A1405. Erasing a person's data blocks it first (owner, 2026-11-06).** The AEPD says erasure means blocking, then destroying (Informe 0148/2019; LOPDGDD art. 32). The owner chose the sealed copy art. 32.4 allows: erased values move out of the database into a sealed, dated file, and the file is destroyed when the period ends, three years where no other period applies. A980's S9 and S11 and A664's removal need this, and a restore must not bring erased values back. It adds no tables. [Findings](compliance/research/2026-11-06-adviser-privacy.md)
+
+- **A1408. Bring the privacy guide up to date with the adviser research.** The guide and notices describe an allergy noted when mentioned, but the till asks every table. Add order changes and the clock-in device to the staff notice, a walk-in allergy notice, and bucket login and two-step sign-in advice. Masked logs are not anonymous, and the venue's notice must name Waitron as a recipient once bug reports are built. [Findings](compliance/research/2026-11-06-adviser-privacy.md)
 
 - **A1077. The core table `order_group_hold_stations` has no retention row** (added by A756 PR 6;
   `docs/superpowers/specs/2026-10-16-a664-retention-table-inventory.md`, its 2026-10-23 line); its

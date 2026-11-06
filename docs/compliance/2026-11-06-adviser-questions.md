@@ -44,7 +44,7 @@ bucket login alone was refused, a wrong key was refused, and the right key resto
 ([receipt](../receipts/a1324/README.md)). The local test server ignores these keys, so only Amazon
 could show this. It was one short run on Amazon only, not through Waitron's own code. The proposal is
 to derive the key from the recovery key the box already keeps, so there is no new secret to hold, and
-where a provider refuses, the box says so. Building it awaits the owner's decision.
+where a provider refuses, the box says so. The owner approved building it (A1404).
 
 **2. The stop on payments stays (owner, 2026-11-06).** The law does not require it: article 3 of Orden
 HAC/1177/2024 switches off the one-minute rule for Veri\*Factu systems, and AEAT's FAQ says so. The
@@ -60,9 +60,10 @@ reaches the release as a repository secret. This refines the owner's answer of 4
 named a repository variable. An earlier draft of this list called this an open conflict: the research
 had read a rule the owner withdrew on 4 November.
 
-**5. Open: deleting a person's data should block it first.** The AEPD's legal office (report 0148/2019) says
+**5. Deleting a person's data blocks it first (owner, 2026-11-06, A1405).** The AEPD's legal office (report 0148/2019) says
 real erasure means setting the data aside first, then destroying it. A980's S9 (erasing a booking guest) and S11 (clearing a former employee's
-email) just clear the field, and A664's removal has the same gap. **Recommendation:** add a blocking step to all three.
+email) just clear the field, and A664's removal has the same gap. The owner chose the sealed, dated
+copy LOPDGDD article 32.4 allows.
 
 ## For the tax and accounting adviser
 
@@ -246,8 +247,8 @@ These cost nothing, and the gestoría the venue already pays can answer most of 
 
 ## Problems found in Waitron
 
-Found by reading code and text, not by running it. None is fixed yet. Each passes the backlog's test
-for its own entry, so they go in once the owner has read them.
+Found by reading code and text, not by running it. None is fixed yet. They are in the backlog as
+A1406, A1407 and A1408.
 
 - **Barcelona time rules are wrong in the built defaults:** `convenio_config` has 36 hours' weekly rest
   rather than two days, and the paid break at six hours rather than five. It has no yearly-hours limit

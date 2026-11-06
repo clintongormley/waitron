@@ -253,15 +253,14 @@ by the answers):
 
 ## Decisions and deliberate limits
 
-- **A1324. The box does not encrypt the bucket copy (under review).** The owner accepted this on
+- **A1324. The box does not encrypt the bucket copy, until A1404 lands.** The owner accepted this on
   2026-11-06 on advice that Litestream 0.5.17 had no encryption. That was wrong: it accepts a
   customer-supplied key, though nobody has run this. A key would sit on the box beside the bucket
   secret, so it protects nothing against someone who reaches the box. It would help when someone
   reaches the bucket without the box, such as a stolen storage login. The box relies on the provider's
   encryption, which it does not check. A test on real Amazon S3 on 2026-11-06 showed the bucket login
   alone refused and the right key restoring every row ([receipt](../receipts/a1324/README.md)).
-  Whether to build it is decision 1 of the
-  [curated adviser list](../compliance/2026-11-06-adviser-questions.md).
+  The owner approved building it, as A1404.
 - **A980 S2c, decision 3:** no product path records a whole-sale void yet, so the voids list is
   empty on every box until one does. See the
   [S2c plan](../superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md).
