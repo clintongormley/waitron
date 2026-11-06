@@ -542,7 +542,7 @@ describe.each([
     await expectRefused(manager.cookie, 403, "person.suspended");
   });
 
-  it("checks a supervisor's permission before reading the body", async () => {
+  it("checks a supervisor's permission before validating the body", async () => {
     const host = fakeHost();
     const { app } = mount(db(), host);
     const response = await post(app, FORGET, supervisor.cookie, json({ nope: 1 }));
@@ -553,7 +553,7 @@ describe.each([
     expect(host.networkForget).toHaveBeenCalledTimes(0);
   });
 
-  it("checks a supervisor's permission before reading the start screen's body", async () => {
+  it("checks a supervisor's permission before validating the start screen's body", async () => {
     const host = fakeHost();
     const { app } = mount(db(), host);
     const response = await post(app, SCREEN, supervisor.cookie, json({ start: "Panel" }));
@@ -567,7 +567,7 @@ describe.each([
   it.each([
     [FORGET, json({ nope: 1 })],
     [SCREEN, json({ start: "Panel" })],
-  ])("checks for a session on %s before reading its body", async (path, body) => {
+  ])("checks for a session on %s before validating its body", async (path, body) => {
     const host = fakeHost();
     const { app } = mount(db(), host);
     const response = await post(app, path, undefined, body);

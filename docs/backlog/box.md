@@ -1129,10 +1129,7 @@ client. No screen calls them yet.
 - Left in the code, for whoever touches it next: `askHost` keeps one cast, `refusal as
   ProtocolRefusal`, where the protocol's refusals go to `box_host.failed`; and on a route whose own
   refusal set is empty (the reads and the start screen), an extra own word passed to `askHost` still
-  compiles, where on the scan, join and forget it does not. Optional follow-up: the join's three
-  connection conditions are copied from `requireSecurePackRequest`
-  (`apps/server/src/backup-recovery-pack-api.ts:154-170`); one shared helper would stop the two
-  drifting apart.
+  compiles, where on the scan, join and forget it does not.
 
 **A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
@@ -1397,9 +1394,11 @@ client. No screen calls them yet.
 - Open: whether a fenced physical box needs Red (today the read-only gate refuses its network
   changes; an exemption would be a row in `READ_ONLY_EXEMPTIONS`). The SMTP and bucket settings
   routes take credentials over any connection, where the join refuses one that is not encrypted.
-- Open, optional: the join's three connection conditions are a copy of `requireSecurePackRequest`'s
-  first three (`apps/server/src/backup-recovery-pack-api.ts:154-170`); one shared helper would stop
-  them drifting apart.
+- Open, optional: the join's three connection conditions repeat those in `requireSecurePackRequest`
+  (`apps/server/src/backup-recovery-pack-api.ts:154-170`), `requireNodeOperationHttps`,
+  `assertOwnerTransport`, `recovery-start-again.ts`'s `isSecure` and `fromThisPage`, and
+  `setup-first-fiscal-api.ts`'s `assertFirstFiscalRequest` with its routes' own encrypted-connection
+  checks; one shared helper would stop them drifting apart.
 - Decisions recorded for review: reads under `system.manage`, with the person as actor (D2); the
   answer table (D4); the protocol owning the password rules, with the route naming the field (D5);
   the join's encrypted same-page connection (D6); two places, refused rather than queued (D7); no
@@ -1513,6 +1512,7 @@ The owner's four answers: no reserved
 
 - **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
 - **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the clock-behind stop and the clock confirmation use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
+- **The box's network and screen routes send at most two requests to the host service at once, and refuse a third with `box_host.busy` rather than queue it (B3 PR 9's D7; the lane's decision of 2026-11-06, open to the owner).** The host's socket serves four connections (`deploy/box/waitron-box.socket`, `MaxConnections=4`) and the clock side, read from the code but not measured, uses one or two. Two rather than one, so a page's read is not refused while a scan runs; refused rather than queued, so no request waits behind a change, which can hold its place for up to 20 seconds. Two places do not hold the total to four; what is still to measure on Linux is in [PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md), D7.
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
   disposable venue copy omits its watchdog; it still takes the venue lock. Ordinary server and
   restore opens retain monitoring. Cloud must pin the implementing release and requalify its

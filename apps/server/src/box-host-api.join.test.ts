@@ -323,7 +323,7 @@ describe.each([
     await expectRefused(manager.cookie, 403, "person.suspended");
   });
 
-  it("checks a supervisor's permission before reading the body", async () => {
+  it("checks a supervisor's permission before validating the body", async () => {
     const host = fakeHost();
     const response = await join(
       mount(host, () => {}, db()),
