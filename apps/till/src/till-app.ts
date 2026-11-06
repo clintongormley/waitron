@@ -11481,12 +11481,12 @@ export class TillApp extends LitElement {
     return read;
   }
 
-  /** After a cancel or Change to the order `orderId` that landed, or may have: the floor's party,
-   * then the order's lines (unless `readLines` is false: the caller is reading them) and bills.
-   * When the order is no longer the open one once the floor
-   * answers, or a later re-read has started, nothing more is read or said. Otherwise, unless the
-   * waiter has left the order since `visit` ({@link #hasLeftOrder}) or a later re-read has started:
-   * this re-read's own failed floor or bills read is said, unless another message already is,
+  /** After a change to the order `orderId` that landed, or may have: the floor's party, then the
+   * order's lines (unless `readLines` is false: the caller is reading them) and bills. When the
+   * order is no longer the open one once the floor answers, or a later re-read has started, nothing
+   * more is read or said. Otherwise, unless the waiter has left the order since `visit`
+   * ({@link #hasLeftOrder}) or a later re-read has started: this re-read's own failed floor or bills
+   * read is said, unless another message already is,
    * whether or not another read has refreshed the order since; and with its floor read failed and
    * its bills read still the latest, what the party still owes is taken from those bills when they
    * are the party's, which is the sum the floor would have answered (`readBillsOfParties` in
@@ -19645,10 +19645,11 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * `settled` is the payments of a table's bill this payment settled: on a handheld a simplified
-   * invoice then shows the paid screen, which offers Finish table (`table.finish`) unless other
-   * bills are still to pay. The bills held predate this payment, so the screen draws from them
-   * without the paid bill, and the read here corrects them.
+   * `settled` is non-null only for a table's bill this payment settled; it holds the bill's
+   * payments, or none for a whole-bill payment. On a handheld a simplified invoice then shows the
+   * paid screen, which offers Finish table (`table.finish`) unless other bills are still to pay. The
+   * bills held predate this payment, so the screen draws from them without the paid bill, and the
+   * read here corrects them.
    */
   #showTicket(
     workingOrderId: string,

@@ -745,7 +745,8 @@ are given.
    only cancel route, `POST /api/demo-reader/cancel`, is the simulator's pretend reader, mounted only
    for it, `till-api.ts:1178`, `:1220`).
 10. **"Cobrar al siguiente"** after a share, keeping the way chosen.
-11. **Settled: the table closes only on Cerrar mesa**, now a big button on the paid screen. Service
+11. **Settled: the table closes only on Cerrar mesa**, now a big button on the paid screen
+    (2026-11-06, A1236: not while other bills are still to pay; see §10's item 10). Service
     design §8 (owner-approved 2026-09-26): "Paying does not by itself free an occupied table. By
     default, **Finish table** closes the visit." Once built, it first runs A758's check (D12, owner
     answer Q40, 2026-10-18): "Finish table warns about dishes not served and offers 'Cancel and
