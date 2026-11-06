@@ -230,9 +230,9 @@ it("Finish retains the local exact-commit observation and originals before publi
     authority: "original-password",
     database: "committed-exact",
     register: null,
-    nextWorkspace: null,
     previousRecordDigest: null,
   });
+  expect(prepared).not.toHaveProperty("nextWorkspace");
   expect(records![1]!.previousRecordDigest).toBe(
     createHash("sha256").update(JSON.stringify(prepared)).digest("hex"),
   );

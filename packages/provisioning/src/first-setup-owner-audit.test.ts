@@ -346,14 +346,13 @@ async function pendingAudit(
     authority: "original-password",
     register: null,
     action,
-    nextWorkspace: null,
   };
   mutate(input, snapshot.originals);
   const prepared = await f.records.prepare(input, snapshot.originals);
   return { before, prepared, audit: createFirstSetupOwnerAudit(before, f.resolution) };
 }
 
-it.each(["register", "authority", "attempt", "action", "revision", "generation", "missing-state"])(
+it.each(["register", "attempt", "action", "revision", "generation", "missing-state"])(
   "does not complete a pending ownership audit with inconsistent %s evidence",
   async (fault) => {
     const f = await fixture("active");
@@ -362,10 +361,6 @@ it.each(["register", "authority", "attempt", "action", "revision", "generation",
       "ownership-rebind",
       (input, originals) => {
         if (fault === "register") input.register = { kind: "no-current-master", confirmed: true };
-        if (fault === "authority") {
-          input.authority = "local-empty-unused-assignment";
-          input.action = "retire";
-        }
         if (fault === "attempt") input.attemptId = "00000000-0000-4000-8000-000000000001";
         if (fault === "action") {
           input.action = "finish-publication";

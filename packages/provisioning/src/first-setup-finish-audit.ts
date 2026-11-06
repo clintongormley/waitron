@@ -33,7 +33,6 @@ export async function prepareFirstSetupFinishAudit(
       authority: "original-password",
       register: null,
       action: "finish-publication",
-      nextWorkspace: null,
     },
     [
       ...snapshot.originals,

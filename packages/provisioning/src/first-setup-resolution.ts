@@ -18,15 +18,6 @@ export type RegisterAnswer =
       consultedAt: string;
     }
   | { kind: "no-current-master"; confirmed: true };
-export interface WorkspaceBinding {
-  workspaceId: string;
-  anchorVenueDir: string;
-  anchorStateDir: string;
-  venueDir: string;
-  stateDir: string;
-  resolutionId: string;
-  selectionGeneration: number;
-}
 interface ResolutionMetadata {
   version: 1;
   resolutionId: string;
@@ -38,14 +29,12 @@ interface ResolutionMetadata {
   evidenceDigest: string;
   evidenceReferences: string[];
   database: "empty-preactivation" | "missing" | "committed-exact" | "unknown-or-nonempty";
-  authority: "original-password" | "local-empty-no-custodian" | "local-empty-unused-assignment";
+  authority: "original-password";
   phase: "prepared" | "applied";
-  nextWorkspace: WorkspaceBinding | null;
   recordedAt: string;
 }
 export interface ResolutionRecord extends ResolutionMetadata {
-  action:
-    "marker-repair" | "ownership-rebind" | "retire" | "select-workspace" | "finish-publication";
+  action: "marker-repair" | "ownership-rebind" | "finish-publication";
   register: RegisterAnswer | null;
 }
 export interface FirstSetupOriginal {
@@ -156,32 +145,6 @@ export async function firstSetupDirectory(path: string, create = false): Promise
     for (const folder of new Set([path, parent])) await syncFolder(folder);
   }
 }
-export function validateWorkspaceBinding(value: unknown): asserts value is WorkspaceBinding {
-  if (
-    !exact(value, [
-      "workspaceId",
-      "anchorVenueDir",
-      "anchorStateDir",
-      "venueDir",
-      "stateDir",
-      "resolutionId",
-      "selectionGeneration",
-    ]) ||
-    !uuid(value.workspaceId) ||
-    !uuid(value.resolutionId) ||
-    !integer(value.selectionGeneration) ||
-    ![value.anchorVenueDir, value.anchorStateDir, value.venueDir, value.stateDir].every(
-      (path) => typeof path === "string" && resolve(path) === path,
-    )
-  )
-    invalid();
-  const base = join(
-    String(value.anchorStateDir),
-    "first-setup-workspaces",
-    String(value.workspaceId),
-  );
-  if (value.venueDir !== join(base, "venue") || value.stateDir !== join(base, "state")) invalid();
-}
 const INPUT_KEYS = [
   "resolutionId",
   "attemptId",
@@ -191,7 +154,6 @@ const INPUT_KEYS = [
   "authority",
   "register",
   "action",
-  "nextWorkspace",
 ];
 function validateInput(value: unknown): asserts value is ResolutionInput {
   if (
@@ -205,29 +167,15 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
     !["empty-preactivation", "missing", "committed-exact", "unknown-or-nonempty"].includes(
       String(value.database),
     ) ||
-    !["original-password", "local-empty-no-custodian", "local-empty-unused-assignment"].includes(
-      String(value.authority),
-    ) ||
-    ![
-      "marker-repair",
-      "ownership-rebind",
-      "retire",
-      "select-workspace",
-      "finish-publication",
-    ].includes(String(value.action))
+    value.authority !== "original-password" ||
+    !["marker-repair", "ownership-rebind", "finish-publication"].includes(String(value.action))
   )
     invalid();
   const answer = value.register;
   if (
     answer === null &&
-    ((value.authority === "local-empty-unused-assignment" &&
-      value.database === "empty-preactivation" &&
-      ["retire", "select-workspace"].includes(String(value.action))) ||
-      (value.authority === "original-password" &&
-        (["marker-repair", "ownership-rebind"].includes(String(value.action)) ||
-          (value.action === "finish-publication" && value.database === "committed-exact") ||
-          (["retire", "select-workspace"].includes(String(value.action)) &&
-            ["missing", "empty-preactivation"].includes(String(value.database))))))
+    (["marker-repair", "ownership-rebind"].includes(String(value.action)) ||
+      (value.action === "finish-publication" && value.database === "committed-exact"))
   ) {
     // Null records no consultation; the observed outcome and authority are checked separately.
   } else if (
@@ -247,25 +195,6 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
     !timestamp(answer.consultedAt)
   )
     invalid();
-  if (
-    value.authority === "local-empty-no-custodian" &&
-    (value.database !== "empty-preactivation" ||
-      !object(answer) ||
-      answer.kind !== "no-current-master" ||
-      !["retire", "select-workspace"].includes(String(value.action)))
-  )
-    invalid();
-  if (
-    value.authority === "local-empty-unused-assignment" &&
-    (value.database !== "empty-preactivation" ||
-      !(answer === null || (object(answer) && answer.kind === "current-master")) ||
-      !["retire", "select-workspace"].includes(String(value.action)))
-  )
-    invalid();
-  if (value.nextWorkspace !== null) {
-    validateWorkspaceBinding(value.nextWorkspace);
-    if (value.nextWorkspace.resolutionId !== value.resolutionId) invalid();
-  }
 }
 function validateRecord(value: unknown): asserts value is ResolutionRecord {
   if (
@@ -520,13 +449,6 @@ export function createFirstSetupResolutionStore(options: {
         validateInput(input);
         const packed = pack(originals),
           path = await folder(input.resolutionId, true);
-        const anchor = await roots();
-        if (
-          input.nextWorkspace !== null &&
-          (input.nextWorkspace.anchorVenueDir !== anchor.venueDir ||
-            input.nextWorkspace.anchorStateDir !== anchor.stateDir)
-        )
-          invalid();
         const existing = await readDurableHostJson(join(path, "000001.json"), LIMIT);
         const records = existing === null ? [] : await read(input.resolutionId);
         const last = records[records.length - 1];
