@@ -2097,6 +2097,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   promise step (k = 13) sent nothing and said nothing; not looked into. A browser click lands only
   after every pending promise step, shown by run only for the step the removed fallback needed.
 
+- **A1364. Split's different-people question ends the press with nothing said when the bill or party
+  changes (seen in A803 slice 4c's review).** With the question open, a bill switch or a new party
+  makes Confirm send nothing and say nothing (`#askDifferentPeople`, `apps/till/src/till-app.ts`).
+  Sending nothing is the plan's D20; whether it should say why is open. Reached only by events sent
+  behind the question, or by a made-up floor answer.
+
+- **A1365. No case covers the follow-up after a split when the bill's draft arrives during it (left
+  open by A803 slice 4c).** Since fix I1, `#followSplit` carries on in that state, where before it
+  stopped. The till suites stay green, but nothing pins what it does there.
+
 - **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** "12 ×
   Croquetas" is twelve rows to tick, because A739's payment window holds those files
   (`apps/till/src/state/bill-payment.ts`, `widgets/bill-pay-dialog.ts`). Since A1208 the counter's
