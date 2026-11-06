@@ -2418,7 +2418,6 @@ export class DashboardApp extends LitElement {
 
   /** A pushed navigation, so the browser's Back button closes the modal. */
   #openProfile(): void {
-    if (!this.profileOpen) this.#beneathProfile = navigationGuardFor(window)?.href ?? location.href;
     this.#url.write({ dashboard: "profile" }, false);
   }
 

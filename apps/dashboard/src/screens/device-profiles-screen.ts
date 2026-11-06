@@ -542,8 +542,10 @@ export class DeviceProfilesScreen extends LitElement {
       const before = this.#addressProfile;
       this.#linkedProfile = this.#addressProfile = this.#url.read("profile");
       if (this.#linkedProfile === null) {
-        if (before !== null && (this.mode === "editor" || this.#openingId !== null))
-          this.#closeEditor(false);
+        if (before !== null) {
+          if (this.mode === "editor" || this.#openingId !== null) this.#closeEditor(false);
+        } else if (this.mode === "editor" && this.editingId !== null)
+          this.#nameKeptProfile(this.editingId);
       } else if (this.#profilesRead) this.#openLinkedProfile();
     },
     dashboardPath,
@@ -1531,7 +1533,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#nameKeptProfile(saved.id);
   }
 
-  /** A guarded write would ask the leave question about the newer input the editor stays open for. */
+  /** A guarded write would ask the leave question whenever unsaved input is held. */
   #nameKeptProfile(id: string): void {
     if (this.#url.read("dashboard") !== "device-profiles" || this.#url.read("profile") === id)
       return;

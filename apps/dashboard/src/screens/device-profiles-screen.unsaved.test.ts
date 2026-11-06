@@ -659,6 +659,7 @@ it("W69 a create kept open while another page's address showed stays open when t
   expect((q(screen, "profile-name") as HTMLElementTagNameMap["wt-input"] | null)?.value).toBe(
     "Newer phone",
   );
+  expect(location.pathname).toBe("/manage/device-profiles/profile/p2");
   expect(unload()).toBe(true);
 });
 
