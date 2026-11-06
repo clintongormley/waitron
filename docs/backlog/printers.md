@@ -199,6 +199,11 @@ A517 uses one job per pull to eliminate unsent leased tails. Every job now repea
 inventory cycle. Measure a burst on the box before choosing inventory caching or another
 lease design; the controlled Hono/transport probe is not a hardware throughput measurement.
 
+A1372 checks the claim against delivered history using the existing printer/status index.
+Its local synthetic database measurement excludes authentication, discovery and physical output.
+Measure those costs on the box, and measure large unfinished queues separately: failed jobs
+and live document leases still enter the status ranges before retry and lease checks.
+
 ## Make an unreported drawer outcome explicit without repeating its pulse
 
 A drawer whose claim or done report was lost stays listed as “printing”, without Resend or an

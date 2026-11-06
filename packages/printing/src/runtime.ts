@@ -101,10 +101,13 @@ export async function claimPrintJobs(
   return claimRows<ClaimedJob>(tx, {
     table: "print_jobs",
     key: "id",
-    claimableJoin: sql`join printers p on p.id = j.printer_id`,
-    claimable: sql`p.active = true and p.deleted_at is null
-      and ( p.transport = 'network_tcp' or ${usbBt} )
-      ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
+    claimable: sql`j.printer_id in (
+        select p.id from printers p
+        where p.active = true and p.deleted_at is null
+          and (p.transport = 'network_tcp' or ${usbBt})
+          ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
+      )
+      and j.status in ('queued', 'failed', 'printing')
       and ${invoiceDue(sql`j.id`)}
       and (j.kind = 'document' or j.status = 'queued')
       and ${due}`,

@@ -3915,7 +3915,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   Needs a native app; parked behind the go-native decision.
 
 - **Measure one-job print pulls on the box** — A517 repeats the agent's inventory cycle per job.
-  Physical throughput is unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
+  A1372 covers delivered-history claim cost in a local database; physical throughput,
+  authentication and large unfinished queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
 - **Make an unreported drawer outcome explicit without repeating its pulse** — a lost claim or
   done report remains “printing”, with no resend or automatic expiry.
