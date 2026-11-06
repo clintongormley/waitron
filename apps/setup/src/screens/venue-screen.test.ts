@@ -635,7 +635,7 @@ describe("setup-venue-screen", () => {
       invalidField: "operationDescription",
     });
     expect(q(el, "[data-test=operationDescription]")).toBeNull();
-    expect(await bottomOf(el)).toContain("500 characters");
+    expect(await bottomOf(el)).toContain("fault in Waitron");
   });
 
   it("marks nothing for a field path this form does not recognise", async () => {
@@ -1077,6 +1077,19 @@ it.each([
     expect(await bottomOf(el)).toBe("");
   },
 );
+
+it.each([
+  ["en-GB", "fault in Waitron"],
+  ["es-ES", "fallo de Waitron"],
+] as const)("the operation description refusal names a fault in Waitron (%s)", (locale, words) => {
+  setLocale(locale);
+  try {
+    expect(t("server_fields.operation_description")).toContain(words);
+    expect(t("server_fields.operation_description")).not.toContain("500");
+  } finally {
+    setLocale("en-GB");
+  }
+});
 
 it("explains an unsupported Demo province", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
