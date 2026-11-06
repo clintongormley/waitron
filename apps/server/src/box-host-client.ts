@@ -15,7 +15,8 @@ import { isUnset } from "./env-value.js";
  *
  * `missing`: no connection was made (`detail` is the error's code; EACCES is a socket whose group
  * the app is not in). `lost`: the connection broke, or closed with no answer, after the request was
- * sent; as after a `timeout`, a request that changes the box may have done so.
+ * sent (for `boxHostRequests()`, a whole reply line that arrived before the break is the answer);
+ * as after a `timeout`, a request that changes the box may have done so.
  */
 export type Unavailable = "missing" | "lost" | "refused" | "timeout" | "malformed";
 export type ClockServiceStatus =
@@ -295,7 +296,10 @@ export interface BoxHostRequests {
 export const DEFAULT_HOST_READ_MS = 5_000;
 /** Longer than the host unit's `RuntimeMaxSec=15` (`deploy/box/waitron-box@.service`). */
 export const DEFAULT_HOST_CHANGE_MS = 20_000;
-/** The longest line `deploy/box/waitron-box.sh` reads before answering `request_invalid`. */
+/**
+ * The longest line `deploy/box/waitron-box.sh` reads whole; it answers `request_invalid` to a
+ * longer one.
+ */
 const SHELL_LINE_MAX = 700;
 
 async function request<Value extends object, Refusal extends string>(

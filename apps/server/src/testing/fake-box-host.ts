@@ -79,7 +79,12 @@ export async function shellBoxHost(): Promise<{ path: string; stderr(): string }
     });
     children.add(child);
     child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
-    child.on("exit", () => {
+    child.on("error", (error) => {
+      stderr += `spawn failed: ${error.message}\n`;
+      children.delete(child);
+      socket.destroy();
+    });
+    child.on("close", () => {
       children.delete(child);
       socket.destroy();
     });

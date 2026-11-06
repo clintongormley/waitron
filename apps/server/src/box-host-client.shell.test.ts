@@ -36,6 +36,7 @@ const SERVER = { source: "server" } as const;
 const SNAPSHOT_REPLY =
   '{"ok":true,"wired":{"connected":true,"address":"192.168.1.10"},"wifi":{"connectedSsidHex":"4361666550657065","savedSsidHex":"4361666550657065"},"change":null,"bootCopy":{"state":"current","reason":null,"failure":null}}\n';
 const REQUEST_INVALID = '{"ok":false,"reason":"request_invalid"}\n';
+const FIELDS_INVALID = '{"ok":false,"reason":"fields_invalid"}\n';
 
 type Call = (client: BoxHostRequests) => Promise<unknown>;
 const saeJoin = (psk: string, ssidHex = "4361666550657065"): Call => {
@@ -98,6 +99,21 @@ describe("boxHostRequests() and a line longer than the shell handler reads", () 
       });
     });
   }
+
+  const OTHER_REFUSAL: Array<[string, Call]> = [
+    ["a 701-character join", JOIN_701],
+    ["a 3142-character name tag", TAG_3142],
+  ];
+  for (const [name, call] of OTHER_REFUSAL) {
+    it(`reads another refusal to ${name} as a refusal`, async () => {
+      const host = await fakeBoxHost((_line, socket) => socket.end(FIELDS_INVALID));
+      expect(await call(boxHostRequests({ socketPath: host.path }))).toEqual({
+        available: false,
+        reason: "refused",
+        refusal: "fields_invalid",
+      });
+    });
+  }
 });
 
 describe("boxHostRequests() and a reply before a broken connection", () => {
@@ -147,14 +163,6 @@ describe("boxHostRequests() and a reply before a broken connection", () => {
     expect(stand.endings).toEqual(["error:ECONNRESET"]);
   });
 
-  it("answers lost when nothing was written", async () => {
-    const host = await fakeBoxHost((_line, socket) => socket.destroy());
-    expect(await boxHostRequests({ socketPath: host.path }).networkRead(PERSON)).toEqual({
-      available: false,
-      reason: "lost",
-    });
-  });
-
   it("leaves the clock client answering lost for a complete reply", async () => {
     const host = await fakeBoxHost((_line, socket) =>
       socket.write(
@@ -166,6 +174,17 @@ describe("boxHostRequests() and a reply before a broken connection", () => {
       reason: "lost",
     });
     expect(stand.endings).toEqual(["error:ECONNRESET"]);
+  });
+});
+
+describe("boxHostRequests() and a connection closed with no reply", () => {
+  it("answers lost when the connection closed cleanly with no reply", async () => {
+    const host = await fakeBoxHost((_line, socket) => socket.destroy());
+    expect(await boxHostRequests({ socketPath: host.path }).networkRead(PERSON)).toEqual({
+      available: false,
+      reason: "lost",
+    });
+    expect(stand.endings).toEqual(["end"]);
   });
 });
 
