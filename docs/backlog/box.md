@@ -1063,8 +1063,10 @@ nothing yet: one typed method for each of PR 7's seven requests.
   for both `""` and `" "` before connecting, so until this pull request the clock client's promise
   rejected for both (`apps/server/src/box-host-client.empty-path.test.ts`).
 - TypeScript reads no types from the `.mjs` module, so `apps/server/src/box-scripts.d.ts` declares
-  the exports the server uses; nothing checks it against the module's code (the plan's D1). It also
-  declares `wifi-record.mjs` and `wifi-boot-copy.mjs`, which only the types test imports.
+  the exports the server uses; TypeScript does not check it against the module's code (the plan's
+  D1): the server's build refuses an export `box-host-client.ts` uses that the module lacks, and the
+  types test reads each list it declares. `box-scripts.d.ts` also declares `wifi-record.mjs` and
+  `wifi-boot-copy.mjs`, which only the types test imports.
 - `host-protocol.mjs` now exports its reply value lists, frozen.
   `apps/server/src/box-host-client.types.test.ts` holds each of the server's value types to the
   matching list, in any order, both through the typecheck and at run time, and sends every listed
@@ -1251,21 +1253,13 @@ nothing yet: one typed method for each of PR 7's seven requests.
   past the clock's 700-character limit without changing a clock answer. A box with the shell alone
   answers `unknown_request` to a B3 line of at most 700 characters, and `request_invalid` to a
   longer one, before it reads the verb (`deploy/box/waitron-box.sh:161-165`; a join line reaches
-  1003 characters, a `tag.write` line 3142). So the server's client must not read
-  `request_invalid` from a shell-only box as a fault in its own line; the forwarding pull request,
-  which lets a B3 line past the shell's 700-character read, removes the case. The client reads
-  `unknown_request` as "this host does not know this request", for that request only (D16), since
-  a host built before a later request was added answers it to that request alone.
+  1003 characters, a `tag.write` line 3142).
 - Every connection's instance stops at `RuntimeMaxSec=15`. A join and a forget are meant to answer
   once the change has started (D8), so each exchange stays short; how long a scan takes on the
   box's radio, and a join with its address, are rig measurements.
 - The Linux adapters are called as plain functions, never with `this` (the dispatcher reads each
   once and calls what it checked), so none may rely on `this`: an adapter that needs state takes
   it through a closure or a bound function.
-- The server's client sends the exact line `formatHostRequest` writes and checks each reply with
-  `parseHostReply`. Nothing in `apps/` imports `scripts/box/` today, so the client pull request
-  chooses between importing the module, moving it into a package, or a TypeScript twin held to it
-  by a shared test.
 - The server's routes check `system.manage` for every person request; `tag.write` runs as the
   server's own duty at handoff and after a rename or a move to Live commits, sending `null` for a
   name the tag cannot hold.
@@ -1307,8 +1301,8 @@ nothing yet: one typed method for each of PR 7's seven requests.
   so the route can hand the value over as read. Today nothing passes a path, so both clients use
   `/run/waitron-box/box.sock` (`box-host-client.ts:42`).
 - The same pull request: CI's `bundle-smoke` already builds and starts a server bundle carrying the
-  host protocol, so a declared import the module lacks fails that build (the plan's finding 13), but
-  no method of `boxHostRequests()` runs there until something calls one.
+  host protocol, so an export `box-host-client.ts` uses that the module lacks fails that build (the
+  plan's finding 13), but no method of `boxHostRequests()` runs there until something calls one.
 - The forwarding pull request (Linux): once the shell handler lets B3 lines past 700 characters,
   decide whether the 700-character rule stays (it also reads a lagging host's `request_invalid` to a
   long line as `unsupported`); measure a forwarded read, scan and change against the 5 and 20

@@ -11,6 +11,8 @@
 
 Nothing calls it: no route, no screen, no boot wiring. The clock requests' client, `boxHostClient()`, answers exactly as before.
 
+> 2026-11-06, as built: both clients now read an empty socket path as the default and answer `missing` for a path the connection refuses at once, the clock client included ([box.md, PR 8](../../backlog/box.md)).
+
 **Architecture:** One server file, `apps/server/src/box-host-client.ts`, gains a second factory beside the clock client's, sharing the socket code. It imports PR 7's module from the repository's root `scripts/box/` by relative path; a small TypeScript description of that module's types (an *ambient declaration*, a `.d.ts` file that tells TypeScript what a JavaScript module exports) lives in `apps/server/src/box-scripts.d.ts` (D1). `scripts/box/host-protocol.mjs` gains exported lists of the values its replies may hold, so the server's types can be held to them by a test (D9).
 
 **Tech Stack:** Node 26 (`node --version` printed `v26.13.0` on 2026-11-06), TypeScript 7 in `apps/server`, Vitest 4.1.12. No new dependency and no workspace package.
