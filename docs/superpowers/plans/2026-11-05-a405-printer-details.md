@@ -222,7 +222,7 @@ Line numbers below were measured on `c3a4f8a56a`.
   `VENUE_SERVICE.readProfileServiceScopes(tx, ids)` (`packages/module/src/module.ts:1109-1121`,
   used by `withProfileAccess`, `apps/server/src/management-api.ts:653-672`). **No seat method reads
   department names**: `listServiceZones` (`module.ts:819`) drops departments without an active zone
-  (`packages/venue-service/src/operations.ts:119`). Task 7 adds `readDepartmentNames` to the seat.
+  (`packages/venue-service/src/operations.ts:119`). Task 7 adds `readProfileDepartments` to the seat.
 - Station names: the only printer→station read returns ids
   (`GET /management-api/printers/:pid/stations`, `print-api.ts:1588-1595`). The delete-impact read
   joins `kitchen_stations` for names (`apps/server/src/printer-delete.ts:121-126`); Task 8 adds a
@@ -968,17 +968,21 @@ and list each in the commit.
 
 ### Task 7: The venue-service seat reads department names
 
+_2026-11-06: changed in Task 8's review from `readDepartmentNames` (names by department id, after
+`readProfileServiceScopes`) to `readProfileDepartments`, one query from profile to department,
+because the old path also ran an allowed-zones query whose answer was thrown away._
+
 **Files:**
 - Modify: `packages/module/src/module.ts` — `VenueServiceContribution` (`:740`) gains
-  `readDepartmentNames(tx: Transaction, ids: readonly string[]): Promise<{ id: string; name: string }[]>`
-  with a one-line doc: every named department that exists, switched off or not
+  `readProfileDepartments(tx: Transaction, profileIds: readonly string[]): Promise<{ profileId: string; departmentId: string; departmentName: string }[]>`
+  with a one-line doc: each named profile's department, switched off or not; a profile with none is absent
 - Modify: `packages/venue-service/src/profile-access.ts` — implement it beside
   `readProfileServiceScopes` (`:257`): a `departments` select by id, no `active` filter
 - Modify: `packages/venue-service/src/service.ts` — import it with the others (`:107-112`) and put it
   on the contribution object (beside `readProfileServiceScopes`, `:228`)
 - Test: `packages/venue-service/src/profile-access.test.ts` (beside the `readProfileServiceScopes`
   cases, `:508`); and `packages/venue-service/src/service.test.ts`'s list of the contribution's
-  method names (`:89`, compared exactly and sorted) gains `"readDepartmentNames"` at its sorted position
+  method names (`:89`, compared exactly and sorted) gains `"readProfileDepartments"` at its sorted position
 
 - [ ] **Step 1: Write the failing test.** `it("reads the names of the departments asked for, switched off ones included, and nothing for an unknown id")`
   — `useVenueDb`; seed two departments, switch one off; ask for both plus a random UUID: two rows,
@@ -1000,7 +1004,7 @@ and list each in the commit.
   returns one row per (printer or A4 printer, profile):
   `{ printerId: string | null, pagePrinterId: string | null, profileId, profileName, roles: Role[], departmentId: string | null, departmentName: string | null }`,
   roles in the order receipt, payment_slip, cash_drawer, invoice; retired profiles left out; department through
-  `VENUE_SERVICE.readProfileServiceScopes` then `readDepartmentNames`. Add
+  `VENUE_SERVICE.readProfileDepartments`, one query. Add
   `GET /management-api/printer-stations` → `{ printerId, stationId, stationName }[]` ordered by
   station name, under the same `gated` (`printer.manage`)
 - Modify: `apps/dashboard/src/api/client.ts` — `PrinterProfileOffer` (`:1250-1254`) to the new

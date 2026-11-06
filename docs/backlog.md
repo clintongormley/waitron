@@ -1312,6 +1312,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   window, landed #2492; PRs 2–4 to come).**
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
 
+- **A Used by link to a prep station opens the Stations tab, not the station (left open by A405).**
+  [Detail](backlog/printers.md#a-used-by-link-to-a-prep-station-opens-the-stations-tab-not-the-station)
+
 - **A `wt-dialog` (and so `wt-modal`) holding hinted fields is taller inside than it shows (found
   by A662; predates it).**
   [Detail](backlog/printers.md#a-wt-dialog-holding-hinted-fields-is-taller-inside-than-it-shows)
