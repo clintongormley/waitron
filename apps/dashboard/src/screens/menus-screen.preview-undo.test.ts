@@ -394,7 +394,11 @@ const soupPrice: MenuChange = {
 /** Soup's own price on this menu was 4.00 when published and is 5.00 now. */
 function soupPreview(): MenuPreview {
   const priced = (price: string, menuName?: string) => {
-    const document = menuDocument([documentProduct("mi-soup", "p-soup")], { "p-soup": "Soup" }, menuName);
+    const document = menuDocument(
+      [documentProduct("mi-soup", "p-soup")],
+      { "p-soup": "Soup" },
+      menuName,
+    );
     const offer = document.offers["mi-soup"]!;
     return {
       ...document,
@@ -410,8 +414,9 @@ function soupPreview(): MenuPreview {
 
 it("runs a price Undo after a save of the same row that is out, and leaves the row unmarked once both finish", async () => {
   const save = held();
-  const updateMenuItem = vi.fn((_menu: string, _item: string, input: { grossPrice: string | null }) =>
-    input.grossPrice === "6.00" ? save.promise : Promise.resolve(),
+  const updateMenuItem = vi.fn(
+    (_menu: string, _item: string, input: { grossPrice: string | null }) =>
+      input.grossPrice === "6.00" ? save.promise : Promise.resolve(),
   );
   const fake = fakeApi({
     updateMenuItem,
@@ -451,7 +456,10 @@ it("runs a price Undo after a save of the same row that is out, and leaves the r
 
   save.answer();
   await vi.waitFor(() => expect(updateMenuItem).toHaveBeenCalledTimes(2));
-  expect(updateMenuItem.mock.calls.map(([, , input]) => input.grossPrice)).toEqual(["6.00", "4.00"]);
+  expect(updateMenuItem.mock.calls.map(([, , input]) => input.grossPrice)).toEqual([
+    "6.00",
+    "4.00",
+  ]);
   await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
 
   visit(`/manage/menus/menu/${MENU}/view/prices`);
