@@ -1037,6 +1037,47 @@ NetworkManager.
   `host_failed` for any adapter failure or wrong answer, with no adapter error text in it. A canary
   sweep finds the Wi-Fi password only in the join adapter's argument.
 
+**Built so far (2026-11-06), PR 8 (#2495).** [PR 8](../superpowers/plans/2026-11-06-b3-8-host-client.md)
+adds `boxHostRequests()` to `apps/server/src/box-host-client.ts`, beside the clock client, called by
+nothing yet: one typed method for each of PR 7's seven requests.
+
+- Each request line is the one `formatHostRequest` writes, and each reply is read by
+  `parseHostReply`, imported from `scripts/box/host-protocol.mjs` by relative path. A request the
+  protocol refuses to write answers `invalid`, and nothing is sent. `tagWrite` always sends the
+  server as its actor.
+- Every failure is an answer with `available: false`, never a throw: `refused` with the host's own
+  word from that request's list, `unsupported`, `missing`, `lost`, `timeout`, `malformed` or
+  `invalid`. A reply over 4096 bytes (`HOST_REPLY_MAX`) is `malformed`.
+- `unsupported` answers `unknown_request`, for that request only, and `request_invalid` to a line
+  over 700 characters, the longest the clock handler reads (`deploy/box/waitron-box.sh:161`). Any
+  other refusal, `request_invalid` to a shorter line included, stays a refusal.
+- A whole reply line that arrives before the connection breaks is the answer for
+  `boxHostRequests()` only; the clock client still answers `lost` there. Tests with a stand-in
+  connection and with the real shell handler cover it; on Linux the handler answers a line over 700
+  characters and then resets the connection (measured in Docker, the plan's re-map finding 9).
+- The two reads wait 5 seconds, the five other requests 20; `readMs` and `changeMs` override them,
+  and the tests run both defaults on fake timers.
+- Both clients, the clock one included, now treat an empty socket path as no path and ask
+  `/run/waitron-box/box.sock` (`isUnset`), and answer `missing` with the error's code for a path the
+  connection refuses at once. On Node v26.13.0, `net.createConnection` threw `ERR_SOCKET_BAD_PORT`
+  for both `""` and `" "` before connecting, so until this pull request the clock client's promise
+  rejected for both (`apps/server/src/box-host-client.empty-path.test.ts`).
+- TypeScript reads no types from the `.mjs` module, so `apps/server/src/box-scripts.d.ts` declares
+  the exports the server uses; TypeScript does not check it against the module's code (the plan's
+  D1): the server's build refuses an export `box-host-client.ts` uses that the module lacks, and the
+  types test reads each list it declares. `box-scripts.d.ts` also declares `wifi-record.mjs` and
+  `wifi-boot-copy.mjs`, which only the types test imports.
+- `host-protocol.mjs` now exports its reply value lists, frozen.
+  `apps/server/src/box-host-client.types.test.ts` holds each of the server's value types to the
+  matching list, in any order, both through the typecheck and at run time, and sends every listed
+  value through the client. `host_failed` is held only as a literal in that test, and `keyMgmt`'s
+  two values are not held to any list.
+- `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names `apps/server` for `host-protocol.mjs`,
+  `wifi-record.mjs` and `wifi-boot-copy.mjs`.
+- `boot.ts` imports the clock client from the same file, so the server's bundle now carries
+  `host-protocol.mjs` and the five modules it reaches (`pnpm --filter @waitron/server build`, then
+  `/usr/bin/grep -n "^// \.\./\.\./scripts/box" apps/server/dist/server.js`, on 2026-11-06).
+
 **A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 **For later slices, from PR 1's re-map against main:**
@@ -1212,21 +1253,13 @@ NetworkManager.
   past the clock's 700-character limit without changing a clock answer. A box with the shell alone
   answers `unknown_request` to a B3 line of at most 700 characters, and `request_invalid` to a
   longer one, before it reads the verb (`deploy/box/waitron-box.sh:161-165`; a join line reaches
-  1003 characters, a `tag.write` line 3142). So the server's client must not read
-  `request_invalid` from a shell-only box as a fault in its own line; the forwarding pull request,
-  which lets a B3 line past the shell's 700-character read, removes the case. The client reads
-  `unknown_request` as "this host does not know this request", for that request only (D16), since
-  a host built before a later request was added answers it to that request alone.
+  1003 characters, a `tag.write` line 3142).
 - Every connection's instance stops at `RuntimeMaxSec=15`. A join and a forget are meant to answer
   once the change has started (D8), so each exchange stays short; how long a scan takes on the
   box's radio, and a join with its address, are rig measurements.
 - The Linux adapters are called as plain functions, never with `this` (the dispatcher reads each
   once and calls what it checked), so none may rely on `this`: an adapter that needs state takes
   it through a closure or a bound function.
-- The server's client sends the exact line `formatHostRequest` writes and checks each reply with
-  `parseHostReply`. Nothing in `apps/` imports `scripts/box/` today, so the client pull request
-  chooses between importing the module, moving it into a package, or a TypeScript twin held to it
-  by a shared test.
 - The server's routes check `system.manage` for every person request; `tag.write` runs as the
   server's own duty at handoff and after a rename or a move to Live commits, sending `null` for a
   name the tag cannot hold.
@@ -1247,6 +1280,47 @@ NetworkManager.
   cases observe", skips itself when any other case in the file is not set to run, so a `.skip` or
   `.only` left in that file turns it off with no failure. Left open by #2474's review, which
   suggested failing instead of skipping when `CI` is set.
+
+**For later slices, from PR 8's [re-map against main](../superpowers/plans/2026-11-06-b3-8-host-client.md#re-map-against-main-on-2026-11-06):**
+
+- The routes pull request builds `boxHostRequests()` in `boot.ts`; makes the `PersonActor` from
+  the signed-in person after checking `system.manage`; gives each of the client's answers a route
+  answer and an error code (`unsupported` and `missing` mean "this box cannot do this", not a
+  fault); never logs a `networkJoin` argument; and runs `tagWrite` as the server's own duty.
+- The same pull request: sending `null` for a venue name the tag cannot hold (PR 7's D12) needs
+  `usableVenueName` from `scripts/box/name-tag.mjs`, unless the route reads this client's `invalid`
+  and sends `null` again. Importing it needs a declaration and a `ROOT_SCOPE_CONSUMERS` entry, which
+  would also close the CI gap below for `name-tag.mjs`.
+- The same pull request: the socket accepts at most four connections at once (`MaxConnections=4`,
+  `deploy/box/waitron-box.socket:10`). A dashboard re-reading `network.read` while a change runs,
+  beside the clock watch's status reads and sets, has to stay inside that; nobody has measured what
+  a fifth connection meets.
+- The same pull request: if the socket path comes from an environment variable, the client already
+  treats an empty value as no value and uses the default (`isUnset`,
+  `apps/server/src/env-value.ts:5`, called at `apps/server/src/box-host-client.ts:147` and `:348`),
+  so the route can hand the value over as read. Today nothing passes a path, so both clients use
+  `/run/waitron-box/box.sock` (`box-host-client.ts:42`).
+- The same pull request: CI's `bundle-smoke` already builds and starts a server bundle carrying the
+  host protocol, so an export `box-host-client.ts` uses that the module lacks fails that build (the
+  plan's finding 13), but no method of `boxHostRequests()` runs there until something calls one.
+- The forwarding pull request (Linux): once the shell handler lets B3 lines past 700 characters,
+  decide whether the 700-character rule stays (it also reads a lagging host's `request_invalid` to a
+  long line as `unsupported`); measure a forwarded read, scan and change against the 5 and 20
+  seconds; and if the Node host runs as its own service, stopping the shell's instance at 15 seconds
+  no longer stops a change, so the reason for 20 seconds needs revisiting (the plan's D6).
+- The "This box" screen pull request: words for `unsupported`, `missing`, `lost`, `timeout`,
+  `malformed` and each refusal, in English and Spanish.
+- Open: the clock client still answers `lost` to a whole reply followed by a broken connection
+  (the plan's D5). Its lines stay under 700 characters, so the shell handler reads them whole, but a
+  later host could break the connection after answering; whether the clock client should read that
+  reply too is undecided.
+- Open: `name-tag.mjs`, `upgrades/contracts.mjs` and `disk-key.mjs` select no package in CI when
+  they alone change, though the server's bundle carries them (the plan's D11; the root-scope guard
+  states this gap in its header).
+- Decisions recorded for review: importing the module with a declaration in the server rather than
+  `allowJs`, a package or a TypeScript twin (D1); `unsupported` and `invalid` as the client's own
+  words (D3); reading a reply before a broken connection for B3's requests only (D5); the 5- and
+  20-second waits (D6).
 
 **Left open by PR 1's review (#2370):**
 

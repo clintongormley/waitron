@@ -1,12 +1,20 @@
 import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CHANGE_KINDS,
+  CHANGE_REFUSALS,
+  CHANGE_STATES,
   HOST_LINE_MAX,
   HOST_REPLY_MAX,
   HOST_VERBS,
   NETWORK_SCAN_MAX,
+  PARSER_REFUSALS,
   PERSON_ID_MAX,
+  REPLY_REFUSALS,
+  SCAN_SECURITY,
   SHELL_VERBS,
+  START_SCREENS,
+  TAG_OUTCOMES,
   VERB_PERMISSION,
   formatHostReply,
   formatHostRequest,
@@ -99,6 +107,66 @@ describe("the lists", () => {
   it("holds the limits", () => {
     expect(HOST_LINE_MAX).toBe(4096);
     expect(PERSON_ID_MAX).toBe(64);
+  });
+});
+
+describe("the reply value lists", () => {
+  it("exports the start screens, frozen", () => {
+    expect(START_SCREENS).toEqual(["dashboard", "till"]);
+    expect(Object.isFrozen(START_SCREENS)).toBe(true);
+  });
+
+  it("exports the parser's refusals, frozen", () => {
+    expect(PARSER_REFUSALS).toEqual([
+      "request_invalid",
+      "unknown_request",
+      "actor_invalid",
+      "fields_invalid",
+    ]);
+    expect(Object.isFrozen(PARSER_REFUSALS)).toBe(true);
+  });
+
+  it("exports each request's own refusals, frozen inside and out", () => {
+    expect(REPLY_REFUSALS).toEqual({
+      "network.read": [],
+      "network.scan": ["busy", "no_wifi"],
+      "network.join": ["busy", "no_wifi"],
+      "network.forget": ["busy", "not_saved"],
+      "screen.read": [],
+      "screen.set": [],
+      "tag.write": ["busy", "no_free_token", "header_unreadable", "no_space"],
+    });
+    expect(Object.isFrozen(REPLY_REFUSALS)).toBe(true);
+    for (const list of Object.values(REPLY_REFUSALS)) expect(Object.isFrozen(list)).toBe(true);
+  });
+
+  it("exports the change kinds, frozen", () => {
+    expect(CHANGE_KINDS).toEqual(["join", "forget"]);
+    expect(Object.isFrozen(CHANGE_KINDS)).toBe(true);
+  });
+
+  it("exports the change states, frozen", () => {
+    expect(CHANGE_STATES).toEqual(["running", "applied", "refused"]);
+    expect(Object.isFrozen(CHANGE_STATES)).toBe(true);
+  });
+
+  it("exports each change kind's refusals, frozen inside and out", () => {
+    expect(CHANGE_REFUSALS).toEqual({
+      join: ["password-rejected", "network-not-found", "timed-out", "failed"],
+      forget: ["failed"],
+    });
+    expect(Object.isFrozen(CHANGE_REFUSALS)).toBe(true);
+    for (const list of Object.values(CHANGE_REFUSALS)) expect(Object.isFrozen(list)).toBe(true);
+  });
+
+  it("exports the scan's security values, frozen", () => {
+    expect(SCAN_SECURITY).toEqual(["wpa-psk", "sae", "other"]);
+    expect(Object.isFrozen(SCAN_SECURITY)).toBe(true);
+  });
+
+  it("exports the name tag's outcomes, frozen", () => {
+    expect(TAG_OUTCOMES).toEqual(["written", "removed", "unchanged"]);
+    expect(Object.isFrozen(TAG_OUTCOMES)).toBe(true);
   });
 });
 
@@ -251,12 +319,20 @@ describe("the verb", () => {
   it("exports no adapter to call", async () => {
     const module = await import("./host-protocol.mjs");
     expect(Object.keys(module).sort()).toEqual([
+      "CHANGE_KINDS",
+      "CHANGE_REFUSALS",
+      "CHANGE_STATES",
       "HOST_LINE_MAX",
       "HOST_REPLY_MAX",
       "HOST_VERBS",
       "NETWORK_SCAN_MAX",
+      "PARSER_REFUSALS",
       "PERSON_ID_MAX",
+      "REPLY_REFUSALS",
+      "SCAN_SECURITY",
       "SHELL_VERBS",
+      "START_SCREENS",
+      "TAG_OUTCOMES",
       "VERB_PERMISSION",
       "formatHostReply",
       "formatHostRequest",

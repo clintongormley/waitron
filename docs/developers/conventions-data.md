@@ -4321,6 +4321,11 @@ after the request was sent, so the clock may have moved), `refused`, `timeout` o
 Time health and the `clock.sync_off` warning (`apps/server/src/clock-sync-alert.ts`: `off`,
 `stopped`, `unsynchronised`, and `unreachable` in production only) read the status through one
 60-second cache, which a set clears.
+The same file's `boxHostRequests()` asks B3's seven host requests and answers the same way, with
+two more answers, `unsupported` (the host does not take that request) and `invalid` (nothing sent),
+and one difference: a whole reply line that arrived before the connection broke is read as the
+reply, not `lost`; nothing calls it yet ([B3 PR 8's plan](../superpowers/plans/2026-11-06-b3-8-host-client.md)). Both
+clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 
 **Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
 `boot.ts`):
