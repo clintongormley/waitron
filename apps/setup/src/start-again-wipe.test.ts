@@ -244,6 +244,11 @@ it.each([
   },
   { name: "setup.owner_required", error: { code: "setup.owner_required" }, cause: "unavailable" },
   {
+    name: "setup.connection_insecure",
+    error: { code: "setup.connection_insecure", params: {}, status: 403 },
+    cause: "insecure",
+  },
+  {
     name: "an unknown refusal cause",
     error: { code: "setup.start_again_refused", params: { cause: "x" } },
     cause: undefined,

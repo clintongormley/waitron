@@ -47,6 +47,8 @@ export const initialOwnerStrings = {
       "This box cannot read some of this setup's files, so deleting it is not offered. Reconnect keeps everything as it is. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
     wipeFault:
       "Deleting this setup is not offered because of a fault in Waitron. Reconnect keeps everything as it is.",
+    wipeInsecure:
+      "Deleting this setup needs the box's secure connection. Set it up, then open this page over it.",
     setupDatabaseUnreadable: "The previous setup process was unsuccessful.",
     tradingSaved:
       "This setup already saved the settings the box sells with, so deleting it is not offered.",
@@ -118,6 +120,8 @@ export const initialOwnerStrings = {
       "Este equipo no puede leer algunos archivos de esta configuración, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     wipeFault:
       "No se ofrece borrar esta configuración por un fallo de Waitron. Reconectar lo deja todo como está.",
+    wipeInsecure:
+      "Para borrar esta configuración hace falta la conexión segura del equipo. Configúrala y abre esta página con ella.",
     setupDatabaseUnreadable: "El proceso de configuración anterior no tuvo éxito.",
     tradingSaved:
       "Esta configuración ya guardó los ajustes con los que vende el equipo, así que no se ofrece borrarla.",
