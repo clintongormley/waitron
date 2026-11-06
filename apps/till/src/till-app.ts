@@ -19677,13 +19677,18 @@ export class TillApp extends LitElement {
     if (paid) void this.#readBillsForPaidScreen();
   }
 
-  /** Stands in for any {@link #rereadAmounts} still out from before the payment. Its success ends a
-   * read's failure said earlier, unless the waiter has left the paid screen, where the message may
-   * be a newer read's. */
+  /** Stops any {@link #rereadAmounts} still out from before the payment, and reads the bills, not the
+   * floor. Its success ends a read's failure said earlier, unless the waiter has left the paid screen
+   * or a newer bills read has started, where the message may be that read's. */
   async #readBillsForPaidScreen(): Promise<void> {
     this.#amountsReread++;
-    const { bills } = await this.#loadPartyBills(undefined, true, true);
-    if (bills !== null && this.drill?.kind === "paid" && this.errorKey === "table.reread_failed")
+    const { read, bills } = await this.#loadPartyBills(undefined, true, true);
+    if (
+      bills !== null &&
+      read === this.#partyBillsRead &&
+      this.drill?.kind === "paid" &&
+      this.errorKey === "table.reread_failed"
+    )
       this.errorKey = undefined;
   }
 

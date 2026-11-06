@@ -4341,6 +4341,124 @@ describe("the paid screen on a handheld", () => {
       expect(text(alert(el))).toBe(t("table.reread_failed"));
     });
 
+    it("when the 15-second read overtakes the paid screen's read and fails, the alert stays once the older read answers", async () => {
+      const nativeTimeout = window.setTimeout.bind(window);
+      const fifteenSeconds: (() => void)[] = [];
+      const timeout = vi.spyOn(window, "setTimeout").mockImplementation(((
+        handler: TimerHandler,
+        delay?: number,
+        ...args: unknown[]
+      ) => {
+        if (delay === 15_000 && typeof handler === "function")
+          fifteenSeconds.push(handler as () => void);
+        return nativeTimeout(handler, delay, ...args);
+      }) as typeof window.setTimeout);
+      try {
+        const read = heldRead();
+        const afterLast = vi
+          .fn<() => Promise<PartyBill[]>>()
+          .mockReturnValueOnce(read.answered)
+          .mockImplementation(readFailed);
+        const { el } = await payBillOneAfter(readFailed, afterLast);
+        expect(afterLast).toHaveBeenCalledOnce();
+        expect(text(alert(el))).toBe(t("table.reread_failed"));
+
+        for (const fire of fifteenSeconds.splice(0)) fire();
+        await flush(el);
+        expect(afterLast).toHaveBeenCalledTimes(2);
+
+        read.answer(billOnePaid);
+        await flush(el);
+
+        expect(paidView(el)).not.toBeNull();
+        expect(text(alert(el))).toBe(t("table.reread_failed"));
+      } finally {
+        timeout.mockRestore();
+      }
+    });
+
+    it("what a newer re-read says stays once the paid screen's older read answers", async () => {
+      const read = heldRead();
+      const afterLast = vi
+        .fn<() => Promise<PartyBill[]>>()
+        .mockReturnValueOnce(read.answered)
+        .mockImplementation(readFailed);
+      const { el } = await payBillOneAfter(async () => threeBills, afterLast, {
+        updateOrderLine: vi
+          .fn()
+          .mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } }),
+      });
+      expect(alert(el)).toBeNull();
+      vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+      emit(tableOrder(el), "change-line", { lineNo: 1, lineName: "x", patch: {}, revision: 0 });
+      await flush(el);
+      expect(afterLast).toHaveBeenCalledTimes(2);
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+
+      read.answer(billOnePaid);
+      await flush(el);
+
+      expect(paidView(el)).not.toBeNull();
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+    });
+
+    /** Bill 1 paid in three shares with its bills read still out, an earlier failure's alert showing
+     * and a Change, sent before the last share, answered: its re-read is out on the floor. */
+    async function newerRereadOnTheFloor() {
+      const read = heldRead();
+      const floor = heldRead<unknown>();
+      const change = heldRead<unknown>();
+      const afterSecond = vi.fn(() => {
+        emit(tableOrder(document.querySelector<TillApp>("till-app")!), "change-line", {
+          lineNo: 1,
+          lineName: "x",
+          patch: {},
+          revision: 0,
+        });
+        return readFailed();
+      });
+      const afterLast = vi
+        .fn<() => Promise<PartyBill[]>>()
+        .mockReturnValueOnce(read.answered)
+        .mockResolvedValue(billOnePaid);
+      const { el } = await payBillOneAfter(afterSecond, afterLast, {
+        updateOrderLine: vi.fn(() => change.answered),
+      });
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+      vi.mocked(api.getTablesState).mockImplementation(() => floor.answered as Promise<never>);
+
+      change.answer({ revision: 1, party: { id: "v1", revision: 4 } });
+      await flush(el);
+      expect(vi.mocked(api.getTablesState)).toHaveBeenCalled();
+      expect(afterLast).toHaveBeenCalledOnce();
+      return { el, read, floor };
+    }
+
+    it("the paid screen's read answering while a newer re-read waits on the floor, with that re-read then fine, ends the alert", async () => {
+      const { el, read, floor } = await newerRereadOnTheFloor();
+
+      read.answer(billOnePaid);
+      await flush(el);
+      floor.answer([mesa({ billCount: 3, outstanding: "50.00" })]);
+      await flush(el);
+
+      expect(paidView(el)).not.toBeNull();
+      expect(alert(el)).toBeNull();
+    });
+
+    it("the paid screen's read answering while a newer re-read waits on the floor, with that floor read then failing, says so", async () => {
+      const { el, read, floor } = await newerRereadOnTheFloor();
+
+      read.answer(billOnePaid);
+      await flush(el);
+      floor.fail(new TypeError("Failed to fetch"));
+      await flush(el);
+
+      expect(paidView(el)).not.toBeNull();
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+    });
+
     it("a refused Open drawer stays when the paid screen's read succeeds", async () => {
       const read = heldRead();
       const { el } = await payBillOneAfter(
