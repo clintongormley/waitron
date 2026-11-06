@@ -744,6 +744,141 @@ it("choosing a Counter zone from Floor opens Counter once and closes its checked
   expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
 });
 
+describe("choosing the Counter zone the counter is already on, with an order in the basket", () => {
+  const REFUSAL = "Clear the basket before changing service area";
+  const heldOrder = {
+    kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
+    id: "wo-1",
+    orderNumber: 5,
+    label: null,
+    lines: [{ menuItemId: "coffee-offer", quantity: "1.000" }],
+  };
+  const emit = (source: Element, type: string, detail?: unknown) =>
+    source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  const alert = (el: TillApp) =>
+    el.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim() ?? null;
+  const zoneMenu = (el: TillApp) =>
+    shell(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
+  async function pickZone(el: TillApp, zoneId: string) {
+    const menu = zoneMenu(el);
+    await (menu as TillShell).updateComplete;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    await userEvent.click(menu.querySelector<HTMLElement>(`[data-counter-zone="${zoneId}"]`)!);
+    await el.updateComplete;
+  }
+  const popoverOpen = (el: TillApp) =>
+    zoneMenu(el).shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
+  async function retrieveFromParked(el: TillApp) {
+    emit(shell(el), "show-counter-orders", { kind: "parked" });
+    await vi.waitFor(() => expect(counter(el)?.orderList).toBe("parked"));
+    const store = counter(el)!.store!;
+    emit(counter(el)!, "retrieve-order", { id: "wo-1" });
+    await vi.waitFor(() => expect(store.lines).toHaveLength(1));
+    await el.updateComplete;
+    return store;
+  }
+
+  it("brings the menu back after a retrieve left the Parked list open", async () => {
+    const { el, api } = await mount(selection(["bar", "shop"], "bar"), {
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOrder),
+    });
+    const store = await retrieveFromParked(el);
+    expect(counter(el)!.orderList).toBe("parked");
+
+    await pickZone(el, "bar");
+
+    await vi.waitFor(() => expect(counter(el)!.orderList).toBeNull());
+    expect(store.lines.map((line) => line.product.productId)).toEqual(["coffee"]);
+    expect(alert(el)).toBeNull();
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+    expect(popoverOpen(el)).toBe(false);
+    expect(counter(el)!.selectedServiceZoneId).toBe("bar");
+  });
+
+  it("brings the menu back from the Waiting list with lines in the basket", async () => {
+    const { el, api } = await mount(selection(["bar", "shop"], "bar"));
+    const store = counter(el)!.store!;
+    store.addProduct(counter(el)!.products[0]!, "1");
+    emit(shell(el), "show-counter-orders", { kind: "waiting" });
+    await vi.waitFor(() => expect(counter(el)?.orderList).toBe("waiting"));
+
+    await pickZone(el, "bar");
+
+    await vi.waitFor(() => expect(counter(el)!.orderList).toBeNull());
+    expect(store.lines).toHaveLength(1);
+    expect(alert(el)).toBeNull();
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+  });
+
+  it("returns from Floor to the counter with the basket's lines kept", async () => {
+    const { el, api } = await mount(selection(["bar", "shop", "room"], "bar"));
+    const store = counter(el)!.store!;
+    store.addProduct(counter(el)!.products[0]!, "1");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await vi.waitFor(() => expect(counter(el)).toBeNull());
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+
+    await pickZone(el, "bar");
+
+    await vi.waitFor(() => expect(counter(el)).not.toBeNull());
+    expect(counter(el)!.store).toBe(store);
+    expect(store.lines).toHaveLength(1);
+    expect(alert(el)).toBeNull();
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+  });
+
+  it("clears the basket refusal but leaves any other message", async () => {
+    const { el } = await mount(selection(["bar", "shop"], "bar"));
+    counter(el)!.store!.addProduct(counter(el)!.products[0]!, "1");
+
+    await pickZone(el, "shop");
+    await vi.waitFor(() => expect(alert(el)).toBe(REFUSAL));
+    await pickZone(el, "bar");
+    await vi.waitFor(() => expect(alert(el)).toBeNull());
+
+    Object.assign(el, { errorKey: "held.stale" });
+    await el.updateComplete;
+    const shown = alert(el);
+    expect(shown).not.toBeNull();
+    expect(shown).not.toBe(REFUSAL);
+    await pickZone(el, "bar");
+    expect(alert(el)).toBe(shown);
+  });
+
+  it("still refuses another zone after a retrieve with the list open", async () => {
+    const { el, api } = await mount(selection(["bar", "shop"], "bar"), {
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOrder),
+    });
+    const store = await retrieveFromParked(el);
+
+    await pickZone(el, "shop");
+
+    await vi.waitFor(() => expect(alert(el)).toBe(REFUSAL));
+    expect(counter(el)!.selectedServiceZoneId).toBe("bar");
+    expect(counter(el)!.orderList).toBe("parked");
+    expect(store.lines).toHaveLength(1);
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+  });
+
+  it("adds no history entry when the menu is already showing", async () => {
+    const { el } = await mount(selection(["bar", "shop"], "bar"));
+    counter(el)!.store!.addProduct(counter(el)!.products[0]!, "1");
+    await el.updateComplete;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    try {
+      await pickZone(el, "bar");
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
+      expect(alert(el)).toBeNull();
+      expect(counter(el)!.orderList).toBeNull();
+    } finally {
+      push.mockRestore();
+      replace.mockRestore();
+    }
+  });
+});
+
 it("a line added while a zone read is pending keeps the original zone and price", async () => {
   let answer!: (value: ZoneOfferCatalogue) => void;
   const pending = new Promise<ZoneOfferCatalogue>((resolve) => {
