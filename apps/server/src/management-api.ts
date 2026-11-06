@@ -759,6 +759,11 @@ export function mountManagementApi(
   );
   const recoveries = new Set<Promise<void>>();
   const credentialKeyRing = deps.credentialKeyRing;
+  const passkeySite = (c: Context) =>
+    c.env?.remoteStaff === true
+      ? { rpId: new URL(c.req.url).hostname, origin: new URL(c.req.url).origin }
+      : { rpId: deps.rpId, origin: deps.origin };
+  const secureCookie = (c: Context) => deps.secureCookies || c.env?.remoteStaff === true;
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();
@@ -867,7 +872,7 @@ export function mountManagementApi(
       const completion = await withTransaction(deps.db, async (tx) => {
         return loginWithGoogle(tx, { subject });
       });
-      setManagementCookie(c, completion.token, deps.secureCookies);
+      setManagementCookie(c, completion.token, secureCookie(c));
       return c.redirect(`${deps.origin}/manage/?login=google`);
     }),
   );
@@ -929,7 +934,7 @@ export function mountManagementApi(
         throw error;
       }
       finishAttempt("success");
-      setManagementCookie(c, session.token, deps.secureCookies);
+      setManagementCookie(c, session.token, secureCookie(c));
       return c.json({ personId: session.personId, offerPasskey: session.offerPasskey });
     }),
   );
@@ -1018,7 +1023,7 @@ export function mountManagementApi(
         return completeAccountAction(tx, { ...common, token: body.token as string });
       });
       if (completion.session === null) clearManagementCookie(c);
-      else setManagementCookie(c, completion.session.token, deps.secureCookies);
+      else setManagementCookie(c, completion.session.token, secureCookie(c));
       return c.json({ personId: completion.personId, authenticated: completion.session !== null });
     }),
   );
@@ -1868,7 +1873,7 @@ export function mountManagementApi(
           await verifyOwnCredentials(tx, credentials);
           return beginPasskeyRegistration(tx, {
             managementSessionId: sessionId,
-            rpId: deps.rpId,
+            rpId: passkeySite(c).rpId,
             rpName: "Waitron",
           });
         },
@@ -1887,8 +1892,8 @@ export function mountManagementApi(
           managementSessionId: sessionId,
           challengeHandle,
           response: response as never,
-          rpId: deps.rpId,
-          origin: deps.origin,
+          rpId: passkeySite(c).rpId,
+          origin: passkeySite(c).origin,
         });
       });
       return c.json(out);
@@ -1901,14 +1906,14 @@ export function mountManagementApi(
       const out = await withTransaction(deps.db, (tx) =>
         readPasskeySignals(tx, { managementSessionId: sessionId }),
       );
-      return c.json({ rpId: deps.rpId, ...out });
+      return c.json({ rpId: passkeySite(c).rpId, ...out });
     }),
   );
 
   app.post("/management-api/passkey/auth/options", (c) =>
     run(c, log, async () => {
       const out = await withTransaction(deps.db, async (tx) => {
-        return beginPasskeyAuthentication(tx, { rpId: deps.rpId });
+        return beginPasskeyAuthentication(tx, { rpId: passkeySite(c).rpId });
       });
       return c.json(out);
     }),
@@ -1921,11 +1926,11 @@ export function mountManagementApi(
         return finishPasskeyAuthentication(tx, {
           challengeHandle,
           response: response as never,
-          rpId: deps.rpId,
-          origin: deps.origin,
+          rpId: passkeySite(c).rpId,
+          origin: passkeySite(c).origin,
         });
       });
-      setManagementCookie(c, session.token, deps.secureCookies);
+      setManagementCookie(c, session.token, secureCookie(c));
       return c.json({ personId: session.personId });
     }),
   );

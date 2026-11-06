@@ -360,6 +360,13 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+**6 November 2026: the owner stopped this implementation and replaced it with A951-S.** Start with
+one remote dashboard entrance and one real browser-to-box path through the existing gateway.
+The old branch stays private and parked. The intake below records the earlier proposal; it does
+not add requirements to the replacement. Current work is listed in the
+[backlog](../backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client).
+
+
 ### Provisioning-source requirements agreement: 6 November 2026
 
 Lane E’s 6 November engineering review accepts the complete D provisioning-source proposal at Cloud

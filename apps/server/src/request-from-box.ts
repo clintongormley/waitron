@@ -38,5 +38,5 @@ export function requestAddress(c: Context): string | undefined {
 
 /** A request with no connection to read, as from `app.request` with no socket, counts as the box's. */
 export function requestFromBox(c: Context, deps: RequestSourceDeps = {}): boolean {
-  return addressIsBox(requestAddress(c), deps);
+  return c.env?.remoteStaff !== true && addressIsBox(requestAddress(c), deps);
 }
