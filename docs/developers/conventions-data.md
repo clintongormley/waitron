@@ -1596,9 +1596,13 @@ management cookie (A1371's plan, D1).
   method is neither `GET` nor `HEAD`, then: If request’s mode is not "cors", then switch on
   request’s referrer policy: "no-referrer" Set serializedOrigin to `null`." So a post from another
   page arrives with its real address or `null`, never with none. `Sec-Fetch-Site` is a second
-  signal only: Fetch Metadata sends it only to a secure address (`curl -sL
-  https://w3c.github.io/webappsec-fetch-metadata/`, 2026-11-06: "Assert: r’s current URL is a
-  potentially trustworthy URL."), so on a box served over plain HTTP the check rests on `Origin`.
+  signal only: Fetch Metadata sends it only to a potentially trustworthy address (`curl -sL
+  https://w3c.github.io/webappsec-fetch-metadata/`, 2026-11-06: "To append the Fetch metadata
+  headers for a request, given request r: If r’s current URL is not an potentially trustworthy URL,
+  return."), so on a box served over plain HTTP at a LAN name or address the check rests on
+  `Origin`. Loopback is potentially trustworthy even over HTTP (`curl -sL
+  https://w3c.github.io/webappsec-secure-contexts/`, 2026-11-06: "If origin’s host matches one of
+  the CIDR notations 127.0.0.0/8 or ::1/128 [RFC4632], return "Potentially Trustworthy".").
 
 **Why.** SameSite ignores the port: the HTML standard's "Sites" are "(origin's scheme, origin's host's
 registrable domain)", with no port. So a page on another port of the box's own name is sent the
@@ -1620,9 +1624,19 @@ check does not look at them; see the backlog entry "Till changes do not check wh
 **Guards, weaker than their names:** the "refuses the attack on every write route" cases in
 `apps/server/src/boot.management-origin.test.ts` and `apps/server/src/waiting-start.test.ts` send
 one attack shape (a random cookie, another port's `Origin`, `Sec-Fetch-Site: same-site`) to every
-write route in their own app's route table. Each sees only its own app, and only the routes the
-harness's modules and configuration mount; a route registered on another app is seen by no sweep,
-and the recovery listener's and first-setup's apps are seen by neither the check nor the sweeps.
+write route in their own app's route table, as their harness mounts it:
+
+- The main-app sweep runs over a full start only, so a module the harness leaves off, and a route
+  mounted only on the restricted or setup start, is swept by nothing.
+- The waiting sweep runs over a waiting app built with its own stand-in check
+  (`requireManagementChangeFromOwnPage(async () => false, …)`), so it proves the waiting app mounts
+  whatever check it is given ahead of its routes. That boot hands it the server's real check is
+  proved by "the waiting start refuses a carry-on from another port of the box's address, and takes
+  its own pages'" in `apps/server/src/boot.start-check.test.ts`: on a started box waiting for a peer,
+  the attack on `POST /carry-on` answers 403 `management.origin_refused`, and neither the box's own
+  page nor `managementOrigin` is refused. That case sends one route, not a sweep.
+- A route registered on any other app is seen by no sweep. The recovery listener's, first-setup's,
+  landing and node-entry apps are seen by neither the check nor the sweeps.
 Since the check refuses a cookie-carrying change to any path, matched or not, a path no route
 serves would also look covered.
 

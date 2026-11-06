@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
+> 2026-11-06: A1371 replaced this route-level page check with the server-wide one (`management.origin_refused`); see `docs/developers/conventions-data.md`.
+
 > 2026-11-06, as built: after review, scan, forget and the start screen refuse a request from another page (`Origin`, `Sec-Fetch-Site`) with 403 `box_host.origin_refused`, in a middleware before the body-size limit and the session check; forget and the start screen take a body only as `application/json`, as the join already did (D6). So the Goal's and D3's 'first' hold only for the two GET routes, and D14's 'before anything else' for no route: every POST route has a page or connection check ahead of the limit, and a GET carries no body.
 
 **Goal:** Let a signed-in person who holds `system.manage` read and change the box's network and start screen through Waitron's server, which asks the box's host service (the small root service outside Docker that changes the box itself) through PR 8's client. Six routes in a new `apps/server/src/box-host-api.ts`:
