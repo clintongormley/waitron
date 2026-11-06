@@ -1,5 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { deviceId as brandDeviceId } from "@waitron/shared";
+import { decimal, deviceId as brandDeviceId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -649,7 +649,7 @@ describe("cancelling a placed order respects stored cards", () => {
             workingOrderId: id,
             provider: "fake",
             paymentRef: randomUUID(),
-            amount: "3.00",
+            amount: decimal("3.00"),
             settledAt: new Date(),
           }),
         );
@@ -767,7 +767,7 @@ describe("forwarded offline card recovery", () => {
         workingOrderId: id,
         provider: "fake",
         paymentRef: randomUUID(),
-        amount: "3.00",
+        amount: decimal("3.00"),
         settledAt: new Date(),
       }),
     );
