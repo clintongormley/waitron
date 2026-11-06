@@ -2446,6 +2446,30 @@ first version check. The same added case in the full root run failed beside 6,69
 baseline had passed all 6,694 cases, so this probe establishes the short-limit failure mechanism;
 it does not establish why A737's original intermittent first check was delayed.
 
+**2026-11-06, ordinary version failures:** A974's pre-push check for #2509 expected status 1
+from each version failure. The first returned 1; the next two hit the fixture's one-second
+allowance and returned 124. A controlled two-second delay under the old allowance reproduced
+that mismatch. The original log is retained in lane F's
+`receipts/a974-split-table-names-20261106/`; its host load was not recorded.
+
+The diagnostic now delays its first nonzero version command by two seconds, asserts that the
+reported first-call duration reaches two seconds, and lets it use the script's ten-second default.
+All original phase/status assertions remain. The install and version stall controls shorten only
+the phase they deliberately stall. The production script and its limits are unchanged.
+
+The slow-Node control also gives its healthy reader the normal read allowance and injects a
+two-second reader delay whose reported duration is asserted. With a one-second read limit it
+fails at the original success assertion; with the default it installs on attempt 1 and retains
+the empty-`nodeArgs` assertion.
+
+The zero-delay ordinary-failure control, timed around real `gtimeout` and the stub in a disposable
+checkout of `46fde7944a`, took 0.12–0.23 seconds per version call during a concurrent root-guard
+run (one-minute host load 4.73). This is a local instrumented sample, not a worst-case bound.
+It does not establish what delayed the original commands. Run the passing delayed control with
+`pnpm exec vitest run scripts/ci-setup-pnpm.test.mjs -t 'identifies each version-then-fails failure'`.
+To reproduce the former mismatch in a disposable checkout, add `PNPM_SETUP_VERSION_SECONDS: "1"`
+to that row's environment while keeping the delay and the original status-1 assertion.
+
 ### Every Node setup is bounded
 
 Each `actions/setup-node` site has two adjacent attempts, each with
