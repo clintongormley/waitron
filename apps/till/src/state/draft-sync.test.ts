@@ -915,6 +915,52 @@ describe("DraftSync: signing out", () => {
 
     expect(server.saveDraft).toHaveBeenCalledOnce();
   });
+
+  it("keeps the person's own lines, not the newer edit on screen, when signing out with a save still out", async () => {
+    let reject!: () => void;
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockImplementationOnce(
+      () =>
+        new Promise<never>((_resolve, fail) => {
+          reject = () => fail({ code: "draft.taken_over", status: 409 });
+        }),
+    );
+    draft.store.addProduct(beer, "1");
+    const queued = draft.flush();
+    await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalledOnce());
+
+    draft.applyBillSnapshot(server.snapshot(seed("p2", steak)), draft.generation);
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    const closed = draft.close();
+
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    reject();
+    await queued;
+    await closed;
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+
+  it("refuses a tap once a candidate is kept, so signing out loses no dish on screen", async () => {
+    const wine = dish("wine", "Wine");
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({ code: "group.not_found", status: 409 });
+    draft.store.addProduct(beer, "1");
+    expect(await draft.flush()).toEqual({ refused: "group.not_found" });
+    seed("p2", steak);
+
+    expect(await draft.correctPlaces(new Map(), new AbortController().signal, () => true)).toEqual({
+      refused: "draft.out_of_date",
+    });
+    draft.store.addProduct(wine, "1");
+    await draft.close();
+
+    expect({
+      screen: rows(draft),
+      kept: draft.candidate?.lines.map((line) => line.product.name),
+    }).toEqual({ screen: ["Beer ×1"], kept: ["Beer"] });
+  });
 });
 
 describe("DraftSync: after a submission", () => {

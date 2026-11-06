@@ -371,6 +371,7 @@ export class DraftSync {
   }
 
   retainCandidate(): void {
+    if (this.candidate !== null) return;
     const base = this.expectedEdit;
     if (base === null || (!this.#unsaved && !this.#saving)) return;
     this.#candidates.set(this.#candidateKey, {
@@ -381,6 +382,7 @@ export class DraftSync {
       lines: structuredClone([...this.store.lines]),
       localGeneration: this.#localGeneration,
     });
+    this.#lockAuthority();
   }
 
   resolveCandidate(reviewedLines: readonly OrderLine[] | null): void {
@@ -888,10 +890,6 @@ export class DraftSync {
       if (!this.#invalidateSave(expectedEdit)) return await this.#refused(error);
       const refusal = asRefusal(error);
       if (refusal?.refused !== DRAFT_PERSON_REFUSAL) return "failed";
-      // onRefused can close this sync (the till does while this person is still signed in), and
-      // closing while a save is out keeps the lines on screen, which can be a newer edit's, over the
-      // kept lines holding this person's.
-      this.#saving = false;
       this.#options.onRefused(refusal.refused);
       return refusal;
     } finally {
