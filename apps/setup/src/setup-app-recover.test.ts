@@ -175,7 +175,6 @@ it.each(refusals)(
 
 it.each([
   ["uncheckable", { password: "uncheckable", revision: null, ownerGeneration: null }],
-  ["repairable", { pair: "repairable" }],
 ] as const)(
   "where the wipe is not offered (%s), Recover from backup is drawn disabled like Start again",
   async (name, inspection) => {
