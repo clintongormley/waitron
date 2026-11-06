@@ -62,8 +62,8 @@ had read a rule the owner withdrew on 4 November.
 
 **5. Deleting a person's data blocks it first (owner, 2026-11-06, A1405).** The AEPD's legal office (report 0148/2019) says
 real erasure means setting the data aside first, then destroying it. A980's S9 (erasing a booking guest) and S11 (clearing a former employee's
-email) just clear the field, and A664's removal has the same gap. The owner chose the sealed, dated
-copy LOPDGDD article 32.4 allows.
+email) just clear the field, and A664's removal has the same gap. The owner chose real blocking inside the
+database, which waits for A760.
 
 ## For the tax and accounting adviser
 
