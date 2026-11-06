@@ -692,7 +692,10 @@ export async function recoveryInvoices() {
   return rows;
 }
 
-export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
+export async function managedHttp(
+  f: Awaited<ReturnType<typeof archiveHost>>,
+  { holdDownloadMs = 0 }: { holdDownloadMs?: number } = {},
+) {
   const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
   const point = {
     id: pointId,
@@ -748,7 +751,10 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
       if (action === "restored") return Response.json({ status: "restored" });
       throw new Error(`unexpected recovery action ${action}`);
     },
-    download: async () => f.restore.artifact,
+    download: async () => {
+      clock.advance(holdDownloadMs);
+      return f.restore.artifact;
+    },
   };
   const client = () => createCloudRecoveryClient(options);
   await client().start();
