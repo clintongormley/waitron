@@ -719,3 +719,22 @@ describe("sumupClient findTransaction refund events", () => {
     ]);
   });
 });
+
+describe("legacy refund HTTP bodies", () => {
+  it.each([200, 202, 204, 400, 403, 404, 409, 422])(
+    "reads status %s without parsing its body",
+    async (status) => {
+      const client = sumupClient({
+        apiKey: "test-key",
+        merchantCode: "MC",
+        fetch: () =>
+          Promise.resolve(
+            new Response(status === 204 ? null : "<html>provider answer</html>", { status }),
+          ),
+      });
+      await expect(client.refund({ transactionId: "txn_1" })).resolves.toEqual({
+        status: status >= 400 ? "refused" : "accepted",
+      });
+    },
+  );
+});

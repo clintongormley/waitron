@@ -1,72 +1,26 @@
-import { AppError, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database } from "@waitron/db";
+import { reversePayment } from "@waitron/payments";
 import type { PaymentResult } from "@waitron/payments";
-import {
-  assertReversible,
-  findPaymentByRef,
-  recordFailedRefund,
-  recordRefund,
-  recordVoid,
-} from "@waitron/payments";
 import type { SumUpClient } from "./client.js";
 import { SUMUP_PROVIDER } from "./client.js";
 
-/**
- * void / refund / partialRefund via SumUp's refund endpoint (there is no separate void). T1: find +
- * read-only reversibility pre-check inside `withTransaction`; network: the refund, OUTSIDE every
- * transaction; T2: `recordVoid`/`recordRefund`, or `recordFailedRefund` when SumUp refused (the
- * row's state is untouched). The same T1/T2 shape as `reverseViaStripe`; not shared with it
- * because one vendor's package must not import another's.
- */
-export async function reverseViaSumUp(
+export function reverseViaSumUp(
   db: Database,
   client: Pick<SumUpClient, "refund">,
   ref: string,
   kind: "void" | "refund",
   amount: Decimal | undefined,
 ): Promise<PaymentResult> {
-  const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTransaction(db, fn);
-  const found = await inTransaction(async (tx) => {
-    const f = await findPaymentByRef(tx, SUMUP_PROVIDER, ref);
-    if (f === undefined || f.externalRef === null) {
-      throw new AppError("payment.not_found", { provider: SUMUP_PROVIDER, paymentRef: ref });
-    }
-    await assertReversible(tx, {
-      provider: SUMUP_PROVIDER,
-      paymentRef: ref,
-      kind,
-      amount,
-    });
-    return { ...f, externalRef: f.externalRef };
-  });
-  const key = { provider: SUMUP_PROVIDER, paymentRef: ref };
-  const attempted = amount ?? decimal(found.amount);
-
-  const outcome = await client.refund({
-    transactionId: found.externalRef,
-    ...(amount ? { amount } : {}),
-  });
-  if (outcome.status === "refused") {
-    await inTransaction((tx) => recordFailedRefund(tx, { ...key, amount: attempted }));
-    return {
-      provider: SUMUP_PROVIDER,
-      paymentRef: ref,
-      state: found.state,
-      amount: attempted,
-      settledAt: null,
-    };
-  }
-  const row = await inTransaction((tx) =>
-    kind === "void" ? recordVoid(tx, key) : recordRefund(tx, { ...key, amount: attempted }),
+  return reversePayment(
+    db,
+    { provider: SUMUP_PROVIDER, paymentRef: ref, kind, amount },
+    async (externalRef) => {
+      const outcome = await client.refund({
+        transactionId: externalRef,
+        ...(amount ? { amount } : {}),
+      });
+      return outcome.status;
+    },
   );
-  return {
-    provider: SUMUP_PROVIDER,
-    paymentRef: ref,
-    state: row.state,
-    amount: amount ?? decimal(row.amount),
-    settledAt: null,
-  };
 }

@@ -1,16 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { AppError, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database } from "@waitron/db";
+import { reversePayment } from "@waitron/payments";
 import type { PaymentResult } from "@waitron/payments";
-import {
-  assertReversible,
-  findPaymentByRef,
-  recordFailedRefund,
-  recordRefund,
-  recordVoid,
-} from "@waitron/payments";
 
 /** Structural, so `reverseViaStripe` takes either `StripeClient` or `StripeDeviceClient`. */
 export interface StripeRefunder {
@@ -28,12 +20,8 @@ export interface ReverseViaStripeOptions {
   resolveProcessorRef?: (externalRef: string) => Promise<string>;
 }
 
-/** The reversibility pre-check runs BEFORE the network refund, so an invalid local state fails
- * without moving money. A Stripe-refused refund records a failure row and leaves the payment state
- * untouched; any other status, `pending` included, is treated as accepted. The idempotency key is
- * fresh per call, so two independent equal partial refunds each issue a real refund.
- * SAME-reversal retry-safety (a persisted per-reversal id) is deferred. */
-export async function reverseViaStripe(
+// A fresh key keeps independent equal partial refunds separate; it does not protect a resend.
+export function reverseViaStripe(
   db: Database,
   client: StripeRefunder,
   provider: string,
@@ -44,52 +32,13 @@ export async function reverseViaStripe(
     resolveProcessorRef = (externalRef) => Promise.resolve(externalRef),
   }: ReverseViaStripeOptions = {},
 ): Promise<PaymentResult> {
-  // Network calls — the refund and `resolveProcessorRef` — stay outside every transaction.
-  const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTransaction(db, fn);
-
-  const found = await inTransaction(async (tx) => {
-    const f = await findPaymentByRef(tx, provider, ref);
-    if (f === undefined || f.externalRef === null) {
-      throw new AppError("payment.not_found", { provider, paymentRef: ref });
-    }
-    const externalRef = f.externalRef;
-    await assertReversible(tx, { provider, paymentRef: ref, kind, amount });
-    return { ...f, externalRef };
+  return reversePayment(db, { provider, paymentRef: ref, kind, amount }, async (externalRef) => {
+    const processorRef = await resolveProcessorRef(externalRef);
+    const outcome = await client.refund({
+      paymentIntentId: processorRef,
+      ...(amount ? { amount } : {}),
+      idempotencyKey: randomUUID(),
+    });
+    return outcome.status === "failed" ? "refused" : "accepted";
   });
-  const key = { provider, paymentRef: ref };
-
-  // After `assertReversible`, so the processor is not asked about a payment we already refuse.
-  const processorRef = await resolveProcessorRef(found.externalRef);
-  const outcome = await client.refund({
-    paymentIntentId: processorRef,
-    ...(amount ? { amount } : {}),
-    idempotencyKey: randomUUID(),
-  });
-
-  if (outcome.status === "failed") {
-    await inTransaction((tx) =>
-      recordFailedRefund(tx, { ...key, amount: amount ?? decimal(found.amount) }),
-    );
-    return {
-      provider,
-      paymentRef: ref,
-      state: found.state,
-      amount: amount ?? decimal(found.amount),
-      settledAt: null,
-    };
-  }
-
-  const row = await inTransaction((tx) =>
-    kind === "void"
-      ? recordVoid(tx, key)
-      : recordRefund(tx, { ...key, amount: amount ?? decimal(found.amount) }),
-  );
-  return {
-    provider,
-    paymentRef: ref,
-    state: row.state,
-    amount: amount ?? decimal(row.amount),
-    settledAt: null,
-  };
 }
