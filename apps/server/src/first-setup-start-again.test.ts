@@ -406,7 +406,11 @@ it("with venue.db missing, a damaged node.db refuses the summary and Start again
     ownerGeneration: current.ownerGeneration!,
   };
   const before = await attemptFiles(f);
-  const refusal = { code: "setup.not_ready", reason: "node.db unreadable" };
+  const refusal = {
+    code: "setup.not_ready",
+    params: { cause: "unreadable" },
+    reason: "node.db unreadable",
+  };
   await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
   await expect(
     actions.startAgainFirstSetup({
@@ -810,12 +814,9 @@ it.each([
       ownerGeneration: current.ownerGeneration!,
     };
     const before = await folderTrees(f);
-    await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
-    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
+    const refusal = { code: "setup.not_ready", params: { cause: "may-have-filed" } };
+    await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
+    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject(refusal);
     expect(await folderTrees(f)).toEqual(before);
     expect(await readStartAgainMarker(f.venueDir)).toBeNull();
   },
@@ -1199,6 +1200,28 @@ it("an unused attempt whose database cannot be read, beside a public record, is 
   expect(vi.mocked(readSetupDatabase)).not.toHaveBeenCalled();
 });
 
+it("an unused attempt whose database the inspection could not show empty, read whole and found not empty, is refused setup.not_ready unexpected, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await writeFile(join(f.venueDir, "venue.db"), "not a database");
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  expect(inspected.database).toBe("corrupt");
+  const ids = {
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+  };
+  const read = { kind: "read", holdings: { rows: 1, kept: 0, records: 0, accepted: 0 } } as const;
+  vi.mocked(readSetupDatabase).mockResolvedValueOnce(read).mockResolvedValueOnce(read);
+  const refusal = { code: "setup.not_ready", params: { cause: "unexpected" } };
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
+  const before = await attemptFiles(f);
+  await expect(actions.startAgainFirstSetup({ ...startRequest, ...ids })).rejects.toMatchObject(
+    refusal,
+  );
+  expect(await attemptFiles(f)).toEqual(before);
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
 it.each(["module-operation-public.json", "first-fiscal-documents/stray.json"])(
   "with the database present, a damaged %s still refuses Start again setup.not_ready, and nothing changes",
   async (file) => {
@@ -1291,7 +1314,7 @@ it("a damaged record with no owner still refuses for a marker over its limit, an
       revision: inspected.revision!,
       ownerGeneration: inspected.ownerGeneration!,
     }),
-  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  ).rejects.toMatchObject({ code: "setup.not_ready", params: { cause: "too-large" } });
   expect(await folderTrees(f)).toEqual(before);
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
@@ -1451,7 +1474,8 @@ it("on a missing database, the summary and Start again with outside evidence con
     };
   });
   const before = await folderTrees(f);
-  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({ code: "setup.not_ready" });
+  const refusal = { code: "setup.not_ready", params: { cause: "may-have-filed" } };
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
   await expect(
     actions.startAgainFirstSetup({
       ...request,
@@ -1460,7 +1484,7 @@ it("on a missing database, the summary and Start again with outside evidence con
         shown: { reached: "named" },
       },
     }),
-  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  ).rejects.toMatchObject(refusal);
   expect(await folderTrees(f)).toEqual(before);
 });
 
@@ -1668,7 +1692,7 @@ it("a marker over its limit refuses Start again before anything is written", asy
         shown: { reached: "named" },
       },
     }),
-  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  ).rejects.toMatchObject({ code: "setup.not_ready", params: { cause: "too-large" } });
   expect(await folderTrees(f)).toEqual(before);
   expect(before.state[`${CONFIRMATIONS}/`]).toBeUndefined();
   expect(before.venue[START_AGAIN_MARKER_FILE]).toBeUndefined();

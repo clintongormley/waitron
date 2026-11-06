@@ -49,12 +49,21 @@ it("reads a row committed only in the -wal through a private copy, leaving the o
 it("answers setup.not_ready when the private copy cannot be written", async () => {
   const held = await heldSetup({ pendingWal: true });
   vi.mocked(fileSystem.mkdtemp).mockRejectedValueOnce(
-    Object.assign(new Error("no space"), { code: "ENOSPC" }),
+    Object.assign(new Error("i/o"), { code: "EIO" }),
   );
   await expect(read(held)).rejects.toMatchObject({
     code: "setup.not_ready",
-    reason: "copy failed: ENOSPC",
+    params: { cause: "unreadable" },
+    reason: "copy failed: EIO",
   });
+});
+
+it("a copy that fails with ENOSPC answers storage.disk_full", async () => {
+  const held = await heldSetup({ pendingWal: true });
+  vi.mocked(fileSystem.mkdtemp).mockRejectedValueOnce(
+    Object.assign(new Error("no space"), { code: "ENOSPC" }),
+  );
+  await expect(read(held)).rejects.toMatchObject({ code: "storage.disk_full", params: {} });
 });
 
 it("answers setup.not_ready when the private copy cannot be removed", async () => {
@@ -71,6 +80,7 @@ it("answers setup.not_ready when the private copy cannot be removed", async () =
   );
   await expect(read(held, modules)).rejects.toMatchObject({
     code: "setup.not_ready",
+    params: { cause: "unreadable" },
     reason: "copy not removed: EBUSY",
   });
   expect(copy).toMatch(/waitron-setup-holdings-/);
@@ -89,6 +99,7 @@ it("keeps a failed read as the reason when the private copy then cannot be remov
   );
   await expect(read(held, modules)).rejects.toMatchObject({
     code: "setup.not_ready",
+    params: { cause: "unreadable" },
     reason: "read failed: ESEAT",
   });
   await rm(dirname(copy!), { recursive: true, force: true });
@@ -101,6 +112,7 @@ it("passes on a module seat's error code, never its reason", async () => {
   });
   await expect(read(held, modules)).rejects.toMatchObject({
     code: "setup.not_ready",
+    params: { cause: "unreadable" },
     reason: "read failed: setup.attempt_invalid",
   });
 });
@@ -144,7 +156,10 @@ it.each([
   });
   const reading = read(held, modules);
   if (outcome === "throws")
-    await expect(reading).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expect(reading).rejects.toMatchObject({
+      code: "setup.not_ready",
+      params: { cause: "unreadable" },
+    });
   else await reading;
   expect(copy).toMatch(/waitron-setup-holdings-/);
   expect(copy).not.toBe(join(held.roots.venueDir, "venue.db"));
