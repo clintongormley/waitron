@@ -2,7 +2,7 @@ import { join, resolve } from "node:path";
 import { deploymentEnvironmentFor, resolveLogDir } from "@waitron/db";
 import type { DeploymentEnvironment } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { DEFAULTS } from "@waitron/scheduler";
+import { DEFAULTS } from "@waitron/payments";
 import { resolveLitestreamBin } from "@waitron/stream/litestream.js";
 import { parseBoxAddresses } from "./box-reach.js";
 import { tryLoadNodeIdentity } from "./node-config.js";

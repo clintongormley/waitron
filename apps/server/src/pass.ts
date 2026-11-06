@@ -1,10 +1,10 @@
 import type { DrainResult } from "@waitron/fiscal";
-import type { RunRecord, TickResult } from "@waitron/scheduler";
+import type { RunRecord, TickResult } from "@waitron/payments";
 import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /** This host's own label for the fiscal drainer. It has no `scheduled_runs` name because it is not
- * a ledger duty (`packages/scheduler/src/duty.ts` says why). */
+ * a ledger duty (`packages/payments/src/reconciliation-schedule/duty.ts` says why). */
 export const DRAIN_DUTY = "fiscal.drain";
 /** The ledger duty name, matching what `reconcilerAsDuty` writes into `scheduled_runs.duty`. */
 export const RECONCILE_DUTY = "payments.reconcile.stripe";

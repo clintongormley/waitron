@@ -62,7 +62,11 @@ import {
   IDENTITY_PERSONAL_DATA,
 } from "@waitron/identity";
 import { validateThemeConfiguration } from "@waitron/layouts";
-import type { ModuleConfigurationTransfer, WaitronModule } from "@waitron/module";
+import {
+  combineBackupVerification,
+  type ModuleConfigurationTransfer,
+  type WaitronModule,
+} from "@waitron/module";
 import {
   PAYMENTS_ALERTS,
   PAYMENTS_CLASSIFICATION,
@@ -70,8 +74,8 @@ import {
   PAYMENTS_CONFIGURATION_TRANSFER,
   PAYMENTS_CHANGE_SOURCES,
   PAYMENTS_HANDOVER,
+  SCHEDULER_BACKUP_VERIFICATION,
 } from "@waitron/payments";
-import { SCHEDULER_BACKUP_VERIFICATION } from "@waitron/scheduler";
 import {
   STAFFING_BACKUP_VERIFICATION,
   STAFFING_CHANGE_SOURCES,
@@ -260,20 +264,15 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../payments/drizzle",
     },
     classification: PAYMENTS_CLASSIFICATION,
-    backup: { verification: paymentsBackupVerification(CARD_PROVIDERS) },
+    backup: {
+      verification: combineBackupVerification(paymentsBackupVerification(CARD_PROVIDERS), [
+        SCHEDULER_BACKUP_VERIFICATION,
+      ]),
+    },
     changes: PAYMENTS_CHANGE_SOURCES,
     configurationTransfer: PAYMENTS_CONFIGURATION_TRANSFER,
     alerts: PAYMENTS_ALERTS,
     handover: PAYMENTS_HANDOVER,
-  },
-  {
-    name: "scheduler",
-    version: "0.0.0",
-    tier: "toggleable",
-    requires: { core: "*" },
-    tablesIn: "payments",
-    backup: { verification: SCHEDULER_BACKUP_VERIFICATION },
-    configurationTransfer: { kind: "none" },
   },
   {
     name: "credentials",

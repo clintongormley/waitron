@@ -1071,10 +1071,10 @@ describe("startServer, against a migrated venue directory", () => {
     // migration seam, so the assertion is on the resulting journals, not on boot success.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-modules-filter-state-"));
-    // `scheduler` is toggleable and owns `__drizzle_migrations_scheduler`.
+    // `bookings` is toggleable and owns `__drizzle_migrations_bookings`.
     await writeFile(
       join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { scheduler: false } }),
+      JSON.stringify({ modules: { bookings: false } }),
     );
     const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-filter-venue-"));
     let server: StartedServer | undefined;
@@ -1096,12 +1096,12 @@ describe("startServer, against a migrated venue directory", () => {
       probe = await openVenueDatabase(venueDir);
       // A scalar subquery answers one row whose column is NULL when the table is missing, where an
       // empty result would also be what a query selecting nothing at all returns.
-      const schedulerReg = await probe.venue.execute<{ reg: string | null }>(
+      const bookingsReg = await probe.venue.execute<{ reg: string | null }>(
         sql.raw(
-          `select (select name from sqlite_master where type = 'table' and name = '__drizzle_migrations_scheduler') as reg`,
+          `select (select name from sqlite_master where type = 'table' and name = '__drizzle_migrations_bookings') as reg`,
         ),
       );
-      expect(schedulerReg.rows[0]!.reg).toBeNull();
+      expect(bookingsReg.rows[0]!.reg).toBeNull();
       // The filter kept every enabled set: `payments` is enabled by default.
       const payments = modulesWithSets(ALL_MODULES).find((m) => m.name === "payments")!;
       const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);
@@ -1129,7 +1129,7 @@ describe("startServer, against a migrated venue directory", () => {
     // `fiscal-none` disabled too, so the fiscal slot resolves to the seeded node's Veri*Factu.
     await writeFile(
       join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { scheduler: false, "fiscal-none": false } }),
+      JSON.stringify({ modules: { bookings: false, "fiscal-none": false } }),
     );
     let server: StartedServer | undefined;
     try {
@@ -1150,7 +1150,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
       server = started;
       await awaitListening(httpPort());
-      expect(reconcileLine.softDisabled).toEqual(["scheduler"]);
+      expect(reconcileLine.softDisabled).toEqual(["bookings"]);
       expect(reconcileLine.toMigrate).toEqual([]);
     } finally {
       if (server !== undefined) await server.close();

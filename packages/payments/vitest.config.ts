@@ -23,11 +23,13 @@ export default defineConfig({
         "drizzle.config.ts",
         "drizzle/**",
         "src/testing/**",
-        // The two public re-export barrels: v8 has reported phantom uncovered branches/functions on
-        // re-export bindings. Their surface is asserted by src/index.test.ts and
-        // schema-ownership.test.ts.
+        "src/reconciliation-schedule/testing/**",
+        // The re-export barrels: v8 has reported phantom uncovered branches/functions on re-export
+        // bindings. Their surface is asserted by src/index.test.ts, schema-ownership.test.ts and
+        // src/reconciliation-schedule/index.test.ts.
         "src/index.ts",
         "src/schema/index.ts",
+        "src/reconciliation-schedule/index.ts",
         // Branchless, yet CI's Linux V8 has reported phantom uncovered branches on it. Remove this
         // line if manual.ts ever grows genuine branching logic.
         "src/manual.ts",

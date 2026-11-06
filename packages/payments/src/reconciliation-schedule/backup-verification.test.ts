@@ -4,12 +4,12 @@ import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
-import { SCHEDULER_MIGRATIONS } from "./migrations.js";
-import { scheduledRuns } from "@waitron/payments";
+import { PAYMENTS_MIGRATIONS } from "../migrations.js";
+import { scheduledRuns } from "../schema/scheduled-runs.js";
 import * as api from "./index.js";
 
-const original = useVenueDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
-const restored = useVenueDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
+const original = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const restored = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const absent = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] };
 const invalid = { status: "invalid", checks: [{ code: "data", status: "invalid" }] };

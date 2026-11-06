@@ -4,8 +4,8 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { SCHEDULER_MIGRATIONS } from "./migrations.js";
-import { scheduledRuns } from "@waitron/payments";
+import { PAYMENTS_MIGRATIONS } from "../migrations.js";
+import { scheduledRuns } from "../schema/scheduled-runs.js";
 import { dayPeriod } from "./derive.js";
 import { claimGap, claimRow, completeRun, enqueueSuccessor, readSnapshot } from "./store.js";
 
@@ -21,7 +21,7 @@ const NOW = new Date("2026-07-25T04:00:00Z");
  * Each case claims a distinct period, so rows accumulating under `resetPerTest: false` never collide.
  */
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   resetPerTest: false,
   setup: (db) => seedTenant(db),
 });

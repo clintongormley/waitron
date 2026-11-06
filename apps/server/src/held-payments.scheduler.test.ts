@@ -6,16 +6,21 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  DEFAULTS,
   insertCapturedPayment,
   listOpenHolds,
   recordHoldOutcome,
   refreshHeldAlert,
+  runDue,
 } from "@waitron/payments";
-import type { HeldAlertSink, ReconcilePeriod, SettlementRecord } from "@waitron/payments";
+import type {
+  HeldAlertSink,
+  ReconcilePeriod,
+  SettlementRecord,
+  TickResult,
+} from "@waitron/payments";
 import { FakeReconciler } from "@waitron/payments/src/testing/fake-reconciler.js";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
-import { DEFAULTS, runDue } from "@waitron/scheduler";
-import type { TickResult } from "@waitron/scheduler";
 import { decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 

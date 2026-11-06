@@ -1235,7 +1235,7 @@ also repeat the list of sharded packages. Do it on its own branch.
   [Detail](#p7s-leftovers-533)
 - A few suites still build engine-shaped refusals by hand rather than through `refusalError`
   (`packages/db/src/testing/refusals.ts`, P10, #527), among them
-  `packages/provisioning/src/cli.test.ts` and `packages/scheduler/src/store.concurrency.test.ts`.
+  `packages/provisioning/src/cli.test.ts` and `packages/payments/src/reconciliation-schedule/store.concurrency.test.ts`.
 
 
 ## Task 2's review found no test that fails when `device_profile_admission_roles` or `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`

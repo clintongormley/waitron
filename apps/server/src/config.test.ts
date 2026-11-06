@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
-import { DEFAULTS } from "@waitron/scheduler";
+import { DEFAULTS } from "@waitron/payments";
 import { isAppError } from "@waitron/shared";
 import { deploymentEnvironment, isDevMode, loadConfig, loadTunnelConfig } from "./config.js";
 

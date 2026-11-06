@@ -6,11 +6,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { CORE_MIGRATIONS, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
-// Side-effect only: `payment.reconcile_unsettled`, thrown below, is declared by @waitron/payments's
+// Side-effect only: `payment.reconcile_unsettled`, thrown below, is declared by payments'
 // `declare module "@waitron/shared"` augmentation.
-import "@waitron/payments";
-import { SCHEDULER_MIGRATIONS } from "./migrations.js";
-import { scheduledRuns } from "@waitron/payments";
+import "../errors.js";
+import { PAYMENTS_MIGRATIONS } from "../migrations.js";
+import { scheduledRuns } from "../schema/scheduled-runs.js";
 import { DEFAULTS, dayPeriod } from "./derive.js";
 import { claimGap, readSnapshot, reclaimStale } from "./store.js";
 import * as store from "./store.js";
@@ -26,7 +26,7 @@ const SKIP_RETRY_MS = DEFAULTS.skipRetryMs;
 const AFTER_SKIP_RETRY = new Date(NOW.getTime() + SKIP_RETRY_MS);
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

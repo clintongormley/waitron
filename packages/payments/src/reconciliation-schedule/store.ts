@@ -1,8 +1,8 @@
 import { and, asc, eq, gt, gte, inArray, lt, lte, notInArray, or, sql } from "drizzle-orm";
 import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
-import { TERMINAL, type LedgerSnapshot } from "./derive.js";
+import { FINAL_STATES, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
-import { scheduledRuns, type RunState } from "@waitron/payments/src/schema/scheduled-runs.js";
+import { scheduledRuns, type RunState } from "../schema/scheduled-runs.js";
 
 /** A row this runner now owns. Returned only by a claim that actually won. `startedAt` is what
  * `completeRun`'s ownership fence keys on — carried here so the caller never has to re-read it. */
@@ -51,7 +51,10 @@ export async function readSnapshot(
       and(
         scope,
         // Copied: `notInArray`'s column overload refuses a readonly array, unlike `inArray`'s.
-        or(gte(scheduledRuns.periodFrom, horizon), notInArray(scheduledRuns.state, [...TERMINAL])),
+        or(
+          gte(scheduledRuns.periodFrom, horizon),
+          notInArray(scheduledRuns.state, [...FINAL_STATES]),
+        ),
       ),
     )
     .orderBy(asc(scheduledRuns.periodFrom));
@@ -209,7 +212,7 @@ export async function completeRun(
  * Enqueue the next generation of one period, due at `dueAt`.
  *
  * Guarded and idempotent. A successor is inserted only when that (duty, period_from) has
- * NO row at any generation in a non-terminal state — anything outside derivation's own `TERMINAL`
+ * NO row at any generation in a non-terminal state — anything outside derivation's own `FINAL_STATES`
  * list, so a `failed` row awaiting its own retry blocks it too. The caller runs this in the SAME
  * transaction as `completeRun`, so the guard sees the run that is finishing as already terminal.
  * The chain stays LINEAR — one unresolved finding cannot fan out into an exponential number of
@@ -226,9 +229,9 @@ export async function enqueueSuccessor(
 
   const [state] = await tx
     .select({
-      // The SAME `TERMINAL` list `readSnapshot` and `derive` key on, not restated as literal SQL
+      // The SAME `FINAL_STATES` list `readSnapshot` and `derive` key on, not restated as literal SQL
       // that a new terminal state would leave behind.
-      unfinished: sql<number>`count(*) filter (where ${notInArray(scheduledRuns.state, [...TERMINAL])})`,
+      unfinished: sql<number>`count(*) filter (where ${notInArray(scheduledRuns.state, [...FINAL_STATES])})`,
       highest: sql<number>`coalesce(max(${scheduledRuns.generation}), -1)`,
     })
     .from(scheduledRuns)

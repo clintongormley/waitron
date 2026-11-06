@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { SCHEDULER_MIGRATIONS } from "./migrations.js";
+import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { DEFAULTS, type LedgerSnapshot } from "./derive.js";
 import { completeRun, readSnapshot, reclaimStale } from "./store.js";
 import { runDue, type SchedulerDeps } from "./run.js";
-import { scheduledRuns } from "@waitron/payments";
+import { scheduledRuns } from "../schema/scheduled-runs.js";
 import { FakeDuty } from "./testing/fake-duty.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
@@ -19,7 +19,7 @@ class ResweepingDuty extends FakeDuty {
 const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const DUTY = "test.duty";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
   await seedTenant(suite.db);

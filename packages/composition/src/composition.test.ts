@@ -67,7 +67,6 @@ import { CREDENTIALS_TABLES } from "@waitron/credentials";
 import { HANDOVER_TABLES } from "@waitron/handover";
 import { IDENTITY_TABLES } from "@waitron/identity";
 import { MEDIA_TABLES } from "@waitron/media";
-import { SCHEDULER_TABLES } from "@waitron/scheduler";
 import { STAFFING_TABLES } from "@waitron/staffing";
 import { VENUE_SERVICE_TABLES } from "@waitron/venue-service";
 
@@ -161,7 +160,6 @@ describe("the eight sets", () => {
       identity: IDENTITY_TABLES,
       handover: HANDOVER_TABLES,
       staffing: STAFFING_TABLES,
-      scheduler: SCHEDULER_TABLES,
     };
     expect(
       ALL_MODULES.filter((m) => m.tablesIn !== undefined)

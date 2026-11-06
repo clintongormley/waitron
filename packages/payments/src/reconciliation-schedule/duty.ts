@@ -20,8 +20,8 @@ export interface DutyOutcome {
 
 /**
  * One recurring duty over calendar periods. Typed structurally and injected, so no non-test file in
- * this package imports `@waitron/payments` (beyond the `scheduled_runs` table it declares) or
- * `@waitron/fiscal`.
+ * this folder imports the rest of payments (beyond the `scheduled_runs` table it declares) or
+ * fiscal code; `eslint.config.js` refuses either.
  *
  * `drain` must not become a `PeriodDuty`: it keeps its own persisted schedule
  * (`envio_flujo.proximo_envio_en`, and `envios.proximo_intento_en` per record), which a ledger row

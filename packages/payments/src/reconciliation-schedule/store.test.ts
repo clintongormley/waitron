@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { SCHEDULER_MIGRATIONS } from "./migrations.js";
+import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { dayPeriod } from "./derive.js";
 import {
   claimGap,
@@ -11,7 +11,7 @@ import {
   readSnapshot,
   reclaimStale,
 } from "./store.js";
-import { scheduledRuns } from "@waitron/payments";
+import { scheduledRuns } from "../schema/scheduled-runs.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const DUTY = "test.duty";
@@ -22,7 +22,7 @@ const PERIOD = dayPeriod(new Date("2026-07-24T00:00:00Z"));
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
   },

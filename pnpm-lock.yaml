@@ -261,9 +261,6 @@ importers:
       '@waitron/reporting':
         specifier: workspace:*
         version: link:../../packages/reporting
-      '@waitron/scheduler':
-        specifier: workspace:*
-        version: link:../../packages/scheduler
       '@waitron/server-kit':
         specifier: workspace:*
         version: link:../../packages/server-kit
@@ -765,9 +762,6 @@ importers:
       '@waitron/reporting':
         specifier: workspace:*
         version: link:../reporting
-      '@waitron/scheduler':
-        specifier: workspace:*
-        version: link:../scheduler
       '@waitron/staffing':
         specifier: workspace:*
         version: link:../staffing
@@ -1988,43 +1982,6 @@ importers:
       '@waitron/store':
         specifier: workspace:*
         version: link:../store
-      drizzle-orm:
-        specifier: ^0.45.4
-        version: 0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(pg@8.23.1)
-    devDependencies:
-      '@types/node':
-        specifier: ^26.6.6
-        version: 26.6.6
-      '@vitest/coverage-v8':
-        specifier: ^4.1.12
-        version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      typescript:
-        specifier: ^7.0.0
-        version: 7.0.2
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  packages/scheduler:
-    dependencies:
-      '@waitron/db':
-        specifier: workspace:*
-        version: link:../db
-      '@waitron/module':
-        specifier: workspace:*
-        version: link:../module
-      '@waitron/payments':
-        specifier: workspace:*
-        version: link:../payments
-      '@waitron/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@waitron/store':
-        specifier: workspace:*
-        version: link:../store
-      '@waitron/sync-enrolment':
-        specifier: workspace:*
-        version: link:../sync-enrolment
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(pg@8.23.1)

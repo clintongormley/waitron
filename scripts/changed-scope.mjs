@@ -295,7 +295,6 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/core",
   "@waitron/payments",
   "@waitron/reporting",
-  "@waitron/scheduler",
   "@waitron/purchasing",
   "@waitron/membership",
   "@waitron/module",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PAYMENTS_CLASSIFICATION } from "@waitron/payments";
+import { PAYMENTS_CLASSIFICATION } from "../classification.js";
 import { SCHEDULER_TABLES } from "./tables.js";
 
 /** This module's share of the classification of the set that holds its tables. */

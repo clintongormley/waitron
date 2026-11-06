@@ -6,7 +6,8 @@ import { count, id, json, label, newId, nowIso, table, tsString } from "@waitron
  * The lifecycle of one scheduled run. `pending` is work enqueued but not yet attempted (a
  * re-sweep, or a parked period's retry); `failed` will be retried; `parked` has exhausted its
  * attempts and is never retried itself; a parked period's retry is a new row.
- * `succeeded` and `parked` are the two TERMINAL states (`TERMINAL` in `derive.ts`).
+ * `succeeded` and `parked` are the two final states (`FINAL_STATES` in
+ * `reconciliation-schedule/derive.ts`).
  */
 export const runState = ["pending", "running", "succeeded", "failed", "parked"] as const;
 export type RunState = (typeof runState)[number];

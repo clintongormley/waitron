@@ -1,5 +1,5 @@
 import type { RunPeriod } from "./duty.js";
-import type { RunState } from "@waitron/payments/src/schema/scheduled-runs.js";
+import type { RunState } from "../schema/scheduled-runs.js";
 
 /** A UTC day is a constant width — no DST. That constancy is why the cadence tiles UTC days. */
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -86,7 +86,7 @@ export interface Derivation {
 }
 
 /** The two states derivation and the store both treat as final. */
-export const TERMINAL: readonly RunState[] = ["succeeded", "parked"];
+export const FINAL_STATES: readonly RunState[] = ["succeeded", "parked"];
 
 export const DEFAULTS = {
   horizonDays: 30,
@@ -128,7 +128,7 @@ export function derive(snapshot: LedgerSnapshot, now: Date, config: DeriveConfig
       }
       continue;
     }
-    if (TERMINAL.includes(r.state) || r.nextAttemptAt === null) continue;
+    if (FINAL_STATES.includes(r.state) || r.nextAttemptAt === null) continue;
     const due = Date.parse(r.nextAttemptAt);
     if (retryDue(due, nowMs, config.longestWaitMs)) claimable.push({ kind: "claimable", row: r });
     else earliestFuture = Math.min(earliestFuture, due);
