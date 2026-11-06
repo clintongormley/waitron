@@ -766,8 +766,8 @@ passed while proving nothing.
 - **Measure the old version in a throwaway worktree, never by swapping files in the working one.**
   `git worktree add --detach <dir> <base-sha>`, `pnpm install` in it, and `git worktree remove` it
   after; a copy set aside that cannot be avoided goes in `mktemp -d`.
-- **Every A1308 slice runs `apps/server`'s `pnpm protection-list` before and after its change, on
-  one machine, never in CI.** Nothing guards it. [How and limits](docs/developers/testing-guide.md#the-protection-list).
+- **Every A1308 slice runs `apps/server`'s `pnpm protection-list` before and after its change, never
+  in CI.** Nothing guards it. [How and limits](docs/developers/testing-guide.md#the-protection-list).
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
   When a fixture describes something an authority will judge, run the real check over it.
 - **Treat “there is a test” as unfinished: name the assertion that fails if behaviour is deleted.**

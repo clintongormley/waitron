@@ -3219,9 +3219,9 @@ folder, not yours.
 
 ### What the schema enforces
 
-`pnpm protection-list list --out <empty absolute dir>` builds a database from the migrations and
-lists every protection in it. It builds two compositions: every module with Veri\*Factu as the
-module (`fiscal-verifactu`), and every module with `fiscal-none` in the fiscal slot instead.
+`pnpm protection-list list --out <empty absolute dir>` builds the databases from the migrations and
+lists every protection in them. It builds two compositions: every module with Veri\*Factu as the
+fiscal module (`fiscal-verifactu`), and every module with `fiscal-none` in the fiscal slot instead.
 Each is built three ways, called phases:
 
 - `sql-only` runs each set's migration SQL files on a plain connection, so it shows what the SQL
@@ -3235,7 +3235,7 @@ Each phase gives a `venue.db` entry and a `node.db` entry. The command writes
 folders instead of the source tree.
 
 The summary counts each kind of protection, first in total and then by the migration set that made
-it. This is the start of what it printed on 2026-11-06 at `c320f94bf9`:
+it; what an installer adds is counted under `applyMigrations` or `installChangeFeed`. This is the start of what it printed on 2026-11-06 at `c320f94bf9`:
 
 ```text
 composition=fiscal-verifactu phase=sql-only database=venue
@@ -3245,10 +3245,10 @@ composition=fiscal-verifactu phase=sql-only database=venue
   ...
 ```
 
-Each entry ends with a `journal rows:` line, which counts each set's migration journal rows. Journal
-tables are not counted as tables.
+Each `migrated` and `change-feed` entry ends with a `journal rows:` line, which counts each set's
+migration journal rows; `sql-only` has no journal tables. Journal tables are not counted as tables.
 
-`pnpm protection-list compare --old <dir> --new <dir> --report <absolute file>` compares two lists
+`pnpm protection-list compare --old <absolute dir> --new <absolute dir> --report <absolute file>` compares two lists
 and writes what it prints to the report file. Two builds of the same commit print `EQUAL` and exit 0.
 A difference prints one `DIFF` header for each composition, phase and database it affects, then one
 line for each object. With `working_orders_enforce_transition` taken out of the new list, it printed
@@ -3262,8 +3262,9 @@ missing trigger working_orders_enforce_transition
 ...
 ```
 
-An object that only the new list holds is `extra`. An object with the same name but a different body
-is `changed`, followed by `old:` and `new:` lines. Whitespace between SQL tokens does not count as a
+An object that only the new list holds is `extra`. An object whose name is unchanged but whose
+compared fields differ prints one `changed` line per field, such as `changed trigger x.body`, each
+followed by `old:` and `new:` lines. Whitespace between SQL tokens does not count as a
 change.
 
 A command it refuses, such as a relative path, exits 2 when you run it through `pnpm protection-list`
@@ -3272,7 +3273,8 @@ gives. So when a script reads the exit status, don't pass `-s`, or read the prin
 
 ### How a slice uses it
 
-1. Before the change, on the base commit, run `protection-list list`.
+1. Before the change, in a throwaway worktree of the base commit (`git worktree add --detach <dir> <base-sha>`,
+   then `pnpm install` in it), run `protection-list list` with `--out` outside the repository.
 2. After the change, run `protection-list list` again and compare it with the base list. It should
    print `EQUAL`, or exactly the differences the slice means to make.
 
