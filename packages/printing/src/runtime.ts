@@ -98,21 +98,24 @@ export async function claimPrintJobs(
         }))`
     }
   )`;
+  // Keep completed history outside the index ranges, including after planner statistics change.
   return claimRows<ClaimedJob>(tx, {
     table: "print_jobs",
     key: "id",
-    claimable: sql`j.printer_id in (
-        select p.id from printers p
-        where p.active = true and p.deleted_at is null
+    claimable: sql`j.id in (
+        select pending.id from printers p
+        cross join print_jobs pending indexed by print_jobs_pull_idx
+        where pending.printer_id = p.id
+          and pending.status in ('queued', 'failed', 'printing')
+          and p.active = true and p.deleted_at is null
           and (p.transport = 'network_tcp' or ${usbBt})
           ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
       )
-      and j.status in ('queued', 'failed', 'printing')
       and ${invoiceDue(sql`j.id`)}
       and (j.kind = 'document' or j.status = 'queued')
       and ${due}`,
     order: sql`case when j.status = 'failed' or exists (
-        select 1 from print_jobs f
+        select 1 from print_jobs f indexed by print_jobs_pull_idx
         where f.printer_id = j.printer_id and f.kind = 'document'
           and f.status = 'failed' and f.attempts < ${MAX_DELIVERY_ATTEMPTS}
           and (f.created_at < j.created_at or (f.created_at = j.created_at and f.rowid < j.rowid))

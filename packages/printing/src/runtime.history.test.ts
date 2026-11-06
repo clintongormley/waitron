@@ -91,18 +91,24 @@ async function measuredClaim(tx: Transaction, agentId: string, printerId: string
 }
 
 describe("print claims with delivered history", () => {
-  it.each([false, true])(
-    "uses both printer and status keys for an empty pull (printer-specific: %s)",
-    async (specific) => {
+  it.each([
+    { specific: false, statistics: false },
+    { specific: true, statistics: false },
+    { specific: false, statistics: true },
+    { specific: true, statistics: true },
+  ])(
+    "uses both printer and status keys for an empty pull ($specific, statistics: $statistics)",
+    async ({ specific, statistics }) => {
       const { agentId, printerId } = await fixture();
       await withTransaction(suite.db, async (tx) => {
+        if (statistics) tx.execute(sql`analyze`);
         const result = await measuredClaim(tx, agentId, specific ? printerId : undefined);
         expect(result.jobs).toEqual([]);
         expect([...result.candidates]).toEqual([]);
         expect(result.plan.join("\n")).toMatch(
-          /SEARCH j USING INDEX print_jobs_pull_idx \(printer_id=\? AND status=\?\)/,
+          /SEARCH (?:j|pending) USING INDEX print_jobs_pull_idx \(printer_id=\? AND status=\?\)/,
         );
-        expect(result.plan.join("\n")).not.toMatch(/SCAN j/);
+        expect(result.plan.join("\n")).not.toMatch(/SCAN (?:j|pending|f)\b/);
       });
     },
   );
