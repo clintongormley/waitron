@@ -100,9 +100,14 @@ async function request(
   app: Hono,
   method: "GET" | "POST",
   path: string,
-  options: { body?: unknown; cookie?: string; socket?: "tls" | "none" } = {},
+  options: {
+    body?: unknown;
+    cookie?: string;
+    socket?: "tls" | "none";
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<Response> {
-  const { body, cookie = managerCookie, socket = "tls" } = options;
+  const { body, cookie = managerCookie, socket = "tls", headers = {} } = options;
   const incoming = socket === "tls" ? new TLSSocket(new Socket()) : undefined;
   if (incoming !== undefined) sockets.push(incoming);
   return app.request(
@@ -112,6 +117,7 @@ async function request(
       headers: {
         cookie,
         ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...headers,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     },
@@ -247,7 +253,7 @@ describe("a place is freed whatever happens", () => {
 });
 
 describe("refusals take no place", () => {
-  it("checks the session and the connection first", async () => {
+  it("checks the session, the connection and the page first", async () => {
     const host = fakeHost();
     const app = mount(host);
     const { scan, read, releaseScan, releaseRead } = await takeBothPlaces(app, host);
@@ -267,8 +273,25 @@ describe("refusals take no place", () => {
       expect(await plain.json()).toEqual({
         error: { code: "box_network.join_connection_insecure", params: { reason: "unencrypted" } },
       });
+      for (const [path, body] of [
+        ["/api/box/network/forget", { ssidHex: JOIN.ssidHex }],
+        ["/api/box/screen", { start: "till" }],
+        ["/api/box/network/scan", undefined],
+      ] as const) {
+        const otherPort = await request(app, "POST", path, {
+          body,
+          headers: { origin: `${URL_BASE}:8443` },
+        });
+        expect(otherPort.status).toBe(403);
+        expect(await otherPort.json()).toEqual({
+          error: { code: "box_host.origin_refused", params: {} },
+        });
+      }
       expect(host.screenRead).toHaveBeenCalledTimes(0);
       expect(host.networkJoin).toHaveBeenCalledTimes(0);
+      expect(host.networkForget).toHaveBeenCalledTimes(0);
+      expect(host.screenSet).toHaveBeenCalledTimes(0);
+      expect(host.networkScan).toHaveBeenCalledTimes(1);
     } finally {
       releaseScan();
       releaseRead();

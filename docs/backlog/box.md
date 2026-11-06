@@ -729,6 +729,22 @@ A1017 qualified the existing [authorised ordinary-restore fixture](../developers
 separately. Cloud still needs its own same-run proof and
 must distinguish verifier non-activation from the ordinary restore's authorised fiscal recovery.
 
+## Management changes do not check which page sent them
+
+OPEN, a server-wide decision (found by B3 PR 9's review, 2026-11-06). SameSite ignores the port, so
+a page on another port of the box's own name is sent a signed-in manager's cookie, and a POST whose
+body is plain text, or that has no body, reaches the route with no preflight. PR 9's own box routes
+now refuse another page by `Origin` and `Sec-Fetch-Site` and take a body only as JSON; the other
+management POST routes read for this entry check neither. Shown in real Chromium only for PR 9's
+forget and start screen, before the fix. The same shape, by reading and not run:
+`POST /api/box/free-space` (since #1987) and `POST /api/box/retire` (no body, no page check),
+`POST /api/box/clock-challenge` (no body; `clock-confirm` and `clock-set`, since #2331, take a body
+of any type and check no page, but need the challenge id only `clock-challenge`'s answer carries,
+which another page cannot read), and `POST /management-api/catalogues` (any body type, through
+`readJsonBody`). Decide whether every management route that changes something checks `Origin` and
+`Sec-Fetch-Site` (one middleware, like `requireOwnPage` in `apps/server/src/box-host-api.ts`),
+requires JSON, or both.
+
 ## A917 — the owner chooses the server's `.local` name instead of `waitron.local`
 
 DESIGNED
@@ -1091,10 +1107,12 @@ client. No screen calls them yet.
   `authorizeSystemManager`, now exported from `box-health-api.ts` unchanged, so the full-disk
   fallback (the same checks again as reads only) covers these routes too. Each request names the
   signed-in person as its actor; a person id that is not a UUID is a fault (500) and reaches no host.
-- Each body must be a JSON object with exactly its keys; anything else answers
-  `management.request_invalid` with `field` set to the first missing or wrong key, or to `body` (an
-  extra key's own name never reaches the log). The SSID is checked with `isSsidHex`, now declared in
-  `box-scripts.d.ts`. Bodies over 4096 bytes are refused the same way.
+- Each body must be a JSON object with exactly its keys, sent as `Content-Type: application/json`;
+  anything else answers `management.request_invalid` with `field` set to the first missing or
+  wrong key, or to `body` (an extra key's own name never reaches the log, and a body of another type
+  names `body`). The type is checked after the session, on the join, the forget and the start
+  screen; the scan reads no body and checks no type. The SSID is checked with `isSsidHex`, now
+  declared in `box-scripts.d.ts`. Bodies over 4096 bytes are refused the same way.
 - The client's answers map to these codes: `missing` and `unsupported` answer 409
   `box_host.unavailable` (`reason` and `detail` kept); `lost`, `timeout`, `malformed` and the
   protocol's four refusals answer 502 `box_host.failed` with that word as `reason`; the host's own
@@ -1109,6 +1127,17 @@ client. No screen calls them yet.
   both on the routes alone and in a started server, where boot's own middleware runs first. A
   `Content-Type` other than `application/json` is refused after the session check, as
   `management.request_invalid` `{ field: "body" }`.
+- The other three changes (the scan, the forget and the start screen) are refused from a page other
+  than the box's own by the same `Origin` and `Sec-Fetch-Site` test, answering 403
+  `box_host.origin_refused` and logged at warn; they need no encrypted connection, since none
+  carries a secret. That check too is a middleware before the body-size limit and the session
+  check, so a refused change has asked the host nothing, taken no host-call place and read none of
+  its body. The reads are not checked: another page cannot read their answers. Why: SameSite
+  ignores the port, so a page served on another port of the box's own name is sent the manager's
+  cookie; a review run in real Chromium showed such a page changing the start screen and forgetting
+  the saved network with a plain-text body, which no preflight stops, before these checks. In a
+  started server, boot's CORS middleware answers that page's preflight with no
+  `Access-Control-Allow-Origin` (a test asks for each of the three).
 - No part of the join's body is logged or answered. A canary sweep sends a password through every
   outcome (success through a stand-in and through the real client, `busy`, `missing`, `lost`,
   `host_failed`, a refused short password, a stand-in that throws with the password as its message,

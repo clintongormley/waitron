@@ -33,6 +33,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "box_host.unavailable": 409,
   "box_host.failed": 502,
   "box_host.busy": 409,
+  "box_host.origin_refused": 403,
   "box_network.busy": 409,
   "box_network.no_wifi": 409,
   "box_network.not_saved": 409,
@@ -107,6 +108,7 @@ type FieldChecks<Body> = { [Key in keyof Body]: (value: unknown) => value is Bod
 /** Refuses a body that is not a JSON object with exactly these keys, naming the first key that is
  * missing or wrong, or `body` for anything else, so a caller's own key names never reach the log. */
 async function bodyOf<Body extends object>(c: Context, checks: FieldChecks<Body>): Promise<Body> {
+  if (!isJson(c)) throw new AppError("management.request_invalid", { field: "body" });
   const body = await readRawJsonBody<unknown>(c);
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new AppError("management.request_invalid", { field: "body" });
@@ -131,29 +133,42 @@ const keyMgmt = (value: unknown): value is WifiJoin["keyMgmt"] =>
 const psk = (value: unknown): value is string => typeof value === "string";
 const hidden = (value: unknown): value is boolean => typeof value === "boolean";
 
+/** SameSite ignores the port, so a page on another port of the box's own name carries a
+ * manager's cookie; these two headers are what tell it apart. */
+function fromOtherPage(c: Context): boolean {
+  const origin = c.req.header("Origin");
+  const site = c.req.header("Sec-Fetch-Site");
+  return (
+    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
+    (site !== undefined && site !== "same-origin" && site !== "none")
+  );
+}
+
 function insecureJoin(c: Context): "unencrypted" | "other_origin" | null {
   const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
   if (!(socket instanceof TLSSocket) || !socket.encrypted) return "unencrypted";
-  const origin = c.req.header("Origin");
-  const site = c.req.header("Sec-Fetch-Site");
-  if (
-    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
-    (site !== undefined && site !== "same-origin" && site !== "none")
-  ) {
-    return "other_origin";
-  }
-  return null;
+  return fromOtherPage(c) ? "other_origin" : null;
 }
 
-/** Answers before the body-size limit, which would otherwise read a body sent without a
+function refuse(c: Context, log: Logger, err: AppError): Response {
+  log("warn", err.code, { ...err.params, requestId: c.get("requestId") });
+  return c.json({ error: { code: err.code, params: err.params } }, 403);
+}
+
+/** Both answer before the body-size limit, which would otherwise read a body sent without a
  * `Content-Length` before any route code runs. */
 function requireSecureJoin(log: Logger): MiddlewareHandler {
   return async (c, next) => {
     const reason = insecureJoin(c);
     if (reason === null) return next();
-    const err = new AppError("box_network.join_connection_insecure", { reason });
-    log("warn", err.code, { ...err.params, requestId: c.get("requestId") });
-    return c.json({ error: { code: err.code, params: err.params } }, 403);
+    return refuse(c, log, new AppError("box_network.join_connection_insecure", { reason }));
+  };
+}
+
+function requireOwnPage(log: Logger): MiddlewareHandler {
+  return async (c, next) => {
+    if (!fromOtherPage(c)) return next();
+    return refuse(c, log, new AppError("box_host.origin_refused", {}));
   };
 }
 
@@ -173,6 +188,11 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
       c.json({ error: { code: "management.request_invalid", params: { field: "body" } } }, 400),
   });
   app.use("/api/box/network/join", requireSecureJoin(log));
+  app.on(
+    "POST",
+    ["/api/box/network/scan", "/api/box/network/forget", "/api/box/screen"],
+    requireOwnPage(log),
+  );
   app.use("/api/box/network/*", limit);
   app.use("/api/box/screen", limit);
   app.get("/api/box/network", (c) =>
@@ -200,7 +220,6 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
   app.post("/api/box/network/join", (c) =>
     run(c, log, async () => {
       const actor = personActor(await authorizeSystemManager(deps.db, c));
-      if (!isJson(c)) throw new AppError("management.request_invalid", { field: "body" });
       const join = await bodyOf<WifiJoin>(c, { ssidHex, keyMgmt, psk, hidden });
       await askHost(
         places,

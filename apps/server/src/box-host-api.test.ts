@@ -445,19 +445,26 @@ describe("the log", () => {
 const SCAN = "/api/box/network/scan";
 const FORGET = "/api/box/network/forget";
 const SSID = "4361666550657065";
+const BOX = "https://box.test";
 
+/** A string body is sent as `application/json` unless `headers` names another type. */
 function post(
   app: Hono,
   path: string,
   cookie?: string,
-  body?: string,
+  body?: string | Uint8Array | ReadableStream<Uint8Array>,
   headers: Record<string, string> = {},
 ) {
-  return app.request(path, {
+  return app.request(`${BOX}${path}`, {
     method: "POST",
-    headers: { ...(cookie === undefined ? {} : { cookie }), ...headers },
+    headers: {
+      ...(typeof body === "string" ? { "content-type": "application/json" } : {}),
+      ...(cookie === undefined ? {} : { cookie }),
+      ...headers,
+    },
     ...(body === undefined ? {} : { body }),
-  });
+    ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
+  } as RequestInit);
 }
 
 const json = (value: unknown) => JSON.stringify(value);
@@ -723,6 +730,165 @@ describe("bodies refused before the host is asked", () => {
       { source: "person", person: manager.id },
     );
   });
+});
+
+const CHANGES = [
+  ["the scan", SCAN, undefined],
+  ["the forget", FORGET, json({ ssidHex: SSID })],
+  ["the screen set", SCREEN, json({ start: "till" })],
+] as const;
+
+function changeAsked(host: ReturnType<typeof fakeHost>): number {
+  return (
+    host.networkScan.mock.calls.length +
+    host.networkForget.mock.calls.length +
+    host.screenSet.mock.calls.length
+  );
+}
+
+describe("a change sent by a page other than the box's own", () => {
+  const OTHER_PAGES = [
+    ["another port of the box's own name", { origin: `${BOX}:8443` }],
+    ["the box's own name over plain HTTP", { origin: "http://box.test" }],
+    ["another site", { origin: "https://elsewhere.example" }],
+    ["a same-site fetch", { "sec-fetch-site": "same-site" }],
+    ["a cross-site fetch", { "sec-fetch-site": "cross-site" }],
+    ["the box's own origin with a same-site fetch", { origin: BOX, "sec-fetch-site": "same-site" }],
+  ] as const;
+
+  describe.each(CHANGES)("%s", (_label, path, body) => {
+    it.each(OTHER_PAGES)("from %s is refused for a signed-in manager", async (_page, headers) => {
+      const host = fakeHost();
+      const log = vi.fn<Logger>();
+      const { app } = mount(suite.db, host, log);
+      const response = await post(app, path, manager.cookie, body, headers);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({
+        error: { code: "box_host.origin_refused", params: {} },
+      });
+      expect(changeAsked(host)).toBe(0);
+      expect(log).toHaveBeenCalledWith("warn", "box_host.origin_refused", {
+        requestId: undefined,
+      });
+    });
+
+    it("from another port is refused before the session is checked", async () => {
+      const host = fakeHost();
+      const { app } = mount(suite.db, host);
+      const response = await post(app, path, undefined, body, { origin: `${BOX}:8443` });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({
+        error: { code: "box_host.origin_refused", params: {} },
+      });
+      expect(changeAsked(host)).toBe(0);
+    });
+
+    it.each([
+      ["no Origin and no Sec-Fetch-Site", {}],
+      ["the box's own page", { origin: BOX, "sec-fetch-site": "same-origin" }],
+      ["a page the person opened themselves", { origin: BOX, "sec-fetch-site": "none" }],
+    ])("from %s is taken", async (_page, headers) => {
+      const host = fakeHost();
+      const { app } = mount(suite.db, host);
+      const response = await post(app, path, manager.cookie, body, headers);
+      expect(response.status).toBe(200);
+      expect(changeAsked(host)).toBe(1);
+    });
+  });
+
+  it("is refused without reading one byte of its body", async () => {
+    let pulls = 0;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(new Uint8Array(4097).fill(0x20));
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const response = await post(app, FORGET, manager.cookie, stream, {
+      "content-type": "application/json",
+      origin: `${BOX}:8443`,
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: "box_host.origin_refused", params: {} },
+    });
+    expect(pulls).toBe(0);
+    expect(changeAsked(host)).toBe(0);
+  });
+
+  it("leaves the reads alone, whose answers another page cannot read", async () => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const response = await app.request(`${BOX}${SCREEN}`, {
+      headers: { cookie: manager.cookie, origin: `${BOX}:8443`, "sec-fetch-site": "same-site" },
+    });
+    expect(response.status).toBe(200);
+    expect(host.screenRead).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the content type of a forget or a start screen", () => {
+  it.each([
+    [FORGET, json({ ssidHex: SSID })],
+    [SCREEN, json({ start: "till" })],
+  ])("%s refuses a text/plain body", async (path, body) => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const response = await post(app, path, manager.cookie, body, { "content-type": "text/plain" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    expect(changeAsked(host)).toBe(0);
+  });
+
+  it.each([
+    [FORGET, json({ ssidHex: SSID })],
+    [SCREEN, json({ start: "till" })],
+  ])("%s refuses a byte body sent with no type", async (path, body) => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const response = await post(app, path, manager.cookie, new TextEncoder().encode(body));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    expect(changeAsked(host)).toBe(0);
+  });
+
+  it.each([
+    [FORGET, json({ ssidHex: SSID })],
+    [SCREEN, json({ start: "till" })],
+  ])("%s takes a JSON body whose type names a character set", async (path, body) => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const response = await post(app, path, manager.cookie, body, {
+      "content-type": "Application/JSON; charset=utf-8",
+    });
+    expect(response.status).toBe(200);
+    expect(changeAsked(host)).toBe(1);
+  });
+
+  it.each([FORGET, SCREEN])(
+    "%s checks a supervisor's permission before the content type",
+    async (path) => {
+      const host = fakeHost();
+      const { app } = mount(suite.db, host);
+      const response = await post(app, path, supervisor.cookie, "x", {
+        "content-type": "text/plain",
+      });
+      expect(response.status).toBe(403);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+        "authorization.not_permitted",
+      );
+    },
+  );
 });
 
 describe("a scan asked with the live header", () => {

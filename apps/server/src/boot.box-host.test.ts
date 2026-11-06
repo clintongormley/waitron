@@ -199,6 +199,52 @@ describe("the box host routes in the running server", () => {
     });
   });
 
+  it("refuse a manager's change sent by a page on another port, and name it no allowed origin", async () => {
+    const host = fakeHost();
+    await withServer({ boxHostRequests: host }, async (venue) => {
+      const otherPort = `http://127.0.0.1:${httpPort() + 1}`;
+      for (const path of ["/api/box/screen", "/api/box/network/forget", "/api/box/network/scan"]) {
+        const preflight = await fetch(url(path), {
+          method: "OPTIONS",
+          headers: {
+            origin: otherPort,
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "content-type",
+          },
+        });
+        // A browser refuses a preflight answer that names no allowed origin.
+        expect(preflight.headers.get("access-control-allow-origin")).toBeNull();
+      }
+
+      for (const [path, body] of [
+        ["/api/box/screen", JSON.stringify({ start: "till" })],
+        ["/api/box/network/forget", JSON.stringify({ ssidHex: "4361666550657065" })],
+        ["/api/box/network/scan", undefined],
+      ] as const) {
+        expect(
+          await answerOf(
+            await fetch(url(path), {
+              method: "POST",
+              headers: {
+                cookie: venue.managerCookie,
+                origin: otherPort,
+                "sec-fetch-site": "same-site",
+                "content-type": "text/plain;charset=UTF-8",
+              },
+              ...(body === undefined ? {} : { body }),
+            }),
+          ),
+        ).toEqual({
+          status: 403,
+          body: { error: { code: "box_host.origin_refused", params: {} } },
+        });
+      }
+      expect(host.screenSet).toHaveBeenCalledTimes(0);
+      expect(host.networkForget).toHaveBeenCalledTimes(0);
+      expect(host.networkScan).toHaveBeenCalledTimes(0);
+    });
+  });
+
   it("talk to the host's own socket when boot was handed no stand-in", async () => {
     if (existsSync("/run/waitron-box/box.sock")) {
       throw new Error("this case needs a machine with no /run/waitron-box/box.sock");
