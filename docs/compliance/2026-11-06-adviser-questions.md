@@ -112,8 +112,8 @@ without Cloud. See [how a venue gives the tax office access](#how-a-venue-gives-
 
 ### Confirmations: tips (hold, see decision 3)
 
-- **T9.** Suggested tip percentages stay outside VAT if nothing is pre-selected and the guest can choose
-  zero or any amount.
+- **T9.** Suggested tip percentages stay outside VAT if nothing is pre-selected, the guest can choose
+  zero or any amount, and the tip is not on the invoice.
 - **T10.** Card tips are booked as money owed to staff, not as income.
 
 ### Confirmations: records and the declaration
