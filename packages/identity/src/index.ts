@@ -54,7 +54,8 @@ export {
   registerModulePermissions,
   roleHasPermission,
 } from "./permissions.js";
-export type { Permission, PersonRoleValue } from "./permissions.js";
+export type { Permission } from "./permissions.js";
+export type { PersonRoleValue } from "@waitron/shared";
 export { persons, personStatus, personRole } from "./schema/persons.js";
 export {
   readOwnProfile,

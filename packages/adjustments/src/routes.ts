@@ -30,8 +30,12 @@ import {
   type AdjustmentReasonInput,
 } from "./operations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
-import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
-import { REASON_KINDS, type ReasonKind } from "./schema/reasons.js";
+import {
+  ADJUSTMENT_ACTIONS,
+  REASON_KINDS,
+  type AdjustmentAction,
+  type ReasonKind,
+} from "@waitron/shared";
 import {
   computeAdjustmentReport,
   listAdjustmentEntries,

@@ -8,7 +8,7 @@ import {
   readTranslationCells,
   translationConfiguration,
 } from "./content-translation-cells.js";
-import { TRANSLATION_GAP_KINDS as KINDS } from "./content-translation-kinds.js";
+import { TRANSLATION_GAP_KINDS as KINDS } from "@waitron/shared";
 import {
   readTranslationSettings,
   type TranslationContext,

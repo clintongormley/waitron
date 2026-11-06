@@ -1,7 +1,7 @@
 import { sql, type AnyColumn } from "drizzle-orm";
 import { check, foreignKey } from "drizzle-orm/sqlite-core";
 import { id, json, table, ticketItems } from "@waitron/db";
-import type { KitchenAllergyBlock } from "@waitron/module";
+import type { KitchenAllergyBlock } from "@waitron/shared";
 
 export function kitchenAllergyBlockCheck(column: AnyColumn) {
   return sql`case when ${column} is null then 1

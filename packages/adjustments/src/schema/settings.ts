@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/sqlite-core";
 import { count, json, money, nowIso, table, tsString } from "@waitron/db";
-import type { PersonRoleValue } from "@waitron/identity";
+import type { PersonRoleValue } from "@waitron/shared";
 
 export const DEFAULT_BILL_APPROVER_ROLES: readonly PersonRoleValue[] = ["manager", "admin"];
 

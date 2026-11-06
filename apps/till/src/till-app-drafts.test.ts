@@ -49,7 +49,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import { openSentDish, openSentMore } from "./screens/till-table-order-screen.sent.test-helpers.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 const unit = {
   staffName: "Staff unit",

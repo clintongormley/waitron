@@ -26,7 +26,7 @@ import {
   vatClassName,
 } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
-import { categoryColorSource, isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { categoryColorSource, isStoredColor } from "@waitron/shared";
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {

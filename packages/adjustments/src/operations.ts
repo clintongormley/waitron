@@ -11,8 +11,9 @@ import {
   type Decimal,
   type DeleteImpact,
 } from "@waitron/shared";
-import { reasonShapeFault, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
-import { adjustmentReasons, type ReasonKind } from "./schema/reasons.js";
+import { reasonShapeFault, type AdjustmentReason } from "./policy.js";
+import type { AdjustmentAction, ReasonKind } from "@waitron/shared";
+import { adjustmentReasons } from "./schema/reasons.js";
 import "./errors.js";
 
 /** Everything an owner edits on a reason; `position` has an operation of its own. */

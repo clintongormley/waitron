@@ -1,6 +1,6 @@
 import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitron/shared";
 import { validateAllergens } from "@waitron/shared";
-import { colorOrNull } from "./color-inheritance.js";
+import { colorOrNull } from "@waitron/shared";
 import { isProductPrice } from "./modifier-limits.js";
 import { validateDietaryDeclarations } from "@waitron/shared";
 import { nonBlankTranslations } from "@waitron/shared";

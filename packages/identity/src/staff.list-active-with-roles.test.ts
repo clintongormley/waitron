@@ -4,7 +4,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import type { PersonRoleValue } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import { hashPin } from "./verify-pin.js";
 import { persons } from "./schema/persons.js";
 import { listActivePersonsWithRoles } from "./staff.js";

@@ -9,7 +9,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { isFullComp } from "./full-comp.js";
-import type { AdjustmentAction, AdjustmentPolicySnapshot } from "./policy.js";
+import type { AdjustmentAction, AdjustmentPolicySnapshot } from "@waitron/shared";
 import { adjustments, type AdjustmentSplit, type AdjustmentStage } from "./schema/adjustments.js";
 
 /** An adjustment to record. `line` is null for a discount on the whole bill. */

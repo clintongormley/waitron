@@ -15,7 +15,8 @@ import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
-import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
+import { roleHasPermission, type Permission } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import {
   PERSONS_EMAIL,
   PERSONS_LIVE_DISPLAY_NAME,

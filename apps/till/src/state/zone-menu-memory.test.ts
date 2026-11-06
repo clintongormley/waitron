@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./zone-menu-memory.js";
 import type { TillZoneMenu } from "../api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 const identity: ZoneMenuIdentity = {
   origin: "https://venue.example",

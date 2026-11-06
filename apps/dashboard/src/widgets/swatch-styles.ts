@@ -1,5 +1,5 @@
 import { css, html, nothing, type TemplateResult } from "lit";
-import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { isStoredColor } from "@waitron/shared";
 
 /** A host whose tree rows draw colour swatches adds these: the rows render inside wt-data-table's
  * shadow root, so ::part is the only way in. */

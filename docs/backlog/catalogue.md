@@ -112,7 +112,7 @@ Left open:
   painting, the section trail, the two-block home arrangement, the breadcrumb and about a hundred lines
   of CSS. A change to the till's tiles has to be repeated by hand, and no test sees the two drift
   apart. Proposed follow-up: move the shared logic and CSS beside `arrangeHome` in
-  `packages/catalogue/src/device-home.ts`.
+  `packages/shared/src/menu-document/device-home.ts`.
 
 ## Two copies of the tree pointer drag — OPEN (W88)
 

@@ -26,7 +26,7 @@ import {
   type MissingIn,
   type TranslationRef,
 } from "@waitron/catalogue/src/content-translation-types.js";
-import { TRANSLATION_GAP_KINDS } from "@waitron/catalogue/src/content-translation-kinds.js";
+import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import type { DashboardApi, SuggestionRunView } from "../api/client.js";
 import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

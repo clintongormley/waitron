@@ -17,7 +17,7 @@ import {
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
 } from "./schema/profile-admission.js";
-import type { PersonRoleValue } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import { seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({

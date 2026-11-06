@@ -4,7 +4,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { assertCategoryNamesFree } from "./category-names.js";
 import { foldName } from "./name-uniqueness.js";
-import { colorOrNull } from "./color-inheritance.js";
+import { colorOrNull } from "@waitron/shared";
 import { categoryDetails } from "./schema/categories.js";
 import { isTopLevelProduct, productWithId } from "./variant-fallback.js";
 import "./errors.js";

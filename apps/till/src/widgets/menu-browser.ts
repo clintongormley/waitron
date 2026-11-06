@@ -25,7 +25,7 @@ import {
   tilePaths,
   type HomeIndex,
   type SectionStep,
-} from "@waitron/catalogue/src/device-home.js";
+} from "@waitron/shared";
 import type { DocumentMember, DocumentTile, HomeDisplay, HomeTileMode } from "@waitron/shared";
 import "./modifier-picker.js";
 import "./tender-pay.js";

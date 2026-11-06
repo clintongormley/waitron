@@ -3,7 +3,7 @@ import { deviceProfiles } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import type { PersonRoleValue } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import { personRole, persons } from "./schema/persons.js";
 import {
   deviceProfileAdmissionPersons,

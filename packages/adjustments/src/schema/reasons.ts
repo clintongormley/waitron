@@ -15,11 +15,8 @@ import {
   table,
   tsString,
 } from "@waitron/db";
-import type { PersonRoleValue } from "@waitron/identity";
-import type { AdjustmentAction } from "../policy.js";
+import { REASON_KINDS, type AdjustmentAction, type PersonRoleValue } from "@waitron/shared";
 
-export const REASON_KINDS = ["void", "comp"] as const;
-export type ReasonKind = (typeof REASON_KINDS)[number];
 const reasonKind = enumType(REASON_KINDS);
 
 /**

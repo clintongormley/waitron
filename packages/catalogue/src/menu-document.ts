@@ -5,7 +5,7 @@ import { catalogues, categories, products, type Transaction } from "@waitron/db"
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
-import { effectiveColor } from "./color-inheritance.js";
+import { effectiveColor } from "@waitron/shared";
 import { readCatalogueSettings } from "./settings.js";
 import { includedMenus } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
@@ -25,7 +25,7 @@ import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { MenuOffer } from "@waitron/shared";
 import type { TileRef } from "@waitron/shared";
-import { HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "./device-home.js";
+import { HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type {
   DocumentMember,
   DocumentTile,

@@ -1,4 +1,4 @@
-import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { fixedNameLanguages } from "./include-folder-presentation.js";
 import type {
   DocumentMember,

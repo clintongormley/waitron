@@ -40,7 +40,7 @@ import {
   tilePaths,
   type HomeIndex,
   type SectionStep,
-} from "@waitron/catalogue/src/device-home.js";
+} from "@waitron/shared";
 import type { DocumentTile, HomeTileMode } from "@waitron/shared";
 import type {
   DocumentMember,

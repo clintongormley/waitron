@@ -1,7 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import type { ContentLanguages } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "./content-translation-kinds.js";
+import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "@waitron/shared";
 import { translationGapsQuery } from "./content-translation-candidates.js";
 import type {
   LanguageTranslationGaps,
@@ -9,14 +9,14 @@ import type {
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
-} from "./content-translation-report-types.js";
+} from "@waitron/shared";
 export type {
   LanguageTranslationGaps,
   LanguageTranslationGapCount,
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
-} from "./content-translation-report-types.js";
+} from "@waitron/shared";
 
 type GapRow = {
   language: string;

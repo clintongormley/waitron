@@ -6,7 +6,7 @@ import { jsonFile } from "@waitron/module";
 import { describe, expect, it } from "vitest";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { ADJUSTMENTS_PERSONAL_DATA } from "./personal-data.js";
-import type { AdjustmentAction } from "./policy.js";
+import type { AdjustmentAction } from "@waitron/shared";
 import { adjustments, type AdjustmentStage } from "./schema/adjustments.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });

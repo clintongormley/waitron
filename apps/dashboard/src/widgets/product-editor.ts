@@ -17,7 +17,7 @@ import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } fro
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { VAT_CLASSES, localToday, vatRateOn, type VatClass } from "@waitron/shared";
 import { PRODUCT_ORDERINGS } from "@waitron/shared";
-import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { categoryColor } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";

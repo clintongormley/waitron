@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import { basisPointsToDecimal, centsToDecimal, thousandthsToDecimal } from "@waitron/shared";
 import { and, asc, eq, or } from "drizzle-orm";
-import { ADJUSTMENT_ACTIONS } from "./policy.js";
+import { ADJUSTMENT_ACTIONS } from "@waitron/shared";
 import { adjustments } from "./schema/adjustments.js";
 
 /** A row marked `by_guest` is the guests' request, never the requester's, as the Adjustment report

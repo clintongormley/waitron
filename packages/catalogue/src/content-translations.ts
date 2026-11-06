@@ -10,7 +10,7 @@ import {
   type TranslationItem,
   type TranslationField,
 } from "./content-translation-types.js";
-import { TRANSLATION_GAP_KINDS } from "./content-translation-kinds.js";
+import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { writeTranslationMaps } from "./content-translation-writes.js";
 import { deleteSavedCellSuggestions } from "./content-suggestion-store.js";
 import { canonicalTranslationLanguage, readTranslationCells } from "./content-translation-cells.js";

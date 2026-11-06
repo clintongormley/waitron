@@ -81,7 +81,7 @@ import type {
 } from "./api/client.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type {
   RefundableTender,
   TenderRefundRequest,

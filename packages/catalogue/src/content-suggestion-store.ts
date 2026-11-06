@@ -44,7 +44,7 @@ import {
 import "./errors.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 
-import { TRANSLATION_GAP_KINDS } from "./content-translation-kinds.js";
+import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { invalidTranslationQuery, translationConfiguration } from "./content-translation-cells.js";
 
 type Fix = SuggestionResult["corrections"][number];

@@ -4,7 +4,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { hashPin, verifyPin } from "./verify-pin.js";
-import type { PersonRoleValue } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import type { PinThrottle } from "./pin-throttle.js";
 import { DUMMY, issueCheck, trustedVerdict, type SecretCheck } from "./secret-check.js";
 

@@ -17,7 +17,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
-import { colorOrNull } from "./color-inheritance.js";
+import { colorOrNull } from "@waitron/shared";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";

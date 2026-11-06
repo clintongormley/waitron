@@ -2,6 +2,13 @@ import "./errors.js";
 
 export * from "./schema/index.js";
 export * from "./policy.js";
+export {
+  REASON_KINDS,
+  ADJUSTMENT_ACTIONS,
+  type ReasonKind,
+  type AdjustmentAction,
+  type AdjustmentPolicySnapshot,
+} from "@waitron/shared";
 export * from "./operations.js";
 export * from "./settings.js";
 export * from "./record.js";

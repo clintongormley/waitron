@@ -2,7 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
-import { homeDisplayProblem } from "./device-home.js";
+import { homeDisplayProblem } from "@waitron/shared";
 import type { HomeDevice, HomeDisplay } from "@waitron/shared";
 import { menuDetails } from "./schema/menu.js";
 import { sectionMembers } from "./schema/sections.js";

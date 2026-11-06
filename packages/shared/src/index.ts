@@ -437,3 +437,50 @@ export {
   type DatedRate,
   type VatRateTable,
 } from "./menu-document/vat-rates.js";
+export {
+  HOME_DEVICES,
+  HOME_TILE_MODES,
+  HOME_ORDERS,
+  HOME_DISPLAY_DEFAULTS,
+  HOME_COLUMN_RANGE,
+  HOME_GRID_COLUMNS,
+  homeDisplayProblem,
+  arrangeHome,
+  tileFill,
+  shownMembers,
+  openedSection,
+  tilePaths,
+  sectionTrail,
+  indexDocument,
+  type HomeBlock,
+  type TileFill,
+  type HomeIndex,
+  type SectionStep,
+} from "./menu-document/device-home.js";
+export {
+  isStoredColor,
+  colorOrNull,
+  categoryColorSource,
+  categoryColor,
+  effectiveColor,
+  type ColorNode,
+  type ColorSource,
+} from "./menu-document/color-inheritance.js";
+export { TRANSLATION_GAP_KINDS } from "./content-translation-kinds.js";
+export type {
+  TranslationGapKind,
+  TranslationGapReason,
+  TranslationGap,
+  LanguageTranslationGaps,
+  LanguageTranslationGapCount,
+} from "./content-translation-report-types.js";
+export type { AllergenMap } from "./allergen-map.js";
+export type { KitchenAllergyBlock, KitchenNoteChange } from "./kitchen-notice-types.js";
+export type { PersonRoleValue } from "./person-role.js";
+export {
+  REASON_KINDS,
+  ADJUSTMENT_ACTIONS,
+  type ReasonKind,
+  type AdjustmentAction,
+  type AdjustmentPolicySnapshot,
+} from "./adjustment-policy-types.js";

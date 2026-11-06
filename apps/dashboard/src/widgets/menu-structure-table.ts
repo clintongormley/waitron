@@ -39,7 +39,7 @@ import { countOf } from "./count-text.js";
 import { PATH_SEPARATOR } from "./category-form.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
-import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { categoryColor } from "@waitron/shared";
 import {
   FOLLOWING_FOLDER,
   folderPresentation,

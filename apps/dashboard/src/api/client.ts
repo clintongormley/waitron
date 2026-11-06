@@ -228,7 +228,7 @@ import type {
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
-} from "@waitron/catalogue/src/content-translation-report-types.js";
+} from "@waitron/shared";
 export type {
   LanguageTranslationGaps,
   LanguageTranslationGapCount,

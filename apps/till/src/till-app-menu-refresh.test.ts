@@ -28,7 +28,7 @@ import type {
   TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 // Lunch is published as v1 and then as v2. Lemonade and Burger are on it; Burger offers an extras list
 // (cheese) and an options list (rare / medium).

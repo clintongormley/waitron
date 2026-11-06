@@ -1,6 +1,6 @@
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { css, html, nothing } from "lit";
-import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { isStoredColor } from "@waitron/shared";
 import { fill } from "../i18n/t.js";
 
 export const productMediaStyles = css`

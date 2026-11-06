@@ -1,6 +1,6 @@
 import type { ContentLanguages } from "@waitron/shared";
 import type { TranslationCellRef, TranslationItem } from "./content-translation-types.js";
-import type { TranslationGapKind } from "./content-translation-report-types.js";
+import type { TranslationGapKind } from "@waitron/shared";
 
 export interface SuggestionResult {
   ref: string;

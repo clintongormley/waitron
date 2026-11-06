@@ -1,8 +1,5 @@
-import type {
-  KitchenAllergyBlock,
-  PartyAllergySnapshot,
-  TicketAllergyCopy,
-} from "./party-allergy.js";
+import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/shared";
+import type { PartyAllergySnapshot, TicketAllergyCopy } from "./party-allergy.js";
 import type { BillIdentity } from "./bill-identity.js";
 import type { ModuleTimeRecordExport } from "./record-export.js";
 import type { ModulePersonalData } from "./personal-data.js";
@@ -636,10 +633,6 @@ export interface KitchenNote {
   revision: number;
 }
 export type KitchenNoteSnapshot = KitchenNote & { scope: KitchenNoteScope; ownerRevision: number };
-export interface KitchenNoteChange {
-  before: string | null;
-  after: string | null;
-}
 export interface StationNoticeDish {
   lineName: string;
   unitName: Record<string, string> | null;

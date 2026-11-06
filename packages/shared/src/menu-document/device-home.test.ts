@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   HOME_COLUMN_RANGE,
@@ -13,7 +11,16 @@ import {
   tileFill,
   tilePaths,
 } from "./device-home.js";
-import type { DocumentMember } from "@waitron/shared";
+import type { DocumentMember } from "./menu-document-types.js";
+
+declare global {
+  interface ImportMeta {
+    glob(
+      pattern: string | string[],
+      options: { query: string; import: string; eager: true },
+    ): Record<string, string>;
+  }
+}
 
 describe("display settings", () => {
   it("defaults a handheld to three columns and a till to six, colours, Device Home Page first", () => {
@@ -267,14 +274,44 @@ describe("sectionTrail", () => {
       ),
     ).toBeNull();
   });
+  it("keeps a first copy open from the list's own members when the list now shows it directly", () => {
+    const wine = { ...section("wine", "wine", [product("rioja")]), direct: true as const };
+    const bar = section("bar", "bar", [wine]);
+    const index = indexDocument([bar], offer);
+    expect(
+      internalNames(
+        sectionTrail(
+          [
+            { sectionId: "bar", copy: 0 },
+            { sectionId: "wine", copy: 0 },
+          ],
+          index,
+        ),
+      ),
+    ).toEqual(["bar", "wine"]);
+    expect(
+      sectionTrail(
+        [
+          { sectionId: "bar", copy: 0 },
+          { sectionId: "wine", copy: 1 },
+        ],
+        index,
+      ),
+    ).toBeNull();
+  });
 });
 
 // Reads the file as TEXT: a dynamic `import()` or a `require` would pass it.
-it("imports nothing but the colour rule and the document types, so a browser app can deep-import it", () => {
-  const source = readFileSync(join(import.meta.dirname, "device-home.ts"), "utf8");
+it("imports nothing but the colour rule and the document types, so a browser app can import it", () => {
+  // `import.meta.glob` rather than `node:fs` because this package installs no `@types/node`.
+  const source = import.meta.glob("./device-home.ts", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  })["./device-home.ts"]!;
   const specifiers = [...source.matchAll(/^import\s+(type\s+)?[^;]*?from\s+"([^"]+)";/gms)].map(
     ([, type, from]) => `${type ? "type " : ""}${from}`,
   );
-  expect(specifiers).toEqual(["./color-inheritance.js", "type @waitron/shared"]);
+  expect(specifiers).toEqual(["./color-inheritance.js", "type ./menu-document-types.js"]);
   expect(source).not.toMatch(/^import\s+"/m);
 });

@@ -9,7 +9,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { contentLanguages } from "./schema/menu.js";
 import { liveTranslationRows } from "./content-translation-candidates.js";
-import { TRANSLATION_GAP_KINDS } from "./content-translation-kinds.js";
+import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import "./errors.js";
 
 /**

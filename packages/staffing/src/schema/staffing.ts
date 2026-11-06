@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { departments, seasons, specialDayDates } from "@waitron/venue-service";
-import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
+import { CALENDAR_COLOURS } from "@waitron/shared";
 import { shifts } from "@waitron/workforce";
 
 const calendarColour = enumType(CALENDAR_COLOURS);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";

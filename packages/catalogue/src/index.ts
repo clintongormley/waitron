@@ -124,7 +124,26 @@ export * from "./sections.js";
 export * from "./include-folder-presentation.js";
 export { setIncludeFolder } from "./include-folder.js";
 export * from "./menu-home.js";
-export * from "./device-home.js";
+export {
+  HOME_DEVICES,
+  HOME_TILE_MODES,
+  HOME_ORDERS,
+  HOME_DISPLAY_DEFAULTS,
+  HOME_COLUMN_RANGE,
+  HOME_GRID_COLUMNS,
+  homeDisplayProblem,
+  arrangeHome,
+  tileFill,
+  shownMembers,
+  openedSection,
+  tilePaths,
+  sectionTrail,
+  indexDocument,
+  type HomeBlock,
+  type TileFill,
+  type HomeIndex,
+  type SectionStep,
+} from "@waitron/shared";
 export {
   createMenuShell,
   readMenuStructure,

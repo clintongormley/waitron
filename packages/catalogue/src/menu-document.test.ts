@@ -55,7 +55,7 @@ import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
 import { extraListItems } from "./schema/extras.js";
 import { createExtraList } from "./extras.js";
 import { menuDetails } from "./schema/menu.js";
-import { HOME_DISPLAY_DEFAULTS, shownMembers } from "./device-home.js";
+import { HOME_DISPLAY_DEFAULTS, shownMembers } from "@waitron/shared";
 import { addShortcut, setHomeDisplay } from "./menu-home.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";

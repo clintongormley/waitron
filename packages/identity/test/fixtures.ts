@@ -8,7 +8,7 @@ import { persons } from "../src/schema/persons.js";
 import { loginManager } from "../src/manager-login.js";
 import { hashPin } from "../src/verify-pin.js";
 import { hashPassword } from "../src/verify-password.js";
-import type { PersonRoleValue } from "../src/permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import type { TotpKeyRing } from "../src/mfa.js";
 
 export const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };

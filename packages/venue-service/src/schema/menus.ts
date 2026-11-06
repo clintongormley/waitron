@@ -11,7 +11,7 @@ import {
   newId,
   table,
 } from "@waitron/db";
-import { CALENDAR_COLOURS } from "../hours-types.js";
+import { CALENDAR_COLOURS } from "@waitron/shared";
 import { departments } from "./service.js";
 
 const calendarColour = enumType(CALENDAR_COLOURS);

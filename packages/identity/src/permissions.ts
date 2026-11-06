@@ -1,3 +1,5 @@
+import type { PersonRoleValue } from "@waitron/shared";
+
 /**
  * Call sites gate on a PERMISSION, never a role string, so the role→permission map below can change
  * in one place. Permission ids are never renamed once shipped.
@@ -41,8 +43,6 @@ export const PERMISSIONS = [
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
-
-export type PersonRoleValue = "staff" | "supervisor" | "manager" | "admin";
 
 const STAFF: ReadonlySet<Permission> = new Set(["sale.take_payment"]);
 const SUPERVISOR: ReadonlySet<Permission> = new Set([

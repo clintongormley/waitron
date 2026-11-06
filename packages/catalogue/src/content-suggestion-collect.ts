@@ -3,8 +3,8 @@ import { categories, products, tenants, type Transaction } from "@waitron/db";
 import type { ContentLanguages } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
-import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "./content-translation-kinds.js";
-import type { TranslationGapKind } from "./content-translation-report-types.js";
+import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "@waitron/shared";
+import type { TranslationGapKind } from "@waitron/shared";
 import {
   listTranslationGapRows,
   liveTranslationRows,

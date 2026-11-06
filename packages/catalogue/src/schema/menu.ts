@@ -11,7 +11,7 @@ import {
   products,
   table,
 } from "@waitron/db";
-import { HOME_DISPLAY_DEFAULTS } from "../device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type { HomeOrder, HomeTileMode } from "@waitron/shared";
 import { sections } from "./sections.js";
 

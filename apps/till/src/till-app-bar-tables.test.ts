@@ -24,7 +24,7 @@ import type {
   UnsentDraft,
   ZoneOfferCatalogue,
 } from "./api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { ServerRouter } from "./api/server-router.js";
 
 const unit = {

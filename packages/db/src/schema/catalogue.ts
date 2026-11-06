@@ -1,28 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { bigCount, count, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
+import type { AllergenMap } from "@waitron/shared";
 import { kitchenCourses } from "./kitchen-courses.js";
-
-/**
- * The db-layer copy of `@waitron/catalogue`'s `ProductAllergens`, local because `@waitron/catalogue`
- * depends on THIS package, so the exact `AllergenCode`-keyed type cannot be imported without a cycle.
- */
-type AllergenKind =
-  | "wheat"
-  | "rye"
-  | "barley"
-  | "oats"
-  | "spelt"
-  | "kamut"
-  | "almonds"
-  | "hazelnuts"
-  | "walnuts"
-  | "cashews"
-  | "pecans"
-  | "brazil_nuts"
-  | "pistachios"
-  | "macadamia";
-export type AllergenMap = Record<string, { kinds?: AllergenKind[] }>;
 
 /** A named, shareable menu. Many locations may point at one catalogue. */
 export const catalogues = table("catalogues", {

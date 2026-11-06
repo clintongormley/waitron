@@ -1,6 +1,7 @@
 import { check, index, unique } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, flag, id, json, label, newId, now, table, ts } from "./columns.js";
-import { products, type AllergenMap } from "./catalogue.js";
+import type { AllergenMap } from "@waitron/shared";
+import { products } from "./catalogue.js";
 
 /** A single dietary origin per ingredient. NULL = not yet categorised (a diet-PENDING ingredient,
  * contagious up a recipe — the diet analogue of `allergens IS NULL`). Drives BOTH the contains-tags

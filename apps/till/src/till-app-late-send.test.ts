@@ -21,7 +21,7 @@ import type {
 } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type { AllergySendTarget } from "@waitron/module";
 import {
   addDish as addSteak,

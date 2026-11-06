@@ -52,7 +52,6 @@ export type {
   KitchenNoteScope,
   KitchenNote,
   KitchenNoteSnapshot,
-  KitchenNoteChange,
   StationNoticeDish,
   KeepOpenSubject,
   ServiceMode,
@@ -162,6 +161,7 @@ import "./errors.js";
 export type { BusinessDayClockConflict } from "./module.js";
 
 export type * from "./party-allergy.js";
+export type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/shared";
 export type * from "./bill-identity.js";
 
 export type {

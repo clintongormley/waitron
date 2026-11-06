@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
