@@ -416,8 +416,6 @@ declare module "@waitron/shared" {
      * `activeReaders` is a COUNT; never a reader id or a secret.
      */
     "payment.provider_in_use": { activeReaders: number };
-    /** Refuses a manager's resolve: the payment is not `attempting`, its order is not open and
-     * marked in flight, or an attempt in this process is still driving the order. */
     "payment.not_stuck": { paymentId: string };
     "payment.resolve_unsupported": { providerId: string };
     /** The processor could not say what became of the payment; the row and the order's mark are
@@ -740,8 +738,6 @@ declare module "@waitron/shared" {
     "bill.other_party": { workingOrderId: string };
     /** No bill payment with this id; `paymentId` is the id the caller sent. */
     "bill.payment_not_found": { paymentId: string };
-    /** A manager's action was refused: the bill payment is no longer pending, its card is at a
-     * reader in this process, or another resolve settled its provider row first. */
     "bill.payment_not_stuck": { paymentId: string };
     /**
      * What became of a pending card bill payment is not confirmed, so nothing was recorded and the

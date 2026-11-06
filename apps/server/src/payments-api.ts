@@ -7,6 +7,8 @@ import { profileAllows } from "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { isFencedStanding, standingOf } from "@waitron/membership";
+import { isReadableChart } from "./membership-trust.js";
 import { readTakenOverFrom } from "./handover-collection.js";
 import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
 import {
@@ -15,6 +17,7 @@ import {
   deviceProfiles,
   devices,
   nowIso,
+  readNodeMembership,
   workingOrders,
   tenderRefunds,
   sales,
@@ -321,14 +324,29 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
  * runs first, in its own transaction, so an unauthorised caller never reaches the provider.
  */
 export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger): void {
-  const collectionScope = async (tx: Transaction) =>
-    or(
+  const collectionScope = async (tx: Transaction) => {
+    const takenOverFrom = await readTakenOverFrom(tx, deps.cfg.nodeId);
+    const held = deps.isPrimary() ? await readNodeMembership(tx) : null;
+    const replaced =
+      held !== null &&
+      isReadableChart(held) &&
+      standingOf(held, deps.cfg.nodeId) === "serving-primary"
+        ? [
+            ...held.body.nodes
+              .filter((node) => isFencedStanding(node.standing))
+              .map((node) => node.nodeId),
+            ...(held.body.revoked ?? []),
+          ]
+        : [];
+    return or(
       inArray(payments.nodeId, [
         deps.cfg.nodeId,
-        ...(await readTakenOverFrom(tx, deps.cfg.nodeId)),
+        ...takenOverFrom,
+        ...(deps.isPrimary() ? replaced : []),
       ]),
       deps.isPrimary() ? isNull(payments.nodeId) : undefined,
     );
+  };
   const gated = <T>(
     sessionId: string,
     fn: (tx: Transaction, personId: string) => Promise<T>,
@@ -1180,7 +1198,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  /** A bill payment a manager may resolve: pending, and at no reader in this process. */
   const requireStuckBillPayment = async (tx: Transaction, id: string) => {
     const [row] = await tx.select().from(billPayments).where(eq(billPayments.id, id));
     if (row === undefined) throw new AppError("bill.payment_not_found", { paymentId: id });
