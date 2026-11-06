@@ -102,7 +102,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 
 - A1218: a counter with two zones cannot get back to its menu.
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
-- [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1381. A manager's stuck-payment actions cover placed orders and only this box's own payments](backlog/payments.md#bundle-a1381-a-managers-stuck-payment-actions-cover-placed-orders-and-only-this-boxs-own-payments)
 - [A1382. Till refusals that say the wrong thing or nothing useful](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
 - [A1383. Tests for four guards a review deleted with nothing failing](backlog/fiscal.md#bundle-a1383-tests-for-four-guards-a-review-deleted-with-nothing-failing)
@@ -856,8 +855,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `Paid` (`bill_pay.paid`) or "{amount} is already paid on this bill" (`table.move_dishes_floor`),
   because `paidQuantitiesOf` counts pending item payments. The row's words came with slice 4a.
   [Detail](backlog/till.md#a1350-a-row-can-read-paid-on-money-a-card-in-progress-has-only-reserved)
-
-- **A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person** (bundle of 5, 1 go-live, 2 important, size M). Holds A1357, A1263, A792. [Detail](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 
 - **A1358. A number stepper's − and + are 24 by 32 px, against the 44 px tap size (seen in A803
   slice 4c's LOOK; predates it).** Measured on Split a table's guest steppers at 390 wide. The
