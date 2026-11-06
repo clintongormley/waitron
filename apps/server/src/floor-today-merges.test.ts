@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -185,7 +186,7 @@ describe("today's merges", () => {
       NOW,
     );
     await setToday(table.t!, { takenOff: true });
-    const unplanned = await v.table(`Unplanned ${table.a!.slice(0, 6)}`);
+    const unplanned = await v.table(`Unplanned ${floorLabelSuffix()}`);
 
     for (const [moving, target, code, tableId] of [
       [table.s!, table.a!, "table.not_on_today_plan", table.s!],

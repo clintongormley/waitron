@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
@@ -313,7 +314,7 @@ describe("the table routes' revision", () => {
       "name",
       async () => {
         const { zoneId, table } = await ROOM();
-        return { zoneId, tableId: table.a!, body: { name: `Window ${randomUUID().slice(0, 6)}` } };
+        return { zoneId, tableId: table.a!, body: { name: `Window ${floorLabelSuffix()}` } };
       },
     ],
   ];
@@ -708,7 +709,7 @@ describe("today's routes", () => {
 
   it("leaves a zone with no layout alone on a reset", async () => {
     const zoneId = await tableServiceZone(v);
-    await v.table(`Unplanned ${randomUUID().slice(0, 6)}`, zoneId);
+    await v.table(`Unplanned ${floorLabelSuffix()}`, zoneId);
 
     await expectRevision(v, resetZoneToday(zoneId), zoneId, 0);
 
@@ -897,7 +898,7 @@ describe("the zone reset's revision", () => {
 });
 
 describe("today's name route", () => {
-  const suffix = () => randomUUID().slice(0, 6);
+  const suffix = () => floorLabelSuffix();
 
   it("answers the revision unchanged when a table is renamed to the name it already has", async () => {
     const { zoneId, table } = await plannedZone(v, [{ key: "bar", label: "Bar" }], NOW);
@@ -1369,8 +1370,8 @@ describe("Reset to … plan", () => {
       v,
       at,
       [
-        { key: "a", label: `A ${randomUUID().slice(0, 6)}` },
-        { key: "b", label: `B ${randomUUID().slice(0, 6)}` },
+        { key: "a", label: `A ${floorLabelSuffix()}` },
+        { key: "b", label: `B ${floorLabelSuffix()}` },
       ],
       { standard: { a: 0, b: 20 }, dinner: { a: 40, b: 60 } },
     );
@@ -1594,7 +1595,7 @@ describe("Update layout", () => {
    */
   async function ownersExample() {
     fixedAt = LUNCH;
-    const tag = randomUUID().slice(0, 6);
+    const tag = floorLabelSuffix();
     const s = await standardAndDinner(
       v,
       LUNCH,
@@ -1744,7 +1745,7 @@ describe("Update layout", () => {
           tables: [
             {
               key: "one",
-              label: `1 ${randomUUID().slice(0, 6)}`,
+              label: `1 ${floorLabelSuffix()}`,
               seats: 4,
               fixed: false,
               placement: { x: 100, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
@@ -1878,7 +1879,7 @@ describe("Update layout", () => {
    */
   async function waitingGroup() {
     fixedAt = LUNCH;
-    const tag = randomUUID().slice(0, 6);
+    const tag = floorLabelSuffix();
     const s = await standardAndDinner(
       v,
       LUNCH,
@@ -1948,7 +1949,7 @@ describe("Update layout", () => {
    */
   async function overlappingDinner(fourInStandard: number) {
     fixedAt = LUNCH;
-    const tag = randomUUID().slice(0, 6);
+    const tag = floorLabelSuffix();
     const s = await standardAndDinner(
       v,
       LUNCH,

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { and, asc, eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -415,7 +415,7 @@ describe("today's changes", () => {
       params: { tableId: table.a },
     });
 
-    const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, zoneId, { today: false });
+    const never = await v.table(`Never ${floorLabelSuffix()}`, zoneId, { today: false });
     await inTx(v, (tx) =>
       tx.insert(floorTodayTables).values({ tableId: never, seats: 4, ...place(40, 0) }),
     );
@@ -429,7 +429,7 @@ describe("today's changes", () => {
   it("does not rename a table going back to its saved place", async () => {
     const { table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     const label = await labelOf(table.a!);
-    const renamed = `Renamed ${randomUUID().slice(0, 6)}`;
+    const renamed = `Renamed ${floorLabelSuffix()}`;
     await inTx(v, (tx) =>
       tx
         .update(floorResetTables)

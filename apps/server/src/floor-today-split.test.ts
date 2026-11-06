@@ -1,8 +1,8 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { randomUUID } from "node:crypto";
 import {
   diningTables,
   floorTodaySplitParts,
@@ -700,7 +700,7 @@ describe("taking a joined table's tables off for today", () => {
 describe("a part's size in today's split", () => {
   it("a part's size comes from the recorded layout", async () => {
     const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
-    const label = (base: string) => `${base} ${randomUUID().slice(0, 6)}`;
+    const label = (base: string) => `${base} ${floorLabelSuffix()}`;
     const removals = enabledTableRemovals(ALL_MODULES);
     const save = async (setId: string, tables: ZonePlanSave["tables"]) => {
       const plan = await inTx(v, (tx) => readLayout(tx, { setId, zoneId: d.zoneId }));
