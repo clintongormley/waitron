@@ -4220,6 +4220,7 @@ it("shows each fact once, label beside value, in Status, Connection and Paper an
     t("printers.status"),
     t("printers.connection"),
     t("printers.details_paper"),
+    t("printers.used_by"),
   ]);
   const active = t("printers.status_active");
   const sayingActive = [...modal.querySelectorAll<HTMLElement>("*")].filter(
