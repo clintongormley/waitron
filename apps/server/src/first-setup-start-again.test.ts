@@ -514,7 +514,10 @@ it("the summary route refuses over plain HTTP", async () => {
       incoming: { socket: new Socket() },
     },
   );
-  expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.connection_insecure", params: {} },
+  });
 });
 
 it("the summary answers with no owner, for a missing database", async () => {
@@ -558,7 +561,10 @@ it("a plain-HTTP request to the Start again route is refused, and nothing change
     },
     { incoming: { socket: new Socket() } },
   );
-  expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.connection_insecure", params: {} },
+  });
   expect(await attemptFiles(f)).toEqual(before);
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
 });

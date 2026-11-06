@@ -68,7 +68,8 @@ export async function sendWipe(
 
 const NOT_READY_CAUSES = ["may-have-filed", "unexpected", "too-large", "unreadable"] as const;
 export type NotReadyCause = (typeof NOT_READY_CAUSES)[number];
-export type WipeRefusal = StartAgainRefusalCause | NotReadyCause | "fault" | "unavailable";
+export type WipeRefusal =
+  StartAgainRefusalCause | NotReadyCause | "fault" | "insecure" | "unavailable";
 
 /**
  * The refusal the page draws for a Start again error, or `undefined` for one it describes as any
@@ -80,6 +81,7 @@ export function wipeRefusal(error: unknown): WipeRefusal | undefined {
   const cause = startAgainRefusalCause(error);
   if (cause !== undefined) return cause;
   if (!object(error)) return undefined;
+  if (error.code === "setup.connection_insecure") return "insecure";
   if (error.code === "setup.not_ready" && typeof error.status === "number") {
     const named = object(error.params) ? error.params.cause : undefined;
     return NOT_READY_CAUSES.find((known) => known === named) ?? "fault";

@@ -1206,6 +1206,8 @@ declare module "@waitron/shared" {
      * trades with.
      */
     "setup.start_again_refused": { cause: "setup-finished" | "kept-records" | "trading-settings" };
+    /** Start again was asked for over a connection that is not encrypted. */
+    "setup.connection_insecure": Record<string, never>;
     /**
      * A manual open-drawer request found no active cash drawer choice on the requesting device (its
      * own, else its profile's default), so there is nothing to send the kick through. `deviceId`

@@ -2227,6 +2227,7 @@ export class SetupApp extends LitElement {
       "too-large": t.wipeTooLarge,
       unreadable: t.wipeUnreadable,
       fault: t.wipeFault,
+      insecure: t.wipeInsecure,
       unavailable: t.wipeUnavailable,
     }[refused ?? "unavailable"];
     if (!this.#firstPasswordScope && this.isConnected) {

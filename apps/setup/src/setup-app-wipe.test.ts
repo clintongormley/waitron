@@ -246,10 +246,13 @@ const refusals: { name: string; summary: () => Response; words: (lang: "en" | "e
       words: (lang) => initialOwnerStrings[lang].keptFault,
     },
     {
-      name: "the box answers setup.owner_required",
+      name: "the box answers setup.connection_insecure",
       summary: () =>
-        Response.json({ error: { code: "setup.owner_required", params: {} } }, { status: 403 }),
-      words: (lang) => initialOwnerStrings[lang].wipeUnavailable,
+        Response.json(
+          { error: { code: "setup.connection_insecure", params: {} } },
+          { status: 403 },
+        ),
+      words: (lang) => initialOwnerStrings[lang].wipeInsecure,
     },
     {
       name: "the box answers setup.not_ready",
@@ -278,6 +281,7 @@ it.each([
   "wipeTooLarge",
   "wipeUnreadable",
   "wipeFault",
+  "wipeInsecure",
 ] as const)("%s has English and Spanish words, and they differ", (key) => {
   expect(initialOwnerStrings.en[key]).toMatch(/\S/);
   expect(initialOwnerStrings.es[key]).toMatch(/\S/);
@@ -297,6 +301,20 @@ for (const [locale, lang] of locales)
       expect(q(app, "start-again")).toBeNull();
       expect(q(app, "retire-confirmed")).toBeNull();
     });
+
+it("where the box answers setup.connection_insecure, the link to set up the secure connection stays", async () => {
+  const { app } = await wipeFixture({
+    summary: () =>
+      Response.json({ error: { code: "setup.connection_insecure", params: {} } }, { status: 403 }),
+  });
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();
+  await settled(app);
+  expect(q(app, "start-again-refused")!.textContent).toBe(initialOwnerStrings.en.wipeInsecure);
+  expect(q<HTMLAnchorElement>(app, "secure-connection")!.getAttribute("href")).toBe(
+    "/setup/connection",
+  );
+});
 
 for (const [locale, lang] of locales)
   it(`in ${locale}, a setup database the box cannot read all of is named above what Start again deletes, with no line about invoices`, async () => {
