@@ -6266,6 +6266,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Retain failure screenshots for long browser test names.**
   [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
+- **Separate pnpm's ordinary-failure diagnostic from its one-second timeout controls.**
+  The version-failure case expected exit 1 but observed timeout 124 in a normal push.
+  Preserve the status assertions and the deliberately stalled cases' bounds.
+  [Detail](backlog/ci.md#pnpms-ordinary-failure-diagnostic-can-hit-its-one-second-timeout).
+
 - **Explain the two older silent pnpm setup stalls.**
   Both lacked command progress reports; replacing the initial Node read does not establish their cause.
   [Detail](backlog/ci.md#explain-the-two-older-silent-pnpm-setup-stalls).
