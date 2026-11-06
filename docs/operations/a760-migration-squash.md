@@ -2,7 +2,8 @@
 
 > **2026-11-04:** the [eight-set plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md)
 > replaces this procedure where the two differ: its opening table lists each change. Everything else
-> here still governs. The freeze, reset roster and owner approval below are still to be recorded.
+> here still governs. The freeze, reset roster and owner decisions are recorded in
+> [The freeze and roster for part 3](#the-freeze-and-roster-for-part-3-6-november-2026).
 
 > Retained on 22 October 2026 for A979, before the planned removal of planning files.
 > This is the approved 16 October procedure, not a record of execution. Its measured counts,
@@ -15,6 +16,49 @@
 > Do not delegate implementation. Check off each step and retain its receipt. This procedure is
 > approved on 16 October 2026. Start only when the watcher records the freeze and named reset
 > roster below; this documentation update does not start the job.
+
+## The freeze and roster for part 3, 6 November 2026
+
+The watcher records this clearance for A760 part 3, as this plan's opening says. Where this section
+differs from the steps below, this section governs part 3.
+
+**Pre-live status.** No production-stamped or real-trading venue is known. Finding one stops the job.
+
+**Owner decisions, 6 November 2026.**
+
+- **A landing freeze, not a work stop.** Nothing lands on Waitron `main` but part 3, documentation
+  included, from the moment lane A takes `main.lock` until part 3 has landed. Lanes A, B, C, E and F
+  keep building, reviewing and planning on their own branches, with no table changes. No STOP file,
+  no bootout, and the watcher's monitor and cron keep running. This replaces "no other mutating
+  work" below, for this job.
+- **Waitron only.** Cloud lanes D, G, H, I, J and K carry on. Cloud's checkout and rehearsal roots
+  are refreshed read-only. Lane A says so if Cloud has to pause for machine capacity.
+- **Lane A lands part 3 itself**, once the protection list prints `EQUAL` for both fiscal
+  compositions, all CI is green and the reviews, Codex's included, are done. It tells the watcher
+  just before landing. This replaces the plan's "the owner's `/land-branch`", for this pull request.
+- **No history rewrite in this freeze.** A1306 stays the last step of A1308, so plan Task 19 does
+  not run.
+- **Migration branches.** `feat/invoice-pdf-email-office-printing` is withdrawn: pull request #1374
+  was closed, and the owner retired the branch. Its tip was `8adba929fd`. A790, A802, A799 and A739
+  remain under the plan's exception.
+
+**Reset roster.**
+
+| Venue | Operator | At reset |
+| --- | --- | --- |
+| Laptop dev-stack instances, as `wa-wt ls` lists them at execution | Lane A, the single-job operator | `wa-wt reset` per the table below, each instance by name |
+| Santet real-data laptop venue, worktree `waitron-local-santet-data` | Lane A, approved by the owner on 16 October | Only the Santet procedure below, through `local/square/reset.sh` |
+| Owner's box, `waitron.local` | Owner | Not reset by this job. See below |
+
+No other box holds a Waitron venue, as far as the watcher knows: the rented server has none, and
+Cloud lanes hold no pre-live Waitron node. An unidentified venue has no reset authority.
+
+**The owner's box differs from the quarantine below.** On 6 November it was running, not off:
+reinstalled by the owner on 5 November on Debian 13, with the app on image
+`sha256:68ae2c5c6da57b807e18bfc820c9f077c5230f86686fd41f0f06a96e7e54d44b`. It has no timer or
+updater, so nothing moves it until someone runs `waitron.sh`. It stays as it is, must be reset
+before its next upgrade, and is reset once when A1308 ends. Lanes also run Docker tests on it, which
+touch no venue.
 
 ## Owner approval, 16 October 2026
 
