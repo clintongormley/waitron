@@ -929,16 +929,15 @@ function withRequired(names: readonly string[]) {
 }
 
 describe("a venue with workforce, with staffing on and off", () => {
-  const base = modules.map((m) => m.name);
-  const staffingOff = withRequired([...base, "workforce"]);
-  const staffingOn = withRequired([...base, "workforce", "staffing"]);
+  // A box switches staffing off in modules.json, which its backup carries; it migrates the same sets.
+  const withStaffing = withRequired([...modules.map((m) => m.name), "workforce", "staffing"]);
   const off = useVenueDb({
-    migrations: migrationOptionsFor(orderedMigrationSets(staffingOff), null),
+    migrations: migrationOptionsFor(orderedMigrationSets(withStaffing), null),
     resetPerTest: false,
     setup: seedSource,
   });
   const on = useVenueDb({
-    migrations: migrationOptionsFor(orderedMigrationSets(staffingOn), null),
+    migrations: migrationOptionsFor(orderedMigrationSets(withStaffing), null),
     resetPerTest: false,
     setup: async (db) => {
       await seedSource(db);
@@ -949,17 +948,18 @@ describe("a venue with workforce, with staffing on and off", () => {
   });
 
   it.each([
-    ["off", off, staffingOff],
-    ["on", on, staffingOn],
-  ] as const)("the full verifier accepts the backup with staffing %s", async (_, venue, set) => {
-    expect(set.some((m) => m.name === "staffing")).toBe(set === staffingOn);
-    const f = await fixture({ db: venue.db, node: venue.node, modules: set });
+    ["off", off, { modules: { staffing: false } }],
+    ["on", on, undefined],
+  ] as const)("the full verifier accepts the backup with staffing %s", async (_, venue, config) => {
+    const f = await fixture({ db: venue.db, node: venue.node, modules: withStaffing });
+    if (config !== undefined)
+      f.entries.push({ name: "secrets/modules.json", bytes: Buffer.from(JSON.stringify(config)) });
     await seal(f);
     const result = await verify(f);
     expect(result.status).toBe("passed");
     expect(result.reason).toBe("none");
     expect(result.modules.map((m) => [m.name, m.status])).toEqual(
-      set
+      withStaffing
         .filter((m) => shippedSetNames.has(m.name) && m.backup?.verification !== undefined)
         .map((m) => [m.name, "passed"])
         .sort(([a], [b]) => a!.localeCompare(b!)),

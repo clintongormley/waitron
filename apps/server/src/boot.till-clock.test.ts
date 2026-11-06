@@ -191,9 +191,9 @@ describe("mounted till clock source", () => {
   });
 });
 
-describe("clock handler absence with identity and workforce absent", () => {
+describe("clock handler absence with workforce absent", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-  it("a disabled direct mount serves no clock handler without querying either absent module", async () => {
+  it("a disabled direct mount serves no clock handler without querying the absent workforce module", async () => {
     const app = new Hono();
     mountTillApi(
       app,
@@ -225,9 +225,9 @@ describe("clock handler absence with identity and workforce absent", () => {
         (await app.request(`/api/clock/${path}`, { method: path === "state" ? "GET" : "POST" }))
           .status,
       ).toBe(404);
-    expect(
-      suite.db.all(sql`select name from sqlite_schema where name in ('persons', 'time_entries')`),
-    ).toEqual([]);
+    expect(suite.db.all(sql`select name from sqlite_schema where name = 'time_entries'`)).toEqual(
+      [],
+    );
   });
 });
 
