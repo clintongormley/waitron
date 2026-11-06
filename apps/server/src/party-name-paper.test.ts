@@ -1,3 +1,5 @@
+import { fireGroup } from "./order-groups.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import * as printing from "@waitron/printing";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -5,6 +7,7 @@ import { eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   kitchenStations,
+  orderGroups,
   parties,
   locations,
   printJobs,
@@ -284,3 +287,32 @@ it("renames only the station whose HOLD paper was recorded", async () => {
   expect(out).toHaveLength(1);
   expect(out[0]!.printerId).not.toBe(barOnly);
 });
+
+it.each([true, false])(
+  "F1 names work waiting at the pass only with recorded HOLD paper (%s)",
+  async (recorded) => {
+    await printer();
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: recorded }));
+    await inTx(v, (tx) => setStationsWaitForPass(tx, true, [stationId]));
+    const p = await seat(v, await v.table("Waiting"));
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        operatorId: OPERATOR,
+        billId: p.tabId,
+        groups: [{ release: "hold", lines: [{ menuItemId: v.item("Burger"), quantity: "1" }] }],
+      }),
+    );
+    const [group] = await v.db.select().from(orderGroups);
+    const expected = await commandFor(v, p.partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, p.partyId, group!.id, { ...expected, submissionId: randomUUID() }),
+    );
+    const [work] = await v.db.select().from(ticketItems);
+    expect(work!.requestedAt).not.toBeNull();
+    expect(work!.firedAt).toBeNull();
+    const out = await rename(p.partyId, "Ana");
+    expect(out).toHaveLength(recorded ? 1 : 0);
+    if (recorded)
+      expect(printedLines(out[0]!.payload)).toContain(`${kitchenTicketWords("es").now}: Ana`);
+  },
+);

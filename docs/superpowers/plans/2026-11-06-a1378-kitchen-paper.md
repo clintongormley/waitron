@@ -87,11 +87,11 @@ Files: `parties.ts`, `till-api.ts`, `kitchen-print.ts`, `kitchen-ticket.ts`,
 
 ### Task 5: Finish the whole bundle
 
-- [ ] Refresh EN/ES 58/80mm raster previews for all new paper; inspect them and send samples and
+- [x] Refresh EN/ES 58/80mm raster previews for all new paper; inspect them and send samples and
   exact wording to the watcher. Keep images/probes outside Git. Wait for wording approval to land.
-- [ ] Remove completed bundle entries from both backlog files; move approved enduring decisions
+- [x] Remove completed bundle entries from both backlog files; move approved enduring decisions
   to their area's decisions section. Register all deliberately changed test checks in the PR/FYI.
-- [ ] Run focused affected suites under UTC and contrasting zones, appropriate root/module guards,
+- [x] Run focused affected suites under UTC and contrasting zones, appropriate root/module guards,
   and the unedited fiscal golden/inmutability suites. Keep all counts and failure controls.
 - [ ] Review the substantial new owner-approved work in one installed disposable Claude candidate;
   retain the first review and repairs. Fix accepted findings in this PR, then normal hook and

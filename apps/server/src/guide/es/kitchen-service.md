@@ -79,7 +79,7 @@ espera recibe su ticket anticipado de espera; otra estación con el ajuste activ
 recibir más tarde lo que se imprime en espera del grupo: un ticket anticipado de espera cuando se le
 mueve un plato en espera, o una comanda HOLD CHANGED cuando se añade al grupo un plato en espera en
 ella. Una estación que tiene lo impreso en espera del grupo sigue recibiéndolo, junto con sus
-correcciones y la comanda marcada FIRE, aunque se desactive su ajuste. Cualquier otra estación
+correcciones y la comanda marcada MARCHAR, aunque se desactive su ajuste. Cualquier otra estación
 imprime su parte sin marca cuando se envía el grupo a preparar, también si comparte impresora:
 solo las secciones que ya recibieron lo impreso en espera llevan la marca MARCHAR.
 

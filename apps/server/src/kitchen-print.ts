@@ -110,6 +110,11 @@ function atFiredQuantity(entry: KitchenTicketItem, item: FiredItem): KitchenTick
   return item.quantity == null ? entry : { ...entry, qty: thousandthsToDecimal(item.quantity) };
 }
 
+// Change paper omits late-send marks, so those marks cannot split otherwise identical portions.
+function changeItem(entry: KitchenTicketItem, item: FiredItem): KitchenTicketItem {
+  return { ...atFiredQuantity(entry, item), afterPeriod: undefined };
+}
+
 /**
  * Pick one language out of a snapshotted locale→string map (a line's unit label). A till whose locale
  * is not among the map's keys prints some stored language rather than a blank.
@@ -436,6 +441,7 @@ export async function orderTableLabel(tx: Transaction, orderId: string): Promise
 interface OrderHeader {
   orderNumber: string;
   tableLabel: string | null;
+  billLabel: string | null;
   id: string;
   partyId: string | null;
   deliveryTableId: string | null;
@@ -466,6 +472,7 @@ async function readOrderHeaders(
         partyId: order.partyId,
         deliveryTableId: order.deliveryTableId,
         orderNumber: String(order.orderNumber),
+        billLabel: order.label,
         tableLabel: labels.get(order.id)!,
       },
     ]),
@@ -556,13 +563,6 @@ interface KnownStations {
   stations: Awaited<ReturnType<typeof readStations>>;
 }
 
-/**
- * The kitchen tickets for a set of just-fired lines, routed by {@link routeKitchenTickets} over the
- * involved stations in name order. A `HOLD` ticket's `firedItems` are the held items printed in
- * advance. On a `fire`, a route is marked FIRE when one of its stations is in `heldPaper`. A printer
- * in `papers` prints the rest of the order as its entry says, in place of what its route alone would
- * decide.
- */
 async function planKitchenTickets(
   tx: Transaction,
   cfg: TradingContext,
@@ -952,6 +952,13 @@ async function readKitchenChangeItems(
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .leftJoin(
+      orderGroupHoldStations,
+      and(
+        eq(orderGroupHoldStations.groupId, workingOrderLines.groupId),
+        eq(orderGroupHoldStations.stationId, ticketItems.stationId),
+      ),
+    )
     .where(
       and(
         inArray(ticketItems.workingOrderId, [...orderIds]),
@@ -963,6 +970,7 @@ async function readKitchenChangeItems(
         or(
           isNotNull(ticketItems.firedAt),
           and(eq(orderGroups.state, "held"), isNotNull(orderGroups.holdPrintedAt)),
+          and(isNotNull(ticketItems.requestedAt), isNotNull(orderGroupHoldStations.groupId)),
         ),
       ),
     )
@@ -1079,11 +1087,11 @@ export async function enqueueOrderKitchenNoteChange(
       after: change.after,
       ...(grouped ? { partyId } : {}),
     };
-    const numbers = new Map<string, Set<number>>();
+    const numbers = new Map<string, Set<string>>();
     for (const [id, items] of orders)
       for (const item of items) {
-        const set = numbers.get(item.stationId) ?? new Set<number>();
-        set.add(Number(headers.get(id)!.orderNumber));
+        const set = numbers.get(item.stationId) ?? new Set<string>();
+        set.add(id);
         numbers.set(item.stationId, set);
       }
     const noteEvent = grouped
@@ -1093,8 +1101,14 @@ export async function enqueueOrderKitchenNoteChange(
             [...numbers].map(([id, values]) => [
               id,
               [...values]
-                .sort((a, b) => a - b)
-                .map((value) => `#${value}`)
+                .sort(
+                  (a, b) =>
+                    Number(headers.get(a)!.orderNumber) - Number(headers.get(b)!.orderNumber),
+                )
+                .map((value) => {
+                  const header = headers.get(value)!;
+                  return `#${header.orderNumber}${header.billLabel === null ? "" : ` · ${header.billLabel}`}`;
+                })
                 .join(", "),
             ]),
           ),
@@ -1145,7 +1159,7 @@ async function printKitchenNoteChanges(
   >();
   for (const target of items) {
     const entry = built.get(target.workingOrderLineId)!;
-    const item = atFiredQuantity(entry.item, target);
+    const item = changeItem(entry.item, target);
     const bucket = byStation.get(target.stationId) ?? [];
     bucket.push({
       orderId: target.orderId,
@@ -1437,7 +1451,7 @@ export async function foldPortionNotices<T extends CorrectionItem>(
     const entry = whole.has(item.workingOrderLineId)
       ? built.get(item.workingOrderLineId)
       : undefined;
-    const merge = entry === undefined ? undefined : mergeKey(atFiredQuantity(entry.item, item));
+    const merge = entry === undefined ? undefined : mergeKey(changeItem(entry.item, item));
     const key =
       merge === undefined
         ? undefined
@@ -1569,7 +1583,7 @@ async function printCorrectionSlips(
   for (const target of items) {
     if (!printersByStation.has(target.stationId)) continue;
     const entry = itemsByLine.get(target.workingOrderLineId)!;
-    const fired = atFiredQuantity(entry.item, target);
+    const fired = changeItem(entry.item, target);
     const item =
       target.group === undefined
         ? fired
@@ -2022,7 +2036,7 @@ async function printMovedSlips(
       .filter((item) => item.stationId === stationId)
       .map((target) => {
         const entry = itemsByLine.get(target.workingOrderLineId)!;
-        const item = atFiredQuantity(entry.item, target);
+        const item = changeItem(entry.item, target);
         return {
           held: target.held,
           lineNo: entry.lineNo,

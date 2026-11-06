@@ -96,6 +96,8 @@ export async function recordKitchenNotices(
     noteEvent,
     allergyBlock = null,
   } = options;
+  if (noteEvent !== undefined && (kind !== "changed" || orderNoteChange === undefined))
+    throw new AppError("kitchen_notice.invalid", { field: "noteEvent" });
   if (
     orderNoteChange !== undefined &&
     (kind !== "changed" ||

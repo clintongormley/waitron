@@ -174,8 +174,6 @@ describe("A773 waiter request: send", () => {
   });
 
   it("releases at once when nothing waits: one item per line, one job at each output", async () => {
-    // A ticket prints the time in the process's time zone, so the bytes below hold only in this one.
-    process.env.TZ = "Europe/Madrid";
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -206,15 +204,23 @@ describe("A773 waiter request: send", () => {
       expect((await jobsAt(tx, venue.printers.grill))[0]).toContain("BURG");
       expect((await jobsAt(tx, venue.printers.pass))[0]).toContain("BURG");
       expect((await jobsAt(tx, venue.printers.kitchen))[0]).toContain("SALAD");
-      // The bytes the same order printed at 4a9a9f05bf, before an item could wait for the pass.
+      expect({
+        grill: await jobsAt(tx, venue.printers.grill),
+        pass: await jobsAt(tx, venue.printers.pass),
+        kitchen: await jobsAt(tx, venue.printers.kitchen),
+      }).toEqual({
+        grill: ["Grill\n\n2\n13:00\n1 x BURG\n"],
+        pass: ["Grill\n\n2\n13:00\n1 x BURG\n"],
+        kitchen: ["Kitchen\n\n2\n13:00\n1 x SALAD\n"],
+      });
       expect({
         grill: await payloadHashes(tx, venue.printers.grill),
         pass: await payloadHashes(tx, venue.printers.pass),
         kitchen: await payloadHashes(tx, venue.printers.kitchen),
       }).toEqual({
-        grill: ["6549922446e2db088ab2b797c87b9b80e45d92d526d23ccaf4decb93edfd2951"],
-        pass: ["6549922446e2db088ab2b797c87b9b80e45d92d526d23ccaf4decb93edfd2951"],
-        kitchen: ["efa65d125caeea238d9a00e704dcd97d64c126bb30b823dc2164a8b7bde8ea9e"],
+        grill: ["f9d1f346ad67d68f84b01611fc77bce7c0912e2be194fa1635a2604d06e57961"],
+        pass: ["f9d1f346ad67d68f84b01611fc77bce7c0912e2be194fa1635a2604d06e57961"],
+        kitchen: ["46c0b0b5d6875f71ae23db3e3184dbb792b1e47be6227cc77afb49fa54c9d1df"],
       });
     });
   });

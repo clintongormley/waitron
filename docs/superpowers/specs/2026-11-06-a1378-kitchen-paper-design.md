@@ -17,7 +17,7 @@ lands in one pull request. The watcher relayed approval of the exact English and
 3. A reprint keeps its earliest original send time and its separate reprint time. This is the
    existing rule, retained and tested, rather than a new choice of clock.
 4. A party's kitchen-note change produces one slip per affected printer and one displayed notice
-   per affected station, listing the affected bill numbers. Independent counter orders and other
+   per affected station, listing the affected bill numbers and retaining their copied bill labels. Independent counter orders and other
    parties stay separate, even when their names, notes and event times match. Measured/sold-as-recorded
    portions and group identities retain their meaning. Acknowledging the one notice covers all its
    underlying rows.
@@ -26,7 +26,7 @@ lands in one pull request. The watcher relayed approval of the exact English and
 6. Naming, renaming or clearing a party name after its food was sent prints one name-change slip
    at each affected printer. It names the old and new names and the affected orders. No outstanding
    kitchen work means no slip; saving the same normalized name means no slip. Fired work and HOLD
-   paper actually recorded at its station count, including a settled bill's unserved food. Served,
+   paper actually recorded at its station count, including work requested at the pass after its group was fired and a settled bill's unserved food. Served,
    collected, abandoned and made-here-only work does not receive a new kitchen instruction.
 7. MOVED combines identical whole portions under the station's existing combined setting.
    Separate retains one entry per whole unit. Group boundaries, measured portions and items marked

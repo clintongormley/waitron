@@ -371,7 +371,16 @@ function emitOrderLine(
   columns: number,
 ): void {
   const label = `${order} · `;
-  if (partyName !== undefined && prepareText(label).length >= columns) {
+  const indentRoom = columns - prepareText(label).length;
+  const longestWord =
+    partyName === undefined
+      ? 0
+      : Math.max(
+          ...prepareText(partyName)
+            .split(" ")
+            .map((word) => word.length),
+        );
+  if (partyName !== undefined && indentRoom < Math.min(longestWord, columns)) {
     for (const part of wrapText(prepareText(order), columns)) b.line(part);
     for (const part of wrapText(prepareText(partyName), columns)) b.line(part);
     return;

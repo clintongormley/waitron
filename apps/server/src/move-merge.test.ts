@@ -1,3 +1,4 @@
+import { readWholePortionLines } from "./order-portions.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -38,7 +39,13 @@ import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { listStationQueues, moveOrderLines, storedOrderTotal } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
-import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
+import {
+  kitchenNotices,
+  setRoutingCell,
+  listZoneOffers,
+  recordWorkingLineContexts,
+  workingLineContexts,
+} from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
@@ -86,6 +93,7 @@ import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill
 import { fireGroup } from "./order-groups.js";
 import {
   enqueueCorrectionSlips,
+  enqueueOrderKitchenNoteChange,
   enqueueMovedSlipsForNamesGone,
   readPartiesSentWork,
   reprintOrderTickets,
@@ -2542,6 +2550,145 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
 });
 
 describe("A1378 MOVED follows station grouping and preserves portion boundaries", () => {
+  it("F2 combines whole portions with different recorded late marks on change paper", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const p = await seat(v, await v.table("Late source"));
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        operatorId: OPERATOR,
+        billId: p.tabId,
+        groups: [{ release: "fire", lines: [{ menuItemId: v.item("Burger"), quantity: "2" }] }],
+      }),
+    );
+    const lines = await v.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, p.tabId));
+    await inTx(v, async (tx) => {
+      await tx
+        .delete(workingLineContexts)
+        .where(eq(workingLineContexts.workingOrderLineId, lines[1]!.id));
+      await recordWorkingLineContexts(
+        tx,
+        p.tabId,
+        [
+          {
+            workingOrderLineId: lines[1]!.id,
+            menuItemId: v.item("Burger"),
+            late: { periodName: "Lunch", confirmedBy: OPERATOR },
+          },
+        ],
+        await listZoneOffers(tx, v.tables.zoneId),
+      );
+    });
+    const contexts = await v.db
+      .select()
+      .from(workingLineContexts)
+      .where(
+        inArray(
+          workingLineContexts.workingOrderLineId,
+          lines.map((line) => line.id),
+        ),
+      );
+    expect(contexts.map((context) => context.latePeriodName).sort()).toEqual(
+      ["Lunch", null].sort(),
+    );
+    const beforeReprint = (await printedBy(grill)).length;
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, p.tabId));
+    const reprinted = await slipsSince(grill, beforeReprint);
+    expect(reprinted.map((paper) => paper.filter((line) => / x BURG$/.test(line)))).toEqual([
+      ["1 x BURG", "1 x BURG"],
+    ]);
+    expect(reprinted[0]!.some((line) => line.includes("LUNCH"))).toBe(true);
+    let before = (await printedBy(grill)).length;
+    await inTx(v, (tx) =>
+      enqueueOrderKitchenNoteChange(tx, v.cfg, [p.tabId], { before: null, after: "Together" }),
+    );
+    expect(
+      (await slipsSince(grill, before)).map((paper) =>
+        paper.filter((line) => / x BURG$/.test(line)),
+      ),
+    ).toEqual([["2 x BURG"]]);
+    before = (await printedBy(grill)).length;
+    const destination = await v.table("Late destination");
+    const command = await commandFor(v, p.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.partyId, destination, { ...command, otherPartyId: null }),
+    );
+    expect(
+      (await slipsSince(grill, before)).map((paper) =>
+        paper.filter((line) => / x BURG$/.test(line)),
+      ),
+    ).toEqual([["2 x BURG"]]);
+    before = (await printedBy(grill)).length;
+    const items = await v.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, p.tabId));
+    expect(items.map((item) => item.quantity)).toEqual([1000, 1000]);
+    await inTx(v, (tx) =>
+      enqueueCorrectionSlips(
+        tx,
+        v.cfg,
+        p.tabId,
+        items.map((item) => ({
+          workingOrderLineId: item.workingOrderLineId,
+          stationId: item.stationId,
+          quantity: 1000,
+          wasStarted: false,
+        })),
+        "VOID",
+      ),
+    );
+    expect(
+      await inTx(v, (tx) =>
+        readWholePortionLines(
+          tx,
+          lines.map((line) => line.id),
+        ),
+      ),
+    ).toEqual(new Set(lines.map((line) => line.id)));
+    expect(
+      (await slipsSince(grill, before)).map((paper) =>
+        paper.filter((line) => / x BURG$/.test(line)),
+      ),
+    ).toEqual([["2 x BURG"]]);
+    const cancelled = (
+      await v.db.select().from(kitchenNotices).where(eq(kitchenNotices.workingOrderId, p.tabId))
+    ).filter((notice) => notice.kind === "void");
+    expect(cancelled).toHaveLength(1);
+    expect(cancelled[0]!.quantity).toBe(2000);
+  });
+
+  it("F6 combines identical held portions within the same MOVED group", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { ticketGrouping: "combined", printHeldWork: true }, [
+        await activeStationId(tx, v, "Grill"),
+      ]),
+    );
+    const p = await seat(v, await v.table("Held source"));
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        operatorId: OPERATOR,
+        billId: p.tabId,
+        groups: [{ release: "hold", lines: [{ menuItemId: v.item("Burger"), quantity: "2" }] }],
+      }),
+    );
+    const before = (await printedBy(grill)).length;
+    const destination = await v.table("Held destination");
+    const command = await commandFor(v, p.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.partyId, destination, { ...command, otherPartyId: null }),
+    );
+    const papers = await slipsSince(grill, before);
+    expect(papers).toHaveLength(1);
+    expect(papers[0]).toContain(kitchenTicketWords("es").hold);
+    expect(papers[0]!.filter((line) => / x BURG$/.test(line))).toEqual(["2 x BURG"]);
+  });
+
   it("keeps two whole measured portions separate under combined", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);

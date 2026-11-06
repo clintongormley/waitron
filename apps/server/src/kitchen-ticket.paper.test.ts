@@ -349,3 +349,27 @@ it("wraps a party note's long bill list without reducing its name to one charact
   expect(lines.some((line) => line.includes("Ana and friends"))).toBe(true);
   expect(lines.filter((line) => line.trim().length === 1)).toEqual([]);
 });
+
+it.each(["180dpi", "203dpi"] as const)(
+  "F3 gives a near-width bill list's party name usable room at %s",
+  (resolution) => {
+    const lines = printedLines(
+      formatKitchenNoteChangeSlip(
+        {
+          locale: "en",
+          stations: [{ stationName: "Grill", items: [item] }],
+          tableLabel: "Table 4",
+          orderNumber: "101",
+          orderNumbers: ["101", "102", "103", "104"],
+          party: { name: "Maria Gonzalez", locale: "en" },
+          at,
+          orderNoteChange: { before: null, after: "Bring together" },
+        },
+        { paperWidth: "58mm", resolution },
+        "Europe/Madrid",
+      ),
+    );
+    expect(lines.some((line) => line.includes("Maria"))).toBe(true);
+    expect(lines.some((line) => line.includes("Gonzalez"))).toBe(true);
+  },
+);

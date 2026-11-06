@@ -260,7 +260,6 @@ and the word table has `fire: "MARCHAR"` and `holdChanged: "EN ESPERA CAMBIADO"`
 not seen on a decoded ticket. The guide `apps/server/src/guide/es/kitchen-service.md` still says:
 
 - `:71` «una comanda HOLD CHANGED cuando se añade al grupo un plato en espera»;
-- `:73` «la comanda marcada FIRE»;
 - `:324` «las comandas de corrección como **HOLD CHANGED**».
 
 By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `:324` from
@@ -268,7 +267,7 @@ By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `
 `~/waitron-campaign-c/questions.md`: use the paper's words (recommended), or keep these because a
 guide's language and a kitchen's can differ. 4b's own new text names no marker, so the question stayed
 open for these older lines only. A1378 replaces the shared-printer explanation; the remaining
-older marker words above still await that separate answer.
+older HOLD CHANGED words above still await that separate answer.
 
 ## Bundle: What happens to the kitchen when guests leave unpaid
 

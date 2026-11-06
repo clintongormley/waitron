@@ -1852,3 +1852,35 @@ it("A1378 records a large notice event within the engine's bound-value limit", a
   expect(rows).toHaveLength(2001);
   expect(rows.every((row) => row.quantity === 1000 && row.orderId === order.orderId)).toBe(true);
 });
+
+it.each(["void", "changed"] as const)(
+  "F5 refuses noteEvent without a note on %s notices",
+  async (kind) => {
+    const v = await venue();
+    const order = await seedOrder(31, null);
+    await expect(
+      inTx((tx) =>
+        recordKitchenNotices(
+          tx,
+          order.orderId,
+          [
+            {
+              workingOrderLineId: order.burgerLineId,
+              stationId: v.grill,
+              quantity: ONE,
+              wasStarted: false,
+            },
+          ],
+          kind,
+          {
+            noteEvent: {
+              createdAt: "2000-01-01T00:00:00.000Z",
+              labels: new Map([[v.grill, "FORGED"]]),
+            },
+          },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "noteEvent" } });
+    expect(await db.select().from(kitchenNotices)).toEqual([]);
+  },
+);
