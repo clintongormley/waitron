@@ -5318,7 +5318,12 @@ describe("till-app: a bill payment on the card reader", () => {
     return el;
   }
 
-  it.each([{ code: "server.internal", status: 502 }, { status: 500 }, {}])(
+  it.each([
+    { code: "server.internal", status: 502 },
+    { code: "server.internal" },
+    { status: 500 },
+    {},
+  ])(
     "A1399: keeps the same complete card confirmation after an uncertain server answer %j",
     async (error) => {
       const takeBillPayment = vi
