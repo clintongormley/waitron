@@ -127,7 +127,7 @@ export type { SuggestionJobRow, SuggestionRow } from "@waitron/db";
 export { CATALOGUE_MIGRATIONS } from "./migrations.js";
 export { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { CATALOGUE_PROVISIONING } from "./provisioning.js";
-export { CATALOGUE_CLASSIFICATION } from "./classification.js";
+export { CATALOGUE_TABLES } from "./classification.js";
 export { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
 export * from "./categories.js";
 export type {

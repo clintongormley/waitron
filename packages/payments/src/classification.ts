@@ -8,7 +8,7 @@ const STATE = "manager configuration / live service; copied to a standby, never 
  * `payments` is `ledger` but not `appendOnly`: `store.ts` updates a payment's row as it moves
  * through its states, so a trigger refusing updates would refuse a card capture.
  */
-export const PAYMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
+export const PAYMENTS_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("payments", "ledger", LEDGER),
   classify("payment_refunds", "ledger", LEDGER),
   appendOnly("payment_resolutions", "ledger", LEDGER),
@@ -22,6 +22,16 @@ export const PAYMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("card_reader_holders", "state", STATE),
 ];
 
-export const PAYMENTS_CHANGE_SOURCES: readonly ChangeSource[] = PAYMENTS_CLASSIFICATION.map(
+/** Every table in payments' set: payments' own and scheduler's, which lives in it. */
+export const PAYMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
+  ...PAYMENTS_OWN_CLASSIFICATION,
+  classify(
+    "scheduled_runs",
+    "state",
+    "the venue's record of which duty ran for which period; a node that takes over continues it",
+  ),
+];
+
+export const PAYMENTS_CHANGE_SOURCES: readonly ChangeSource[] = PAYMENTS_OWN_CLASSIFICATION.map(
   ({ table }) => ({ table, type: table }),
 );

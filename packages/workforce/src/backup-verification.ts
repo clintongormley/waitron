@@ -2,7 +2,7 @@ import { compareBackupTables } from "@waitron/db";
 import type { BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
 import { SOURCES, type Source } from "@waitron/shared";
-import { WORKFORCE_CLASSIFICATION } from "./classification.js";
+import { WORKFORCE_OWN_CLASSIFICATION } from "./classification.js";
 import { verifyChain, type VerifiableEntry } from "./chain-hash.js";
 import { verifyPayPeriodClosures } from "./pay-period-chain.js";
 import type { PayPeriodClosure, RecordExtension } from "./record-types.js";
@@ -13,7 +13,7 @@ export const WORKFORCE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   publicEvidenceDigest: null,
   data: {
     kind: "custom",
-    tables: WORKFORCE_CLASSIFICATION.map((c) => c.table),
+    tables: WORKFORCE_OWN_CLASSIFICATION.map((c) => c.table),
     immutableTables,
     checks: ["data", "chain", "head", "history"],
   },
@@ -26,7 +26,7 @@ export const WORKFORCE_BACKUP_VERIFICATION: BackupVerificationContribution = {
     const equal = await compareBackupTables({
       before: context.before,
       after: context.after,
-      policies: WORKFORCE_CLASSIFICATION.map(({ table }) => ({
+      policies: WORKFORCE_OWN_CLASSIFICATION.map(({ table }) => ({
         table,
         immutable: immutableTables.includes(table),
         addedColumns: {},

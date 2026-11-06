@@ -3,10 +3,10 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { compareBackupTables } from "@waitron/db";
 import type { BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
-import { ADJUSTMENTS_CLASSIFICATION } from "./classification.js";
+import { ADJUSTMENTS_TABLES } from "./classification.js";
 import * as schema from "@waitron/db/schema/adjustments.js";
 
-const tables = ADJUSTMENTS_CLASSIFICATION.map((c) => c.table);
+const tables = [...ADJUSTMENTS_TABLES];
 const immutableTables = ["adjustments", "adjustment_refunds", "adjustment_lines"];
 const addedAdjustmentColumns: Readonly<Record<string, BackupValue>> = {
   charge_kept: 0n,

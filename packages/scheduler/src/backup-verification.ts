@@ -1,8 +1,8 @@
 import { compareBackupTables } from "@waitron/db";
 import type { BackupVerificationContribution } from "@waitron/module";
-import { SCHEDULER_CLASSIFICATION } from "./classification.js";
+import { SCHEDULER_TABLES } from "./tables.js";
 
-const tables = SCHEDULER_CLASSIFICATION.map((entry) => entry.table);
+const tables = [...SCHEDULER_TABLES];
 export const SCHEDULER_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,

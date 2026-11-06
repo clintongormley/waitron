@@ -143,7 +143,7 @@ export {
 } from "./google-oidc.js";
 export type { GoogleOidcClaim } from "./google-oidc.js";
 
-export { IDENTITY_CLASSIFICATION } from "./classification.js";
+export { IDENTITY_TABLES } from "./classification.js";
 export { IDENTITY_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { IDENTITY_PERSONAL_DATA } from "./personal-data.js";
 

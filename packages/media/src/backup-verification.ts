@@ -3,7 +3,7 @@ import { compareBackupTables } from "@waitron/db";
 import { sniffImageType } from "@waitron/catalogue";
 import type { BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
-import { MEDIA_CLASSIFICATION } from "./classification.js";
+import { MEDIA_TABLES } from "./tables.js";
 
 const immutableTables = ["media_image_data", "media_image_blobs"];
 export const MEDIA_BACKUP_VERIFICATION: BackupVerificationContribution = {
@@ -11,7 +11,7 @@ export const MEDIA_BACKUP_VERIFICATION: BackupVerificationContribution = {
   publicEvidenceDigest: null,
   data: {
     kind: "custom",
-    tables: MEDIA_CLASSIFICATION.map((c) => c.table),
+    tables: [...MEDIA_TABLES],
     immutableTables,
     checks: ["data"],
   },
@@ -24,7 +24,7 @@ export const MEDIA_BACKUP_VERIFICATION: BackupVerificationContribution = {
     const equal = await compareBackupTables({
       before: context.before,
       after: context.after,
-      policies: MEDIA_CLASSIFICATION.map(({ table }) => ({
+      policies: MEDIA_TABLES.map((table) => ({
         table,
         immutable: immutableTables.includes(table),
         addedColumns: {},

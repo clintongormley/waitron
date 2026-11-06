@@ -6,17 +6,14 @@ import { NODE_BACKUP_VERIFICATION } from "./node-backup-verification.js";
 import {
   ADJUSTMENTS_BACKUP_VERIFICATION,
   ADJUSTMENTS_CHANGE_SOURCES,
-  ADJUSTMENTS_CLASSIFICATION,
   ADJUSTMENTS_CONFIGURATION_TRANSFER,
   ADJUSTMENTS_PERMISSIONS,
   ADJUSTMENTS_PERSONAL_DATA,
   ADJUSTMENTS_PROVISIONING,
   ADJUSTMENTS_ROUTES,
 } from "@waitron/adjustments";
-import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
 import { NODE_CLASSIFICATION } from "@waitron/node-db";
 import {
-  CATALOGUE_CLASSIFICATION,
   CATALOGUE_BACKUP_VERIFICATION,
   CATALOGUE_CHANGE_SOURCES,
   CATALOGUE_CONFIGURATION_TRANSFER,
@@ -57,9 +54,8 @@ import {
   BOOKINGS_PERMISSIONS,
   BOOKINGS_ROUTES,
 } from "@waitron/bookings";
-import { HANDOVER_BACKUP_VERIFICATION, HANDOVER_CLASSIFICATION } from "@waitron/handover";
+import { HANDOVER_BACKUP_VERIFICATION } from "@waitron/handover";
 import {
-  IDENTITY_CLASSIFICATION,
   IDENTITY_BACKUP_VERIFICATION,
   IDENTITY_CONFIGURATION_TRANSFER,
   IDENTITY_CHANGE_SOURCES,
@@ -75,11 +71,10 @@ import {
   PAYMENTS_CHANGE_SOURCES,
   PAYMENTS_HANDOVER,
 } from "@waitron/payments";
-import { SCHEDULER_CLASSIFICATION, SCHEDULER_BACKUP_VERIFICATION } from "@waitron/scheduler";
+import { SCHEDULER_BACKUP_VERIFICATION } from "@waitron/scheduler";
 import {
   STAFFING_BACKUP_VERIFICATION,
   STAFFING_CHANGE_SOURCES,
-  STAFFING_CLASSIFICATION,
   STAFFING_CONFIGURATION_TRANSFER,
   STAFFING_PERMISSIONS,
   STAFFING_PERSONAL_DATA,
@@ -98,7 +93,6 @@ import {
   VENUE_SERVICE,
   VENUE_SERVICE_ALERTS,
   VENUE_SERVICE_BACKUP_VERIFICATION,
-  VENUE_SERVICE_CLASSIFICATION,
   VENUE_SERVICE_CHANGE_SOURCES,
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
   VENUE_SERVICE_PERMISSIONS,
@@ -179,12 +173,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "mandatory",
     requires: { core: "*" },
-    migrations: {
-      name: "handover",
-      table: "__drizzle_migrations_handover",
-      from: "../handover/drizzle",
-    },
-    classification: HANDOVER_CLASSIFICATION,
+    tablesIn: "core",
     backup: { verification: HANDOVER_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
@@ -193,12 +182,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "mandatory",
     requires: { core: "*" },
-    migrations: {
-      name: "catalogue",
-      table: "__drizzle_migrations_catalogue",
-      from: "../catalogue/drizzle",
-    },
-    classification: CATALOGUE_CLASSIFICATION,
+    tablesIn: "core",
     backup: { verification: CATALOGUE_BACKUP_VERIFICATION },
     changes: CATALOGUE_CHANGE_SOURCES,
     configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
@@ -209,13 +193,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "mandatory",
     requires: { core: "*", modules: { catalogue: "*" } },
-    migrations: {
-      name: "venue-service",
-      table: "__drizzle_migrations_venue_service",
-      from: "../venue-service/drizzle",
-    },
+    tablesIn: "core",
     backup: { verification: VENUE_SERVICE_BACKUP_VERIFICATION },
-    classification: VENUE_SERVICE_CLASSIFICATION,
     changes: VENUE_SERVICE_CHANGE_SOURCES,
     venueService: VENUE_SERVICE,
     configurationTransfer: VENUE_SERVICE_CONFIGURATION_TRANSFER,
@@ -228,14 +207,9 @@ export const ALL_MODULES: readonly WaitronModule[] = [
   {
     name: "identity",
     version: "0.0.0",
-    tier: "toggleable",
+    tier: "mandatory",
     requires: { core: "*" },
-    migrations: {
-      name: "identity",
-      table: "__drizzle_migrations_identity",
-      from: "../identity/drizzle",
-    },
-    classification: IDENTITY_CLASSIFICATION,
+    tablesIn: "core",
     backup: { verification: IDENTITY_BACKUP_VERIFICATION },
     changes: IDENTITY_CHANGE_SOURCES,
     configurationTransfer: IDENTITY_CONFIGURATION_TRANSFER,
@@ -297,26 +271,16 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "toggleable",
     requires: { core: "*" },
-    migrations: {
-      name: "scheduler",
-      table: "__drizzle_migrations_scheduler",
-      from: "../scheduler/drizzle",
-    },
-    classification: SCHEDULER_CLASSIFICATION,
+    tablesIn: "payments",
     backup: { verification: SCHEDULER_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
   {
     name: "credentials",
     version: "0.0.0",
-    tier: "toggleable",
+    tier: "mandatory",
     requires: { core: "*" },
-    migrations: {
-      name: "credentials",
-      table: "__drizzle_migrations_credentials",
-      from: "../credentials/drizzle",
-    },
-    classification: CREDENTIALS_CLASSIFICATION,
+    tablesIn: "core",
     backup: { verification: CREDENTIALS_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
@@ -389,13 +353,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "mandatory",
     requires: { core: "*" },
-    migrations: {
-      name: "adjustments",
-      table: "__drizzle_migrations_adjustments",
-      from: "../adjustments/drizzle",
-    },
+    tablesIn: "core",
     backup: { verification: ADJUSTMENTS_BACKUP_VERIFICATION },
-    classification: ADJUSTMENTS_CLASSIFICATION,
     changes: ADJUSTMENTS_CHANGE_SOURCES,
     routes: ADJUSTMENTS_ROUTES,
     permissions: ADJUSTMENTS_PERMISSIONS,
@@ -408,13 +367,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "toggleable",
     requires: { core: "*", modules: { identity: "*", "venue-service": "*", workforce: "*" } },
-    migrations: {
-      name: "staffing",
-      table: "__drizzle_migrations_staffing",
-      from: "../staffing/drizzle",
-    },
+    tablesIn: "workforce",
     backup: { verification: STAFFING_BACKUP_VERIFICATION },
-    classification: STAFFING_CLASSIFICATION,
     changes: STAFFING_CHANGE_SOURCES,
     routes: STAFFING_ROUTES,
     permissions: STAFFING_PERMISSIONS,

@@ -5,7 +5,7 @@ export {
 } from "./activations.js";
 export type { HandoverActivation, HandoverActivationRow } from "./activations.js";
 export { HANDOVER_BACKUP_VERIFICATION } from "./backup-verification.js";
-export { HANDOVER_CLASSIFICATION } from "./classification.js";
+export { HANDOVER_TABLES } from "./tables.js";
 export {
   HANDOVER_KINDS,
   envelopeDigest,

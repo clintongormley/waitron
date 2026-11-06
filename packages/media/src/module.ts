@@ -3,9 +3,8 @@ import { MEDIA_ROUTES } from "./routes.js";
 import { listImageTranslationGaps } from "./images.js";
 import type { ModulePermission, WaitronModule } from "@waitron/module";
 import type { ChangeSource } from "@waitron/shared";
-import { MEDIA_CLASSIFICATION } from "./classification.js";
 import { MEDIA_BACKUP_VERIFICATION } from "./backup-verification.js";
-export { MEDIA_CLASSIFICATION } from "./classification.js";
+export { MEDIA_TABLES } from "./tables.js";
 
 export const MEDIA_CHANGE_SOURCES: readonly ChangeSource[] = [
   { table: "media_images", type: "media_images" },
@@ -31,8 +30,7 @@ export const MEDIA_MODULE: WaitronModule = {
   version: "0.0.0",
   tier: "mandatory",
   requires: { core: "*", modules: { catalogue: "*", "venue-service": "*" } },
-  migrations: { name: "media", table: "__drizzle_migrations_media", from: "../media/drizzle" },
-  classification: MEDIA_CLASSIFICATION,
+  tablesIn: "core",
   backup: { verification: MEDIA_BACKUP_VERIFICATION },
   changes: MEDIA_CHANGE_SOURCES,
   configurationTransfer: MEDIA_CONFIGURATION_TRANSFER,

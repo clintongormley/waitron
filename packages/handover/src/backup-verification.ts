@@ -1,8 +1,8 @@
 import { compareBackupTables } from "@waitron/db";
 import type { BackupVerificationContribution } from "@waitron/module";
-import { HANDOVER_CLASSIFICATION } from "./classification.js";
+import { HANDOVER_TABLES } from "./tables.js";
 
-const tables = HANDOVER_CLASSIFICATION.map((entry) => entry.table);
+const tables = [...HANDOVER_TABLES];
 export const HANDOVER_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,

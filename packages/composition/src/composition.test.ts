@@ -72,6 +72,15 @@ import {
   VENUE_SERVICE_ROUTES,
 } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
+import { ADJUSTMENTS_TABLES } from "@waitron/adjustments";
+import { CATALOGUE_TABLES } from "@waitron/catalogue";
+import { CREDENTIALS_TABLES } from "@waitron/credentials";
+import { HANDOVER_TABLES } from "@waitron/handover";
+import { IDENTITY_TABLES } from "@waitron/identity";
+import { MEDIA_TABLES } from "@waitron/media";
+import { SCHEDULER_TABLES } from "@waitron/scheduler";
+import { STAFFING_TABLES } from "@waitron/staffing";
+import { VENUE_SERVICE_TABLES } from "@waitron/venue-service";
 
 it("only workforce grants correction decisions to supervisors and higher", () => {
   const workforce = ALL_MODULES.find((m) => m.name === "workforce")!;
@@ -120,6 +129,65 @@ describe("a module's tables live in exactly one set", () => {
         (m) => m.name,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("the eight sets", () => {
+  it("are exactly core, node, workforce, workforce-es, payments, bookings and the two fiscal sets", () => {
+    expect(
+      orderedMigrationSets(ALL_MODULES)
+        .map((set) => set.name)
+        .sort(),
+    ).toEqual(
+      [
+        "core",
+        "node",
+        "workforce",
+        "workforce-es",
+        "payments",
+        "bookings",
+        "fiscal-verifactu",
+        "fiscal-none",
+      ].sort(),
+    );
+  });
+
+  it("each set's manifest entry is what the descriptors produce", () => {
+    const descriptors = new Map(orderedMigrationSets(ALL_MODULES).map((set) => [set.name, set]));
+    for (const entry of manifestSets()) expect(descriptors.get(entry.name)).toEqual(entry);
+    expect(manifestSets()).toHaveLength(descriptors.size);
+  });
+
+  it("each set classifies exactly its own module's tables and those of every module hosted in it", () => {
+    // A hosted module names its tables in a plain list; the host's own share is what its own backup
+    // check covers, which the verifier requires to match the set's classification once combined.
+    const hostedTables: Record<string, readonly string[]> = {
+      catalogue: CATALOGUE_TABLES,
+      "venue-service": VENUE_SERVICE_TABLES,
+      media: MEDIA_TABLES,
+      adjustments: ADJUSTMENTS_TABLES,
+      credentials: CREDENTIALS_TABLES,
+      identity: IDENTITY_TABLES,
+      handover: HANDOVER_TABLES,
+      staffing: STAFFING_TABLES,
+      scheduler: SCHEDULER_TABLES,
+    };
+    expect(
+      ALL_MODULES.filter((m) => m.tablesIn !== undefined)
+        .map((m) => m.name)
+        .sort(),
+    ).toEqual(Object.keys(hostedTables).sort());
+    for (const host of modulesWithSets(ALL_MODULES)) {
+      const members = ALL_MODULES.filter((m) => m.tablesIn === host.name);
+      const expected = [
+        ...(host.backup?.verification?.data.tables ?? []),
+        ...members.flatMap((m) => hostedTables[m.name]!),
+      ].sort();
+      expect({
+        set: host.name,
+        tables: (host.classification ?? []).map((c) => c.table).sort(),
+      }).toEqual({ set: host.name, tables: expected });
+    }
   });
 });
 

@@ -1,9 +1,14 @@
 import { fileURLToPath } from "node:url";
 import { appendOnlyTablesIn } from "@waitron/sync-enrolment";
-import { STAFFING_CLASSIFICATION } from "./classification.js";
+import { WORKFORCE_CLASSIFICATION } from "@waitron/workforce";
+import { STAFFING_TABLES } from "./classification.js";
 
 export const STAFFING_MIGRATIONS = {
   migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),
   migrationsTable: "__drizzle_migrations_staffing",
-  appendOnlyTables: appendOnlyTablesIn(STAFFING_CLASSIFICATION),
+  appendOnlyTables: appendOnlyTablesIn(
+    WORKFORCE_CLASSIFICATION.filter(({ table }) =>
+      (STAFFING_TABLES as readonly string[]).includes(table),
+    ),
+  ),
 } as const;

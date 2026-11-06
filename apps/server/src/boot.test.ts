@@ -1216,6 +1216,69 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
+  it.each(["identity", "credentials"])(
+    "refuses a trading boot whose modules.json switches %s off — module.mandatory_not_disableable",
+    async (name) => {
+      // Their tables live in core's set, so the module cannot be switched off.
+      const port = await freePort();
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-mandatory-state-"));
+      let started: Promise<StartedServer> | undefined;
+      try {
+        await writeFile(
+          join(stateDir, "modules.json"),
+          JSON.stringify({ modules: { [name]: false, "fiscal-none": false } }),
+        );
+        started = startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
+        });
+        await expect(started).rejects.toMatchObject({
+          code: "module.mandatory_not_disableable",
+          params: { module: name },
+        });
+      } finally {
+        // A start that wrongly succeeds is still closed.
+        await started?.then(
+          (server) => server.close(),
+          () => undefined,
+        );
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+
+  it("starts a trading boot whose modules.json switches staffing off", async () => {
+    // Staffing's tables live in workforce's set, so switching the module off leaves them in place.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staffing-off-state-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { staffing: false, "fiscal-none": false } }),
+    );
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_ENV: "preproduction",
+        WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
+      });
+      await awaitListening(httpPort());
+    } finally {
+      if (server !== undefined) await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("setup mode serves the built setup wizard at / end-to-end when WAITRON_SETUP_APP_DIR is configured", async () => {
     // `config.setupAppDir` threads through boot's setup branch into `mountSetup`'s `mountSpa`, so
     // `GET /` serves the built wizard rather than the inline placeholder.
