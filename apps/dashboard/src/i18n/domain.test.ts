@@ -5,6 +5,7 @@ import {
   allergenName,
   allergenStateName,
   breachKindName,
+  homeDeviceName,
   jobStatusName,
   printModeName,
   regimeName,
@@ -23,6 +24,13 @@ import { setLocale } from "./t.js";
 afterEach(() => {
   // Reset to the shipped default so a setLocale in one test cannot leak into another.
   setLocale("es-ES");
+});
+
+it("names each Home device in the screen's language", () => {
+  expect(homeDeviceName("handheld")).toBe("Terminal de mano");
+  setLocale("en-GB");
+  expect(homeDeviceName("handheld")).toBe("Handheld");
+  expect(homeDeviceName("till")).toBe("Till");
 });
 
 it("resolves a role token to Spanish, to English, and passes an unknown value through raw", () => {

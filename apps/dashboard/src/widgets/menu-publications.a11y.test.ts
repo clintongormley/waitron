@@ -412,3 +412,16 @@ describe.each(["light", "dark"] as const)("the schedule form's action states (%s
     },
   );
 });
+
+describe.each(["light", "dark"] as const)("Publish later while blocked (%s)", (theme) => {
+  it("renders accessibly", async () => {
+    const { el, host } = await mountScheduling(theme);
+    el.blocked = true;
+    await settle(el);
+    const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="schedule-open"]',
+    )!;
+    expect(button.disabled).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+});

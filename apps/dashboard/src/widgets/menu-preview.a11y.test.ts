@@ -59,6 +59,23 @@ const changes: MenuPreview = {
   ),
 };
 
+const undoable: MenuPreview = {
+  ...changes,
+  live: { versionId: "v-2", document: changes.document },
+  changes: [
+    {
+      id: "fixture-src/widgets/menu-preview.a11y.test.ts-5",
+      targets: { before: [], after: [] },
+      kind: "menu_renamed",
+      from: "Lunch",
+      to: "Lunch Menu",
+      source: "this_menu",
+    },
+    ...changes.changes,
+  ],
+};
+const undoId = "fixture-src/widgets/menu-preview.a11y.test.ts-5";
+
 const states: Record<string, Partial<MenuPreviewPanel>> = {
   loading: { status: null, preview: null },
   "live version unread": { status: null, preview: changes },
@@ -82,6 +99,48 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
     },
   },
   "no changes to list": { preview: { ...changes, changes: [], warnings: [] } },
+  "edit links": {
+    preview: {
+      ...changes,
+      changes: [
+        ...changes.changes,
+        {
+          id: "fixture-src/widgets/menu-preview.a11y.test.ts-3",
+          targets: { before: [], after: [] },
+          kind: "order_changed",
+          listSectionId: "s-drinks",
+          list: ["Drinks"],
+          source: "included_menu",
+          includedMenu: { id: "m-drinks", name: "Drinks" },
+        },
+        {
+          id: "fixture-src/widgets/menu-preview.a11y.test.ts-4",
+          targets: { before: [], after: [] },
+          kind: "extra_max_quantity_changed",
+          productId: "p-cheese",
+          name: "Cheese",
+          listId: "x-toppings",
+          listName: "Toppings",
+          from: 1,
+          to: 2,
+          source: "shared_product",
+        },
+      ],
+    },
+  },
+  "undo ready": { preview: undoable },
+  undoing: { preview: undoable, undoing: undoId },
+  "undo blocked": { preview: undoable, undoBlocked: true },
+  "undo refused": {
+    preview: undoable,
+    undoRefusals: { [undoId]: "Another menu called Lunch already exists." },
+    undoResult: "Burger price changed from €12.00 to €13.00",
+  },
+  "undone, failed to read again": {
+    preview: null,
+    failed: true,
+    undoResult: "Menu renamed from Lunch to Lunch Menu",
+  },
   publishing: { preview: changes, publishing: true },
   published: { preview: changes, result: { kind: "published", number: 3 } },
   stale: { preview: changes, result: { kind: "stale" } },

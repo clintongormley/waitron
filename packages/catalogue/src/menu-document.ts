@@ -840,12 +840,14 @@ function productFields(
     if (was.menuPrice !== variant.menuPrice) menu.add("variants");
     else if (was.unitPrice !== variant.unitPrice) {
       const priceSource = setting?.price.state === "decided" ? setting.price.source : undefined;
-      fromSetting(
-        priceSource?.kind === "parent" && decision?.price.state === "decided"
-          ? decision.price.source
-          : priceSource,
-        a.grossPrice === b.grossPrice ? shared : menu,
-      );
+      if (priceSource?.kind === "parent" && a.grossPrice !== b.grossPrice) menu.add("variants");
+      else
+        fromSetting(
+          priceSource?.kind === "parent" && decision?.price.state === "decided"
+            ? decision.price.source
+            : priceSource,
+          a.grossPrice === b.grossPrice ? shared : menu,
+        );
     }
   }
   if (!same(extrasTerms(a), extrasTerms(b))) shared.add("extras");
@@ -1013,17 +1015,21 @@ export function diffEntries(
         to: offer.unitPrice,
         ...(() => {
           const price = combined.get(productId)?.price;
+          if (was.grossPrice !== offer.grossPrice) {
+            if (price?.state !== "decided" || price.source.kind !== "own")
+              return { source: "this_menu" as const };
+            const otherwise = price.otherwise;
+            return {
+              source: "this_menu" as const,
+              inheritedPrice: otherwise?.state === "decided" ? otherwise.value : null,
+            };
+          }
           return price?.state === "decided" && price.source.kind === "menu"
             ? {
                 source: "included_menu" as const,
                 includedMenu: { id: price.source.menuId, name: price.source.menuName },
               }
-            : {
-                source:
-                  was.grossPrice === offer.grossPrice
-                    ? ("shared_product" as const)
-                    : ("this_menu" as const),
-              };
+            : { source: "shared_product" as const };
         })(),
       });
     const { shared, menu, included } = productFields(was, offer, combined.get(productId));
@@ -1045,14 +1051,23 @@ export function diffEntries(
         fields: shared,
         source: "shared_product",
       });
-    if (menu.length > 0)
+    if (menu.length > 0) {
+      const inherited = (combined.get(productId)?.variants ?? []).flatMap(({ variantId, price }) =>
+        price.state === "decided" && price.source.kind === "own"
+          ? [[variantId, price.otherwise?.state === "decided" ? price.otherwise.value : null]]
+          : [],
+      );
       push({
         kind: "product_changed",
         productId,
         name: offer.name,
         fields: menu,
         source: "this_menu",
+        ...(inherited.length === 0
+          ? {}
+          : { inheritedVariantPrices: Object.fromEntries(inherited) }),
       });
+    }
   }
   for (const [productId, offer] of next.offers) {
     if (prev.offers.has(productId)) continue;

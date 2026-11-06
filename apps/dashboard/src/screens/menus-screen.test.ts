@@ -9634,7 +9634,7 @@ describe("publishing", () => {
         [...panel(el).shadowRoot!.querySelectorAll('[data-test="changes"] li')].map(text),
       ).toEqual([
         "Chips added under Drinks Hide",
-        "Lemonade: allergens — shared product, also on Dinner Menu Hide",
+        "Lemonade: allergens — shared product, also on Dinner Menu Edit product Hide",
       ]),
     );
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
@@ -9825,7 +9825,7 @@ describe("publishing", () => {
     );
     await vi.waitFor(() =>
       expect(text(inPanel(el, "changes"))).toBe(
-        "Prices Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu Hide",
+        "Prices Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu Edit product Hide",
       ),
     );
     expect(client.getMenuPreview.mock.calls.length).toBe(reads + 1);

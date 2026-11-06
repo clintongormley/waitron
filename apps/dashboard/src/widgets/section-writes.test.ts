@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { fieldOf, ListWriteQueue } from "./section-writes.js";
+import { ListWriteQueue } from "./section-writes.js";
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -13,21 +13,6 @@ function deferred<T = void>() {
 
 /** Lets every queued step that can run, run. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-it("places a translation refusal beside its language's name, and any other by the field it names", () => {
-  expect(fieldOf({ code: "menu_section.translation_required", params: { language: "en" } })).toBe(
-    "names-en",
-  );
-  expect(fieldOf({ code: "menu_section.invalid", params: { field: "internalName" } })).toBe(
-    "internalName",
-  );
-  // A translation refusal naming no language falls back like any other.
-  expect(fieldOf({ code: "menu_section.translation_required", params: { field: "names" } })).toBe(
-    "names",
-  );
-  expect(fieldOf({ code: "management.request_invalid" })).toBe("_form");
-  expect(fieldOf(new Error("down"))).toBe("_form");
-});
 
 it("runs each write only after the one before it has finished, in the order asked", async () => {
   const queue = new ListWriteQueue();

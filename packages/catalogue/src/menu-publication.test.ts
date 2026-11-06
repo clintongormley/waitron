@@ -23,7 +23,7 @@ import {
 import * as menuDocument from "./menu-document.js";
 import * as operations from "./operations.js";
 import * as sectionGraph from "./section-graph.js";
-import { requireMenuRoot } from "./menu-structure.js";
+import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { applyLiveFields, MENU_DOCUMENT_FORMAT, menuDocumentHash } from "./menu-document.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import {
@@ -1699,6 +1699,318 @@ describe("previewMenu", () => {
         alsoOn: ["Dinner Menu"],
       },
     ]);
+  });
+
+  describe("credits a price change to the menu whose setting moved", () => {
+    const priceChange = async (menuId: string) =>
+      changeBodies((await app((tx) => previewMenu(tx, menuId))).changes).filter(
+        (change) => change.kind === "price_changed",
+      );
+
+    it("credits Lunch clearing its own Lemonade price, reached only through Drinks", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.lunch);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
+      );
+      expect(await priceChange(f.lunch)).toEqual([
+        {
+          kind: "price_changed",
+          productId: f.lemonade,
+          name: "Lemonade",
+          from: "2.80",
+          to: "3.00",
+          source: "this_menu",
+        },
+      ]);
+    });
+
+    it("credits Dinner setting, then clearing, its own Burger price", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), {
+          grossPrice: "11.00",
+        }),
+      );
+      expect((await priceChange(f.dinner)).map((change) => change.source)).toEqual(["this_menu"]);
+      await publish(f.dinner);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), { grossPrice: null }),
+      );
+      expect((await priceChange(f.dinner)).map((change) => change.source)).toEqual(["this_menu"]);
+    });
+
+    it("credits Drinks' own Lemonade price to Drinks when Lunch sets none", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
+      );
+      await publish(f.lunch);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: "3.40",
+        }),
+      );
+      expect(
+        (await priceChange(f.lunch)).map(({ source, includedMenu }) => ({ source, includedMenu })),
+      ).toEqual([{ source: "included_menu", includedMenu: { id: f.drinksMenu, name: "Drinks" } }]);
+    });
+
+    it("credits Drinks clearing its own Lemonade price to Drinks on Dinner", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: "3.40",
+        }),
+      );
+      await publish(f.dinner);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: null,
+        }),
+      );
+      expect(
+        (await priceChange(f.dinner)).map(({ source, includedMenu, from, to }) => ({
+          source,
+          includedMenu,
+          from,
+          to,
+        })),
+      ).toEqual([
+        {
+          source: "included_menu",
+          includedMenu: { id: f.drinksMenu, name: "Drinks" },
+          from: "3.40",
+          to: "3.00",
+        },
+      ]);
+    });
+
+    it("credits Lunch clearing its own Lemonade price to Lunch on Brunch, which includes Lunch", async () => {
+      const f = await menusFixture(fx.db);
+      const brunch = await app(async (tx) => {
+        const created = await createCatalogue(tx, { name: "Brunch Menu" });
+        const root = (await readMenuStructure(tx, created.id)).rootSectionId;
+        await addMember(tx, root, section(f.lunchRoot));
+        return created.id;
+      });
+      await publish(brunch);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
+      );
+      expect(
+        (await priceChange(brunch)).map(({ source, includedMenu, from, to }) => ({
+          source,
+          includedMenu,
+          from,
+          to,
+        })),
+      ).toEqual([
+        {
+          source: "included_menu",
+          includedMenu: { id: f.lunch, name: "Lunch Menu" },
+          from: "2.80",
+          to: "3.00",
+        },
+      ]);
+    });
+
+    it("credits a Lemonade variant that follows the dish to Lunch when Lunch clears its own price", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        setProductVariants(
+          tx,
+          f.lemonade,
+          [
+            {
+              id: f.large,
+              name: "Large",
+              customerName: { en: "A big glass" },
+              kitchenName: "LRG",
+              image: "large.jpg",
+              unitPrice: null,
+              available: true,
+            },
+          ],
+          "en",
+        ),
+      );
+      await publish(f.lunch);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
+      );
+      expect(
+        changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)
+          .filter((change) => change.kind === "price_changed" || change.kind === "product_changed")
+          .map((change) => ({
+            kind: change.kind,
+            source: change.source,
+            ...("fields" in change ? { fields: change.fields } : {}),
+          })),
+      ).toEqual([
+        { kind: "price_changed", source: "this_menu" },
+        { kind: "product_changed", source: "this_menu", fields: ["variants"] },
+      ]);
+    });
+  });
+
+  describe("says what this menu would inherit now on its own price change", () => {
+    const priceChanges = async (menuId: string) =>
+      changeBodies((await app((tx) => previewMenu(tx, menuId))).changes).filter(
+        (change) => change.kind === "price_changed",
+      );
+
+    it("names Burger's product price while Dinner sets its own, following a product price change", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), {
+          grossPrice: "11.00",
+        }),
+      );
+      expect(await priceChanges(f.dinner)).toEqual([
+        {
+          kind: "price_changed",
+          productId: f.burger,
+          name: "Burger",
+          from: "12.00",
+          to: "11.00",
+          source: "this_menu",
+          inheritedPrice: "12.00",
+        },
+      ]);
+      await app((tx) => updateProduct(tx, f.burger, { unitPrice: "13.50" }));
+      expect((await priceChanges(f.dinner)).map((change) => change.inheritedPrice)).toEqual([
+        "13.50",
+      ]);
+    });
+
+    it("leaves it out when Dinner clears a price it had live", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), {
+          grossPrice: "11.00",
+        }),
+      );
+      await publish(f.dinner);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), { grossPrice: null }),
+      );
+      const [change] = await priceChanges(f.dinner);
+      expect(change).toMatchObject({ source: "this_menu", from: "11.00", to: "12.00" });
+      expect(change).not.toHaveProperty("inheritedPrice");
+    });
+
+    it("leaves it out of a shared product's price change", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      await app((tx) => updateProduct(tx, f.burger, { unitPrice: "13.50" }));
+      const [change] = await priceChanges(f.dinner);
+      expect(change).toMatchObject({ source: "shared_product", from: "12.00", to: "13.50" });
+      expect(change).not.toHaveProperty("inheritedPrice");
+    });
+
+    it("says null when the places Dinner would inherit Lemonade's price from disagree", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      await app(async (tx) => {
+        await addMember(tx, f.dinnerRoot, product(f.lemonade));
+        await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: "3.40",
+        });
+        await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lemonade), {
+          grossPrice: "3.10",
+        });
+      });
+      expect(await priceChanges(f.dinner)).toEqual([
+        {
+          kind: "price_changed",
+          productId: f.lemonade,
+          name: "Lemonade",
+          from: "3.00",
+          to: "3.10",
+          source: "this_menu",
+          inheritedPrice: null,
+        },
+      ]);
+    });
+  });
+
+  describe("says what each variant this menu prices would charge without its own price", () => {
+    const ownVariantChanges = async (menuId: string) =>
+      changeBodies((await app((tx) => previewMenu(tx, menuId))).changes)
+        .filter((change) => change.kind === "product_changed")
+        .filter((change) => change.source === "this_menu");
+    const priceLarge = (f: MenusFixture, menuId: string, price: string) =>
+      app(async (tx) =>
+        setMenuVariants(
+          tx,
+          await offerOf(tx, menuId, f.lemonade),
+          [{ variantId: f.large, price }],
+          menuId,
+        ),
+      );
+
+    it("names Drinks' Large price while Lunch sets its own", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.lunch);
+      await priceLarge(f, f.lunch, "4.00");
+      expect(await ownVariantChanges(f.lunch)).toEqual([
+        {
+          kind: "product_changed",
+          productId: f.lemonade,
+          name: "Lemonade",
+          fields: ["variants"],
+          source: "this_menu",
+          inheritedVariantPrices: { [f.large]: "3.50" },
+        },
+      ]);
+      await priceLarge(f, f.drinksMenu, "4.10");
+      expect((await ownVariantChanges(f.lunch)).map((c) => c.inheritedVariantPrices)).toEqual([
+        { [f.large]: "4.10" },
+      ]);
+    });
+
+    it("says null when the places Lunch would inherit Large's price from disagree", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.lunch);
+      await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
+      await priceLarge(f, f.drinksMenu, "3.90");
+      await priceLarge(f, f.lunch, "4.00");
+      expect((await ownVariantChanges(f.lunch)).map((c) => c.inheritedVariantPrices)).toEqual([
+        { [f.large]: null },
+      ]);
+    });
+
+    it("leaves it out when Lunch sets no variant price", async () => {
+      const f = await menusFixture(fx.db);
+      await app((tx) =>
+        setProductVariants(
+          tx,
+          f.lemonade,
+          [
+            {
+              id: f.large,
+              name: "Large",
+              customerName: { en: "A big glass" },
+              kitchenName: "LRG",
+              image: "large.jpg",
+              unitPrice: null,
+              available: true,
+            },
+          ],
+          "en",
+        ),
+      );
+      await publish(f.lunch);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: "3.30" }),
+      );
+      const [change] = await ownVariantChanges(f.lunch);
+      expect(change).toMatchObject({ fields: ["variants"] });
+      expect(change).not.toHaveProperty("inheritedVariantPrices");
+    });
   });
 
   it("names sulphites on Lemonade and on its extra as shared product changes (Review Focus 1)", async () => {

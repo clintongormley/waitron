@@ -1583,6 +1583,15 @@ registerCodeMessages(CODE_MESSAGES);
 
 export { codeOf };
 
+/** The field a refusal belongs beside, by what the error carries (packages/catalogue/src/errors.ts):
+ * `menu_section.translation_required` names a language, `menu_section.invalid` a field. */
+export function fieldOf(error: unknown): string {
+  const params = (error as { params?: { field?: unknown; language?: unknown } }).params;
+  if (codeOf(error) === "menu_section.translation_required" && typeof params?.language === "string")
+    return `names-${params.language}`;
+  return typeof params?.field === "string" ? params.field : "_form";
+}
+
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),

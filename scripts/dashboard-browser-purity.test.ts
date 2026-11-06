@@ -25,7 +25,10 @@ import { mapComments } from "../packages/shared/src/source-comments.js";
  * package) is NOT followed, and no dashboard bundle is built by a pull request that leaves
  * `deploy/` alone, so nothing catches that case on such a pull request. A `from "@waitron/db"`
  * inside a comment counts, and a dynamic `import("…")` does not. The type-only check finds
- * comments with `mapComments`, whose guesses about `/` are listed on it.
+ * comments with `mapComments`, whose guesses about `/` are listed on it. The list also holds
+ * `packages/catalogue/src/menu-undo.ts`, a catalogue file the dashboard imports by deep path; for
+ * it the server-entry check reads `../index.js`, which is not the catalogue's entry (`./index.js`),
+ * so only the reachable scan would catch an import of that entry.
  */
 const REPO = join(import.meta.dirname, "..");
 const FORBIDDEN = ["@waitron/db", "hono", "pg", "drizzle-orm", "node:"];
@@ -40,6 +43,7 @@ const SUBPATHS: string[] = [
   "packages/venue-service/src/dashboard/fixed-title.ts",
   "packages/venue-service/src/dashboard/calendar-colours.ts",
   "packages/venue-service/src/dashboard/period-colour-styles.ts",
+  "packages/catalogue/src/menu-undo.ts",
 ];
 
 function tsFiles(path: string): string[] {

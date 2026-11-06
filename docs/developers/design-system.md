@@ -1471,7 +1471,7 @@ The time adds its UTC offset only when the venue's clock shows that
 minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
 reads "Unpublished" there until it goes live. "Publish later" opens a compact form with a date
 and a time; it is offered only when the preview has loaded with no clashes and the draft
-differs from the version it would follow. Each scheduled row has a row menu, pinned at the end,
+differs from the version it would follow. While an Undo of the menu is out, it is drawn disabled. Each scheduled row has a row menu, pinned at the end,
 with two separate actions: "Change time", which opens the same form starting at that version's date
 and time, and "Cancel this version", which asks first. A request that would put a newer version live
 before an older one is refused with a sentence naming each version in the way and its time, under
@@ -5407,6 +5407,27 @@ Show all changes restores
 them and is disabled when nothing is hidden. Show the hidden count below the heading and explain that
 Publish still includes every change. Keep hidden IDs in component state for the same menu,
 intersecting them with each refreshed change list; leaving the menu forgets them.
+
+Each bullet's action sits after View and before Hide, and depends on where the change came from. A
+change made in this menu gets an Undo button where one existing write puts the whole change back to
+the published version: the menu's name, a Home display setting, an own section's name, photo or
+colour, a dish's price here, or one variant's price here; nothing on a menu never published. A
+shared product's change links to Edit product, or Edit extras list for an extras item's portion or
+maximum quantity. An included menu's change links to Edit {menu}, on its Price overrides tab for a
+price and its Structure tab otherwise. A deleted product, and every other change, gets none. Undo
+reads Undoing… while its write is out and is drawn muted while another write, a Home save or a
+publish is out; both states ignore clicks. While an Undo of a menu is out, that menu's Publish now and
+Publish later are disabled. A refusal shows inside its bullet as "Not undone. {reason}" when the
+bullet is drawn with its Undo as the refusal arrives; otherwise (the person has left that menu's
+Preview tab or hidden the change, or the preview can no longer be read, no longer lists the change
+or no longer offers its Undo) it shows in the error line under the screen's heading as "Not undone
+on {menu}: {change}. {reason}", naming the menu the Undo was sent from. A refusal already in its
+bullet stays there when the change is hidden, and comes back with Show all changes without being
+announced again; it goes once the change no longer offers Undo, and does not come back if Undo does.
+A success shows one status line under the Unpublished changes heading, "Undone: {change}.", and the
+preview is read again. Undo never asks for confirmation. Checks:
+`apps/dashboard/src/widgets/menu-preview.undo.test.ts` and
+`apps/dashboard/src/screens/menus-screen.preview-undo.test.ts`.
 
 Widget checks: `apps/dashboard/src/widgets/menu-preview-tree.test.ts` and
 `menu-preview-navigation.test.ts` beside it; publication and accessibility checks remain beside

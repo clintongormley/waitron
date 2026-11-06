@@ -1,5 +1,5 @@
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
-import type { AllergenDeclaration, PersonRole, Printer } from "../api/client.js";
+import type { AllergenDeclaration, HomeDevice, PersonRole, Printer } from "../api/client.js";
 import { fill, t } from "./t.js";
 
 // Each table is a local, `string`-keyed copy of a server token set; api/client.ts says why the
@@ -189,6 +189,10 @@ export function swapDirectionName(direction: string, locale: string = currentLoc
 
 export function statusName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(STATUS_NAMES, value, locale);
+}
+
+export function homeDeviceName(device: HomeDevice): string {
+  return t(device === "handheld" ? "home.device_handheld" : "home.device_till");
 }
 
 /** Spanish puts a variant's state in the feminine and a product's in the masculine. */

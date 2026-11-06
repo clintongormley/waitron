@@ -26,7 +26,7 @@ export const publishWarningStyles = css`
   }
 `;
 
-function openProduct(event: MouseEvent, id: string): void {
+export function openProduct(event: MouseEvent, id: string): void {
   if (leftToBrowser(event)) return;
   event.preventDefault();
   event.stopPropagation();
