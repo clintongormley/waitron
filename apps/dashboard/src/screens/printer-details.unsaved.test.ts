@@ -246,7 +246,7 @@ for (const owner of ["name", "host"] as const) {
   });
 }
 
-it("a Used by link asks before leaving a dirty form", async () => {
+it("draws no Used by link while editing, so no link can leave a draft", async () => {
   const { screen } = await mount({
     listPrinterProfiles: async () => [
       {

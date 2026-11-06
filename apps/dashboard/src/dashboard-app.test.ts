@@ -1996,6 +1996,22 @@ describe("dashboard-app", () => {
     },
   );
 
+  it("tells the printers screen which screens the session may open, for its Used by links", async () => {
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["booking.manage"] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navItem(el, "printers")!.click();
+    await flush(el);
+    const printers = el.shadowRoot!.querySelector("dashboard-printers-screen") as HTMLElement & {
+      canOpen: (screen: string) => boolean;
+    };
+    expect(printers.canOpen("printers")).toBe(true);
+    expect(printers.canOpen("no-such-screen")).toBe(false);
+  });
+
   it.each([
     { permissions: ["report.view"], canExport: false },
     { permissions: ["report.view", "report.export"], canExport: true },

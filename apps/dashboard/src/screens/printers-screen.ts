@@ -92,11 +92,16 @@ function detailsSection(section: {
   id: string;
   heading: string;
   dataTest: string;
+  className?: string;
   rows: SettingsRow[];
   before?: TemplateResult;
   after?: TemplateResult | typeof nothing;
 }): TemplateResult {
-  return html`<section data-test=${section.dataTest} aria-labelledby=${section.id}>
+  return html`<section
+    class=${section.className ?? nothing}
+    data-test=${section.dataTest}
+    aria-labelledby=${section.id}
+  >
     <h3 id=${section.id}>${section.heading}</h3>
     ${section.before ?? nothing} ${settingsRows(section.rows)} ${section.after ?? nothing}
   </section>`;
@@ -399,10 +404,10 @@ export class PrintersScreen extends LitElement {
         width: 100%;
         max-width: var(--wt-form-max-width);
       }
-      [data-test="printer-section-used-by"] a {
+      .used-by a {
         color: var(--wt-color-primary-text);
       }
-      [data-test="printer-section-used-by"] a:focus-visible {
+      .used-by a:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
@@ -3146,6 +3151,7 @@ export class PrintersScreen extends LitElement {
       id: "printer-details-used-by",
       heading: t("printers.used_by"),
       dataTest: "printer-section-used-by",
+      className: "used-by",
       rows,
       after:
         rows.length === 0
