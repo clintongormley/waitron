@@ -225,7 +225,8 @@ was stopped afterwards. The owner then authorised a separate managed demo: its
 unprivileged app restarts through systemd and its separate tunnel through Docker.
 Both recovered from a controlled process exit and the public page returned 200.
 They are enabled for startup; a physical box reboot has not been tested. Automatic
-renewal, a physically outside-home browser and offline-sale checks remain open. The gateway behavior below records the earlier
+renewal and offline-sale checks remain open. A fresh Chromium sign-in through the
+rented server's outside-home exit also passed with normal certificate trust. The gateway behavior below records the earlier
 local proof, not a completed A951-S qualification.
 
 The gateway removes revoked installations on its next signed configuration update.
