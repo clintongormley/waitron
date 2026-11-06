@@ -126,15 +126,13 @@ describe("print claims with delivered history", () => {
           host: "other-printer.test",
         });
         if (specific)
-          await tx
-            .insert(printJobs)
-            .values({
-              locationId: venueId,
-              printerId: other.id,
-              payload: Buffer.from([1]),
-              status: "queued",
-              createdAt: "2025-01-01T00:00:00.000Z",
-            });
+          await tx.insert(printJobs).values({
+            locationId: venueId,
+            printerId: other.id,
+            payload: Buffer.from([1]),
+            status: "queued",
+            createdAt: "2025-01-01T00:00:00.000Z",
+          });
         if (statistics) tx.execute(sql`analyze`);
         const result = await measuredClaim(tx, agentId, specific ? printerId : undefined, invoice);
         expect(result.jobs).toEqual([]);
