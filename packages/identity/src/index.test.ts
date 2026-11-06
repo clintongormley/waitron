@@ -27,7 +27,10 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
   });
 });
 
-/** Its one foreign key is to its device; none to persons, which `schema/sessions.ts` says why. */
+/**
+ * Its one foreign key is to its device; none to persons, which
+ * `packages/db/src/schema/identity/sessions.ts` says why.
+ */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares sessions' primary key, its open-session index, and one foreign key, to its device", () => {
     const config = getTableConfig(api.sessions);
@@ -47,7 +50,10 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
   });
 });
 
-/** It declares no foreign key to persons; `schema/management-sessions.ts` says why. */
+/**
+ * It declares no foreign key to persons; `packages/db/src/schema/identity/management-sessions.ts`
+ * says why.
+ */
 describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares management_sessions' primary key and its open-session index, and no foreign key", () => {
     const config = getTableConfig(api.managementSessions);

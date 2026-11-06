@@ -1218,7 +1218,7 @@ and 360 px in the till page and bring any zone under either limit back to the ow
 **A995 (left open by A757 slice 6).** As read on 2026-10-21: the floor's ready chip counts a dish as
 one only when its frozen `unit_precision` is above 0 (`apps/server/src/table-signals.ts:96-103`),
 and the held chip the same (`readHeldCounts`, `apps/server/src/order-groups.ts:1567`), and new
-venues get `g`, `mg` and `ml` at 0 places (`packages/catalogue/src/provisioning.ts:96-146`), so
+venues get `g`, `mg` and `ml` at 0 places (`packages/catalogue/src/provisioning.ts:27-51`), so
 150 g of a dish reads as 150 there while slice 6's rows read 1 item. The till's own draft count
 decides "whole units" with `soldByTheUnit`, which does not read `measure`
 (`apps/till/src/screens/till-table-order-screen.ts:214-215`,

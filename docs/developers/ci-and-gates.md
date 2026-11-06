@@ -421,13 +421,15 @@ Five hedges worth carrying. `packages/node-db`'s score is taken over the mutants
 `ignoreStatic` keeps: a local `pnpm --filter @waitron/node-db exec stryker run --force` on
 2026-11-01 instrumented 153 mutants, and its report marked 50 of them `Ignored` as static and 103
 `Killed`, a score of 100.00. `packages/fiscal`'s `mutate` list names only some of its source files, so its floor
-is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: one file is out of its
-`mutate` set — `src/english-only.ts`, whose only suite lives in the root vitest project and which
-nothing under `packages/db` imports, so every one of its mutants survives by construction. The
-receipt is the `!src/english-only.ts` entry in `packages/db/stryker.config.json`'s `mutate` list;
+is not a package-wide one. Neither is `packages/db`'s: one file and seven folders are out of its
+`mutate` set. The file is `src/english-only.ts`, whose only suite lives in the root vitest project and
+which nothing under `packages/db` imports, so every one of its mutants survives by construction. The
+folders are the module table definitions under `src/schema/` (`credentials`, `media`, `handover`,
+`identity`, `catalogue`, `adjustments`, `venue-service`), whose suites stay in the module packages
+until A760's Task 11 moves them. The receipt is `packages/db/stryker.config.json`'s `mutate` list;
 `scripts/mutation-shard.mjs` reads each sharded package's `mutate` list from that config rather than
-keeping its own copy, and `scripts/mutation-shard.test.mjs` names `src/english-only.ts` as the one
-file db's selection leaves out. Nor do ui's and db's merged scores count every mutant: one whose
+keeping its own copy, and `scripts/mutation-shard.test.mjs` names exactly the files db's selection
+leaves out. Nor do ui's and db's merged scores count every mutant: one whose
 span crosses a `HEAVY_FILES` range boundary is mutated by no shard — 2 in db and 26 in ui at the
 2026-10-12 splits, as counted by that day's Codex review by instrumenting each split file whole and
 by range. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
@@ -590,7 +592,7 @@ listed 69 files when it was read on 2026-09-23, and not one of them was a `.test
 backticked as a path here on purpose — `coverage/` is generated and gitignored, and
 `scripts/claude-md-pointers.test.ts` would fail on a backticked path that is missing from a fresh
 checkout.) The second half is config: `packages/db/stryker.config.json` takes `src/**/*.ts` and
-subtracts `*.test.ts`.
+subtracts `*.test.ts`, among other exclusions.
 
 **The coverage half.** `packages/db`'s `vitest.config.ts` deliberately does NOT exclude
 `src/testing/**`, and says why at that line: it was once excluded wholesale as "harness code, not
@@ -626,7 +628,8 @@ uncovered branches of slack, and a change that adds a few unreached `??` or `?.`
 redden the job on its own.
 
 **The mutation half, which is invisible until the nightly run.** `packages/db/stryker.config.json` mutates
-`src/**/*.ts` minus `*.test.ts` and minus `src/english-only.ts`, so the moved code enters the
+`src/**/*.ts` minus `*.test.ts`, minus `src/english-only.ts` and, until A760's Task 16, minus the
+seven module-table folders under `src/schema/`, so the moved code enters the
 mutation subject set too. On that branch `packages/db/src/testing/schema-conformance.ts` became the
 largest mutation-eligible file in the package, about half as long again as
 `packages/db/src/schema/sales.ts`. Recompute rather than trusting a figure written here:

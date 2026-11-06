@@ -1,7 +1,5 @@
 import "./errors.js";
 
-// The tables are defined in `@waitron/workforce`; this package goes on exporting them under its own
-// name.
 export {
   personStaffRoles,
   shiftAssignments,

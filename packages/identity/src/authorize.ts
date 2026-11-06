@@ -43,8 +43,9 @@ export async function authorize(
   args: { sessionId: string; permission: Permission | (string & {}); override?: Override },
   attempts?: PinAttempts,
 ): Promise<Authorization> {
-  // `sessions` declares no key to `persons` (why: `schema/sessions.ts`), so a session whose person
-  // row is gone is absent from this join and reads as `session.not_open`, which fails closed.
+  // `sessions` declares no key to `persons` (why: `packages/db/src/schema/identity/sessions.ts`),
+  // so a session whose person row is gone is absent from this join and reads as `session.not_open`,
+  // which fails closed.
   const [row] = await tx
     .select({ personId: sessions.personId, role: persons.role })
     .from(sessions)

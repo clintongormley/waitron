@@ -313,7 +313,11 @@ sentence on each field; this is the shape of it. Four fields are required:
 - `subjectName` — the name the suite's own case names will use, `core` or `catalogue`. It names the
   SET, not the package, and it is read by whoever reads a failure.
 - `declarations` — the package's schema barrel, handed in as `import * as barrel from "./index.js"`.
-  These are the declarations the subject set is supposed to have built. A package with no barrel
+  A module set whose table definitions have moved into a folder of `@waitron/db` or
+  `@waitron/workforce` while its suite stayed in the module package imports that folder's barrel
+  through the owning package's `exports` entry instead, as
+  `import * as barrel from "@waitron/db/schema/catalogue.js"`. These are the declarations the
+  subject set is supposed to have built. A package with no barrel
   hands in the schema file its `drizzle.config.ts` generates from, as `packages/bookings` does;
   the suite reads only the exports that are tables.
 - `declaresClosedVocabularies` — whether any column in this set is declared with a closed

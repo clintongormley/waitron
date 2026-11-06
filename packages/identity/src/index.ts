@@ -15,7 +15,6 @@ export {
   setProfileAdmission,
 } from "./profile-admission.js";
 export type { ProfileAdmission } from "./profile-admission.js";
-// The tables are defined in `@waitron/db`; this package goes on exporting them under its own name.
 export {
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,

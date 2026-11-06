@@ -286,8 +286,10 @@ checks that each app's notice folder is named, not that each generated file is c
 
 ## `@waitron/db`'s `exports` map is enumerated, not a wildcard
 
-Every entry is written out one by one in `packages/db/package.json` — the main entry, plus one per
-test helper this package deliberately publishes to other packages. Read that file for the current
+Every entry is written out one by one in `packages/db/package.json` — the main entry, one per
+test helper this package deliberately publishes to other packages, and, until A760's Task 11, one
+per folder of module table definitions (`./schema/<folder>.js`), which module packages' source and
+suites, and an `apps/server` suite, import. Read that file for the current
 list rather than any copy of it kept here; a copy in prose is a thing to maintain, and this one had
 already gone stale once. A wildcard would publish the whole harness. Consequence: `apps/server`
 cannot deep-import `packages/db`'s `errors.ts`.
@@ -4634,9 +4636,9 @@ out.
 
 | Job | +400 | −400 | Decision |
 | --- | --- | --- | --- |
-| Dashboard sessions (`packages/identity/src/management-session.ts:81`) | expired, as before | expired once last seen more than the 30-minute idle timeout ahead; a smaller step ends none | fixed (test: `management-session.test.ts`, "a last-seen time ahead of the clock") |
+| Dashboard sessions (`packages/identity/src/management-session.ts:79`) | expired, as before | expired once last seen more than the 30-minute idle timeout ahead; a smaller step ends none | fixed (test: `management-session.test.ts`, "a last-seen time ahead of the clock") |
 | A mirror's viewer session (`apps/server/src/mirror-session.ts`, the keepalive) | re-stamped, as before | the keepalive re-stamps a last-seen time ahead of the clock, so the viewer is not refused | fixed (tests: `mirror-session.test.ts`, "refreshes a STALE session" for +400 and "left hours ahead by a backward clock step" for −400) |
-| Passkey challenges (`packages/identity/src/passkey.ts:110`) | expired | expired when stamped more than a minute ahead | fixed (test: `passkey.test.ts`, "stamped more than a minute ahead") |
+| Passkey challenges (`packages/identity/src/passkey.ts:113`) | expired | expired when stamped more than a minute ahead | fixed (test: `passkey.test.ts`, "stamped more than a minute ahead") |
 | Stream generations (`packages/stream/src/supervisor.ts`, `#pruneDaily`) | no effect: generations are aged by the bucket's own times against the bucket's clock, and the prune runs once a day by the steady clock | no effect, for the same reason | fixed (test: `supervisor.test.ts`, "ages old generations by the bucket's clock", both directions; nothing is pruned while the bucket's clock cannot be read, and a read that failed at opening is tried again at the daily prune). Before the fix the bucket's times were compared with the box's clock, so a box clock wrongly a week ahead deleted every old generation, with or without a step |
 | Backup archives (`apps/server/src/backup-sweep.ts`, `pruneBackend`; making room) | without a hold, every archive past `retainDays` deleted | archives stamped ahead rank last | fixed in Tasks 14 and 14a for steps the box makes (tests in `backup-sweep.test.ts`, `backup-room.test.ts`, `low-space-backups.test.ts`); a step by the time service or by hand holds nothing — accepted: only steps the box makes are recorded |
 | Cached time health (`apps/server/src/ttl-cache.ts`) | entry stale, recomputed | an entry from the clock's future would be served for days | fixed in Task 6 (test: `ttl-cache.test.ts`) |

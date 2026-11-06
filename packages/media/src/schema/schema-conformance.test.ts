@@ -16,6 +16,7 @@ describeSchemaConformance({
   prerequisites: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   subject: MEDIA_MIGRATIONS,
   declarations,
-  // False: no column in `images.ts` is declared with the `enumText`/`enumCheck` pair.
+  // False: no column in `packages/db/src/schema/media/images.ts` is declared with the
+  // `enumText`/`enumCheck` pair.
   declaresClosedVocabularies: false,
 });

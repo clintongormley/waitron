@@ -89,8 +89,8 @@ function requiredText(value: string, field: string): string {
 }
 
 /** The predicate reads `liveDisplayNameKey()`, the expression `persons_tenant_live_display_name_uq`
- * is declared over (`./schema/persons.ts`), so this pre-check and the index cannot disagree about
- * which names collide. */
+ * is declared over (`packages/db/src/schema/identity/persons.ts`), so this pre-check and the index
+ * cannot disagree about which names collide. */
 export async function assertDisplayNameAvailable(
   tx: Transaction,
   displayName: string,

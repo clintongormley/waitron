@@ -1,6 +1,5 @@
 import "./errors.js";
 
-// The tables are defined in `@waitron/db`; this package goes on exporting them under its own name.
 export {
   adjustmentLines,
   adjustmentReasons,
