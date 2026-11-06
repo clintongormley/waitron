@@ -85,9 +85,10 @@ describe("tradeDay", () => {
   );
 
   it(
-    "sends each round through a waiter's draft, and releases every held round before it is made",
+    "sends rounds through drafts, prints and releases held rounds, and sends an invoice",
     async () => {
-      const venue = await freshVenue("2025-11-03T08:00:00Z");
+      // Seed 2's ten bills include one that asks for an invoice; seed 1's include none.
+      const venue = await freshVenue("2025-11-03T08:00:00Z", 2);
 
       await tradeDay(venue, "2025-11-03", 10);
 
@@ -117,6 +118,20 @@ describe("tradeDay", () => {
           Date.parse(group.firstAdvance as string),
         );
       }
+      // Every station holding a held group's dishes printed its HOLD ticket, and only those.
+      const paper = rows(
+        venue,
+        sql`select e.group_id as groupId,
+              (select count(*) from order_group_hold_stations h where h.group_id = e.group_id) as printed,
+              (select count(distinct t.station_id) from ticket_items t
+                 join working_order_lines l on l.id = t.working_order_line_id
+                 where l.group_id = e.group_id) as stations
+            from order_group_events e where e.kind = 'fired'`,
+      );
+      expect.soft(counts.order_group_hold_stations).toBeGreaterThan(0);
+      for (const group of paper)
+        expect.soft(group.printed, group.groupId as string).toBe(group.stations);
+      expect.soft(counts.invoice_deliveries).toBeGreaterThan(0);
     },
     CASE_TIMEOUT_MS,
   );

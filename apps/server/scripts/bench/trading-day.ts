@@ -20,6 +20,12 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const OPENING_FLOAT = "150.00";
 const NO_ALLERGY = { party: { answer: "none", guests: [] }, ticks: [] };
+const INVOICE_RECIPIENT = {
+  taxId: "B12345674",
+  legalName: "Bench Client SL",
+  address: "2 Main Street, 28013 Madrid, Madrid",
+  countryCode: "ES",
+};
 /** A held round is sent this long before it is due, while the round before it is still eaten. */
 const HELD_AHEAD_MINUTES = 6;
 
@@ -66,6 +72,8 @@ interface PlannedBill {
   rounds: string[][];
   /** Per round: sent ahead and held, then fired when due. Never the first round. */
   held: boolean[];
+  /** The guest asks for a full invoice before paying. */
+  invoice: boolean;
   route: PaymentRoute;
 }
 
@@ -84,6 +92,7 @@ type Step =
   | { kind: "allergy" }
   | { kind: "round"; round: number; release: "fire" | "hold" }
   | { kind: "fire"; round: number }
+  | { kind: "invoice" }
   | { kind: "advance"; round: number; to: "preparing" | "ready" }
   | { kind: "served"; round: number }
   | { kind: "pay" }
@@ -222,6 +231,17 @@ export async function tradeDay(
         `/api/parties/${bill.partyId}/groups/${bill.groupIds[step.round]}/fire`,
         { submissionId: randomUUID(), expectedPartyRevision: revision(bill.partyId!) },
       );
+    } else if (step.kind === "invoice") {
+      const [order] = await venue.db
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, bill.tabId!));
+      await call(cookie, "PUT", `/api/working-orders/${bill.tabId}/invoice-choice`, {
+        revision: order!.revision,
+        invoiceType: "F1",
+        recipient: INVOICE_RECIPIENT,
+        expectedEdit: await editOf(bill.tabId!),
+      });
     } else if (step.kind === "advance") {
       for (const ticket of bill.tickets[step.round]!)
         await call(cookie, "POST", `/api/ticket-items/${ticket.id}/advance`, {
@@ -446,6 +466,10 @@ export function planDay(
   const routes = paymentRoutesFor(bills);
   // Its own sequence, so holding rounds leaves every other draw of the day as it was.
   const holds = seededRandom(daySeed(venue.seed, `${day}:hold`));
+  const invoices = seededRandom(daySeed(venue.seed, `${day}:invoice`));
+  const invoiceChance =
+    BENCH_PROFILE.invoiceShare /
+    (BENCH_PROFILE.paymentMix["payments-reader"] + BENCH_PROFILE.paymentMix["payments-cash"]);
   const seatTimes: number[] = [];
   if (seats !== undefined) {
     const span = seats.to.getTime() - seats.from.getTime();
@@ -488,6 +512,7 @@ export function planDay(
       till: pick(tills),
       rounds,
       held: rounds.map((_, round) => round > 0 && holds() < BENCH_PROFILE.heldRoundShare),
+      invoice: routes[index]!.startsWith("payments-") && invoices() < invoiceChance,
       route: routes[index]!,
     };
   });
@@ -542,6 +567,7 @@ function eventsOf(plan: PlannedBill): Event[] {
     at(start + 12, { kind: "served", round });
   });
   const end = 3 + plan.rounds.length * 18;
+  if (plan.invoice) at(end + 5, { kind: "invoice" });
   at(end + 6, { kind: "pay" });
   at(end + 8, { kind: "finish" });
   at(end + 9, { kind: "handOver" });

@@ -43,7 +43,7 @@ import { beginAttendanceDiscovery } from "../../src/attendance-discovery.js";
 import { recordAttendanceFact } from "../../src/attendance-capture.js";
 import { deploymentEnvironment } from "../../src/config.js";
 import { mountDeviceApi } from "../../src/device-api.js";
-import { createStation } from "../../src/kitchen.js";
+import { createStation, updateStation } from "../../src/kitchen.js";
 import { DEVICE_COOKIE } from "../../src/device-session.js";
 import type { Logger } from "../../src/logger.js";
 import { mountManagementApi } from "../../src/management-api.js";
@@ -228,6 +228,7 @@ async function provision(db: Database): Promise<void> {
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Restaurant",
+        taxpayerDomicile: "1 High Street, 28013 Madrid, Madrid",
         addressLine1: "1 High Street",
         addressLine2: null,
         postalCode: "28013",
@@ -320,6 +321,7 @@ async function seed(
       ).id,
       bar: (await createStation(tx, { name: "Bench bar", printerIds: [printerIds[2]!] })).id,
     };
+    for (const id of Object.values(stations)) await updateStation(tx, id, { printHeldWork: true });
 
     const catalogue = await createCatalogue(tx, { name: CATALOGUE_NAME });
     let made = 0;

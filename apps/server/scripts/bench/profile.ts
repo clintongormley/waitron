@@ -18,6 +18,12 @@ export const BENCH_PROFILE = {
   roundsPerBill: { min: 2, max: 3 },
   /** The chance a round after a bill's first is sent ahead, held, and fired when it is due. */
   heldRoundShare: 1 / 3,
+  /**
+   * The share of all bills that ask for a full invoice, which the receipt printed at payment
+   * carries. Only bills paid through `/payments` do: `/api/pay` refuses one
+   * (`sale.full_invoice_unavailable`).
+   */
+  invoiceShare: 1 / 25,
   tills: 4,
   kitchenScreens: 2,
   thermalPrinters: 3,
