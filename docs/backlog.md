@@ -1309,7 +1309,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   Finished jobs are to be kept one month (owner, 2026-10-14). [Detail](backlog/printers.md#the-virtual-pdf-printer)
 
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a
-  window, landed #2492; PR 2 (Used by) done; PRs 3–4 to come).**
+  window, landed #2492; PR 2, Used by, landed #2511; PRs 3–4 to come).**
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
 
 - **A Used by link to a prep station opens the Stations tab, not the station (left open by A405).**
