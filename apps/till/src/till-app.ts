@@ -16173,11 +16173,13 @@ export class TillApp extends LitElement {
       : { ...opened, revisions };
   }
 
-  /** A party gaining its first bill moves these behind a press, which names its own bills. */
+  /** A party gaining its first bill, or the bill on screen its first draft, moves these behind a
+   * press, which names its own bills. A press made before the draft knew nothing of it, so its
+   * arrival is not a change here: D20's comparison judges the edit state it brings. */
   #withFirstBill(asked: PartyComposition): PartyComposition {
-    return asked.billId === undefined
-      ? { ...asked, sync: this.#draftSync, billId: this.activeTabId }
-      : asked;
+    if (asked.billId === undefined)
+      return { ...asked, sync: this.#draftSync, billId: this.activeTabId };
+    return asked.sync === undefined ? { ...asked, sync: this.#draftSync } : asked;
   }
 
   async #onSplitTable(event: Event, confirmed?: PartyComposition): Promise<void> {
@@ -16760,23 +16762,18 @@ export class TillApp extends LitElement {
     if (!over) return false;
     const partyId = this.orderParty?.id;
     const visit = this.#orderVisit;
+    // A split asked with no bill on screen still stands once the party's first bill arrives.
+    const still = () =>
+      (shown === undefined || this.activeTabId === shown) &&
+      this.orderParty?.id === partyId &&
+      this.#orderVisit === visit;
     this.differentPeopleConfirmation = {
       limit,
       proceed: async () => {
-        if (
-          this.activeTabId === shown &&
-          this.orderParty?.id === partyId &&
-          this.#orderVisit === visit
-        )
-          await proceed();
+        if (still()) await proceed();
       },
       cancel: () => {
-        if (
-          this.activeTabId === shown &&
-          this.orderParty?.id === partyId &&
-          this.#orderVisit === visit
-        )
-          cancelled?.();
+        if (still()) cancelled?.();
       },
     };
     return true;

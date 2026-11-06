@@ -44,6 +44,7 @@ import {
   table,
   table7,
   tableOrder,
+  till,
 } from "../test/allergy-app-fixture.js";
 
 const changed = (bill: string) => fill(t("table.split_changed"), { bill });
@@ -888,7 +889,7 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
   });
 
   /** The timed read has listed Bill 1 and started the reload, whose floor read is out. */
-  async function reloadOut(over: Record<string, unknown> = {}) {
+  async function reloadOut(over: Record<string, unknown> = {}, rows = firstRows(3)) {
     const floors = held<ReturnType<typeof atFloor>>();
     const el = await mounted({
       getTablesState: vi.fn().mockResolvedValue(noBillFloor),
@@ -900,7 +901,7 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
     server.bills.add("b9");
     api.getTablesState!.mockReset().mockImplementation(floors.read);
     api.getPartyBills!.mockResolvedValue(firstList());
-    api.getSplitSources!.mockReset().mockResolvedValue(firstRows(3));
+    api.getSplitSources!.mockReset().mockResolvedValue(rows);
     await timedRead(el);
     expect(floors.calls).toHaveLength(1);
     expect(picker(el)!.sources.map((each) => each.bill.workingOrderId)).toEqual(["b9"]);
@@ -1084,6 +1085,128 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
       await flush(el);
       expect(api.splitTable).not.toHaveBeenCalled();
       expect(said(el)).toBe(changed("Bill 2"));
+    });
+  });
+
+  describe("the different-people question open while the first bill's draft arrives", () => {
+    const limited = {
+      getTill: vi.fn().mockResolvedValue({ ...till("till"), simplifiedInvoiceLimit: "15.00" }),
+    };
+    const twoDishes: SplitSources = {
+      partyRevision: 3,
+      bills: [
+        {
+          billId: "b9",
+          lines: [dish("steak", 1), dish("wine", 2)],
+          balance: balance("b9", "20.00"),
+        },
+      ],
+    };
+    const loose = { wholeBillIds: [], loose: [{ billId: "b9", lineIds: ["steak"] }] };
+    const question = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
+    const steakBox = (el: TillApp) =>
+      picker(el)!
+        .shadowRoot!.querySelector(`[data-split-bill="b9"] till-portion-picker`)
+        ?.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="steak"]');
+    const pickSteak = async (el: TillApp) => {
+      steakBox(el)!.click();
+      await flush(el);
+    };
+
+    /** Bill 1 comes on screen with its lines read out, so it has no draft when Split asks. */
+    async function askedBeforeItsDraft(over: Record<string, unknown> = {}) {
+      const lines = held<{ lines: never[]; revision: number }>();
+      const { el, floors } = await reloadOut({ ...limited, ...over }, twoDishes);
+      api.getTabLines!.mockImplementation(lines.read);
+      await pickSteak(el);
+      floors.calls[0]!.answer(stillTogether());
+      await flush(el);
+      await flush(el);
+      expect(tableOrder(el)!.orderId).toBe("b9");
+      expect(lines.calls.length).toBeGreaterThan(0);
+
+      await press(el, "[data-split-confirm]");
+      expect(question(el)).not.toBeNull();
+      expect(panelOpen(el)).toBe(false);
+      expect(api.splitTable).not.toHaveBeenCalled();
+      return { el, lines };
+    }
+
+    it("its drafts read still out at Confirm: the press sends once, nothing known, for the server to judge", async () => {
+      const drafts = held<unknown>();
+      const { el, lines } = await askedBeforeItsDraft({ listDrafts: vi.fn(() => drafts.read()) });
+      lines.calls.forEach((call) => call.answer({ lines: [], revision: 0 }));
+      await flush(el);
+      expect(drafts.calls.length).toBeGreaterThan(0);
+
+      question(el)!.querySelector<HTMLElement>("[data-confirm]")!.click();
+      await flush(el);
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(api.splitTable!.mock.calls[0]![2]).toEqual(loose);
+      expect(api.splitTable!.mock.calls[0]![4]).toEqual([noEdit("b9")]);
+    });
+
+    it("its drafts read answered before Confirm: no request and the sentence, the panel back with its pick", async () => {
+      const { el, lines } = await askedBeforeItsDraft({
+        listDrafts: vi.fn(async (partyId: string) => {
+          const snapshot = await server.listDrafts(partyId);
+          return {
+            ...snapshot,
+            billEdits: snapshot.billEdits.map((edit) =>
+              edit.billId === "b9" ? { ...edit, editorVersion: 4 } : edit,
+            ),
+          };
+        }),
+      });
+      lines.calls.forEach((call) => call.answer({ lines: [], revision: 0 }));
+      await flush(el);
+      await flush(el);
+
+      question(el)!.querySelector<HTMLElement>("[data-confirm]")!.click();
+      await flush(el);
+      await flush(el);
+      expect(api.splitTable).not.toHaveBeenCalled();
+      expect(panelOpen(el)).toBe(true);
+      expect(said(el)).toBe(changed("Bill 1"));
+      expect(steakBox(el)!.checked).toBe(true);
+    });
+
+    /** Split asks with no bill on screen; then the reload brings Bill 1, its lines read out. */
+    async function askedBeforeTheBill() {
+      const lines = held<{ lines: never[]; revision: number }>();
+      const { el, floors } = await reloadOut(limited, twoDishes);
+      api.getTabLines!.mockImplementation(lines.read);
+      await pickSteak(el);
+      await press(el, "[data-split-confirm]");
+      expect(question(el)).not.toBeNull();
+      expect(panelOpen(el)).toBe(false);
+      expect(tableOrder(el)!.orderId).toBeUndefined();
+
+      floors.calls[0]!.answer(stillTogether());
+      await flush(el);
+      await flush(el);
+      expect(tableOrder(el)!.orderId).toBe("b9");
+      expect(question(el)).not.toBeNull();
+      return el;
+    }
+
+    it("the bill arriving while it is open: Confirm sends once, nothing known", async () => {
+      const el = await askedBeforeTheBill();
+      question(el)!.querySelector<HTMLElement>("[data-confirm]")!.click();
+      await flush(el);
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(api.splitTable!.mock.calls[0]![2]).toEqual(loose);
+      expect(api.splitTable!.mock.calls[0]![4]).toEqual([noEdit("b9")]);
+    });
+
+    it("the bill arriving while it is open: Cancel brings the panel back with its pick", async () => {
+      const el = await askedBeforeTheBill();
+      question(el)!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await flush(el);
+      expect(api.splitTable).not.toHaveBeenCalled();
+      expect(panelOpen(el)).toBe(true);
+      expect(steakBox(el)!.checked).toBe(true);
     });
   });
 });
