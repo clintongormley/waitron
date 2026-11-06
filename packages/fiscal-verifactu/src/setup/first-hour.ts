@@ -197,7 +197,11 @@ export class FirstSetupHour extends LitElement {
   @state() private kept = false;
   #delivery?: ReturnType<typeof createRecoveryDelivery<void>>;
   #reference?: InitialSetupRecoveryReference;
-  #wait = new ClockWait<Selected>(this, () => void this.#select(true));
+  /** Make the series was pressed on this page load and nothing since cancelled it. */
+  #pressed = false;
+  #wait = new ClockWait<Selected>(this, () =>
+    this.#pressed ? void this.#select(true) : this.#wait.show(),
+  );
   #generation = 0;
   #scope?: DraftScope<Draft>;
   override connectedCallback(): void {
@@ -243,6 +247,7 @@ export class FirstSetupHour extends LitElement {
   #clear(): void {
     this.#disposeDelivery();
     ++this.#generation;
+    this.#pressed = false;
     this.busy = false;
     this.draft = empty();
     this.comparison = undefined;
@@ -256,6 +261,7 @@ export class FirstSetupHour extends LitElement {
   }
   #edit(change: Partial<Draft>): void {
     ++this.#generation;
+    this.#pressed = false;
     this.busy = false;
     this.draft = { ...this.draft, ...change };
     this.#wait.show();
@@ -284,6 +290,7 @@ export class FirstSetupHour extends LitElement {
   }
   async #compare(): Promise<void> {
     if (!this.api?.preparation || this.busy) return;
+    this.#pressed = false;
     const { context, current, send } = this.#begin();
     this.busy = true;
     this.error = false;
@@ -305,6 +312,7 @@ export class FirstSetupHour extends LitElement {
   async #select(automatic = false): Promise<void> {
     if (this.busy || this.#wait.result?.status === "selected") return;
     if (!automatic && !this.#canSelect) return;
+    if (!automatic) this.#pressed = true;
     const { api, context, current, send } = this.#begin();
     this.busy = true;
     this.error = false;
