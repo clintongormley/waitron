@@ -2288,7 +2288,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
-- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 16, 8 important, size M, waits for the A1308 table hold to lift). Holds A1368, A1351, A1366. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
+- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 19, 8 important, size M, waits for the A1308 table hold to lift). Holds A1368, A1351, A1366, A1345, A1346. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
 - **Cloud's shared UI release still needs dependency updates and portal qualification.**
   Waitron's [release workflow](../.github/workflows/publish-ui.yml) checks and publishes
@@ -2300,14 +2300,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [release guide](developers/shared-ui-preparation.md) explains local inspection.
   Cloud's D579 owns dependency updates, the seven-day lag check and portal/image
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
-
-- **A1345. Choosing the next kitchen round number reads every round ever sent.** For A1308's
-  orders and sales slice, measured by the bench before and after.
-  [Detail](backlog/architecture.md#a1345-choosing-the-next-kitchen-round-number-reads-every-round-ever-sent)
-
-- **A1346. Two invoice-record lookups by sale walk every original record.** For A1308's fiscal
-  slice (the owner lands it), measured by the bench before and after.
-  [Detail](backlog/architecture.md#a1346-two-invoice-record-lookups-by-sale-walk-every-original-record)
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e

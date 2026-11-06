@@ -676,5 +676,13 @@ Names are today's; the appendices give each table's new name.
 | `payments` | Settle the remaining delete refusal | Payments and adjustments; the owner lands this part (watcher, 6 November) | An A805 follow-up |
 | `envio_flujo`, `envios`, `invoice_series`, `registro_sif` | Settle the remaining delete or update refusal | Fiscal, landed by the owner | Four A805 follow-ups |
 
+A1308 slice 0's bench found three slow reads on a year of trading, placed the same way:
+
+| Today's table | Addition | Lands in | Backlog entry |
+| --- | --- | --- | --- |
+| `order_groups` | An index, or two indexed lookups, for the next round number | Orders and sales | A1345 |
+| `registros_facturacion` | The two lookups by sale use `registros_sale_idx` | Fiscal, landed by the owner | A1346 |
+| `print_jobs` | The payload after the columns reads filter on | Devices and printing | A print job's payload |
+
 A1306's history rewrite gets a task in A760's plan, Task 19, with a check that the `:main` image tag
 still follows `main` afterwards and the repair if it does not.

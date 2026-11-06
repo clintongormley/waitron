@@ -1065,28 +1065,6 @@ product failures.
   `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes
   `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
 
-## A1345. Choosing the next kitchen round number reads every round ever sent
-
-- **A1345. Choosing the next kitchen round number reads every round ever sent** (found by A1308
-  slice 0's bench, 2026-11-05). `nextGroupNumber` in `apps/server/src/order-groups.ts` filters
-  `party_id = ? or number_party_id = ?`, and `number_party_id` has no index, so the query plan is a
-  scan of `order_groups`. It runs on the round submit, move and merge paths, several times a bill.
-  Measured in the bench: 21 µs a call on day 1, 443 µs on day 9. The fix is an index or two indexed
-  lookups, so it waits for A1308's orders and sales slice, which measures it with the bench before
-  and after.
-
-## A1346. Two invoice-record lookups by sale walk every original record
-
-- **A1346. Two invoice-record lookups by sale walk every original record** (found by A1308 slice
-  0's bench, 2026-11-05). `filedReceiptFor` in `packages/fiscal-verifactu/src/backend.ts` and
-  `readDeviceReceiptEvidence` in `packages/fiscal-verifactu/src/device-receipt-evidence.ts` filter
-  `sale_id = ? and tipo_registro = 'alta' and corrects_registro_id is null`. With no planner
-  statistics the engine picks the unique index on `corrects_registro_id`, where `is null` matches
-  every original record, instead of `registros_sale_idx`. Measured on the bench's day-9 database
-  from the `sqlite3` command line, warm: 236 µs, against 26 µs when forced through
-  `registros_sale_idx`. It is fiscal-package code, so it goes
-  to A1308's fiscal slice, which the owner lands, measured with the bench before and after.
-
 ## A1301. Remove the "location" concept: the venue holds everything a location held
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
@@ -1200,8 +1178,9 @@ product failures.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
-16 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
-except the last, added on 2026-11-07.
+19 entries, size M. The first 15 are unchanged from the index they came from (backlog review,
+2026-11-06); the 16th was added on 2026-11-07, and the last three are slow reads A1308 slice 0's
+bench found on a year of trading.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
 
@@ -1253,6 +1232,25 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   sat in another migration set) ended when A760 moved
   it into core. Declare the keys when A1308 rewrites the starting migrations (CLAUDE.md §3: declare
   every foreign key).
+- **A1345. Choosing the next kitchen round number reads every round ever sent.**
+  `nextGroupNumber` in `apps/server/src/order-groups.ts` filters
+  `party_id = ? or number_party_id = ?`, and `number_party_id` has no index, so the query plan is a
+  scan of `order_groups`. It runs on the round submit, move and merge paths, several times a bill.
+  Measured in the bench: 21 µs a call on day 1, 443 µs on day 9. The fix is an index or two indexed
+  lookups.
+- **A1346. Two invoice-record lookups by sale walk every original record.** `filedReceiptFor` in
+  `packages/fiscal-verifactu/src/backend.ts` and `readDeviceReceiptEvidence` in
+  `packages/fiscal-verifactu/src/device-receipt-evidence.ts` filter
+  `sale_id = ? and tipo_registro = 'alta' and corrects_registro_id is null`. With no planner
+  statistics the engine picks the unique index on `corrects_registro_id`, where `is null` matches
+  every original record, instead of `registros_sale_idx`. Measured on the bench's day-9 database
+  from the `sqlite3` command line, warm: 236 µs, against 26 µs when forced through
+  `registros_sale_idx`. Fiscal-package code: the owner lands it.
+- **A print job's payload sits ahead of its status columns.** `print_jobs.payload` averaged 20 KB
+  on the bench's first full year (built 2026-11-06, since rebuilt), so any walk over print-job rows reads about five pages a job (the table was
+  8 GB of the 12 GB year), and the printers-down check (`stationPrintersDownQuery` in
+  `apps/server/src/station-outputs-down.ts`) groups over every stuck job of a printer. It matters
+  only with many stuck jobs. Put the payload after the columns reads filter on.
 
 ## What A1308 retires
 
