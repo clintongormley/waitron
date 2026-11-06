@@ -1108,6 +1108,9 @@ export class MenusScreen extends LitElement {
       }
       if (part === "preview") {
         this.preview = response.body as MenuReadModels["preview"];
+        const listed = new Set(this.preview.changes.map(({ id }) => id));
+        const unlisted = Object.keys(this.undoRefusals).filter((id) => !listed.has(id));
+        if (unlisted.length > 0) this.undoRefusals = without(this.undoRefusals, unlisted);
         this.previewError = false;
         this.previewResetRequired = false;
         this.status = this.preview.status;
@@ -1507,6 +1510,7 @@ export class MenusScreen extends LitElement {
     const warnings = this.preview?.warnings ?? [];
     this.publishing = new Set([...this.publishing, menuId]);
     this.publishResult = null;
+    this.undoResult = null;
     let result: PublishResult;
     try {
       result = {

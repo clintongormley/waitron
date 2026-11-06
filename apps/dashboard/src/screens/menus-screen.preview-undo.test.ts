@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
@@ -609,4 +610,63 @@ it("shows another menu none of the refusals and success line said on the menu le
   await settle();
   expect(refusalIn(panel(), "mains-colour")).toBeNull();
   expect(resultLine(panel())).toBeNull();
+});
+
+it("drops the success line when the menu is published", async () => {
+  const renameCatalogue = vi.fn(async () => {
+    fake.state.preview = previewOf([recolour]);
+  });
+  const publishing = held<{ number: number }>();
+  const publishMenu = vi.fn(() => publishing.promise);
+  const fake = fakeApi({ renameCatalogue, publishMenu } as unknown as Partial<DashboardApi>);
+  const { panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "own-rename")!);
+  await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
+  publishButton(panel()).click();
+  await vi.waitFor(() => expect(publishMenu).toHaveBeenCalledTimes(1));
+  await panel().updateComplete;
+  expect(resultLine(panel())).toBeNull();
+  publishing.answer({ number: 3 });
+  await vi.waitFor(() => expect(panel().publishing).toBe(false));
+});
+
+it("keeps a refusal shown when a live snapshot of the menu arrives", async () => {
+  const live = new LiveData();
+  const updateSection = vi.fn(async () => {
+    throw { code: "menu_section.invalid", params: { field: "color" } };
+  });
+  const fake = fakeApi({ updateSection, liveData: live } as unknown as Partial<DashboardApi>);
+  const { panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(refusalIn(panel(), "mains-colour")).not.toBeNull());
+  const before = panel().preview;
+  fake.state.preview = { ...fake.state.preview };
+  const reads = fake.getMenuRead.mock.calls.length;
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(fake.getMenuRead.mock.calls.length).toBeGreaterThan(reads));
+  await vi.waitFor(() => expect(panel().preview).not.toBe(before));
+  await settle();
+  expect(refusalIn(panel(), "mains-colour")).not.toBeNull();
+});
+
+it("forgets a refusal once a fresh preview no longer lists its change", async () => {
+  const live = new LiveData();
+  const updateSection = vi.fn(async () => {
+    throw { code: "menu_section.invalid", params: { field: "color" } };
+  });
+  const fake = fakeApi({ updateSection, liveData: live } as unknown as Partial<DashboardApi>);
+  const { panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(refusalIn(panel(), "mains-colour")).not.toBeNull());
+
+  fake.state.preview = previewOf([rename]);
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).toBeNull());
+
+  // The same change is made again: it is listed afresh, with nothing said about it.
+  fake.state.preview = previewOf([rename, recolour]);
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
+  await settle();
+  expect(refusalIn(panel(), "mains-colour")).toBeNull();
 });
