@@ -731,7 +731,7 @@ must distinguish verifier non-activation from the ordinary restore's authorised 
 
 ## Till changes do not check which page sent them
 
-OPEN (left open by A1371). The till's sign-in cookie and the device cookie are `SameSite=Strict`
+OPEN (left open by A1371, #2507). The till's sign-in cookie and the device cookie are `SameSite=Strict`
 (`apps/server/src/till-session.ts:45-51`, `apps/server/src/device-session.ts:60-67`), and SameSite
 ignores the port, so a page on another port of the box's name is sent them with a change it posts
 to a till route. The server-wide page check judges only a change that carries the dashboard's
