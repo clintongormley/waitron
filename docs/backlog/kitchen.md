@@ -276,7 +276,7 @@ Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitche
 
 ## A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark
 
-**A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327).** The dish is one whose HOLD ticket has printed, which
+**A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** The dish is one whose HOLD ticket has printed, which
 the waiter then fired at a station that waits for the pass, and which the pass has not yet
 released. When its bill goes to another table or another bill, the MOVED slip lists it and its
 release is marked FIRE; moving the bill to the counter does neither:
