@@ -83,7 +83,7 @@ import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { DEMO_PRINTER_KEY } from "./demo-printer.js";
-import { setPrinterPortable } from "@waitron/layouts";
+import { setPrinterPortable, type ProfilePrinterRole } from "@waitron/layouts";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPrinterHolders } from "./device-equipment.js";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
@@ -1617,6 +1617,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           })
           .from(stationPrinters)
           .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
+          .where(eq(kitchenStations.active, true))
           .orderBy(kitchenStations.name, kitchenStations.id, stationPrinters.printerId),
       );
       return c.json(rows);
@@ -1624,8 +1625,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   );
 }
 
-const PROFILE_PRINTER_ROLE_ORDER = ["receipt", "payment_slip", "cash_drawer", "invoice"] as const;
-type ProfilePrinterRole = (typeof PROFILE_PRINTER_ROLE_ORDER)[number];
+const PROFILE_PRINTER_ROLE_ORDER = [
+  "receipt",
+  "payment_slip",
+  "cash_drawer",
+  "invoice",
+] as const satisfies readonly ProfilePrinterRole[];
 
 interface PrinterProfileUse {
   printerId: string | null;

@@ -893,6 +893,31 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
     ]);
   });
 
+  it("GET /management-api/printer-stations leaves out a deleted station still holding a printer", async () => {
+    const app = mountApp();
+    const agent = await joinAndAccept(app, "Deleted station agent");
+    const printer = await createPrinter(app, agent.agentId, "Pass printer");
+    const live = await seedStation(tenantA, `Live ${randomUUID()}`);
+    const deleted = await seedStation(tenantA, `Deleted ${randomUUID()}`);
+    await suite.db.insert(stationPrinters).values([
+      { stationId: live, printerId: printer },
+      { stationId: deleted, printerId: printer },
+    ]);
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, deleted));
+
+    const res = await send(app, "GET", "/management-api/printer-stations", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const stationIds = ((await res.json()) as { printerId: string; stationId: string }[])
+      .filter((r) => r.printerId === printer)
+      .map((r) => r.stationId);
+    expect(stationIds).toEqual([live]);
+  });
+
   it("GET /management-api/printer-stations requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {
     const app = mountApp();
     const unauth = await send(app, "GET", "/management-api/printer-stations");
