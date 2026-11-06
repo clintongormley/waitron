@@ -6,6 +6,7 @@ import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   enabledModules,
+  modulesWithSets,
   type ConfigurationTransferTable,
   type WaitronModule,
 } from "@waitron/module";
@@ -50,7 +51,6 @@ async function scratch(run: (tx: Transaction) => Promise<void>) {
 it.each([
   { value: null, field: "artifact" },
   { value: [], field: "artifact" },
-  { value: { version: 11 }, field: "version" },
   { value: { ...configurationBundle(), createdAt: "bad-date" }, field: "artifact" },
   { value: { ...configurationBundle(), modules: { module: -1 } }, field: "artifact" },
   { value: { ...configurationBundle(), reconnect: [3] }, field: "artifact" },
@@ -95,6 +95,18 @@ it.each([
   );
   expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
     expect.objectContaining(invalid(field)),
+  );
+});
+
+it("refuses a configuration format newer than this box's as newer software", () => {
+  const artifact = encryptArtifact(
+    packArchive([
+      { name: "configuration.json", bytes: Buffer.from(JSON.stringify({ version: 11 })) },
+    ]),
+    passphrase,
+  );
+  expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
+    expect.objectContaining({ code: "setup.configuration_newer", params: {} }),
   );
 });
 
@@ -235,7 +247,6 @@ it.each([
 
 it.each([
   { change: { modules: { extra: 1 } }, field: "modules" },
-  { change: { modules: { "synthetic-transfer": 2 } }, field: "module:synthetic-transfer" },
   { change: { tables: { secret: [] } }, field: "tables" },
   { change: { tables: {} }, field: "table:zz_parents" },
   { change: { tables: { zz_parents: [null] } }, field: "table:zz_parents" },
@@ -250,6 +261,27 @@ it.each([
       { "synthetic-transfer": 1 },
     ),
   ).toThrow(expect.objectContaining(invalid(field)));
+});
+
+it.each([
+  { exported: { "synthetic-transfer": 2 }, code: "setup.configuration_newer" },
+  { exported: { "synthetic-transfer": 0 }, code: "setup.configuration_outdated" },
+])("names which side is newer when a module's version differs: $exported", ({ exported, code }) => {
+  const bundle = { ...configurationBundle(), modules: exported as Record<string, number> };
+  expect(() =>
+    validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
+      "synthetic-transfer": 1,
+    }),
+  ).toThrow(expect.objectContaining({ code, params: {} }));
+});
+
+it("refuses an export that lacks a module the box runs as a module mismatch, not an older export", () => {
+  const bundle = { ...configurationBundle(), modules: {} };
+  expect(() =>
+    validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
+      "synthetic-transfer": 1,
+    }),
+  ).toThrow(expect.objectContaining(invalid("module:synthetic-transfer")));
 });
 
 it("validates a bundle without a module that has no set of its own, and refuses one naming it", () => {
@@ -280,7 +312,7 @@ it("checks an import's module version before replacing its existing rows", async
       importConfigurationTables(tx, bundle, [moduleWith([{ name: "zz_parents" }])], {
         "synthetic-transfer": 1,
       }),
-    ).rejects.toMatchObject(invalid("module:synthetic-transfer"));
+    ).rejects.toMatchObject({ code: "setup.configuration_newer", params: {} });
     expect((await tx.execute(sql`select id from zz_parents`)).rows).toEqual([{ id: "retained" }]);
   });
 });
@@ -559,6 +591,23 @@ it("exports the venue's own fields and the default menu outside them", async () 
     ].sort(),
   );
   expect(bundle.defaultCatalogueId).toBe(defaultCatalogueId);
+});
+
+it("lists only the exported modules' versions, so setup accepts a box's export that names its switched-off modules", async () => {
+  const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
+  const target = await applyVenue(planVenue(gbVenue, modules), { db: suite.db, modules });
+  const everyVersion = Object.fromEntries(modulesWithSets(ALL_MODULES).map((m) => [m.name, 1]));
+  expect(everyVersion).toHaveProperty("fiscal-verifactu");
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    target,
+    modules,
+    new Date("2026-10-16T11:40:00Z"),
+    everyVersion,
+  );
+  const enabledVersions = Object.fromEntries(modulesWithSets(modules).map((m) => [m.name, 1]));
+  expect(bundle.modules).toEqual(enabledVersions);
+  expect(() => validateConfigurationBundle(bundle, modules, enabledVersions)).not.toThrow();
 });
 
 it("puts every row under the importing venue whatever location id it names", async () => {

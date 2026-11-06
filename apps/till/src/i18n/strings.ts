@@ -1447,6 +1447,8 @@ export const en = {
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
     "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
+  // Their "tell a manager" is the owner's stated exception to never sending the person elsewhere: a
+  // waiter at a stopped till has no step of their own (2026-11-06, A1384).
   "sale.disk_full":
     "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager.",
   "sale.disk_full_manual_card":

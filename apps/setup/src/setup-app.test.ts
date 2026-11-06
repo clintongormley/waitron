@@ -13,6 +13,7 @@ import type { SetupDoneScreen } from "./screens/done-screen.js";
 import type { BucketRestoreRequestDetail } from "./events.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
+import { startEn } from "./i18n/strings/start.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -1458,6 +1459,42 @@ describe("setup-app", () => {
       "Reload",
     );
   });
+
+  it.each([
+    [
+      "en-GB",
+      "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
+      "Reload",
+    ],
+    [
+      "es-ES",
+      "Este servidor está marcado para producción, así que no ofrece Demostración ni Prepara tu restaurante. Recarga para elegir otra opción.",
+      "Recargar",
+    ],
+  ] as const)(
+    "Demo refused sif.throwaway_allocation_refused says the box is for production and offers Reload, not Retry (%s)",
+    async (locale, sentence, reload) => {
+      try {
+        const provision = vi.fn().mockRejectedValue({
+          code: "sif.throwaway_allocation_refused",
+          params: { environment: "production" },
+          status: 400,
+        });
+        const el = await mountSetupApp(stubApi({ provision }));
+        setLocale(locale);
+        provisionRequest(el);
+        await flush(el);
+        expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(sentence);
+        const host = await screenHost(el, "provisioning");
+        expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+        expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+          reload,
+        );
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
 
   it("maps setup.not_ready to a not-ready message that CAN be retried", async () => {
     const provision = vi.fn().mockRejectedValue({ code: "setup.not_ready", params: {} });
@@ -3166,17 +3203,17 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "This export is not compatible with this Waitron version. Export it again from a box running the current version, then load the new export.",
+      "This export and this box do not use the same parts of Waitron, so the export cannot be loaded here.",
     ],
     [
       "es-ES",
-      "Esta exportación no es compatible con esta versión de Waitron. Vuelve a exportar desde un equipo con la versión actual y carga la nueva exportación.",
+      "Esta exportación y este equipo no usan las mismas partes de Waitron, así que la exportación no se puede cargar aquí.",
     ],
   ] as const)(
-    "explains how to replace an incompatible configuration export (%s)",
+    "explains an export using different parts of Waitron (%s)",
     async (locale, sentence) => {
       try {
-        for (const field of ["version", "module:core", "modules"]) {
+        for (const field of ["module:core", "modules"]) {
           const el = await mountSetupApp(
             stubApi({
               stageConfiguration: vi.fn().mockRejectedValue({
@@ -3204,6 +3241,35 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       }
     },
   );
+
+  it.each([
+    [
+      "en-GB",
+      "This export was made by newer Waitron software than this box has. Update this box, then load the export again.",
+    ],
+    [
+      "es-ES",
+      "Esta exportación la hizo una versión de Waitron más nueva que la de este equipo. Actualiza este equipo y vuelve a cargar la exportación.",
+    ],
+  ] as const)("explains an export from newer software (%s)", async (locale, sentence) => {
+    try {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi
+            .fn()
+            .mockRejectedValue({ code: "setup.configuration_newer", params: {}, status: 400 }),
+        }),
+      );
+      setLocale(locale);
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+      expect(readDraft(el).configurationImport).toBeUndefined();
+      expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
+    } finally {
+      setLocale("en-GB");
+    }
+  });
 
   it.each([
     [
@@ -5154,7 +5220,7 @@ it("routes an internal description refusal to the venue action message", async (
   >("wt-form-actions")!;
   await actions.updateComplete;
   expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent).toContain(
-    "500 characters",
+    startEn["server_fields.operation_description"],
   );
   expect(
     (venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & { disabled: boolean })

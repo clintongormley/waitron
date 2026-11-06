@@ -66,16 +66,27 @@ export async function sendWipe(
   return result;
 }
 
+const NOT_READY_CAUSES = ["may-have-filed", "unexpected", "too-large", "unreadable"] as const;
+export type NotReadyCause = (typeof NOT_READY_CAUSES)[number];
+export type WipeRefusal =
+  StartAgainRefusalCause | NotReadyCause | "fault" | "insecure" | "unavailable";
+
 /**
  * The refusal the page draws for a Start again error, or `undefined` for one it describes as any
  * other error. `setup.owner_required` is drawn as unavailable: the owner-tab words are false for a
- * Start again that needs no owner tab.
+ * Start again that needs no owner tab. A `setup.not_ready` with no `status` is the page's own, not
+ * the box's.
  */
-export function wipeRefusal(error: unknown): StartAgainRefusalCause | "unavailable" | undefined {
+export function wipeRefusal(error: unknown): WipeRefusal | undefined {
   const cause = startAgainRefusalCause(error);
   if (cause !== undefined) return cause;
-  return object(error) &&
-    (error.code === "setup.not_ready" || error.code === "setup.owner_required")
+  if (!object(error)) return undefined;
+  if (error.code === "setup.connection_insecure") return "insecure";
+  if (error.code === "setup.not_ready" && typeof error.status === "number") {
+    const named = object(error.params) ? error.params.cause : undefined;
+    return NOT_READY_CAUSES.find((known) => known === named) ?? "fault";
+  }
+  return error.code === "setup.not_ready" || error.code === "setup.owner_required"
     ? "unavailable"
     : undefined;
 }

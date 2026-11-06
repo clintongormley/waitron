@@ -33,7 +33,8 @@ confirmar que borrar la configuración sea seguro, la página lo indica y no ofr
 incluye una configuración cuyo propio registro no se puede leer o lleva una marca que necesita
 reparación: entonces la única salida es reinstalar Waitron, salvo que la configuración aún no
 hubiera guardado nada; en ese caso **Continuar con tu contraseña de configuración** repara el
-registro y sigue.
+registro y sigue. Con una conexión sin cifrar no funciona ninguna: configura antes la conexión
+segura.
 
 Cuando se ha borrado la configuración, el equipo se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges

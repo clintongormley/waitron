@@ -238,7 +238,7 @@ describe("staged configuration import", () => {
     expect(await response.json()).toEqual({
       error:
         _label === "future version"
-          ? { code: "setup.request_invalid", params: { field: "version" } }
+          ? { code: "setup.configuration_newer", params: {} }
           : { code: "setup.configuration_outdated", params: {} },
     });
     expect((await readdir(stateDir)).sort()).toEqual([
@@ -936,8 +936,8 @@ describe("routing cells in a staged import", () => {
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({
-      code: "setup.request_invalid",
-      params: { field: "module:venue-service" },
+      code: "setup.configuration_outdated",
+      params: {},
     });
     expect(await readdir(stateDir)).toEqual([]);
   });
@@ -961,8 +961,8 @@ describe("routing cells in a staged import", () => {
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({
-      code: "setup.request_invalid",
-      params: { field: "module:core" },
+      code: "setup.configuration_outdated",
+      params: {},
     });
     expect(await readdir(stateDir)).toEqual([]);
   });

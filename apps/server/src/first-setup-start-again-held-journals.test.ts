@@ -9,6 +9,7 @@ import {
   expectUnreadableDeleted,
   expectHeldRefused,
   keptRecords,
+  notReadyBecause,
   dropTables,
   type Held,
 } from "../test/start-again-held-fixture.js";
@@ -26,7 +27,7 @@ it("an intact held database with an invoice and another database's hot journal b
   const f = await heldSetup({ invoices: 1 });
   foreignHotJournal(`${venueDb(f)}-journal`, "rolls-back");
   expect(await labelOf(f)).toBe("unknown");
-  await expectHeldRefused(f, { code: "setup.not_ready" });
+  await expectHeldRefused(f, notReadyBecause("unreadable"));
 });
 
 it("an intact held database with an invoice and an empty-original journal from another database beside it is refused setup.not_ready, and nothing changes", async () => {
@@ -34,7 +35,7 @@ it("an intact held database with an invoice and an empty-original journal from a
   checkpointed(venueDb(f));
   foreignHotJournal(`${venueDb(f)}-journal`, "empty-original");
   await expectHeldRefused(f, {
-    code: "setup.not_ready",
+    ...notReadyBecause("unreadable"),
     reason: "journal beside a damaged read: no such table",
   });
 });
@@ -93,7 +94,7 @@ it("an invoice record with the envios table missing refuses kept-records even wh
 it("with a readable held venue.db, a damaged node.db refuses the summary and Start again setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup();
   await writeFile(join(f.roots.venueDir, "node.db"), "not a database");
-  await expectHeldRefused(f, { code: "setup.not_ready", reason: "node.db unreadable" });
+  await expectHeldRefused(f, { ...notReadyBecause("unreadable"), reason: "node.db unreadable" });
 });
 
 it("control: without the journal, the same held database refuses kept-records", async () => {
@@ -101,16 +102,23 @@ it("control: without the journal, the same held database refuses kept-records", 
   await expectHeldRefused(f, keptRecords);
 });
 
-it("a damaged held database whose private copy fails is refused setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ pendingWal: true });
-  const wal = await readFile(`${venueDb(f)}-wal`);
-  damagePages(venueDb(f), "department_days");
-  // The damage is written with the -wal checkpointed; putting it back keeps the copy path.
-  await writeFile(`${venueDb(f)}-wal`, wal);
-  copyFails.on = true;
-  await expectHeldRefused(f, { code: "setup.not_ready", reason: "copy failed: ENOSPC" });
-  expect(copyFails.calls).toBeGreaterThan(0);
-});
+// A failed copy is never read as damage, which would offer deletion.
+it.each([
+  ["ENOSPC", { code: "storage.disk_full" }],
+  ["EIO", notReadyBecause("unreadable")],
+] as const)(
+  "a damaged held database whose private copy fails with %s is refused as the failure says, and nothing changes",
+  async (code, refusal) => {
+    const f = await heldSetup({ pendingWal: true });
+    const wal = await readFile(`${venueDb(f)}-wal`);
+    damagePages(venueDb(f), "department_days");
+    // The damage is written with the -wal checkpointed; putting it back keeps the copy path.
+    await writeFile(`${venueDb(f)}-wal`, wal);
+    copyFails.code = code;
+    await expectHeldRefused(f, refusal);
+    expect(copyFails.calls).toBeGreaterThan(0);
+  },
+);
 
 it("a venue.db the box may not open is refused setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup();
@@ -119,10 +127,12 @@ it("a venue.db the box may not open is refused setup.not_ready, and nothing chan
   try {
     expect(await labelOf(f)).toBe("unreadable");
     const { ids, actions } = await withoutSignIn(f);
-    await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({ code: "setup.not_ready" });
-    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
+    await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(
+      notReadyBecause("unreadable"),
+    );
+    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject(
+      notReadyBecause("unreadable"),
+    );
   } finally {
     await chmod(venueDb(f), 0o644);
   }
@@ -133,7 +143,7 @@ it("a venue.db the box may not open is refused setup.not_ready, and nothing chan
 
 it.each([
   ["with an invoice", { invoices: 1 }, keptRecords],
-  ["without one", {}, { code: "setup.not_ready" }],
+  ["without one", {}, notReadyBecause("unreadable")],
 ] as const)(
   "a readable held database labelled corrupt %s refuses as its contents say, and nothing changes",
   async (_label, options, refusal) => {

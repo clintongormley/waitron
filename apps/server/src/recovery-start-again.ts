@@ -79,7 +79,7 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     wrongPassword:
       "This is not the administrator password of the interrupted setup. Nothing was changed. Check it and try again: it is the password chosen when this setup began.",
     forgotten:
-      "If the password is forgotten, this page cannot go further. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
+      "If the password is forgotten, this page cannot go further. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included, unless a backup is restored afterwards.",
     throttled: (n) =>
       `Too many wrong passwords. Try again in ${n === 1 ? "1 minute" : `${n} minutes`}. Nothing was changed.`,
     filesChanged:
@@ -90,7 +90,7 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     otherPage: "This choice must be sent from this page. Nothing was changed.",
     busy: "Another Waitron program is using the box's files. Nothing was changed. Wait a moment, then press Continue again.",
     diskFull:
-      "The box's disk is full, so the choice could not be saved. Nothing was moved. Press “Retry a normal boot”: as it starts, the box frees space by clearing its own temporary copies, old logs and crash reports. Then choose again. If that is not enough, the choice cannot be saved on this box; if you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
+      "The box's disk is full, so the choice could not be saved. Nothing was moved. Press “Retry a normal boot”: as it starts, the box frees space by clearing its own temporary copies, old logs and crash reports. Then choose again. If that is not enough, the choice cannot be saved on this box; if you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included, unless a backup is restored afterwards.",
     moveUnavailable:
       "These files cannot be moved aside on this box: the system treats the folder they are in and the box's folder for moved files as separate disks, and Start again never copies these files. Nothing was changed. Keep everything and stop is still available.",
     notSaved: "The box could not save the choice. Nothing was moved. Press Continue to try again.",
@@ -120,7 +120,7 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     wrongPassword:
       "No es la contraseña de administrador de la configuración interrumpida. No se ha cambiado nada. Revísala y vuelve a intentarlo: es la contraseña que se eligió al empezar esta configuración.",
     forgotten:
-      "Si se ha olvidado la contraseña, esta página no puede seguir. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.",
+      "Si se ha olvidado la contraseña, esta página no puede seguir. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.",
     throttled: (n) =>
       `Demasiadas contraseñas incorrectas. Vuelve a intentarlo dentro de ${n === 1 ? "1 minuto" : `${n} minutos`}. No se ha cambiado nada.`,
     filesChanged:
@@ -132,7 +132,7 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     otherPage: "Esta elección debe enviarse desde esta página. No se ha cambiado nada.",
     busy: "Otro programa de Waitron está usando los archivos del equipo. No se ha cambiado nada. Espera un momento y vuelve a pulsar «Continuar».",
     diskFull:
-      "El disco del equipo está lleno, así que no se ha podido guardar la elección. No se ha movido nada. Pulsa «Reintentar un arranque normal»: al arrancar, el equipo libera espacio descartando sus propias copias temporales, registros antiguos e informes de fallos. Después vuelve a elegir. Si no basta, la elección no se puede guardar en este equipo; si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.",
+      "El disco del equipo está lleno, así que no se ha podido guardar la elección. No se ha movido nada. Pulsa «Reintentar un arranque normal»: al arrancar, el equipo libera espacio descartando sus propias copias temporales, registros antiguos e informes de fallos. Después vuelve a elegir. Si no basta, la elección no se puede guardar en este equipo; si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.",
     moveUnavailable:
       "Estos archivos no se pueden apartar en este equipo: el sistema trata la carpeta donde están y la carpeta del equipo para archivos apartados como discos distintos, y «Empezar de nuevo» nunca copia estos archivos. No se ha cambiado nada. Puedes elegir «Conservarlo todo y parar».",
     notSaved:

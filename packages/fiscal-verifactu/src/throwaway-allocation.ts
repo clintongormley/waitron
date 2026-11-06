@@ -37,7 +37,7 @@ export function createThrowawayAllocation(
 ): ThrowawayAllocation {
   const generateKey = options.generateKey ?? (() => generateKeyPairSync("ed25519"));
   return {
-    prepare({ environments, taxpayerNif, bases, nodeId, administratorId }) {
+    prepare({ environments, taxId, bases, nodeId, administratorId }) {
       if (environments.length === 0)
         throw new AppError("sif.throwaway_allocation_refused", { environment: "none" });
       const refused = environments.findIndex((environment) => environment !== "preproduction");
@@ -59,7 +59,7 @@ export function createThrowawayAllocation(
       const allocation = {
         version: 1 as const,
         allocationId: throwawayId(),
-        taxpayerNif,
+        taxpayerNif: taxId,
         softwareId: WAITRON_ID_SISTEMA,
         environment: "preproduction" as const,
         installationIdentity: "S000001",

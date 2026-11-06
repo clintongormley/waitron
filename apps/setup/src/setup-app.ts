@@ -1,11 +1,10 @@
 import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import { draftScopeFor } from "@waitron/ui";
 import { FirstSetupSession } from "./first-setup-session.js";
-import { readWipeSummary, sendWipe, wipeRefusal } from "./start-again-wipe.js";
+import { readWipeSummary, sendWipe, wipeRefusal, type WipeRefusal } from "./start-again-wipe.js";
 import type {
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
-  StartAgainRefusalCause,
   StartAgainSummary,
 } from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
@@ -464,11 +463,11 @@ const PRIVACY_CONTACT_MESSAGES: Record<string, { invalid: StringKey; tooLong: St
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
+  if (code === "setup.configuration_newer") return say("shell.configuration.newer");
   if (
     code === "setup.request_invalid" &&
     typeof params?.field === "string" &&
-    (params.field === "version" ||
-      params.field === "modules" ||
+    (params.field === "modules" ||
       (params.field.startsWith("module:") && params.field.length > "module:".length))
   ) {
     return say("shell.configuration.incompatible_version");
@@ -1099,7 +1098,7 @@ export class SetupApp extends LitElement {
   #afterWipe?: "start-again" | "recover";
   @state() private firstWipeError?: Message;
   /** The box's refusal of Start again, drawn in Start again's place until Reconnect reads the setup again. */
-  @state() private firstStartAgainRefused?: StartAgainRefusalCause | "unavailable";
+  @state() private firstStartAgainRefused?: WipeRefusal;
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
   #firstReplacing = false;
@@ -1614,6 +1613,11 @@ export class SetupApp extends LitElement {
         return;
       case "deployment.already_stamped":
         this.provisionMessage = say("shell.already_stamped");
+        this.provisionCanRetry = false;
+        this.provisionReloadLabel = say("shell.reload");
+        return;
+      case "sif.throwaway_allocation_refused":
+        this.provisionMessage = say("shell.provision.throwaway_refused");
         this.provisionCanRetry = false;
         this.provisionReloadLabel = say("shell.reload");
         return;
@@ -2216,14 +2220,18 @@ export class SetupApp extends LitElement {
     const confirmOpen = this.firstRestartConfirm && summary !== undefined;
     const refused = this.firstStartAgainRefused;
     const offered = inspection !== undefined && wipeOffered(inspection);
-    const refusalWords =
-      refused === "setup-finished"
-        ? t.setupFinished
-        : refused === "trading-settings"
-          ? `${t.tradingSaved} ${t.tradingSavedPassword}`
-          : refused === "kept-records"
-            ? t.keptFault
-            : t.wipeUnavailable;
+    const refusalWords = {
+      "setup-finished": t.setupFinished,
+      "trading-settings": `${t.tradingSaved} ${t.tradingSavedPassword}`,
+      "kept-records": t.keptFault,
+      "may-have-filed": t.wipeMayHaveFiled,
+      unexpected: t.wipeUnexpected,
+      "too-large": t.wipeTooLarge,
+      unreadable: t.wipeUnreadable,
+      fault: t.wipeFault,
+      insecure: t.wipeInsecure,
+      unavailable: t.wipeUnavailable,
+    }[refused ?? "unavailable"];
     if (!this.#firstPasswordScope && this.isConnected) {
       this.#firstPasswordScope = draftScopeFor(this, {
         id: this.#firstPasswordOwner,

@@ -256,6 +256,16 @@ it.each<[string, string, string]>([
   },
 );
 
+it("Start again names a node.db holding another node's row as unexpected", async () => {
+  const roots = await attemptWithMigratedNode();
+  await withNode(roots, signingKeyRow(randomUUID()));
+  await expect(assertStartAgainAllowedOnDisk(roots, { nodeId: NODE_ID })).rejects.toMatchObject({
+    code: "setup.not_ready",
+    params: { cause: "unexpected" },
+    reason: "node.db holds another node's row: node_signing_key",
+  });
+});
+
 it("Start again told no attempt's node refuses a node.db holding a recovery-key check", async () => {
   const roots = await attemptWithMigratedNode();
   await recoveryKeyRow(roots);

@@ -2,7 +2,8 @@ import { nodeDumpEntry } from "./testing/node-copy.js";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Hono } from "hono";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
@@ -1563,6 +1564,101 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(sourceStateDir, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it.each([
+    [
+      "stages the export a running Spanish box's own export route hands out",
+      () => ES_MODULE_CONFIG,
+      200,
+      { venue: { taxId: "60000011A" } },
+    ],
+    [
+      "refuses, as a module mismatch, the export of a box with bookings switched off",
+      () =>
+        venueModuleConfig(
+          parseModuleConfig({ modules: { bookings: false } }, ALL_MODULES),
+          "ES-common",
+        ),
+      400,
+      { error: { code: "setup.request_invalid", params: { field: "module:bookings" } } },
+    ],
+  ] as const)(
+    "%s",
+    async (_label, sourceModules, status, answer) => {
+      const TAX_ID = "60000011A";
+      const PASSPHRASE = "a long enough export passphrase";
+      const source = await freshVenue();
+      const target = await freshVenue();
+      const sourceStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-config-route-source-"));
+      let server: StartedServer | undefined;
+      try {
+        const sourceIds = await provisionVenue(
+          {
+            ownerDb: source.store.venue,
+            moduleConfig: sourceModules(),
+            database: source.directory,
+            stateDir: sourceStateDir,
+          },
+          { environment: "preproduction", venue: hashedVenueRequest(TAX_ID) },
+        );
+        const [admin] = await source.store.venue
+          .select({ id: persons.id })
+          .from(persons)
+          .where(eq(persons.role, "admin"));
+        const session = await withTransaction(source.store.venue, (tx) =>
+          startManagementSession(tx, { personId: admin!.id }),
+        );
+        await source.store.close();
+        beforeServerStarts();
+        const port = await freePort();
+        server = await startServer({
+          ...KEY_ENV,
+          WAITRON_STATE_DIR: sourceStateDir,
+          WAITRON_VENUE_DIR: source.directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_NODE_ID: sourceIds.nodeId,
+          WAITRON_ENV: "preproduction",
+          WAITRON_ONBOARDING_INTENT: "prepare",
+        });
+        await awaitListening(httpPort());
+        const exported = await fetch(
+          `http://127.0.0.1:${httpPort()}/management-api/configuration-export`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+            },
+            body: JSON.stringify({ passphrase: PASSPHRASE }),
+          },
+        );
+        expect(exported.status, await exported.clone().text()).toBe(200);
+        const artifact = new Uint8Array(await exported.arrayBuffer());
+        await server.close();
+        server = undefined;
+
+        await withSetupBoot(target.directory, { WAITRON_ENV: "dev" }, async ({ post }) => {
+          const staged = await post("/setup-api/configuration", {
+            headers: {
+              "content-type": "application/octet-stream",
+              "x-waitron-export-passphrase": PASSPHRASE,
+            },
+            body: artifact,
+          });
+          expect(await staged.json()).toMatchObject(answer);
+          expect(staged.status).toBe(status);
+        });
+      } finally {
+        await server?.close();
+        await target.store.close();
+        await rm(source.directory, { recursive: true, force: true });
+        await rm(target.directory, { recursive: true, force: true });
+        await rm(sourceStateDir, { recursive: true, force: true });
+      }
+    },
+    120_000,
+  );
 
   it("imports a configuration export into the venue of a new taxpayer, which keeps its own identity and series", async () => {
     const OLD_TAX_ID = "60000011A";

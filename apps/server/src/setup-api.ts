@@ -249,6 +249,7 @@ export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
  */
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.configuration_outdated": 400,
+  "setup.configuration_newer": 400,
   "setup.request_invalid": 400,
   "setup.certificate_refused": 422,
   "setup.owner_required": 403,

@@ -136,7 +136,12 @@ export async function buildConfigurationBundle(
     },
     defaultCatalogueId,
     privacyContact: { privacyNoticeUrl, privacyEmail },
-    modules: moduleVersions,
+    // A trading box's versions also name its switched-off modules, which setup refuses by name.
+    modules: Object.fromEntries(
+      Object.entries(moduleVersions).filter(([name]) =>
+        modulesWithSets(modules).some((module) => module.name === name),
+      ),
+    ),
     ...transferred,
   };
 }
@@ -466,7 +471,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
   if (typeof value.version === "number" && value.version > 10) {
-    throw new AppError("setup.request_invalid", { field: "version" });
+    throw new AppError("setup.configuration_newer", {});
   }
   if (value.version !== 10) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
@@ -580,9 +585,16 @@ export function validateConfigurationBundle(
     throw new AppError("setup.request_invalid", { field: "modules" });
   }
   for (const module of versioned) {
-    if (bundle.modules[module.name] !== targetVersions[module.name]) {
+    const exported = bundle.modules[module.name];
+    const target = targetVersions[module.name];
+    if (exported === target) continue;
+    if (target === undefined || exported === undefined) {
       throw new AppError("setup.request_invalid", { field: `module:${module.name}` });
     }
+    if (exported > target) {
+      throw new AppError("setup.configuration_newer", {});
+    }
+    throw new AppError("setup.configuration_outdated", {});
   }
   checkedRows(bundle, modules);
   for (const field of PRIVACY_CONTACT_FIELDS) {

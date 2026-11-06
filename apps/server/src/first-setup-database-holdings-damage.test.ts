@@ -87,6 +87,7 @@ it("is not ready, never damaged, for an intact database with another database's 
   foreignHotJournal(`${venueDb(held)}-journal`, "rolls-back");
   await expect(readDatabase(held)).rejects.toMatchObject({
     code: "setup.not_ready",
+    params: { cause: "unreadable" },
     reason: "journal beside a damaged read: errcode 11",
   });
   expect(await readFile(venueDb(held))).toEqual(before);
@@ -105,6 +106,7 @@ it("is not ready, never damaged, for a database the box may not open", async () 
   try {
     await expect(readDatabase(held)).rejects.toMatchObject({
       code: "setup.not_ready",
+      params: { cause: "unreadable" },
       reason: expect.stringMatching(/^database unreadable: open /),
     });
   } finally {
@@ -114,8 +116,24 @@ it("is not ready, never damaged, for a database the box may not open", async () 
 
 it.each([
   ["open", 26, { kind: "damaged", code: "errcode 26" }],
-  ["open", 14, { code: "setup.not_ready", reason: "database unreadable: open unknown 14" }],
-  ["wal", 11, { code: "setup.not_ready", reason: "database unreadable: wal unknown 11" }],
+  [
+    "open",
+    14,
+    {
+      code: "setup.not_ready",
+      params: { cause: "unreadable" },
+      reason: "database unreadable: open unknown 14",
+    },
+  ],
+  [
+    "wal",
+    11,
+    {
+      code: "setup.not_ready",
+      params: { cause: "unreadable" },
+      reason: "database unreadable: wal unknown 11",
+    },
+  ],
 ] as const)(
   "an opening that fails at %s with code %i answers %o",
   async (stage, errcode, answer) => {
@@ -160,6 +178,7 @@ it("is not ready, never damaged, when a module seat fails with code 1 for anothe
   });
   await expect(readDatabase(held, modules)).rejects.toMatchObject({
     code: "setup.not_ready",
+    params: { cause: "unreadable" },
     reason: "read failed: ERR_SQLITE_ERROR 1",
   });
 });
@@ -171,6 +190,7 @@ it("is not ready, never damaged, for an intact database holding an invoice with 
   foreignHotJournal(`${venueDb(held)}-journal`, "empty-original");
   await expect(readDatabase(held)).rejects.toMatchObject({
     code: "setup.not_ready",
+    params: { cause: "unreadable" },
     reason: "journal beside a damaged read: no such table",
   });
   expect(await readFile(venueDb(held))).toEqual(before);
@@ -219,6 +239,7 @@ it.each([
     });
     await expect(readDatabase(held, modules)).rejects.toMatchObject({
       code: "setup.not_ready",
+      params: { cause: "unreadable" },
       reason: `main file read failed: ${code}`,
     });
   },

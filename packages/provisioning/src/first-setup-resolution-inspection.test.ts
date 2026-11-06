@@ -672,6 +672,44 @@ it.each(["file", "overflow"])(
   },
 );
 
+it.each([
+  ["a state artifact made a folder", "unexpected"],
+  ["a state artifact over the size limit", "too-large"],
+  ["a delivery folder made a file", "unexpected"],
+  ["a delivery folder over the file count", "too-large"],
+] as const)("names the cause when %s after inspection", async (fault, cause) => {
+  const f = await fixture("active");
+  const artifact = join(f.stateDir, "module-operation-public.json");
+  const delivery = join(f.stateDir, "first-fiscal-documents");
+  await writeFile(artifact, '{"retained":true}');
+  const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
+  let changed = false;
+  f.service.inspectFirstSetupResolution = async () => {
+    const result = await inspect();
+    if (!changed) {
+      changed = true;
+      if (fault === "a state artifact made a folder") {
+        await rm(artifact);
+        await mkdir(artifact);
+      } else if (fault === "a state artifact over the size limit")
+        await truncate(artifact, 128 * 1024 * 1024 + 1);
+      else if (fault === "a delivery folder made a file") await writeFile(delivery, "not a folder");
+      else {
+        await mkdir(delivery);
+        await Promise.all(
+          Array.from({ length: 1025 }, (_, i) => writeFile(join(delivery, `${i}.json`), "{}")),
+        );
+      }
+    }
+    return result;
+  };
+  await expect(f.service.captureFirstSetupOriginals()).rejects.toMatchObject({
+    code: "setup.not_ready",
+    params: { cause },
+  });
+  expect(changed).toBe(true);
+});
+
 it.each([false, true])(
   "refuses damaged ownership state through inspected=%s recovery",
   async (inspected) => {

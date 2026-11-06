@@ -145,3 +145,39 @@ it("in the held state, on a full disk with the box's spare file, the spare is no
   expect(await diskSnapshot(f.roots)).toEqual(before);
   expect((await stat(spare)).size).toBe(SPARE_SPACE_BYTES);
 });
+
+it("in the held state, a setup database read through a private copy on a full disk answers the summary 507 storage.disk_full, deleting nothing", async (ctx) => {
+  const small = needDisk(ctx);
+  // A pending -wal sends the read through a private copy in TMPDIR, on the small disk.
+  const f = await heldSetup({ pendingWal: true });
+  const entry = await resolveFirstSetupEntry(
+    f.roots,
+    { WAITRON_ENV: "preproduction" },
+    undefined,
+    () => {},
+    spareOption(f.roots),
+  );
+  if (entry.kind !== "resolution") throw new Error("repair app missing");
+  const inspected = (await (await entry.app.request(ROUTE, {}, tls())).json()) as Inspection;
+  // Room for SQLite's own side files but not for the copy: with none at all the inspection's open
+  // fails first, and that is already answered as a full disk.
+  small.fill(1024 * 1024);
+  expect(small.free()).toBeLessThan((await stat(join(f.roots.venueDir, "venue.db"))).size);
+  const before = await diskSnapshot(f.roots);
+  const answer = await entry.app.request(
+    `${ROUTE}/start-again/summary`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inspectionId: inspected.inspectionId,
+        revision: inspected.revision,
+        ownerGeneration: inspected.ownerGeneration,
+      }),
+    },
+    tls(),
+  );
+  expect(answer.status, await answer.clone().text()).toBe(507);
+  expect(await answer.json()).toMatchObject({ error: { code: "storage.disk_full" } });
+  expect(await diskSnapshot(f.roots)).toEqual(before);
+});
