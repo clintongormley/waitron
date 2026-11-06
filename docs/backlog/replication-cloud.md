@@ -682,6 +682,81 @@ follow, being reached over the internet (owner, 2026-10-29).
 Building waits for A947's strip and Cloud's half:
 [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 
+## A947 3b must make the held chart vouch for a joined box's key, or the main box can never check its answer and waits at every start.
+
+The start check verifies a peer's signed status with
+`peerKeyOf` (`apps/server/src/handover-signing.ts`): this box's own key, the main-box key a spare
+pins at adoption, and keys the held chart's endorsements vouch for. A main box holds none of
+these for its spare, so once 3b makes a spare finish joining, the spare's answers count as
+silent. No box has a joined peer before 3b. 3b must also give each box its own address in the
+chart: by default both advertise `https://waitron.local` (`deploy/Dockerfile`, sent at
+`apps/server/src/adopt.ts:109`), and the check never asks a peer at its own address. Left open by
+A1018 Slice 3 (Ruling R13).
+
+
+## The boot peer reconcile cannot reach a real box's certificate.
+
+`fetchPeerMembershipDocument`
+(`apps/server/src/membership-reconcile.ts:66`) calls the plain global `fetch`, which refuses a
+leaf from a box's own authority, and it sets no time limit. `git blame` shows the line from
+e82588f349 (2026-09-08, "Outbox → native logical replication", #280), so it predates A1018. The
+start check's transport (`askPeerStatus`, `apps/server/src/boot-peer-check.ts`) pins the
+authority a spare holds, or skips the check behind its signed answer. Found by A1018 Slice 3's
+review.
+
+
+## The membership route ignores a different chart at the term this box holds.
+
+The start check
+counts a trusted chart at the held term with another body that fences this box, and names
+another box as serving primary, as a takeover
+(`apps/server/src/boot-peer-check.ts`), but `POST /api/node/membership` answers `{ accepted: false }`
+and steps nothing down (`apps/server/src/node-membership-api.ts`). Left open by A1018 Slice 3.
+
+
+## The start check may still stop for a chart whose signer was evicted while it asked.
+
+If a
+chart that fences this box is refused at the save because a chart committed during the check
+evicts its signer, the check still answers "superseded" and names that chart's serving primary
+as its successor. Read, not run. Left open by A1018
+Slice 3.
+
+
+## A spare learns it has no room to place the copy only after the old box has stopped selling.
+
+The duty does not post its acceptance without room for the copy and the start floor, and waits on
+`handover.no_room_to_place` (`apps/server/src/handover-destination-duty.ts`), but the old box has
+stepped down by then. Finding it while the old box still sells needs the old box's database size
+in the offer. Left open by A1018 Slice 5 (Ruling R35).
+
+
+## A handover's manifest has no row for the box's other state-folder files.
+
+`recovery.json`,
+`setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud-replacement.json`,
+`backup-room-note.json`, `spare-space` and `<state>/handover/<operationId>/` are not in
+`packages/handover/src/manifest.ts`; whether a handover needs rows for them is not decided. Left
+open by A1018 Slice 4 (Slice 4's Ruling R5).
+
+
+## A real account's refused sign-in can take a fraction of a millisecond longer than an unknown one's.
+
+Measured at 0.03 to 0.24 ms at one attempt; it follows the one dummy hash all refusals
+share (`checkManagerPassword`, `packages/identity/src/manager-login.ts`) and vanished with one
+account and one unknown address. The login rule is absolute, so it needs a ruling. `git log -S`
+finds that hash from 2026-08-30, before A1018.
+
+
+## A hung integrity check on a copy has no time limit.
+
+Only an answer, an exit or a stop ends the
+wait, so the duty would wait with no reason recorded, and the frozen-process watchdog does not see
+it (read, not run). A stop asks the thread to end and answers when it has, or after `STOP_WAIT_MS` with the file
+possibly still open: a running `integrity_check` does not stop for it. Left open by
+A1018 Slice 5 (Ruling R53).
+
+
 ## Decisions and deliberate limits
 
 **Owner decision 2026-11-04 — a minute name the old box selected but never activated counts as

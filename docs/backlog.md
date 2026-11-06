@@ -5946,22 +5946,12 @@ Not in any track until the standalone primary is done.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **A947 3b must make the held chart vouch for a joined box's key, or the main box can never check
-  its answer and waits at every start.** The start check verifies a peer's signed status with
-  `peerKeyOf` (`apps/server/src/handover-signing.ts`): this box's own key, the main-box key a spare
-  pins at adoption, and keys the held chart's endorsements vouch for. A main box holds none of
-  these for its spare, so once 3b makes a spare finish joining, the spare's answers count as
-  silent. No box has a joined peer before 3b. 3b must also give each box its own address in the
-  chart: by default both advertise `https://waitron.local` (`deploy/Dockerfile`, sent at
-  `apps/server/src/adopt.ts:109`), and the check never asks a peer at its own address. Left open by
-  A1018 Slice 3 (Ruling R13).
+  its answer and waits at every start.** Left open by A1018 Slice 3 (Ruling R13).
+  [Detail](backlog/replication-cloud.md#a947-3b-must-make-the-held-chart-vouch-for-a-joined-boxs-key-or-the-main-box-can-never-check-its-answer-and-waits-at-every-start)
 
-- **The boot peer reconcile cannot reach a real box's certificate.** `fetchPeerMembershipDocument`
-  (`apps/server/src/membership-reconcile.ts:66`) calls the plain global `fetch`, which refuses a
-  leaf from a box's own authority, and it sets no time limit. `git blame` shows the line from
-  e82588f349 (2026-09-08, "Outbox → native logical replication", #280), so it predates A1018. The
-  start check's transport (`askPeerStatus`, `apps/server/src/boot-peer-check.ts`) pins the
-  authority a spare holds, or skips the check behind its signed answer. Found by A1018 Slice 3's
+- **The boot peer reconcile cannot reach a real box's certificate.** Found by A1018 Slice 3's
   review.
+  [Detail](backlog/replication-cloud.md#the-boot-peer-reconcile-cannot-reach-a-real-boxs-certificate)
 
 - **A captured signed peer query can be replayed later to read a box's status, or a stepped-down box's indicator and final copy.** The peer-status
   route checks the query's `atMs` but never uses it, so there is no freshness window; a strict one
@@ -5972,17 +5962,13 @@ Not in any track until the standalone primary is done.
   nothing. Left open by A1018 Slice 3.
   [Detail](backlog/replication-cloud.md#the-waiting-starts-loose-ends)
 
-- **The membership route ignores a different chart at the term this box holds.** The start check
-  counts a trusted chart at the held term with another body that fences this box, and names
-  another box as serving primary, as a takeover
-  (`apps/server/src/boot-peer-check.ts`), but `POST /api/node/membership` answers `{ accepted: false }`
-  and steps nothing down (`apps/server/src/node-membership-api.ts`). Left open by A1018 Slice 3.
-
-- **The start check may still stop for a chart whose signer was evicted while it asked.** If a
-  chart that fences this box is refused at the save because a chart committed during the check
-  evicts its signer, the check still answers "superseded" and names that chart's serving primary
-  as its successor. Read, not run. Left open by A1018
+- **The membership route ignores a different chart at the term this box holds.** Left open by A1018
   Slice 3.
+  [Detail](backlog/replication-cloud.md#the-membership-route-ignores-a-different-chart-at-the-term-this-box-holds)
+
+- **The start check may still stop for a chart whose signer was evicted while it asked.** Read, not
+  run. Left open by A1018 Slice 3.
+  [Detail](backlog/replication-cloud.md#the-start-check-may-still-stop-for-a-chart-whose-signer-was-evicted-while-it-asked)
 
 - **The waiting page does not change when the wait ends.** A person already looking at it keeps
   seeing "This box is waiting for…" until they reload (`apps/server/src/waiting-page.ts`). Left
@@ -5998,16 +5984,12 @@ Not in any track until the standalone primary is done.
   the wording is a judgement call. Left open by A1018 Slice 3.
 
 - **A spare learns it has no room to place the copy only after the old box has stopped selling.**
-  The duty does not post its acceptance without room for the copy and the start floor, and waits on
-  `handover.no_room_to_place` (`apps/server/src/handover-destination-duty.ts`), but the old box has
-  stepped down by then. Finding it while the old box still sells needs the old box's database size
-  in the offer. Left open by A1018 Slice 5 (Ruling R35).
+  Left open by A1018 Slice 5 (Ruling R35).
+  [Detail](backlog/replication-cloud.md#a-spare-learns-it-has-no-room-to-place-the-copy-only-after-the-old-box-has-stopped-selling)
 
-- **A handover's manifest has no row for the box's other state-folder files.** `recovery.json`,
-  `setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud-replacement.json`,
-  `backup-room-note.json`, `spare-space` and `<state>/handover/<operationId>/` are not in
-  `packages/handover/src/manifest.ts`; whether a handover needs rows for them is not decided. Left
-  open by A1018 Slice 4 (Slice 4's Ruling R5).
+- **A handover's manifest has no row for the box's other state-folder files.** Left open by A1018
+  Slice 4 (Slice 4's Ruling R5).
+  [Detail](backlog/replication-cloud.md#a-handovers-manifest-has-no-row-for-the-boxs-other-state-folder-files)
 
 - **A venue with no module that can prepare a promotion cannot hand over.** A venue without
   Veri\*Factu is refused `handover.venue_not_supported` before anything is recorded, because no
@@ -6086,10 +6068,8 @@ Not in any track until the standalone primary is done.
   Left open by A1018 Slice 5 (Ruling R38).
 
 - **A real account's refused sign-in can take a fraction of a millisecond longer than an unknown
-  one's.** Measured at 0.03 to 0.24 ms at one attempt; it follows the one dummy hash all refusals
-  share (`checkManagerPassword`, `packages/identity/src/manager-login.ts`) and vanished with one
-  account and one unknown address. The login rule is absolute, so it needs a ruling. `git log -S`
-  finds that hash from 2026-08-30, before A1018.
+  one's.** The login rule is absolute, so it needs a ruling.
+  [Detail](backlog/replication-cloud.md#a-real-accounts-refused-sign-in-can-take-a-fraction-of-a-millisecond-longer-than-an-unknown-ones)
 
 - **After a plain promote nobody sweeps the old box's open card payments.** That route writes no
   activation row, and a fenced box no longer sweeps, so a payment stays `attempting` until a person
@@ -6129,11 +6109,8 @@ Not in any track until the standalone primary is done.
 - **The spare's digest of a copy takes no stop signal.** A stop during it waits for the read to end;
   the cost on a large file was not measured. Left open by A1018 Slice 5 (Ruling R53).
 
-- **A hung integrity check on a copy has no time limit.** Only an answer, an exit or a stop ends the
-  wait, so the duty would wait with no reason recorded, and the frozen-process watchdog does not see
-  it (read, not run). A stop asks the thread to end and answers when it has, or after `STOP_WAIT_MS` with the file
-  possibly still open: a running `integrity_check` does not stop for it. Left open by
-  A1018 Slice 5 (Ruling R53).
+- **A hung integrity check on a copy has no time limit.** Left open by A1018 Slice 5 (Ruling R53).
+  [Detail](backlog/replication-cloud.md#a-hung-integrity-check-on-a-copy-has-no-time-limit)
 
 - **A throw while checking a copy leaves no reason a person can read.** It reaches only the log, with
   the old box stopped (run with a journal with no `hash` column). Left open by A1018 Slice 5 (Ruling
