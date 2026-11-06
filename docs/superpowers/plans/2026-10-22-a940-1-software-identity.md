@@ -589,7 +589,7 @@ are public, but they are **never committed**: a fork inherits nothing.
 "Secret" here is only GitHub's storage for a value that is not in the source; it hides nothing. The
 values end up readable in every official image — `docker inspect`, the image's history, and
 `docker buildx imagetools inspect` (which read the image's settings off the registry on 2026-11-06,
-printing only a count of `WAITRON_` names). That fits "public".
+printing only a count of `WAITRON_` names: 12, none of them `WAITRON_PRODUCER_`). That fits "public".
 
 **This plan never holds the real values**, and neither does any commit, test or log line a task
 writes. Test fixtures use made-up values: name `PRODUCER PERSON`, tax number `00000000T` (eight
@@ -671,8 +671,9 @@ is why the start check under "The catch" exists.
    `ARG WAITRON_PRODUCER_TAX_ID` and `ARG WAITRON_PRODUCER_ADDRESS` and adds the three to its `ENV`
    block (today's block: `deploy/Dockerfile:266-278`). The print-agent target does not take them.
    A build argument is visible only in a stage that declares it, which is why the Dockerfile
-   already declares `WAITRON_BUILD_ID` again in each stage that reads it (`:4`, `:26`, `:128`,
-   `:264`); slice 2's renderer, which runs in the build stage, needs its own three declarations
+   declares `WAITRON_BUILD_ID` once before the first `FROM` (`:4`, before `:11`), which gives its
+   default, and again in each stage that reads it: the build stage (`:26`), the print-agent stage
+   (`:128`) and the runtime stage (`:264`); slice 2's renderer, which runs in the build stage, needs its own three declarations
    there. **Measured 2026-11-06** with a throwaway image, built, run and removed:
    ```
    printf 'FROM alpine:3.23\nARG P_NAME\nARG P_ADDR\nENV A=1 \\\n  P_NAME=${P_NAME} \\\n  P_ADDR=${P_ADDR} \\\n  B=2\n' > Dockerfile
@@ -688,7 +689,7 @@ is why the start check under "The catch" exists.
    `push: true`, with the `:main` tag among its tags (`ci.yml:4054-4066`, `push: true` at `:4060`), so a check after it would
    run after `:main` had moved. 8g reorders it: build with `load: true`; then check, in the shell
    and without printing, that each of the three values inside the built image equals its secret;
-   then push the `sha-…` tag and move `:main`. A step before the build fails when any secret is
+   then push, with a second build step served from the builder's cache and today's tags (8g). A step before the build fails when any secret is
    empty, printing lengths only. The image-smoke workflow (`image-smoke.yml:133-155`) passes none:
    its box starts blank and preproduction (`image-smoke.yml:195-198`).
 3. Every image published from the official repository then carries them — `:main` and `sha-…` on a
@@ -704,13 +705,14 @@ is why the start check under "The catch" exists.
    - **Do not change the three secrets' tax number until A993 has landed.** A change of name or
      address alone is not a new system (§5.6 compares the tax number only) and goes through.
    - 8g adds a guard to the publish job: it reads the tax number in the image `:main` points at
-     now, from the registry (`docker buildx imagetools inspect ghcr.io/<owner>/waitron:main
-     --format '{{json .Image.Config.Env}}'`, run on 2026-11-06 against the live image, printing
-     only a count), and fails when the new secret's differs, unless the repository variable
-     `WAITRON_PRODUCER_CHANGE_ALLOWED` is `yes` — a deliberate act, cleared after that publish. The
-     publish job runs on a push, so a variable stands in for a workflow input. An image with no tax
-     number yet (today's `:main`) is no difference, so the first publish passes. A failed or
-     timed-out registry read fails the job, bounded like the workflow's other network steps.
+     now, from the registry (the read `main-tag-guard.sh` already makes; run by hand on 2026-11-06
+     against the live image, printing only a count: today's `:main` carries 12 `WAITRON_` settings
+     and no `WAITRON_PRODUCER_` one), and fails when the new secret's differs, unless the repository
+     variable `WAITRON_PRODUCER_CHANGE_ALLOWED` holds that new tax number — a deliberate act that
+     allows exactly one change. The publish job runs on a push, so a variable stands in for a
+     workflow input. An image with no tax number yet (today's `:main`) is no difference, so the first
+     publish passes. The read runs under an outer timeout and fails the job on an error or a
+     timeout.
 5. **Someone building their own passes their own**: `docker build --build-arg
    WAITRON_PRODUCER_NAME=… --build-arg WAITRON_PRODUCER_TAX_ID=… --build-arg
    WAITRON_PRODUCER_ADDRESS=…`, or the three variables in the environment when running from source.
@@ -794,8 +796,10 @@ compare the running tax number with the one the chain's latest record carries, w
 - **Where it runs: on every node that can add a record** — every trading start that is neither a
   mirror nor fenced (`fencedOrMirror`, `apps/server/src/boot.ts:1989`). Not only the singleton
   primary: the sale routes are not gated on the role. `isSingletonPrimary` (`boot.ts:2021`) gates
-  role-specific duties and, joined with `!fencedOrMirror`, the till's `acceptingSales` and
-  `isPrimary` answers (`boot.ts:2345,2359`); the read-only gate, which refuses writes, is mounted for
+  role-specific duties and, joined with `!fencedOrMirror`, two answers: `acceptingSales` for
+  `GET /api/node`, the role probe tills poll (`boot.ts:2345`, `node-api.ts:36-40`), and `isPrimary`,
+  node enrolment's gate, which refuses with `node.enrol_unavailable` (`boot.ts:2359`,
+  `node-enrol-api.ts:50`); the read-only gate, which refuses writes, is mounted for
   `fencedOrMirror` alone (`boot.ts:2042-2051`). The only thing that sets a mode-primary node's role
   to secondary at boot is the fence (`boot.ts:1972-1979`). A restricted box returns before this
   point (`return restrictedStart()`, `boot.ts:1832,1931`). Why it must not run on a mirror is under
@@ -988,9 +992,10 @@ files under `apps` and `packages` on `5558d26e89`), a `trading.env` file the tes
 `backup-verification-compatibility.test.ts:584`), `vi.stubEnv("WAITRON_ENV", "production")`
 (`apps/server/scripts/demo-seed/seed.test.ts:263`, `seed-sales.test.ts:192`), an assignment
 (`packages/provisioning/src/cli-first-setup.test.ts:265,628,853`), a constant
-(`PRODUCTION_BOX`, `apps/server/src/setup-api.throwaway.test.ts:38`), and backends built with
-`environment: "production"` in 90 `packages/fiscal-verifactu` test files. So the selection is by
-outcome, not by text.
+(`PRODUCTION_BOX`, `apps/server/src/setup-api.throwaway.test.ts:38`), and the literal
+`environment: "production"` in 90 `packages/fiscal-verifactu` test files (most of them options for
+the submission pass or the AEAT client, a few of them backends). So the selection is by outcome, not
+by text.
 
 **Files:** create `apps/server/src/testing/test-producer.ts` (`useTestProducer()`: stubs the three
 made-up values in `beforeAll` — before any server or backend the file starts there — and restores
@@ -1013,18 +1018,21 @@ values in that child's environment if it builds one by hand.
   holds `sif.producer_unset` outside the cases that test it. Then, with the three exported in the
   shell running vitest (made-up values), run
   `pnpm --filter @waitron/server exec vitest run src/taxpayer-rename.filing.test.ts scripts/demo-seed/seed-sales.golden.test.ts`
-  — PASS unedited, which shows `test.env` wins over the shell.
+  — PASS unedited, which shows `test.env` wins over the shell. (The claim check measured this on
+  Vitest 4.1.12 on 2026-11-06 in throwaway projects: `test.env` with `""` beat a shell export, for
+  the test and for a child process it started; the control without the line saw the shell's
+  value.)
 - [ ] **Step 4: commit** — `test: tests start with no producer, and production starts name a made-up one`,
   the file list in the message.
 
 #### 8e. The chain check and its entry point
 
 **Files:** `packages/fiscal/src/backend.ts` (the `FiscalBackend` interface, `:374`, gains an optional
-`checkFilingIdentity?(db: Database, nodeId: string): Promise<void>` — "throws when this node's open
-chain was made under a different software producer from the one this backend files under"; it
-takes a plain `db` and `nodeId`, as the contract's other read-only entries do,
-`hasNonproductionRecords?(db)` and `readinessRejections?(db)` at `packages/fiscal/src/contribution.ts:178,180`,
-and opens no write transaction); `packages/fiscal-verifactu/src/backend.ts` implements it from a new
+`checkFilingIdentity?(tx: Transaction, nodeId: NodeId): Promise<void>` — "throws when this node's
+open chain was made under a different software producer from the one this backend files under".
+It reads only, and takes the same arguments as the interface's existing read
+`checkIntegrity(tx: Transaction, nodeId: NodeId)` (`:531`); the file imports only `Transaction`
+from `@waitron/db` (`:4`). Boot runs it in one read transaction); `packages/fiscal-verifactu/src/backend.ts` implements it from a new
 `packages/fiscal-verifactu/src/producer-change.ts`, using the identity the backend captured (so the
 check and the records agree); `errors.ts` gains `sif.producer_changed` (no params). A cross-package
 contract change, which is a risk trigger: the full review wave runs on this pull request anyway.
@@ -1048,7 +1056,7 @@ contract change, which is a risk trigger: the full review wave runs on this pull
 #### 8f. The start runs the check, and the recovery page explains it
 
 **Files:** `apps/server/src/boot.ts` (after `makeFiscalBackend`, `:2084`, when `!fencedOrMirror`
-(`:1989`): `await nodeBackend.checkFilingIdentity?.(db, config.node.nodeId)`);
+(`:1989`): `nodeBackend.checkFilingIdentity` inside one `withTransaction` that only reads, with the node's id);
 `apps/server/src/i18n/recovery-page.ts` (the code's words); a new
 `apps/server/src/boot.producer-change.test.ts`; `recovery-surface.test.ts`.
 
@@ -1091,12 +1099,33 @@ three secrets, builds with `load: true` and pushes only after the in-image compa
 `deploy/README.md` (two sentences for someone building their own: pass the three build arguments; a
 fork's publish job needs its own three secrets).
 
-The publish job, in order: (1) fail if any secret is empty, printing lengths; (2) read `:main`'s tax
-number from the registry and fail on a difference unless `vars.WAITRON_PRODUCER_CHANGE_ALLOWED ==
-'yes'`; (3) build the app image with `load: true`; (4) compare each of the three values inside it
-with its secret in the shell, without printing either; (5) push the `sha-…` tag, then move `:main`
-(and the release tag) as today. Every network step keeps the workflow's existing bounded-retry
-shape (CLAUDE.md §2).
+The publish job, in order:
+
+1. Fail if any secret is empty, printing lengths only.
+2. Compare the new tax number with `:main`'s. `scripts/main-tag-guard.sh` already reads `:main`'s
+   environment off the registry (`docker buildx imagetools inspect "$IMAGE" --format
+   '{{range .Image.Config.Env}}{{println .}}{{end}}'`, `:56-57`); the guard reuses that one read
+   (the script hands back the line, or the step that calls it does the reading once for both)
+   rather than adding a second. A difference fails the job unless the repository variable
+   `WAITRON_PRODUCER_CHANGE_ALLOWED` holds **the new tax number itself** (public), so it lets
+   exactly one change through and a value left set allows nothing further. Whether a re-run of a
+   failed job reads a variable set after its first attempt is unverified; the step says "set the
+   variable, then push again" if a re-run does not. That read runs under an outer `timeout` and
+   fails the job on an error or a timeout. Today's registry read and the two build-and-push steps
+   (`ci.yml:4054`, `:4068`) have no timeout or retry of their own beyond the job's
+   `timeout-minutes: 10`; CLAUDE.md §2's bounded-step rules name checkout, node and pnpm setup,
+   apt-get and artifacts, not registry steps.
+3. Build the app image with `load: true`, tagged locally. Loading works because the job builds one
+   platform, `linux/amd64` (`ci.yml:4059`; the reason is the comment at `:4042`); a second
+   platform would need this rechecked.
+4. Compare each of the three values inside the loaded image with its secret in the shell, without
+   printing either.
+5. Push with a second `build-push-action` step given the same inputs and `push: true`, served from
+   the builder's cache, with the tags as today: `sha-…`, plus `:main` when `main-tag-guard.sh`
+   answers `move`, in one `tags:` list (`ci.yml:4061`). Rebuilt from cache, the pushed image is not
+   byte-for-byte the compared one, but it is built from the same build arguments. `docker push` of
+   the loaded image is not used: I believe, not run, that it would drop the provenance attestation
+   the published index carries (`main-tag-guard.sh:48`).
 
 - [ ] **Step 1: failing guard cases** in the two script tests; run
   `pnpm exec vitest run scripts/deploy-image-env.test.ts scripts/ci-workflow.test.mjs` — FAIL.
@@ -1110,8 +1139,10 @@ shape (CLAUDE.md §2).
   prints the made-up address whole; remove the image you built, by its tag.
 - [ ] **Step 4: commit** — `deploy: the release image carries its producer's settings from repository secrets`.
 - [ ] **Step 5: the one real-fork test — only once the owner has set the secrets.** If they are not
-  set, stop here and hand back to the driver; the steps above do not depend on it. Fork the
-  repository to a scratch account or organisation and push, to a scratch branch there, a one-step
+  set (`gh secret list` showed none on 2026-11-06), stop here and hand back to the driver; the
+  steps above do not depend on it. Fork the repository to a scratch account or organisation and
+  enable Actions on the fork first (I believe they are off on a new fork until its owner turns them
+  on; not checked), then push, to a scratch branch there, a one-step
   workflow triggered by `push` that prints `${#WAITRON_PRODUCER_TAX_ID}` from
   `secrets.WAITRON_PRODUCER_TAX_ID`: expect `0`. The control: the same workflow pushed to a scratch
   branch of the official repository: expect the real length. A `push` trigger, not
