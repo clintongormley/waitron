@@ -3206,6 +3206,83 @@ still passed all 59 cases. Reading that key explicitly made both lost-answer cas
 test does not check that assignment path.
 
 
+## The protection list
+
+A1308 changes most of the tables, and every slice of it has to answer one question: did the change
+drop or alter a protection the database used to enforce, such as a CHECK, a trigger, a foreign key
+or a unique index? Reading the diff does not answer it, so slice 0 built a tool that does. It lives
+in `apps/server/scripts/protection-list/` and runs from `apps/server`. It does not run in CI: only
+its unit tests do, in `apps/server`'s suite.
+
+It refuses a relative path, because `pnpm --filter … exec` runs a command from the package's
+folder, not yours.
+
+### What the schema enforces
+
+`pnpm protection-list list --out <empty absolute dir>` builds a database from the migrations and
+lists every protection in it. It builds two compositions: every module with Veri\*Factu as the
+module (`fiscal-verifactu`), and every module with `fiscal-none` in the fiscal slot instead.
+Each is built three ways, called phases:
+
+- `sql-only` runs each set's migration SQL files on a plain connection, so it shows what the SQL
+  alone declares;
+- `migrated` runs the product's own `applyMigrations`, which adds the triggers its installers make;
+- `change-feed` then runs `installChangeFeed`, as the server does at every start.
+
+Each phase gives a `venue.db` entry and a `node.db` entry. The command writes
+`protection-list.json` (16 MB), `summary.txt` and the databases under `databases/`, and it refuses an
+`--out` that already holds anything. `--migration-root <absolute dir>` reads packaged migration
+folders instead of the source tree.
+
+The summary counts each kind of protection, first in total and then by the migration set that made
+it. This is the start of what it printed on 2026-11-06 at `c320f94bf9`:
+
+```text
+composition=fiscal-verifactu phase=sql-only database=venue
+  total: 240 tables, 0 views, 301 explicit indexes, 226 implicit indexes, 472 CHECKs, 418 foreign keys, 42 triggers
+  core: 95 tables, 0 views, 123 explicit indexes, 90 implicit indexes, 183 CHECKs, 173 foreign keys, 27 triggers
+  handover: 1 tables, 0 views, 1 explicit indexes, 1 implicit indexes, 1 CHECKs, 2 foreign keys, 0 triggers
+  ...
+```
+
+Each entry ends with a `journal rows:` line, which counts each set's migration journal rows. Journal
+tables are not counted as tables.
+
+`pnpm protection-list compare --old <dir> --new <dir> --report <absolute file>` compares two lists
+and writes what it prints to the report file. Two builds of the same commit print `EQUAL` and exit 0.
+A difference prints one `DIFF` header for each composition, phase and database it affects, then one
+line for each object. With `working_orders_enforce_transition` taken out of the new list, it printed
+this and exited 1:
+
+```text
+DIFF composition=fiscal-none phase=change-feed database=venue
+missing trigger working_orders_enforce_transition
+DIFF composition=fiscal-none phase=migrated database=venue
+missing trigger working_orders_enforce_transition
+...
+```
+
+An object that only the new list holds is `extra`. An object with the same name but a different body
+is `changed`, followed by `old:` and `new:` lines. Whitespace between SQL tokens does not count as a
+change.
+
+A command it refuses, such as a relative path, exits 2 when you run it through `pnpm protection-list`
+or `tsx`. Through `pnpm -s` (pnpm 9.15.0) the same refusal exited 1, the status a difference also
+gives. So when a script reads the exit status, don't pass `-s`, or read the printed report too.
+
+### How a slice uses it
+
+1. Before the change, on the base commit, run `protection-list list`.
+2. After the change, run `protection-list list` again and compare it with the base list. It should
+   print `EQUAL`, or exactly the differences the slice means to make.
+
+### What it does not tell you
+
+- **It reads what a freshly built database holds, not what the code does.** A rule that only
+  TypeScript enforces is not on it, and neither is a protection that an upgraded database holds but
+  a new build does not.
+
+
 ## Root receipt excerpts moved on 2026-10-23
 
 These passages retain the root instruction receipts moved by A1026. They are excerpts

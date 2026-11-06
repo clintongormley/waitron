@@ -1078,9 +1078,10 @@ product failures.
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written. The owner has
-  reviewed every file and answered every question (2026-11-04), and approved it the same day. It runs
-  first: [slice 0](../superpowers/plans/2026-11-04-a1308-slice-0-bench.md) (the bench and the
-  protection list), then [A760](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md).
+  reviewed every file and answered every question (2026-11-04), and approved it the same day.
+  [Slice 0](../superpowers/plans/2026-11-04-a1308-slice-0-bench.md)'s protection list is built; [the testing guide](../developers/testing-guide.md#the-protection-list)
+  says how each slice uses it. Its bench is still to land, in slice 0's second pull request. Next is
+  [A760](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md).
   **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. There is one job runner. 111 product
