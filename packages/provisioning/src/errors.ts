@@ -8,6 +8,7 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "setup.configuration_outdated": Record<string, never>;
+    "setup.configuration_newer": Record<string, never>;
     "recovery.passphrase_invalid": Record<string, never>;
     "backup.artifact_invalid": { reason: string };
     "backup.archive_invalid": { reason: string };

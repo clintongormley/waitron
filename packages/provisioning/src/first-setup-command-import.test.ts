@@ -288,25 +288,25 @@ it.each([
       bundle.venue.country = "GB";
       bundle.venue.timeZone = "Europe/London";
     },
-    "configurationImport",
+    { code: "setup.request_invalid", params: { field: "configurationImport" } },
   ],
   [
     "taxpayer",
     (bundle: ConfigurationBundle) => {
       bundle.venue.taxId = "B12345674";
     },
-    "configurationImport",
+    { code: "setup.request_invalid", params: { field: "configurationImport" } },
   ],
   [
     "schema version",
     (bundle: ConfigurationBundle) => {
       bundle.modules.core = bundle.modules.core! - 1;
     },
-    "module:core",
+    { code: "setup.configuration_outdated", params: {} },
   ],
 ] as const)(
   "command refuses retained %s mismatch before stamping",
-  async (_label, change, field) => {
+  async (_label, change, refusal) => {
     const f = await fixture(false, change);
     await expect(
       completeFirstSetupCommand(
@@ -315,7 +315,7 @@ it.each([
         f.owner,
         f.deployment,
       ),
-    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field } });
+    ).rejects.toMatchObject(refusal);
     expect(await readDeploymentEnvironment(target.db)).toBeNull();
     expect((await target.db.execute("select count(*) as n from tenants")).rows).toEqual([{ n: 0 }]);
   },

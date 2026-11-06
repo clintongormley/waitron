@@ -3166,17 +3166,17 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "This export is not compatible with this Waitron version. Export it again from a box running the current version, then load the new export.",
+      "This export and this box do not use the same parts of Waitron, so the export cannot be loaded here.",
     ],
     [
       "es-ES",
-      "Esta exportación no es compatible con esta versión de Waitron. Vuelve a exportar desde un equipo con la versión actual y carga la nueva exportación.",
+      "Esta exportación y este equipo no usan las mismas partes de Waitron, así que la exportación no se puede cargar aquí.",
     ],
   ] as const)(
     "explains how to replace an incompatible configuration export (%s)",
     async (locale, sentence) => {
       try {
-        for (const field of ["version", "module:core", "modules"]) {
+        for (const field of ["module:core", "modules"]) {
           const el = await mountSetupApp(
             stubApi({
               stageConfiguration: vi.fn().mockRejectedValue({
@@ -3204,6 +3204,35 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       }
     },
   );
+
+  it.each([
+    [
+      "en-GB",
+      "This export was made by newer Waitron software than this box has. Update this box, then load the export again.",
+    ],
+    [
+      "es-ES",
+      "Esta exportación la hizo una versión de Waitron más nueva que la de este equipo. Actualiza este equipo y vuelve a cargar la exportación.",
+    ],
+  ] as const)("explains an export from newer software (%s)", async (locale, sentence) => {
+    try {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi
+            .fn()
+            .mockRejectedValue({ code: "setup.configuration_newer", params: {}, status: 400 }),
+        }),
+      );
+      setLocale(locale);
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+      expect(readDraft(el).configurationImport).toBeUndefined();
+      expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
+    } finally {
+      setLocale("en-GB");
+    }
+  });
 
   it.each([
     [

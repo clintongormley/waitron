@@ -139,8 +139,10 @@ export const shellEn = {
 
   "shell.configuration.outdated":
     "This configuration export is from an older format. Export it again from a current box.",
+  "shell.configuration.newer":
+    "This export was made by newer Waitron software than this box has. Update this box, then load the export again.",
   "shell.configuration.incompatible_version":
-    "This export is not compatible with this Waitron version. Export it again from a box running the current version, then load the new export.",
+    "This export and this box do not use the same parts of Waitron, so the export cannot be loaded here.",
   "shell.configuration.could_not_open":
     "The configuration export could not be opened. Check the file and passphrase.",
   "shell.configuration.category_name_taken":
@@ -304,8 +306,10 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
 
   "shell.configuration.outdated":
     "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un equipo actualizado.",
+  "shell.configuration.newer":
+    "Esta exportación la hizo una versión de Waitron más nueva que la de este equipo. Actualiza este equipo y vuelve a cargar la exportación.",
   "shell.configuration.incompatible_version":
-    "Esta exportación no es compatible con esta versión de Waitron. Vuelve a exportar desde un equipo con la versión actual y carga la nueva exportación.",
+    "Esta exportación y este equipo no usan las mismas partes de Waitron, así que la exportación no se puede cargar aquí.",
   "shell.configuration.could_not_open":
     "No se ha podido abrir la exportación de configuración. Revisa el archivo y la contraseña de exportación.",
   "shell.configuration.category_name_taken":

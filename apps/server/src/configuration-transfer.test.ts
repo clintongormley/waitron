@@ -3496,10 +3496,7 @@ describe("a department's late-send manager setting in a configuration transfer",
       },
     };
     expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: "module:venue-service" },
-      }),
+      expect.objectContaining({ code: "setup.configuration_outdated", params: {} }),
     );
   });
 });
@@ -6159,10 +6156,7 @@ describe("special days in a configuration transfer", () => {
       modules: { ...transferred.modules, "venue-service": versions["venue-service"]! - 1 },
     };
     expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: "module:venue-service" },
-      }),
+      expect.objectContaining({ code: "setup.configuration_outdated", params: {} }),
     );
   });
 });
@@ -6452,10 +6446,7 @@ describe("public holidays in a configuration transfer", () => {
       modules: { ...transferred.modules, "venue-service": holidayMigration },
     };
     expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: "module:venue-service" },
-      }),
+      expect.objectContaining({ code: "setup.configuration_outdated", params: {} }),
     );
   });
 });
