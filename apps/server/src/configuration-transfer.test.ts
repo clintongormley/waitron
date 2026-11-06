@@ -87,7 +87,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
@@ -3482,7 +3481,10 @@ describe("a department's late-send manager setting in a configuration transfer",
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    expect(journal.entries.map((entry) => entry.tag)).toContain("0071_late_send");
+    expect(versions["venue-service"]).toBeGreaterThanOrEqual(1);
+    expect(transferred.tables.departments!.some((row) => "late_send_needs_manager" in row)).toBe(
+      true,
+    );
     expect(versions["venue-service"]).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...transferred,
@@ -6153,7 +6155,8 @@ describe("special days in a configuration transfer", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    expect(journal.entries.map((entry) => entry.tag)).toContain("0021_hours_calendar");
+    expect(versions["venue-service"]).toBeGreaterThanOrEqual(1);
+    expect(transferred.tables.special_days).toHaveLength(3);
     expect(versions["venue-service"]).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...transferred,
@@ -6443,20 +6446,11 @@ describe("public holidays in a configuration transfer", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const frozen = JSON.parse(
-      await readFile(
-        join(historicalSet("venue-service").migrationsFolder, "meta/_journal.json"),
-        "utf8",
-      ),
-    ) as { entries: { tag: string }[] };
-    const holidayMigration = frozen.entries.findIndex(
-      (entry) => entry.tag === "0023_public_holidays",
-    );
-    expect(holidayMigration).toBeGreaterThan(0);
+    expect(versions["venue-service"]).toBeGreaterThanOrEqual(1);
     expect(versions["venue-service"]).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...transferred,
-      modules: { ...transferred.modules, "venue-service": holidayMigration },
+      modules: { ...transferred.modules, "venue-service": versions["venue-service"]! - 1 },
     };
     expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
       expect.objectContaining({

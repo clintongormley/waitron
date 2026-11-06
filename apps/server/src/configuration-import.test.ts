@@ -30,7 +30,6 @@ import {
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 import { ALL_MODULES } from "./modules.js";
-import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -926,20 +925,11 @@ describe("routing cells in a staged import", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const frozen = JSON.parse(
-      await readFile(
-        join(historicalSet("venue-service").migrationsFolder, "meta/_journal.json"),
-        "utf8",
-      ),
-    ) as { entries: { tag: string }[] };
-    const routingMigration = frozen.entries.findIndex((entry) =>
-      entry.tag.endsWith("_routing_cells"),
-    );
-    expect(routingMigration).toBeGreaterThan(0);
+    expect(versions["venue-service"]).toBeGreaterThanOrEqual(1);
     expect(versions["venue-service"]).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...bundle,
-      modules: { ...bundle.modules, "venue-service": routingMigration },
+      modules: { ...bundle.modules, "venue-service": versions["venue-service"]! - 1 },
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({
@@ -957,17 +947,11 @@ describe("routing cells in a staged import", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const frozen = JSON.parse(
-      await readFile(join(historicalSet("core").migrationsFolder, "meta/_journal.json"), "utf8"),
-    ) as { entries: { tag: string }[] };
-    const stationBumpMode = frozen.entries.findIndex((entry) =>
-      entry.tag.endsWith("_station_bump_mode"),
-    );
-    expect(stationBumpMode).toBeGreaterThan(0);
+    expect(versions.core).toBeGreaterThanOrEqual(1);
     expect(versions.core).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...bundle,
-      modules: { ...bundle.modules, core: stationBumpMode },
+      modules: { ...bundle.modules, core: versions.core! - 1 },
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({

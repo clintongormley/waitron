@@ -4,13 +4,20 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { signPointer, writePointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { locations, nodes, nowIso, stampDeployment, openVenueDatabase } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  nodes,
+  nowIso,
+  stampDeployment,
+  openVenueDatabase,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations } from "@waitron/migrations";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
@@ -18,39 +25,18 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
-import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
-import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
+import { migrationsRootWith } from "./testing/migrations-ahead.js";
 
-const core = historicalSet("core");
-
-const prefix = mkdtempSync(join(tmpdir(), "preview-old-schema-"));
-mkdirSync(join(prefix, "meta"));
+// The backup's venue is today's core schema; the preview runs code one core step ahead of it.
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const journal = JSON.parse(
-  readFileSync(join(core.migrationsFolder, "meta/_journal.json"), "utf8"),
+  readFileSync(join(CORE_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as {
   entries: { tag: string }[];
 };
-const allTags = journal.entries.map((entry) => entry.tag);
-journal.entries = journal.entries.slice(
-  0,
-  journal.entries.findIndex((entry) => entry.tag.startsWith("0151_")),
-);
-for (const entry of journal.entries)
-  copyFileSync(join(core.migrationsFolder, `${entry.tag}.sql`), join(prefix, `${entry.tag}.sql`));
-writeFileSync(join(prefix, "meta/_journal.json"), JSON.stringify(journal));
-const suite = useVenueDb({
-  migrations: [
-    {
-      ...core,
-      migrationsFolder: prefix,
-      appendOnlyTables: predecessorAppendOnly(
-        core.appendOnlyTables,
-        core.migrationsFolder,
-        allTags.slice(0, journal.entries.length),
-        allTags.slice(journal.entries.length),
-      ),
-    },
-  ],
+const prefix = mkdtempSync(join(tmpdir(), "preview-old-schema-"));
+const codeRoot = migrationsRootWith(prefix, {
+  core: [{ tag: "9999_one_step_ahead", sql: "CREATE TABLE `one_step_ahead` (`id` integer);" }],
 });
 afterAll(() => rmSync(prefix, { recursive: true, force: true }));
 
@@ -122,7 +108,7 @@ it("previews a backup with an older venue schema by migrating only its private s
       environment: "preproduction",
       stateDir: scratch,
       stagingDir: scratch,
-      migrationsRoot: null,
+      migrationsRoot: codeRoot,
       modules: [
         {
           ...fakeModule("core"),
@@ -229,7 +215,7 @@ it("binds a bucket copy with an older venue schema before private preview migrat
       },
       stateDir: scratch,
       stagingDir: scratch,
-      migrationsRoot: null,
+      migrationsRoot: codeRoot,
       modules: [
         {
           ...fakeModule("core"),
