@@ -17,7 +17,7 @@ import type {
   AllergyPatch,
   PartyAllergyRead,
 } from "@waitron/module";
-import { ALLERGEN_CODES, allergenKinds, type Kind } from "@waitron/catalogue/src/allergens.js";
+import { ALLERGEN_CODES, allergenKinds, type Kind } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";

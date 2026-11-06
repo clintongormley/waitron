@@ -4,6 +4,7 @@ import {
   customerPresentationText,
   joinCustomerPresentationText,
   kitchenPresentationName,
+  nonBlankTranslations,
   type ProductPresentation,
 } from "./product-presentation.js";
 
@@ -150,5 +151,19 @@ describe("kitchenPresentationName", () => {
     const plain = { ...full, variantName: null, variantKitchenName: null };
     expect(kitchenPresentationName(plain)).toBe("COF");
     expect(kitchenPresentationName({ ...plain, kitchenName: " " })).toBe("Coffee");
+  });
+});
+
+describe("nonBlankTranslations", () => {
+  test("folds a missing map, or one with only blank text, to null", () => {
+    expect(nonBlankTranslations(null)).toBeNull();
+    expect(nonBlankTranslations(undefined)).toBeNull();
+    expect(nonBlankTranslations({})).toBeNull();
+    expect(nonBlankTranslations({ es: " ", en: "" })).toBeNull();
+  });
+
+  test("keeps a map holding any non-blank text, blanks included", () => {
+    const map = { es: " ", en: "Bread" };
+    expect(nonBlankTranslations(map)).toBe(map);
   });
 });

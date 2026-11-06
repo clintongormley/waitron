@@ -2,31 +2,18 @@ import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
-import { effectiveColor } from "./color-inheritance.js";
 import { readCatalogueSettings } from "./settings.js";
 import { includedMenus } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
-import type { CombinedOffer, MenuClash, ValueSource } from "./menu-combine-types.js";
-import { listMenuOffers } from "./operations.js";
-import { effectiveDefaultLabelId } from "./option-default.js";
-import { homeDisplaysOf } from "./menu-home.js";
-import {
-  FOLLOWING_FOLDER,
-  fixedNameLanguages,
-  folderPresentation,
-} from "./include-folder-presentation.js";
-import { menuDetails } from "./schema/menu.js";
-import { optionLabels } from "./schema/options.js";
-import { sections } from "./schema/sections.js";
-import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
-import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
-import type { MenuOffer } from "./menu-types.js";
-import type { TileRef } from "./section-types.js";
-import { HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "./device-home.js";
 import type {
+  CombinedOffer,
+  MenuClash,
+  ValueSource,
+  MenuOffer,
+  TileRef,
   DocumentMember,
   DocumentTile,
   FrozenOffer,
@@ -40,10 +27,63 @@ import type {
   MenuUnavailable,
   ProductChangeField,
   SectionChangeField,
-} from "./menu-document-types.js";
+} from "@waitron/shared";
+import { listMenuOffers } from "./operations.js";
+import { effectiveDefaultLabelId } from "./option-default.js";
+import { homeDisplaysOf } from "./menu-home.js";
+import {
+  FOLLOWING_FOLDER,
+  fixedNameLanguages,
+  folderPresentation,
+} from "./include-folder-presentation.js";
+import { menuDetails } from "./schema/menu.js";
+import { optionLabels } from "./schema/options.js";
+import { sections } from "./schema/sections.js";
+import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
+import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
 
-export type * from "./menu-document-types.js";
+export type {
+  OverlayOfferField,
+  FrozenExtraItem,
+  FrozenOptionLabel,
+  FrozenOfferedModifier,
+  FrozenOfferVariant,
+  FrozenOffer,
+  DocumentMember,
+  DocumentList,
+  DocumentTile,
+  HomeDevice,
+  HomeTileMode,
+  HomeOrder,
+  HomeDisplay,
+  DeviceHome,
+  MenuDocument,
+  LiveExtraItem,
+  LiveOptionsList,
+  LiveOfferedModifier,
+  LiveOffer,
+  MenuField,
+  MenuTarget,
+  MenuOccurrence,
+  MenuChangeSource,
+  MenuChangeBody,
+  MenuChange,
+  ProductChangeField,
+  SectionChangeField,
+  MenuStatus,
+  MenuPreview,
+  PublishedMenuVersion,
+  OvertakenEdition,
+  QueuedEdition,
+  MenuEdition,
+  MenuPublications,
+  LocalTime,
+  MenuPublicationsAnswer,
+  MenuUnavailable,
+  ServedMenu,
+  MenuState,
+} from "@waitron/shared";
 
 export const MENU_DOCUMENT_FORMAT = 3;
 

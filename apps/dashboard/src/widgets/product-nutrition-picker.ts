@@ -7,9 +7,10 @@ import {
   CEREAL_KINDS,
   NUT_KINDS,
   type Kind,
-} from "@waitron/catalogue/src/allergens.js";
-import { DIETARY_LABELS, type DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
-import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
+  DIETARY_LABELS,
+  type DietaryLabel,
+} from "@waitron/shared";
+import type { InheritedValues } from "@waitron/shared";
 import { allergenName, allergenKindName } from "../i18n/domain.js";
 import { fill, t } from "../i18n/t.js";
 import {

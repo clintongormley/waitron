@@ -6,6 +6,13 @@ import {
 } from "./dietary-declarations.js";
 
 describe("direct dietary declarations", () => {
+  it("accepts a list of supported labels and returns a copy of it", () => {
+    const labels = ["vegan", "halal"];
+    const out = validateDietaryDeclarations(labels);
+    expect(out).toEqual(["vegan", "halal"]);
+    expect(out).not.toBe(labels);
+  });
+
   it("infers vegetarian/no meat/no fish from vegan without inferring halal or kosher", () => {
     expect(expandDietaryDeclarations(["vegan"])).toEqual([
       "vegan",

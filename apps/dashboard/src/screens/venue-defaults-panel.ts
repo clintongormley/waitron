@@ -13,12 +13,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import {
-  VAT_CLASSES,
-  vatRateOn,
-  localToday,
-  type VatClass,
-} from "@waitron/catalogue/src/vat-rates.js";
+import { VAT_CLASSES, vatRateOn, localToday, type VatClass } from "@waitron/shared";
 import { QueryController } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDefaults } from "../api/client.js";
 import { dashboardQuery } from "../api/live-queries.js";

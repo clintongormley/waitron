@@ -15,7 +15,7 @@ import type { BackupManifest } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
-const NODE_SET = ALL_MODULES.find((module) => module.name === "node")!.migrations;
+const NODE_SET = ALL_MODULES.find((module) => module.name === "node")!.migrations!;
 const suite = useVenueDb({
   migrations: migrationOptionsFor([{ ...NODE_SET, appendOnlyTables: [] }], null),
 });

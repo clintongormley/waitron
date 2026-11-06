@@ -23,7 +23,7 @@ import * as productModifiers from "./product-modifiers.js";
 import * as optionsModule from "./options.js";
 import { seedVenueWithSeries } from "../test/fixtures.js";
 import { EACH_UNIT } from "./units.js";
-import type { OfferedExtraItem } from "./menu-types.js";
+import type { OfferedExtraItem } from "@waitron/shared";
 
 expectTypeOf<OfferedExtraItem["portion"]>().toEqualTypeOf<string>();
 expectTypeOf<OfferedExtraItem["unit"]>().toEqualTypeOf<{

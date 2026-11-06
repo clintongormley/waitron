@@ -502,7 +502,7 @@ emptied keeps `wt-button`'s disabled fade instead. Reach for the filled-backgrou
 never as a shortcut around a `--wt-color-*` token.
 
 **A menu's Device Home Page, on the till and in the dashboard's preview.** Both draw it from one
-set of rules (`packages/catalogue/src/device-home.ts`): the till in its menu browser
+set of rules (`packages/shared/src/menu-document/device-home.ts`): the till in its menu browser
 (`apps/till/src/widgets/menu-browser.ts`) and the dashboard in a menu's Home page tab
 (`apps/dashboard/src/widgets/device-home-preview.ts`). Under search come two blocks, the shortcuts
 and the menu's own structure, in the order the menu sets for that kind of device. The first block

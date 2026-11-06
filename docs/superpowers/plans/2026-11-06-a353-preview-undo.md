@@ -96,6 +96,11 @@ relative `from "…"`, type imports included (`scripts/dashboard-browser-purity.
 so Task 1.3 adds the file to that guard's `SUBPATHS` list (a single `.ts` entry is allowed:
 `:18-22,33-43`). The shell walk above predicts the entry passes.
 
+> 2026-11-06 (A760 PR 1): these three type files moved to `packages/shared/src/menu-document/`,
+> and `menu-undo.ts` now takes them with `import type … from "@waitron/shared"`; PRs 2–5 do the
+> same. The purity check does not follow that import, so its `SUBPATHS` entry now reads
+> `menu-undo.ts` alone, and the check's `LEAVES` list holds the three files type-only.
+
 ### Decision 3 — drafts: Undo stages nothing, and nothing staged can be behind it
 
 Every staged draft reachable from the menu editor lives in a modal: the menu and section forms

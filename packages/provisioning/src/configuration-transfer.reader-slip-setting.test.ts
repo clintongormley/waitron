@@ -40,7 +40,7 @@ it("keeps hardware readers and their slip settings outside configuration bundles
   const versions = {
     payments: await appliedSchemaVersion(
       { venue: suite.db, node: suite.node },
-      payments.migrations,
+      payments.migrations!,
     ),
   };
   await suite.db.execute(

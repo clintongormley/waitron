@@ -2,14 +2,14 @@ export type LocalizedText = Record<string, string>;
 import { decimal, MONEY_SCALE, toScale } from "@waitron/shared";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
-import type { DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
-export type { DietaryLabel };
 import type {
+  DietaryLabel,
   InheritedValues,
   ProductEditorBody,
   ProductModifierRef,
   ProductVariantInput,
-} from "@waitron/catalogue/src/product-types.js";
+} from "@waitron/shared";
+export type { DietaryLabel };
 
 /** A new variant omits `id`; an edited one carries it. */
 export type EditorVariant = ProductVariantInput;

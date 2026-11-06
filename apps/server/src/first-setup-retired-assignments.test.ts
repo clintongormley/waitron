@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { initialSetupFor, withOperationAuthority } from "@waitron/module";
+import { initialSetupFor, modulesWithSets, withOperationAuthority } from "@waitron/module";
 import { readStartAgainMarker, type FirstSetupState } from "@waitron/provisioning";
 import {
   decodeMinuteIdentity,
@@ -289,7 +289,7 @@ async function fixture(
       ? createFirstSetupResolutionInspection({
           ...anchor,
           store: oldHost.store,
-          expectedMigrationSets: modules.map((module) => module.migrations.name),
+          expectedMigrationSets: modulesWithSets(modules).map((module) => module.migrations.name),
           publicEvidencePaths: [outsidePath],
         })
       : oldHost.resolution,

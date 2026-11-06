@@ -101,19 +101,26 @@ export function buildBackupVerificationTarget(input: {
   runtime: { release: string; revision: string; fingerprint: string };
 }): BackupVerificationTarget {
   const inventory = backupVerificationInventory(input.modules);
+  const sets = new Set(inventory.map(({ module }) => module.name));
   try {
     const modules = inventory
-      .map(({ module, verification }) => {
+      .map(({ module, hosted, verification }) => {
         if (module.name !== module.migrations.name) unsupported();
         const folder = migrationOptionsFor(
           [{ ...module.migrations, appendOnlyTables: [] }],
           input.migrationsRoot,
         )[0]!.migrationsFolder;
         const migrations = migrationBytes(folder);
-        const requires: Record<string, string> = { ...module.requires?.modules };
-        if (module.requires?.core !== undefined) {
-          if (requires.core !== undefined && requires.core !== module.requires.core) unsupported();
-          requires.core = module.requires.core;
+        const requires: Record<string, string> = {};
+        for (const part of [module, ...hosted]) {
+          for (const [name, range] of [
+            ...Object.entries(part.requires?.modules ?? {}),
+            ...(part.requires?.core === undefined ? [] : [["core", part.requires.core] as const]),
+          ]) {
+            if (name === module.name || !sets.has(name)) continue;
+            if (requires[name] !== undefined && requires[name] !== range) unsupported();
+            requires[name] = range;
+          }
         }
         return {
           name: module.name,

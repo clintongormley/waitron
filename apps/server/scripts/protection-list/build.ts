@@ -5,15 +5,20 @@ import { ALL_MODULES } from "@waitron/composition";
 import { installChangeFeed, openVenueDatabase } from "@waitron/db";
 import {
   applyMigrations,
+  manifestSets,
   migrationOptionsFor,
+  type MigrationSet,
   type VenueMigrationOptions,
 } from "@waitron/migrations";
-import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
+import { modulesWithSets, orderedMigrationSets, type WaitronModule } from "@waitron/module";
 import type { SchemaListEntry, SchemaListFile } from "./compare.js";
 import { readSchema } from "./read-schema.js";
 
 export const COMPOSITIONS = ["fiscal-verifactu", "fiscal-none"] as const;
 export const PHASES = ["sql-only", "migrated", "change-feed"] as const;
+/** Where the set list comes from: the module descriptors, or `migrations.manifest.json`. */
+export const PATHS = ["descriptor", "manifest"] as const;
+export type SetPath = (typeof PATHS)[number];
 const DATABASES = ["venue", "node"] as const;
 type DatabaseName = (typeof DATABASES)[number];
 
@@ -56,9 +61,19 @@ function modulesFor(composition: string): WaitronModule[] {
   return ALL_MODULES.filter((module) => module.fiscal === undefined || module.name === composition);
 }
 
+/** The manifest's sets, in its order, less those of the fiscal modules the composition leaves out. */
+function manifestSetsFor(composition: string): MigrationSet[] {
+  const otherFiscal = new Set(
+    modulesWithSets(
+      ALL_MODULES.filter((module) => module.fiscal !== undefined && module.name !== composition),
+    ).map((module) => module.migrations.name),
+  );
+  return manifestSets().filter((set) => !otherFiscal.has(set.name));
+}
+
 function planFor(
   composition: string,
-  sets: ReturnType<typeof orderedMigrationSets>,
+  sets: readonly MigrationSet[],
   options: readonly VenueMigrationOptions[],
 ): SetPlan[] {
   if (sets.length === 0) throw new Error(`No migration sets for ${composition}`);
@@ -80,7 +95,7 @@ function planFor(
   });
 }
 
-function objectKeys(db: DatabaseSync): string[] {
+export function objectKeys(db: DatabaseSync): string[] {
   return (
     db
       .prepare(
@@ -256,11 +271,13 @@ function ownersFor(
 export async function buildSchemaListFile(options: {
   migrationRoot: string | null;
   workDir: string;
+  path?: SetPath;
 }): Promise<BuiltSchemaListFile> {
   const entries: BuiltSchemaListEntry[] = [];
   for (const composition of COMPOSITIONS) {
     const modules = modulesFor(composition);
-    const sets = orderedMigrationSets(modules);
+    const sets =
+      options.path === "manifest" ? manifestSetsFor(composition) : orderedMigrationSets(modules);
     const migrationOptions = migrationOptionsFor(sets, options.migrationRoot);
     const plan = planFor(composition, sets, migrationOptions);
     const common = {

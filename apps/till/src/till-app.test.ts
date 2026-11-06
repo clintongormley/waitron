@@ -15,7 +15,7 @@ import { type WtInput, type WtCombobox, applyTokens, currentContentLanguages } f
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
@@ -81,7 +81,6 @@ import type {
 } from "./api/client.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import type {
   RefundableTender,
   TenderRefundRequest,

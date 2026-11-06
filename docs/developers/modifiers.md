@@ -20,11 +20,10 @@ list — never both (`product_modifiers_one_reference_ck`,
 staff `name`, translated `customerName`, plain `kitchenName` — follow the product convention, and
 which surface reads which is in [products.md](products.md).
 
-The wire shapes are declared once, in `packages/catalogue/src/modifier-list-types.ts`: `OptionList`,
+The wire shapes are declared once, in `packages/shared/src/menu-document/modifier-list-types.ts`: `OptionList`,
 `OptionLabel`, `ExtraList`, `ExtraListItem`, their `…Input` twins, the two `…Row` shapes
 (`OptionListRow`, `ExtraListRow`) and the two `…Dependants` shapes.
-That file is types only and imports nothing, so a browser client can import the same copy the server
-answers with. `scripts/dashboard-browser-purity.test.ts` is what keeps it that way, and it reads the
+That file is types only and imports nothing. `scripts/dashboard-browser-purity.test.ts` is what keeps it that way, and it reads the
 file as TEXT, so an `import type` line would pass it — that the file imports nothing at all is true
 today and guarded by nothing.
 
@@ -327,7 +326,7 @@ The two sell-side reads — `listAvailableProducts` and `listMenuOffers`
 (`packages/catalogue/src/operations.ts`) — each carry an `offeredModifiers` array: the ordered
 extras and options lists a dish puts in front of a diner, already resolved. It is built by
 `readOfferedModifiers` (`packages/catalogue/src/offered-modifiers.ts`) and the shapes are declared
-beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
+beside the rest of the sell-side wire in `packages/shared/src/menu-document/menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
 `OfferedOptionsList`, `OfferedExtraItem`). The till app reads neither directly: its zone-offer
 routes serve each menu's published version (`listZoneOffers`, `packages/venue-service/src/operations.ts`),
 which `listMenuOffers` built when the menu was published, with each extras item and option label

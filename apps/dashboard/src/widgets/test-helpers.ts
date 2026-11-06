@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -476,9 +476,9 @@ export function combinedFixture(
   ownPrice: string | null = null,
   cataloguePrice = price,
   catalogueVariants: Record<string, string | null> = {},
-): import("@waitron/catalogue/src/menu-combine-types.js").CombinedOffer {
+): import("@waitron/shared").CombinedOffer {
   type Decimal = import("@waitron/shared").Decimal;
-  type Setting<T> = import("@waitron/catalogue/src/menu-combine-types.js").Setting<T>;
+  type Setting<T> = import("@waitron/shared").Setting<T>;
   const decided = <T>(
     value: T,
     kind: "own" | "product" | "parent" = "product",

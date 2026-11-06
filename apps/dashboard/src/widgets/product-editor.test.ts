@@ -25,9 +25,8 @@ import {
 } from "./product-editor.js";
 import type { EditorVariant, ProductEditorDraft, UnitChoice } from "./product-editor-model.js";
 import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
-import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
-import { localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
-import { formatMoney } from "@waitron/shared";
+import type { InheritedValues } from "@waitron/shared";
+import { localToday, vatRateOn, formatMoney } from "@waitron/shared";
 import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";

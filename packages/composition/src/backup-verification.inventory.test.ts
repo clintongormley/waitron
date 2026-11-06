@@ -4,7 +4,11 @@ import { withTransaction } from "@waitron/db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { openBackupQuery } from "@waitron/store";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { BackupVerificationUnsupported, orderedMigrationSets } from "@waitron/module";
+import {
+  BackupVerificationUnsupported,
+  modulesWithSets,
+  orderedMigrationSets,
+} from "@waitron/module";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { ALL_MODULES } from "./modules.js";
 import { backupVerificationInventory } from "./backup-verification.js";
@@ -31,7 +35,7 @@ it("covers the actual composition and every migrated data table, including disab
     declared.push(...verification.data.tables);
   }
   expect(new Set(declared).size).toBe(declared.length);
-  const journals = new Set(ALL_MODULES.map((module) => module.migrations.table));
+  const journals = new Set(modulesWithSets(ALL_MODULES).map((module) => module.migrations.table));
   const actual = [suite.db, suite.node]
     .flatMap((db) =>
       db.all<{ name: string }>(sql`select name from sqlite_schema where type='table'`),

@@ -6,7 +6,7 @@ import {
   rawThousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import type { AdjustmentAction } from "./policy.js";
+import type { AdjustmentAction } from "@waitron/shared";
 import { adjustmentRefunds } from "./schema/refund-links.js";
 
 /** Records how much of a refund paid back each named cancel; writes nothing else. */

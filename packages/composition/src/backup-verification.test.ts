@@ -131,6 +131,20 @@ describe("backup verification inventory", () => {
     unsupported(() => backupVerificationInventory(modules), "target_incompatible");
   });
 
+  it("folds a module with no set of its own into the entry of the set holding its tables", () => {
+    const setless: WaitronModule = {
+      name: "dependent",
+      version: "1.0.0",
+      tier: "toggleable",
+      requires: { core: "*" },
+      tablesIn: "core",
+      backup: { verification: semantics() },
+    };
+    const inventory = backupVerificationInventory([descriptor("core"), setless]);
+    expect(inventory.map((entry) => entry.module.name)).toEqual(["core"]);
+    expect(inventory[0]!.hosted).toEqual([setless]);
+  });
+
   it("checks supported semantics even with a correctly typed declaration", () => {
     const invalid = { ...semantics(), version: 2 } as unknown as BackupVerificationContribution;
     unsupported(
@@ -190,3 +204,67 @@ it.each(["scheduler", "bookings", "fiscal-none", "handover"])(
     expect(item.module.backup?.restore).toBeUndefined();
   },
 );
+
+describe("a set's entry covers every module whose tables it holds", () => {
+  function hostedIn(host: string, module: WaitronModule): WaitronModule {
+    return { ...module, migrations: undefined, tablesIn: host, classification: undefined };
+  }
+  const real = (name: string) => ALL_MODULES.find((m) => m.name === name)!;
+
+  it("gives a hosted module no entry of its own and folds its verification into its host's", () => {
+    const modules = [real("core"), hostedIn("core", real("credentials"))];
+    const inventory = backupVerificationInventory(modules);
+    expect(inventory.map((entry) => entry.module.name)).toEqual(["core"]);
+    expect(inventory[0]!.hosted).toEqual([modules[1]]);
+    const combined = inventory[0]!.verification;
+    const credentials = real("credentials").backup!.verification!;
+    const core = real("core").backup!.verification!;
+    expect([...combined.data.tables].sort()).toEqual(
+      [...core.data.tables, ...credentials.data.tables].sort(),
+    );
+    expect(combined.data.checks).toContain("secret");
+    expect(credentials.data.checks).toContain("secret");
+    expect(new Set(combined.data.checks).size).toBe(combined.data.checks.length);
+  });
+
+  it("names a set's hosted modules in name order", () => {
+    const later = descriptor("zeta", { migrations: undefined, tablesIn: "core" });
+    const earlier = descriptor("alpha", { migrations: undefined, tablesIn: "core" });
+    const middle = descriptor("mid", { migrations: undefined, tablesIn: "core" });
+    const inventory = backupVerificationInventory([descriptor("core"), later, earlier, middle]);
+    expect(inventory[0]!.hosted.map((m) => m.name)).toEqual(["alpha", "mid", "zeta"]);
+  });
+
+  it("is each module's own verification, unchanged, for today's real modules", () => {
+    const inventory = backupVerificationInventory(ALL_MODULES);
+    expect(inventory.map((entry) => entry.module.name)).toEqual(ALL_MODULES.map((m) => m.name));
+    for (const entry of inventory) {
+      expect(entry.hosted).toEqual([]);
+      expect(entry.verification.data).toEqual(entry.module.backup!.verification!.data);
+    }
+  });
+
+  it.each([
+    ["names no host", { tablesIn: undefined }],
+    ["names a module that is not supplied", { tablesIn: "missing" }],
+    ["names a module with no set of its own", { tablesIn: "other" }],
+  ])("refuses a set-less module that %s", (_label, extra) => {
+    const other = descriptor("other", { migrations: undefined, tablesIn: "core" });
+    const setless = descriptor("dependent", { migrations: undefined, ...extra });
+    unsupported(
+      () => backupVerificationInventory([descriptor("core"), other, setless]),
+      "target_incompatible",
+    );
+  });
+
+  it("refuses a hosted module with no verification of its own", () => {
+    unsupported(
+      () =>
+        backupVerificationInventory([
+          descriptor("core"),
+          descriptor("dependent", { migrations: undefined, tablesIn: "core", backup: undefined }),
+        ]),
+      "semantics_missing",
+    );
+  });
+});

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { packageDirOf } from "../packages/module/src/module.js";
+import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
 
 /**
  * Every foreign key and every unique index the product's schema is supposed to have, checked
@@ -876,7 +876,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
 /** Every migration set, applied into one database in the manifest's order, as the product does. */
 function buildSchema() {
   const connection = new DatabaseSync(":memory:");
-  for (const module of ALL_MODULES) {
+  for (const module of modulesWithSets(ALL_MODULES)) {
     const drizzleDir = join(PACKAGES_DIR, packageDirOf(module), "drizzle");
     let entries;
     try {

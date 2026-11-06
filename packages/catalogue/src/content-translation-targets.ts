@@ -1,13 +1,14 @@
 import type { Transaction } from "@waitron/db";
-import { AppError, contentLanguageCode, type ContentLanguages } from "@waitron/shared";
+import {
+  AppError,
+  contentLanguageCode,
+  type ContentLanguages,
+  TRANSLATION_GAP_KINDS as KINDS,
+} from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { contentLanguagesOr } from "./content-languages.js";
-import { TRANSLATION_GAP_KINDS as KINDS } from "./content-translation-kinds.js";
-import type {
-  TranslationGapKind,
-  TranslationGapReason,
-} from "./content-translation-report-types.js";
+import type { TranslationGapKind, TranslationGapReason } from "@waitron/shared";
 import type { TranslationOwners, TranslationRef } from "./content-translation-types.js";
 import {
   namedRows,

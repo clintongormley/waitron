@@ -1,10 +1,10 @@
 import type { AllergenDeclaration } from "../api/client.js";
-import { validateAllergens } from "@waitron/catalogue/src/allergens.js";
 import {
+  validateAllergens,
   DIETARY_LABELS,
   expandDietaryDeclarations,
   type DietaryLabel,
-} from "@waitron/catalogue/src/dietary-declarations.js";
+} from "@waitron/shared";
 import { allergenRefusalText, codeOf } from "../i18n/codes.js";
 
 export interface NutritionValue {

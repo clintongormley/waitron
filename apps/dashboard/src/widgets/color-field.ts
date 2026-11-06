@@ -1,6 +1,6 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { CATEGORY_PALETTE } from "@waitron/ui";
-import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { isStoredColor } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 

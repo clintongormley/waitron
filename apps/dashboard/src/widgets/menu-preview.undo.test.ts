@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { menuChangeActions } from "@waitron/catalogue/src/menu-undo.js";
-import type { MenuTarget } from "@waitron/catalogue/src/menu-document-types.js";
+import type { MenuTarget } from "@waitron/shared";
 import type { DocumentMember, MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { MenuPreviewPanel } from "./menu-preview.js";

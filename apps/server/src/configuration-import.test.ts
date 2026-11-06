@@ -970,7 +970,7 @@ describe("routing cells in a staged import", () => {
   it("accepts a fresh bundle whose versions match the journal", async () => {
     const { bundle, versions } = await exported();
     const venueService = ALL_MODULES.find((module) => module.name === "venue-service")!;
-    expect(versions["venue-service"]).toBe(expectedSchemaVersion(venueService.migrations, null));
+    expect(versions["venue-service"]).toBe(expectedSchemaVersion(venueService.migrations!, null));
     expect(bundle.modules["venue-service"]).toBe(versions["venue-service"]);
     const { stateDir, result } = await staged(bundle, versions);
     await expect(result).resolves.toMatchObject({ counts: { routing_cells: 2 } });

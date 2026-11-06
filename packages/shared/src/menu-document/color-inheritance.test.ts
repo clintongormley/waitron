@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   categoryColor,
   categoryColorSource,
+  colorOrNull,
   effectiveColor,
   isStoredColor,
   type ColorNode,
@@ -101,7 +102,32 @@ describe("categoryColorSource", () => {
 describe("isStoredColor", () => {
   it("takes lowercase #rrggbb only", () => {
     expect(isStoredColor("#b12525")).toBe(true);
-    for (const value of ["#B12525", "#b12", "b12525", "red", "", null, 5])
+    for (const value of [
+      "#B12525",
+      "#b12",
+      "b12525",
+      "x#b12525",
+      "#b12525x",
+      "red",
+      "",
+      null,
+      5,
+      { toString: () => "#b12525" },
+    ])
       expect(isStoredColor(value)).toBe(false);
+  });
+});
+
+describe("colorOrNull", () => {
+  const refuse = (): never => {
+    throw new Error("refused");
+  };
+  it("passes null and a stored colour through", () => {
+    expect(colorOrNull(null, refuse)).toBeNull();
+    expect(colorOrNull("#b12525", refuse)).toBe("#b12525");
+  });
+  it("hands anything else to the caller's refusal", () => {
+    for (const value of ["#B12525", "red", undefined, 5])
+      expect(() => colorOrNull(value, refuse)).toThrow("refused");
   });
 });

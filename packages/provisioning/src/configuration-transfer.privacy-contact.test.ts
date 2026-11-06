@@ -5,7 +5,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { appliedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { enabledModules, type WaitronModule } from "@waitron/module";
+import { enabledModules, modulesWithSets, type WaitronModule } from "@waitron/module";
 import { sql } from "drizzle-orm";
 import { applyHistoricalTestVenue } from "../test/allocated-venue.js";
 import { configurationBundle } from "../test/configuration-bundle.js";
@@ -39,7 +39,7 @@ async function exported(prepare?: () => Promise<void>): Promise<ConfigurationBun
     venueFiscalSelection(ALL_MODULES, "ES-common").config,
   );
   const versions: Record<string, number> = {};
-  for (const module of modules)
+  for (const module of modulesWithSets(modules))
     versions[module.name] = await appliedSchemaVersion(
       { venue: suite.db, node: suite.node },
       module.migrations,

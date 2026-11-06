@@ -79,12 +79,7 @@ import { MenuReadController } from "../api/menu-read-controller.js";
 import { sendMenuUndo, undoRefusalText } from "../api/menu-undo.js";
 import { menuChangeAction } from "@waitron/catalogue/src/menu-undo.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import {
-  HOME_COLUMN_RANGE,
-  HOME_DEVICES,
-  HOME_ORDERS,
-  HOME_TILE_MODES,
-} from "@waitron/catalogue/src/device-home.js";
+import { HOME_COLUMN_RANGE, HOME_DEVICES, HOME_ORDERS, HOME_TILE_MODES } from "@waitron/shared";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";

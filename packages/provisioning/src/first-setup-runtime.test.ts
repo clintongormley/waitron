@@ -6,11 +6,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { deployment, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   withOperationAuthority,
   type ModuleOperationHost,
   type OperationBinding,
 } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import * as hour from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -516,4 +518,24 @@ it("hands a module the public evidence its host was given, for the binding the m
   });
   expect(await bound.readPublicEvidence(f.context.binding)).toBe(evidence);
   expect(asked).toEqual([f.context.binding]);
+});
+
+it("leaves a module with no set of its own out of the sets an empty database must hold", async () => {
+  const root = await mkdtemp(join(tmpdir(), "first-setup-setless-"));
+  roots.push(root);
+  const venueDir = join(root, "venue");
+  await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
+  const setless = fakeSetlessModule("synthetic-setless", "core", { requires: { core: "*" } });
+  const host = createFirstSetupModuleHost({
+    stateDir: join(root, "state"),
+    venueDir,
+    environment: {},
+    modules: [...ALL_MODULES, setless],
+  });
+  expect(await host.resolution.inspectFirstSetupDatabase(["synthetic-setless"])).toMatchObject({
+    emptyDatabase: false,
+  });
+  expect(await host.resolution.inspectFirstSetupDatabase()).toMatchObject({
+    emptyDatabase: true,
+  });
 });

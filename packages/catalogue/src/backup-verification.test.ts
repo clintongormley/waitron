@@ -14,7 +14,7 @@ import { CATALOGUE_CLASSIFICATION } from "./classification.js";
 import { menuPublications, menuVersions, menuVersionImages } from "./schema/publication.js";
 import { catalogueSettings } from "./schema/settings.js";
 import { contentSuggestionJobs } from "./schema/suggestions.js";
-import type { MenuDocument } from "./menu-document-types.js";
+import type { MenuDocument } from "@waitron/shared";
 const migrations = [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });

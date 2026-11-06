@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { packageDirOf } from "../packages/module/src/module.js";
+import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
 import { tablesCreatedBy } from "../packages/sync-enrolment/src/migration-tables.js";
 import { migrationSqlFiles } from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
@@ -16,7 +16,7 @@ import { migrationSqlFiles } from "../packages/sync-enrolment/src/testing/migrat
 const REPO_ROOT = join(import.meta.dirname, "..");
 
 function packageDirToModule(): Map<string, string> {
-  return new Map(ALL_MODULES.map((module) => [packageDirOf(module), module.name]));
+  return new Map(modulesWithSets(ALL_MODULES).map((module) => [packageDirOf(module), module.name]));
 }
 
 interface DrizzlePackage {

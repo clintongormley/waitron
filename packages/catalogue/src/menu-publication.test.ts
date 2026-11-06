@@ -1,6 +1,6 @@
 import { products } from "@waitron/db";
 import { takeOffMenus } from "./menu-removal.js";
-import type { MenuChange, MenuChangeBody } from "./menu-document-types.js";
+import type { MenuChange, MenuChangeBody } from "@waitron/shared";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -59,7 +59,7 @@ import {
   joinCustomerPresentationText,
   staffPresentationName,
   kitchenPresentationName,
-} from "./product-presentation.js";
+} from "@waitron/shared";
 import {
   customerOptionSnapshotLabels,
   optionSnapshotLabels,

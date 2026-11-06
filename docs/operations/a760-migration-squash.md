@@ -235,6 +235,12 @@ a Cloud code change, stop and replan; a literal-filename search is insufficient 
 
 ### Comparison and preservation contract
 
+> 2026-11-06, for this section and every command block below that names
+> `scripts/migration-baseline.mjs`: built as `apps/server/scripts/migration-baseline/` and run from `apps/server` as
+> `pnpm migration-baseline preserve|controls|copies`, with no `--repo`; `inventory` and `compare`
+> are `pnpm protection-list list|compare`. See
+> [the testing guide](../developers/testing-guide.md#the-a760-baseline-tools).
+
 The new `scripts/migration-baseline.mjs` accepts these subcommands through the installed server
 `tsx` binary. Use `--repo` explicitly; `pnpm --filter ... exec` changes the working directory.
 All inventory outputs and SQLite databases go under `--out` outside the repository; comparison/copy

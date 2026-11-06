@@ -1,11 +1,5 @@
 import { compareDecimal, type Decimal } from "@waitron/shared";
-import type {
-  Candidate,
-  CombinedOffer,
-  CombineInput,
-  MenuClash,
-  Setting,
-} from "./menu-combine-types.js";
+import type { Candidate, CombinedOffer, CombineInput, MenuClash, Setting } from "@waitron/shared";
 
 function resolve<T>(candidates: Candidate<T>[], equal: (a: T, b: T) => boolean): Setting<T> {
   const first = candidates[0];

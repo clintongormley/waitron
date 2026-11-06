@@ -1,5 +1,5 @@
 import { formatMoney, type ContentLanguages } from "@waitron/shared";
-import type { MenuDocument } from "@waitron/catalogue/src/menu-document-types.js";
+import type { MenuDocument } from "@waitron/shared";
 import { fixedLanguages, patchFieldValue } from "@waitron/catalogue/src/menu-patch.js";
 import type { MenuPatchChange } from "@waitron/catalogue/src/menu-patch-types.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

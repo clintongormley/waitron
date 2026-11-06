@@ -112,6 +112,7 @@ import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/
 import {
   enabledModules,
   fiscalSlot,
+  modulesWithSets,
   orderedMigrationSets,
   reconcile,
   selectTimeRecordExport,
@@ -1274,7 +1275,7 @@ async function bootServer(
         .map(([n]) => n),
     );
     const r = reconcile(
-      setsToMigrate.map((m) => m.name),
+      modulesWithSets(setsToMigrate).map((m) => m.name),
       migrated,
     );
     if (r.softDisabled.length > 0 || r.toMigrate.length > 0) {
@@ -2288,7 +2289,9 @@ async function bootServer(
     log,
   });
   const tableRemovals = enabledTableRemovals(
-    ALL_MODULES.filter((module) => (appliedModuleVersions[module.name] ?? 0) > 0),
+    ALL_MODULES.filter(
+      (module) => (appliedModuleVersions[module.tablesIn ?? module.name] ?? 0) > 0,
+    ),
   );
   const workforceEnabled =
     !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce");

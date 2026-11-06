@@ -6,7 +6,7 @@ import type { Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { managementSessions } from "./schema/management-sessions.js";
 import { persons } from "./schema/persons.js";
-import type { PersonRoleValue } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
 
 /** Sliding: a resolve restarts it unless the read is passive or passes `touch: false`. */

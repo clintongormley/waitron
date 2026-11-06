@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { forbiddenVocabulary, vocabularyOwners } from "./vocabulary.js";
+import type { MigrationSetSource } from "@waitron/migrations";
 import type { WaitronModule } from "./module.js";
 
-const mod = (name: string, vocabulary?: readonly string[]): WaitronModule => ({
+const mod = (
+  name: string,
+  vocabulary?: readonly string[],
+): WaitronModule & { migrations: MigrationSetSource } => ({
   name,
   version: "0.0.0",
   tier: "toggleable",

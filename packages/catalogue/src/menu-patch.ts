@@ -1,15 +1,20 @@
-import { AppError, decimal, isAppError, toScale, type ContentLanguages } from "@waitron/shared";
+import {
+  AppError,
+  decimal,
+  isAppError,
+  toScale,
+  type ContentLanguages,
+  VAT_CLASSES,
+} from "@waitron/shared";
 import "./errors.js";
 import { folderPresentation } from "./include-folder-presentation.js";
-import type { DocumentMember, MenuDocument } from "./menu-document-types.js";
-import type { IncludeFolderOverrides } from "./section-types.js";
+import type { DocumentMember, MenuDocument, IncludeFolderOverrides } from "@waitron/shared";
 import { PATCH_FIELDS, type MenuPatchChange, type MenuPatchTarget } from "./menu-patch-types.js";
 import { isProductPrice } from "./modifier-limits.js";
 import {
   mergeOptionalTranslations,
   validateOptionalTranslations,
 } from "./optional-translations.js";
-import { VAT_CLASSES } from "./vat-rates.js";
 
 type Copy = Record<string, unknown>;
 

@@ -1,10 +1,7 @@
 import { css, html, nothing } from "lit";
 import { NUTRITION_ICONS, registerIcons } from "@waitron/ui";
-import {
-  expandDietaryDeclarations,
-  type DietaryLabel,
-} from "@waitron/catalogue/src/dietary-declarations.js";
-import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
+import { expandDietaryDeclarations, type DietaryLabel } from "@waitron/shared";
+import type { ProductAllergens } from "@waitron/shared";
 import type { DietProfile } from "../api/client.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { currentLocale, t } from "../i18n/t.js";

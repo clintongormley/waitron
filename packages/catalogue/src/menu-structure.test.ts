@@ -32,7 +32,7 @@ import {
   removeMember,
 } from "./sections.js";
 import { listMenuVariants, setMenuVariants, setProductVariants } from "./variants.js";
-import type { MemberRef } from "./section-types.js";
+import type { MemberRef } from "@waitron/shared";
 
 // A menu's structure and the settings rows it keeps in step with it.
 const fx = useCatalogueDb();

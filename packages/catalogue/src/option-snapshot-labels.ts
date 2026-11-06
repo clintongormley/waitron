@@ -1,5 +1,8 @@
-import { kitchenPresentationName, nonBlankTranslations } from "./product-presentation.js";
-import { resolveSnapshotText } from "@waitron/shared";
+import {
+  kitchenPresentationName,
+  nonBlankTranslations,
+  resolveSnapshotText,
+} from "@waitron/shared";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /**

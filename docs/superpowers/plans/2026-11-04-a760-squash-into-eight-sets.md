@@ -32,6 +32,7 @@ the shipped-copy checks, the old-epoch refusals, the reset roster and the stop p
 | One PR, one job, no delegation | Three PRs. Only PR 3 needs the freeze. Implementers are subagents, one at a time on one branch | Shortens the freeze; `implementer` rule in `~/.claude/CLAUDE.md` |
 | Finish or withdraw **every** migration branch; a parked one blocks | A790 Cut A (#2455), A802, A799 and A739 do not block. Pin the base without them. They land afterwards with regenerated migrations. There is no A790 Cut B. Every other migration branch still blocks | Owner, 4 November |
 | `inventory` and `compare` are built here, with `--repo` | They exist from slice 0, as `protection-list list` and `compare`. Each checkout runs its own copy, so there is no `--repo` | One tool; the old clone holds it because slice 0 lands first |
+| The new `scripts/migration-baseline.mjs`, run with `--repo` | Built in Task 4 as `apps/server/scripts/migration-baseline/`, run from `apps/server` as `pnpm migration-baseline preserve\|controls\|copies`, with no `--repo` | Beside slice 0's protection-list, which it builds on |
 | `compare` exits 1 on any failure; `inventory` saves drizzle snapshots and every SQL statement with its file and line | `compare` exits 1 on a difference and 2 on a refusal (1 through `pnpm -s`), a list with nothing to compare among them; `list` saves no drizzle snapshots and no statement's file and line | As slice 0 built them |
 | The owner resets the home box on return after 2 November | The home box stays quarantined until A1308 ends, then is reset once | Design §6; hold file |
 | "Land only after green review and CI" | PR 3 replaces the fiscal set's SQL, so it waits for the owner's `/land-branch` | `lanes-land-their-own-prs` |
@@ -175,7 +176,9 @@ Keep every constant's value order: `enumType` writes it into the SQL. The same r
   - `WaitronModule.tablesIn?: string`: the name of the module whose set holds this module's tables.
   - `modulesWithSets(modules): (WaitronModule & { migrations: MigrationSetSource })[]`.
   - `orderedMigrationSets` still sorts every module by `requires`, then returns sets for those with
-    `migrations`.
+    `migrations`, and throws `module.set_ownership_invalid` when a module has both or neither of
+    `migrations`/`tablesIn`, its host is missing or has no set, or it has no set but carries a
+    `classification` (which belongs in the host's).
   - `packageDirOf` still throws for a module with no set: guards filter first.
 
 Readers that must use `modulesWithSets`: `apps/server/src/backup-manifest.ts:25`, `restore.ts:349`,

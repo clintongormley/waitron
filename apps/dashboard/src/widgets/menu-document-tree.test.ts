@@ -2,7 +2,7 @@ import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
-import type { MenuTarget } from "@waitron/catalogue/src/menu-document-types.js";
+import type { MenuTarget } from "@waitron/shared";
 import type { MenuDocument } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";

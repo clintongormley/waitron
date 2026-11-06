@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
+import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/shared";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import {
   enumCheck,

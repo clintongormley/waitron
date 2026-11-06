@@ -1,7 +1,16 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError, decimal, decimalToCents, toScale } from "@waitron/shared";
-import type { ContentLanguages, Decimal } from "@waitron/shared";
+import type {
+  ContentLanguages,
+  Decimal,
+  ProductPresentation,
+  MenuOffer,
+  MenuPriceVariant,
+  MenuVariant,
+  ProductVariant,
+  ProductVariantInput,
+} from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
   mergeOptionalTranslations,
@@ -16,14 +25,11 @@ import { extraListItems, extraLists } from "./schema/extras.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
-import type { ProductPresentation } from "./product-presentation.js";
-import type { MenuOffer, MenuPriceVariant, MenuVariant } from "./menu-types.js";
-export type { MenuVariant } from "./menu-types.js";
+export type { MenuVariant } from "@waitron/shared";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
 import { assertFamilyNamesFree, nameColumns } from "./product-names.js";
 import "./errors.js";
-import type { ProductVariant, ProductVariantInput } from "./product-types.js";
-export type { ProductVariant, ProductVariantInput } from "./product-types.js";
+export type { ProductVariant, ProductVariantInput } from "@waitron/shared";
 
 /** What {@link setProductVariants} takes: the editor's {@link ProductVariantInput}, whose `active`
  * the editor body always carries, with `active` optional for a caller in code — absent creates a new

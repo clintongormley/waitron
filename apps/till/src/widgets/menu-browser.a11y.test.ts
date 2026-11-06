@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { DocumentMember } from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentMember } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget, type Theme } from "./test-helpers.js";
 import { page, userEvent } from "vitest/browser";
@@ -7,7 +7,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 function product(key: string, name: string, available = true): TillProduct {
   return {

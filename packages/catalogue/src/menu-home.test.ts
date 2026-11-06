@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product, section, type MenusFixture } from "../test/menus-fixture.js";
-import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import {
   addShortcut,
   moveShortcut,

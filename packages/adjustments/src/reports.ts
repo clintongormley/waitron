@@ -13,9 +13,10 @@ import {
   thousandthsToDecimal,
   type BusinessDayClock,
   type Decimal,
+  ADJUSTMENT_ACTIONS,
+  type AdjustmentAction,
 } from "@waitron/shared";
 import { DEFAULT_ENTRY_PAGE_SIZE, MAX_ENTRY_PAGE_SIZE } from "./entry-pages.js";
-import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
 import { adjustments, type AdjustmentStage } from "./schema/adjustments.js";
 
 /** An inclusive range of the venue's business days, and the clock that places them. */

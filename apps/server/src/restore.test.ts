@@ -41,6 +41,7 @@ import { FISCAL_RESTORE, currentSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
 import { enabledModules, fiscalSlot } from "@waitron/module";
 import type { RestoreHook, WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { readModuleConfig } from "./module-config.js";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
@@ -356,6 +357,12 @@ setInterval(() => db, 1000);`;
     expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
 
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+  });
+
+  it("restores with a module that has no set of its own in the list", async () => {
+    const setless = fakeSetlessModule("synthetic-setless", "core");
+    await restoreFromArtifact(deps({ modules: [...withHooks({}), setless] }));
+    await expectVenueRestored();
   });
 
   it("creates its own destination roots (staging/state/venue) when they do not yet exist", async () => {

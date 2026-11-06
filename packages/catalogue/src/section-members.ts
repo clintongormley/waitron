@@ -5,7 +5,7 @@ import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
 import { sectionMembers } from "./schema/sections.js";
 import { toSectionMember, type SectionGraph } from "./section-graph.js";
-import type { MemberRef, SectionMember, TileRef } from "./section-types.js";
+import type { MemberRef, SectionMember, TileRef } from "@waitron/shared";
 import "./errors.js";
 
 export const memberOrder = [asc(sectionMembers.position), asc(sectionMembers.id)];

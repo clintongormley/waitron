@@ -9,7 +9,8 @@ import { foldForUniqueness } from "./fold.js";
 import { hashPassword, verifyPassword } from "./verify-password.js";
 import { verifyTotp } from "./totp.js";
 import { consumeRecoveryCode, decryptTotpSecret, type TotpKeyRing } from "./mfa.js";
-import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
+import { roleHasPermission, type Permission } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import {
   resolveManagementSession,
   startManagementSession,

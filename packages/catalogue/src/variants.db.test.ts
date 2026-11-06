@@ -27,7 +27,7 @@ import {
   selectMenuVariant,
   type VariantWrite,
 } from "./variants.js";
-import { staffPresentationName, customerPresentationText } from "./product-presentation.js";
+import { staffPresentationName, customerPresentationText } from "@waitron/shared";
 import { createUnit, EACH_UNIT } from "./units.js";
 import { createCategory, setMainReportingCategory } from "./categories.js";
 

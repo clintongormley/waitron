@@ -1,5 +1,4 @@
-import { AppError } from "@waitron/shared";
-import "./errors.js";
+import { AppError } from "../errors.js";
 
 export const DIETARY_LABELS = [
   "vegan",

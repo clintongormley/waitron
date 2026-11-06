@@ -1,4 +1,4 @@
-import type { MenuDocument, QueuedEdition } from "./menu-document-types.js";
+import type { MenuDocument, QueuedEdition } from "@waitron/shared";
 
 /** The patch wire shapes. A browser-safe LEAF: types and the field table only. */
 

@@ -1,4 +1,4 @@
-import type { Decimal } from "@waitron/shared";
+import type { Decimal } from "../money.js";
 /** A menu source wraps the included menu's source, preserving each step of inheritance. */
 export type ValueSource =
   | { kind: "own" }

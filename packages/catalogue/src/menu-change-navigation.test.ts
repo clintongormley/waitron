@@ -8,7 +8,7 @@ import type {
   MenuDocument,
   MenuField,
   MenuTarget,
-} from "./menu-document-types.js";
+} from "@waitron/shared";
 import { navigateMenuChanges as navigate } from "./menu-navigation.js";
 
 function navigateMenuChanges(

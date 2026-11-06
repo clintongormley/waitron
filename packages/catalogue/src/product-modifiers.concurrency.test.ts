@@ -6,7 +6,7 @@ import { createCatalogue, createProduct } from "./operations.js";
 import { createExtraList, deleteExtraList } from "./extras.js";
 import { createOptionList, deleteOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
-import type { ProductModifierRef } from "./product-types.js";
+import type { ProductModifierRef } from "@waitron/shared";
 import { racePair } from "../test/fixtures.js";
 
 /**

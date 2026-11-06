@@ -3,7 +3,7 @@ import "../src/till-app.js";
 import { userEvent } from "vitest/browser";
 import type { AllergySendTarget, PartyAllergyRead } from "@waitron/module";
 import { deviceZonesFixture } from "./device-zones.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import {
   floorPartyBills,
   draftServer,

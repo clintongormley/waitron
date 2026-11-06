@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BackupCheckUnavailable,
   BackupVerificationUnsupported,
+  combineBackupVerification,
   validateBackupModuleResult,
   validateBackupVerificationContribution,
 } from "./backup-verification.js";
@@ -365,5 +366,156 @@ describe("backup module results", () => {
         message: "Backup check unavailable",
       });
     }
+  });
+});
+
+describe("combining a set's own verification with the modules it hosts", () => {
+  type Status = "passed" | "invalid" | "needs_authority" | "unsupported";
+  function hosted(statuses: Readonly<Record<string, Status>> = { data: "passed" }) {
+    const checks = Object.keys(statuses);
+    return validateBackupVerificationContribution({
+      version: 1,
+      publicEvidenceDigest: null,
+      data: { kind: "database_only", tables: ["shifts", "records"], immutableTables: [], checks },
+      secrets: ["vault:shifts"],
+      entries: [
+        { name: "secrets/example.json", presence: "required" },
+        { name: "secrets/shifts.json", presence: "optional" },
+      ],
+      effects: [{ id: "keep-shifts", kind: "data", check: checks[0] }],
+      zeroSchema: "empty_schema",
+      targetOnly: "empty_after_migration",
+      verifyRestoredData: async () => {
+        const list = Object.entries(statuses).map(([code, status]) => ({ code, status }));
+        const status =
+          (["unsupported", "needs_authority", "invalid"] as const).find((s) =>
+            list.some((c) => c.status === s),
+          ) ?? "passed";
+        return { status, checks: list };
+      },
+    });
+  }
+  const host = () => validateBackupVerificationContribution(declaration());
+  const context = {} as Parameters<ReturnType<typeof host>["verifyRestoredData"]>[0];
+
+  it("is the host itself when nothing is hosted", () => {
+    const own = host();
+    expect(combineBackupVerification(own, [])).toBe(own);
+  });
+
+  it("covers the union of every table, check, secret, entry and effect", () => {
+    const combined = combineBackupVerification(host(), [hosted()]);
+    expect([...combined.data.tables].sort()).toEqual(["heads", "records", "shifts"]);
+    expect(combined.data.immutableTables).toEqual(["records"]);
+    expect([...combined.data.checks].sort()).toEqual(["chain", "data"]);
+    expect([...combined.secrets].sort()).toEqual(["vault:example", "vault:shifts"]);
+    expect(combined.effects.map((e) => e.id).sort()).toEqual([
+      "activate",
+      "keep-shifts",
+      "preserve-history",
+    ]);
+    expect(combined.data.kind).toBe("custom");
+    expect(combined.targetOnly).toBe("unsupported");
+    expect(combined.zeroSchema).toBe("absent_tables_and_entries");
+    expect(Object.isFrozen(combined)).toBe(true);
+  });
+
+  it("keeps an entry required when any contribution requires it", () => {
+    const combined = combineBackupVerification(host(), [hosted()]);
+    expect([...combined.entries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
+      { name: "secrets/example.json", presence: "required" },
+      { name: "secrets/shifts.json", presence: "optional" },
+    ]);
+  });
+
+  it("is database-only and supported when every contribution is", () => {
+    const combined = combineBackupVerification(hosted(), [
+      hosted({ data: "passed", secret: "passed" }),
+    ]);
+    expect(combined.data.kind).toBe("database_only");
+    expect(combined.targetOnly).toBe("empty_after_migration");
+    expect(combined.zeroSchema).toBe("empty_schema");
+  });
+
+  it("keeps the one public evidence digest there is, and none when there are none", () => {
+    const digest = "a".repeat(64);
+    const withDigest = validateBackupVerificationContribution({
+      ...declaration(),
+      publicEvidenceDigest: digest,
+    });
+    expect(combineBackupVerification(hosted(), [withDigest]).publicEvidenceDigest).toBe(digest);
+    expect(combineBackupVerification(hosted(), [hosted()]).publicEvidenceDigest).toBeNull();
+  });
+
+  it("refuses two different public evidence digests rather than dropping one", () => {
+    const one = validateBackupVerificationContribution({
+      ...declaration(),
+      publicEvidenceDigest: "a".repeat(64),
+    });
+    const two = validateBackupVerificationContribution({
+      ...hosted(),
+      publicEvidenceDigest: "b".repeat(64),
+    });
+    unsupported(() => combineBackupVerification(one, [two]));
+  });
+
+  it("refuses one effect id declared two different ways", () => {
+    const other = validateBackupVerificationContribution({
+      ...hosted(),
+      effects: [{ id: "activate", kind: "data", check: "data" }],
+    });
+    unsupported(() => combineBackupVerification(host(), [other]));
+  });
+
+  it("returns one check per code, each with its worst status, and the worst status overall", async () => {
+    const combined = combineBackupVerification(host(), [
+      hosted({ data: "needs_authority" }),
+      hosted({ data: "invalid", secret: "passed" }),
+    ]);
+    const result = await combined.verifyRestoredData(context);
+    expect(result.status).toBe("needs_authority");
+    expect([...result.checks].sort((a, b) => (a.code < b.code ? -1 : 1))).toEqual([
+      { code: "chain", status: "passed" },
+      { code: "data", status: "needs_authority" },
+      { code: "secret", status: "passed" },
+    ]);
+    expect(validateBackupModuleResult(result, combined, false)).toEqual(result);
+  });
+
+  it("fails the set when a hosted module's check fails", async () => {
+    const combined = combineBackupVerification(host(), [hosted({ data: "invalid" })]);
+    const result = await combined.verifyRestoredData(context);
+    expect(result.status).toBe("invalid");
+    expect(result.checks.find((c) => c.code === "data")!.status).toBe("invalid");
+  });
+
+  it("runs the host first, then each hosted contribution in the order given", async () => {
+    const order: string[] = [];
+    const tracked = (name: string, owner: ReturnType<typeof host>) =>
+      validateBackupVerificationContribution({
+        ...owner,
+        verifyRestoredData: async (c: typeof context) => {
+          order.push(name);
+          return owner.verifyRestoredData(c);
+        },
+      });
+    await combineBackupVerification(tracked("host", host()), [
+      tracked("first", hosted()),
+      tracked("second", hosted()),
+    ]).verifyRestoredData(context);
+    expect(order).toEqual(["host", "first", "second"]);
+  });
+
+  it("refuses a hosted result that does not answer its own checks", async () => {
+    const wrong = validateBackupVerificationContribution({
+      ...hosted(),
+      verifyRestoredData: async () => ({
+        status: "passed",
+        checks: [{ code: "chain", status: "passed" }],
+      }),
+    });
+    await expect(
+      combineBackupVerification(host(), [wrong]).verifyRestoredData(context),
+    ).rejects.toThrow(expect.objectContaining({ reason: "semantics_missing" }));
   });
 });

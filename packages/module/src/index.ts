@@ -10,6 +10,7 @@ export type {
 export {
   BackupVerificationUnsupported,
   BackupCheckUnavailable,
+  combineBackupVerification,
   validateBackupVerificationContribution,
   validateBackupModuleResult,
 } from "./backup-verification.js";
@@ -52,7 +53,6 @@ export type {
   KitchenNoteScope,
   KitchenNote,
   KitchenNoteSnapshot,
-  KitchenNoteChange,
   StationNoticeDish,
   KeepOpenSubject,
   ServiceMode,
@@ -77,7 +77,7 @@ export type {
   Named,
   NarrowedDevice,
 } from "./module.js";
-export { orderedMigrationSets, packageDirOf } from "./module.js";
+export { modulesWithSets, orderedMigrationSets, packageDirOf } from "./module.js";
 export type {
   Alert,
   AlertEventClaim,
@@ -162,6 +162,7 @@ import "./errors.js";
 export type { BusinessDayClockConflict } from "./module.js";
 
 export type * from "./party-allergy.js";
+export type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/shared";
 export type * from "./bill-identity.js";
 
 export type {

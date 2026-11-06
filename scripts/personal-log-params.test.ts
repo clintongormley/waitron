@@ -138,6 +138,7 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["table.label_taken.takenBy", "the name of the table holding the label"],
   ["table.short_name_taken.shortName", "a table's short name"],
   ["table.short_name_taken.takenBy", "the name of the table holding the short name"],
+  ["vat_rate.table_invalid.vatClass", "a VAT class: general, reduced, super_reduced or zero"],
   ["zone.name_taken.name", "the name of a zone"],
   ["zone.table_in_use.tableName", "the name of a table"],
 ]);

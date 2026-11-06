@@ -38,6 +38,7 @@ import {
 import { MEDIA_MIGRATIONS } from "@waitron/media";
 import { manifestSets } from "@waitron/migrations";
 import {
+  modulesWithSets,
   orderedMigrationSets,
   personalDataParts,
   selectTimeRecordExport,
@@ -94,6 +95,31 @@ describe("ALL_MODULES is the migration source of truth", () => {
   });
   it("lists the manifest's module names in order", () => {
     expect(ALL_MODULES.map((m) => m.name)).toEqual(manifestSets().map((s) => s.name));
+  });
+});
+
+describe("a module's tables live in exactly one set", () => {
+  it("every module has exactly one of its own set and a tablesIn naming another's", () => {
+    expect(
+      ALL_MODULES.filter((m) => (m.migrations === undefined) === (m.tablesIn === undefined)).map(
+        (m) => m.name,
+      ),
+    ).toEqual([]);
+  });
+  it("a tablesIn names a module that has a set of its own", () => {
+    const withSets = new Set(modulesWithSets(ALL_MODULES).map((m) => m.name));
+    expect(
+      ALL_MODULES.filter((m) => m.tablesIn !== undefined && !withSets.has(m.tablesIn)).map(
+        (m) => m.name,
+      ),
+    ).toEqual([]);
+  });
+  it("a module with no set of its own carries no classification", () => {
+    expect(
+      ALL_MODULES.filter((m) => m.migrations === undefined && m.classification !== undefined).map(
+        (m) => m.name,
+      ),
+    ).toEqual([]);
   });
 });
 

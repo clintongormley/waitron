@@ -1,10 +1,15 @@
-import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
-import { AppError, type ContentLanguages } from "@waitron/shared";
+import {
+  VAT_CLASSES,
+  type VatClass,
+  AppError,
+  type ContentLanguages,
+  colorOrNull,
+  HOME_DEVICES,
+  homeDisplayProblem,
+} from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
 import { readTenant, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
-import { colorOrNull } from "./color-inheritance.js";
-import { HOME_DEVICES, homeDisplayProblem } from "./device-home.js";
 import { checkIncludeFolderRows } from "./include-folder.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { storeProductNameKeys } from "./product-names.js";

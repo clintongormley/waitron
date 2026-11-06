@@ -63,6 +63,27 @@ export interface ErrorParams {
   /** The box's disk is full, so a write was refused. `restartDeletesLogs` says restarting the box
    *  deletes old logs to make room; absent, the answer says nothing about restarting. */
   "storage.disk_full": { restartDeletesLogs?: true };
+  /** A key in a product's allergen declaration is not one of the EU-14 codes. */
+  "allergen.invalid_code": { code: string };
+  "allergen.kinds_required": { code: string };
+  "allergen.invalid_kind": { code: string };
+  /** A direct dietary declaration is not one of the supported suitability labels. */
+  "diet.declaration_invalid": Record<string, never>;
+  /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */
+  "diet.invalid_origin": { origin: string };
+  /** A supplied diet label (`vegan`/`vegetarian`/…) is not an accepted value for `field`. */
+  "diet.invalid_label": { field: string; value: string };
+  /** A diet override both adds and removes the same contains-tag — a contradiction. */
+  "diet.add_remove_conflict": { tag: string };
+  /** `value`, a date handed to `caller` or one in its rate table, is not a `YYYY-MM-DD` calendar date. */
+  "vat_rate.date_invalid": { caller: "vatRateOn" | "vatRatesOn"; value: string };
+  /** `caller`'s rate table lists `vatClass` with a missing or dated first entry, or not dated oldest
+   * first. */
+  "vat_rate.table_invalid": {
+    caller: "vatRateOn" | "vatRatesOn";
+    vatClass: "general" | "reduced" | "super_reduced" | "zero";
+    reason: "first_entry_missing_or_dated" | "not_oldest_first";
+  };
 }
 
 export type ErrorCode = keyof ErrorParams;

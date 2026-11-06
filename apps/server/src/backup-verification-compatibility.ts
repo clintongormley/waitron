@@ -104,7 +104,11 @@ function moduleConfig(
   const keyCount = [...text.matchAll(/"(?:[^"\\]|\\.)*"\s*:/g)].length;
   if (
     keyCount !== Object.keys(overrides).length + 1 ||
-    Object.keys(overrides).some((name) => !Object.hasOwn(source, name))
+    Object.keys(overrides).some(
+      (name) =>
+        !Object.hasOwn(source, name) &&
+        !modules.some((module) => module.name === name && module.migrations === undefined),
+    )
   )
     refuse("unsupported");
   parseModuleConfig(config, modules);
@@ -166,8 +170,11 @@ async function reconcile(
   const venueJournals = new Set<string>();
   const nodeOwned = new Set<string>();
   const nodeJournals = new Set<string>();
-  for (const { module, verification } of inventory) {
-    const classified = (module.classification ?? []).map((c) => c.table).sort();
+  for (const { module, hosted, verification } of inventory) {
+    const classified = [module, ...hosted]
+      .flatMap((m) => m.classification ?? [])
+      .map((c) => c.table);
+    classified.sort();
     if (!isDeepStrictEqual(classified, [...verification.data.tables].sort())) refuse("unsupported");
     for (const table of classified) {
       if (owned.has(table)) refuse("unsupported");
@@ -189,14 +196,16 @@ async function reconcile(
           refuse("unsupported");
       }
     }
-    for (const state of module.backup?.nonDbState ?? []) {
-      if (
-        state.kind !== "preparation-history" ||
-        !verification.entries.some(
-          (entry) => entry.name === `secrets/module-evidence/${module.name}/${state.source}.json`,
+    for (const part of [module, ...hosted]) {
+      for (const state of part.backup?.nonDbState ?? []) {
+        if (
+          state.kind !== "preparation-history" ||
+          !verification.entries.some(
+            (entry) => entry.name === `secrets/module-evidence/${part.name}/${state.source}.json`,
+          )
         )
-      )
-        refuse("unsupported");
+          refuse("unsupported");
+      }
     }
   }
   if ([...journals].some((name) => owned.has(name))) refuse("unsupported");

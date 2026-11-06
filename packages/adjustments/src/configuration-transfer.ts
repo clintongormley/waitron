@@ -1,7 +1,6 @@
 import type { ModuleConfigurationTransfer } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, REASON_KINDS, type ReasonKind } from "@waitron/shared";
 import { isRoleList, reasonShapeFault, type ReasonShapeField } from "./policy.js";
-import { REASON_KINDS, type ReasonKind } from "./schema/reasons.js";
 import "./errors.js";
 
 const REASON_COLUMNS: Record<ReasonShapeField, string> = {

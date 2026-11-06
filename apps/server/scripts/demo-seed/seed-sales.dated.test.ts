@@ -24,8 +24,9 @@ const CHANGE = vi.hoisted(() => {
   const local = new Date(yesterday.getTime() - yesterday.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
 });
-vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@waitron/catalogue/src/vat-rates.js")>();
+vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@waitron/shared/src/menu-document/vat-rates.js")>();
   const table = {
     ...original.VAT_RATE_TABLE,
     reduced: [

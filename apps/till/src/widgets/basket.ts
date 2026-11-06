@@ -2,7 +2,7 @@ import "./modifier-picker.js";
 import "./order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "./order-kitchen-note.js";
 import type { ModifierConfirmDetail, StagedRemoval } from "./modifier-picker.js";
-import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
+import type { ProductAllergens } from "@waitron/shared";
 import {
   ContentLanguageController,
   currentContentLanguages,

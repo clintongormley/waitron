@@ -44,6 +44,7 @@ export function recoveryFiscalSelection(
   if (
     selected.length !== 1 ||
     owner?.fiscal?.id !== jurisdiction.modules.filing ||
+    owner.migrations === undefined ||
     !Number.isSafeInteger(manifest.modules[owner.name]) ||
     manifest.modules[owner.name]! < 0 ||
     recordedVersions[owner.name] !== manifest.modules[owner.name]

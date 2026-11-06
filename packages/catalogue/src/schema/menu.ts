@@ -11,8 +11,8 @@ import {
   products,
   table,
 } from "@waitron/db";
-import { HOME_DISPLAY_DEFAULTS } from "../device-home.js";
-import type { HomeOrder, HomeTileMode } from "../menu-document-types.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import type { HomeOrder, HomeTileMode } from "@waitron/shared";
 import { sections } from "./sections.js";
 
 /** The one content-language policy shared by the reusable catalogue and media: at most one row,
@@ -54,7 +54,7 @@ export const menuDetails = table(
     // changes nothing a reader sees.
     homeSectionId: id("default_home_layout_id").notNull(),
     // No CHECK on these six: one makes drizzle rebuild the table; homeDisplayProblem
-    // (device-home.ts) holds the ranges. So the text ones are not `enumType`, whose vocabulary
+    // (`@waitron/shared`'s menu-document/device-home.ts) holds the ranges. So the text ones are not `enumType`, whose vocabulary
     // the schema-conformance suite requires a CHECK for.
     handheldColumns: count("handheld_columns").notNull().default(handheld.columns),
     handheldTiles: homeTiles("handheld_tiles").notNull().default(handheld.tiles),

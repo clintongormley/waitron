@@ -11,7 +11,7 @@ import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
 import { membersOf } from "./section-members.js";
-import type { TileRef } from "./section-types.js";
+import type { TileRef } from "@waitron/shared";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
 import { menuPublications, menuVersions } from "./schema/publication.js";

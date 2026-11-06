@@ -14,7 +14,7 @@ import {
   table,
   tsString,
 } from "@waitron/db";
-import { TRANSLATION_GAP_KINDS } from "../content-translation-kinds.js";
+import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 
 export const SUGGESTION_JOB_STATES = [
   "submitting",

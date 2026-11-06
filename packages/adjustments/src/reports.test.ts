@@ -21,7 +21,8 @@ import {
   subtractDecimal,
 } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
-import { policySnapshotOf, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
+import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
+import type { AdjustmentAction } from "@waitron/shared";
 import { recordAdjustment } from "./record.js";
 import { linkRefundToCancels } from "./refund-links.js";
 import {

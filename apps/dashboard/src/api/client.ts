@@ -1,19 +1,14 @@
 import type { RecipientIdentifier } from "@waitron/country-packs";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type { TenderRefundView, StuckTenderRefundRow } from "./tender-refund-types.js";
-import type { AllergenDeclaration as AllergenEntry } from "@waitron/catalogue/src/allergens.js";
+import type { AllergenDeclaration as AllergenEntry } from "@waitron/shared";
 export type { AllergenEntry };
 import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
 import type { PlanPlacement, VenueThemeAnswer } from "@waitron/ui";
 import type { ThemeChoices, ThemeWarning } from "@waitron/ui-core/theme";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
-import type {
-  Setting,
-  CombinedOffer,
-  ValueSource,
-  Place,
-} from "@waitron/catalogue/src/menu-combine-types.js";
+import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared";
 export type { Setting, CombinedOffer, ValueSource, Place };
 import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@waitron/shared";
 
@@ -33,7 +28,8 @@ export interface NodeRecoveryPack {
 /**
  * Most types below are hand-kept copies of the server's JSON shapes, so nothing compares them with
  * the server at compile time. The product and modifier-list shapes are imported instead, from
- * catalogue's type-only leaf files (`scripts/dashboard-browser-purity.test.ts`).
+ * `@waitron/shared`'s type-only `menu-document/*-types.ts` leaves
+ * (`scripts/dashboard-browser-purity.test.ts`).
  */
 import type { TimingBand } from "@waitron/shared";
 import type { RoutingView } from "@waitron/venue-service/routing";
@@ -50,7 +46,7 @@ import type {
   ProductEditorValue,
   ProductVariantInput as ProductEditorVariant,
   ProductEditorBody as ProductEditorInput,
-} from "@waitron/catalogue/src/product-types.js";
+} from "@waitron/shared";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
 export type { DepartmentReceiptModel as DepartmentReceiptSettings } from "./department-receipts.js";
@@ -203,7 +199,7 @@ import type {
   OptionListDependants,
   OptionListInput,
   OptionListRow,
-} from "@waitron/catalogue/src/modifier-list-types.js";
+} from "@waitron/shared";
 import type {
   HomeTile,
   IncludeFolder,
@@ -215,7 +211,7 @@ import type {
   SectionInput,
   SectionMember,
   TileRef,
-} from "@waitron/catalogue/src/section-types.js";
+} from "@waitron/shared";
 export type {
   HomeTile,
   IncludeFolder,
@@ -233,7 +229,7 @@ import type {
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
-} from "@waitron/catalogue/src/content-translation-report-types.js";
+} from "@waitron/shared";
 export type {
   LanguageTranslationGaps,
   LanguageTranslationGapCount,
@@ -270,7 +266,7 @@ export type {
   SuggestionRunView,
 };
 
-import type { MenuPriceRow, MenuPriceVariant } from "@waitron/catalogue/src/menu-types.js";
+import type { MenuPriceRow, MenuPriceVariant } from "@waitron/shared";
 export type { MenuPriceRow, MenuPriceVariant };
 import type {
   LiveMenu,
@@ -294,7 +290,7 @@ import type {
   PublishedMenuVersion,
   QueuedEdition,
   SectionChangeField,
-} from "@waitron/catalogue/src/menu-document-types.js";
+} from "@waitron/shared";
 export type {
   DocumentMember,
   FrozenOffer,
@@ -477,47 +473,15 @@ export type VatClass = "general" | "reduced" | "super_reduced" | "zero";
  * present. */
 export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 
-export type DietaryOrigin =
-  "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
-
-/** Local copies of `@waitron/catalogue`'s runtime lists, as are the two below: a runtime import
- * from that package's main entry would load its `operations.ts`, which imports `@waitron/db`. */
-export const DIETARY_ORIGINS = [
-  "plant",
-  "meat",
-  "fish",
-  "shellfish",
-  "dairy",
-  "egg",
-  "honey",
-  "other_animal",
-] as const;
-
-export const DIETARY_LABELS = [
-  "vegan",
-  "vegetarian",
-  "halal",
-  "kosher",
-  "no_meat",
-  "no_fish",
-] as const;
-export type DietaryLabel = (typeof DIETARY_LABELS)[number];
-
-export const DIETARY_SUITABILITY = ["vegan", "vegetarian", "halal", "kosher"] as const;
-export type DietarySuitability = (typeof DIETARY_SUITABILITY)[number];
-
-export type ContainsTag = "meat" | "fish";
-
-/** A present label field forces that label over the recipe-derived one; an absent field defers to
- * it. */
-export interface DietOverride {
-  vegan?: "yes" | "no";
-  vegetarian?: "yes" | "no";
-  halal?: "yes" | "no";
-  kosher?: "yes" | "no";
-  addContains?: ContainsTag[];
-  removeContains?: ContainsTag[];
-}
+export { DIETARY_ORIGINS, DIETARY_LABELS, DIETARY_SUITABILITY } from "@waitron/shared";
+export type {
+  DietaryOrigin,
+  DietaryLabel,
+  DietarySuitability,
+  ContainsTag,
+  DietOverride,
+} from "@waitron/shared";
+import type { DietaryOrigin } from "@waitron/shared";
 
 export interface CatalogueSummary {
   id: string;

@@ -5,7 +5,7 @@ import { AppError } from "@waitron/shared";
 import { sessions } from "./schema/sessions.js";
 import { verifyPersonCredential } from "./credential.js";
 import { canUseDeviceProfile } from "./profile-admission.js";
-import type { PersonRoleValue } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
 import type { SecretCheck } from "./secret-check.js";
 

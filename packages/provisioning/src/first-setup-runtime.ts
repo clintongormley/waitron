@@ -7,6 +7,7 @@ import {
   configureModuleOperations,
   enabledModules,
   initialSetupFor,
+  modulesWithSets,
   type ModuleOperationHost,
   type OperationBinding,
   type WaitronModule,
@@ -114,7 +115,7 @@ export function createFirstSetupRuntime(options: {
     ...options,
     store,
     migrationsRoot: options.environment.WAITRON_MIGRATIONS_DIR || null,
-    expectedMigrationSets: options.modules.map((module) => module.migrations.name),
+    expectedMigrationSets: modulesWithSets(options.modules).map((module) => module.migrations.name),
     publicEvidencePaths: retained.flatMap((sources) => sources.files),
     publicEvidenceDirectories: retained.flatMap((sources) => sources.directories),
   });

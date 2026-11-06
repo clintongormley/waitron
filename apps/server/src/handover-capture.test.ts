@@ -25,6 +25,7 @@ import {
 } from "@waitron/handover";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import type { WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import {
   appendHandoverEventTx,
   NODE_MIGRATIONS,
@@ -388,6 +389,20 @@ describe("capturing a stepped-down box's final copy", () => {
       { name: "credentials", version: "0.4.0" },
       { name: "node", version: "0.9.0" },
     ]);
+  });
+
+  it("lists a module with no set of its own among the modules but gives it no schema entry", async () => {
+    const self = await steppedDown();
+    const setless = fakeSetlessModule("synthetic-setless", "core", { version: "0.1.0" });
+    const envelope = await captureFinalCopy(deps(self, { modules: [...MODULES, setless] }), OP);
+    expect(envelope.body.snapshot.schema.map((entry) => entry.set)).toEqual([
+      "core",
+      "credentials",
+    ]);
+    expect(envelope.body.snapshot.modules).toContainEqual({
+      name: "synthetic-setless",
+      version: "0.1.0",
+    });
   });
 
   it("carries the own-state manifest read from this box's state folder", async () => {

@@ -11,7 +11,12 @@ import {
 import { personRole, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { imageMigrationHashes, manifestSets, type MigrationSetSource } from "@waitron/migrations";
-import { checkHandoverCopy, collectHandoverSummaries, type WaitronModule } from "@waitron/module";
+import {
+  checkHandoverCopy,
+  collectHandoverSummaries,
+  modulesWithSets,
+  type WaitronModule,
+} from "@waitron/module";
 import type { HandoverOperation } from "@waitron/node-db";
 import { modulePreparationMergeFits, quoteIdent, unknownHashes } from "@waitron/provisioning";
 import { isAppError, type ErrorCode } from "@waitron/shared";
@@ -261,7 +266,7 @@ async function behindThisImage(
   modules: readonly WaitronModule[],
   root: string | null,
 ): Promise<Refusal | null> {
-  for (const { migrations: set } of modules) {
+  for (const { migrations: set } of modulesWithSets(modules)) {
     if (set.database === "node") continue;
     const held = (await journals(set.table)) ?? [];
     if (unknownHashes(imageHashesOf(set, root), held).length > 0) {

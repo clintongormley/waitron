@@ -3,14 +3,8 @@ import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
-import type {
-  DocumentMember,
-  DocumentTile,
-  HomeDevice,
-  HomeDisplay,
-} from "@waitron/catalogue/src/menu-document-types.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import type { DocumentMember, DocumentTile, HomeDevice, HomeDisplay } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget, type Theme } from "./test-helpers.js";

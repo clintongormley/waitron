@@ -18,7 +18,7 @@ import { runCli, type CliDeps } from "./cli.js";
 import { applyVenue, type VenueResult } from "./venue-apply.js";
 import { planVenue } from "./venue-plan.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
-import { enabledModules } from "@waitron/module";
+import { enabledModules, modulesWithSets } from "@waitron/module";
 import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { readTenantIdentities } from "./tenant-guard.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
@@ -861,7 +861,7 @@ async function productionFixture(accepted: boolean, certificate = productionCert
   const modules = enabledModules(ALL_MODULES, selected.config);
   const versions: Record<string, number> = {};
   const { appliedSchemaVersion } = await import("@waitron/migrations");
-  for (const module of modules)
+  for (const module of modulesWithSets(modules))
     versions[module.name] = await appliedSchemaVersion(
       { venue: venue.db, node: venue.node },
       module.migrations,

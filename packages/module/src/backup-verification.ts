@@ -242,9 +242,75 @@ export function validateBackupModuleResult(
   if (checks.length !== expected.length || checks.some((check) => !expected.includes(check.code)))
     refuse();
   if (notApplicable && status !== "passed") refuse();
-  const aggregate = [...STATUSES]
-    .reverse()
-    .find((candidate) => checks.some((check) => check.status === candidate));
-  if (status !== aggregate) refuse();
+  if (status !== worst(checks.map((check) => check.status))) refuse();
   return Object.freeze({ status, checks });
+}
+
+/** The most severe of `statuses`, the latest in `STATUSES`; undefined for none. */
+function worst(statuses: readonly BackupModuleStatus[]): BackupModuleStatus | undefined {
+  return [...STATUSES].reverse().find((candidate) => statuses.includes(candidate));
+}
+
+function union<T>(lists: readonly (readonly T[])[]): T[] {
+  return [...new Set(lists.flat())];
+}
+
+/**
+ * One set's verification: its own module's contribution followed by those of the modules whose
+ * tables it holds, in the order given. Each part's result is checked against its own contribution
+ * before the parts are merged into one check per code. A public evidence digest is kept only when
+ * every part that has one has the same one: two different ones are refused, since this package has
+ * no hash to combine them with.
+ */
+export function combineBackupVerification(
+  host: BackupVerificationContribution,
+  hosted: readonly BackupVerificationContribution[],
+): BackupVerificationContribution {
+  if (hosted.length === 0) return host;
+  const parts = [host, ...hosted];
+  const digests = union(
+    parts.map((p) => (p.publicEvidenceDigest === null ? [] : [p.publicEvidenceDigest])),
+  );
+  if (digests.length > 1) refuse();
+  const entries = new Map<string, "required" | "optional">();
+  for (const entry of parts.flatMap((p) => p.entries))
+    if (entries.get(entry.name) !== "required") entries.set(entry.name, entry.presence);
+  const effects = new Map<string, BackupVerificationContribution["effects"][number]>();
+  for (const effect of parts.flatMap((p) => p.effects)) {
+    const seen = effects.get(effect.id);
+    if (seen !== undefined && (seen.kind !== effect.kind || seen.check !== effect.check)) refuse();
+    effects.set(effect.id, effect);
+  }
+  return validateBackupVerificationContribution({
+    version: 1,
+    publicEvidenceDigest: digests[0] ?? null,
+    data: {
+      kind: parts.some((p) => p.data.kind === "custom") ? "custom" : "database_only",
+      tables: union(parts.map((p) => p.data.tables)),
+      immutableTables: union(parts.map((p) => p.data.immutableTables)),
+      checks: union(parts.map((p) => p.data.checks)),
+    },
+    secrets: union(parts.map((p) => p.secrets)),
+    entries: [...entries].map(([name, presence]) => ({ name, presence })),
+    effects: [...effects.values()].map((e) => ({ id: e.id, kind: e.kind, check: e.check })),
+    zeroSchema: host.zeroSchema,
+    targetOnly: parts.some((p) => p.targetOnly === "unsupported")
+      ? "unsupported"
+      : "empty_after_migration",
+    verifyRestoredData: async (context: BackupVerificationContext) => {
+      const statuses = new Map<BackupCheckCode, BackupModuleStatus[]>();
+      for (const part of parts) {
+        const result = validateBackupModuleResult(
+          await part.verifyRestoredData(context),
+          part,
+          false,
+        );
+        for (const check of result.checks)
+          statuses.set(check.code, [...(statuses.get(check.code) ?? []), check.status]);
+      }
+      // Never empty: each code holds the status that added it, and every part has a check.
+      const checks = [...statuses].map(([code, found]) => ({ code, status: worst(found)! }));
+      return { status: worst(checks.map((c) => c.status))!, checks };
+    },
+  });
 }

@@ -1,5 +1,4 @@
-import { AppError } from "@waitron/shared";
-import "./errors.js"; // load the code registry for the throws below
+import { AppError } from "../errors.js";
 
 export const DIETARY_ORIGINS = [
   "plant",

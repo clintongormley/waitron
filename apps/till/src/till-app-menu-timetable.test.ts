@@ -15,7 +15,7 @@ import type {
   TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 interface Menu {
   id: string;

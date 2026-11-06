@@ -4,10 +4,10 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { extraLists, productModifiers } from "./schema/extras.js";
 import { optionLists } from "./schema/options.js";
-import type { ProductModifierRef } from "./product-types.js";
+import type { ProductModifierRef } from "@waitron/shared";
 import "./errors.js";
 
-export type { ProductModifierRef } from "./product-types.js";
+export type { ProductModifierRef } from "@waitron/shared";
 
 /**
  * The two kinds of list a product's attachment list can name. Both body parsers decide what to

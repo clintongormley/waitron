@@ -24,7 +24,7 @@ import type {
   TillMenuOffer,
   ZoneOfferCatalogue,
 } from "./api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { ServerRouter } from "./api/server-router.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { setLocale, t } from "./i18n/t.js";

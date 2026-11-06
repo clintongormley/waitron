@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, TRANSLATION_GAP_KINDS as KINDS } from "@waitron/shared";
 import { sql, type SQL } from "drizzle-orm";
 import { namedRows, blankIn, LIVE_CANDIDATE, POSITION } from "./content-translation-candidates.js";
 import {
@@ -8,7 +8,6 @@ import {
   readTranslationCells,
   translationConfiguration,
 } from "./content-translation-cells.js";
-import { TRANSLATION_GAP_KINDS as KINDS } from "./content-translation-kinds.js";
 import {
   readTranslationSettings,
   type TranslationContext,

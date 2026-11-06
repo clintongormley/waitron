@@ -1,4 +1,4 @@
-import type { IncludeFolder, IncludeFolderOverrides, Presentation } from "./section-types.js";
+import type { IncludeFolder, IncludeFolderOverrides, Presentation } from "@waitron/shared";
 
 export const FOLLOWING_FOLDER: IncludeFolder = Object.freeze({
   showAsFolder: true,

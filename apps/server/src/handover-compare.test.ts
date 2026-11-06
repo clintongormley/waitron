@@ -55,6 +55,7 @@ import {
 } from "@waitron/membership";
 import { imageMigrationHashes, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import {
   appendHandoverEventTx,
   readHandoverEvent,
@@ -684,6 +685,16 @@ describe("compareFinalCopy", () => {
     ])("an old box listing %s is refused", async (_label, change) => {
       const r = await rig();
       expect(await r.compareRow(r.resigned(change))).toEqual(refused("handover.modules_differ"));
+    });
+
+    it("a module with no set of its own, held on both boxes, is accepted", async () => {
+      const r = await rig();
+      const setless = fakeSetlessModule("synthetic-setless", "core");
+      const indicator = r.resigned(
+        (body) => void body.snapshot.modules.push({ name: setless.name, version: setless.version }),
+      );
+      const result = await r.compareRow(indicator, { modules: [...ALL_MODULES, setless] });
+      expect(result).toEqual({ ok: true });
     });
 
     it("the order this box holds its modules in does not matter", async () => {

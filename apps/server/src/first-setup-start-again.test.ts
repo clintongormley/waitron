@@ -1,3 +1,4 @@
+import { modulesWithSets } from "@waitron/module";
 import { createHash, randomBytes } from "node:crypto";
 import {
   access,
@@ -1227,7 +1228,7 @@ it("with the database missing, an outside evidence file configured beside a dama
     stateDir: f.stateDir,
     venueDir: f.venueDir,
     store: f.store,
-    expectedMigrationSets: f.modules.map((module) => module.migrations.name),
+    expectedMigrationSets: modulesWithSets(f.modules).map((module) => module.migrations.name),
     publicEvidencePaths: [outsidePath],
   });
   const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, resolution } });

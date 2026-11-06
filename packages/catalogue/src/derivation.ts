@@ -1,4 +1,4 @@
-import type { ProductAllergens } from "./allergens.js";
+import type { ProductAllergens } from "@waitron/shared";
 
 /** The recipe module's overlay: the derived allergen floor, plus whether the derivation is
  * incomplete (a recipe with at least one unreviewed ingredient). `pending` forces the product

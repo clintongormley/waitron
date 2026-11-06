@@ -35,10 +35,10 @@ import type {
   OvertakenEdition,
   PublishedMenuVersion,
   QueuedEdition,
-} from "./menu-document-types.js";
+} from "@waitron/shared";
 import "./errors.js";
 
-export type { MenuStatus } from "./menu-document-types.js";
+export type { MenuStatus } from "@waitron/shared";
 
 export interface LiveVersion {
   versionId: string;

@@ -4,11 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import type {
-  FrozenExtraItem,
-  FrozenOfferVariant,
-  MenuDocument,
-} from "@waitron/catalogue/src/menu-document-types.js";
+import type { FrozenExtraItem, FrozenOfferVariant, MenuDocument } from "@waitron/shared";
 import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
 import type {

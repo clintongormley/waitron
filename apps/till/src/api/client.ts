@@ -28,7 +28,28 @@ import type {
   TenderRefundView,
   TenderRefundAcknowledgment,
 } from "./tender-refund-types.js";
-import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
+import type {
+  ProductAllergens,
+  BumpMode,
+  ChangesAfterSending,
+  ContentLanguages,
+  JoinSide,
+  ExtraSelection,
+  KitchenSignal,
+  OptionSelection,
+  OptionSnapshot,
+  ReceiptPresentation,
+  StationThresholds,
+  TableSignal,
+  TimingBand,
+  AccessibleCatalogue,
+  OfferedModifier,
+  ProductOrdering,
+  LiveOffer,
+  MenuState,
+  MenuUnavailable,
+  ServedMenu,
+} from "@waitron/shared";
 import { readTransferEvents } from "./transfer-events.js";
 import type {
   BillRow,
@@ -38,7 +59,6 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import type { BumpMode, ChangesAfterSending, ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type {
   AttendanceCommand,
@@ -64,24 +84,6 @@ export type {
 } from "@waitron/workforce/attendance-contract";
 
 import type { FormFactor, CapabilityFlag, NavigationScreen } from "../layout.js";
-import type {
-  ExtraSelection,
-  KitchenSignal,
-  OptionSelection,
-  OptionSnapshot,
-  ReceiptPresentation,
-  StationThresholds,
-  TableSignal,
-  TimingBand,
-} from "@waitron/shared";
-import type { AccessibleCatalogue, OfferedModifier } from "@waitron/catalogue/src/menu-types.js";
-import type { ProductOrdering } from "@waitron/catalogue/src/product-ordering.js";
-import type {
-  LiveOffer,
-  MenuState,
-  MenuUnavailable,
-  ServedMenu,
-} from "@waitron/catalogue/src/menu-document-types.js";
 
 export type { JoinSide } from "@waitron/shared";
 
@@ -92,7 +94,7 @@ export type {
   OfferedExtrasList,
   OfferedModifier,
   OfferedOptionsList,
-} from "@waitron/catalogue/src/menu-types.js";
+} from "@waitron/shared";
 
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
@@ -266,41 +268,15 @@ export interface VatBreakdownEntry {
   tax: string;
 }
 
-/**
- * LOCAL copies of catalogue's `dietary.ts` types, structurally identical so a value crosses the
- * boundary. `DietLabel` is a cautious tri-state: `"unknown"` when the base recipe is unreviewed — never
- * a positive claim.
- */
-export type DietaryOrigin =
-  "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
-export type ContainsTag = "meat" | "fish";
-export type DietLabel = "yes" | "no" | "unknown";
-
-/** The recipe-derived diet basis: `pending` is true while the recipe is unreviewed (holding
- * vegan/vegetarian at "unknown"). */
-export interface DietDerivation {
-  origins: DietaryOrigin[];
-  pending: boolean;
-}
-/** A staff diet OVERRIDE: an explicit label wins over the derivation; halal/kosher are never derived.
- * Absent fields don't override. */
-export interface DietOverride {
-  vegan?: "yes" | "no";
-  vegetarian?: "yes" | "no";
-  halal?: "yes" | "no";
-  kosher?: "yes" | "no";
-  addContains?: ContainsTag[];
-  removeContains?: ContainsTag[];
-}
-/** The PUBLISHED diet profile — the derivation folded with the override. halal/kosher appear only when
- * the override set them. */
-export interface DietProfile {
-  vegan: DietLabel;
-  vegetarian: DietLabel;
-  contains: ContainsTag[];
-  halal?: "yes" | "no";
-  kosher?: "yes" | "no";
-}
+export type {
+  DietaryOrigin,
+  ContainsTag,
+  DietLabel,
+  DietDerivation,
+  DietOverride,
+  DietProfile,
+} from "@waitron/shared";
+import type { DietDerivation, DietOverride, DietProfile } from "@waitron/shared";
 
 /**
  * One sellable product as the till's widgets consume it, built from exactly two payloads:

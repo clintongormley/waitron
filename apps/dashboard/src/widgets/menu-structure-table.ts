@@ -2,7 +2,7 @@ import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { foldForSearch, textSearch, type TextSearch } from "@waitron/shared";
+import { foldForSearch, textSearch, type TextSearch, categoryColor } from "@waitron/shared";
 import {
   baseStyles,
   reorder,
@@ -39,12 +39,11 @@ import { countOf } from "./count-text.js";
 import { PATH_SEPARATOR } from "./category-form.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
-import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import {
   FOLLOWING_FOLDER,
   folderPresentation,
 } from "@waitron/catalogue/src/include-folder-presentation.js";
-import type { Presentation } from "@waitron/catalogue/src/section-types.js";
+import type { Presentation } from "@waitron/shared";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";

@@ -2,7 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type {
   DashboardApi,
   MenuChange,

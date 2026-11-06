@@ -1,4 +1,4 @@
-import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
+import type { ProductAllergens } from "@waitron/shared";
 import { type TemplateResult, css, html, nothing } from "lit";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";

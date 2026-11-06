@@ -11,7 +11,7 @@ import { readOfferedModifiers } from "./offered-modifiers.js";
 import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { menuVersions } from "./schema/publication.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { newCustomerPresentation } from "./new-customer-text.js";
+import { newCustomerPresentation } from "@waitron/shared";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

@@ -425,3 +425,25 @@ export function tableDeclarations(createSql: string): TableDeclarations {
   }
   return { columns, keys, foreignKeys };
 }
+
+export interface CreatedObject {
+  readonly kind: "table" | "index" | "trigger" | "view";
+  readonly name: string;
+}
+
+/** What `CREATE [TEMP] [UNIQUE] TABLE|INDEX|TRIGGER|VIEW [IF NOT EXISTS] [schema.]name` makes; null otherwise. */
+export function createdObject(statement: string): CreatedObject | null {
+  const tokens = significantTokens(statement);
+  if (!isWord(tokens[0], "CREATE")) return null;
+  let index = 1;
+  if (isWord(tokens[index], "TEMP") || isWord(tokens[index], "TEMPORARY")) index += 1;
+  if (isWord(tokens[index], "UNIQUE")) index += 1;
+  const kind = tokens[index]?.text.toLowerCase();
+  if (kind !== "table" && kind !== "index" && kind !== "trigger" && kind !== "view") return null;
+  index += 1;
+  if (isWord(tokens[index], "IF")) index += 3;
+  if (isSymbol(tokens[index + 1], ".")) index += 2;
+  const name = tokens[index];
+  if (name === undefined) return null;
+  return { kind, name: unquoted(name.text) };
+}

@@ -9,19 +9,19 @@ import {
   submitOnEnter,
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
-import type { ContentLanguages } from "@waitron/shared";
-import { resolveMenuText } from "@waitron/catalogue/src/customer-menu-presentation.js";
+import type {
+  ContentLanguages,
+  IncludeFolder,
+  IncludeFolderInput,
+  IncludeFolderOverrides,
+  Presentation,
+} from "@waitron/shared";
+import { resolveMenuText } from "@waitron/shared";
 import {
   FOLLOWING_FOLDER,
   folderOverridesFrom,
   folderPresentation,
 } from "@waitron/catalogue/src/include-folder-presentation.js";
-import type {
-  IncludeFolder,
-  IncludeFolderInput,
-  IncludeFolderOverrides,
-  Presentation,
-} from "@waitron/catalogue/src/section-types.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";

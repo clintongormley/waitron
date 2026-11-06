@@ -17,7 +17,7 @@ import {
 } from "./staff.js";
 import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
-import type { PersonRoleValue } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import { recoveryCodes } from "./schema/recovery-codes.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";

@@ -28,8 +28,10 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { foldForSearch, formatMoney, searchFor } from "@waitron/shared";
 import {
+  foldForSearch,
+  formatMoney,
+  searchFor,
   HOME_GRID_COLUMNS,
   arrangeHome,
   indexDocument,
@@ -40,8 +42,8 @@ import {
   tilePaths,
   type HomeIndex,
   type SectionStep,
-} from "@waitron/catalogue/src/device-home.js";
-import type { DocumentTile, HomeTileMode } from "@waitron/catalogue/src/menu-document-types.js";
+} from "@waitron/shared";
+import type { DocumentTile, HomeTileMode } from "@waitron/shared";
 import type {
   DocumentMember,
   FrozenOffer,

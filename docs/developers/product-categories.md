@@ -328,7 +328,7 @@ positions.
 number from 2 to 3 for a handheld and from 4 to 10 for a till. `tiles` is `colours` or `thumbnails`,
 and `order` is `home_first` (the shortcuts, then the menu) or `menu_first`. A new menu starts with
 3 columns on a handheld and 6 on a till, both `colours` and `home_first` (`HOME_DISPLAY_DEFAULTS`,
-`packages/catalogue/src/device-home.ts`).
+`packages/shared/src/menu-document/device-home.ts`).
 
 | Route | Body and success | Refusals |
 | --- | --- | --- |
@@ -363,7 +363,7 @@ a phone or a tablet (`kindOfFormFactor`, `apps/till/src/layout.ts`) and `till` o
 is `homeSectionId`). The displays are six columns on `menu_details`: `handheld_columns`,
 `handheld_tiles`, `handheld_order`, `till_columns`, `till_tiles` and `till_order`, each required and
 with a default. None has a CHECK, because adding one makes drizzle rebuild the table, so the
-database stores any value: `homeDisplayProblem` (`packages/catalogue/src/device-home.ts`) is the
+database stores any value: `homeDisplayProblem` (`packages/shared/src/menu-document/device-home.ts`) is the
 whole of the range check. A save runs it, and so does a configuration import, which refuses a bad
 value with `setup.request_invalid` (`field` such as `menu_details.till_columns`).
 

@@ -13,8 +13,12 @@ import {
 } from "@waitron/ui";
 import "./product-info.js";
 import { nutritionDietLabels } from "./nutrition-icons.js";
-import { foldCache, foldForSearch, formatMoney, searchFor, type NameSearch } from "@waitron/shared";
 import {
+  foldCache,
+  foldForSearch,
+  formatMoney,
+  searchFor,
+  type NameSearch,
   HOME_GRID_COLUMNS,
   arrangeHome,
   indexDocument,
@@ -25,13 +29,8 @@ import {
   tilePaths,
   type HomeIndex,
   type SectionStep,
-} from "@waitron/catalogue/src/device-home.js";
-import type {
-  DocumentMember,
-  DocumentTile,
-  HomeDisplay,
-  HomeTileMode,
-} from "@waitron/catalogue/src/menu-document-types.js";
+} from "@waitron/shared";
+import type { DocumentMember, DocumentTile, HomeDisplay, HomeTileMode } from "@waitron/shared";
 import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { AppError } from "../errors.js";
 import {
   deriveDietProfile,
   overlayDietProfile,
@@ -62,6 +63,15 @@ describe("deriveDietProfile", () => {
 
 describe("overlayDietProfile", () => {
   const base: DietProfile = { vegan: "unknown", vegetarian: "unknown", contains: [] };
+  it("with no override returns the derived profile with its contains-tags sorted", () => {
+    const derived: DietProfile = { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] };
+    expect(overlayDietProfile(derived, null)).toEqual({
+      vegan: "no",
+      vegetarian: "no",
+      contains: ["fish", "meat"],
+    });
+    expect(derived.contains).toEqual(["meat", "fish"]);
+  });
   it("override forces a label", () => {
     expect(overlayDietProfile(base, { vegan: "yes" }).vegan).toBe("yes");
   });
@@ -141,5 +151,74 @@ describe("validateDietOverride (Task 4)", () => {
     expect(() => validateDietOverride({ addContains: ["meat"], removeContains: ["meat"] })).toThrow(
       /diet.add_remove_conflict/,
     );
+  });
+});
+
+describe("diet refusals and the override's edges", () => {
+  function refusal(call: () => unknown): { code: string; params: unknown } {
+    try {
+      call();
+    } catch (e) {
+      return { code: (e as AppError).code, params: (e as AppError).params };
+    }
+    throw new Error("should have thrown");
+  }
+
+  it("refuses an unknown origin and a tag outside meat and fish, echoing the value", () => {
+    expect(refusal(() => validateOrigin("rock"))).toEqual({
+      code: "diet.invalid_origin",
+      params: { origin: "rock" },
+    });
+    expect(refusal(() => validateOrigin(5))).toEqual({
+      code: "diet.invalid_origin",
+      params: { origin: "5" },
+    });
+    expect(refusal(() => validateContainsTag("plant"))).toEqual({
+      code: "diet.invalid_origin",
+      params: { origin: "plant" },
+    });
+  });
+
+  it("names the field and value of a bad label, and the list that is not a list", () => {
+    expect(
+      refusal(() => validateDietOverride({ halal: "maybe" } as unknown as DietOverride)),
+    ).toEqual({ code: "diet.invalid_label", params: { field: "halal", value: "maybe" } });
+    expect(
+      refusal(() => validateDietOverride({ removeContains: "fish" } as unknown as DietOverride)),
+    ).toEqual({ code: "diet.invalid_origin", params: { origin: "fish" } });
+    expect(
+      refusal(() => validateDietOverride({ addContains: ["fish"], removeContains: ["fish"] })),
+    ).toEqual({ code: "diet.add_remove_conflict", params: { tag: "fish" } });
+  });
+
+  it("accepts an override of labels alone", () => {
+    const override: DietOverride = { vegan: "no" };
+    expect(validateDietOverride(override)).toBe(override);
+  });
+
+  it("counts dairy, egg and honey as vegetarian", () => {
+    for (const origin of ["dairy", "egg", "honey"] as const)
+      expect(deriveDietProfile({ origins: [origin], pending: false }).vegetarian).toBe("yes");
+  });
+
+  it("keeps the derived tags, overrides each label, sorts, and adds halal and kosher only when set", () => {
+    const derived: DietProfile = { vegan: "no", vegetarian: "yes", contains: ["meat"] };
+    expect(overlayDietProfile(derived, { vegetarian: "no" })).toStrictEqual({
+      vegan: "no",
+      vegetarian: "no",
+      contains: ["meat"],
+    });
+    expect(overlayDietProfile(derived, { addContains: ["fish"], kosher: "yes" })).toStrictEqual({
+      vegan: "no",
+      vegetarian: "yes",
+      contains: ["fish", "meat"],
+      kosher: "yes",
+    });
+    expect(overlayDietProfile(derived, { halal: "no" })).toStrictEqual({
+      vegan: "no",
+      vegetarian: "yes",
+      contains: ["meat"],
+      halal: "no",
+    });
   });
 });

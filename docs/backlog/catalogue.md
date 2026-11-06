@@ -112,7 +112,7 @@ Left open:
   painting, the section trail, the two-block home arrangement, the breadcrumb and about a hundred lines
   of CSS. A change to the till's tiles has to be repeated by hand, and no test sees the two drift
   apart. Proposed follow-up: move the shared logic and CSS beside `arrangeHome` in
-  `packages/catalogue/src/device-home.ts`.
+  `packages/shared/src/menu-document/device-home.ts`.
 
 ## Two copies of the tree pointer drag — OPEN (W88)
 
@@ -238,7 +238,7 @@ A487a also saw it in `src/components/wt-tabs` runs. Which test logs it was not l
 ## `joinCustomerPresentationText` passes the requested language where the default belongs — OPEN (found 2026-10-02 by A172, not measured)
 
 - It calls `resolveSnapshotText(variant, locale,
-locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixed in
+locale)` (`packages/shared/src/menu-document/product-presentation.ts`), the shape A172 fixed in
   `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
   language alphabetically rather than the default. The order path freezes the variant's text in
   the default content language, under every receipt-language key, before it gets there

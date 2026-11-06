@@ -121,7 +121,7 @@ beforeEach(async () => {
   for (const m of baseModules)
     await runMigrations(suite.db, {
       migrationsFolder: join(root!, m.name),
-      migrationsTable: m.migrations.table,
+      migrationsTable: m.migrations!.table,
     });
   execute(
     "insert into locations values ('10000000-0000-4000-8000-000000000001'); insert into nodes values ('20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001'); insert into deployment values (1, 'preproduction');",
@@ -185,7 +185,7 @@ describe("strict backup compatibility", () => {
         ...base,
         tier: "mandatory",
         requires: undefined,
-        migrations: { ...base.migrations, database: "node" },
+        migrations: { ...base.migrations!, database: "node" },
         backup: {
           verification: policy(["node_things"], {
             entries: [{ name: "node.dump", presence: "required" }],
@@ -765,5 +765,63 @@ describe("strict backup compatibility", () => {
         },
       }),
     ).rejects.toBe(error);
+  });
+});
+
+describe("a module whose tables live in another module's set", () => {
+  /** Adds staffing with no set of its own; its host `extra` classifies `shifts`. */
+  function addStaffing(): void {
+    const at = modules.findIndex((m) => m.name === "extra");
+    const extra = modules[at]!;
+    modules[at] = {
+      ...extra,
+      classification: [
+        ...extra.classification!,
+        { table: "shifts", class: "state", reason: "Synthetic verification fixture" },
+      ],
+    };
+    modules.push({
+      ...module("staffing", ["shifts"]),
+      migrations: undefined,
+      tablesIn: "extra",
+      classification: undefined,
+    });
+  }
+
+  it("has its tables checked as part of its host's set", async () => {
+    addStaffing();
+    bindTarget();
+    expect(target.modules.map((m) => m.name)).toEqual(["core", "extra"]);
+    await expect(run()).resolves.toBe("invalid");
+    execute("create table shifts (id text)");
+    await expect(run()).resolves.toBe("passed");
+  });
+
+  it("refuses its tables in a copy whose target does not know the module", async () => {
+    execute("create table shifts (id text)");
+    await expect(run()).resolves.toBe("unsupported");
+  });
+
+  it.each([true, false])("accepts a modules.json that sets it to %s", async (enabled) => {
+    addStaffing();
+    bindTarget();
+    execute("create table shifts (id text)");
+    setEntry("secrets/modules.json", JSON.stringify({ modules: { staffing: enabled } }));
+    await expect(run()).resolves.toBe("passed");
+  });
+
+  it("still covers its tables when modules.json switches it off", async () => {
+    addStaffing();
+    bindTarget();
+    setEntry("secrets/modules.json", JSON.stringify({ modules: { staffing: false } }));
+    await expect(run()).resolves.toBe("invalid");
+  });
+
+  it("still refuses an override naming a module nobody supplied", async () => {
+    addStaffing();
+    bindTarget();
+    execute("create table shifts (id text)");
+    setEntry("secrets/modules.json", JSON.stringify({ modules: { ghost: true } }));
+    await expect(run()).resolves.toBe("unsupported");
   });
 });

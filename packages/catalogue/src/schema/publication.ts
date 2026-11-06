@@ -12,7 +12,7 @@ import {
   table,
   ts,
 } from "@waitron/db";
-import type { MenuDocument } from "../menu-document-types.js";
+import type { MenuDocument } from "@waitron/shared";
 
 /**
  * One fixed version of a menu, published or queued: the whole document, never changed once

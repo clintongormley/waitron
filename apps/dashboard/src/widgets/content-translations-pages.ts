@@ -9,7 +9,7 @@ import {
   type TranslationQuery,
   type TranslationRef,
 } from "@waitron/catalogue/src/content-translation-types.js";
-import { TRANSLATION_GAP_KINDS } from "@waitron/catalogue/src/content-translation-kinds.js";
+import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import type {
   ContentSuggestionQuery,
   ContentSuggestionRead,

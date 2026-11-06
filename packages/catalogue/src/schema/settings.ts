@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, label, table } from "@waitron/db";
-import { VAT_CLASSES } from "../vat-rates.js";
+import { VAT_CLASSES } from "@waitron/shared";
 
 const vatClass = enumType(VAT_CLASSES);
 

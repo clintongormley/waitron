@@ -1,20 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { appendOnly, classify } from "@waitron/sync-enrolment";
+import type { MigrationSetSource } from "@waitron/migrations";
 import {
+  modulesWithSets,
   orderedMigrationSets,
   packageDirOf,
   type RestoreHook,
   type WaitronModule,
 } from "./index.js";
+import { fakeSetlessModule } from "./testing/fake-module.js";
 
-const mod = (name: string, requires?: WaitronModule["requires"]): WaitronModule => ({
+const mod = (
+  name: string,
+  requires?: WaitronModule["requires"],
+): WaitronModule & { migrations: MigrationSetSource } => ({
   name,
   version: "0.0.0",
   tier: "toggleable",
   migrations: { name, table: `__drizzle_migrations_${name}`, from: `../${name}/drizzle` },
   ...(requires ? { requires } : {}),
 });
+
+const setless = (name: string, requires?: WaitronModule["requires"]): WaitronModule =>
+  fakeSetlessModule(name, "core", requires ? { requires } : {});
 
 /** The AppError code `fn` throws, or `false` if it did not throw one. */
 function thrownCode(fn: () => unknown): string | false {
@@ -23,6 +32,18 @@ function thrownCode(fn: () => unknown): string | false {
     return false;
   } catch (error) {
     return isAppError(error) ? error.code : false;
+  }
+}
+
+/** The params of the `module.set_ownership_invalid` refusal `orderedMigrationSets` throws, or `false`. */
+function ownershipRefusal(modules: readonly WaitronModule[]): unknown {
+  try {
+    orderedMigrationSets(modules);
+    return false;
+  } catch (error) {
+    return isAppError(error) && error.code === "module.set_ownership_invalid"
+      ? error.params
+      : false;
   }
 }
 
@@ -166,6 +187,71 @@ describe("orderedMigrationSets", () => {
         "module.start_again_deletable_invalid",
       );
     });
+  });
+});
+
+describe("a module with no set of its own", () => {
+  it("modulesWithSets keeps only the modules that carry a set, in list order", () => {
+    const mods = [mod("core"), setless("catalogue", { core: "*" }), mod("sync")];
+    expect(modulesWithSets(mods).map((m) => m.name)).toEqual(["core", "sync"]);
+  });
+
+  it("orderedMigrationSets omits it, yet still orders the modules that depend on it after it", () => {
+    const mods = [
+      mod("orders", { modules: { catalogue: "*" } }),
+      setless("catalogue", { modules: { media: "*" } }),
+      mod("media", { core: "*" }),
+      mod("core"),
+    ];
+    expect(orderedMigrationSets(mods).map((s) => s.name)).toEqual(["core", "media", "orders"]);
+  });
+
+  it("orderedMigrationSets still validates its requires", () => {
+    const mods = [mod("core"), setless("catalogue", { modules: { media: "*" } })];
+    expect(thrownCode(() => orderedMigrationSets(mods))).toBe("module.dependency_missing");
+  });
+
+  it("orderedMigrationSets refuses one that names no set to hold its tables", () => {
+    const neither: WaitronModule = { ...setless("catalogue"), tablesIn: undefined };
+    expect(ownershipRefusal([mod("core"), neither])).toEqual({
+      module: "catalogue",
+      reason: "no_set",
+    });
+  });
+
+  it("orderedMigrationSets refuses one that has a set of its own and names another", () => {
+    const both: WaitronModule = { ...mod("catalogue"), tablesIn: "core" };
+    expect(ownershipRefusal([mod("core"), both])).toEqual({
+      module: "catalogue",
+      reason: "two_sets",
+    });
+  });
+
+  it("orderedMigrationSets refuses a tablesIn naming a module that is not in the list", () => {
+    expect(ownershipRefusal([mod("media"), setless("catalogue")])).toEqual({
+      module: "catalogue",
+      reason: "host_missing",
+    });
+  });
+
+  it("orderedMigrationSets refuses a tablesIn naming a module with no set of its own", () => {
+    const mods = [mod("core"), setless("media"), fakeSetlessModule("catalogue", "media")];
+    expect(ownershipRefusal(mods)).toEqual({ module: "catalogue", reason: "host_has_no_set" });
+  });
+
+  it("orderedMigrationSets refuses a classification on it, which no set would protect", () => {
+    const classified: WaitronModule = {
+      ...setless("catalogue"),
+      classification: [appendOnly("catalogue_entries", "ledger", "what happened")],
+    };
+    expect(ownershipRefusal([mod("core"), classified])).toEqual({
+      module: "catalogue",
+      reason: "classified_without_set",
+    });
+  });
+
+  it("packageDirOf throws for it, so a guard has to filter first", () => {
+    expect(() => packageDirOf(setless("catalogue"))).toThrow(/catalogue.*no migration set/);
   });
 });
 

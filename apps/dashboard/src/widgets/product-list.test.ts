@@ -12,7 +12,7 @@ import {
 } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Course, Product, Unit } from "../api/client.js";
-import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
+import type { ListedVariant } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
 import { registerIcons, setHelpMode, type WtHelpTooltip } from "@waitron/ui";

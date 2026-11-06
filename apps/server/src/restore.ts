@@ -45,6 +45,7 @@ import {
 } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import {
+  modulesWithSets,
   orderedMigrationSets,
   type OperationBinding,
   type ProvisionedNode,
@@ -343,11 +344,14 @@ async function validateEntryMetadata(
     throw new AppError("restore.archive_incomplete", { missing: NODE_DUMP_NAME });
   }
 
-  // GATE — before any write. `expectedVersions` is read from THIS binary's own migrations per module
+  // GATE — before any write. `expectedVersions` is read from THIS binary's own migrations per migration set
   // (`expectedSchemaVersion`), never a hardcoded number — the same shape `buildManifest` builds from a
   // database, just off the shipped folders instead.
   const expectedVersions = Object.fromEntries(
-    deps.modules.map((m) => [m.name, expectedSchemaVersion(m.migrations, deps.migrationsRoot)]),
+    modulesWithSets(deps.modules).map((m) => [
+      m.name,
+      expectedSchemaVersion(m.migrations, deps.migrationsRoot),
+    ]),
   );
   checkRestoreCompatibility(manifest, { environment: deps.environment, expectedVersions });
 

@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { readTranslationSettings, type TranslationContext } from "./content-translation-targets.js";
 import {
   TRANSLATION_NAME_BYTES,
@@ -10,7 +10,6 @@ import {
   type TranslationItem,
   type TranslationField,
 } from "./content-translation-types.js";
-import { TRANSLATION_GAP_KINDS } from "./content-translation-kinds.js";
 import { writeTranslationMaps } from "./content-translation-writes.js";
 import { deleteSavedCellSuggestions } from "./content-suggestion-store.js";
 import { canonicalTranslationLanguage, readTranslationCells } from "./content-translation-cells.js";

@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { decimal } from "@waitron/shared";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { decimal } from "../money.js";
+import { isAppError } from "../errors.js";
 import {
   VAT_RATE_TABLE,
   localCalendarDate,
+  localToday,
   vatRateOn,
   vatRatesOn,
   type DatedRate,
@@ -17,6 +19,27 @@ const WITH_CHANGE: VatRateTable = {
     { from: "2027-01-01", rate: "23.00" },
   ],
 };
+
+/** The code and params of the AppError `fn` throws; anything else it throws, as thrown. */
+function refusal(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (error) {
+    return isAppError(error) ? { code: error.code, params: error.params } : error;
+  }
+  return "no refusal";
+}
+
+const dateInvalid = (caller: "vatRateOn" | "vatRatesOn", value: string) => ({
+  code: "vat_rate.date_invalid",
+  params: { caller, value },
+});
+
+const tableInvalid = (
+  caller: "vatRateOn" | "vatRatesOn",
+  vatClass: string,
+  reason: "first_entry_missing_or_dated" | "not_oldest_first",
+) => ({ code: "vat_rate.table_invalid", params: { caller, vatClass, reason } });
 
 describe("vatRateOn", () => {
   it("gives today's four rates from the shipped table", () => {
@@ -39,13 +62,15 @@ describe("vatRateOn", () => {
 
   it("refuses a date that is not a real YYYY-MM-DD calendar day", () => {
     for (const bad of ["2027-1-01", "2027-02-30", "20270101", "", "2027-01-01T00:00"]) {
-      expect(() => vatRateOn("general", bad)).toThrow(/^vatRateOn: .*not a calendar date/);
+      expect(refusal(() => vatRateOn("general", bad))).toEqual(dateInvalid("vatRateOn", bad));
     }
   });
 
   it("refuses a table whose first entry is dated", () => {
     const table = { ...VAT_RATE_TABLE, general: [{ from: "2020-01-01", rate: "21.00" }] };
-    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/^vatRateOn: the first entry/);
+    expect(refusal(() => vatRateOn("general", "2026-09-27", table))).toEqual(
+      tableInvalid("vatRateOn", "general", "first_entry_missing_or_dated"),
+    );
   });
 
   it("refuses a table with a second undated entry", () => {
@@ -56,7 +81,9 @@ describe("vatRateOn", () => {
         { from: null, rate: "23.00" },
       ],
     };
-    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/oldest first/);
+    expect(refusal(() => vatRateOn("general", "2026-09-27", table))).toEqual(
+      tableInvalid("vatRateOn", "general", "not_oldest_first"),
+    );
   });
 
   it("refuses a table whose entries are out of order or repeat a date", () => {
@@ -76,8 +103,12 @@ describe("vatRateOn", () => {
         { from: "2027-01-01", rate: "24.00" },
       ],
     };
-    expect(() => vatRateOn("general", "2026-09-27", outOfOrder)).toThrow(/oldest first/);
-    expect(() => vatRateOn("general", "2026-09-27", repeated)).toThrow(/oldest first/);
+    expect(refusal(() => vatRateOn("general", "2026-09-27", outOfOrder))).toEqual(
+      tableInvalid("vatRateOn", "general", "not_oldest_first"),
+    );
+    expect(refusal(() => vatRateOn("general", "2026-09-27", repeated))).toEqual(
+      tableInvalid("vatRateOn", "general", "not_oldest_first"),
+    );
   });
 
   it("refuses a table entry dated with something other than a calendar date", () => {
@@ -88,12 +119,16 @@ describe("vatRateOn", () => {
         { from: "2027-13-01", rate: "23.00" },
       ],
     };
-    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/not a calendar date/);
+    expect(refusal(() => vatRateOn("general", "2026-09-27", table))).toEqual(
+      dateInvalid("vatRateOn", "2027-13-01"),
+    );
   });
 
   it("refuses a class with no entries", () => {
     const table = { ...VAT_RATE_TABLE, general: [] };
-    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/first entry/);
+    expect(refusal(() => vatRateOn("general", "2026-09-27", table))).toEqual(
+      tableInvalid("vatRateOn", "general", "first_entry_missing_or_dated"),
+    );
   });
 });
 
@@ -123,7 +158,9 @@ describe("vatRatesOn", () => {
   });
 
   it("refuses a date that is not a real YYYY-MM-DD calendar day", () => {
-    expect(() => vatRatesOn("2027-02-30")).toThrow(/^vatRatesOn: .*not a calendar date/);
+    expect(refusal(() => vatRatesOn("2027-02-30"))).toEqual(
+      dateInvalid("vatRatesOn", "2027-02-30"),
+    );
   });
 
   it("refuses a malformed class even when another class is asked for, and on every call", () => {
@@ -134,9 +171,15 @@ describe("vatRatesOn", () => {
         { from: null, rate: "1.00" },
       ],
     };
-    expect(() => vatRatesOn("2026-09-27", table)).toThrow(/^vatRatesOn: .*oldest first/);
-    expect(() => vatRatesOn("2026-09-27", table)).toThrow(/oldest first/);
-    expect(() => vatRateOn("general", "2026-09-27", table)).toThrow(/^vatRateOn: .*oldest first/);
+    expect(refusal(() => vatRatesOn("2026-09-27", table))).toEqual(
+      tableInvalid("vatRatesOn", "zero", "not_oldest_first"),
+    );
+    expect(refusal(() => vatRatesOn("2026-09-27", table))).toEqual(
+      tableInvalid("vatRatesOn", "zero", "not_oldest_first"),
+    );
+    expect(refusal(() => vatRateOn("general", "2026-09-27", table))).toEqual(
+      tableInvalid("vatRateOn", "zero", "not_oldest_first"),
+    );
   });
 });
 
@@ -152,8 +195,12 @@ describe("a table checked once", () => {
     expect(vatRateOn("general", "2028-01-01", table)).toBe(decimal("23.00"));
     table.general[1]!.from = "2027-00-99";
     table.general[1]!.rate = "99.00";
-    expect(() => vatRateOn("general", "2028-01-01", table)).toThrow(/not a calendar date/);
-    expect(() => vatRatesOn("2028-01-01", table)).toThrow(/not a calendar date/);
+    expect(refusal(() => vatRateOn("general", "2028-01-01", table))).toEqual(
+      dateInvalid("vatRateOn", "2027-00-99"),
+    );
+    expect(refusal(() => vatRatesOn("2028-01-01", table))).toEqual(
+      dateInvalid("vatRatesOn", "2027-00-99"),
+    );
   });
 
   it("is checked again when its entries are reordered after passing", () => {
@@ -166,7 +213,9 @@ describe("a table checked once", () => {
     expect(vatRatesOn("2028-06-01", table).general).toBe(decimal("24.00"));
     general.reverse();
     general.unshift(general.pop()!);
-    expect(() => vatRatesOn("2028-06-01", table)).toThrow(/oldest first/);
+    expect(refusal(() => vatRatesOn("2028-06-01", table))).toEqual(
+      tableInvalid("vatRatesOn", "general", "not_oldest_first"),
+    );
   });
 
   it("the shipped table cannot be changed at any level", () => {
@@ -196,5 +245,19 @@ describe("localCalendarDate", () => {
   it("puts local midnight on the new day", () => {
     expect(localCalendarDate(new Date("2026-12-31T23:00:00.000Z"), 60)).toBe("2027-01-01");
     expect(localCalendarDate(new Date("2026-12-31T22:59:59.999Z"), 60)).toBe("2026-12-31");
+  });
+});
+
+describe("localToday", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is this process's local calendar date", () => {
+    vi.useFakeTimers();
+    for (const instant of ["2026-12-31T23:30:00.000Z", "2027-01-01T00:30:00.000Z"]) {
+      vi.setSystemTime(new Date(instant));
+      expect(localToday()).toBe(new Date().toLocaleDateString("en-CA"));
+    }
   });
 });

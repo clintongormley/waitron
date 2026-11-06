@@ -20,8 +20,8 @@ export {
   validateUnitPrecision,
 } from "./unit-validation.js";
 import "./errors.js";
-import type { Unit, SellableUnit } from "./product-types.js";
-export type { Unit, SellableUnit } from "./product-types.js";
+import type { Unit, SellableUnit } from "@waitron/shared";
+export type { Unit, SellableUnit } from "@waitron/shared";
 
 /** The unit a product reads as when it has NO stored unit. It is NEVER written to `units` or
  * `product_units`. */

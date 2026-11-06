@@ -1,4 +1,4 @@
-import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { fixedNameLanguages } from "./include-folder-presentation.js";
 import type {
   DocumentMember,
@@ -14,7 +14,7 @@ import type {
   MenuField,
   MenuOccurrence,
   MenuTarget,
-} from "./menu-document-types.js";
+} from "@waitron/shared";
 
 export function indexMenuOccurrences(document: MenuDocument): MenuOccurrence[] {
   const occurrences: MenuOccurrence[] = [];

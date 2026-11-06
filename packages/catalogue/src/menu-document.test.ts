@@ -1,9 +1,14 @@
-import type { DocumentMember, MenuChange, MenuChangeBody } from "./menu-document-types.js";
+import type {
+  DocumentMember,
+  MenuChange,
+  MenuChangeBody,
+  IncludeFolderInput,
+} from "@waitron/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { decimal } from "@waitron/shared";
+import { decimal, HOME_DISPLAY_DEFAULTS, shownMembers } from "@waitron/shared";
 import { plantStoredCategory, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import {
   menusFixture,
@@ -25,7 +30,7 @@ import {
   type MenuDocument,
 } from "./menu-document.js";
 import { BATCH_SIZE } from "./batches.js";
-import * as vatRates from "./vat-rates.js";
+import * as vatRates from "@waitron/shared";
 import { createCategory, updateCategory } from "./categories.js";
 import * as settings from "./settings.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -48,14 +53,12 @@ import {
 } from "./sections.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { readMenuStructure, type MenuStructureNode } from "./menu-structure.js";
-import type { IncludeFolderInput } from "./section-types.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
 import { extraListItems } from "./schema/extras.js";
 import { createExtraList } from "./extras.js";
 import { menuDetails } from "./schema/menu.js";
-import { HOME_DISPLAY_DEFAULTS, shownMembers } from "./device-home.js";
 import { addShortcut, setHomeDisplay } from "./menu-home.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";

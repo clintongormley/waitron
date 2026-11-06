@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type {
   DashboardApi,
   MenuHome,

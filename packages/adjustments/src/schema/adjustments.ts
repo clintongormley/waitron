@@ -16,7 +16,7 @@ import {
   tsString,
   workingOrders,
 } from "@waitron/db";
-import { ADJUSTMENT_ACTIONS, type AdjustmentPolicySnapshot } from "../policy.js";
+import { ADJUSTMENT_ACTIONS, type AdjustmentPolicySnapshot } from "@waitron/shared";
 
 const adjustmentAction = enumType(ADJUSTMENT_ACTIONS);
 

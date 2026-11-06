@@ -1,4 +1,4 @@
-import { resolveSnapshotText } from "@waitron/shared";
+import { resolveSnapshotText } from "../content-languages.js";
 import { newCustomerText } from "./new-customer-text.js";
 
 export interface ProductPresentation {

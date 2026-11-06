@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { HomeTile, MenuDocument } from "../api/client.js";
-import type { DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentTile } from "@waitron/shared";
 import {
   cleanupWidgets,
   documentProduct,

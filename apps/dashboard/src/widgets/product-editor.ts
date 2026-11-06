@@ -20,9 +20,9 @@ import {
   localToday,
   vatRateOn,
   type VatClass,
-} from "@waitron/catalogue/src/vat-rates.js";
-import { PRODUCT_ORDERINGS } from "@waitron/catalogue/src/product-ordering.js";
-import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+  PRODUCT_ORDERINGS,
+  categoryColor,
+} from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -66,7 +66,7 @@ import {
   type FieldContext,
 } from "./form-fields.js";
 import type { CategorySummary, DashboardApi } from "../api/client.js";
-import type { ProductModifierRef } from "@waitron/catalogue/src/product-types.js";
+import type { ProductModifierRef } from "@waitron/shared";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 import type {
   EditorVariant,

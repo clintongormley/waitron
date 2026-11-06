@@ -456,7 +456,7 @@ const EXTRA_PRODUCT_NAME = "Panecillo";
 const EXTRA_PRICE = "0.50";
 const EXTRA_VAT_CLASS = "general" as const;
 
-type OverlayAllergens = import("@waitron/catalogue/src/allergens.js").ProductAllergens;
+type OverlayAllergens = import("@waitron/shared").ProductAllergens;
 
 async function attachExtra(
   shop: Shop,

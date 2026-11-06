@@ -2,7 +2,7 @@ import { and, eq, gt, inArray } from "drizzle-orm";
 import { catalogues, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
-import type { MenuDocument } from "./menu-document-types.js";
+import type { MenuDocument } from "@waitron/shared";
 import { liveVersions } from "./menu-publication.js";
 import { menuScheduledPublications, menuVersions } from "./schema/publication.js";
 import { takeOffMenus, dropMenuPrices } from "./menu-removal.js";

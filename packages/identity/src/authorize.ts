@@ -4,7 +4,8 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { sessions } from "./schema/sessions.js";
-import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
+import { roleHasPermission, type Permission } from "./permissions.js";
+import type { PersonRoleValue } from "@waitron/shared";
 import {
   verifyPersonCredential,
   verifyThrottledCredential,

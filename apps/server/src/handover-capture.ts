@@ -19,7 +19,7 @@ import {
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
-import { collectHandoverSummaries, type WaitronModule } from "@waitron/module";
+import { collectHandoverSummaries, modulesWithSets, type WaitronModule } from "@waitron/module";
 import {
   appendHandoverEventTx,
   readHandoverOperation,
@@ -243,7 +243,7 @@ async function venueSchema(
   query: BackupQuery,
 ): Promise<SchemaEntry[]> {
   const schema: SchemaEntry[] = [];
-  for (const m of modules) {
+  for (const m of modulesWithSets(modules)) {
     if (m.migrations.database === "node") continue;
     const table = m.migrations.table;
     // A fault in Waitron: a descriptor names its journal table in this shape.

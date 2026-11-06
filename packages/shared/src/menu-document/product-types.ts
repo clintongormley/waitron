@@ -1,4 +1,4 @@
-import type { PricingUnit } from "./pricing.js";
+import type { PricingUnit } from "./pricing-unit.js";
 import type { VatClass } from "./vat-rates.js";
 import type { ProductAllergens } from "./allergens.js";
 import type { DietDerivation, DietOverride } from "./dietary.js";
@@ -16,10 +16,10 @@ import type { ProductOrdering } from "./product-ordering.js";
 /**
  * One entry in a product's ordered attachment list: an extras list or an options list, never both.
  * The `id` is the LIST's id, not the attachment row's — the row's own key is a surrogate nothing
- * outside `product-modifiers.ts` names.
+ * outside catalogue's `product-modifiers.ts` names.
  *
  * It lives HERE rather than beside the read/write code because the dashboard's product editor sends
- * and receives it, and this file is the one the browser may import: `product-modifiers.ts` imports
+ * and receives it, and this file is the one the browser may import: catalogue's `product-modifiers.ts` imports
  * drizzle and `@waitron/db`.
  */
 export interface ProductModifierRef {

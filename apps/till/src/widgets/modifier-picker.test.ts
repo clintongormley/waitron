@@ -1,6 +1,6 @@
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./menu-browser.js";
@@ -14,7 +14,6 @@ import {
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { WtTextarea } from "@waitron/ui";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 /**
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their

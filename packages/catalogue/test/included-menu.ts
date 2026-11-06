@@ -2,7 +2,7 @@ import type { Transaction } from "@waitron/db";
 import { createCatalogue } from "../src/operations.js";
 import { requireMenuRoot } from "../src/menu-structure.js";
 import { readSection } from "../src/sections.js";
-import type { SectionInput, SectionDetails } from "../src/section-types.js";
+import type { SectionInput, SectionDetails } from "@waitron/shared";
 
 /** A standalone menu root for tests that include the same content from several menus. */
 export async function createIncludedMenu(

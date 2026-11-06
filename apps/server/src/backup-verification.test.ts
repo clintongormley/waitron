@@ -10,7 +10,7 @@ import forge from "node-forge";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { migrationOptionsFor } from "@waitron/migrations";
-import { orderedMigrationSets } from "@waitron/module";
+import { modulesWithSets, orderedMigrationSets } from "@waitron/module";
 import * as store from "@waitron/store";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withNodeTransaction } from "@waitron/db";
@@ -620,7 +620,7 @@ describe("complete backup verification", () => {
     f.deps.modules = [...modules, scheduler];
     f.deps.migrationsRoot = join(f.root, "migrations");
     const migrations = migrationOptionsFor(orderedMigrationSets(f.deps.modules), null);
-    for (const module of f.deps.modules) {
+    for (const module of modulesWithSets(f.deps.modules)) {
       const options = migrations.find(
         (option) => option.migrationsTable === module.migrations.table,
       );

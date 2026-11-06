@@ -9,8 +9,7 @@ import type {
 
 /**
  * How a menu's Device Home Page is presented, shared by the server's checks, the till's menu
- * browser and the dashboard's preview. Browser-safe: it imports no database or server code, so the
- * two apps deep-import it.
+ * browser and the dashboard's preview. Browser-safe: it imports no database or server code.
  */
 
 export const HOME_DEVICES = ["handheld", "till"] as const satisfies readonly HomeDevice[];

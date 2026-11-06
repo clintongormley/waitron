@@ -3,7 +3,7 @@ import type { OptionLabel } from "./modifier-list-types.js";
 import type { ProductAllergens } from "./allergens.js";
 import type { DietDerivation, DietOverride, DietProfile } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
-import type { PricingUnit } from "./pricing.js";
+import type { PricingUnit } from "./pricing-unit.js";
 import type { ProductOrdering } from "./product-ordering.js";
 import type { VatClass } from "./vat-rates.js";
 import type { SellableUnit } from "./product-types.js";

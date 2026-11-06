@@ -10,7 +10,7 @@ import { readMenuStructure } from "../src/menu-structure.js";
 import { addMember, createSectionIn } from "../src/sections.js";
 import { setProductVariants } from "../src/variants.js";
 import { menuItems } from "../src/schema/menu.js";
-import type { MemberRef } from "../src/section-types.js";
+import type { MemberRef } from "@waitron/shared";
 
 export const NO_ICE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const WITH_ICE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";

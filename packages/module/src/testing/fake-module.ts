@@ -16,3 +16,14 @@ export function fakeModule(
     ...seats,
   };
 }
+
+/** {@link fakeModule} for a module whose tables live in `tablesIn`'s set: no set or classification of its own. */
+export function fakeSetlessModule(
+  name: string,
+  tablesIn: string,
+  seats: Partial<
+    Pick<WaitronModule, "version" | "requires" | "configurationTransfer" | "tableRemoval">
+  > = {},
+): WaitronModule {
+  return { name, version: "0.0.0", tier: "toggleable", tablesIn, ...seats };
+}

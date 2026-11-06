@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { readVenue, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   enabledModules,
@@ -249,6 +250,23 @@ it.each([
       { "synthetic-transfer": 1 },
     ),
   ).toThrow(expect.objectContaining(invalid(field)));
+});
+
+it("validates a bundle without a module that has no set of its own, and refuses one naming it", () => {
+  const setless = fakeSetlessModule("synthetic-setless", "synthetic-transfer", {
+    configurationTransfer: { kind: "none" },
+  });
+  const modules = [moduleWith([]), setless];
+  const versions = { "synthetic-transfer": 1 };
+  const bundle = { ...configurationBundle(), modules: { "synthetic-transfer": 1 } };
+  expect(() => validateConfigurationBundle(bundle, modules, versions)).not.toThrow();
+  expect(() =>
+    validateConfigurationBundle(
+      { ...bundle, modules: { ...bundle.modules, "synthetic-setless": 1 } },
+      modules,
+      versions,
+    ),
+  ).toThrow(expect.objectContaining(invalid("modules")));
 });
 
 it("checks an import's module version before replacing its existing rows", async () => {
