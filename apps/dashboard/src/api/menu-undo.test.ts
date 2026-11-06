@@ -82,7 +82,8 @@ describe("undoRefusalText", () => {
   beforeEach(() => setLocale("en-GB"));
   afterEach(() => setLocale(original));
 
-  const refused = (code: string) => ({ code });
+  const refused = (code: string, params?: Record<string, unknown>) =>
+    params === undefined ? { code } : { code, params };
   const tillDisplay: MenuUndoCommand = { ...display, device: "till" } as MenuUndoCommand;
 
   it.each([
@@ -116,6 +117,7 @@ describe("undoRefusalText", () => {
       "menu_section.invalid",
       section,
       "Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+      { field: "color" },
     ],
     [
       "content.translation_invalid",
@@ -132,8 +134,8 @@ describe("undoRefusalText", () => {
       tillDisplay,
       "The published Till display setting is no longer offered. Choose one on the Home page tab, or hide this change.",
     ],
-  ] as const)("words %s from %o", (code, command, expected) => {
-    expect(undoRefusalText(refused(code), command)).toBe(expected);
+  ] as const)("words %s from %o", (code, command, expected, params?: Record<string, unknown>) => {
+    expect(undoRefusalText(refused(code, params), command)).toBe(expected);
   });
 
   it("words a refusal in Spanish when the screen is in Spanish", () => {
@@ -151,6 +153,29 @@ describe("undoRefusalText", () => {
     (field) => {
       expect(undoRefusalText({ code: "menu_section.invalid", params: { field } }, section)).toBe(
         "Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+      );
+    },
+  );
+
+  it("words a section refusal naming no field as the photo or colour when the Undo puts back only those", () => {
+    const presentation: MenuUndoCommand = {
+      ...section,
+      patch: { color: null, image: null },
+    } as MenuUndoCommand;
+    expect(undoRefusalText(refused("menu_section.invalid"), presentation)).toBe(
+      "Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+    );
+  });
+
+  it.each([
+    ["names", { internalName: "Mains", names: { en: "Mains" } }],
+    ["names and colour", { internalName: "Mains", names: { en: "Mains" }, color: null }],
+  ])(
+    "falls back to the code's own message for a section refusal naming no field when the Undo puts back %s",
+    (_label, patch) => {
+      const named = { ...section, patch } as MenuUndoCommand;
+      expect(undoRefusalText(refused("menu_section.invalid"), named)).toBe(
+        codeMessage("menu_section.invalid"),
       );
     },
   );

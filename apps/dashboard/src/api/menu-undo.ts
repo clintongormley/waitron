@@ -48,6 +48,13 @@ function refusedField(error: unknown): unknown {
 /** `menu_section.invalid` also answers a malformed name; only these fields are the photo or colour. */
 const PRESENTATION_FIELDS: readonly unknown[] = ["color", "image"];
 
+/** With no field named, the refusal can be blamed on the photo or colour only when the Undo sent
+ * nothing else. */
+function refusesPresentation(field: unknown, patch: object): boolean {
+  if (field !== undefined) return PRESENTATION_FIELDS.includes(field);
+  return Object.keys(patch).every((key) => PRESENTATION_FIELDS.includes(key));
+}
+
 function refusalSentence(
   code: string,
   command: MenuUndoCommand,
@@ -65,11 +72,7 @@ function refusalSentence(
         return { key: "menu_preview.undo_item_gone", values: { name: command.name } };
       return null;
     case "updateSection": {
-      if (
-        code === "menu_section.invalid" &&
-        field !== undefined &&
-        !PRESENTATION_FIELDS.includes(field)
-      )
+      if (code === "menu_section.invalid" && !refusesPresentation(field, command.patch))
         return null;
       const key = SECTION_REFUSALS[code];
       return key ? { key, values: { name: command.name } } : null;
