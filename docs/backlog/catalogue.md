@@ -478,7 +478,7 @@ names; folding them into the one helper was not part of W77a.
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
   2026-10-07: "would it be possible to have an 'Undo' link as well?").** In progress in five pull
-  requests ([plan](../superpowers/plans/2026-11-06-a353-preview-undo.md)). PR 1 credits each price
+  requests ([plan](../superpowers/plans/2026-11-06-a353-preview-undo.md)). PR 1 (landed #2510, 2026-11-06) credits each price
   change to the menu whose price setting moved; gives Undo to a menu's name, its Home display
   settings, an own section's name, photo or colour, a dish's price on the menu, and one variant's
   price on the menu; and links each shared-product change, except a deleted product's, to Edit
@@ -487,6 +487,34 @@ names; folding them into the one helper was not part of W77a.
   this menu's own lists; PR 4, includes added and removed, own sections moved, and a new own section
   that is empty; PR 5, one-move order changes and one-write shortcut changes, after which this
   entry is deleted and the changes left without Undo (the plan's section 2) become their own entry.
+
+## A1375 — A353's Undo: two rare ways a refusal is never shown
+
+- **A1375 — A353's Undo: two rare ways a refusal is never shown (found by #2510's review, not
+  reproduced).** (1) If a fresh preview that drops the change arrives in the instant between the
+  refusal being placed beside its change and the screen redrawing, the refusal can be removed
+  before it is drawn. (2) If a content language is switched off and back on within one preview
+  reload, a stale refusal can survive. Both are in `apps/dashboard/src/screens/menus-screen.ts`
+  (`#undo`, and the refusal pruning after a refresh). Next step: a test that holds the refusal
+  and delivers the preview in that gap, then route a refusal whose bullet is not drawn after the
+  redraw to the error line.
+
+## A1376 — The menu Preview's change list at 390 px: the last row runs under the box's edge
+
+- **A1376 — The menu Preview's change list at 390 px: the last row runs under its scrolling box's
+  bottom edge** (seen in A353 PR 1's look, 2026-11-06; whether it predates #2510 was not checked).
+  A refusal or the success line makes the list longer, so it shows more often now. Next step:
+  screenshot `main` before #2510 at 390 px to place it, then fix the box's height or padding in
+  `apps/dashboard/src/widgets/menu-preview.ts`.
+
+## A1377 — A353's Undo: two wordings for the owner
+
+- **A1377 — A353's Undo: two wordings for the owner** (from #2510). (1) If a menu is deleted while
+  its Preview is open, a price Undo is refused `menu_item.not_found` and reads "{name} is no longer
+  on this menu." rather than "This menu has been deleted, so there is nothing to undo.". (2) The
+  success line can carry two colons ("Undone: Tapas and small plates: name, colour."). Both are
+  in `apps/dashboard/src/api/menu-undo.ts` and `apps/dashboard/src/i18n/strings.ts`; ask the owner
+  whether either should change.
 
 ## A1373 — The Preview credits a product's own price change seen through an include to the included menu
 

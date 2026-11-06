@@ -1056,10 +1056,22 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/catalogue.md#loose-ends-left-by-a343-a-menus-price-overrides-tab-tidied-1368)
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version** —
-  owner, 2026-10-07; in progress in five pull requests. PR 1: Undo for a menu's name, Home display,
+  owner, 2026-10-07; in progress in five pull requests. PR 1 (landed #2510): Undo for a menu's name, Home display,
   own section's name, photo or colour, and a dish's or one variant's price here, plus edit links
   on shared and included changes. PRs 2–5: includes, products, sections, order and shortcuts.
   [Detail](backlog/catalogue.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version)
+
+- **A1375 — A353's Undo: two rare ways a refusal is never shown** — a preview arriving between
+  placing a refusal and the redraw, or a language switched off and on within one reload.
+  [Detail](backlog/catalogue.md#a1375--a353s-undo-two-rare-ways-a-refusal-is-never-shown)
+
+- **A1376 — The menu Preview's change list at 390 px: the last row runs under the box's edge** —
+  not yet placed before or after #2510.
+  [Detail](backlog/catalogue.md#a1376--the-menu-previews-change-list-at-390-px-the-last-row-runs-under-the-boxs-edge)
+
+- **A1377 — A353's Undo: two wordings for the owner** — a deleted menu's price Undo, and a
+  success line with two colons.
+  [Detail](backlog/catalogue.md#a1377--a353s-undo-two-wordings-for-the-owner)
 
 - **A1373 — The Preview credits a product's own price change seen through an include to the
   included menu**, not the shared product, when no menu sets a price of its own; telling it apart
