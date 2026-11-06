@@ -464,11 +464,11 @@ const PRIVACY_CONTACT_MESSAGES: Record<string, { invalid: StringKey; tooLong: St
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
+  if (code === "setup.configuration_newer") return say("shell.configuration.newer");
   if (
     code === "setup.request_invalid" &&
     typeof params?.field === "string" &&
-    (params.field === "version" ||
-      params.field === "modules" ||
+    (params.field === "modules" ||
       (params.field.startsWith("module:") && params.field.length > "module:".length))
   ) {
     return say("shell.configuration.incompatible_version");
