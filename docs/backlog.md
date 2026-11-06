@@ -3994,8 +3994,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **While a discovery window is open, a device not reported within 45 seconds drops off the list**
   until its next report; 45 seconds does not cover every scan pass (C102, #953).
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued —
-  owner 2026-10-08: take it from here when a lane has room).**
+- **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a
+  window, landed #2492; PRs 2–4 to come).**
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
 
 - **Loose ends left by A662 (#1803).**
