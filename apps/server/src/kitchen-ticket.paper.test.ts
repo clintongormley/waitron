@@ -21,6 +21,53 @@ const ticket = {
   items: [item],
 };
 
+describe("A1378 station FIRE and party identity", () => {
+  it.each([false, true])("keeps FIRE within its recorded station section (last: %s)", (last) => {
+    const cold = {
+      stationName: "Cold",
+      items: [{ qty: 1, name: "Salad" }],
+      ...(last ? {} : { mark: "FIRE" as const }),
+    };
+    const grill = {
+      stationName: "Grill",
+      items: [{ qty: 1, name: "Steak" }],
+      ...(last ? { mark: "FIRE" as const } : {}),
+    };
+    const lines = printedLines(
+      formatKitchenTicket({ ...ticket, scope: "stations", stations: [cold, grill] }, layout, "UTC"),
+    );
+    expect(lines[0]).toBe("Cold · Grill");
+    expect(lines.slice(4)).toEqual(
+      last
+        ? ["Cold", "1 x Salad", "Grill", "*** FIRE ***", "1 x Steak", ""]
+        : ["Cold", "*** FIRE ***", "1 x Salad", "Grill", "1 x Steak", ""],
+    );
+  });
+
+  it.each([
+    ["en", "Order 17 · Ana"],
+    ["es", "Pedido 17 · Ana"],
+  ])("names the party on a %s correction", (locale, expected) => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          locale,
+          kind: "VOID",
+          stationName: "Grill",
+          tableLabel: "Table 4",
+          orderNumber: "17",
+          at,
+          item,
+          party: { name: "Ana", locale },
+        },
+        layout,
+        "UTC",
+      ),
+    );
+    expect(lines[3]).toBe(expected);
+  });
+});
+
 describe("kitchen paper in the venue's time zone", () => {
   it.each([
     ["Europe/Madrid", "2026-07-17T23:30:00Z", "01:30"],

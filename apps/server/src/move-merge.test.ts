@@ -2,6 +2,7 @@ import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -25,6 +26,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
+  assignProductUnit,
   createCatalogue,
   createCategory,
   createProduct,
@@ -2539,7 +2541,55 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
   });
 });
 
-describe("a MOVED slip lays out each line by the ticket grouping and never adds two lines together (§4)", () => {
+describe("A1378 MOVED follows station grouping and preserves portion boundaries", () => {
+  it("keeps two whole measured portions separate under combined", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    await inTx(v, async (tx) => {
+      const [gram] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "g"));
+      await assignProductUnit(tx, v.productId("Burger"), gram!.id);
+      await publishWorkingMenu(tx, v.tables.menuId);
+    });
+    const p = await seat(v, await v.table("Measured source"));
+    await order(v, p.tabId, "Burger", "Burger");
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, p.partyId);
+    const destination = await v.table("Measured destination");
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.partyId, destination, { ...command, otherPartyId: null }),
+    );
+    const papers = await slipsSince(grill, before);
+    expect(papers).toHaveLength(1);
+    expect(papers[0]!.filter((line) => line.endsWith("g x BURG"))).toEqual([
+      "1 g x BURG",
+      "1 g x BURG",
+    ]);
+  });
+
+  it("keeps identical portions from distinct groups separate under combined", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const p = await seat(v, await v.table("Group source"));
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        groups: [
+          { release: "fire", lines: [{ menuItemId: v.item("Burger"), quantity: "1" }] },
+          { release: "fire", lines: [{ menuItemId: v.item("Burger"), quantity: "1" }] },
+        ],
+        billId: p.tabId,
+        operatorId: OPERATOR,
+      }),
+    );
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, p.partyId);
+    const destination = await v.table("Group destination");
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.partyId, destination, { ...command, otherPartyId: null }),
+    );
+    const papers = await slipsSince(grill, before);
+    expect(papers).toHaveLength(1);
+    expect(papers[0]!.slice(-5)).toEqual(["GRUPO 1", "1 x BURG", "GRUPO 2", "1 x BURG", ""]);
+  });
   afterEach(() =>
     withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { ticketGrouping: "combined", printHeldWork: false });
@@ -2598,7 +2648,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     ]);
   });
 
-  it("with combined quantities, two lines of one Burger on one ticket print as two entries of 1: lines are never added together", async () => {
+  it("with combined quantities, two lines of one Burger on one ticket print as one entry of 2", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const table124 = await v.table("Mesa 124");
@@ -2615,14 +2665,11 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     );
 
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 123", "Mesa 124", [
-        "1 x BURG",
-        "1 x BURG",
-      ]),
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 123", "Mesa 124", ["2 x BURG"]),
     ]);
   });
 
-  it("with combined quantities, one Burger sent on each of two tickets prints as two entries of 1", async () => {
+  it("with combined quantities, one Burger sent on each of two tickets prints as one entry of 2", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const table126 = await v.table("Mesa 126");
@@ -2640,14 +2687,11 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     );
 
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 125", "Mesa 126", [
-        "1 x BURG",
-        "1 x BURG",
-      ]),
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 125", "Mesa 126", ["2 x BURG"]),
     ]);
   });
 
-  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2 still print as two entries of 1", async () => {
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2 still print as one entry of 2", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const table128 = await v.table("Mesa 128");
@@ -2664,10 +2708,10 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
       moveGuests(tx, v.cfg, partyId, table128, { ...command, otherPartyId: null }),
     );
 
-    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["1 x BURG", "1 x BURG"]]);
+    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["2 x BURG"]]);
   });
 
-  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as two entries of 1 after Transfer items moves both", async () => {
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as one entry of 2 after Transfer items moves both", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 131"));
@@ -2688,10 +2732,10 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
 
     await inTx(v, (tx) => transferItems(tx, v.cfg, tabId, second, lineNos, command));
 
-    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["1 x BURG", "1 x BURG"]]);
+    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["2 x BURG"]]);
   });
 
-  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as two entries of 1 after Merge bills", async () => {
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as one entry of 2 after Merge bills", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 132"));
@@ -2705,10 +2749,10 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
 
     await inTx(v, (tx) => mergeBills(tx, v.cfg, second, tabId, command));
 
-    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["1 x BURG", "1 x BURG"]]);
+    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["2 x BURG"]]);
   });
 
-  it("with combined quantities, one Burger sent twice while the station had no printer prints as two entries of 1", async () => {
+  it("with combined quantities, one Burger sent twice while the station had no printer prints as one entry of 2", async () => {
     const v = await setupPartyVenue(db);
     const table130 = await v.table("Mesa 130");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 129"));
@@ -2721,9 +2765,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
       moveGuests(tx, v.cfg, partyId, table130, { ...command, otherPartyId: null }),
     );
 
-    expect((await slipsSince(kitchenPrinterId, 0)).map(dishLines)).toEqual([
-      ["1 x BURG", "1 x BURG"],
-    ]);
+    expect((await slipsSince(kitchenPrinterId, 0)).map(dishLines)).toEqual([["2 x BURG"]]);
   });
 });
 

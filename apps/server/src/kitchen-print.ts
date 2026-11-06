@@ -738,7 +738,9 @@ async function planKitchenTickets(
           firedAt,
           mark:
             mark ??
-            (fire !== undefined && route.stationIds.some((id) => fire.heldPaper.has(id))
+            (onTicket.length === 1 &&
+            fire !== undefined &&
+            route.stationIds.some((id) => fire.heldPaper.has(id))
               ? "FIRE"
               : undefined),
           ...(onTicket.length === 1
@@ -748,6 +750,7 @@ async function planKitchenTickets(
                 stations: onTicket.map((station) => ({
                   stationName: station.name,
                   items: station.items,
+                  mark: fire?.heldPaper.has(station.id) === true ? ("FIRE" as const) : undefined,
                 })),
               }),
           ...(leavesOut !== null
@@ -1322,6 +1325,7 @@ async function printCorrectionSlips(
   ]);
   const stationNames = await readStations(tx, stationIds);
   const header = await readOrderHeader(tx, orderId);
+  const partyName = (await readPartyNames(tx, [orderId])).get(orderId)!;
   const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
 
   const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();
@@ -1450,6 +1454,7 @@ async function printCorrectionSlips(
           ...correction,
           locale: language,
           kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: language },
+          party: partyName === null ? undefined : { name: partyName, locale: language },
           stationName: stationNames.get(stationId)!.name,
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
@@ -1840,9 +1845,7 @@ async function readMovedSlipPrinting(
 
 /**
  * One MOVED slip per station of `items`, to its printers, listing its fired items and its held
- * ones under HOLD, group by group. The station's ticket grouping lays out each line on its
- * own and never adds two lines together: a link {@link writeLinksAfter} moves or copies loses its
- * reprint mark, so which ticket last carried a line cannot be told.
+ * ones under HOLD, group by group.
  */
 async function printMovedSlips(
   tx: Transaction,
@@ -1875,7 +1878,6 @@ async function printMovedSlips(
       })
       .sort(byGroupThenLine);
     const { ticketGrouping } = stationNames.get(stationId)!;
-    const laidOut = (item: KitchenTicketItem) => arrangeTicketItems([item], ticketGrouping);
     const held: MovedSlip["held"] = [];
     for (const { item } of listed.filter((entry) => entry.held)) {
       const last = held.at(-1);
@@ -1884,10 +1886,14 @@ async function printMovedSlips(
         last.items[0]?.groupId === item.groupId &&
         last.group === item.group
       )
-        last.items.push(...laidOut(item));
-      else held.push({ group: item.group!, items: laidOut(item) });
+        last.items.push(item);
+      else held.push({ group: item.group!, items: [item] });
     }
-    const fired = listed.filter((entry) => !entry.held).flatMap((entry) => laidOut(entry.item));
+    for (const group of held) group.items = arrangeTicketItems(group.items, ticketGrouping);
+    const fired = arrangeTicketItems(
+      listed.filter((entry) => !entry.held).map((entry) => entry.item),
+      ticketGrouping,
+    );
     for (const group of groupByLayout(targets)) {
       const bytes = formatMovedSlip(
         {

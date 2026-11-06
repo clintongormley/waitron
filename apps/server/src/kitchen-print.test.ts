@@ -2591,6 +2591,19 @@ describe("a station printer that was deleted", () => {
 });
 
 describe("the party's name on a kitchen ticket", () => {
+  it("A1378 includes the current party name on a queued correction", async () => {
+    const v = await setupPartyVenue(db);
+    const printer = await kitchenPrinter(v);
+    const p = await seat(v, await v.table("Table 70"));
+    await nameParty(v, p.partyId, "Ana");
+    await order(v, p.tabId, "Burger", "Burger");
+    const before = (await ticketsSince(printer)).length;
+    await inTx(v, (tx) => cancelLine(tx, v.cfg, p.tabId, 1));
+    const corrections = await ticketsSince(printer, before);
+    expect(corrections).toHaveLength(1);
+    expect(corrections[0]![3]).toBe(`Pedido ${(await billRow(v, p.tabId)).orderNumber} · Ana`);
+    expect(corrections[0]).toContain("1 x BURG");
+  });
   /** A printer on the venue's default station; returns its id. */
   async function kitchenPrinter(v: PartyVenue): Promise<string> {
     return inTx(v, async (tx) => {

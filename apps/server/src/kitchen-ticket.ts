@@ -52,6 +52,7 @@ export interface KitchenTicketItem {
 export interface KitchenTicketStation {
   stationName: string;
   items: KitchenTicketItem[];
+  mark?: "FIRE";
 }
 
 /** One item of the order at another station, as a station's own ticket lists it. */
@@ -438,6 +439,7 @@ export function formatKitchenTicket(
   else {
     for (const station of ticket.stations) {
       text(station.stationName);
+      if (station.mark === "FIRE") text(`*** ${kitchenTicketWords(ticket.locale).fire} ***`);
       emitList(station.items);
     }
   }
@@ -481,6 +483,7 @@ export function joinKitchenTickets(first: Uint8Array, second: Uint8Array): Uint8
 
 export type CorrectionSlip = {
   locale: string;
+  party?: { name: string; locale: string };
   kitchenNote?: KitchenNoteHeading;
   stationName: string;
   tableLabel: string | null;
@@ -576,7 +579,14 @@ export function formatCorrectionSlip(
   text(`*** ${slipHeader(slip)} ***`);
   text(slip.stationName);
   if (slip.tableLabel !== null) text(slip.tableLabel);
-  text(slip.orderNumber);
+  if (slip.party === undefined) text(slip.orderNumber);
+  else
+    emitOrderLine(
+      b,
+      `${kitchenTicketWords(slip.party.locale).order} ${slip.orderNumber}`,
+      slip.party.name,
+      columns,
+    );
   b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNote(b, slip.kitchenNote, columns);
   if (slip.item.group !== undefined) emitGroup(b, slip.item, [slip.item], columns, slip.locale);

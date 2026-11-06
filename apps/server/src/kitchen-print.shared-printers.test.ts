@@ -15,13 +15,13 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { createProduct } from "@waitron/catalogue";
+import { createProduct, writeContentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import type { OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createStation, updateStation } from "./kitchen.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { enqueueKitchenTickets, reprintOrderTickets } from "./kitchen-print.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
@@ -165,6 +165,51 @@ function onPrinter<T extends { printerId: string }>(jobs: T[], printerId: string
   expect(own).toHaveLength(1);
   return own[0]!;
 }
+
+it.each(["Cold", "Pastry", "both"])(
+  "A1378 shared FIRE labels only %s recorded sections",
+  async (recorded) => {
+    const { cfg, catalogueId } = await setupVenue();
+    const result = await withTransaction(db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+      const venue = await threeStations(tx, catalogueId);
+      const shared = await makePrinter(tx, "Shared FIRE");
+      for (const id of [venue.x, venue.z])
+        await attachPrinterToStation(tx, { stationId: id, printerId: shared });
+      const orderId = await fireNewOrder(tx, cfg, [line(venue.salad), line(venue.tart)]);
+      const fired = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const before = new Set((await sentJobs(tx)).map((job) => job.id));
+      const heldPaper = new Set(
+        recorded === "both" ? [venue.x, venue.z] : [recorded === "Cold" ? venue.x : venue.z],
+      );
+      await enqueueKitchenTickets(
+        tx,
+        cfg,
+        orderId,
+        fired.map((item) => ({ ...item, stationId: item.stationId! })),
+        { fire: { heldPaper } },
+      );
+      return { shared, jobs: (await sentJobs(tx)).filter((job) => !before.has(job.id)) };
+    });
+    const paper = onPrinter(result.jobs, result.shared).printed;
+    expect(paper[0]).toBe("Cold · Pastry");
+    expect(paper.slice(4)).toEqual([
+      "Cold",
+      ...(recorded === "Pastry" ? [] : ["*** FIRE ***"]),
+      "1 x Salad",
+      "Pastry",
+      ...(recorded === "Cold" ? [] : ["*** FIRE ***"]),
+      "1 x Tart",
+      "",
+    ]);
+  },
+);
 
 describe("a printer shared by several stations", () => {
   it("prints one ticket per send, with a section for each of its stations in this send", async () => {
