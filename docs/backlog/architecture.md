@@ -406,9 +406,9 @@ until A977).
   A972 cut 1 moves its original bytes and keeps the existing encoder behavior.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
-  Other private naming sites remain in the till's boot and counter-payment suites and
-  the server split-bill suites; `registroCount` helper consumers in bill-editing, move-bill and
-  other order suites; and shared helper consumers
+  Private naming sites remain in the till's boot, counter-payment and split-selection suites,
+  and in the server split suites alongside shared fixture names; `registroCount` consumers in
+  split-table, bill-editing, move-bill and other order suites; and shared helper consumers
   such as `made-here.test.ts`. Moved-dish names remain in the till's
   `till-table-order-screen.move-dishes.test.ts`.
   Remaining accented bindings include `portion-selection.test.ts`, `counter-portion-rows.test.ts`
@@ -805,11 +805,14 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 ## A974. Finish the remaining English names in general code.
 
-- **A974. Finish the remaining English names in general code.** Remaining names include till boot and
-  counter-payment fixtures; the server split-bill suites; `registroCount` helper consumers in
-  bill-editing, move-bill and other order suites; the till's moved-dish suite; accented bindings in
+- **A974. Finish the remaining English names in general code.** Remaining names include till boot,
+  counter-payment and split-selection fixtures; shared fixture names and private bindings in the
+  server split suites; `registroCount` consumers in split-table, bill-editing, move-bill and other
+  order suites; the till's moved-dish suite; accented bindings in
   `portion-selection.test.ts`, `counter-portion-rows.test.ts` and `till-ticket-view.test.ts`,
   shared helper consumers and file names.
+  Private split-suite bindings include those in `till-api.table-actions.test.ts`,
+  `fingerprint-refusal.implicit.test.ts` and `split-bill.fiscal.test.ts`.
   Shared fixture property names such as `cafeId` remain open.
   Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
   display samples under A976.
@@ -821,6 +824,13 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   [Detail](architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 ### A974 review assertion gaps
+
+Qualify the no-sale assertions in `split-table.fiscal.test.ts`, in "the new bill holds no sale".
+The 6 November naming review's attempts to issue every split bill, including a route-scoped
+fully-paid bypass, left this case passing with no sale or record on the new bill. Those probes
+did not reach a wrong-sale outcome, so they establish neither a product defect nor whether the existing no-sale assertions can catch one. Find a
+control that creates an unwanted sale or record on the new bill and reaches those assertions,
+while retaining the dish-name, sale-count, record-count and open-status checks.
 
 Keep the parent-category and variant-category fixture destinations distinct in the working-order
 variant-routing case. On 5 November 2026, the driver changed only the glasses-category route from

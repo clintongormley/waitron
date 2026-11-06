@@ -6266,6 +6266,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Retain failure screenshots for long browser test names.**
   [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
+- **Separate pnpm's ordinary-failure diagnostic from its one-second timeout controls.**
+  The version-failure case expected exit 1 but observed timeout 124 in a normal push.
+  Preserve the status assertions and the deliberately stalled cases' bounds.
+  [Detail](backlog/ci.md#pnpms-ordinary-failure-diagnostic-can-hit-its-one-second-timeout).
+
 - **Explain the two older silent pnpm setup stalls.**
   Both lacked command progress reports; replacing the initial Node read does not establish their cause.
   [Detail](backlog/ci.md#explain-the-two-older-silent-pnpm-setup-stalls).
@@ -6685,14 +6690,19 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only).
 
 - **A974. Finish the remaining English names in general code.**
-  Remaining names include till boot and counter-payment fixtures; shared-fixture consumers in the
-  server split-bill suites; `registroCount` helper consumers in bill-editing, move-bill and
-  other order suites;
+  Remaining names include till boot, counter-payment and split-selection fixtures; shared fixture
+  names and private bindings in the server split suites; `registroCount` consumers in split-table,
+  bill-editing, move-bill and other order suites;
   the till's moved-dish suite; accented bindings in the portion-selection, counter-portion-rows
   and till-ticket-view tests; shared helper consumers and file names.
   Keep accented search fixtures unchanged.
   Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
+
+- **Qualify the split-table new-bill no-sale check.** Find a control that reaches the existing
+  no-sale assertions with an unwanted sale or record. Existing probes have not established that
+  they can fail; no product defect has been demonstrated.
+  [Detail](backlog/architecture.md#a974-review-assertion-gaps).
 
 - **Strengthen the server group and fiscal-sale fixture checks.** The named no-kitchen
   setup and several fixture/reference substitutions survived the A974 review’s probes.

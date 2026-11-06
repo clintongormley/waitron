@@ -271,12 +271,12 @@ describe("A803 split: issuance", () => {
   it("a loose pick of the last unpaid dish of an item-paid bill issues its one invoice, on the staying party", async () => {
     const { partyId, tabId, first, leaving } = await atTwoTables("Paella", "Caña");
     await payFor(tabId, 1, "35.00");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
     expect(registroCount(venue, tabId)).toBe(0);
 
     const answer = await split(partyId, leaving, {
       wholeBillIds: [],
-      loose: [{ billId: tabId, lineIds: [caña!] }],
+      loose: [{ billId: tabId, lineIds: [beerLineId!] }],
     });
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -292,11 +292,11 @@ describe("A803 split: issuance", () => {
   it("when the party's first table is the one taken away, the invoice names the table that stays", async () => {
     const { partyId, tabId, first, leaving } = await atTwoTables("Paella", "Caña");
     await payFor(tabId, 1, "35.00");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
 
     const answer = await split(partyId, first, {
       wholeBillIds: [],
-      loose: [{ billId: tabId, lineIds: [caña!] }],
+      loose: [{ billId: tabId, lineIds: [beerLineId!] }],
     });
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -308,11 +308,11 @@ describe("A803 split: issuance", () => {
   it("the new bill holds no sale", async () => {
     const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña");
     await payFor(tabId, 1, "35.00");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
 
     const answer = await split(partyId, leaving, {
       wholeBillIds: [],
-      loose: [{ billId: tabId, lineIds: [caña!] }],
+      loose: [{ billId: tabId, lineIds: [beerLineId!] }],
     });
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -357,11 +357,11 @@ describe("A803 split: issuance", () => {
   it("a loose pick that leaves the source still owing issues nothing", async () => {
     const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña", "Caña");
     await contribute(tabId, "35.00");
-    const caña = lineIdsOf(tabId).at(-1)!;
+    const beerLineId = lineIdsOf(tabId).at(-1)!;
 
     const answer = await split(partyId, leaving, {
       wholeBillIds: [],
-      loose: [{ billId: tabId, lineIds: [caña] }],
+      loose: [{ billId: tabId, lineIds: [beerLineId] }],
     });
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -373,14 +373,14 @@ describe("A803 split: issuance", () => {
   it("a refusal by the trading admission rolls the whole split back", async () => {
     const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña");
     await contribute(tabId, "35.00");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
     const before = counts();
     const revision = revisionOf(partyId);
 
     const answer = await split(
       partyId,
       leaving,
-      { wholeBillIds: [], loose: [{ billId: tabId, lineIds: [caña!] }] },
+      { wholeBillIds: [], loose: [{ billId: tabId, lineIds: [beerLineId!] }] },
       mounted({ admission: new TradingAdmission() }),
     );
 
@@ -448,11 +448,11 @@ describe("A803 split: issuance", () => {
         .filter((key) => key.startsWith("service:"));
 
     const looseParty = await atTwoTables("Paella", "Caña");
-    const [, caña] = lineIdsOf(looseParty.tabId);
+    const [, beerLineId] = lineIdsOf(looseParty.tabId);
     const loose = await split(
       looseParty.partyId,
       looseParty.leaving,
-      { wholeBillIds: [], loose: [{ billId: looseParty.tabId, lineIds: [caña!] }] },
+      { wholeBillIds: [], loose: [{ billId: looseParty.tabId, lineIds: [beerLineId!] }] },
       app,
     );
     expect(loose.status, JSON.stringify(loose.json)).toBe(200);

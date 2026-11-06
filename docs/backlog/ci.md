@@ -1463,3 +1463,25 @@ assertion runs. The retry-disabled controls still detect the missing retry; they
 that its count assertion always reports first. Reproduce the throttled-frame case before choosing
 a wall-clock-bounded observation; keep the retry schedule, request assertions and existing case
 deadline. The related `await failed` can also await a missing event until the case times out.
+
+
+## pnpm's ordinary-failure diagnostic can hit its one-second timeout
+
+On 6 November 2026, A974's normal pre-push run passed 14,284 root cases and failed
+`ci-setup-pnpm.test.mjs`'s "identifies each version-then-fails failure with its phase, status and
+elapsed time" at line 280. Installation succeeded on all three attempts. The first version
+command exited 1; the next two reached their one-second limit and exited 124, so the original
+status-1 assertion failed. The test and setup script are unchanged by that naming branch;
+`git blame` attributes this case and its one-second limits to `5c84d69107` (A1338).
+
+A disposable checkout of the branch's unchanged base, `93a2ab5104`, reproduces the same
+assertion failure when the version stub sleeps two seconds before its existing exit 1. Its
+zero-delay control passes. This demonstrates the timeout mechanism; what delayed the two
+commands in the original push remains unmeasured. The isolated passing case is not a repair.
+The original hook log and both controls are in lane F's
+`receipts/a974-split-table-names-20261106/`.
+
+Separate the ordinary nonzero-exit diagnostic from the deliberately timed-out controls while
+keeping every phase/status assertion and stalled-command bound. Measure the ordinary fixture
+before selecting its allowance. Keep the production script's limits unchanged unless a separate
+measurement justifies changing them.
