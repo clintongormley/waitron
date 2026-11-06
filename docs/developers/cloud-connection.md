@@ -212,10 +212,20 @@ For the A951-S entrance (6 November 2026), set `WAITRON_STAFF_ORIGIN` to the
 assigned HTTPS staff origin, `WAITRON_STAFF_HOST` to its tunnel bind address and
 `WAITRON_STAFF_PORT` to its receiving port (8443 by default). Keep the LAN listener's
 TLS files, management origin and passkey hostname configured for the LAN. Start
-with the matching staff key and certificate in `WAITRON_STATE_DIR`; the separate
-listener checks replacements every ten seconds and applies valid ones to new TLS
-connections without a restart. An invalid replacement keeps the loaded context
+with a connected test installation and `WAITRON_CLOUD_ORIGIN` set. The Cloud worker
+creates the staff key and requests its certificate through that signed connection.
+It opens the separate listener after the first certificate arrives. Existing matching
+staff keys and certificates in `WAITRON_STATE_DIR` also work at startup. The listener
+checks replacements every ten seconds and applies valid ones to new TLS connections
+without a restart. An invalid replacement keeps the loaded context
 and logs `cloud.certificate_reload_failed`.
+
+The worker saves `staff-certificate-request.json` before submitting, so a lost reply
+or a box restart reuses the same request and staff key. It polls pending requests on
+the existing one-minute Cloud loop. Renewal starts when at most thirty days remain,
+or one third of the certificate lifetime for shorter certificates. An unsuccessful
+exchange leaves the installed chain in place. This client keeps the existing
+test-installation restriction; it does not request production-installation certificates.
 
 Venue devices continue to use the LAN address. On 6 November a Mac browser signed
 in through the public gateway with normal certificate trust, and an issued
@@ -225,7 +235,7 @@ was stopped afterwards. The owner then authorised a separate managed demo: its
 unprivileged app restarts through systemd and its separate tunnel through Docker.
 Both recovered from a controlled process exit and the public page returned 200.
 They are enabled for startup; a physical box reboot has not been tested. Automatic
-renewal and offline-sale checks remain open. A fresh Chromium sign-in through the
+renewal on the public demo and offline-sale checks remain open. A fresh Chromium sign-in through the
 rented server's outside-home exit also passed with normal certificate trust. The gateway behavior below records the earlier
 local proof, not a completed A951-S qualification.
 
@@ -307,26 +317,24 @@ reconnection** is running may be refused as busy; if it is, press it again once 
 finishes. On a server that was not restored from a Cloud snapshot, the screen offers **Connect to
 Cloud** instead of **Request reconnection**. Keep the previous server out of service throughout.
 
-Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel and a
-new TLS certificate remain operator steps, and Cloud access and backups need their own checks
+Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel remains
+an operator step. For a test installation using the separate staff entrance, the certificate
+worker requests its new chain after reconnection. Cloud access and backups need their own checks
 afterwards. Cloud owns route placement and fencing. Continuous complete-server recovery, a
 planned handover of the final writes and production recovery are not implemented.
 
 ### Reissue staff TLS after a restore
 
 A recovery archive deliberately excludes `cloud-staff.key` and `cloud-staff.crt`.
-If your restored configuration still points at those missing files, Waitron refuses
-to start; it does not silently serve plain HTTP. Before enabling remote access on a
-replacement, generate a new staff key/CSR and have the Cloud operator issue its chain
-for the authorized replacement. Set the TLS paths and management origin consistently
-before starting it. The certificate commands work without a running server.
+If your LAN listener's TLS paths point at those missing files, Waitron refuses to start.
+Keep the LAN certificate and management origin configured for the LAN. For the separate staff
+entrance, reconnect the replacement to Cloud and set its assigned `WAITRON_STAFF_ORIGIN`;
+the test-installation certificate worker creates a new staff key and opens that listener after
+issuance. You can also use the certificate commands above without a running server.
 
-The certificate commands do not reconnect the replacement to Cloud; that is the separate
-step in [Reconnect a restored test server to its Cloud venue](#reconnect-a-restored-test-server-to-its-cloud-venue).
-For local recovery first, use Waitron's existing local-certificate setup and its matching
-local management origin, then change to the staff hostname once the replacement is reconnected
-and its new tunnel and certificate are installed. Do not copy the old staff key.
-
+The certificate commands do not reconnect the replacement to Cloud; use
+[Reconnect a restored test server to its Cloud venue](#reconnect-a-restored-test-server-to-its-cloud-venue)
+first. Do not copy the old staff key.
 
 ## Deliver a managed snapshot locally
 
