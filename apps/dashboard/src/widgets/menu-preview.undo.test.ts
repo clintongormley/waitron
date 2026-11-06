@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { menuChangeActions } from "@waitron/catalogue/src/menu-undo.js";
 import type { MenuTarget } from "@waitron/catalogue/src/menu-document-types.js";
-import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
+import type { DocumentMember, MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { MenuPreviewPanel } from "./menu-preview.js";
 import {
@@ -239,4 +241,286 @@ it("works out the changes' actions once per preview, not once per row or per ren
   await el.updateComplete;
   expect(menuChangeActions).toHaveBeenCalledTimes(2);
   expect(vi.mocked(menuChangeActions).mock.calls[1]![0].preview).toBe(el.preview);
+});
+
+const LIVE: MenuPreview["live"] = { versionId: "v-2", document: DOCUMENT };
+const RENAME_TEXT = "Menu renamed from Lunch to Lunch Menu";
+
+function livePreview(changes: MenuChange[]): MenuPreview {
+  return { ...preview(changes), live: LIVE };
+}
+
+async function mountLive(changes: MenuChange[], props: Partial<MenuPreviewPanel> = {}) {
+  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
+    menuName: "Lunch Menu",
+    status,
+    preview: livePreview(changes),
+    ...props,
+  });
+  return el;
+}
+
+const undoButton = (el: MenuPreviewPanel, id: string) =>
+  el.shadowRoot!.querySelector<HTMLButtonElement>(`button.undo[data-undo-change="${id}"]`);
+const undoEvents = (el: MenuPreviewPanel) => {
+  const heard = vi.fn();
+  el.addEventListener("wt-menu-undo", (event) => {
+    const custom = event as CustomEvent;
+    heard({ detail: custom.detail, bubbles: custom.bubbles, composed: custom.composed });
+  });
+  return heard;
+};
+
+/** The colour `token` resolves to inside the widget. */
+function tokenColour(el: MenuPreviewPanel, token: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = `var(${token})`;
+  el.shadowRoot!.appendChild(probe);
+  const colour = getComputedStyle(probe).color;
+  probe.remove();
+  return colour;
+}
+
+it("offers Undo only where the action is undo, never on a shared or included change", async () => {
+  const el = await mountLive([ownRename, sharedPrice, includedOrder, deleted]);
+  expect(
+    [...el.shadowRoot!.querySelectorAll("button.undo")].map((b) =>
+      b.getAttribute("data-undo-change"),
+    ),
+  ).toEqual(["own-rename"]);
+  const button = undoButton(el, "own-rename")!;
+  expect(button.type).toBe("button");
+  expect(text(button)).toBe("Undo");
+});
+
+it("offers no Undo on a menu that has never been published", async () => {
+  const el = await mount([ownRename]);
+  expect(el.shadowRoot!.querySelector(`[data-change-row="own-rename"]`)).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("button.undo")).toBeNull();
+});
+
+it("names the Undo and describes it with the change's own words", async () => {
+  const el = await mountLive([ownRename]);
+  const button = undoButton(el, "own-rename")!;
+  const described = (button.getAttribute("aria-describedby") ?? "").split(" ");
+  const words = el.shadowRoot!.getElementById(described[0]!)!;
+  expect(words.tagName).toBe("SPAN");
+  expect(text(words)).toBe(RENAME_TEXT);
+  expect(described).toHaveLength(1);
+  expect(button.closest("li")).toBe(words.closest("li"));
+});
+
+it("puts Undo after View and before Hide", async () => {
+  const el = await mountLive([ownRename]);
+  const row = el.shadowRoot!.querySelector(`[data-change-row="own-rename"]`)!;
+  expect(
+    [...row.querySelectorAll("a, button")].map((node) =>
+      node.hasAttribute("data-change-id")
+        ? "view"
+        : node.hasAttribute("data-undo-change")
+          ? "undo"
+          : node.hasAttribute("data-hide-change")
+            ? "hide"
+            : "other",
+    ),
+  ).toEqual(["view", "undo", "hide"]);
+});
+
+it("sends one wt-menu-undo on a click, stopping the click", async () => {
+  const el = await mountLive([ownRename]);
+  const heard = undoEvents(el);
+  const outside = vi.fn();
+  el.addEventListener("click", outside);
+  await userEvent.click(undoButton(el, "own-rename")!);
+  expect(heard.mock.calls).toEqual([
+    [{ detail: { changeId: "own-rename", change: RENAME_TEXT }, bubbles: true, composed: true }],
+  ]);
+  expect(outside).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector("wt-dialog[open], wt-modal[open], dialog[open]")).toBeNull();
+});
+
+it.each(["{Enter}", " "])("sends one wt-menu-undo on %s", async (key) => {
+  const el = await mountLive([ownRename]);
+  const heard = undoEvents(el);
+  undoButton(el, "own-rename")!.focus();
+  await userEvent.keyboard(key);
+  expect(heard.mock.calls).toEqual([
+    [{ detail: { changeId: "own-rename", change: RENAME_TEXT }, bubbles: true, composed: true }],
+  ]);
+});
+
+it("says Undoing… while its Undo is out, keeps the link colour, and sends nothing more", async () => {
+  const el = await mountLive([ownRename], { undoing: "own-rename" });
+  const heard = undoEvents(el);
+  const button = undoButton(el, "own-rename")!;
+  expect(text(button)).toBe("Undoing…");
+  expect(button.getAttribute("aria-disabled")).toBe("true");
+  expect(getComputedStyle(button).color).toBe(tokenColour(el, "--wt-color-primary-text"));
+  await userEvent.click(button, { force: true });
+  expect(heard).not.toHaveBeenCalled();
+});
+
+it("draws a blocked Undo muted and sends nothing", async () => {
+  const el = await mountLive([ownRename], { undoBlocked: true });
+  const heard = undoEvents(el);
+  const button = undoButton(el, "own-rename")!;
+  expect(text(button)).toBe("Undo");
+  expect(button.getAttribute("aria-disabled")).toBe("true");
+  expect(getComputedStyle(button).color).toBe(tokenColour(el, "--wt-color-text-muted"));
+  expect(tokenColour(el, "--wt-color-text-muted")).not.toBe(
+    tokenColour(el, "--wt-color-primary-text"),
+  );
+  await userEvent.click(button, { force: true });
+  expect(heard).not.toHaveBeenCalled();
+});
+
+it("draws an unblocked Undo in the link colour", async () => {
+  const el = await mountLive([ownRename]);
+  const button = undoButton(el, "own-rename")!;
+  expect(button.hasAttribute("aria-disabled")).toBe(false);
+  expect(getComputedStyle(button).color).toBe(tokenColour(el, "--wt-color-primary-text"));
+});
+
+it("holds Publish back while an Undo is out", async () => {
+  const el = await mountLive([ownRename], { undoing: "own-rename" });
+  const published = vi.fn();
+  el.addEventListener("wt-menu-publish", published);
+  const publish =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="publish"]')!;
+  expect(publish.variant).toBe("secondary");
+  expect(publish.disabled).toBe(true);
+  publish.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(published).not.toHaveBeenCalled();
+  el.undoing = null;
+  await el.updateComplete;
+  expect(publish.variant).toBe("primary");
+  expect(publish.disabled).toBe(false);
+});
+
+it("shows a refusal inside the bullet, announced once, and described from the Undo", async () => {
+  const el = await mountLive([ownRename], {
+    undoRefusals: { "own-rename": "Another menu is now called Lunch." },
+  });
+  const row = () => el.shadowRoot!.querySelector(`[data-change-row="own-rename"]`)!;
+  const refusal = () => row().querySelector<HTMLElement>("[data-undo-refusal]")!;
+  expect(refusal().tagName).toBe("P");
+  expect(text(refusal())).toBe("Not undone. Another menu is now called Lunch.");
+  expect(refusal().getAttribute("role")).toBe("alert");
+  const described = undoButton(el, "own-rename")!.getAttribute("aria-describedby")!.split(" ");
+  expect(described).toContain(refusal().id);
+  el.preview = livePreview([ownRename]);
+  await el.updateComplete;
+  expect(text(refusal())).toBe("Not undone. Another menu is now called Lunch.");
+  expect(refusal().hasAttribute("role")).toBe(false);
+  el.undoRefusals = {
+    "own-rename": "This menu has been deleted, so there is nothing to put back.",
+  };
+  await el.updateComplete;
+  expect(refusal().getAttribute("role")).toBe("alert");
+});
+
+it("keeps focus on a change's Undo across a new preview after a refusal", async () => {
+  const el = await mountLive([ownRename, sharedPrice]);
+  undoButton(el, "own-rename")!.focus();
+  el.undoRefusals = { "own-rename": "Another menu is now called Lunch." };
+  el.preview = livePreview([ownRename, sharedPrice]);
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(undoButton(el, "own-rename"));
+});
+
+it("keeps focus on a change's Undo across a new preview while it is undoing", async () => {
+  const el = await mountLive([ownRename, sharedPrice]);
+  undoButton(el, "own-rename")!.focus();
+  el.undoing = "own-rename";
+  await el.updateComplete;
+  el.preview = livePreview([ownRename, sharedPrice]);
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(undoButton(el, "own-rename"));
+});
+
+it("moves focus to the first Hide link when the undone change has gone", async () => {
+  const el = await mountLive([ownRename, sharedPrice]);
+  undoButton(el, "own-rename")!.focus();
+  el.preview = livePreview([sharedPrice]);
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(
+    el.shadowRoot!.querySelector('a[data-hide-change="shared-price"]'),
+  );
+});
+
+it("moves focus to the changes pane when no change is left", async () => {
+  const el = await mountLive([ownRename]);
+  undoButton(el, "own-rename")!.focus();
+  el.preview = livePreview([]);
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(
+    el.shadowRoot!.querySelector('[data-test="changes-pane"]'),
+  );
+});
+
+it("leaves focus alone when it was outside the list", async () => {
+  const el = await mountLive([ownRename]);
+  const pane = el.shadowRoot!.querySelector<HTMLElement>('[data-test="document-pane"]')!;
+  pane.focus();
+  el.preview = livePreview([]);
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(pane);
+});
+
+it.each([
+  ["ready", {}],
+  ["failed", { failed: true, preview: null }],
+])("says what was undone under the heading when %s", async (_, props) => {
+  const el = await mountLive([sharedPrice], { undoResult: RENAME_TEXT, ...props });
+  const lines = el.shadowRoot!.querySelectorAll('[data-test="undo-result"]');
+  expect(lines).toHaveLength(1);
+  expect(lines[0]!.getAttribute("role")).toBe("status");
+  expect(text(lines[0]!)).toBe(`Undone: ${RENAME_TEXT}.`);
+  expect(lines[0]!.closest('[data-test="changes"]')).toBeNull();
+  expect(
+    el.shadowRoot!.getElementById("changes-heading")!.compareDocumentPosition(lines[0]!) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+it("says nothing was undone when there is no result", async () => {
+  const el = await mountLive([ownRename]);
+  expect(el.shadowRoot!.querySelector('[data-test="undo-result"]')).toBeNull();
+});
+
+it("works the actions out again when the switched-on content languages change", async () => {
+  const before = currentContentLanguages();
+  const section = (es: string): DocumentMember => {
+    const node = documentSection("s-mains", "Mains", []);
+    return node.kind === "section" ? { ...node, names: { en: "Mains", es } } : node;
+  };
+  const liveDocument = menuDocument([section("Principales")], {});
+  const rename: MenuChange = {
+    id: "mains-renamed",
+    targets: { before: [], after: [] },
+    kind: "section_changed",
+    sectionId: "s-mains",
+    name: "Mains",
+    fields: ["names"],
+    source: "this_menu",
+  };
+  try {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+    const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
+      menuName: "Lunch Menu",
+      status,
+      preview: {
+        ...preview([rename]),
+        document: menuDocument([section("Segundos")], {}),
+        live: { versionId: "v-2", document: liveDocument },
+      },
+    });
+    expect(undoButton(el, "mains-renamed")).not.toBeNull();
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    await el.updateComplete;
+    expect(undoButton(el, "mains-renamed")).toBeNull();
+  } finally {
+    setContentLanguages(before);
+  }
 });

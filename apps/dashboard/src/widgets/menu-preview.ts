@@ -251,6 +251,26 @@ export class MenuPreviewPanel extends LitElement {
       a {
         color: var(--wt-color-primary-text);
       }
+      button.undo {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      button.undo:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      button.undo.blocked {
+        color: var(--wt-color-text-muted);
+        cursor: default;
+      }
+      button.undo[aria-disabled="true"] {
+        cursor: default;
+      }
       .actions {
         display: grid;
         justify-items: start;
@@ -270,6 +290,14 @@ export class MenuPreviewPanel extends LitElement {
   @property() failureReason = "";
   @property({ type: Boolean }) publishing = false;
   @property({ attribute: false }) result: PublishResult | null = null;
+  /** The change whose Undo is out. */
+  @property({ attribute: false }) undoing: string | null = null;
+  /** Another write, a Home save or a publish is out, so no Undo can be sent. */
+  @property({ type: Boolean }) undoBlocked = false;
+  /** Change id → why its Undo was refused. */
+  @property({ attribute: false }) undoRefusals: Record<string, string> = {};
+  /** The bullet text of the last change undone. */
+  @property({ attribute: false }) undoResult: string | null = null;
 
   @state() private confirmingPreview: MenuPreview | null = null;
   #publishedWarnings: MenuPreview["warnings"] = [];
@@ -277,6 +305,11 @@ export class MenuPreviewPanel extends LitElement {
   @state() private hiddenChangeIds = new Set<string>();
   #menuId: string | null = null;
   #actions: ReadonlyMap<string, MenuChangeAction> = new Map();
+  #actionsLanguages = "";
+  #shownRefusals: Record<string, string> = {};
+  /** Refusals drawn for the first time in this list, the only ones announced. */
+  #freshRefusals = new Set<string>();
+  #focusedUndo: string | null = null;
   #navigation = 0;
   @state() private navigationUnavailable = false;
 
@@ -374,16 +407,32 @@ export class MenuPreviewPanel extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (this.failed || changed.has("menuName")) this.confirmingPreview = null;
+    const focused = this.shadowRoot?.activeElement;
+    this.#focusedUndo =
+      focused instanceof HTMLButtonElement && focused.classList.contains("undo")
+        ? focused.dataset.undoChange!
+        : null;
+    if (changed.has("undoRefusals")) {
+      const shown = this.#shownRefusals;
+      this.#freshRefusals = new Set(
+        Object.keys(this.undoRefusals).filter((id) => shown[id] !== this.undoRefusals[id]),
+      );
+      this.#shownRefusals = this.undoRefusals;
+    } else if (changed.has("preview")) this.#freshRefusals = new Set();
+    const languages = currentContentLanguages().languages;
+    if (!changed.has("preview") && this.#actionsLanguages !== languages.join(" ")) {
+      this.#actionsLanguages = languages.join(" ");
+      if (this.preview !== null)
+        this.#actions = menuChangeActions({ preview: this.preview, languages });
+    }
     if (changed.has("preview")) {
       this.confirmingPreview = null;
       this.navigationUnavailable = false;
       this.#navigation++;
       this.#actions = new Map();
+      this.#actionsLanguages = languages.join(" ");
       if (this.preview === null) return;
-      this.#actions = menuChangeActions({
-        preview: this.preview,
-        languages: currentContentLanguages().languages,
-      });
+      this.#actions = menuChangeActions({ preview: this.preview, languages });
       const menuId = this.preview.document.menuId;
       if (this.#menuId !== menuId) {
         this.selectedView = null;
@@ -394,6 +443,66 @@ export class MenuPreviewPanel extends LitElement {
       }
       this.#menuId = menuId;
     }
+  }
+
+  override updated(): void {
+    const id = this.#focusedUndo;
+    this.#focusedUndo = null;
+    if (id === null) return;
+    const root = this.shadowRoot!;
+    const button = [...root.querySelectorAll<HTMLButtonElement>("button.undo")].find(
+      (candidate) => candidate.dataset.undoChange === id,
+    );
+    if (button !== undefined) {
+      if (root.activeElement !== button) button.focus({ preventScroll: true });
+      return;
+    }
+    const next =
+      root.querySelector<HTMLElement>("a[data-hide-change]") ??
+      root.querySelector<HTMLElement>('[data-test="changes-pane"]');
+    next?.focus({ preventScroll: true });
+  }
+
+  #undo(event: Event, change: MenuChange, words: string): void {
+    event.stopPropagation();
+    if (this.undoing !== null || this.undoBlocked || this.failed) return;
+    this.dispatchEvent(
+      new CustomEvent("wt-menu-undo", {
+        detail: { changeId: change.id, change: words },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #renderUndo(change: MenuChange, index: number, words: string) {
+    if (this.#actions.get(change.id)?.kind !== "undo") return nothing;
+    const undoing = this.undoing === change.id;
+    const blocked = !undoing && (this.undoing !== null || this.undoBlocked);
+    const refusal = this.undoRefusals[change.id];
+    return html`<button
+      type="button"
+      class=${blocked ? "undo blocked" : "undo"}
+      data-undo-change=${change.id}
+      aria-disabled=${undoing || blocked ? "true" : nothing}
+      aria-describedby=${refusal === undefined ? `change-words-${index}` : `change-words-${index} change-refusal-${index}`}
+      @click=${(event: Event) => this.#undo(event, change, words)}
+    >
+      ${t(undoing ? "menu_preview.undoing" : "menu_preview.undo")}
+    </button>`;
+  }
+
+  #renderRefusal(change: MenuChange, index: number) {
+    const reason = this.undoRefusals[change.id];
+    if (reason === undefined || this.#actions.get(change.id)?.kind !== "undo") return nothing;
+    return html`<p
+      class="error"
+      id=${`change-refusal-${index}`}
+      data-undo-refusal
+      role=${this.#freshRefusals.has(change.id) ? "alert" : nothing}
+    >
+      ${fill("menu_preview.undo_refused", { reason })}
+    </p>`;
   }
 
   /** One place inside a sentence. */
@@ -548,7 +657,13 @@ export class MenuPreviewPanel extends LitElement {
 
   #publish(event: Event, confirmed = false): void {
     event.stopPropagation();
-    if (this.failed || this.publishing || this.preview === null || this.preview.clashes.length > 0)
+    if (
+      this.failed ||
+      this.publishing ||
+      this.undoing !== null ||
+      this.preview === null ||
+      this.preview.clashes.length > 0
+    )
       return;
     if (this.preview.warnings.length && !confirmed) {
       this.confirmingPreview = this.preview;
@@ -633,8 +748,10 @@ export class MenuPreviewPanel extends LitElement {
                 <ul>
                   ${rows.map((change) => {
                     const target = this.#target(change);
+                    const words = this.#words(change);
+                    const index = preview.changes.indexOf(change);
                     return html`<li data-change-row=${change.id}>
-                      <span>${this.#words(change)}</span>
+                      <span id=${`change-words-${index}`}>${words}</span>
                       ${change.source === "this_menu" ? nothing : html`<span class="source">— ${this.#source(change)}</span>`}
                       ${
                         target === null
@@ -647,7 +764,7 @@ export class MenuPreviewPanel extends LitElement {
                               >(${t("menu_preview.view_change")})</a
                             >`
                       }
-                      ${this.#renderEdit(change)}
+                      ${this.#renderEdit(change)} ${this.#renderUndo(change, index, words)}
                       <a
                         data-own-click
                         data-hide-change=${change.id}
@@ -655,6 +772,7 @@ export class MenuPreviewPanel extends LitElement {
                         @click=${(event: MouseEvent) => void this.#hide(event, change, preview)}
                         >${t("menu_preview.hide_change")}</a
                       >
+                      ${this.#renderRefusal(change, index)}
                     </li>`;
                   })}
                 </ul>
@@ -680,6 +798,13 @@ export class MenuPreviewPanel extends LitElement {
             : nothing
         }
       </div>
+      ${
+        this.undoResult === null
+          ? nothing
+          : html`<p role="status" data-test="undo-result">
+              ${fill("menu_preview.undone", { change: this.undoResult })}
+            </p>`
+      }
       ${body}
     </section>`;
   }
@@ -773,10 +898,10 @@ export class MenuPreviewPanel extends LitElement {
     const menu = { menu: this.menuName };
     return html`<div class="actions">
       <wt-button
-        variant=${this.publishing || this.preview.clashes.length === 0 ? "primary" : "secondary"}
+        variant=${this.undoing === null && (this.publishing || this.preview.clashes.length === 0) ? "primary" : "secondary"}
         data-test="publish"
         .loading=${this.publishing}
-        .disabled=${this.preview.clashes.length > 0}
+        .disabled=${this.preview.clashes.length > 0 || this.undoing !== null}
         @click=${(event: Event) => this.#publish(event)}
         >${fill(
           this.publishing ? "menu_preview.publishing" : "menu_preview.publish",
