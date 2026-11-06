@@ -93,7 +93,7 @@ describe("node.db's handover tables", () => {
   describe("operations", () => {
     it("names the operations' primary key as the generated migration snapshot does", () => {
       const snapshot = JSON.parse(
-        readFileSync(new URL("../drizzle/meta/0001_snapshot.json", import.meta.url), "utf8"),
+        readFileSync(new URL("../drizzle/meta/0000_snapshot.json", import.meta.url), "utf8"),
       ) as { tables: Record<string, { compositePrimaryKeys: Record<string, unknown> }> };
       const [key] = getTableConfig(nodeHandoverOperations).primaryKeys;
       expect(Object.keys(snapshot.tables.node_handover_operations!.compositePrimaryKeys)).toEqual([

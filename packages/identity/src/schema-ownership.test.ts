@@ -21,25 +21,26 @@ const OWNED = [
   "device_profile_admission_persons",
 ];
 
-/** Core tables that must never appear in this package's generated SQL. */
+/** Core tables the core set, which now holds this package's tables, must create exactly once. */
 const CORE = ["tenants", "devices", "device_profiles"];
 
-const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
+const drizzleDir = fileURLToPath(new URL("../../db/drizzle", import.meta.url));
 
 /**
- * Every table name this package's generated migrations CREATE, under any quoting: a scan looking
- * for one quoting style finds nothing and reports it as absence.
+ * How many times the core set's generated migrations CREATE each table, under any quoting: a scan
+ * looking for one quoting style finds nothing and reports it as absence.
  */
-function tablesCreated(): Set<string> {
+function createCounts(): Map<string, number> {
   const sql = readdirSync(drizzleDir)
     .filter((f) => f.endsWith(".sql"))
     .map((f) => readFileSync(join(drizzleDir, f), "utf8"))
     .join("\n");
-  const names = new Set<string>();
+  const counts = new Map<string, number>();
   for (const m of sql.matchAll(/create table (?:if not exists )?[`"]?([a-z0-9_]+)[`"]?/gi)) {
-    names.add(m[1]!.toLowerCase());
+    const name = m[1]!.toLowerCase();
+    counts.set(name, (counts.get(name) ?? 0) + 1);
   }
-  return names;
+  return counts;
 }
 
 describe("the identity schema entrypoint owns exactly its own tables", () => {
@@ -51,19 +52,18 @@ describe("the identity schema entrypoint owns exactly its own tables", () => {
     expect(exported).toEqual([...OWNED].sort());
   });
 
-  it("emits no CREATE TABLE for a core table", () => {
-    const created = tablesCreated();
-    // The control: the loop below passes against an EMPTY scan.
-    expect(created.size).toBeGreaterThan(0);
+  it("adds no second CREATE TABLE for a core table", () => {
+    const counts = createCounts();
+    expect(counts.size).toBeGreaterThan(0);
     for (const table of CORE) {
-      expect([...created]).not.toContain(table);
+      expect(counts.get(table)).toBe(1);
     }
   });
 
-  it("emits a CREATE TABLE for every table it owns", () => {
-    const created = tablesCreated();
+  it("has a CREATE TABLE in the core set for every table it owns", () => {
+    const counts = createCounts();
     for (const table of OWNED) {
-      expect([...created]).toContain(table);
+      expect(counts.get(table) ?? 0).toBeGreaterThan(0);
     }
   });
 });
