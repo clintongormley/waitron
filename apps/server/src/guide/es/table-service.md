@@ -284,9 +284,9 @@ mesa** para todas las cuentas de la mesa, y luego las formas de cobrar esta cuen
 que se imprimirá su ticket. Cuando ya se ha pagado una parte de la cuenta, **Parte de esta cuenta ya
 está pagada: cobra el resto como pago de cuenta** ocupa el lugar de **Efectivo** y **Tarjeta**. En
 un terminal de camarero, un solo botón **Cobrar** ocupa el lugar de **Efectivo**, **Tarjeta** y las
-formas de cobrar. En un terminal de camarero, cuando se paga una cuenta y quedan otras, la pantalla
-enumera las cuentas que quedan por pagar y **Volver a la mesa** abre la siguiente. El pie no tiene
-**Aparcar**: la cuenta de una mesa ya espera en su mesa.
+formas de cobrar. El pie no tiene **Aparcar**: la cuenta de una mesa ya espera en su mesa. En un
+terminal de camarero, cuando se paga una cuenta con factura simplificada y quedan otras, la pantalla
+enumera las cuentas que quedan por pagar y **Volver a la mesa** abre la primera de ellas.
 
 Waitron no cobra una cuenta con platos sin enviar. Mientras la cuenta en pantalla tiene platos en tu
 **Pedido sin enviar**, o se muestran platos sin enviar de otra persona para ella con su botón

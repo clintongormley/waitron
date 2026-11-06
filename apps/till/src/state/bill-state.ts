@@ -2,7 +2,7 @@ import { compareDecimal, decimal } from "@waitron/shared";
 import type { PartyBill } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 
-/** A bill still to pay: open, or placed and not yet collected. */
+/** Open or placed; unlike `stillToPay`, counts an empty open bill. */
 export function owing(bill: Pick<PartyBill, "status">): boolean {
   return bill.status === "open" || bill.status === "placed";
 }

@@ -2173,7 +2173,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 
 ## Bundle A1386: Blank or misleading Floor pages
 
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06); A1409 joined after it.
 
 - **A1055. At phone width, a Floor that opens on a later zone leaves its tab scrolled out of
   sight.** Fix: scroll the selected tab into view when the Floor opens on it.

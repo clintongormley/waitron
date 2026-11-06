@@ -1198,6 +1198,7 @@ export interface BillBalance {
   received: string;
   /** The applied amount of the pending payments. */
   reserved: string;
+  /** The total less received and reserved; zero once the bill is settled or abandoned. */
   outstanding: string;
   /** The net tips of the received payments. */
   tips: string;
