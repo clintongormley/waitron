@@ -21,6 +21,7 @@ import type {
 import {
   captureAttempting,
   failAttempting,
+  getPaymentByRef,
   insertAttempting,
   listAttempting,
   refundLookupOf,
@@ -28,7 +29,7 @@ import {
   stampAttemptingRef,
 } from "@waitron/payments";
 import type { SumUpClient, SumUpTransaction } from "./client.js";
-import { SUMUP_PROVIDER } from "./client.js";
+import { DOCUMENTED_REFUND_REFUSALS, SUMUP_PROVIDER } from "./client.js";
 import { reverseViaSumUp } from "./reverse.js";
 import "./errors.js";
 
@@ -46,17 +47,6 @@ export const RESOLVE_RETRY_MS = 60_000;
  * lost may have been accepted; SumUp's own 60 s reader window plus a generous tap allowance is far
  * inside 15 min. After it, SumUp having nothing means no money moved: `failed`, no incident. */
 export const NOT_FOUND_GRACE_MS = 15 * 60_000;
-
-/**
- * Refusals of `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds` that SumUp's
- * OpenAPI file (`RefundTransaction`, read 2026-09-27) documents as the refund not happening: "'400':
- * The refund request is invalid.", "'403': The request is authenticated but not permitted for this
- * operation.", "'404': The requested transaction does not exist or does not belong to the
- * merchant.", "'409': The transaction cannot be refunded due to business constraints." and "'422':
- * The refund could not be processed by the payment processor." None says "not created" in those
- * words. No 401, 429 or 5xx is documented for this operation, so those settle nothing.
- */
-const DOCUMENTED_REFUND_REFUSALS = new Set([400, 403, 404, 409, 422]);
 
 /**
  * How far before `sentAt` SumUp may stamp a REFUND event that is still the refund sent then: the
@@ -337,6 +327,13 @@ export class SumUpCloudProvider implements PaymentProvider {
         throw error;
       }
     };
+    const unresolved = (tx: Transaction, paymentRef: string, status: string) =>
+      this.opts.incidents(tx, {
+        origin: jobOrigin("payment_check"),
+        error: new AppError("payment.pending_outcome_unactionable", { paymentRef, status }),
+        severity: "error",
+        detectedAt: now,
+      });
     // Keep a refused outcome and its alert in the same transaction.
     const failWith = (
       key: { provider: string; paymentRef: string },
@@ -345,16 +342,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       this.inTransaction(async (tx) => {
         const failed = await resolve(() => failAttempting(tx, key));
         if (failed === undefined) return undefined;
-        if (status === null) return false;
-        return this.opts.incidents(tx, {
-          origin: jobOrigin("payment_check"),
-          error: new AppError("payment.pending_outcome_unactionable", {
-            paymentRef: key.paymentRef,
-            status,
-          }),
-          severity: "error",
-          detectedAt: now,
-        });
+        return status === null ? false : unresolved(tx, key.paymentRef, status);
       });
     for (const row of rows) {
       if (signal?.aborted) {
@@ -391,17 +379,23 @@ export class SumUpCloudProvider implements PaymentProvider {
         continue;
       }
       if (outcome.kind === "captured") {
-        const captured = await this.inTransaction((tx) =>
-          resolve(() =>
+        const result = await this.inTransaction(async (tx) => {
+          const captured = await resolve(() =>
             captureAttempting(tx, {
               ...key,
               settledAt: outcome.settledAt,
               externalRef: outcome.transactionId,
               card: outcome.card,
             }),
-          ),
-        );
-        if (captured !== undefined) forwarded++;
+          );
+          if (captured !== undefined) return { captured: true, incident: false };
+          const current = await getPaymentByRef(tx, key);
+          const incident =
+            current?.state === "failed" && (await unresolved(tx, key.paymentRef, t.status));
+          return { captured: false, incident };
+        });
+        if (result.captured) forwarded++;
+        if (result.incident) incidentsRaised++;
         continue;
       }
       // failed → no incident; deferred (REFUNDED / unknown) → incident naming the status.

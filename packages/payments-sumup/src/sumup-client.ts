@@ -3,7 +3,12 @@ import { AppError } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 // Side-effect only: the registry for `reader.unpair_failed`.
 import "@waitron/payments";
-import { fromMajorUnits, SUMUP_PROVIDER, toMinorUnits } from "./client.js";
+import {
+  DOCUMENTED_REFUND_REFUSALS,
+  fromMajorUnits,
+  SUMUP_PROVIDER,
+  toMinorUnits,
+} from "./client.js";
 import type {
   CreateCheckoutOutcome,
   SumUpClient,
@@ -225,12 +230,11 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         // Partial refunds use integer cents; see docs/research/2026-09-10-sumup-solo-experiments.md §10.3.
         p.amount === undefined ? {} : { amount: toMinorUnits(p.amount) },
       );
-      if ((status >= 300 && status < 400) || status >= 500) {
-        throw new Error(
-          `sumup POST /v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds: HTTP ${status}`,
-        );
-      }
-      return { status: status >= 400 ? "refused" : "accepted" } as const;
+      if (status >= 200 && status < 300) return { status: "accepted" };
+      if (DOCUMENTED_REFUND_REFUSALS.has(status)) return { status: "refused" };
+      throw new Error(
+        `sumup POST /v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds: HTTP ${status}`,
+      );
     },
     async sendRefund(p: { transactionId: string; amount: Decimal }) {
       const httpStatus = await callForStatus(
