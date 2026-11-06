@@ -3637,6 +3637,68 @@ describe("A182 canvas retirement", () => {
 describe("a device profile's address", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  const editingId = (el: DeviceProfilesScreen) =>
+    el.shadowRoot!.querySelector("[data-test=editor-form]")?.getAttribute("data-editing-id") ??
+    null;
+
+  it("names the profile while its editor is open, so a reload opens it again", async () => {
+    history.replaceState(null, "", "/manage/device-profiles");
+    const api = stubApi();
+    const el = await mount(api);
+    const replace = vi.spyOn(history, "replaceState");
+    const push = vi.spyOn(history, "pushState");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
+    expect(location.pathname).toBe("/manage/device-profiles/profile/p1");
+    expect(replace).toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    const address = location.href;
+    cleanupWidgets();
+    history.replaceState(null, "", address);
+    const reloaded = await mount(stubApi());
+    await vi.waitFor(() => expect(editingId(reloaded)).toBe("p1"));
+    expect(location.pathname).toBe("/manage/device-profiles/profile/p1");
+  });
+
+  it("leaves the profile's name out of the address when Cancel closes its editor", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+    const el = await mount();
+    await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
+    const push = vi.spyOn(history, "pushState");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull(),
+    );
+    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("leaves the profile's name out of the address when a save closes its editor", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+    const api = stubApi();
+    const el = await mount(api);
+    await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
+    rename(el);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull(),
+    );
+    expect(api.updateDeviceProfile).toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/device-profiles");
+  });
+
+  it("closes the editor when Back takes the profile's name out of the address", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+    const el = await mount();
+    await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
+    history.replaceState(null, "", "/manage/device-profiles");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
+  });
+
   it("opens the profile its address names, once", async () => {
     history.replaceState(null, "", "/manage/device-profiles/profile/p2");
     const push = vi.spyOn(history, "pushState");
@@ -3650,8 +3712,8 @@ describe("a device profile's address", () => {
     );
     expect(api.getDeviceProfile).toHaveBeenCalledTimes(1);
     expect(api.getDeviceProfile).toHaveBeenCalledWith("p2");
-    expect(location.pathname).toBe("/manage/device-profiles");
-    expect(replace).toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/device-profiles/profile/p2");
+    expect(replace).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);

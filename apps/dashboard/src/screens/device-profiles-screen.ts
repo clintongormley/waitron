@@ -531,26 +531,39 @@ export class DeviceProfilesScreen extends LitElement {
   );
 
   @state() private mode: "list" | "editor" = "list";
-  /** A `profile` in the path opens that profile's editor once the profiles have loaded, and leaves
-   * the path by replacing it, so Back still leaves the screen. */
+  /** A `profile` in the path names the profile whose editor is open, written and cleared by
+   * replacing, so Back still leaves the screen. */
   readonly #url = new UrlStateController(
     this,
     () => {
       if (this.#url.read("dashboard") !== "device-profiles") return;
       this.#linkedProfile = this.#url.read("profile");
-      if (this.#profilesRead) this.#openLinkedProfile();
+      if (this.#linkedProfile === null) {
+        if (this.mode === "editor" || this.#openingId !== null) this.#closeEditor(false);
+      } else if (this.#profilesRead) this.#openLinkedProfile();
     },
     dashboardPath,
   );
   #linkedProfile: string | null = null;
   #profilesRead = false;
+  /** The profile whose editor is being read, until the read lands. */
+  #openingId: string | null = null;
 
+  /** An id naming no profile opens nothing, and leaves the path rather than sitting in it. */
   #openLinkedProfile(): void {
     const id = this.#linkedProfile;
     if (id === null) return;
     this.#linkedProfile = null;
-    this.#url.write({ profile: null }, true);
+    if (id === this.#openingId || (this.mode === "editor" && id === this.editingId)) return;
     if (this.profiles.some((profile) => profile.id === id)) void this.#openEditor(id);
+    else this.#url.write({ profile: null }, true);
+  }
+
+  #closeEditor(writeUrl = true): void {
+    this.#clearDraft();
+    this.mode = "list";
+    if (writeUrl && this.#url.read("profile") !== null)
+      void this.#url.write({ profile: null }, true);
   }
 
   @state() private profiles: DeviceProfile[] = [];
@@ -1017,6 +1030,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#readerScope?.dispose();
     this.#readerScope = undefined;
     this.#leave = undefined;
+    this.#openingId = null;
     this.editingId = null;
     this.draftName = "";
     this.draftCapabilities = [];
@@ -1124,6 +1138,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#clearErrorOnOpen();
     this.#clearDraft();
     const opened = this.#opened;
+    this.#openingId = id;
     try {
       const [profile, kitchenScreens, initialChoices] = await Promise.all([
         this.api.getDeviceProfile(id),
@@ -1131,6 +1146,7 @@ export class DeviceProfilesScreen extends LitElement {
         this.#watchScopeChoices(),
       ]);
       if (opened !== this.#opened) return;
+      this.#openingId = null;
       const choices = this.#latestScopeChoices ?? initialChoices;
       this.scopeChoices = choices;
       this.editingId = id;
@@ -1167,9 +1183,13 @@ export class DeviceProfilesScreen extends LitElement {
         this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
       this.mode = "editor";
       this.#registerDraft();
+      void this.#url.write({ profile: id }, true);
       void this.#loadReaders(id, this.#opened);
     } catch (error) {
-      if (opened === this.#opened) this.#showReadError(error);
+      if (opened === this.#opened) {
+        this.#openingId = null;
+        this.#showReadError(error);
+      }
     }
   }
 
@@ -1481,8 +1501,7 @@ export class DeviceProfilesScreen extends LitElement {
   async #cancel(): Promise<void> {
     if (this.saving) return;
     const proceed = () => {
-      this.#clearDraft();
-      this.mode = "list";
+      this.#closeEditor();
       this.#showError(null);
     };
     if (this.#leave) await this.#leave.request({ scopes: [this], reason: "cancel", proceed });
@@ -1598,10 +1617,7 @@ export class DeviceProfilesScreen extends LitElement {
       scope?.commit(submitted);
       if (!(await this.#saveReaders(saved, submitted, readers, readerScope, active, turn))) return;
       if (scope?.isDirty() || readerScope?.isDirty()) this.#keepEditing(saved, submitted);
-      else {
-        this.#clearDraft();
-        this.mode = "list";
-      }
+      else this.#closeEditor();
       resultTurn = this.#saveTurn;
       const profiles = await this.api.listDeviceProfiles();
       if (this.isConnected && resultTurn === this.#saveTurn && (this.mode === "list" || active()))

@@ -1046,7 +1046,9 @@ because the old path also ran an allowed-zones query whose answer was thrown awa
 - Modify: `apps/dashboard/src/navigation.ts` — `"device-profiles": { profile: "profile" }`
 - Modify: `apps/dashboard/src/screens/device-profiles-screen.ts` — a `UrlStateController`; once the
   profiles have loaded, a `profile` word naming a listed profile calls `#openEditor(id)` (`:1097`)
-  and the word is written back to null (replace); an unknown id opens nothing
+  and the word is written back to null (replace); an unknown id opens nothing. The owner overruled
+  the write-back on 2026-11-06: the word stays while the profile's editor is open, as in the
+  catalogue, so a reload opens it again.
 - Test: `apps/dashboard/src/screens/device-profiles-screen.test.ts`, `apps/dashboard/src/navigation.test.ts`
 
 - [ ] **Step 1: Write the failing tests.** `it("opens the profile its address names, once")`;
