@@ -311,6 +311,14 @@ export class LoginScreen extends LitElement {
       code !== "person.suspended"
     )
       return;
+    // An initial session probe may report absence after anonymous typing begins.
+    if (
+      code === "management_session.required" &&
+      this.token === null &&
+      !this.busy &&
+      (this.step === "email" || this.step === "password")
+    )
+      return;
     this.token = null;
     this.actionPurpose = null;
     this.actionValidated = false;

@@ -221,8 +221,11 @@ Venue devices continue to use the LAN address. On 6 November a Mac browser signe
 in through the public gateway with normal certificate trust, and an issued
 replacement was installed without restarting the server
 ([PR #2525](https://github.com/clintongormley/waitron/pull/2525)). That bounded test
-was stopped afterwards. Automatic renewal, a physically outside-home browser and
-offline-sale checks remain open. The gateway behavior below records the earlier
+was stopped afterwards. The owner then authorised a separate managed demo: its
+unprivileged app restarts through systemd and its separate tunnel through Docker.
+Both recovered from a controlled process exit and the public page returned 200.
+They are enabled for startup; a physical box reboot has not been tested. Automatic
+renewal, a physically outside-home browser and offline-sale checks remain open. The gateway behavior below records the earlier
 local proof, not a completed A951-S qualification.
 
 The gateway removes revoked installations on its next signed configuration update.

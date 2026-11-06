@@ -2100,7 +2100,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   on 6 November with a small remote entrance and the existing gateway. The old branch stays parked.
   A manual browser signed in through the public gateway with normal certificate trust on
   6 November ([proof PR](https://github.com/clintongormley/waitron/pull/2525)); live certificate
-  replacement also worked without a server restart. Left: the certificate worker and renewal,
+  replacement also worked without a server restart. A separate managed demo recovered its app
+  and tunnel after controlled exits; physical reboot is untested. Left: the certificate worker and renewal,
   managed tunnel container, signed connection details, Settings on/off/status, external-client
   qualification and retirement of `@waitron/tunnel`. Translate all and address completion remain
   test-box trials.
