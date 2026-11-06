@@ -885,8 +885,8 @@ export class DashboardApp extends LitElement {
   @state() private navSearch = "";
 
   @state() private profileOpen = false;
-  /** The address Your profile opened over: closing it writes that back, keeping the words a screen
-   * keeps in it, such as the editor it has open. */
+  /** The address beneath Your profile, which its close button writes back so the screen beneath gets
+   * its address words again. */
   #beneathProfile: string | null = null;
 
   /** Reported by profile-screen via `profile-tab-change`: the Edit action lives in this shell's modal
