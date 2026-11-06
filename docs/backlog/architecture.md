@@ -408,8 +408,11 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
   shared-fixture consumers in the server split-bill and move-bill suites;
-  bill-editing, moved-dish and other order fixtures; and shared helper consumers
-  such as `made-here.test.ts`. Accented move-line bindings also remain.
+  bill-editing and other order fixtures; and shared helper consumers
+  such as `made-here.test.ts`. Moved-dish names remain in `move-dishes.test.ts`'s `saveTarta`,
+  `till-api.move-dishes.test.ts` and the till's `till-table-order-screen.move-dishes.test.ts`.
+  Accented bindings remain in `portion-selection.test.ts`, `counter-portion-rows.test.ts`,
+  `till-ticket-view.test.ts`, `receipt-document.test.ts` and `made-here.routes.test.ts`.
   Fixture strings remain separate from this naming work. The receipt-print and working-order
   suites retain Spanish display samples under A976. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
@@ -804,7 +807,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
   counter-payment fixtures; shared-fixture consumers in the server split-bill and move-bill suites,
-  bill-editing, moved-dish and other order fixtures, shared helper
+  bill-editing and other order fixtures, moved-dish helpers and sibling suites, shared helper
   consumers and file names.
   Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
   display samples under A976.
