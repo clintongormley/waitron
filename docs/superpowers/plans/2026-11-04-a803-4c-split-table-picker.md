@@ -874,6 +874,9 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   (`till-floor-screen.ts:1378-1385`) takes the later of its own `#carried` and this one, under the same
   rule: only while `tablesReadAt < answeredAt`. A later read that started after the answer wins, and a
   poll that started before it does not.
+  2026-11-06, finish-branch review: the later answer can hold the lower revision (a late split answer
+  brought 9 after a read of 12), so `#revision` now sends the highest of the read and every answer that
+  arrived after the read started (e9ffd6713a).
 
 - **D20 What goes, and the guard that stays.** Going: `split-table-bill`, `#splitTableBills`' bill
   buttons, `#splitGuestsDialog`, `widgets/split-guests-dialog.ts` (its `SplitGuestsDetail` type moves to
