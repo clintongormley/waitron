@@ -245,6 +245,28 @@ a restart cannot extend it. Expiry closes remote connections while local HTTPS
 continues. The local peer container grants no access to the rest of your LAN and
 has no SSH support feature.
 
+### Staff-certificate status discovery, 6 November 2026
+
+A box that loses a request file needs to learn which request Cloud already holds. The watcher
+approved extending the existing signed `staff-certificate-status` action on 6 November at 23:07;
+Cloud owns the receiver. The implementation waits for that receiver and this amendment's Claude
+read. Existing installation authentication, leases, test restrictions and limits stay in place.
+
+Send `{ "version": 1, "requestId": null }` for discovery. The reply has `version: 1`, the
+`installationId`, the currently assigned staff `hostname`, the current configuration `revision`
+and `request`. With no exchange row, `request` is null. Otherwise it contains the stored
+`requestId`, `hostname`, `revision` and `csrDigest`. Return that metadata even when the stored
+hostname or revision is stale, so a replacement can name the exact predecessor. Discovery
+returns no CSR, certificate or private key. A request naming a UUID and every submit retain their
+existing bodies and replies; the ordinary status returns a chain only for a current matching request.
+
+On each certificate pass, discover that row and create the CSR from the retained box key.
+If its digest, hostname and revision match, poll that request. Otherwise submit a replacement
+using the discovered request ID as `previousRequestId`, or null when there is no row. A lost
+submit reply is resolved by the next discovery rather than by guessing its predecessor. Cloud's
+existing row holds this request state; no new local request file, table, job or route is needed.
+A valid installed chain stays in place during failures and unrelated configuration changes.
+
 ### Recover a test venue from a Cloud snapshot
 
 If a venue server has failed, open **Restore from backup** on a fresh replacement and choose
