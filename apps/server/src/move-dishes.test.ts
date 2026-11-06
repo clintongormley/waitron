@@ -299,9 +299,9 @@ async function payItems(billId: string, lineNos: number[], amount: string): Prom
 describe("A803 move dishes: the moves that succeed", () => {
   it("A803 move dishes: moves two of four identical Cañas to a new bill, Bill 3, holding exactly those two lines with their portions and ticket items", async () => {
     const p = await party([dish("Caña", "4")]);
-    const cañas = await dishIds(p.bill1, "Caña");
-    expect(cañas).toHaveLength(4);
-    const moving = cañas.slice(0, 2);
+    const beerLines = await dishIds(p.bill1, "Caña");
+    expect(beerLines).toHaveLength(4);
+    const moving = beerLines.slice(0, 2);
     const boundBefore = bindings(moving);
     expect(boundBefore).toHaveLength(2);
     const tickets = (await ticketsOf(p.bill1)).filter((item) => moving.includes(item.lineId!));
@@ -315,7 +315,7 @@ describe("A803 move dishes: the moves that succeed", () => {
       [billId, 3, null],
     ]);
     expect(await dishIds(billId)).toEqual(moving);
-    expect(await dishIds(p.bill1)).toEqual(cañas.slice(2));
+    expect(await dishIds(p.bill1)).toEqual(beerLines.slice(2));
     expect(bindings(moving)).toEqual(boundBefore);
     expect(await ticketsOf(billId)).toEqual(tickets);
   });
@@ -387,26 +387,26 @@ describe("A803 move dishes: the moves that succeed", () => {
 
   it("A803 move dishes: after an item payment for one Caña, the unpaid Cañas move and the paid one stays", async () => {
     const p = await party([dish("Caña", "3")]);
-    const cañas = await dishIds(p.bill1, "Caña");
+    const beerLines = await dishIds(p.bill1, "Caña");
     const lineNos = (await rowsOf(p.bill1)).map((row) => row.lineNo);
     await payItems(p.bill1, [lineNos[0]!], "3.00");
 
-    await move(p.partyId, p.bill1, p.bill2, cañas.slice(1));
+    await move(p.partyId, p.bill1, p.bill2, beerLines.slice(1));
 
-    expect(await dishIds(p.bill1)).toEqual(cañas.slice(0, 1));
-    expect(await dishIds(p.bill2)).toEqual(cañas.slice(1));
+    expect(await dishIds(p.bill1)).toEqual(beerLines.slice(0, 1));
+    expect(await dishIds(p.bill2)).toEqual(beerLines.slice(1));
   });
 
   it("A803 move dishes: onto Bill 2 holding a €5 contribution, the Caña moves, Bill 2 owes more and its payment is unchanged", async () => {
     const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Vino")]);
     const paymentId = await cashContribution(v, p.bill2, "5.00");
     const before = await total(p.bill2);
-    const [caña] = await dishIds(p.bill1, "Caña");
+    const [beerLine] = await dishIds(p.bill1, "Caña");
     const payments = await paymentsOf(v, p.bill2);
 
-    await move(p.partyId, p.bill1, p.bill2, [caña!]);
+    await move(p.partyId, p.bill1, p.bill2, [beerLine!]);
 
-    expect(await dishIds(p.bill2, "Caña")).toEqual([caña]);
+    expect(await dishIds(p.bill2, "Caña")).toEqual([beerLine]);
     expect(await total(p.bill2)).toBe(before + 300);
     expect(await paymentsOf(v, p.bill2)).toEqual(payments);
     expect(payments.map((payment) => payment.id)).toEqual([paymentId]);
@@ -414,17 +414,17 @@ describe("A803 move dishes: the moves that succeed", () => {
 
   it("A803 move dishes: onto Bill 2 whose Vino is paid by item, the Caña moves and the Vino stays paid", async () => {
     const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Vino"), dish("Agua")]);
-    const [vino] = await rowsOf(p.bill2);
-    await payItems(p.bill2, [vino!.lineNo], "30.00");
+    const [wineLine] = await rowsOf(p.bill2);
+    await payItems(p.bill2, [wineLine!.lineNo], "30.00");
     const payments = await paymentsOf(v, p.bill2);
-    const [caña] = await dishIds(p.bill1, "Caña");
+    const [beerLine] = await dishIds(p.bill1, "Caña");
 
-    await move(p.partyId, p.bill1, p.bill2, [caña!]);
+    await move(p.partyId, p.bill1, p.bill2, [beerLine!]);
 
-    expect(await dishIds(p.bill2, "Caña")).toEqual([caña]);
+    expect(await dishIds(p.bill2, "Caña")).toEqual([beerLine]);
     expect(await paymentsOf(v, p.bill2)).toEqual(payments);
     const paid = await inTx(v, (tx) => readPaidQuantities(tx, p.bill2));
-    expect([...paid]).toEqual([[vino!.id, 1000]]);
+    expect([...paid]).toEqual([[wineLine!.id, 1000]]);
   });
 
   it("A803 move dishes: onto Bill 2 holding a received €20 card payment, the Caña moves and the payment is unchanged", async () => {
@@ -446,11 +446,11 @@ describe("A803 move dishes: the moves that succeed", () => {
     );
     const payments = await paymentsOf(v, p.bill2);
     const before = await total(p.bill2);
-    const [caña] = await dishIds(p.bill1, "Caña");
+    const [beerLine] = await dishIds(p.bill1, "Caña");
 
-    await move(p.partyId, p.bill1, p.bill2, [caña!]);
+    await move(p.partyId, p.bill1, p.bill2, [beerLine!]);
 
-    expect(await dishIds(p.bill2, "Caña")).toEqual([caña]);
+    expect(await dishIds(p.bill2, "Caña")).toEqual([beerLine]);
     expect(await total(p.bill2)).toBe(before + 300);
     expect(await paymentsOf(v, p.bill2)).toEqual(payments);
   });
@@ -469,20 +469,22 @@ describe("A803 move dishes: the moves that succeed", () => {
 
   it("A803 move dishes: a dish in a held group moves to another bill of the party and stays in its group", async () => {
     const p = await party([dish("Paella"), dish("Flan")], "hold");
-    const [paella] = await dishIds(p.bill1, "Paella");
-    const group = (await rowsOf(p.bill1)).find((row) => row.id === paella)!.groupId;
+    const [riceLine] = await dishIds(p.bill1, "Paella");
+    const group = (await rowsOf(p.bill1)).find((row) => row.id === riceLine)!.groupId;
     expect(group).not.toBeNull();
 
-    await move(p.partyId, p.bill1, p.bill2, [paella!]);
+    await move(p.partyId, p.bill1, p.bill2, [riceLine!]);
 
-    expect((await rowsOf(p.bill2)).map((row) => [row.id, row.groupId])).toEqual([[paella, group]]);
+    expect((await rowsOf(p.bill2)).map((row) => [row.id, row.groupId])).toEqual([
+      [riceLine, group],
+    ]);
   });
 
   it("A803 move dishes: with the Paella recalled into a draft, the Flan beside it on the bill moves and the Paella stays", async () => {
     const p = await party([dish("Paella"), dish("Flan")], "hold");
-    const [paella] = await dishIds(p.bill1, "Paella");
+    const [riceLine] = await dishIds(p.bill1, "Paella");
     const [flan] = await dishIds(p.bill1, "Flan");
-    await recallIntoDraft(p.partyId, p.bill1, paella!);
+    await recallIntoDraft(p.partyId, p.bill1, riceLine!);
 
     await sendMove(
       p.bill1,
@@ -491,7 +493,7 @@ describe("A803 move dishes: the moves that succeed", () => {
       await readMove(p.partyId, p.bill1, p.bill2, adminId()),
     );
 
-    expect(await dishIds(p.bill1)).toEqual([paella]);
+    expect(await dishIds(p.bill1)).toEqual([riceLine]);
     expect(await dishIds(p.bill2)).toEqual([flan]);
   });
 
@@ -918,29 +920,29 @@ describe("A803 move dishes refuses, and changes nothing", () => {
 
   it("A803 move dishes refuses: a card payment of the whole bill under way on the source is order.payment_in_flight", async () => {
     const p = await party([dish("Caña", "2")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     v.db.run(
       sql`update working_orders set payment_attempt_at = '2026-11-01T10:00:00.000Z' where id = ${p.bill1}`,
     );
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "order.payment_in_flight", {
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "order.payment_in_flight", {
       workingOrderId: p.bill1,
     });
   });
 
   it("A803 move dishes refuses: a card payment of the whole bill under way on the destination is order.payment_in_flight naming it", async () => {
     const p = await party([dish("Caña", "2")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     v.db.run(
       sql`update working_orders set payment_attempt_at = '2026-11-01T10:00:00.000Z' where id = ${p.bill2}`,
     );
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "order.payment_in_flight", {
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "order.payment_in_flight", {
       workingOrderId: p.bill2,
     });
   });
 
   it("A803 move dishes refuses: a card contribution still at the reader on the source is order.payment_in_flight", async () => {
     const p = await party([dish("Caña", "2"), dish("Vino")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
       tx.insert(billPayments).values({
         workingOrderId: p.bill1,
@@ -955,14 +957,14 @@ describe("A803 move dishes refuses, and changes nothing", () => {
         deviceId: v.cfg.origin.deviceId,
       }),
     );
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "order.payment_in_flight", {
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "order.payment_in_flight", {
       workingOrderId: p.bill1,
     });
   });
 
   it("A803 move dishes refuses: a card contribution still at the reader on the destination is order.payment_in_flight naming it", async () => {
     const p = await party([dish("Caña", "2"), dish("Vino")], "fire", [dish("Agua")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
       tx.insert(billPayments).values({
         workingOrderId: p.bill2,
@@ -977,7 +979,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
         deviceId: v.cfg.origin.deviceId,
       }),
     );
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "order.payment_in_flight", {
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "order.payment_in_flight", {
       workingOrderId: p.bill2,
     });
   });
@@ -985,7 +987,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   it("A803 move dishes refuses: a card refund in progress on the destination is bill.refund_in_progress naming it", async () => {
     const p = await party([dish("Caña", "2"), dish("Vino")], "fire", [dish("Agua"), dish("Vino")]);
     const paymentId = await cashContribution(v, p.bill2, "1.00");
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
       tx.insert(billPaymentRefunds).values({
         billPaymentId: paymentId,
@@ -1000,7 +1002,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
         state: "pending",
       }),
     );
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "bill.refund_in_progress", {
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "bill.refund_in_progress", {
       workingOrderId: p.bill2,
     });
   });
@@ -1008,7 +1010,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   it("A803 move dishes refuses: a card refund in progress on the source is bill.refund_in_progress", async () => {
     const p = await party([dish("Caña", "2"), dish("Vino")]);
     const paymentId = await cashContribution(v, p.bill1, "5.00");
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
       tx.insert(billPaymentRefunds).values({
         billPaymentId: paymentId,
@@ -1023,7 +1025,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
         state: "pending",
       }),
     );
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "bill.refund_in_progress", {
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "bill.refund_in_progress", {
       workingOrderId: p.bill1,
     });
   });
@@ -1034,10 +1036,10 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     ["abandoned", "tab.not_open", (id: string) => ({ tabId: id })],
   ] as const)("A803 move dishes refuses: a destination %s is %s", async (status, code, params) => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, p.bill2);
     await setStatus(p.bill2, status);
-    await refused(() => sendMove(p.bill1, p.bill2, [caña!], ask), code, params(p.bill2));
+    await refused(() => sendMove(p.bill1, p.bill2, [beerLine!], ask), code, params(p.bill2));
   });
 
   it.each([
@@ -1046,18 +1048,18 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     ["abandoned", "tab.not_open", (id: string) => ({ tabId: id })],
   ] as const)("A803 move dishes refuses: a source %s is %s", async (status, code, params) => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, p.bill2);
     await setStatus(p.bill1, status);
-    await refused(() => sendMove(p.bill1, p.bill2, [caña!], ask), code, params(p.bill1));
+    await refused(() => sendMove(p.bill1, p.bill2, [beerLine!], ask), code, params(p.bill1));
   });
 
   it("A803 move dishes refuses: another party's bill is bill.other_party", async () => {
     const p = await party([dish("Caña")]);
     const other = await party([dish("Flan")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, other.bill2);
-    await refused(() => sendMove(p.bill1, other.bill2, [caña!], ask), "bill.other_party", {
+    await refused(() => sendMove(p.bill1, other.bill2, [beerLine!], ask), "bill.other_party", {
       workingOrderId: other.bill2,
     });
   });
@@ -1073,18 +1075,18 @@ describe("A803 move dishes refuses, and changes nothing", () => {
 
   it("A803 move dishes refuses: a destination served another way is service_zone.mode_incompatible", async () => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) => VENUE_SERVICE.retargetOrderContext(tx, p.bill2, v.counter.zoneId));
     await refused(
-      () => move(p.partyId, p.bill1, p.bill2, [caña!]),
+      () => move(p.partyId, p.bill1, p.bill2, [beerLine!]),
       "service_zone.mode_incompatible",
     );
   });
 
   it("A803 move dishes refuses: the source as its own destination is tab.transfer_self", async () => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
-    await refused(() => move(p.partyId, p.bill1, p.bill1, [caña!]), "tab.transfer_self", {
+    const [beerLine] = await dishIds(p.bill1);
+    await refused(() => move(p.partyId, p.bill1, p.bill1, [beerLine!]), "tab.transfer_self", {
       tabId: p.bill1,
     });
   });
@@ -1115,21 +1117,22 @@ describe("A803 move dishes refuses, and changes nothing", () => {
 
   it("A803 move dishes refuses: the same id twice is tab.transfer_duplicate_line", async () => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     await refused(
-      () => move(p.partyId, p.bill1, p.bill2, [caña!, caña!]),
+      () => move(p.partyId, p.bill1, p.bill2, [beerLine!, beerLine!]),
       "tab.transfer_duplicate_line",
-      { tabId: p.bill1, lineNo: await lineNoOf(p.bill1, caña!) },
+      { tabId: p.bill1, lineNo: await lineNoOf(p.bill1, beerLine!) },
     );
   });
 
   it("A803 move dishes refuses: one id named more times than a statement can bind is tab.transfer_duplicate_line", async () => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     await refused(
-      () => move(p.partyId, p.bill1, p.bill2, Array<string>(SQL_VARIABLE_LIMIT + 1).fill(caña!)),
+      () =>
+        move(p.partyId, p.bill1, p.bill2, Array<string>(SQL_VARIABLE_LIMIT + 1).fill(beerLine!)),
       "tab.transfer_duplicate_line",
-      { tabId: p.bill1, lineNo: await lineNoOf(p.bill1, caña!) },
+      { tabId: p.bill1, lineNo: await lineNoOf(p.bill1, beerLine!) },
     );
   });
 
@@ -1140,10 +1143,10 @@ describe("A803 move dishes refuses, and changes nothing", () => {
 
   it("A803 move dishes refuses: a dish recalled into a draft is draft.out_of_date", async () => {
     const p = await party([dish("Paella"), dish("Flan")], "hold");
-    const [paella] = await dishIds(p.bill1, "Paella");
-    await recallIntoDraft(p.partyId, p.bill1, paella!);
+    const [riceLine] = await dishIds(p.bill1, "Paella");
+    await recallIntoDraft(p.partyId, p.bill1, riceLine!);
     const ask = await readMove(p.partyId, p.bill1, p.bill2, adminId());
-    await refused(() => sendMove(p.bill1, p.bill2, [paella!], ask), "draft.out_of_date", {
+    await refused(() => sendMove(p.bill1, p.bill2, [riceLine!], ask), "draft.out_of_date", {
       billId: p.bill1,
     });
   });
@@ -1153,19 +1156,19 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, p.bill1, [{ menuItemId: v.item("Tarta"), quantity: "1", hold: true }]),
     );
-    const tarta = (await dishIds(p.bill1)).at(-1)!;
-    await refused(() => move(p.partyId, p.bill1, null, [tarta]), "tab.split_held_line", {
+    const cakeLine = (await dishIds(p.bill1)).at(-1)!;
+    await refused(() => move(p.partyId, p.bill1, null, [cakeLine]), "tab.split_held_line", {
       tabId: p.bill1,
-      lineNo: await lineNoOf(p.bill1, tarta),
+      lineNo: await lineNoOf(p.bill1, cakeLine),
     });
   });
 
   it("A803 move dishes refuses: another person's unsent dishes on the destination are draft.taken_over naming them", async () => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     await saveTarta(p.partyId, p.bill2, adminId());
     const [edit] = await editsOf(p.bill2);
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "draft.taken_over", {
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "draft.taken_over", {
       billId: p.bill2,
       ownerId: adminId(),
       edit,
@@ -1174,17 +1177,17 @@ describe("A803 move dishes refuses, and changes nothing", () => {
 
   it("A803 move dishes refuses: a stale editor version on the source is draft.out_of_date", async () => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, p.bill2, adminId());
     await saveTarta(p.partyId, p.bill1, adminId());
-    await refused(() => sendMove(p.bill1, p.bill2, [caña!], ask), "draft.out_of_date", {
+    await refused(() => sendMove(p.bill1, p.bill2, [beerLine!], ask), "draft.out_of_date", {
       billId: p.bill1,
     });
   });
 
   it("A803 move dishes refuses: a stale party revision is party.out_of_date", async () => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, p.bill2);
     await inTx(v, (tx) =>
       tx
@@ -1192,7 +1195,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
         .set({ revision: sql`${parties.revision} + 1` })
         .where(eq(parties.id, p.partyId)),
     );
-    await refused(() => sendMove(p.bill1, p.bill2, [caña!], ask), "party.out_of_date", {
+    await refused(() => sendMove(p.bill1, p.bill2, [beerLine!], ask), "party.out_of_date", {
       partyId: p.partyId,
     });
   });
@@ -1211,21 +1214,25 @@ describe("A803 move dishes race: the second of two writes is refused, changing n
 
   it("A803 move dishes race: a €40 contribution commits first; the move that would now break the floor is bill.received_exceeds_total", async () => {
     const p = await party([dish("Vino"), dish("Burger"), dish("Agua")]);
-    const [vino] = await dishIds(p.bill1, "Vino");
+    const [wineLine] = await dishIds(p.bill1, "Vino");
     const ask = await readMove(p.partyId, p.bill1, p.bill2);
     await cashContribution(v, p.bill1, "40.00");
-    await refused(() => sendMove(p.bill1, p.bill2, [vino!], ask), "bill.received_exceeds_total", {
-      workingOrderId: p.bill1,
-      excess: "26.00",
-    });
+    await refused(
+      () => sendMove(p.bill1, p.bill2, [wineLine!], ask),
+      "bill.received_exceeds_total",
+      {
+        workingOrderId: p.bill1,
+        excess: "26.00",
+      },
+    );
   });
 
   it("A803 move dishes race: Bill 2 is taken by another person first; the move is draft.taken_over", async () => {
     const p = await party([dish("Caña")]);
-    const [caña] = await dishIds(p.bill1);
+    const [beerLine] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, p.bill2);
     await saveTarta(p.partyId, p.bill2, adminId());
-    await refused(() => sendMove(p.bill1, p.bill2, [caña!], ask), "draft.taken_over", {
+    await refused(() => sendMove(p.bill1, p.bill2, [beerLine!], ask), "draft.taken_over", {
       billId: p.bill2,
       ownerId: adminId(),
     });
