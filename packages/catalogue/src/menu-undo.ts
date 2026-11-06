@@ -204,7 +204,7 @@ function ownSectionUndo(
 ): MenuChangeAction {
   const was = findSection(live.root.members, change.sectionId);
   const is = findSection(now.root.members, change.sectionId);
-  // An include's presentation is PR 2's; whether a section is an include never changes.
+  // Whether a section is an include never changes.
   if (was === null || is === null || was.includedMenu !== undefined) return NONE;
   const patch: Partial<SectionInput> = {};
   for (const field of change.fields)
