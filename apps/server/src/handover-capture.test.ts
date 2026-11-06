@@ -15,6 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   parseIndicator,
@@ -80,13 +81,13 @@ const MODULES = [
     handover: { summarise: async (query) => ({ probeRows: await probeRows(query) }) },
   },
   {
-    name: "credentials",
+    name: "bookings",
     version: "0.4.0",
-    tier: "mandatory",
+    tier: "toggleable",
     migrations: {
-      name: "credentials",
-      table: "__drizzle_migrations_credentials",
-      from: "../credentials/drizzle",
+      name: "bookings",
+      table: "__drizzle_migrations_bookings",
+      from: "../bookings/drizzle",
     },
   },
   {
@@ -103,7 +104,7 @@ const MODULES = [
 ] as const satisfies readonly WaitronModule[];
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, BOOKINGS_MIGRATIONS, NODE_MIGRATIONS],
   setup: async (db) => {
     db.run(sql`create table handover_probe (n integer not null)`);
   },
@@ -374,19 +375,19 @@ describe("capturing a stepped-down box's final copy", () => {
         )
       ).map((row) => row.hash);
     const core = await journal("__drizzle_migrations_db");
-    const credentials = await journal("__drizzle_migrations_credentials");
-    expect(core.length).toBeGreaterThan(1);
+    const bookings = await journal("__drizzle_migrations_bookings");
+    expect(core.length).toBeGreaterThan(0);
     expect(envelope.body.snapshot.schema).toEqual([
-      { set: "core", version: core.length, journalSha256: sha256Hex(core.join("\n")) },
       {
-        set: "credentials",
-        version: credentials.length,
-        journalSha256: sha256Hex(credentials.join("\n")),
+        set: "bookings",
+        version: bookings.length,
+        journalSha256: sha256Hex(bookings.join("\n")),
       },
+      { set: "core", version: core.length, journalSha256: sha256Hex(core.join("\n")) },
     ]);
     expect(envelope.body.snapshot.modules).toEqual([
+      { name: "bookings", version: "0.4.0" },
       { name: "core", version: "1.2.3" },
-      { name: "credentials", version: "0.4.0" },
       { name: "node", version: "0.9.0" },
     ]);
   });
@@ -395,10 +396,7 @@ describe("capturing a stepped-down box's final copy", () => {
     const self = await steppedDown();
     const setless = fakeSetlessModule("synthetic-setless", "core", { version: "0.1.0" });
     const envelope = await captureFinalCopy(deps(self, { modules: [...MODULES, setless] }), OP);
-    expect(envelope.body.snapshot.schema.map((entry) => entry.set)).toEqual([
-      "core",
-      "credentials",
-    ]);
+    expect(envelope.body.snapshot.schema.map((entry) => entry.set)).toEqual(["bookings", "core"]);
     expect(envelope.body.snapshot.modules).toContainEqual({
       name: "synthetic-setless",
       version: "0.1.0",
@@ -463,7 +461,7 @@ describe("capturing a stepped-down box's final copy", () => {
 
   it("lists a set's journal by when each migration was applied, not by row order", async () => {
     const self = await steppedDown();
-    const table = "__drizzle_migrations_credentials";
+    const table = "__drizzle_migrations_bookings";
     const applied = (
       await suite.db.all<{ hash: string }>(
         sql.raw(`select hash from "${table}" order by created_at`),
@@ -472,8 +470,8 @@ describe("capturing a stepped-down box's final copy", () => {
     suite.db.run(sql.raw(`insert into "${table}" (hash, created_at) values ('earliest', 0)`));
     try {
       const envelope = await captureFinalCopy(deps(self), OP);
-      const credentials = envelope.body.snapshot.schema.find((row) => row.set === "credentials");
-      expect(credentials?.journalSha256).toBe(journalDigest(["earliest", ...applied]));
+      const bookings = envelope.body.snapshot.schema.find((row) => row.set === "bookings");
+      expect(bookings?.journalSha256).toBe(journalDigest(["earliest", ...applied]));
     } finally {
       suite.db.run(sql.raw(`delete from "${table}" where hash = 'earliest'`));
     }

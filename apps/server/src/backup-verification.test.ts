@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import forge from "node-forge";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { migrationOptionsFor } from "@waitron/migrations";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { modulesWithSets, orderedMigrationSets } from "@waitron/module";
 import * as store from "@waitron/store";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
@@ -35,9 +35,11 @@ vi.mock("node:fs/promises", async (original) => {
 });
 const realFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
 
-const modules = ALL_MODULES.filter((m) =>
-  ["core", "credentials", "fiscal-none", "node"].includes(m.name),
+const modules = ALL_MODULES.filter(
+  (m) => ["core", "fiscal-none", "node"].includes(m.name) || m.tablesIn === "core",
 );
+const shippedSetNames = new Set(manifestSets().map((set) => set.name));
+const setEntries = modules.filter((m) => shippedSetNames.has(m.name));
 const sourceNodeId = "20000000-0000-4000-8000-000000000002";
 const locationId = "10000000-0000-4000-8000-000000000001";
 const capturedAt = "2026-10-20T08:00:00.000Z";
@@ -208,12 +210,6 @@ describe("complete backup verification", () => {
           name: "core",
           semanticsVersion: 1,
           status: "passed",
-          checks: [{ code: "data", status: "passed" }],
-        },
-        {
-          name: "credentials",
-          semanticsVersion: 1,
-          status: "passed",
           checks: [
             { code: "data", status: "passed" },
             { code: "secret", status: "passed" },
@@ -261,7 +257,6 @@ describe("complete backup verification", () => {
       const result = await verify(f);
       expect(result.modules.map((m) => [m.name, m.status])).toEqual([
         ["core", "passed"],
-        ["credentials", "passed"],
         ["fiscal-none", "passed"],
         ["node", "passed"],
       ]);
@@ -556,12 +551,15 @@ describe("complete backup verification", () => {
     await seal(f);
     const result = await verify(f);
     expect(result).toMatchObject({ status: "invalid", reason: "module_integrity" });
-    expect(result.modules).toHaveLength(4);
+    expect(result.modules).toHaveLength(setEntries.length);
     expect(result.modules[0]).toEqual({
       name: "core",
       semanticsVersion: 1,
       status: "invalid",
-      checks: [{ code: "data", status: "invalid" }],
+      checks: [
+        { code: "data", status: "invalid" },
+        { code: "secret", status: "passed" },
+      ],
     });
   });
   it("a real encrypted vault row with an unavailable key prevents a completed module verdict", async () => {
@@ -607,12 +605,12 @@ describe("complete backup verification", () => {
   it("accepts a real target-only owner only after its migrated tables are empty", async () => {
     const f = await fixture();
     await seal(f);
-    f.deps.modules = [...modules, ALL_MODULES.find((m) => m.name === "scheduler")!];
+    f.deps.modules = [...modules, ALL_MODULES.find((m) => m.name === "bookings")!];
     f.request.target = buildBackupVerificationTarget(f.deps);
     const result = await verify(f);
     expect(result.status).toBe("passed");
-    expect(result.modules.find((m) => m.name === "scheduler")).toEqual({
-      name: "scheduler",
+    expect(result.modules.find((m) => m.name === "bookings")).toEqual({
+      name: "bookings",
       semanticsVersion: 1,
       status: "passed",
       checks: [{ code: "not_applicable", status: "passed" }],
@@ -621,8 +619,8 @@ describe("complete backup verification", () => {
   it("refuses a target-only owner when real migrations seed its owned table", async () => {
     const f = await fixture();
     await seal(f);
-    const scheduler = ALL_MODULES.find((module) => module.name === "scheduler")!;
-    f.deps.modules = [...modules, scheduler];
+    const targetOnly = ALL_MODULES.find((module) => module.name === "bookings")!;
+    f.deps.modules = [...modules, targetOnly];
     f.deps.migrationsRoot = join(f.root, "migrations");
     const migrations = migrationOptionsFor(orderedMigrationSets(f.deps.modules), null);
     for (const module of modulesWithSets(f.deps.modules)) {
@@ -633,18 +631,18 @@ describe("complete backup verification", () => {
         recursive: true,
       });
     }
-    const schedulerRoot = join(f.deps.migrationsRoot, "scheduler");
+    const targetOnlyRoot = join(f.deps.migrationsRoot, "bookings");
     const journal = JSON.parse(
-      await readFile(join(schedulerRoot, "meta/_journal.json"), "utf8"),
+      await readFile(join(targetOnlyRoot, "meta/_journal.json"), "utf8"),
     ) as {
       entries: { tag: string }[];
     };
     await appendFile(
-      join(schedulerRoot, journal.entries.at(-1)!.tag + ".sql"),
-      `\n--> statement-breakpoint\ninsert into scheduled_runs
-        (id, duty, period_from, period_to, state, created_at, updated_at)
-        values ('90000000-0000-4000-8000-000000000009', 'verification-fixture',
-          '2026-10-20', '2026-10-21', 'pending', '${capturedAt}', '${capturedAt}');`,
+      join(targetOnlyRoot, journal.entries.at(-1)!.tag + ".sql"),
+      `\n--> statement-breakpoint\ninsert into bookings
+        (id, location_id, booking_date, booking_time, party_size, contact_name, created_by, created_at)
+        values ('90000000-0000-4000-8000-000000000009', '${locationId}', '2026-10-20', '20:00', 2,
+          'verification-fixture', 'verification-fixture', '${capturedAt}');`,
     );
     f.request.target = buildBackupVerificationTarget(f.deps);
     expect(await verify(f)).toMatchObject({
@@ -656,14 +654,14 @@ describe("complete backup verification", () => {
   it("a target-only owner cannot claim an empty table its migrations did not create", async () => {
     const f = await fixture();
     await seal(f);
-    const scheduler = ALL_MODULES.find((m) => m.name === "scheduler")!;
-    const owner = scheduler.backup!.verification!;
+    const targetOnly = ALL_MODULES.find((m) => m.name === "bookings")!;
+    const owner = targetOnly.backup!.verification!;
     f.deps.modules = [
       ...modules,
       {
-        ...scheduler,
+        ...targetOnly,
         classification: [
-          ...scheduler.classification!,
+          ...targetOnly.classification!,
           {
             table: "missing_owned_state",
             class: "state",
@@ -671,7 +669,7 @@ describe("complete backup verification", () => {
           },
         ],
         backup: {
-          ...scheduler.backup,
+          ...targetOnly.backup,
           verification: {
             ...owner,
             data: { ...owner.data, tables: [...owner.data.tables, "missing_owned_state"] },
@@ -909,7 +907,7 @@ describe("complete backup verification", () => {
           ? "module_data_check_requires_authority"
           : "semantics_missing",
       );
-      expect(result.modules).toHaveLength(4);
+      expect(result.modules).toHaveLength(setEntries.length);
       expect(result.modules[0]!.checks).toContainEqual({ code: "source", status: sourceStatus });
     },
   );
@@ -962,10 +960,10 @@ describe("a venue with workforce, with staffing on and off", () => {
     expect(result.reason).toBe("none");
     expect(result.modules.map((m) => [m.name, m.status])).toEqual(
       set
-        .filter((m) => m.backup?.verification !== undefined)
+        .filter((m) => shippedSetNames.has(m.name) && m.backup?.verification !== undefined)
         .map((m) => [m.name, "passed"])
         .sort(([a], [b]) => a!.localeCompare(b!)),
     );
-    expect(result.modules.some((m) => m.name === "staffing")).toBe(set === staffingOn);
+    expect(result.modules.some((m) => m.name === "staffing")).toBe(false);
   });
 });

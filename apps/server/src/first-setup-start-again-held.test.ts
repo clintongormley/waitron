@@ -10,6 +10,7 @@ import {
 } from "../test/start-again-held-fixture.js";
 import { expectStartAgainDeleted, expectStartAgainRefused } from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
+import { expectedSchemaVersion, manifestSets } from "@waitron/migrations";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
@@ -92,7 +93,10 @@ function nodeHoldings(f: Pick<Held, "roots">) {
 it("in the held state, Start again deletes a node.db holding the node set's tables and the attempt's recovery-key check and signing key", async () => {
   const f = await heldSetup();
   expect(nodeHoldings(f)).toEqual({
-    __drizzle_migrations_node: 2,
+    __drizzle_migrations_node: expectedSchemaVersion(
+      manifestSets().find((set) => set.name === "node")!,
+      null,
+    ),
     node_handover_events: 0,
     node_handover_operations: 0,
     node_handover_restriction: 0,
