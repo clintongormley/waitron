@@ -9,6 +9,7 @@ import {
   floorZones,
   installChangeFeed,
   openVenueDatabase,
+  printAgents,
   products,
   venueLocationId,
   withTransaction,
@@ -43,6 +44,7 @@ import { beginAttendanceDiscovery } from "../../src/attendance-discovery.js";
 import { recordAttendanceFact } from "../../src/attendance-capture.js";
 import { deploymentEnvironment } from "../../src/config.js";
 import { mountDeviceApi } from "../../src/device-api.js";
+import { acceptPrintAgentJoinRequest, createJoinRequest } from "../../src/join-requests.js";
 import { createStation, updateStation } from "../../src/kitchen.js";
 import { DEVICE_COOKIE } from "../../src/device-session.js";
 import type { Logger } from "../../src/logger.js";
@@ -50,6 +52,7 @@ import { mountManagementApi } from "../../src/management-api.js";
 import { mountMeApi } from "../../src/me-api.js";
 import { ALL_MODULES, enabledFloorAnnotators, enabledTableRemovals } from "../../src/modules.js";
 import { createPairingMode } from "../../src/pairing-mode.js";
+import { mountPrintApi } from "../../src/print-api.js";
 import { mountReportApi } from "../../src/report-api.js";
 import { TOTP_KEY_RING } from "../../src/testing/authenticator.js";
 import { enrolDeviceForTest } from "../../src/testing/enrol.js";
@@ -75,6 +78,7 @@ const KDS_PREFIX = "Bench kitchen screen ";
 const WAITER_PREFIX = "Bench waiter ";
 const MANAGER_NAME = "Bench manager";
 const CATALOGUE_NAME = "Bench menu";
+const PRINT_AGENT_NAME = "Bench print agent";
 
 /** The modules of a Veri*Factu box: every module but the other one filling the fiscal slot. */
 const MODULES = ALL_MODULES.filter(
@@ -119,7 +123,7 @@ export interface BenchVenue {
   db: Database;
   nodeId: NodeId;
   cfg: WithVenueRowId;
-  /** Till, device, report, me and management routes, mounted as boot mounts them. */
+  /** Till, device, print, report, me and management routes, mounted as boot mounts them. */
   app: Hono;
   tills: BenchTill[];
   kitchenScreens: BenchKitchenScreen[];
@@ -127,6 +131,8 @@ export interface BenchVenue {
   manager: BenchPerson;
   /** A management session for `manager`, minted at this open. */
   managementCookie: string;
+  /** The `Authorization` header of the print agent every printer prints through, minted at this open. */
+  printAgentAuthorization: string;
   dishes: BenchDish[];
   zones: BenchZone[];
   /** Every device's cookie by device id, for saving beside a copy: tokens are stored hashed. */
@@ -189,6 +195,7 @@ export async function openBenchVenue(
     const { token } = await withTransaction(db, (tx) =>
       startManagementSession(tx, { personId: manager.id }),
     );
+    const printAgentAuthorization = `Bearer ${await printAgentToken(db, cfg)}`;
     const app = mount(db, cfg, options.log ?? (() => {}));
     return {
       dir,
@@ -199,6 +206,7 @@ export async function openBenchVenue(
       app,
       ...read,
       managementCookie: `${MANAGEMENT_COOKIE}=${token}`,
+      printAgentAuthorization,
       deviceCookies: () => ({ ...cookies }),
       checkpoint: async () => {
         for (const file of [store.venue, store.node])
@@ -265,6 +273,33 @@ async function renewDeviceTokens(db: Database): Promise<Record<string, string>> 
   return renewed;
 }
 
+/**
+ * The bench's one print agent, joined and accepted as the dashboard accepts one on first open, and
+ * given a new token on every later open: like a device's, its token is stored hashed.
+ */
+async function printAgentToken(db: Database, cfg: WithVenueRowId): Promise<string> {
+  const [agent] = await db
+    .select({ id: printAgents.id })
+    .from(printAgents)
+    .where(eq(printAgents.name, PRINT_AGENT_NAME));
+  if (agent !== undefined) {
+    const token = randomUUID();
+    await db
+      .update(printAgents)
+      .set({ tokenHash: hashSecret(token) })
+      .where(eq(printAgents.id, agent.id));
+    return `${agent.id}.${token}`;
+  }
+  return withTransaction(db, async (tx) => {
+    const join = await createJoinRequest(tx, cfg, { kind: "print_agent", label: PRINT_AGENT_NAME });
+    const accepted = await acceptPrintAgentJoinRequest(tx, cfg, join.joinId, {
+      choice: join.verificationNumber,
+    });
+    if (!accepted.ok) throw new Error("bench: the print agent's join was refused");
+    return `${join.joinId}.${join.token}`;
+  });
+}
+
 /** A seeded generator: one seed gives one sequence. */
 export function seededRandom(seed: number): () => number {
   let state = seed >>> 0;
@@ -296,20 +331,14 @@ async function seed(
   const profiles = await withTransaction(db, async (tx) => {
     const departmentIds = await benchDepartments(tx);
     const printerIds: string[] = [];
-    for (const [name, hasCashDrawer] of [
-      ["Bench receipts", true],
-      ["Bench kitchen", false],
-      ["Bench bar", false],
+    // Network printers, which the bench's print agent prints to: no route serves a `cloud_poll` one.
+    for (const [name, host, hasCashDrawer] of [
+      ["Bench receipts", "192.0.2.1", true],
+      ["Bench kitchen", "192.0.2.2", false],
+      ["Bench bar", "192.0.2.3", false],
     ] as const)
       printerIds.push(
-        (
-          await createPrinter(tx, {
-            name,
-            transport: "cloud_poll",
-            pollId: `bench-${name}-${randomUUID()}`,
-            hasCashDrawer,
-          })
-        ).id,
+        (await createPrinter(tx, { name, transport: "network_tcp", host, hasCashDrawer })).id,
       );
     const stations = {
       kitchen: (
@@ -571,6 +600,18 @@ function mount(db: Database, cfg: WithVenueRowId, log: Logger): Hono {
       pairingMode: createPairingMode(),
       attendance: recordAttendanceFact,
       attendanceClock: clock,
+    },
+    log,
+  );
+  mountPrintApi(
+    app,
+    {
+      db,
+      cfg,
+      readMembership: () => Promise.resolve(null),
+      pairingMode: createPairingMode(),
+      venueLocale: LOCALE,
+      readInvoiceDocument: () => Promise.reject(new Error("bench: the venue has no page printer")),
     },
     log,
   );

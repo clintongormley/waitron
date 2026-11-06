@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import { kitchenStations, withTransaction } from "@waitron/db";
 import { businessDayBounds } from "@waitron/shared";
 import { readScopedPassBoard } from "../../src/pass-board.js";
+import { JOBS_WAITING_MS } from "../../src/print-job-trouble.js";
+import { stationPrintersDown } from "../../src/station-outputs-down.js";
 import { listStationQueues } from "../../src/working-order.js";
 import { installBenchClock, type BenchClock } from "./bench-clock.js";
 import { openBenchVenue, type BenchVenue } from "./bench-venue.js";
@@ -132,6 +134,44 @@ describe("tradeDay", () => {
       for (const group of paper)
         expect.soft(group.printed, group.groupId as string).toBe(group.stations);
       expect.soft(counts.invoice_deliveries).toBeGreaterThan(0);
+    },
+    CASE_TIMEOUT_MS,
+  );
+
+  it(
+    "prints every job of the day, drawer kicks included, before the till would call it stuck",
+    async () => {
+      // Seed 2's ten bills include an invoice, so its receipt prints too.
+      const venue = await freshVenue("2025-11-03T08:00:00Z", 2);
+      const down: unknown[] = [];
+
+      await tradeDay(venue, "2025-11-03", 10, {
+        beforeBill: async () => {
+          down.push(
+            ...(await withTransaction(venue.db, (tx) => stationPrintersDown(tx, clock!.now()))),
+          );
+        },
+      });
+
+      expect.soft(down, "printers down when a bill is seated").toEqual([]);
+      const kinds = rows(
+        venue,
+        sql`select kind, status, count(*) as n from print_jobs group by kind, status order by kind`,
+      );
+      expect.soft(kinds.map((row) => [row.kind, row.status])).toEqual([
+        ["document", "done"],
+        ["drawer", "done"],
+      ]);
+      const late = rows(
+        venue,
+        sql`select id, created_at as createdAt, delivered_at as deliveredAt from print_jobs
+            where delivered_at is null
+              or julianday(delivered_at) - julianday(created_at) >= ${JOBS_WAITING_MS / 86_400_000}`,
+      );
+      expect.soft(late.length, "jobs not printed within the waiting time").toBe(0);
+      expect
+        .soft(await withTransaction(venue.db, (tx) => stationPrintersDown(tx, clock!.now())))
+        .toEqual([]);
     },
     CASE_TIMEOUT_MS,
   );

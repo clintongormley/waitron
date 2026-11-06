@@ -145,6 +145,40 @@ export async function tradeDay(
     return { json: (text === "" ? null : JSON.parse(text)) as Record<string, unknown>, response };
   };
 
+  const agentCall = async (path: string, body: unknown) => {
+    requests += 1;
+    const response = await venue.app.request(path, {
+      method: "POST",
+      headers: { authorization: venue.printAgentAuthorization, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await response.text();
+    if (!response.ok) throw new BenchRefusal("POST", path, response.status, text);
+    return (text === "" ? null : JSON.parse(text)) as Record<string, unknown>;
+  };
+
+  // Each printer prints as a working one does: whenever a step has queued a job, the print agent
+  // claims every job due and reports each one printed before the next step, so no job outlives
+  // the till's waiting time (`JOBS_WAITING_MS`, apps/server/src/print-job-trouble.ts).
+  let printedThrough = -1;
+  const printQueued = async () => {
+    const top = venue.db.all<{ top: number }>(
+      sql`select coalesce(max(rowid), 0) as top from print_jobs`,
+    )[0]!.top;
+    if (top === printedThrough) return;
+    for (;;) {
+      const pull = await agentCall("/print-api/agent/jobs", {});
+      const jobs = pull.jobs as { id: string; invoiceClaim?: unknown }[];
+      if (jobs.length === 0) break;
+      for (const job of jobs)
+        await agentCall(`/print-api/agent/jobs/${job.id}/result`, {
+          status: "done",
+          ...(job.invoiceClaim === undefined ? {} : { invoiceClaim: job.invoiceClaim }),
+        });
+    }
+    printedThrough = top;
+  };
+
   const firstSeat = Math.min(...plans.map((plan) => plan.seatAt));
   const opening = firstSeat - 30 * MINUTE;
   // The clock never runs back, so a day already behind it would be traded at the wrong time.
@@ -286,12 +320,14 @@ export async function tradeDay(
       // Synchronous SQLite starves the venue watchdog's timer unless the loop gets a turn.
       if (results.length % 25 === 0) await nextTurn();
     }
+    await printQueued();
   }
 
   clock.set(new Date(Math.max(...events.map((event) => event.at)) + 5 * MINUTE));
   for (const till of venue.tills) await call(sessions.get(till.id)!, "DELETE", "/api/session");
 
   const overnight = await closeDay(venue, day, new Date(Date.parse(bounds.endAt) + 30 * MINUTE));
+  await printQueued();
   return { day, bills: results, routes, requests, ...overnight };
 }
 
