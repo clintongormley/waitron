@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -424,6 +425,40 @@ describe("the start check on a real start", () => {
       expect(await acceptingSales()).toBe(false);
       const page = await fetch(`http://127.0.0.1:${httpPort()}/`);
       expect(await page.text()).toContain("This box is waiting for Spare");
+    }, 60_000);
+
+    it("the waiting start refuses a carry-on from another port of the box's address, and takes its own pages'", async () => {
+      const booted = await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        seams: { ...seams(waitThen()), waitingStart: { intervalMs: 60_000, secure: () => true } },
+      });
+      expect(booted.acceptingSales).toBe(false);
+      const carryOnFrom = async (origin: string, site: string) => {
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/carry-on`, {
+          method: "POST",
+          headers: {
+            cookie: `waitron_management_session=${randomUUID()}`,
+            origin,
+            "sec-fetch-site": site,
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: "",
+        });
+        const text = await response.text();
+        return { status: response.status, refused: text.includes("management.origin_refused") };
+      };
+      expect(await carryOnFrom(`http://127.0.0.1:${httpPort() + 1}`, "same-site")).toEqual({
+        status: 403,
+        refused: true,
+      });
+      expect(await carryOnFrom(`http://127.0.0.1:${httpPort()}`, "same-origin")).toMatchObject({
+        refused: false,
+      });
+      expect(await carryOnFrom("https://dashboard.example", "cross-site")).toMatchObject({
+        refused: false,
+      });
+      expect(await acceptingSales()).toBe(false);
     }, 60_000);
 
     it("on a fixed port, the normal start binds the port the waiting start released", async () => {
