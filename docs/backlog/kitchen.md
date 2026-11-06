@@ -276,7 +276,8 @@ kitchen screen differs between them: `moveBill`'s counter branch gives it a `mov
 burger only, while `moveSettledBillToCounter` gives one for the tarta as well, with the slip still
 listing only the burger.
 
-Whether a cook may be left with two tickets for one dish here is the owner's to judge.
+The owner chose to fix it (2026-11-06): a cook is not left with two tickets for one dish. It lands
+in A1308's orders and sales slice, which rebuilds the table anyway.
 
 ## A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print
 

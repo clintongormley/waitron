@@ -660,7 +660,7 @@ Names are today's; the appendices give each table's new name.
 | `extra_lists` | A CHECK refusing a maximum of 0 | Menu and photos | Loose ends of A263 |
 | `kitchen_notices` | An index on `working_order_id` | Floor and kitchen | A1351 |
 | `kitchen_notices` | The ticket item a MOVED notice was written for | Floor and kitchen | A1366 |
-| `order_group_hold_stations` | One record per dish, not per group; the owner judges whether a cook may be left with two tickets (the question is with the watcher) | Orders and sales | A1368 |
+| `order_group_hold_stations` | One record per dish, not per group, so a dish moved to the counter gets its MOVED line and FIRE mark (owner, 6 November: fix it) | Orders and sales | A1368 |
 | `print_jobs` | A next-attempt column, so a flapping printer cannot fail a ticket | Devices and printing | Retry spacing |
 | `webauthn_credentials` | Remove the passkey name column | People and working time | Passkey name column |
 | `payments` | Settle the remaining delete refusal | Payments and adjustments; the owner lands this part (watcher, 6 November) | An A805 follow-up |

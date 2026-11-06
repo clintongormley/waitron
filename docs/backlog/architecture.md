@@ -1225,8 +1225,8 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   action:** decide whether the columns want a check constraint and the write paths a domain refusal.
 - **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** At the counter the dish
   leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
-  record: a schema change, held by A1308 until A760 lands. Whether a cook may be left with two
-  tickets here is the owner's to judge.
+  record: a schema change, held by A1308 until A760 lands. The owner chose to fix it there
+  (2026-11-06): a cook is not left with two tickets for one dish.
   [Detail](kitchen.md#a1368-a-dish-waiting-for-the-pass-whose-hold-ticket-printed-moved-to-the-counter-still-gets-no-moved-line-and-no-fire-mark)
 - **A1351. `kitchen_notices` has no index on `working_order_id` (left open by A803 slice 4c).** Split
   a table's MOVED-slip read scans it once per split: 9.29 ms at 200,000 rows and 48 ms at 1,000,000,
