@@ -110,7 +110,7 @@ function linesOf(menuItemId: string, quantity: string): { menuItemId: string; qu
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to
-// `working_orders`; P3's duplicate backstop; and recovery of a capture P3 never filed. `FakeStripe`
+// `working_orders`; P3's settled-order replay; and recovery of a capture P3 never filed. `FakeStripe`
 // drives the reader deterministically.
 const LOCALE = "es-ES";
 
@@ -1583,7 +1583,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(client.lastCreateIntent).toBeUndefined();
   });
 
-  it("a second Pay that files the first card's charge before the first finalises makes P3 REPLAY it, filing nothing (duplicate backstop)", async () => {
+  it("a second Pay that files the first card's charge before the first finalises makes P3 REPLAY it, filing nothing (settled-order replay)", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const app = suite.db;
     const id = randomUUID();
@@ -1599,8 +1599,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       OPERATOR,
     );
 
-    // The second Pay files the sale from the first card's charge; the first's `recordSale` is then
-    // refused by `sales_working_order_id_key` and replays that sale's ticket.
     const { provider, reader, second } = chargedThenFiledBySecondPay(cfg);
     const deps: IntegratedPayDeps = {
       admission: testTradingAdmission(),

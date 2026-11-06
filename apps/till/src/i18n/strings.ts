@@ -1751,7 +1751,7 @@ export const en = {
   "cancel_credit.refused_payments":
     "This bill holds a payment, so it cannot be cancelled and credited.",
   "cancel_credit.refused_payment_in_flight":
-    "A card payment on this bill is in progress. Wait for it to finish.",
+    "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it before cancelling.",
   "cancel_credit.refused_not_permitted":
     "The person who approved this cannot issue credit notes. Choose someone who can.",
   "cancel_credit.done": "Credit note {number} issued. The bill is cancelled.",
@@ -3630,7 +3630,7 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.refused_payments":
     "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",
   "cancel_credit.refused_payment_in_flight":
-    "Se está cobrando esta cuenta con tarjeta. Espera a que termine.",
+    "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo antes de cancelar.",
   "cancel_credit.refused_not_permitted":
     "La persona que lo ha aprobado no puede emitir facturas rectificativas. Elige a alguien que pueda.",
   "cancel_credit.done": "Factura rectificativa {number} emitida. La cuenta queda cancelada.",
