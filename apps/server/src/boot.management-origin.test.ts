@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -12,6 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartServerSeams, StartedServer } from "./boot.js";
 import type { BoxHostRequests, HostUnavailable } from "./box-host-client.js";
+import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -87,11 +88,7 @@ async function withServer(
   try {
     scratch = await mkdtemp(join(tmpdir(), "waitron-boot-management-origin-"));
     const migrationsRoot = join(scratch, "migrations");
-    for (const [index, set] of manifestSets().entries()) {
-      await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-        recursive: true,
-      });
-    }
+    await copyMigrationsRoot(migrationsRoot);
     await writeFile(
       join(scratch, "modules.json"),
       JSON.stringify({ modules: { "fiscal-none": false } }),

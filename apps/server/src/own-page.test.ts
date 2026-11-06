@@ -86,6 +86,7 @@ const REFUSED_ROWS: [string, Record<string, string>, { noLookup?: boolean }][] =
     { origin: BOX, "sec-fetch-site": "same-site" },
     { noLookup: true },
   ],
+  ["a null origin", { origin: "null" }, { noLookup: true }],
 ];
 
 describe("requireManagementChangeFromOwnPage refuses a change carrying the manager's cookie", () => {
@@ -95,12 +96,6 @@ describe("requireManagementChangeFromOwnPage refuses a change carrying the manag
       if (noLookup === true) expect(trusted).not.toHaveBeenCalled();
     });
   }
-
-  it("a null origin", async () => {
-    const headers = { origin: "null" };
-    await expectRefused(await send(headers), "POST", headers);
-    expect(trusted).not.toHaveBeenCalled();
-  });
 
   it("a trusted-origin lookup that fails", async () => {
     trusted.mockRejectedValue(new Error("membership read failed"));
@@ -172,26 +167,19 @@ describe("requireManagementChangeFromOwnPage takes", () => {
     expect(trusted).not.toHaveBeenCalled();
   });
 
-  it("a GET from another page", async () => {
-    await expectTaken(
-      await send({ origin: `${BOX}:8443`, "sec-fetch-site": "same-site" }, { method: "GET" }),
-      "GET",
-    );
-  });
-
-  it("a HEAD from another page", async () => {
-    await expectTaken(
-      await send({ origin: `${BOX}:8443`, "sec-fetch-site": "same-site" }, { method: "HEAD" }),
-      "GET",
-    );
-  });
-
-  it("an OPTIONS from another page", async () => {
-    await expectTaken(
-      await send({ origin: `${BOX}:8443`, "sec-fetch-site": "same-site" }, { method: "OPTIONS" }),
-      "OPTIONS",
-    );
-  });
+  // Hono answers a HEAD with the GET handler.
+  for (const [article, method, handler] of [
+    ["a", "GET", "GET"],
+    ["a", "HEAD", "GET"],
+    ["an", "OPTIONS", "OPTIONS"],
+  ]) {
+    it(`${article} ${method} from another page`, async () => {
+      await expectTaken(
+        await send({ origin: `${BOX}:8443`, "sec-fetch-site": "same-site" }, { method }),
+        handler,
+      );
+    });
+  }
 });
 
 describe("sentFromThisOrigin", () => {
@@ -220,7 +208,6 @@ describe("sentFromThisOrigin", () => {
 
   const FALSE_ROWS: [string, Record<string, string>][] = [
     ...REFUSED_ROWS.map(([name, headers]): [string, Record<string, string>] => [name, headers]),
-    ["a null origin", { origin: "null" }],
     ["a trusted page on another origin", { origin: TRUSTED, "sec-fetch-site": "cross-site" }],
   ];
   for (const [name, headers] of FALSE_ROWS) {

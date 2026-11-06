@@ -1,12 +1,10 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { AppError } from "@waitron/shared";
 import { readManagementSessionToken } from "@waitron/server-kit";
+import type { OriginAllowlist } from "./allowed-origins.js";
 import type { Logger } from "./logger.js";
+import { SAFE_METHODS } from "./read-only-gate.js";
 import "./errors.js";
-
-export type TrustedOrigin = (origin: string) => Promise<boolean>;
-
-const READS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** An empty header is present and foreign, never absent: only `undefined` means not sent. */
 export function sentFromThisOrigin(c: Context): boolean {
@@ -20,7 +18,7 @@ export function sentFromThisOrigin(c: Context): boolean {
 
 /** A trusted page on another origin is taken whatever its `Sec-Fetch-Site`, which a browser
  * rightly calls `same-site` or `cross-site`. Rejects when `trusted` rejects. */
-export async function sentFromOwnPage(c: Context, trusted: TrustedOrigin): Promise<boolean> {
+async function sentFromOwnPage(c: Context, trusted: OriginAllowlist): Promise<boolean> {
   if (sentFromThisOrigin(c)) return true;
   const origin = c.req.header("Origin");
   if (
@@ -38,11 +36,11 @@ export async function sentFromOwnPage(c: Context, trusted: TrustedOrigin): Promi
  * manager's cookie; only a change carrying that cookie is judged, so a till on another server,
  * a webhook or the print agent posting without it passes. */
 export function requireManagementChangeFromOwnPage(
-  trusted: TrustedOrigin,
+  trusted: OriginAllowlist,
   log: Logger,
 ): MiddlewareHandler {
   return async (c, next) => {
-    if (READS.has(c.req.method)) return next();
+    if (SAFE_METHODS.has(c.req.method)) return next();
     if (readManagementSessionToken(c) === null) return next();
     let own = false;
     let lookupFailed = false;
