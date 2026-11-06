@@ -318,8 +318,9 @@ with Google before using Google sign-in there.
 
 A missing certificate or a staff port that will not bind is logged as `server.listen_failed` with
 `listener: staff`; it does not stop the local listener. The staff listener closes with the server.
-Setup, recovery, restricted starts and mirrors do not open it. Automatic connection, certificate issuance
-and Settings on/off/status remain open in A951-S.
+Setup, recovery, restricted starts and mirrors do not open it. Automatic tunnel connection,
+Settings on/off/status and qualification of certificate renewal on the public demo remain open
+in A951-S.
 
 ## Environment variables
 
