@@ -1097,8 +1097,7 @@ as plain text. Departments are the distinct departments of the listed profiles, 
 
 ### Task 11: PR 2's guide, backlog and look
 
-- [ ] **Step 1:** Append the Used by sentences to both guide sections; run the guide checks (Task 5
-  Step 4).
+- [ ] **Step 1:** No guide change: the owner cut the Used by sentence on 2026-11-06.
 - [ ] **Step 2: Backlog.** Delete point 5 from the A405 section; add under Printers in
   `docs/backlog/printers.md` (and a one-line pointer in `docs/backlog.md`'s Printers area): "**A
   Used by link to a prep station opens the Stations tab, not the station (left open by A405).** The
