@@ -45,10 +45,12 @@ async function fixture() {
   let original: Record<string, unknown>;
   let ready = false;
   let response: { status: number; body: string | Buffer } | undefined;
+  let waiting = async () => {};
   const f = await installationFixture(undefined, {
     staffCertificate: async (v, saved, req, res) => {
       expect(req.url).toBe(`/api/installations/${v[2]}`);
       expect(v[6]).toBe(JSON.stringify((saved.lifecycle as { lease: unknown }).lease));
+      await waiting();
       if (response) {
         res.writeHead(response.status);
         res.end(response.body);
@@ -100,6 +102,9 @@ async function fixture() {
   return {
     ...f,
     calls,
+    hold: (fn: () => Promise<void>) => {
+      waiting = fn;
+    },
     respond: (status: number, body: string | Buffer) => {
       response = { status, body };
     },
@@ -423,3 +428,59 @@ it("keeps a fresh installed certificate when Cloud changes another configuration
     await f.close();
   }
 });
+
+it("keeps Cloud refresh available while a certificate reply waits", async () => {
+  const f = await fixture();
+  let release = () => {},
+    arrived = () => {};
+  const reached = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  f.hold(async () => {
+    arrived();
+    await held;
+  });
+  const certificate = f.client.staffCertificate(hostname);
+  try {
+    await reached;
+    await expect(f.client.refresh()).resolves.toMatchObject({ installation: { state: "active" } });
+  } finally {
+    release();
+    await certificate;
+    await f.close();
+  }
+}, 15000);
+
+it("does not install a certificate if Stop Cloud access completes while its reply waits", async () => {
+  const f = await fixture();
+  let release = () => {},
+    arrived = () => {};
+  const reached = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  f.ready();
+  f.hold(async () => {
+    arrived();
+    await held;
+  });
+  const certificate = f.client.staffCertificate(hostname).catch((error) => error);
+  try {
+    await reached;
+    await f.client.revoke(async () => {});
+    release();
+    expect(await certificate).toMatchObject({ code: "cloud.not_configured" });
+    await expect(readFile(join(f.stateDir, "cloud-staff.crt"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    release();
+    await certificate;
+    await f.close();
+  }
+}, 15000);

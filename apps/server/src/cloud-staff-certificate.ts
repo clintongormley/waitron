@@ -1,11 +1,10 @@
-import { createHash, createPrivateKey, randomUUID, sign, X509Certificate } from "node:crypto";
+import { createHash, randomUUID, X509Certificate } from "node:crypto";
 import { lstat, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { SavedCloudState } from "./cloud-client.js";
-import { machinePayload } from "./cloud-installation.js";
 import { createStaffCsr, installStaffCertificate } from "./cloud-remote.js";
-import type { OnRefusal } from "./cloud-translation.js";
+import { serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
 
 interface Request {
@@ -93,6 +92,7 @@ export async function refreshStaffCertificate(
   hostname: string,
   signal?: AbortSignal,
   onRefusal?: OnRefusal,
+  isCurrent?: () => Promise<boolean>,
 ): Promise<boolean> {
   signal?.throwIfAborted();
   const lease = state.lifecycle?.lease,
@@ -127,56 +127,21 @@ export async function refreshStaffCertificate(
   }
   const { operationId, version, csr, previousRequestId } = request;
   const action = request.submitted ? "staff-certificate-status" : "staff-certificate-submit";
-  const used = JSON.stringify(lease);
-  const bytes = machinePayload(state, {
-    action,
-    operationId: request.submitted ? randomUUID() : operationId,
-    lease: used,
-    body: JSON.stringify(
-      request.submitted
-        ? { version, requestId: operationId }
-        : { version, hostname, revision, csr, previousRequestId },
-    ),
-  });
   try {
-    const response = await fetch(`${state.origin}/api/installations/${action}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        payload: bytes.toString("base64url"),
-        signature: sign(
-          null,
-          bytes,
-          createPrivateKey({
-            key: Buffer.from(state.privateKey, "base64url"),
-            format: "der",
-            type: "pkcs8",
-          }),
-        ).toString("base64url"),
-      }),
-      redirect: "error",
-      signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
-        : AbortSignal.timeout(8000),
-    });
-    if (!response.body) throw new Error();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    for await (const chunk of response.body) {
-      size += chunk.length;
-      if (size > 32768) throw new Error();
-      chunks.push(chunk);
-    }
-    const reply: unknown = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)),
+    const reply = await serviceExchange(
+      state,
+      action,
+      request.submitted ? randomUUID() : operationId,
+      JSON.stringify(
+        request.submitted
+          ? { version, requestId: operationId }
+          : { version, hostname, revision, csr, previousRequestId },
+      ),
+      {},
+      signal,
+      onRefusal,
     );
-    if (!response.ok) {
-      if (object(reply) && response.status === 403 && reply.error === "revoked")
-        await onRefusal?.("revoked", used, state.publicKey);
-      if (object(reply) && response.status === 401 && reply.error === "invalid_proof")
-        await onRefusal?.("invalid_proof", used, state.publicKey);
-      throw new Error();
-    }
+    if (isCurrent && !(await isCurrent())) throw new AppError("cloud.not_configured", {});
     if (
       !object(reply) ||
       reply.version !== 1 ||
@@ -197,7 +162,8 @@ export async function refreshStaffCertificate(
     request.submitted = true;
     await save(path, request);
     return request.installed === true;
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) throw error;
     throw new AppError("cloud.unavailable", {});
   }
 }

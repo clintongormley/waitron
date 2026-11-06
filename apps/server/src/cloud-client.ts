@@ -408,29 +408,22 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       : undefined;
   return {
     async staffCertificate(hostname: string, signal?: AbortSignal): Promise<boolean> {
-      await leaseState(signal);
-      let refusal: Parameters<OnRefusal> | undefined;
-      try {
-        return await run(
-          async () => {
-            const state = await read();
-            if (!state) throw new AppError("cloud.not_configured", {});
-            return refreshStaffCertificate(
-              state,
-              options.stateDir,
-              hostname,
-              signal,
-              async (...args) => {
-                refusal = args;
-              },
-            );
-          },
-          true,
-          signal,
-        );
-      } finally {
-        if (refusal) await recordRefusal(...refusal);
-      }
+      const state = await leaseState(signal);
+      const registration = registrationOf(state);
+      return refreshStaffCertificate(
+        state,
+        options.stateDir,
+        hostname,
+        signal,
+        recordRefusal,
+        async () => {
+          const current = await read();
+          return (
+            registrationOf(current) === registration &&
+            current?.lifecycle?.pending?.action !== "revoke"
+          );
+        },
+      );
     },
     async billing(signal?: AbortSignal): Promise<BillingDisplay> {
       const registration = registrationOf(await read());
