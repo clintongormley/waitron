@@ -271,3 +271,13 @@ it("reads the floor plan editor's zone from its path", () => {
   expect(url.read("zone")).toBe("z1");
   expect(url.read("set")).toBe("s1");
 });
+
+it("reads the device profile a device profiles address names", () => {
+  history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  expect(url.read("dashboard")).toBe("device-profiles");
+  expect(url.read("profile")).toBe("p1");
+});

@@ -11,6 +11,7 @@ import {
   formMessageStyles,
   draftScopeFor,
   saveActionState,
+  UrlStateController,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -28,6 +29,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
+import { dashboardPath } from "../navigation.js";
 import { ROLES, a4Choices, printerLabel, roleName } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 // A local mirror keeps the layouts barrel's database imports out of the browser bundle.
@@ -529,6 +531,27 @@ export class DeviceProfilesScreen extends LitElement {
   );
 
   @state() private mode: "list" | "editor" = "list";
+  /** A `profile` in the path opens that profile's editor once the profiles have loaded, and leaves
+   * the path by replacing it, so Back still leaves the screen. */
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "device-profiles") return;
+      this.#linkedProfile = this.#url.read("profile");
+      if (this.#profilesRead) this.#openLinkedProfile();
+    },
+    dashboardPath,
+  );
+  #linkedProfile: string | null = null;
+  #profilesRead = false;
+
+  #openLinkedProfile(): void {
+    const id = this.#linkedProfile;
+    if (id === null) return;
+    this.#linkedProfile = null;
+    this.#url.write({ profile: null }, true);
+    if (this.profiles.some((profile) => profile.id === id)) void this.#openEditor(id);
+  }
 
   @state() private profiles: DeviceProfile[] = [];
 
@@ -666,6 +689,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#clearDraft();
     this.narrowed = [];
     this.mode = "list";
+    this.#profilesRead = false;
     super.disconnectedCallback();
   }
 
@@ -680,6 +704,8 @@ export class DeviceProfilesScreen extends LitElement {
       await Promise.all([
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.profiles = value;
+          this.#profilesRead = true;
+          this.#openLinkedProfile();
         }),
         this.#queries
           .watch("listPrinters", [], (value) => {

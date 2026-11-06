@@ -3633,3 +3633,40 @@ describe("A182 canvas retirement", () => {
     ]);
   });
 });
+
+describe("a device profile's address", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens the profile its address names, once", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/p2");
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(profiles[1]) });
+    const el = await mount(api);
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("[data-test=editor-form]")?.getAttribute("data-editing-id"),
+      ).toBe("p2"),
+    );
+    expect(api.getDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(api.getDeviceProfile).toHaveBeenCalledWith("p2");
+    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(replace).toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(api.getDeviceProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens nothing for an address naming no profile", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/gone");
+    const push = vi.spyOn(history, "pushState");
+    const api = stubApi();
+    const el = await mount(api);
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/device-profiles"));
+    expect(api.getDeviceProfile).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
+    expect(push).not.toHaveBeenCalled();
+  });
+});
