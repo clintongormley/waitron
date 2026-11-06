@@ -2098,9 +2098,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **A951-S. Reach the box's dashboard through Cloud.** The owner replaced the earlier A951 build
   on 6 November with a small remote entrance and the existing gateway. The old branch stays parked.
-  Left: one real browser-to-box path, the tunnel container, signed connection details, certificate
-  renewal, Settings on/off/status and retirement of `@waitron/tunnel`. After the browser path works,
-  try Translate all, then address completion, on the test box only.
+  A manual browser signed in through the public gateway with normal certificate trust on
+  6 November ([proof PR](https://github.com/clintongormley/waitron/pull/2525)); live certificate
+  replacement also worked without a server restart. Left: the certificate worker and renewal,
+  managed tunnel container, signed connection details, Settings on/off/status, external-client
+  qualification and retirement of `@waitron/tunnel`. Translate all and address completion remain
+  test-box trials.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** box-side networking and `@waitron/tunnel`'s retirement; first-contact trust

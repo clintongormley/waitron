@@ -1034,12 +1034,19 @@ certificate files. It excludes the setup and recovery pages, till, device, print
 remote before the box's own-device check. Password guessing keeps the existing backoff. The local
 listener and its passkey hostname keep their configuration.
 
-Remaining work, in order:
+On 6 November a manual Chromium session used the public gateway to sign in to the test box
+with its ordinary password and normal certificate trust, then opened its overview. Installing
+an issued replacement changed new TLS connections without restarting the server. This was a Mac
+client on the home network using the public Internet path, not a physically outside-home browser.
+The bounded test app and peer were stopped afterwards; the owner's containers were untouched.
+[Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
 
-- Get a real browser outside the home network through the existing gateway to the test box, with
-  its ordinary account. Manual setup is acceptable. The owner's test box containers stay untouched.
-- Add the separate outbound tunnel container, send box details over the existing signed connection,
-  renew the certificate, provide Settings on/off/status, and retire `@waitron/tunnel`.
+Remaining work, following the owner's certificate-first order:
+
+- Add the box certificate worker over the existing signed exchange, including renewal.
+- Add the managed outbound tunnel container, send box details over the existing signed connection,
+  provide Settings on/off/status, and retire `@waitron/tunnel`.
+- Qualify a physically outside-home browser and a lasting test deployment.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.
 - Once the browser path works, try Translate all and the existing address fields with a Cloud
