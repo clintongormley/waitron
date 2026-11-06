@@ -156,9 +156,7 @@ it("accepts an older backup's record that carries timeFloorMs, and carries no fl
     ]),
   ).toEqual({ reference: "prepared-hours", complete: true, records: [publicRow] });
   expect(() =>
-    project([
-      { reference: "prepared-hours", complete: true, records: [publicRow], timeFloorMs: 1.5 },
-    ]),
+    project([{ reference: "prepared-hours", complete: true, records: [], timeFloorMs: 1.5 }]),
   ).toThrowError(
     expect.objectContaining({
       code: "sif.allocation_invalid",

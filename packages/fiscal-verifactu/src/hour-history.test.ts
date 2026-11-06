@@ -4,7 +4,7 @@ import { decodeMinuteIdentity } from "./hour-identity.js";
 
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 
-it("projects a positively complete empty history without inventing a floor", () => {
+it("projects a positively complete empty history", () => {
   expect(
     projectHourHistory({ scope, sources: [{ reference: "venue", complete: true, records: [] }] }),
   ).toEqual({

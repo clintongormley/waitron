@@ -48,7 +48,7 @@ const SWITCH = at("2026-10-23T19:40:50.000Z");
 const TRUE_NOW = at("2026-10-24T09:00:00.000Z");
 const RELEASE = at("2026-10-15T00:00:00.000Z");
 const BEHIND = at("2026-10-20T10:00:00.000Z");
-// After the backup's newest record and its creation, before the unseen name: only the clock rules
+// After the backup's newest record, before the unseen name: only the clock rules
 // stand in the way.
 const AFTER_BACKUP = at("2026-10-23T10:00:00.000Z");
 const KNOWN = "0CNNW";
@@ -449,7 +449,7 @@ describe("selected although a later name is known", () => {
     expect(await restore({ box })).toEqual(settled(box));
   });
 
-  it("W: the box and another device wrong together, below the backup's creation", async () => {
+  it("W: the box and another device wrong together, behind the true time", async () => {
     expect(await restore({ box: BEHIND, browser: BEHIND })).toEqual(settled(BEHIND));
   });
 });
