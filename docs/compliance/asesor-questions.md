@@ -3962,8 +3962,8 @@ the restaurant chooses, and does not encrypt it first: it relies on the provider
 does not protect against someone holding valid credentials. The owner kept this on 2026-11-06 (A1324),
 because the key would have to sit on the same box as those credentials. Is that adequate under GDPR
 article 32? If the copy leaked, would the people affected have to be told, since the article 34(3)(a)
-exception for unintelligible data would not apply? Sent in the
-[batch of 2026-11-05](2026-11-05-consultas-para-asesores.md).
+exception for unintelligible data would not apply? Part of the
+[batch of 2026-11-05](2026-11-05-consultas-para-asesores.md), which is not sent yet.
 
 ### Sources checked for the 2026-10-04 revision
 
