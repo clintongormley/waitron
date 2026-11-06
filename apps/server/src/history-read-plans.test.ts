@@ -25,25 +25,42 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 
 async function capture<T>(read: () => Promise<T>) {
   const queries: Query[] = [];
-  const plans: { sql: string; details: string[] }[] = [];
+  const plans: { sql: string; details: string[]; lookupBills: string[] }[] = [];
   const prototype = SQLiteSelectBase.prototype as unknown as {
     _prepare(oneTime?: boolean): unknown;
     toSQL(): Query;
   };
   const prepare = prototype._prepare;
-  const builder = vi.spyOn(prototype, "_prepare").mockImplementation(function (oneTime) {
+  const builder = vi.spyOn(prototype, "_prepare").mockImplementation(function (
+    this: { toSQL(): Query },
+    oneTime,
+  ) {
     queries.push(this.toSQL());
     return prepare.call(this, oneTime);
   });
   const nativePrepare = DatabaseSync.prototype.prepare;
-  const native = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (text) {
-    const query = queries.findLast((query) => query.sql === text);
+  const native = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (
+    this: DatabaseSync,
+    text,
+  ) {
+    const query = queries.filter((query) => query.sql === text).at(-1);
+    const lookupBills: string[] = [];
+    const observed = text.replace(
+      'select "working_orders"."id" from "working_orders"',
+      'select observe_service_bill("working_orders"."id") from "working_orders"',
+    );
+    if (observed !== text) {
+      this.function("observe_service_bill", (id) => {
+        lookupBills.push(String(id));
+        return id;
+      });
+    }
     if (query !== undefined) {
       const explanation = nativePrepare.call(this, `explain query plan ${text}`);
       const rows = explanation.all(...(query.params as SQLInputValue[]));
-      plans.push({ sql: text, details: rows.map((row) => String(row.detail)) });
+      plans.push({ sql: text, details: rows.map((row) => String(row.detail)), lookupBills });
     }
-    return nativePrepare.call(this, text);
+    return nativePrepare.call(this, observed);
   });
   try {
     return { result: await read(), plans };
@@ -206,6 +223,7 @@ describe("current service reads with collected history", () => {
       );
       expect(items).toHaveLength(3);
       for (const plan of items) {
+        expect(plan.lookupBills).toEqual([venue.party.tabId]);
         expect(plan.details.join("\n")).toContain("ticket_items_order_idx");
         expect(plan.details.join("\n")).not.toContain("ticket_items_waiting_idx");
         expect(plan.details.join("\n")).not.toContain("ticket_items_queue_idx");
@@ -239,8 +257,13 @@ describe("current service reads with collected history", () => {
         .update(ticketItems)
         .set({ madeHere: true })
         .where(eq(ticketItems.workingOrderLineId, madeHere!.line));
-      const queues = await listStationQueues(tx, [venue.stations.grill]);
-      const orders = queues.get(venue.stations.grill)!;
+      const measured = await capture(() => listStationQueues(tx, [venue.stations.grill]));
+      const lookup = measured.plans.find((plan) => plan.sql.includes('from "ticket_items"'))!;
+      expect(lookup.lookupBills).toContain(venue.party.tabId);
+      expect(lookup.lookupBills).toContain(ready!.bill);
+      expect(lookup.lookupBills).not.toContain(collected!.bill);
+      expect(lookup.lookupBills).not.toContain(abandoned!.bill);
+      const orders = measured.result.get(venue.stations.grill)!;
       expect(orders.map((order) => order.orderId).sort()).toEqual(
         [venue.party.tabId, ready!.bill].sort(),
       );

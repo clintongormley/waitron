@@ -8249,7 +8249,7 @@ function onStationQueues(stationIds: readonly string[]): SQL | undefined {
     // Read tickets by bill; a station's index range includes its collected history.
     inArray(
       ticketItems.workingOrderId,
-      sql`(select ${workingOrders.id} from ${workingOrders} where ${workingOrders.collectedAt} is null)`,
+      sql`(select ${workingOrders.id} from ${workingOrders} where ${workingOrders.collectedAt} is null and ${workingOrders.status} <> ${"abandoned"})`,
     ),
     inArray(sql`+${ticketItems.stationId}`, [...stationIds]),
     eq(ticketItems.madeHere, false),
