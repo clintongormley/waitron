@@ -152,7 +152,7 @@ describe("the append-only tables core took in from other modules", () => {
   describe("in a database holding core's set alone", () => {
     const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-    it.each(FOLDED_APPEND_ONLY)("%s accepts an insert and refuses an update", async (table) => {
+    const insertRow = (table: (typeof FOLDED_APPEND_ONLY)[number]) => {
       suite.db.run(sql`pragma foreign_keys = off`);
       try {
         for (const statement of ROWS[table].insert) suite.db.run(statement);
@@ -160,10 +160,23 @@ describe("the append-only tables core took in from other modules", () => {
         suite.db.run(sql`pragma foreign_keys = on`);
       }
       expect(suite.db.all(sql`select 1 from ${sql.identifier(table)}`)).toHaveLength(1);
+    };
 
+    it.each(FOLDED_APPEND_ONLY)("%s accepts an insert and refuses an update", async (table) => {
+      insertRow(table);
       const update = await captureError(() => suite.db.run(ROWS[table].update));
       expect(isRefusal(update, TRIGGER_ABORT)).toBe(true);
       expect(engineErrorMessage(update)).toBe(`${table} is append-only`);
+    });
+
+    it.each(FOLDED_APPEND_ONLY)("%s refuses a delete", async (table) => {
+      insertRow(table);
+      const deletion = await captureError(() =>
+        suite.db.run(sql`delete from ${sql.identifier(table)}`),
+      );
+      expect(isRefusal(deletion, TRIGGER_ABORT)).toBe(true);
+      expect(engineErrorMessage(deletion)).toBe(`${table} is append-only`);
+      expect(suite.db.all(sql`select 1 from ${sql.identifier(table)}`)).toHaveLength(1);
     });
   });
 });
