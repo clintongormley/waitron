@@ -727,7 +727,7 @@ describe("A773 requested lifecycle", () => {
 });
 
 describe("a finished table's paid food leaves the kitchen screens (A1344)", () => {
-  it("takes the card off the station when the dish still being made is cancelled at Finish", async () => {
+  it("takes the card off the station when the unserved remainder is cancelled at Finish", async () => {
     const p = await fixture(true, "fire");
     await inTx(venue, (tx) =>
       markServed(

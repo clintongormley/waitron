@@ -745,7 +745,6 @@ export async function finishTable(
   return closed;
 }
 
-/** A finished table's paid bills have left the kitchen, at the moment the table closed. */
 async function handOverFinishedBills(tx: Transaction, partyId: string): Promise<void> {
   const [party] = await tx
     .select({ closedAt: parties.closedAt })

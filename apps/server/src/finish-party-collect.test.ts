@@ -979,18 +979,18 @@ describe("a full invoice's guests line follows the bill's party (A1033)", () => 
   });
 });
 
+async function cardsFor(billId: string) {
+  return (await inTx(venue, (tx) => listStationQueue(tx, venue.stationId))).filter(
+    (group) => group.orderId === billId,
+  );
+}
+
+async function closedAt(partyId: string) {
+  const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
+  return party!.closedAt;
+}
+
 describe("a finished table's paid food leaves the kitchen screens (A1344)", () => {
-  async function cardsFor(billId: string) {
-    return (await inTx(venue, (tx) => listStationQueue(tx, venue.stationId))).filter(
-      (group) => group.orderId === billId,
-    );
-  }
-
-  async function closedAt(partyId: string) {
-    const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
-    return party!.closedAt;
-  }
-
   it("takes a served, paid bill's card off the station when the table finishes", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     const billId = t.billIds[0]!;
