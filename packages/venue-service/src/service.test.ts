@@ -84,6 +84,7 @@ describe("VENUE_SERVICE", () => {
       "readLinesSoldInEach",
       "readPartyAllergy",
       "readPrintedDepartmentReceipt",
+      "readProfileDepartments",
       "readProfileKitchenScreens",
       "readProfileServiceAccess",
       "readProfileServiceScopes",

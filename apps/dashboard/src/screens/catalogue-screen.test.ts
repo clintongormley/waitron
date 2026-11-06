@@ -2783,6 +2783,39 @@ describe("catalogue-screen", () => {
     await flush(el);
     expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
   });
+
+  it("keeps a new product's editor when the address comes back from another page naming no product", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    emit(list(el), "add-product", { categoryId: null });
+    await el.updateComplete;
+    expect(editor(el).open).toBe(true);
+    history.replaceState(null, "", "/manage/profile");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    history.replaceState(null, "", "/manage/catalogue");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(editor(el).open).toBe(true);
+  });
+
+  it("closes a product opened from the list when Back takes its name out of the address", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    expect(editor(el).open).toBe(true);
+    expect(location.pathname).toBe("/manage/catalogue/product/p1");
+    history.replaceState(null, "", "/manage/catalogue");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(editor(el).open).toBe(false);
+  });
   describe("a variant's own page", () => {
     // Listed under its parent only: the list read nests variants, and nothing lists one at the top.
     const withVariant: Product[] = [

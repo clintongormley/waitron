@@ -69,6 +69,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listPrinters: async () => [printer],
       listRecentJobs: async () => [],
       listPrinterProfiles: async () => [],
+      listPrinterStationNames: async () => [],
       listDiscoveredPrinters: async () => [],
       listPagePrinters: async () => [],
       pairingMode: async () => ({
@@ -244,6 +245,30 @@ for (const owner of ["name", "host"] as const) {
     await choose(app, "keep");
   });
 }
+
+it("draws no Used by link while editing, so no link can leave a draft", async () => {
+  const { screen } = await mount({
+    listPrinterProfiles: async () => [
+      {
+        printerId: "p1",
+        pagePrinterId: null,
+        profileId: "dp1",
+        profileName: "Waiters",
+        roles: ["receipt"],
+        departmentId: "d1",
+        departmentName: "Dining room",
+      },
+    ],
+  });
+  screen.canOpen = () => true;
+  await screen.updateComplete;
+  expect(q(screen, "[data-test=printer-section-used-by] a")).not.toBeNull();
+  await open(screen);
+  change(screen, "name", "Bar");
+  await screen.updateComplete;
+  expect(q(screen, "[data-test=printer-section-used-by]")).toBeNull();
+  expect(q(screen, "[data-test=printer-details-body] a")).toBeNull();
+});
 
 it("a save whose refresh fails shows the failed read and its retry inside the details window", async () => {
   let reads = 0;

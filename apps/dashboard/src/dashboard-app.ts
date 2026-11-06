@@ -885,6 +885,9 @@ export class DashboardApp extends LitElement {
   @state() private navSearch = "";
 
   @state() private profileOpen = false;
+  /** The address beneath Your profile, which its close button writes back so the screen beneath gets
+   * its address words again. */
+  #beneathProfile: string | null = null;
 
   /** Reported by profile-screen via `profile-tab-change`: the Edit action lives in this shell's modal
    * footer, shown only while "details" is active. */
@@ -1585,6 +1588,7 @@ export class DashboardApp extends LitElement {
     this.drawerOpen = false;
     this.navSearch = "";
     this.profileOpen = false;
+    this.#beneathProfile = null;
   }
 
   /**
@@ -2406,7 +2410,10 @@ export class DashboardApp extends LitElement {
 
   #writeCurrentUrl(replace: boolean): void {
     if (this.profileOpen) this.#url.write({ dashboard: "profile" }, replace);
-    else this.#writeScreenUrl(this.screen, replace);
+    else {
+      this.#writeScreenUrl(this.screen, replace);
+      this.#beneathProfile = navigationGuardFor(window)?.href ?? location.href;
+    }
   }
 
   /** A pushed navigation, so the browser's Back button closes the modal. */
@@ -2417,7 +2424,10 @@ export class DashboardApp extends LitElement {
   /** Replaces the current entry, so "profile" does not stay behind as its own Back-button stop. A
    * Back-button close goes through `#onHistory` instead. */
   #closeProfile(): void {
-    this.#writeScreenUrl(this.screen, true);
+    const guard = navigationGuardFor(window);
+    if (this.#beneathProfile !== null && guard !== undefined)
+      void guard.write(this.#beneathProfile, true);
+    else this.#writeScreenUrl(this.screen, true);
   }
 
   readonly #onHistory = (): void => {
@@ -2951,6 +2961,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-printers-screen
           .api=${this.api}
           .canManage=${this.#sessionPermissions.includes("printer.manage")}
+          .canOpen=${this.#canOpenScreen}
         ></dashboard-printers-screen>`;
       case "floor-plan":
         return html`<dashboard-floor-plan-editor .api=${this.api}

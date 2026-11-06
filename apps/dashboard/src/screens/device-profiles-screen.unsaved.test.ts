@@ -1,6 +1,6 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, onTestFinished } from "vitest";
 import { LitElement, html } from "lit";
-import { LeaveController, registerIcons } from "@waitron/ui";
+import { LeaveController, NavigationGuard, registerIcons } from "@waitron/ui";
 import type { DashboardApi, DeviceProfile, Printer, Station } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -589,6 +589,78 @@ it("W69 a create accepted with newer input uses Update on its next save", async 
     ["p2", "Newer phone", [], "till", null, { receiptPrinterIds: [], paymentSlipPrinterIds: [] }],
   ]);
   expect(unload()).toBe(false);
+});
+
+it("W69 a create kept open for newer input names the new profile in the address without asking", async () => {
+  history.replaceState(null, "", "/manage/device-profiles");
+  let finish!: () => void;
+  const { app, screen } = await mount({
+    createDeviceProfile: async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return { ...profile, id: "p2", name: "Submitted phone" };
+    },
+  });
+  const coordinator = app.leave.coordinator;
+  const guard = new NavigationGuard(window, {
+    isDirty: () => coordinator.isDirty(),
+    request: (proceed, signal) =>
+      coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+  });
+  onTestFinished(() => guard.dispose());
+  q(screen, "profile-cancel")!.click();
+  await expect.poll(() => q(screen, "create")).not.toBeNull();
+  q(screen, "create")!.click();
+  await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
+  change(screen, "profile-name", "Submitted phone");
+  change(screen, "profile-department", "d1");
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => finish).toBeTypeOf("function");
+  change(screen, "profile-name", "Newer phone");
+  finish();
+  await expect.poll(() => location.pathname).toBe("/manage/device-profiles/profile/p2");
+  await screen.updateComplete;
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect((q(screen, "profile-name") as HTMLElementTagNameMap["wt-input"]).value).toBe(
+    "Newer phone",
+  );
+  expect(unload()).toBe(true);
+});
+
+it("W69 a create kept open while another page's address showed stays open when the address comes back", async () => {
+  history.replaceState(null, "", "/manage/device-profiles");
+  let finish!: () => void;
+  const { screen } = await mount({
+    createDeviceProfile: async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return { ...profile, id: "p2", name: "Submitted phone" };
+    },
+  });
+  q(screen, "profile-cancel")!.click();
+  await expect.poll(() => q(screen, "create")).not.toBeNull();
+  q(screen, "create")!.click();
+  await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
+  change(screen, "profile-name", "Submitted phone");
+  change(screen, "profile-department", "d1");
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => finish).toBeTypeOf("function");
+  history.replaceState(null, "", "/manage/profile");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  change(screen, "profile-name", "Newer phone");
+  finish();
+  await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
+  expect(location.pathname).toBe("/manage/profile");
+  history.replaceState(null, "", "/manage/device-profiles");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await screen.updateComplete;
+  expect((q(screen, "profile-name") as HTMLElementTagNameMap["wt-input"] | null)?.value).toBe(
+    "Newer phone",
+  );
+  expect(location.pathname).toBe("/manage/device-profiles/profile/p2");
+  expect(unload()).toBe(true);
 });
 
 const readerRow = (id: string, name: string) => ({

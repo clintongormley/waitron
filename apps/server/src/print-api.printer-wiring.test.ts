@@ -7,6 +7,7 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   devices,
+  floorZones,
   kitchenStations,
   nowIso,
   pagePrinters,
@@ -24,6 +25,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { departments, deviceProfileServiceAccess } from "@waitron/venue-service";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
@@ -696,14 +698,28 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
       mine.has(o.printerId),
     );
     expect(offers).toEqual([
-      { printerId: counter, profileId: bar!.id, profileName: bar!.name },
-      ...[counter, portable]
-        .sort()
-        .map((printerId) => ({ printerId, profileId: waiters!.id, profileName: waiters!.name })),
+      {
+        printerId: counter,
+        pagePrinterId: null,
+        profileId: bar!.id,
+        profileName: bar!.name,
+        roles: ["receipt", "payment_slip"],
+        departmentId: null,
+        departmentName: null,
+      },
+      ...[counter, portable].sort().map((printerId) => ({
+        printerId,
+        pagePrinterId: null,
+        profileId: waiters!.id,
+        profileName: waiters!.name,
+        roles: ["payment_slip"],
+        departmentId: null,
+        departmentName: null,
+      })),
     ]);
   });
 
-  it("GET /management-api/printer-profiles lists a receipt printer on an invoice list, and no row for a page printer there", async () => {
+  it("GET /management-api/printer-profiles lists a receipt printer and a page printer on an invoice list", async () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Invoice offers agent");
     const counter = await createPrinter(app, agent.agentId, "Counter");
@@ -735,10 +751,12 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
     });
     expect(res.status).toBe(200);
     const offers = (await res.json()) as { printerId: string | null; profileId: string }[];
+    const row = { profileId: invoices!.id, profileName: invoices!.name, roles: ["invoice"] };
+    const noDepartment = { departmentId: null, departmentName: null };
     expect(offers.filter((o) => o.profileId === invoices!.id)).toEqual([
-      { printerId: counter, profileId: invoices!.id, profileName: invoices!.name },
+      { printerId: null, pagePrinterId: office!.id, ...row, ...noDepartment },
+      { printerId: counter, pagePrinterId: null, ...row, ...noDepartment },
     ]);
-    expect(offers.some((o) => o.printerId === null)).toBe(false);
   });
 
   it("GET /management-api/printer-profiles requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {
@@ -751,6 +769,166 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
     expect(staff.status).toBe(403);
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     const manager = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: managerCookie,
+    });
+    expect(manager.status).toBe(200);
+  });
+
+  it("GET /management-api/printer-profiles gives each profile's roles for a printer once, with its department", async () => {
+    const app = mountApp();
+    const agent = await joinAndAccept(app, "Roles agent");
+    const printer = await createPrinter(app, agent.agentId, "Terrace counter");
+    const [terrace] = await suite.db
+      .insert(departments)
+      .values({ locationId: tenantA.locationId, name: "Terrace", tradingName: "Terrace" })
+      .returning({ id: departments.id });
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: tenantA.locationId, name: `Terrace zone ${randomUUID()}` })
+      .returning({ id: floorZones.id });
+    const [till, display] = await suite.db
+      .insert(deviceProfiles)
+      .values([
+        { name: `Terrace till ${randomUUID()}`, formFactor: "till" },
+        { name: `Pass display ${randomUUID()}`, formFactor: "kds" },
+      ])
+      .returning({ id: deviceProfiles.id, name: deviceProfiles.name });
+    await suite.db.insert(deviceProfileServiceAccess).values({
+      deviceProfileId: till!.id,
+      departmentId: terrace!.id,
+      everyZone: true,
+      startingZoneId: zone!.id,
+    });
+    await suite.db.insert(deviceProfilePrinters).values([
+      // Stored before the receipt row, and before it alphabetically, so neither order gives the list's.
+      { deviceProfileId: till!.id, printerId: printer, role: "cash_drawer", position: 0 },
+      { deviceProfileId: till!.id, printerId: printer, role: "receipt", position: 0 },
+      { deviceProfileId: display!.id, printerId: printer, role: "receipt", position: 0 },
+    ]);
+
+    const res = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const offers = ((await res.json()) as { printerId: string | null }[]).filter(
+      (o) => o.printerId === printer,
+    );
+    expect(offers).toEqual(
+      [
+        {
+          printerId: printer,
+          pagePrinterId: null,
+          profileId: till!.id,
+          profileName: till!.name,
+          roles: ["receipt", "cash_drawer"],
+          departmentId: terrace!.id,
+          departmentName: "Terrace",
+        },
+        {
+          printerId: printer,
+          pagePrinterId: null,
+          profileId: display!.id,
+          profileName: display!.name,
+          roles: ["receipt"],
+          departmentId: null,
+          departmentName: null,
+        },
+      ].sort((a, b) => a.profileName.localeCompare(b.profileName)),
+    );
+  });
+
+  it("GET /management-api/printer-profiles leaves out a retired profile", async () => {
+    const app = mountApp();
+    const agent = await joinAndAccept(app, "Retired agent");
+    const printer = await createPrinter(app, agent.agentId, "Old counter");
+    const [live, retired] = await suite.db
+      .insert(deviceProfiles)
+      .values([
+        { name: `Live ${randomUUID()}`, formFactor: "till" },
+        { name: `Retired ${randomUUID()}`, formFactor: "till", retiredAt: nowIso() },
+      ])
+      .returning({ id: deviceProfiles.id });
+    await suite.db.insert(deviceProfilePrinters).values([
+      { deviceProfileId: live!.id, printerId: printer, role: "receipt", position: 0 },
+      { deviceProfileId: retired!.id, printerId: printer, role: "receipt", position: 0 },
+    ]);
+
+    const res = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const profileIds = ((await res.json()) as { printerId: string | null; profileId: string }[])
+      .filter((o) => o.printerId === printer)
+      .map((o) => o.profileId);
+    expect(profileIds).toEqual([live!.id]);
+  });
+
+  it("GET /management-api/printer-stations names each station printing to each printer", async () => {
+    const app = mountApp();
+    const agent = await joinAndAccept(app, "Stations agent");
+    const grill = await createPrinter(app, agent.agentId, "Grill printer");
+    const bar = await createPrinter(app, agent.agentId, "Bar printer");
+    const suffix = randomUUID();
+    const zeta = await seedStation(tenantA, `Zeta ${suffix}`);
+    const alpha = await seedStation(tenantA, `Alpha ${suffix}`);
+    await suite.db.insert(stationPrinters).values([
+      { stationId: zeta, printerId: grill },
+      { stationId: alpha, printerId: grill },
+      { stationId: alpha, printerId: bar },
+    ]);
+
+    const res = await send(app, "GET", "/management-api/printer-stations", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const mine = new Set([grill, bar]);
+    const rows = ((await res.json()) as { printerId: string }[]).filter((r) =>
+      mine.has(r.printerId),
+    );
+    expect(rows).toEqual([
+      ...[grill, bar]
+        .sort()
+        .map((printerId) => ({ printerId, stationId: alpha, stationName: `Alpha ${suffix}` })),
+      { printerId: grill, stationId: zeta, stationName: `Zeta ${suffix}` },
+    ]);
+  });
+
+  it("GET /management-api/printer-stations leaves out a deleted station still holding a printer", async () => {
+    const app = mountApp();
+    const agent = await joinAndAccept(app, "Deleted station agent");
+    const printer = await createPrinter(app, agent.agentId, "Pass printer");
+    const live = await seedStation(tenantA, `Live ${randomUUID()}`);
+    const deleted = await seedStation(tenantA, `Deleted ${randomUUID()}`);
+    await suite.db.insert(stationPrinters).values([
+      { stationId: live, printerId: printer },
+      { stationId: deleted, printerId: printer },
+    ]);
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, deleted));
+
+    const res = await send(app, "GET", "/management-api/printer-stations", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const stationIds = ((await res.json()) as { printerId: string; stationId: string }[])
+      .filter((r) => r.printerId === printer)
+      .map((r) => r.stationId);
+    expect(stationIds).toEqual([live]);
+  });
+
+  it("GET /management-api/printer-stations requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {
+    const app = mountApp();
+    const unauth = await send(app, "GET", "/management-api/printer-stations");
+    expect(unauth.status).toBe(401);
+    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
+    const staff = await send(app, "GET", "/management-api/printer-stations", {
+      cookie: staffCookie,
+    });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    const manager = await send(app, "GET", "/management-api/printer-stations", {
       cookie: managerCookie,
     });
     expect(manager.status).toBe(200);

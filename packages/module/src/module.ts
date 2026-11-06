@@ -1113,6 +1113,11 @@ export interface VenueServiceContribution {
       startingZoneId: string | null;
     }[]
   >;
+  /** Each named profile's department, switched off or not; a profile with none is absent. */
+  readProfileDepartments(
+    tx: Transaction,
+    profileIds: readonly string[],
+  ): Promise<{ profileId: string; departmentId: string; departmentName: string }[]>;
   /** Replaces a profile's department, zones and starting zone.
    *  A field not named keeps its stored value, and naming none leaves a stored department's scope
    *  untouched; a kitchen display starts from no scope. Refused `device_profile.access_invalid`,

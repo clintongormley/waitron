@@ -294,8 +294,16 @@ it.each([
     ["menu_details", "sections", "section_members", "products", "catalogues"],
   ],
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
-  // their profile. Not `devices`, which a device's heartbeat changes every minute.
-  ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles"]],
+  // their profile, and the profile's department. Not `devices`,
+  // which a device's heartbeat changes every minute.
+  [
+    "listPrinterProfiles",
+    [],
+    ["device_profile_printers", "device_profiles", "device_profile_service_access", "departments"],
+  ],
+  // `/management-api/printer-stations` (apps/server/src/print-api.ts): the station rows, joined to
+  // their station's name.
+  ["listPrinterStationNames", [], ["station_printers", "kitchen_stations"]],
   // `printerDeleteRules` (apps/server/src/printer-delete.ts): the printer, its live jobs and
   // invoice receipts, its holder, the devices choosing or inheriting it and the profile rows they
   // inherit through, and the stations it prints for, each named.

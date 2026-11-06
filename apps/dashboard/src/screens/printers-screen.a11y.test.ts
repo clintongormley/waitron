@@ -122,9 +122,33 @@ const jobs: PrintJobRow[] = [
 ];
 
 const printerProfiles: PrinterProfileOffer[] = [
-  { printerId: "p1", profileId: "dp1", profileName: "Waiters" },
-  { printerId: "p2", profileId: "dp1", profileName: "Waiters" },
-  { printerId: "p1", profileId: "dp2", profileName: "Counter" },
+  {
+    printerId: "p1",
+    profileId: "dp1",
+    profileName: "Waiters",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p2",
+    profileId: "dp1",
+    profileName: "Waiters",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p1",
+    profileId: "dp2",
+    profileName: "Counter",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
 ];
 
 // An unregistered USB device, a disabled registration offered for adding again, and an office printer.
@@ -203,6 +227,7 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
     listPagePrinters: vi.fn().mockResolvedValue([]),
     listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
+    listPrinterStationNames: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -613,6 +638,45 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     openDetailsEdit(el);
     await flush(el);
     await expectNoA11yViolations(host);
+  });
+  it("renders the Used by group, its links and its empty state accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: stubApi(false, {
+          listPrinterProfiles: vi.fn().mockResolvedValue([
+            {
+              printerId: "p1",
+              profileId: "dp1",
+              profileName: "Waiters",
+              pagePrinterId: null,
+              roles: ["receipt", "payment_slip", "cash_drawer", "invoice"],
+              departmentId: "d1",
+              departmentName: "Dining room",
+            },
+          ]),
+          listPrinterStationNames: vi
+            .fn()
+            .mockResolvedValue([{ printerId: "p1", stationId: "s1", stationName: "Grill" }]),
+        }),
+        canOpen: () => true,
+      },
+      theme,
+    );
+    await flush(el);
+    await openPrinter(el);
+    expect(q(el, "[data-test=printer-section-used-by]")!.querySelectorAll("a")).toHaveLength(3);
+    await expectNoA11yViolations(host);
+    cleanupWidgets();
+    const empty = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi(false, { listPrinterProfiles: vi.fn().mockResolvedValue([]) }) },
+      theme,
+    );
+    await flush(empty.el);
+    await openPrinter(empty.el);
+    expect(q(empty.el, "[data-test=printer-used-by-nothing]")).not.toBeNull();
+    await expectNoA11yViolations(empty.host);
   });
   it.each([
     ["en", 1280],

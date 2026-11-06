@@ -89,6 +89,20 @@ const people: PersonSummary[] = [
   },
 ];
 
+const ownProfile = {
+  displayName: "Ada",
+  firstNames: "Ada",
+  lastNames: "Lovelace",
+  telephone: null,
+  email: "manager@example.com",
+  pendingEmail: null,
+  locale: "en-GB",
+  hasPassword: true,
+  hasTotp: false,
+  hasGoogle: false,
+  passkeys: [],
+};
+
 const meResponse = {
   personId: "p1",
   role: "manager",
@@ -260,6 +274,11 @@ const mySchedule = (el: DashboardApp) =>
 const overview = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-overview-screen");
 const sales = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-sales-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
+function unsavedOnUnload(): boolean {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
 const units = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-units-screen");
 const navUnits = (el: DashboardApp) =>
@@ -1104,6 +1123,363 @@ describe("dashboard-app", () => {
     expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
     await expect.poll(() => new URL(location.href).pathname).toBe("/manage/catalogue");
   });
+
+  const deviceProfile = {
+    id: "dp1",
+    name: "Front counter",
+    capabilities: [],
+    formFactor: "till",
+    inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
+    departmentId: null,
+    allowedZoneIds: null,
+    startingZoneId: null,
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
+    startingScreen: null,
+  };
+  async function mountOnDeviceProfiles(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getProfile: vi.fn().mockResolvedValue(ownProfile),
+        listDeviceProfiles: vi.fn().mockResolvedValue([deviceProfile]),
+        getDeviceProfile: vi.fn().mockResolvedValue(deviceProfile),
+        listPagePrinters: vi.fn().mockResolvedValue([]),
+        listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
+        getProfileScopeChoices: vi.fn().mockResolvedValue({ departments: [], zones: [] }),
+        listReaders: vi.fn().mockResolvedValue([]),
+        getProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
+        liveData: new LiveData(),
+        ...overrides,
+      }),
+    });
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector("dashboard-device-profiles-screen")!;
+    const name = () => screen.shadowRoot!.querySelector<WtInput>("[data-test=profile-name]");
+    const rename = async (value: string) => {
+      name()!.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+      await screen.updateComplete;
+    };
+    return { el, screen, name, rename };
+  }
+  const closeProfileButton = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+  const travel = (move: () => void) =>
+    new Promise<void>((resolve) => {
+      window.addEventListener("popstate", () => resolve(), { once: true });
+      move();
+    });
+
+  it.each([
+    ["its close button", closeProfileButton],
+    ["Back", () => history.back()],
+  ])(
+    "closing Your profile with %s keeps the device profile editor it opened over, with its unsaved name",
+    async (_how, close) => {
+      history.replaceState(null, "", "/manage/device-profiles/profile/dp1");
+      const { el, screen, name, rename } = await mountOnDeviceProfiles();
+      await expect.poll(() => name()?.value).toBe("Front counter");
+      await rename("Back counter");
+
+      expect(unsavedOnUnload()).toBe(true);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+      await flush(el);
+      expect(location.pathname).toBe("/manage/profile");
+      close(el);
+      await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+      await flush(el);
+      await screen.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+      expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+      expect(name()?.value).toBe("Back counter");
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    },
+  );
+
+  it("closing Your profile with its close button keeps a new device profile's editor, with its unsaved name", async () => {
+    history.replaceState(null, "", "/manage/device-profiles");
+    const { el, screen, name, rename } = await mountOnDeviceProfiles();
+    await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=create]")).not.toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await expect.poll(() => name()).not.toBeNull();
+    await rename("New counter");
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    closeProfileButton(el);
+    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await flush(el);
+    await screen.updateComplete;
+
+    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(name()?.value).toBe("New counter");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+
+  it("a device profile editor whose read lands while Your profile shows is named in the address once the window closes", async () => {
+    history.replaceState(null, "", "/manage/device-profiles");
+    let land!: () => void;
+    const { el, screen, name } = await mountOnDeviceProfiles({
+      getDeviceProfile: () =>
+        new Promise((resolve) => {
+          land = () => resolve(deviceProfile);
+        }),
+    });
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=edit-dp1]"))
+      .not.toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-dp1]")!.click();
+    await expect.poll(() => land).toBeTypeOf("function");
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    land();
+    await expect.poll(() => name()?.value).toBe("Front counter");
+    closeProfileButton(el);
+    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await flush(el);
+    await screen.updateComplete;
+
+    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(name()?.value).toBe("Front counter");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+
+  it("closing Your profile, reached by Forward after a reload, keeps the device profile editor beneath it", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/dp1");
+    history.pushState(null, "", "/manage/profile");
+    await travel(() => history.back());
+    const { el, screen, name, rename } = await mountOnDeviceProfiles();
+    await expect.poll(() => name()?.value).toBe("Front counter");
+    await rename("Back counter");
+
+    await travel(() => history.forward());
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+    closeProfileButton(el);
+    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await flush(el);
+    await screen.updateComplete;
+
+    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(name()?.value).toBe("Back counter");
+  });
+
+  it("closing Your profile, reached by Forward after Back, keeps the device profile editor opened between", async () => {
+    history.replaceState(null, "", "/manage/device-profiles");
+    const { el, screen, name } = await mountOnDeviceProfiles();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    await travel(() => history.back());
+    await flush(el);
+    expect(location.pathname).toBe("/manage/device-profiles");
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=edit-dp1]"))
+      .not.toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-dp1]")!.click();
+    await expect.poll(() => name()?.value).toBe("Front counter");
+    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+
+    await travel(() => history.forward());
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    closeProfileButton(el);
+    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await flush(el);
+    await screen.updateComplete;
+
+    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(name()?.value).toBe("Front counter");
+  });
+
+  const catalogueProduct = {
+    id: "p1",
+    modifiers: [],
+    catalogueId: "cat-a",
+    categoryId: null,
+    primaryCategoryId: null,
+    name: "Croquettes",
+    customerName: null,
+    unitId: "u1",
+    unit: {
+      id: "u1",
+      staffName: "Unit",
+      staffAbbreviation: "u",
+      name: { es: "unidad" },
+      abbreviation: { es: "u" },
+      precision: 0,
+    },
+    description: null,
+    kitchenName: null,
+    dietaryDeclarations: [],
+    pricingUnit: "each",
+    unitPrice: "8.50",
+    vatClass: "reduced",
+    active: true,
+    available: true,
+    ordering: "public",
+    allergens: null,
+    dietOverride: null,
+    dietDerivation: null,
+    manualAllergens: null,
+    image: null,
+    color: null,
+    variants: [],
+    courseId: null,
+  };
+  const productEditorValue = {
+    id: "p1",
+    parentId: null,
+    inherited: null,
+    name: "Croquettes",
+    customerName: null,
+    description: null,
+    kitchenName: null,
+    image: null,
+    unitId: "u1",
+    unitPrice: "8.50",
+    active: true,
+    available: true,
+    ordering: "public",
+    vatClass: "reduced",
+    variants: [],
+    primaryCategoryId: null,
+    color: null,
+    modifiers: [],
+    allergens: {},
+    dietaryDeclarations: [],
+    courseId: null,
+  };
+  async function mountOnCatalogue(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["product.manage"] }),
+        getProfile: vi.fn().mockResolvedValue(ownProfile),
+        listCatalogues: vi
+          .fn()
+          .mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true, version: 1 }]),
+        listProducts: vi.fn().mockResolvedValue([catalogueProduct]),
+        listUnits: vi.fn().mockResolvedValue([]),
+        listExtraLists: vi.fn().mockResolvedValue([]),
+        listOptionLists: vi.fn().mockResolvedValue([]),
+        listMadeAt: vi.fn().mockResolvedValue({}),
+        getProductEditor: vi.fn().mockResolvedValue(productEditorValue),
+        liveData: new LiveData(),
+        ...overrides,
+      }),
+    });
+    await flush(el);
+    const editor = () =>
+      catalogue(el)?.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "dashboard-product-editor",
+      );
+    const price = () => editor()?.shadowRoot!.querySelector<WtInput>("[name=unit-price]");
+    const fromBrowser = (type: string, detail: unknown) =>
+      catalogue(el)!
+        .shadowRoot!.querySelector("dashboard-catalogue-browser")!
+        .dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    const reprice = async (value: string) => {
+      price()!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+      await flush(el);
+    };
+    const passThroughYourProfile = async () => {
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+      await flush(el);
+      expect(location.pathname).toBe("/manage/profile");
+      closeProfileButton(el);
+      await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+      await flush(el);
+    };
+    return { el, editor, price, fromBrowser, reprice, passThroughYourProfile };
+  }
+
+  it("closing Your profile keeps the product editor it opened over, with its unsaved price", async () => {
+    history.replaceState(null, "", "/manage/catalogue/product/p1");
+    const { el, editor, price, reprice, passThroughYourProfile } = await mountOnCatalogue();
+    await expect.poll(() => editor()?.open).toBe(true);
+    await expect.poll(() => price()?.value).toBe("8.50");
+    await reprice("9.25");
+
+    expect(unsavedOnUnload()).toBe(true);
+    await passThroughYourProfile();
+
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+    expect(location.pathname).toBe("/manage/catalogue/product/p1");
+    expect(editor()?.open).toBe(true);
+    expect(price()?.value).toBe("9.25");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+
+  it("closing Your profile keeps a new product's editor, with its unsaved price", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const { el, editor, price, fromBrowser, reprice, passThroughYourProfile } =
+      await mountOnCatalogue();
+    await expect
+      .poll(() => catalogue(el)?.shadowRoot!.querySelector("dashboard-catalogue-browser"))
+      .not.toBeNull();
+    fromBrowser("add-product", { categoryId: null });
+    await expect.poll(() => editor()?.open).toBe(true);
+    await expect.poll(() => price()).not.toBeNull();
+    await reprice("9.25");
+
+    expect(unsavedOnUnload()).toBe(true);
+    await passThroughYourProfile();
+
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+    expect(location.pathname).toBe("/manage/catalogue");
+    expect(editor()?.open).toBe(true);
+    expect(price()?.value).toBe("9.25");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+
+  it.each([
+    ["/manage/catalogue", "/manage/catalogue/product/p1"],
+    ["/manage/catalogue/category/c1", "/manage/catalogue/product/p1/category/c1"],
+  ])(
+    "a product editor whose read lands while Your profile shows over %s is named in the address once the window closes",
+    async (start, named) => {
+      history.replaceState(null, "", start);
+      let land!: () => void;
+      const { el, editor, price, fromBrowser } = await mountOnCatalogue({
+        getProductEditor: () =>
+          new Promise((resolve) => {
+            land = () => resolve(productEditorValue);
+          }),
+      });
+      await expect
+        .poll(() => catalogue(el)?.shadowRoot!.querySelector("dashboard-catalogue-browser"))
+        .not.toBeNull();
+      fromBrowser("edit-product", { productId: "p1" });
+      await expect.poll(() => land).toBeTypeOf("function");
+
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+      await flush(el);
+      expect(location.pathname).toBe("/manage/profile");
+      land();
+      await expect.poll(() => price()?.value).toBe("8.50");
+      closeProfileButton(el);
+      await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+      await flush(el);
+
+      expect(location.pathname).toBe(named);
+      expect(editor()?.open).toBe(true);
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    },
+  );
 
   it("disables the relocated Edit button until profile data has actually loaded, and never throws if clicked early", async () => {
     // Edit lives in the shell's footer, so it renders before getProfile() resolves, and
@@ -1995,6 +2371,22 @@ describe("dashboard-app", () => {
       expect(printers.canManage).toBe(canManage);
     },
   );
+
+  it("tells the printers screen which screens the session may open, for its Used by links", async () => {
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["booking.manage"] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navItem(el, "printers")!.click();
+    await flush(el);
+    const printers = el.shadowRoot!.querySelector("dashboard-printers-screen") as HTMLElement & {
+      canOpen: (screen: string) => boolean;
+    };
+    expect(printers.canOpen("printers")).toBe(true);
+    expect(printers.canOpen("no-such-screen")).toBe(false);
+  });
 
   it.each([
     { permissions: ["report.view"], canExport: false },
@@ -7946,6 +8338,7 @@ describe("printer details window during a pending save", () => {
               },
             ]),
             listPrinterProfiles: vi.fn().mockResolvedValue([]),
+            listPrinterStationNames: vi.fn().mockResolvedValue([]),
             listDiscoveredPrinters: vi.fn().mockResolvedValue([]),
             listPagePrinters: vi.fn().mockResolvedValue([]),
             pairingMode: vi.fn().mockResolvedValue({

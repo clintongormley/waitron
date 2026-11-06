@@ -4239,7 +4239,8 @@ beside its value, the label muted and the value in normal weight, and stacks the
 (`settingsRows`), as the owner's approved mock-ups drew.
 
 Printer details open in a modal over the tab they were opened from (A405). Each fact is one row,
-in groups under Status, Connection and Paper and drawer (`settingsRows`); the Active switch sits
+in groups under Status, Connection, Paper and drawer, and Used by (`settingsRows`); Used by shows
+only outside Edit. The Active switch sits
 once, under Status, and acts at once. The view footer reads Close and Delete at the start,
 Calibrate printer and Edit at the end. Edit turns the modal into one form of the name and, for a
 network printer, its host and port; that form has no Close button, its footer reads Cancel and Save

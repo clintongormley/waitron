@@ -22,6 +22,7 @@ import {
 } from "./operations.js";
 import {
   assertProfileZone,
+  readProfileDepartments,
   readProfileServiceAccess,
   readProfileServiceScopes,
   readProfileZones,
@@ -31,6 +32,7 @@ import {
   type ProfileServiceAccessInput,
 } from "./profile-access.js";
 import {
+  departments,
   deviceProfileServiceAccess,
   deviceProfileZones,
   zoneServicePolicies,
@@ -501,6 +503,39 @@ describe("a profile's service access", () => {
         .from(deviceProfileZones)
         .where(eq(deviceProfileZones.deviceProfileId, venue.profile)),
     ).toEqual([]);
+  });
+});
+
+describe("profile departments", () => {
+  it("reads each asked-for profile's department, switched off ones included, and nothing for a profile with none or an unknown id", async () => {
+    const venue = await seedVenueWithZones();
+    await save(venue, restaurantScope(venue));
+    const deliProfile = await seedProfile();
+    await db.insert(deviceProfileServiceAccess).values({
+      deviceProfileId: deliProfile,
+      departmentId: venue.deli,
+      everyZone: true,
+      startingZoneId: venue.counter,
+    });
+    await db.update(departments).set({ active: false }).where(eq(departments.id, venue.deli));
+    const unasked = await seedProfile();
+    await db.insert(deviceProfileServiceAccess).values({
+      deviceProfileId: unasked,
+      departmentId: venue.restaurant,
+      everyZone: true,
+      startingZoneId: venue.dining,
+    });
+    const noDepartment = await seedProfile();
+    const rows = await scoped((tx) =>
+      readProfileDepartments(tx, [venue.profile, deliProfile, noDepartment, randomUUID()]),
+    );
+    expect(rows.sort((a, b) => a.profileId.localeCompare(b.profileId))).toEqual(
+      [
+        { profileId: venue.profile, departmentId: venue.restaurant, departmentName: "Restaurant" },
+        { profileId: deliProfile, departmentId: venue.deli, departmentName: "Deli" },
+      ].sort((a, b) => a.profileId.localeCompare(b.profileId)),
+    );
+    await expect(scoped((tx) => readProfileDepartments(tx, []))).resolves.toEqual([]);
   });
 });
 

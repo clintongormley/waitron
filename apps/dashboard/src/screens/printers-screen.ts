@@ -72,6 +72,7 @@ import type {
   PrinterPatch,
   PrinterAddressProbe,
   PrinterProfileOffer,
+  PrinterStationName,
 } from "../api/client.js";
 
 /** The printer details form, as it would be saved. */
@@ -91,14 +92,40 @@ function detailsSection(section: {
   id: string;
   heading: string;
   dataTest: string;
+  className?: string;
   rows: SettingsRow[];
   before?: TemplateResult;
   after?: TemplateResult | typeof nothing;
 }): TemplateResult {
-  return html`<section data-test=${section.dataTest} aria-labelledby=${section.id}>
+  return html`<section
+    class=${section.className ?? nothing}
+    data-test=${section.dataTest}
+    aria-labelledby=${section.id}
+  >
     <h3 id=${section.id}>${section.heading}</h3>
     ${section.before ?? nothing} ${settingsRows(section.rows)} ${section.after ?? nothing}
   </section>`;
+}
+
+const USE_WORDS = {
+  receipt: "printers.use_receipt",
+  payment_slip: "printers.use_payment_slip",
+  cash_drawer: "printers.use_cash_drawer",
+  invoice: "printers.use_invoice",
+} as const satisfies Record<PrinterProfileOffer["roles"][number], StringKey>;
+
+/** `printers.used_by_profile` with the profile's name, or its link, in place of `{profile}`. */
+function usedByProfileLine(
+  profile: TemplateResult | string,
+  uses: string,
+): (TemplateResult | string)[] {
+  return t("printers.used_by_profile")
+    .split(/(\{profile\}|\{uses\})/)
+    .map((part) => (part === "{profile}" ? profile : part === "{uses}" ? uses : part));
+}
+
+function commaList(items: (TemplateResult | string)[]): TemplateResult {
+  return html`${items.flatMap((item, index) => (index === 0 ? [item] : [", ", item]))}`;
 }
 
 interface PrinterDraft {
@@ -377,6 +404,18 @@ export class PrintersScreen extends LitElement {
         width: 100%;
         max-width: var(--wt-form-max-width);
       }
+      /* Tap-height as a box of its own, so a link's line grows to hold it and no link's target
+         overlaps the line above or below. */
+      .used-by a {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        color: var(--wt-color-primary-text);
+      }
+      .used-by a:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
       .status-fields {
         display: grid;
         gap: var(--wt-space-4);
@@ -550,6 +589,8 @@ export class PrintersScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   /** The session holds `printer.manage`: the A4 printers panel offers its actions. */
   @property({ type: Boolean }) canManage = false;
+  /** Whether the person may open a dashboard screen; a Used by name links only to one they may. */
+  @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -832,6 +873,9 @@ export class PrintersScreen extends LitElement {
   @state() private calibrationJobId: string | null = null;
 
   @state() private printerProfiles: PrinterProfileOffer[] = [];
+  @state() private printerStations: PrinterStationName[] = [];
+  /** Which of the Used by reads have answered: until both have, no usage does not mean none. */
+  @state() private usageRead: ReadonlySet<"profiles" | "stations"> = new Set();
 
   @state() private armedRevokeId: string | null = null;
 
@@ -1040,6 +1084,11 @@ export class PrintersScreen extends LitElement {
         }),
         this.#queries.watch("listPrinterProfiles", [], (printerProfiles) => {
           this.printerProfiles = printerProfiles;
+          this.usageRead = new Set([...this.usageRead, "profiles"]);
+        }),
+        this.#queries.watch("listPrinterStationNames", [], (printerStations) => {
+          this.printerStations = printerStations;
+          this.usageRead = new Set([...this.usageRead, "stations"]);
         }),
         this.#queries.watch("listPagePrinters", [], (pagePrinters) => {
           this.pagePrinters = pagePrinters;
@@ -2908,9 +2957,6 @@ export class PrintersScreen extends LitElement {
     const seen = this.#printerObservation(p);
     const address = p.host ? `${p.host}${p.port === null ? "" : `:${p.port}`}` : null;
     const yesNo = (value: boolean) => t(value ? "printers.yes" : "printers.no");
-    const offeredOn = this.printerProfiles
-      .filter((offer) => offer.printerId === p.id)
-      .map((offer) => offer.profileName);
     const connection: SettingsRow[] = [
       {
         label: t("printers.transport"),
@@ -2986,11 +3032,6 @@ export class PrintersScreen extends LitElement {
       ...(p.portable
         ? [{ label: t("printers.holder"), value: holderText(p.holder), dataTest: "printer-holder" }]
         : []),
-      {
-        label: t("printers.profiles"),
-        value: offeredOn.join(", ") || t("printers.no"),
-        dataTest: "printer-profiles",
-      },
     ];
     return html`<section data-test="printer-status">
       <div class="status-grid">
@@ -3056,8 +3097,76 @@ export class PrintersScreen extends LitElement {
               </div>`
             : nothing,
         })}
+        ${this.#renderUsedBy(p)}
       </div>
     </section>`;
+  }
+
+  #renderUsedBy(p: Printer): TemplateResult {
+    const link = (screen: string, href: string, name: string) =>
+      this.canOpen(screen) ? html`<a href=${href}>${name}</a>` : name;
+    const profiles = this.printerProfiles.filter((offer) => offer.printerId === p.id);
+    const departments = new Map<string, string>();
+    for (const { departmentId, departmentName } of profiles)
+      if (departmentId !== null && departmentName !== null)
+        departments.set(departmentId, departmentName);
+    const stations = this.printerStations.filter((station) => station.printerId === p.id);
+    const rows: SettingsRow[] = [];
+    if (profiles.length > 0)
+      rows.push({
+        label: t("nav.device_profiles"),
+        value: profiles.map(
+          (offer) =>
+            html`<div data-test=${`printer-used-by-profile-${offer.profileId}`}>
+              ${usedByProfileLine(
+                link(
+                  "device-profiles",
+                  `/manage/device-profiles/profile/${encodeURIComponent(offer.profileId)}`,
+                  offer.profileName,
+                ),
+                offer.roles.map((role) => t(USE_WORDS[role])).join(", "),
+              )}
+            </div>`,
+        ),
+        dataTest: "printer-used-by-profiles",
+      });
+    if (departments.size > 0)
+      rows.push({
+        label: t("printers.used_by_departments"),
+        value: commaList(
+          [...departments]
+            .sort(([, a], [, b]) => a.localeCompare(b))
+            .map(([id, name]) =>
+              link(
+                "venue-operations",
+                `/manage/venue-operations/department/${encodeURIComponent(id)}`,
+                name,
+              ),
+            ),
+        ),
+        dataTest: "printer-used-by-departments",
+      });
+    if (stations.length > 0)
+      rows.push({
+        label: t("printers.used_by_stations"),
+        value: commaList(
+          stations.map(({ stationName }) =>
+            link("prep-stations", "/manage/prep-stations/view/stations", stationName),
+          ),
+        ),
+        dataTest: "printer-used-by-stations",
+      });
+    return detailsSection({
+      id: "printer-details-used-by",
+      heading: t("printers.used_by"),
+      dataTest: "printer-section-used-by",
+      className: "used-by",
+      rows,
+      after:
+        rows.length === 0 && this.usageRead.size === 2
+          ? html`<p data-test="printer-used-by-nothing">${t("printers.used_by_nothing")}</p>`
+          : nothing,
+    });
   }
 
   #seenStatus(

@@ -222,7 +222,7 @@ Line numbers below were measured on `c3a4f8a56a`.
   `VENUE_SERVICE.readProfileServiceScopes(tx, ids)` (`packages/module/src/module.ts:1109-1121`,
   used by `withProfileAccess`, `apps/server/src/management-api.ts:653-672`). **No seat method reads
   department names**: `listServiceZones` (`module.ts:819`) drops departments without an active zone
-  (`packages/venue-service/src/operations.ts:119`). Task 7 adds `readDepartmentNames` to the seat.
+  (`packages/venue-service/src/operations.ts:119`). Task 7 adds `readProfileDepartments` to the seat.
 - Station names: the only printer→station read returns ids
   (`GET /management-api/printers/:pid/stations`, `print-api.ts:1588-1595`). The delete-impact read
   joins `kitchen_stations` for names (`apps/server/src/printer-delete.ts:121-126`); Task 8 adds a
@@ -448,9 +448,10 @@ invoices).
 
 Guide, appended to the Printer details section — English: "**Used by** lists the device profiles
 that print to it and for what, the prep stations that send it tickets, and the departments those
-profiles belong to. Each name opens its own screen." Spanish: "**Se usa en** muestra los perfiles
+profiles belong to." Spanish: "**Se usa en** muestra los perfiles
 de dispositivo que imprimen en ella y para qué, las estaciones de preparación que le envían
-comandas y los departamentos de esos perfiles. Cada nombre abre su pantalla."
+comandas y los departamentos de esos perfiles." The owner cut this guide sentence on 2026-11-06:
+no Used by sentence goes into the guide.
 
 ### PR 3 — dashboard
 
@@ -651,6 +652,7 @@ PR 2:
   the department fields; the permission case (`:744`) is unchanged.
 - `printers-screen.test.ts` cases reading `printer-profiles` (the "Offered on profiles" fact) read
   the Used by group.
+- `printers-screen.test.ts` "shows each fact once…" — its heading list gains `printers.used_by`.
 
 PR 3:
 - `page-printers-panel.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts` — the widget is deleted; each
@@ -966,23 +968,29 @@ and list each in the commit.
 
 ## PR 2 — Where a printer is used
 
-### Task 7: The venue-service seat reads department names
+### Task 7: The venue-service seat reads each profile's department
+
+_2026-11-06: changed in Task 8's review from `readDepartmentNames` (names by department id, after
+`readProfileServiceScopes`) to `readProfileDepartments`, one query from profile to department,
+because the old path also ran an allowed-zones query whose answer was thrown away._
 
 **Files:**
 - Modify: `packages/module/src/module.ts` — `VenueServiceContribution` (`:740`) gains
-  `readDepartmentNames(tx: Transaction, ids: readonly string[]): Promise<{ id: string; name: string }[]>`
-  with a one-line doc: every named department that exists, switched off or not
+  `readProfileDepartments(tx: Transaction, profileIds: readonly string[]): Promise<{ profileId: string; departmentId: string; departmentName: string }[]>`
+  with a one-line doc: each named profile's department, switched off or not; a profile with none is absent
 - Modify: `packages/venue-service/src/profile-access.ts` — implement it beside
-  `readProfileServiceScopes` (`:257`): a `departments` select by id, no `active` filter
+  `readProfileServiceScopes` (`:257`): one join from each asked-for profile's
+  `device_profile_service_access` row to `departments`, no `active` filter
 - Modify: `packages/venue-service/src/service.ts` — import it with the others (`:107-112`) and put it
   on the contribution object (beside `readProfileServiceScopes`, `:228`)
 - Test: `packages/venue-service/src/profile-access.test.ts` (beside the `readProfileServiceScopes`
   cases, `:508`); and `packages/venue-service/src/service.test.ts`'s list of the contribution's
-  method names (`:89`, compared exactly and sorted) gains `"readDepartmentNames"` at its sorted position
+  method names (`:89`, compared exactly and sorted) gains `"readProfileDepartments"` at its sorted position
 
-- [ ] **Step 1: Write the failing test.** `it("reads the names of the departments asked for, switched off ones included, and nothing for an unknown id")`
-  — `useVenueDb`; seed two departments, switch one off; ask for both plus a random UUID: two rows,
-  names as seeded; an empty id list returns `[]` without a query error.
+- [ ] **Step 1: Write the failing test.** `it("reads each asked-for profile's department, switched off ones included, and nothing for a profile with none or an unknown id")`
+  — `useVenueDb`; give two profiles departments, switch one department off, give a third profile
+  none; ask for those plus a random UUID: one row per profile with a department, names as seeded;
+  an empty id list returns `[]` without a query error.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/venue-service exec vitest run src/profile-access.test.ts src/service.test.ts`
   — FAIL (no function; the method-name list differs).
 - [ ] **Step 3: Implement.** Use `inArray` and the store's chunking only if the id list can grow
@@ -991,7 +999,7 @@ and list each in the commit.
   `pnpm --filter @waitron/venue-service exec tsc --noEmit`, `pnpm --filter @waitron/server exec tsc --noEmit`,
   and `pnpm exec vitest run scripts/module-seams.test.ts` — pass. Any test fake implementing
   `VenueServiceContribution` that fails to typecheck gains the method.
-- [ ] **Step 5: Commit** — `git commit -s -m "The venue-service seat reads department names by id (A405 point 5)"`.
+- [ ] **Step 5: Commit** — `git commit -s -m "The venue-service seat reads each profile's department (A405 point 5)"`.
 
 ### Task 8: The server says which profiles use a printer, for what, and which stations
 
@@ -1000,7 +1008,7 @@ and list each in the commit.
   returns one row per (printer or A4 printer, profile):
   `{ printerId: string | null, pagePrinterId: string | null, profileId, profileName, roles: Role[], departmentId: string | null, departmentName: string | null }`,
   roles in the order receipt, payment_slip, cash_drawer, invoice; retired profiles left out; department through
-  `VENUE_SERVICE.readProfileServiceScopes` then `readDepartmentNames`. Add
+  `VENUE_SERVICE.readProfileDepartments`, one query. Add
   `GET /management-api/printer-stations` → `{ printerId, stationId, stationName }[]` ordered by
   station name, under the same `gated` (`printer.manage`)
 - Modify: `apps/dashboard/src/api/client.ts` — `PrinterProfileOffer` (`:1250-1254`) to the new
@@ -1038,7 +1046,9 @@ and list each in the commit.
 - Modify: `apps/dashboard/src/navigation.ts` — `"device-profiles": { profile: "profile" }`
 - Modify: `apps/dashboard/src/screens/device-profiles-screen.ts` — a `UrlStateController`; once the
   profiles have loaded, a `profile` word naming a listed profile calls `#openEditor(id)` (`:1097`)
-  and the word is written back to null (replace); an unknown id opens nothing
+  and the word is written back to null (replace); an unknown id opens nothing. The owner overruled
+  the write-back on 2026-11-06: the word stays while the profile's editor is open, as in the
+  catalogue, so a reload opens it again.
 - Test: `apps/dashboard/src/screens/device-profiles-screen.test.ts`, `apps/dashboard/src/navigation.test.ts`
 
 - [ ] **Step 1: Write the failing tests.** `it("opens the profile its address names, once")`;
@@ -1083,12 +1093,11 @@ as plain text. Departments are the distinct departments of the listed profiles, 
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the printers files and `src/dashboard-app.test.ts -t "printer"` — pass;
   change the "Offered on profiles" assertions listed for PR 2.
-- [ ] **Step 5: Commit** — `git commit -s -m "Printer details say where the printer is used, each name a link to its screen (A405 point 5)"`.
+- [ ] **Step 5: Commit** — `git commit -s -m "Printer details say where the printer is used (A405 point 5)"`.
 
 ### Task 11: PR 2's guide, backlog and look
 
-- [ ] **Step 1:** Append the Used by sentences to both guide sections; run the guide checks (Task 5
-  Step 4).
+- [ ] **Step 1:** No guide change: the owner cut the Used by sentence on 2026-11-06.
 - [ ] **Step 2: Backlog.** Delete point 5 from the A405 section; add under Printers in
   `docs/backlog/printers.md` (and a one-line pointer in `docs/backlog.md`'s Printers area): "**A
   Used by link to a prep station opens the Stations tab, not the station (left open by A405).** The

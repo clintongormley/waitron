@@ -61,6 +61,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinters: vi.fn().mockResolvedValue([printer]),
     listRecentJobs: vi.fn().mockResolvedValue([]),
     listPrinterProfiles: vi.fn().mockResolvedValue([]),
+    listPrinterStationNames: vi.fn().mockResolvedValue([]),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([]),
     listPagePrinters: vi.fn().mockResolvedValue([]),
     pairingMode: vi.fn().mockResolvedValue({

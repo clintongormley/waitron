@@ -33,6 +33,7 @@ import type {
   PrintJobRow,
   Printer,
   PrinterProfileOffer,
+  PrinterStationName,
 } from "../api/client.js";
 import {
   AGENT_SCAN_LISTEN_MS,
@@ -259,9 +260,33 @@ const jobs: PrintJobRow[] = [
 ];
 
 const printerProfiles: PrinterProfileOffer[] = [
-  { printerId: "p1", profileId: "dp1", profileName: "Camareros" },
-  { printerId: "p2", profileId: "dp1", profileName: "Camareros" },
-  { printerId: "p1", profileId: "dp2", profileName: "Mostrador" },
+  {
+    printerId: "p1",
+    profileId: "dp1",
+    profileName: "Camareros",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p2",
+    profileId: "dp1",
+    profileName: "Camareros",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p1",
+    profileId: "dp2",
+    profileName: "Mostrador",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
 ];
 
 const pending: JoinRequestRow[] = [
@@ -317,6 +342,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([] as DiscoveredPrinter[]),
     listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
+    listPrinterStationNames: vi.fn().mockResolvedValue([]),
     listPagePrinters: vi.fn().mockResolvedValue([] as PagePrinterRow[]),
     registerPagePrinter: vi.fn().mockResolvedValue({ id: "pp9", outcome: "created" }),
     ...overrides,
@@ -4181,7 +4207,7 @@ it("does not rewrite a route outside Printers while a name draft is open", async
   expect(location.pathname).toBe("/manage/devices");
 });
 
-it("shows each fact once, label beside value, in Status, Connection and Paper and drawer", async () => {
+it("shows each fact once, label beside value, in Status, Connection, Paper and drawer, and Used by", async () => {
   await page.viewport(1280, 800);
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
@@ -4194,6 +4220,7 @@ it("shows each fact once, label beside value, in Status, Connection and Paper an
     t("printers.status"),
     t("printers.connection"),
     t("printers.details_paper"),
+    t("printers.used_by"),
   ]);
   const active = t("printers.status_active");
   const sayingActive = [...modal.querySelectorAll<HTMLElement>("*")].filter(
@@ -4895,6 +4922,7 @@ it("shows the saved drawer independently of the profiles offering it, and the de
       },
     ]),
     listPrinterProfiles: vi.fn().mockResolvedValue([]),
+    listPrinterStationNames: vi.fn().mockResolvedValue([]),
   });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
@@ -4903,7 +4931,7 @@ it("shows the saved drawer independently of the profiles offering it, and the de
   q(el, "[data-test=printer-row-p1]")!.click();
   await flush(el);
   expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.yes"));
-  expect(text(el, "[data-test=printer-profiles]")).toBe(t("printers.no"));
+  expect(text(el, "[data-test=printer-used-by-nothing]")).toBe(t("printers.used_by_nothing"));
   expect(text(el, "[data-test=printer-status]")).toContain(
     formatRecentMinute("2026-09-26T14:00:00.000Z"),
   );
@@ -4917,17 +4945,251 @@ it("lists the profiles that offer a printer, following their changes but not a d
   await selectTab(el, "printers");
   q(el, "[data-test=printer-row-p1]")!.click();
   await flush(el);
-  const profilesField = q(el, "[data-test=printer-profiles]")!;
-  expect(profilesField.textContent!.trim()).toBe("Camareros, Mostrador");
-  expect(profilesField.previousElementSibling!.textContent!.trim()).toBe(t("printers.profiles"));
+  const receipts = t("printers.use_receipt");
+  const profilesField = q(el, "[data-test=printer-used-by-profiles]")!;
+  expect(
+    [...profilesField.querySelectorAll("[data-test^=printer-used-by-profile-]")].map((line) =>
+      line.textContent!.trim(),
+    ),
+  ).toEqual([
+    fill("printers.used_by_profile", { profile: "Camareros", uses: receipts }),
+    fill("printers.used_by_profile", { profile: "Mostrador", uses: receipts }),
+  ]);
+  expect(profilesField.previousElementSibling!.textContent!.trim()).toBe(t("nav.device_profiles"));
   // A device's heartbeat changes `devices`; the offers do not read it.
   liveData.invalidate([{ type: "devices", id: "seen" }]);
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
   vi.mocked(api.listPrinterProfiles).mockResolvedValue([printerProfiles[0]!]);
   liveData.invalidate([{ type: "device_profile_printers", id: "changed" }]);
-  await vi.waitFor(() => expect(text(el, "[data-test=printer-profiles]")).toBe("Camareros"));
+  await vi.waitFor(() =>
+    expect(text(el, "[data-test=printer-used-by-profiles]")).toBe(
+      fill("printers.used_by_profile", { profile: "Camareros", uses: receipts }),
+    ),
+  );
 });
+
+const usedByProfiles: PrinterProfileOffer[] = [
+  {
+    printerId: "p1",
+    pagePrinterId: null,
+    profileId: "dp1",
+    profileName: "Camareros",
+    roles: ["receipt", "cash_drawer"],
+    departmentId: "d1",
+    departmentName: "Sala",
+  },
+  {
+    printerId: "p1",
+    pagePrinterId: null,
+    profileId: "dp2",
+    profileName: "Mostrador",
+    roles: ["receipt", "payment_slip", "invoice"],
+    departmentId: "d1",
+    departmentName: "Sala",
+  },
+  {
+    printerId: "p1",
+    pagePrinterId: null,
+    profileId: "dp3",
+    profileName: "Pantalla cocina",
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p2",
+    pagePrinterId: null,
+    profileId: "dp4",
+    profileName: "Terraza",
+    roles: ["receipt"],
+    departmentId: "d2",
+    departmentName: "Terraza",
+  },
+];
+
+const usedByStations: PrinterStationName[] = [
+  { printerId: "p1", stationId: "s1", stationName: "Barra" },
+  { printerId: "p2", stationId: "s2", stationName: "Plancha" },
+];
+
+async function openUsedBy(
+  canOpen: (screen: string) => boolean,
+  profiles: PrinterProfileOffer[] = usedByProfiles,
+  stations: PrinterStationName[] = usedByStations,
+): Promise<PrintersScreen> {
+  history.replaceState(null, "", "/manage/printers");
+  const api = stubApi({
+    listPrinterProfiles: vi.fn().mockResolvedValue(profiles),
+    listPrinterStationNames: vi.fn().mockResolvedValue(stations),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api, canOpen });
+  await flush(el);
+  await selectTab(el, "printers");
+  q(el, "[data-test=printer-row-p1]")!.click();
+  await flush(el);
+  return el;
+}
+
+it("says which profiles use the printer and for what, which departments they belong to, and which stations print to it", async () => {
+  const el = await openUsedBy(() => false);
+  const section = q(el, "[data-test=printer-section-used-by]")!;
+  expect(section.querySelector("h3")!.textContent!.trim()).toBe(t("printers.used_by"));
+  expect([...section.querySelectorAll("dt")].map((label) => label.textContent!.trim())).toEqual([
+    t("nav.device_profiles"),
+    t("printers.used_by_departments"),
+    t("printers.used_by_stations"),
+  ]);
+  expect(
+    [...section.querySelectorAll("[data-test^=printer-used-by-profile-]")].map((line) =>
+      line.textContent!.trim(),
+    ),
+  ).toEqual([
+    fill("printers.used_by_profile", {
+      profile: "Camareros",
+      uses: `${t("printers.use_receipt")}, ${t("printers.use_cash_drawer")}`,
+    }),
+    fill("printers.used_by_profile", {
+      profile: "Mostrador",
+      uses: `${t("printers.use_receipt")}, ${t("printers.use_payment_slip")}, ${t("printers.use_invoice")}`,
+    }),
+    fill("printers.used_by_profile", {
+      profile: "Pantalla cocina",
+      uses: t("printers.use_receipt"),
+    }),
+  ]);
+  expect(text(el, "[data-test=printer-used-by-departments]")).toBe("Sala");
+  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Barra");
+  expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+  expect(section.querySelector("a")).toBeNull();
+});
+
+it("links each name to its screen only where the person may open it", async () => {
+  const el = await openUsedBy((screen) => screen === "venue-operations");
+  const section = q(el, "[data-test=printer-section-used-by]")!;
+  const links = [...section.querySelectorAll("a")];
+  expect(links.map((link) => [link.textContent!.trim(), link.getAttribute("href")])).toEqual([
+    ["Sala", "/manage/venue-operations/department/d1"],
+  ]);
+  expect(text(el, "[data-test=printer-used-by-profile-dp1]")).toBe(
+    fill("printers.used_by_profile", {
+      profile: "Camareros",
+      uses: `${t("printers.use_receipt")}, ${t("printers.use_cash_drawer")}`,
+    }),
+  );
+  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Barra");
+  cleanupWidgets();
+
+  const all = await openUsedBy(() => true);
+  expect(
+    [...q(all, "[data-test=printer-section-used-by]")!.querySelectorAll("a")].map((link) => [
+      link.textContent!.trim(),
+      link.getAttribute("href"),
+    ]),
+  ).toEqual([
+    ["Camareros", "/manage/device-profiles/profile/dp1"],
+    ["Mostrador", "/manage/device-profiles/profile/dp2"],
+    ["Pantalla cocina", "/manage/device-profiles/profile/dp3"],
+    ["Sala", "/manage/venue-operations/department/d1"],
+    ["Barra", "/manage/prep-stations/view/stations"],
+  ]);
+});
+
+it.each([
+  [1280, 800],
+  [390, 844],
+])(
+  "gives each Used by link a full-height touch target no other link covers at %ix%i",
+  async (w, h) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(w, h);
+    try {
+      const el = await openUsedBy(() => true);
+      const links = [...q(el, "[data-test=printer-section-used-by]")!.querySelectorAll("a")];
+      expect(links).toHaveLength(5);
+      for (const link of links) {
+        link.scrollIntoView({ block: "center" });
+        const box = link.getBoundingClientRect();
+        const x = (box.left + box.right) / 2;
+        const middle = (box.top + box.bottom) / 2;
+        for (const y of [middle - 21, middle + 21]) {
+          const hit = el.shadowRoot!.elementFromPoint(x, y);
+          expect(
+            hit !== null && link.contains(hit),
+            `${link.textContent!} at ${y} hit ${hit?.textContent}`,
+          ).toBe(true);
+        }
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);
+
+it("says nothing uses a printer that no profile or station names", async () => {
+  const el = await openUsedBy(
+    () => true,
+    usedByProfiles.filter(({ printerId }) => printerId !== "p1"),
+    usedByStations.filter(({ printerId }) => printerId !== "p1"),
+  );
+  const section = q(el, "[data-test=printer-section-used-by]")!;
+  expect(section.querySelector("h3")!.textContent!.trim()).toBe(t("printers.used_by"));
+  expect(section.querySelector("dl dt")).toBeNull();
+  expect(text(el, "[data-test=printer-used-by-nothing]")).toBe(t("printers.used_by_nothing"));
+});
+
+async function openUsedByWith(api: DashboardApi): Promise<PrintersScreen> {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  expect(q(el, "[data-test=printer-section-used-by]")).not.toBeNull();
+  return el;
+}
+
+it("does not say nothing uses a printer while the stations are still being read", async () => {
+  let answer!: (stations: PrinterStationName[]) => void;
+  const el = await openUsedByWith(
+    stubApi({
+      listPrinterProfiles: vi.fn().mockResolvedValue([]),
+      listPrinterStationNames: () => new Promise((resolve) => (answer = resolve)),
+    }),
+  );
+  expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+  answer([{ printerId: "p1", stationId: "s1", stationName: "Barra" }]);
+  await flush(el);
+  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Barra");
+  expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+});
+
+it("says nothing uses a printer only once the profiles have answered too", async () => {
+  let answer!: (profiles: PrinterProfileOffer[]) => void;
+  const el = await openUsedByWith(
+    stubApi({
+      listPrinterProfiles: () => new Promise((resolve) => (answer = resolve)),
+      listPrinterStationNames: vi.fn().mockResolvedValue([]),
+    }),
+  );
+  expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+  answer([]);
+  await flush(el);
+  expect(text(el, "[data-test=printer-used-by-nothing]")).toBe(t("printers.used_by_nothing"));
+});
+
+it.each(["listPrinterProfiles", "listPrinterStationNames"] as const)(
+  "does not say nothing uses a printer when %s fails",
+  async (failing) => {
+    const el = await openUsedByWith(
+      stubApi({
+        listPrinterProfiles: vi.fn().mockResolvedValue([]),
+        listPrinterStationNames: vi.fn().mockResolvedValue([]),
+        [failing]: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      }),
+    );
+    expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+    expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+  },
+);
 
 it("reopens printer status from its URL and reflects a saved drawer choice", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1?keep=yes");

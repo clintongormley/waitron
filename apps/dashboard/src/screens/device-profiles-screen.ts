@@ -11,6 +11,9 @@ import {
   formMessageStyles,
   draftScopeFor,
   saveActionState,
+  UrlStateController,
+  encodePathSegment,
+  navigationGuardFor,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -28,6 +31,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
+import { dashboardPath } from "../navigation.js";
 import { ROLES, a4Choices, printerLabel, roleName } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 // A local mirror keeps the layouts barrel's database imports out of the browser bundle.
@@ -529,6 +533,52 @@ export class DeviceProfilesScreen extends LitElement {
   );
 
   @state() private mode: "list" | "editor" = "list";
+  /** A `profile` in the path names the profile whose editor is open, written and cleared by
+   * replacing, so Back still leaves the screen. */
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "device-profiles") return;
+      const before = this.#addressProfile;
+      this.#linkedProfile = this.#addressProfile = this.#url.read("profile");
+      if (this.#linkedProfile === null) {
+        if (before !== null) {
+          if (this.mode === "editor" || this.#openingId !== null) this.#closeEditor(false);
+        } else if (this.mode === "editor" && this.editingId !== null)
+          this.#nameKeptProfile(this.editingId);
+      } else if (this.#profilesRead) this.#openLinkedProfile();
+    },
+    dashboardPath,
+  );
+  #linkedProfile: string | null = null;
+  /** The `profile` word as this screen last read or wrote it. A new profile's editor is named by
+   * none, so only the word going away closes an editor. */
+  #addressProfile: string | null = null;
+
+  #writeProfileWord(profile: string | null): void {
+    void this.#url.write({ profile }, true);
+    if (this.#url.read("dashboard") === "device-profiles")
+      this.#addressProfile = this.#url.read("profile");
+  }
+  #profilesRead = false;
+  /** The profile whose editor is being read, until the read lands. */
+  #openingId: string | null = null;
+
+  /** An id naming no profile opens nothing, and leaves the path rather than sitting in it. */
+  #openLinkedProfile(): void {
+    const id = this.#linkedProfile;
+    if (id === null) return;
+    this.#linkedProfile = null;
+    if (id === this.#openingId || (this.mode === "editor" && id === this.editingId)) return;
+    if (this.profiles.some((profile) => profile.id === id)) void this.#openEditor(id);
+    else this.#writeProfileWord(null);
+  }
+
+  #closeEditor(writeUrl = true): void {
+    this.#clearDraft();
+    this.mode = "list";
+    if (writeUrl && this.#url.read("profile") !== null) this.#writeProfileWord(null);
+  }
 
   @state() private profiles: DeviceProfile[] = [];
 
@@ -666,6 +716,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#clearDraft();
     this.narrowed = [];
     this.mode = "list";
+    this.#profilesRead = false;
     super.disconnectedCallback();
   }
 
@@ -680,6 +731,8 @@ export class DeviceProfilesScreen extends LitElement {
       await Promise.all([
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.profiles = value;
+          this.#profilesRead = true;
+          this.#openLinkedProfile();
         }),
         this.#queries
           .watch("listPrinters", [], (value) => {
@@ -991,6 +1044,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#readerScope?.dispose();
     this.#readerScope = undefined;
     this.#leave = undefined;
+    this.#openingId = null;
     this.editingId = null;
     this.draftName = "";
     this.draftCapabilities = [];
@@ -1098,6 +1152,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#clearErrorOnOpen();
     this.#clearDraft();
     const opened = this.#opened;
+    this.#openingId = id;
     try {
       const [profile, kitchenScreens, initialChoices] = await Promise.all([
         this.api.getDeviceProfile(id),
@@ -1105,6 +1160,7 @@ export class DeviceProfilesScreen extends LitElement {
         this.#watchScopeChoices(),
       ]);
       if (opened !== this.#opened) return;
+      this.#openingId = null;
       const choices = this.#latestScopeChoices ?? initialChoices;
       this.scopeChoices = choices;
       this.editingId = id;
@@ -1141,9 +1197,14 @@ export class DeviceProfilesScreen extends LitElement {
         this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
       this.mode = "editor";
       this.#registerDraft();
+      this.#writeProfileWord(id);
       void this.#loadReaders(id, this.#opened);
     } catch (error) {
-      if (opened === this.#opened) this.#showReadError(error);
+      if (opened === this.#opened) {
+        this.#openingId = null;
+        if (this.#url.read("profile") === id) this.#writeProfileWord(null);
+        this.#showReadError(error);
+      }
     }
   }
 
@@ -1455,8 +1516,7 @@ export class DeviceProfilesScreen extends LitElement {
   async #cancel(): Promise<void> {
     if (this.saving) return;
     const proceed = () => {
-      this.#clearDraft();
-      this.mode = "list";
+      this.#closeEditor();
       this.#showError(null);
     };
     if (this.#leave) await this.#leave.request({ scopes: [this], reason: "cancel", proceed });
@@ -1470,6 +1530,18 @@ export class DeviceProfilesScreen extends LitElement {
     this.#loaded = saved;
     this.#loadedKitchenScreens = structuredClone(submitted.kitchenScreens);
     this.#loadedEquipment = equipmentOf(submitted.printerLists);
+    this.#nameKeptProfile(saved.id);
+  }
+
+  /** A guarded write would ask the leave question whenever unsaved input is held. */
+  #nameKeptProfile(id: string): void {
+    if (this.#url.read("dashboard") !== "device-profiles" || this.#url.read("profile") === id)
+      return;
+    const guard = navigationGuardFor(window);
+    if (guard === undefined) return this.#writeProfileWord(id);
+    const url = new URL(guard.href);
+    url.pathname = `${dashboardPath.basePath}/device-profiles/profile/${encodePathSegment(id)}`;
+    guard.rewrite(url);
   }
 
   /**
@@ -1572,10 +1644,7 @@ export class DeviceProfilesScreen extends LitElement {
       scope?.commit(submitted);
       if (!(await this.#saveReaders(saved, submitted, readers, readerScope, active, turn))) return;
       if (scope?.isDirty() || readerScope?.isDirty()) this.#keepEditing(saved, submitted);
-      else {
-        this.#clearDraft();
-        this.mode = "list";
-      }
+      else this.#closeEditor();
       resultTurn = this.#saveTurn;
       const profiles = await this.api.listDeviceProfiles();
       if (this.isConnected && resultTurn === this.#saveTurn && (this.mode === "list" || active()))

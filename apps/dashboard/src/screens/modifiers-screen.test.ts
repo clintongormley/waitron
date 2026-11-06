@@ -458,6 +458,34 @@ describe("a path naming one list", () => {
     expect(history.length).toBe(before);
   });
 
+  it("keeps the editor and its shown refusal when the address comes back naming the same list", async () => {
+    history.replaceState(null, "", "/manage/modifiers/view/extras/list/e1");
+    const el = await mount(
+      api({
+        updateExtraList: vi
+          .fn()
+          .mockRejectedValue({ code: "extras.invalid", params: { field: "name" } }),
+      }),
+    );
+    await vi.waitFor(() => expect(extraForm(el).open).toBe(true));
+    extraForm(el).dispatchEvent(
+      new CustomEvent("wt-submit", {
+        detail: { value: { name: "Breads" } },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    const message = codeMessage("extras.invalid");
+    await vi.waitFor(() => expect(extraForm(el).fieldErrors.name).toBe(message));
+    history.replaceState(null, "", "/manage/profile");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    history.replaceState(null, "", "/manage/modifiers/view/extras/list/e1");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await el.updateComplete;
+    expect(extraForm(el).open).toBe(true);
+    expect(extraForm(el).fieldErrors.name).toBe(message);
+  });
+
   it("drops the list from the path when the tab changes, still as a history entry", async () => {
     history.replaceState(null, "", "/manage/modifiers/view/extras");
     history.pushState(null, "", "/manage/modifiers/view/options/list/o1");

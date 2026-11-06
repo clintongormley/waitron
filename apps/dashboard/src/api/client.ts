@@ -1210,11 +1210,22 @@ export interface Printer {
   active: boolean;
 }
 
-/** One profile offering one printer, on either of its lists. */
+/** One live profile listing one receipt or page printer, with the lists it is on. */
 export interface PrinterProfileOffer {
-  printerId: string;
+  printerId: string | null;
+  pagePrinterId: string | null;
   profileId: string;
   profileName: string;
+  roles: Exclude<EquipmentRole, "card_terminal">[];
+  departmentId: string | null;
+  departmentName: string | null;
+}
+
+/** One prep station printing to one printer. */
+export interface PrinterStationName {
+  printerId: string;
+  stationId: string;
+  stationName: string;
 }
 
 export interface PrinterInput {
@@ -3950,6 +3961,10 @@ export class DashboardApi {
 
   listPrinterProfiles(): Promise<PrinterProfileOffer[]> {
     return this.#request<PrinterProfileOffer[]>("/management-api/printer-profiles", "GET");
+  }
+
+  listPrinterStationNames(): Promise<PrinterStationName[]> {
+    return this.#request<PrinterStationName[]>("/management-api/printer-stations", "GET");
   }
 
   createPrinter(input: PrinterInput): Promise<{ id: string }> {

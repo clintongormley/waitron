@@ -8,7 +8,7 @@ import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
 import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
@@ -16,6 +16,7 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   drawerOpens,
+  kitchenStations,
   printAgents,
   printJobs,
   printPaperWidth,
@@ -23,6 +24,7 @@ import {
   printers,
   printTransport,
   readVenue,
+  stationPrinters,
   withTransaction,
   type Database,
   type Transaction,
@@ -81,7 +83,8 @@ import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { DEMO_PRINTER_KEY } from "./demo-printer.js";
-import { setPrinterPortable } from "@waitron/layouts";
+import { setPrinterPortable, type ProfilePrinterRole } from "@waitron/layouts";
+import { VENUE_SERVICE } from "./modules.js";
 import { readPrinterHolders } from "./device-equipment.js";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
 import { DISCOVERED_TTL_MS, isListed as listedAt, withinTtl } from "./discovery-listing.js";
@@ -1594,25 +1597,101 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // The printer detail page's "offered on profiles", under the printers screen's own permission.
+  // The printer details' "Used by" group, under the printers screen's own permission.
   app.get("/management-api/printer-profiles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(await gated(sessionId, readPrinterProfileUses));
+    }),
+  );
+
+  app.get("/management-api/printer-stations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, (tx) =>
         tx
-          .selectDistinct({
-            printerId: deviceProfilePrinters.printerId,
-            profileId: deviceProfiles.id,
-            profileName: deviceProfiles.name,
+          .select({
+            printerId: stationPrinters.printerId,
+            stationId: kitchenStations.id,
+            stationName: kitchenStations.name,
           })
-          .from(deviceProfilePrinters)
-          .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
-          .where(isNotNull(deviceProfilePrinters.printerId))
-          .orderBy(deviceProfiles.name, deviceProfilePrinters.printerId),
+          .from(stationPrinters)
+          .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
+          .where(eq(kitchenStations.active, true))
+          .orderBy(kitchenStations.name, kitchenStations.id, stationPrinters.printerId),
       );
       return c.json(rows);
     }),
   );
+}
+
+const PROFILE_PRINTER_ROLE_ORDER = [
+  "receipt",
+  "payment_slip",
+  "cash_drawer",
+  "invoice",
+] as const satisfies readonly ProfilePrinterRole[];
+
+interface PrinterProfileUse {
+  printerId: string | null;
+  pagePrinterId: string | null;
+  profileId: string;
+  profileName: string;
+  roles: ProfilePrinterRole[];
+  departmentId: string | null;
+  departmentName: string | null;
+}
+
+/** One row per printer or page printer and live profile listing it, its roles in a fixed order. */
+async function readPrinterProfileUses(tx: Transaction): Promise<PrinterProfileUse[]> {
+  const rows = await tx
+    .select({
+      printerId: deviceProfilePrinters.printerId,
+      pagePrinterId: deviceProfilePrinters.pagePrinterId,
+      profileId: deviceProfiles.id,
+      profileName: deviceProfiles.name,
+      role: deviceProfilePrinters.role,
+    })
+    .from(deviceProfilePrinters)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+    .where(isNull(deviceProfiles.retiredAt))
+    .orderBy(
+      deviceProfiles.name,
+      deviceProfiles.id,
+      deviceProfilePrinters.printerId,
+      deviceProfilePrinters.pagePrinterId,
+    );
+  const uses = new Map<string, PrinterProfileUse>();
+  for (const row of rows) {
+    const key = `${row.profileId}/${row.printerId ?? ""}/${row.pagePrinterId ?? ""}`;
+    const use = uses.get(key);
+    if (use === undefined) {
+      uses.set(key, {
+        printerId: row.printerId,
+        pagePrinterId: row.pagePrinterId,
+        profileId: row.profileId,
+        profileName: row.profileName,
+        roles: [row.role],
+        departmentId: null,
+        departmentName: null,
+      });
+    } else use.roles.push(row.role);
+  }
+  const result = [...uses.values()];
+  for (const use of result)
+    use.roles.sort(
+      (a, b) => PROFILE_PRINTER_ROLE_ORDER.indexOf(a) - PROFILE_PRINTER_ROLE_ORDER.indexOf(b),
+    );
+  const profileIds = [...new Set(result.map((use) => use.profileId))];
+  const departments = new Map(
+    (await VENUE_SERVICE.readProfileDepartments(tx, profileIds)).map((d) => [d.profileId, d]),
+  );
+  for (const use of result) {
+    const department = departments.get(use.profileId);
+    use.departmentId = department?.departmentId ?? null;
+    use.departmentName = department?.departmentName ?? null;
+  }
+  return result;
 }
 
 function requirePickupRoles(value: unknown): ("receipt" | "payment_slip")[] {
