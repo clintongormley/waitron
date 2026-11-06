@@ -42,14 +42,14 @@ import { recallToDraft } from "./draft-recall.js";
 import { readBillLines, readOrderRevision } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { moveDishes } from "./testing/bill-action-fixture.js";
+import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { joinTables, splitTable } from "./testing/table-action-fixture.js";
+import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
 import {
   readChangesAfterSending,
   setChangesAfterSending,
@@ -2412,6 +2412,94 @@ describe("A803 waiting copy: kitchen paper", () => {
       const released = await releaseTarta(t);
       expect(released).toEqual([expect.arrayContaining(["1.000 x TARTA"])]);
       expect(released[0]![0]).not.toMatch(/\*\*\*/);
+    });
+
+    /** The party's bill-to-bill moves of Bill 2's waiting Tarta, each by its real writer. */
+    const BETWEEN_BILLS = {
+      "Split bill": async (t: Awaited<ReturnType<typeof paperTable>>) => {
+        const tarta = await lineOf(t.bill2, "Tarta");
+        const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
+        return (
+          await inTx(v, (tx) => splitBill(tx, v.cfg, t.bill2, [{ lineNo: tarta.lineNo }], command))
+        ).billId;
+      },
+      "Move dishes": async (t: Awaited<ReturnType<typeof paperTable>>) => {
+        const tarta = await lineOf(t.bill2, "Tarta");
+        const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
+        await inTx(v, (tx) => moveDishes(tx, v.cfg, t.bill2, t.bill1, [tarta.id], command));
+        return t.bill1;
+      },
+      "Transfer items": async (t: Awaited<ReturnType<typeof paperTable>>) => {
+        const tarta = await lineOf(t.bill2, "Tarta");
+        const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
+        await inTx(v, (tx) =>
+          transferItems(tx, v.cfg, t.bill2, t.bill1, [{ lineNo: tarta.lineNo }], command),
+        );
+        return t.bill1;
+      },
+      "Merge bills": async (t: Awaited<ReturnType<typeof paperTable>>) => {
+        const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
+        await inTx(v, (tx) => mergeBills(tx, v.cfg, t.bill1, t.bill2, command));
+        return t.bill1;
+      },
+    };
+
+    it.each(Object.keys(BETWEEN_BILLS) as (keyof typeof BETWEEN_BILLS)[])(
+      "A1327: %s taking the waiting tarta to another bill of the party lists it under HOLD and its release prints FIRE",
+      async (action) => {
+        const t = await waitingTable();
+        const fromNumber = await orderNumberOf(t.bill2);
+        const mark = (await printed(t.grill.printer)).length;
+
+        const to = await BETWEEN_BILLS[action](t);
+
+        expect((await lineOf(to, "Tarta")).groupId).toBe(t.g);
+        const toNumber = await orderNumberOf(to);
+        expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+          movedSlip(t.grill.name, `${words.order} ${fromNumber} -> ${toNumber}`, t.label, t.label, [
+            ...(action === "Merge bills" ? ["1.000 x BURG"] : []),
+            words.hold,
+            `${words.group} 3 · DESSERTS`,
+            "1.000 x TARTA",
+          ]),
+        ]);
+        const releaseMark = (await printed(t.grill.printer)).length;
+        await release(t.grill.id, (await lineOf(to, "Tarta")).id);
+        expect((await printed(t.grill.printer)).slice(releaseMark)).toEqual([
+          fireTicket(t.grill.name, t.label, toNumber, 3, "1.000 x TARTA"),
+        ]);
+      },
+    );
+
+    it("A1327: combined into the party at the table it moves to, the waiting tarta keeps its group, is listed under HOLD and its release prints FIRE", async () => {
+      const t = await waitingTable();
+      const label = `Mesa 8 (${t.n})`;
+      const tableId = await v.table(label);
+      const other = await seat(v, tableId);
+      await orderForParty(v, other.partyId, ["Agua"]);
+      const fromNumber = await orderNumberOf(t.bill2);
+      const mark = (await printed(t.grill.printer)).length;
+
+      const moving = {
+        ...(await commandFor(v, t.partyId)),
+        otherPartyId: other.partyId,
+        expectedOtherPartyRevision: await revisionOf(v, other.partyId),
+      };
+      await inTx(v, (tx) => moveGuests(tx, v.cfg, t.partyId, tableId, moving));
+
+      expect((await lineOf(t.bill2, "Tarta")).groupId).toBe(t.g);
+      expect(await orderNumberOf(t.bill2)).toBe(fromNumber);
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+        movedSlip(t.grill.name, `${words.order} ${fromNumber}`, t.label, label, [
+          "1.000 x BURG",
+          words.hold,
+          `${words.group} 3 · DESSERTS`,
+          "1.000 x TARTA",
+        ]),
+      ]);
+      expect(await releaseTarta(t)).toEqual([
+        fireTicket(t.grill.name, label, fromNumber, 3, "1.000 x TARTA"),
+      ]);
     });
   });
 });

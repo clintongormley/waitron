@@ -274,45 +274,28 @@ Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitche
   when it became Ready, or is it enough that a cook can collapse Ready to a strip that draws no
   cards (slice 9)? Seen in A797 slice 8's LOOK.
 
-## A1327. A dish waiting for the pass that changes table gets no MOVED line, and its later ticket prints with no FIRE mark
+## A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark
 
-**A1327. A dish waiting for the pass that changes table gets no MOVED line, and its later ticket prints with no FIRE mark (seen in A803 slice 4b's review; predates it).** The dish here is one the waiter has fired
-and the pass has not yet released (Requested), and whose HOLD ticket has already printed. The review
-of 4b found, by running it, that when its bill changes table:
+**A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327).** The dish is one the waiter has fired at a station
+that waits for the pass, and the pass has not yet released, whose HOLD ticket has already printed.
+A1327 lists it on the MOVED slip and marks its release FIRE when its bill goes to another table or
+another bill. Moving the bill to the counter does neither:
 
-- the MOVED slip has no line for it. `readSentItems` (`apps/server/src/kitchen-print.ts`) builds its
-  list of what a station already has from dishes the pass has released and from dishes of a group
-  still held. This dish is neither: it is not released, and its group is no longer held.
-- its later release ticket has no FIRE mark, because the group now holding it has no record of HOLD
-  paper.
+- `moveBill`'s counter branch and `moveSettledBillToCounter` (`apps/server/src/move-bill.ts`) leave
+  the bill's dishes with no group;
+- the pass then releases the dish by its bill, not a group (`apps/server/src/pass-card.ts`);
+- the record of which stations have a group's HOLD paper is per group (`order_group_hold_stations`).
 
-A throwaway probe fired a held group at a station that waits for the pass, moved the bill to a free
-table, and released the dish with the real `releasePassItems`. It printed:
+So the slip cannot list it and the release cannot mark it without a per-dish record, which is a
+schema change, held by A1308 until A760 lands.
 
-```
-before move: {"requested":true,"fired":false}
-slip:    ["*** MOVIDO ***","Paper grill 3","Pedido 6","De: Mesa 5 (3)","A:  Mesa 8 (3)","15:41","1.000 x BURG",""]
-release: ["Paper grill 3","Mesa 8 (3)","6","15:41","GRUPO 1 · DESSERTS","1.000 x TARTA",""]
-```
+The "A1327 limit" case in `apps/server/src/waiting-course-copy.test.ts` pins what `moveBill`'s
+counter branch prints today. The slip:
+`["*** MOVIDO ***",…,"A:  (mostrador)",…,"1.000 x BURG",""]`; the release ticket has no `***`
+header: `[<station>,"Mesa 5 (…)",<order number>,<time>,"1.000 x TARTA",""]`. The kitchen screen gets
+a `moved` notice for the burger and none for the tarta. `moveSettledBillToCounter` was not run.
 
-So the cook holds a HOLD ticket for a tarta at Mesa 5, is told nothing about it moving, and then gets
-a plain tarta ticket for Mesa 8, which a cook can read as a second dish.
-
-The probe was run at the branch tip of the time (`71adba2863`; the one later commit before this entry,
-`f86819f209`, changed tests only) and again with `apps/server/src` checked out from `9c80824143`, the
-main commit 4b was built on. The second run printed the same slip and the same unmarked ticket
-(`Tests 1 passed | 16 skipped (17)`). So this predates 4b; how far back it goes was not traced.
-
-4b adds one more way to reach it: fire a copy at such a station, then move the bill again. That slip
-read, with the review's own `…` for the lines it left out,
-`["*** MOVIDO ***",…,"De: Mesa 8 (7)","A:  Mesa 9 (7)","15:26","1.000 x BURG",""]`, and again names
-no tarta. The release ticket after that second route was not quoted.
-
-2026-11-06, A803 4c: a single dish in that state that Split a table moves has the same gap, because
-its MOVED slip's list also comes from `readSentItems`, which 4c did not change (read, not run).
-
-Whether a cook may be left with two tickets for one dish is the owner's to judge. Nothing is decided
-and 4b changes none of it.
+Whether a cook may be left with two tickets for one dish here is the owner's to judge.
 
 ## A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print
 
