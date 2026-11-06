@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -316,7 +317,7 @@ describe("a joined table come apart", () => {
     }));
     tables.push({
       key: "long",
-      label: `Long table ${randomUUID().slice(0, 6)}`,
+      label: `Long table ${floorLabelSuffix()}`,
       seats: 10,
       fixed: false,
       placement: { x: 0, y: 20, width: 6, height: 2, shape: "rect", rotation: 0 },
@@ -339,7 +340,7 @@ describe("a layout that stands a joined table's tables", () => {
   /** Standard places 4 and 5 and leaves 4+5 off; Dinner places 4+5 and leaves 4 and 5 off; reset onto Standard. */
   async function underStandard(): Promise<Record<"t4" | "t5" | "t45", string>> {
     const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
-    const label = (base: string) => `${base} ${randomUUID().slice(0, 6)}`;
+    const label = (base: string) => `${base} ${floorLabelSuffix()}`;
     const save = async (setId: string, tables: ZonePlanSave["tables"]) => {
       const plan = await inTx(v, (tx) => readLayout(tx, { setId, zoneId: d.zoneId }));
       return inTx(v, (tx) =>

@@ -3,6 +3,23 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## Shortened random table labels outside the floor suites
+
+The 6 November 2026 floor-label review found shortened UUIDs in table labels in
+`device-levers.test.ts`, `till-api.expo-board.test.ts`, `till-api.profile-zones.test.ts`,
+`order-groups.test.ts` and `till-api.tables.test.ts`, under `apps/server/src`.
+These sites were inspected, not tested with forced collisions. Trace each fixture's database
+lifetime, reproduce repeated suffixes through its real table writer, and replace the label
+suffix where needed without changing the production uniqueness guard or existing assertions.
+
+## Floor-plan short-name fixtures
+
+`apps/server/src/floor-plan.test.ts` retains two four-character UUID suffix sites for short
+names, separate from the full table labels. The 6 November 2026 review forced a repeated suffix
+and reported one failed case. Reproduce the failure and check the reported refusal before fixing
+these fixtures. Keep the five-character short-name limit, the case-insensitive comparisons and
+every existing refusal assertion. The limit does not require a random suffix.
+
 ## Three adjustment-portion refusal checks also pass with shortened ID lists
 
 A974's 5 November 2026 naming review observed that three cases in

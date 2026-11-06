@@ -25,12 +25,12 @@ useVenueDb({
 afterEach(() => vi.mocked(crypto.randomUUID).mockReset());
 
 it.each([
-  { label: "Counter 3", sharedPrefix: true },
-  { label: undefined, sharedPrefix: true },
-  { label: "Counter 3", sharedPrefix: false },
-  { label: undefined, sharedPrefix: false },
+  { kind: "explicit", label: "Counter 3", sharedPrefix: true },
+  { kind: "key-derived", label: undefined, sharedPrefix: true },
+  { kind: "explicit", label: "Counter 3", sharedPrefix: false },
+  { kind: "key-derived", label: undefined, sharedPrefix: false },
 ])(
-  "keeps $label table labels distinct across zones with sharedPrefix=$sharedPrefix",
+  "keeps $kind table labels distinct across zones with sharedPrefix=$sharedPrefix",
   async ({ label, sharedPrefix }) => {
     vi.mocked(crypto.randomUUID).mockImplementation(() => {
       const serial = String(++nextUUID).padStart(12, "0");

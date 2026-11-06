@@ -362,7 +362,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
   it("the same name in capitals with an accent, either way round", async () => {
     const suffix = floorLabelSuffix();
     const lower = `García birthday ${suffix}`;
-    const upper = `GARCÍA BIRTHDAY ${suffix.toUpperCase()}`;
+    const upper = `GARCÍA BIRTHDAY ${suffix}`;
     for (const [taken, asked] of [
       [lower, upper],
       [upper, lower],

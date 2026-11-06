@@ -6344,6 +6344,16 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Shortened random table labels remain outside the floor suites.** Inspect the non-floor
+  fixture sites and reproduce repeated suffixes before replacing them; preserve the existing
+  uniqueness and refusal checks.
+  [Detail](backlog/ci.md#shortened-random-table-labels-outside-the-floor-suites).
+
+- **Floor-plan short-name fixtures still draw only four random characters.** A review probe
+  forcing one repeated suffix failed a case. Reproduce it and replace the fixture suffix while
+  retaining the five-character limit and the original case-insensitive refusal checks.
+  [Detail](backlog/ci.md#floor-plan-short-name-fixtures).
+
 - **A change to the till alone does not run the handover's end-to-end test.** The test loads the
   till's router by path, and a till-only change selects no `@waitron/server` (`scripts/changed-scope.mjs`),
   so it can pass and a main push can reuse that pass; the next server pull request then fails for a
