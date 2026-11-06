@@ -1874,10 +1874,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the amount in its unit, as paper does.
 
 - **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327).** At the counter the dish
-  leaves its group, and the record of HOLD paper is kept per group, so neither can be had without a
-  per-dish record: a schema change, held by A1308 until A760 lands. Whether a cook may be left with
-  two tickets here is the owner's to judge.
+  leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
+  record: a schema change, held by A1308 until A760 lands. Whether a cook may be left with two
+  tickets here is the owner's to judge.
   [Detail](backlog/kitchen.md#a1368-a-dish-waiting-for-the-pass-whose-hold-ticket-printed-moved-to-the-counter-still-gets-no-moved-line-and-no-fire-mark)
+
+- **A1369. A reprint of a bill's kitchen tickets leaves out a dish waiting for the pass whose HOLD ticket printed (seen in A1327's review; predates it).**
+  The dish is one whose HOLD ticket printed, then fired at a station that waits for the pass and not
+  yet released. Reprinting its bill prints only the bill's other dishes: `readReprintParts`
+  (`apps/server/src/kitchen-print.ts`) reads held work through `readOnHoldTickets` only. Decide
+  whether a reprint lists it, and how it is marked.
 
 - **A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print (seen in A803 slice 4b's look; predates it).** They say «marcada FIRE» and «HOLD CHANGED»
   where the paper prints `*** MARCHAR ***` and `EN ESPERA CAMBIADO`.

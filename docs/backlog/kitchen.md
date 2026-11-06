@@ -276,24 +276,23 @@ Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitche
 
 ## A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark
 
-**A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327).** The dish is one the waiter has fired at a station
-that waits for the pass, and the pass has not yet released, whose HOLD ticket has already printed.
-A1327 lists it on the MOVED slip and marks its release FIRE when its bill goes to another table or
-another bill. Moving the bill to the counter does neither:
+**A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327).** The dish is one whose HOLD ticket has printed, which
+the waiter then fired at a station that waits for the pass, and which the pass has not yet
+released. When its bill goes to another table or another bill, the MOVED slip lists it and its
+release is marked FIRE; moving the bill to the counter does neither:
 
 - `moveBill`'s counter branch and `moveSettledBillToCounter` (`apps/server/src/move-bill.ts`) leave
   the bill's dishes with no group;
 - the pass then releases the dish by its bill, not a group (`apps/server/src/pass-card.ts`);
 - the record of which stations have a group's HOLD paper is per group (`order_group_hold_stations`).
 
-So the slip cannot list it and the release cannot mark it without a per-dish record, which is a
-schema change, held by A1308 until A760 lands.
+The fix proposed is a per-dish record of HOLD paper, which is a schema change, held by A1308 until
+A760 lands.
 
-The "A1327 limit" case in `apps/server/src/waiting-course-copy.test.ts` pins what `moveBill`'s
-counter branch prints today. The slip:
-`["*** MOVIDO ***",…,"A:  (mostrador)",…,"1.000 x BURG",""]`; the release ticket has no `***`
-header: `[<station>,"Mesa 5 (…)",<order number>,<time>,"1.000 x TARTA",""]`. The kitchen screen gets
-a `moved` notice for the burger and none for the tarta. `moveSettledBillToCounter` was not run.
+The two "A1368" cases in `apps/server/src/waiting-course-copy.test.ts` pin both counter paths. The
+kitchen screen differs between them: `moveBill`'s counter branch gives it a `moved` notice for the
+burger only, while `moveSettledBillToCounter` gives one for the tarta as well, with the slip still
+listing only the burger.
 
 Whether a cook may be left with two tickets for one dish here is the owner's to judge.
 

@@ -519,7 +519,8 @@ export async function takeIntoParty(
  * its group and its id is returned in `heldLineIds`, for the caller to give it a copy of the group
  * at the party it joins ({@link copyHeldGroups}). Recalled sources travel as unsent draft rows.
  * Sent dishes leave their groups, keeping their ticket and served state, except, under
- * `keepWaiting`, those waiting for the pass on HOLD paper ({@link waitingDishesOnHoldPaper}), which
+ * `keepWaiting`, those waiting for the pass in a group where one of this bill's dishes, or an extra
+ * of one, waits at a station with the group's HOLD paper ({@link waitingDishesOnHoldPaper}), which
  * stay and are returned in `waitingLineIds` for {@link copyWaitingGroups}. `firers` maps each dish
  * that was in a fired group, by line id, to the person or kitchen display that fired it.
  */

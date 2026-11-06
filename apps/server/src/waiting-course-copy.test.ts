@@ -28,6 +28,7 @@ import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createCourse, createStation } from "./kitchen.js";
 import {
   copyHeldGroups,
+  copyWaitingGroups,
   fireGroup,
   readCurrentOrders,
   readHeldCounts,
@@ -48,6 +49,9 @@ import { releasePassItems, type PassActor } from "./pass-release.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
+import { moveSettledBillToCounter } from "./move-bill.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
 import {
@@ -768,6 +772,197 @@ describe("A803 waiting copy: copyHeldGroups", () => {
 
     expect((await groupRow(copies.get(g)!)).remindAt).toBeNull();
     expect((await groupRow(g)).remindAt).toBe(snoozed);
+  });
+});
+
+describe("A1327 waiting copy: copyWaitingGroups", () => {
+  const stations: string[] = [];
+  let stationNumber = 0;
+  afterEach(async () => {
+    await inTx(v, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: false }, stations);
+      await setStationsWaitForPass(tx, false, stations);
+    });
+    stations.length = 0;
+  });
+
+  /**
+   * Held group G of Flan (Pastry), Tarta (Grill) and Paella (Fryer), fired with every station
+   * waiting for the pass and only Grill and Pastry printing held work: each dish waits, Flan and
+   * Tarta on HOLD paper. Tarta and Paella then move to Bill 2, keeping G.
+   */
+  async function waitingGroup() {
+    const n = ++stationNumber;
+    const grill = await stationWithPrinter(`Waiting grill ${n}`, ["Tarta"]);
+    const pastry = await stationWithPrinter(`Waiting pastry ${n}`, ["Flan"]);
+    const fryer = await stationWithPrinter(`Waiting fryer ${n}`, ["Paella"]);
+    stations.push(grill, pastry, fryer);
+    await inTx(v, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true }, [grill, pastry]);
+      await setStationsWaitForPass(tx, true, [grill, pastry, fryer]);
+    });
+    const a = await seatWith([{ names: ["Flan", "Tarta", "Paella"], release: "hold" }]);
+    const g = (await lineOf(a.billId, "Flan")).groupId!;
+    expect(await holdStationsOf(g)).toEqual([grill, pastry].sort());
+    await fire(a.partyId, g);
+    const bill2 = await moveToNewBill(a.partyId, a.billId, [
+      (await lineOf(a.billId, "Tarta")).id,
+      (await lineOf(a.billId, "Paella")).id,
+    ]);
+    const cake = await lineOf(bill2, "Tarta");
+    const rice = await lineOf(bill2, "Paella");
+    for (const dish of [cake, rice])
+      expect(await kitchenItemOf(dish.id)).toMatchObject({
+        requestedAt: expect.any(String),
+        firedAt: null,
+      });
+    return { ...a, g, bill2, cake, rice, grill, pastry, fryer };
+  }
+
+  async function copyWaiting(billId: string, from: string, to: string, lineIds: string[]) {
+    return inTx(v, async (tx) => {
+      await reseatBill(tx, billId, to);
+      return copyWaitingGroups(tx, from, to, lineIds, MOVER);
+    });
+  }
+
+  it("A1327 waiting copy: copyWaitingGroups makes a fired copy carrying its source's firing and HOLD time, and only the HOLD stations a moving dish waits at", async () => {
+    const w = await waitingGroup();
+    const extra = await addExtra(w.bill2, w.cake.id);
+    const cakeItem = await kitchenItemOf(w.cake.id);
+    await inTx(v, (tx) =>
+      tx.insert(ticketItems).values({
+        ...cakeItem,
+        id: randomUUID(),
+        workingOrderLineId: extra,
+        stationId: w.pastry,
+        requestedAt: null,
+        firedAt: null,
+        state: "queued",
+      }),
+    );
+    const source = await groupRow(w.g);
+    expect(source).toMatchObject({ state: "fired", firedBy: expect.any(String) });
+    expect(source.holdPrintedAt).not.toBeNull();
+    expect(source.requestKind).not.toBe("next_course");
+    const b = await otherParty();
+    const [bFired] = await groupsOf(b);
+    const ticketsBefore = await ticketsOf([w.billId, w.bill2]);
+
+    const copies = await copyWaiting(w.bill2, w.partyId, b, [w.cake.id, w.rice.id]);
+
+    const copyId = copies.get(w.g)!;
+    expect([...copies]).toEqual([[w.g, copyId]]);
+    expect(await groupRow(copyId)).toEqual({
+      id: copyId,
+      partyId: b,
+      position: bFired!.position + 1,
+      displayNumber: bFired!.displayNumber + 1,
+      numberPartyId: b,
+      state: "fired",
+      firedAt: source.firedAt,
+      firedBy: source.firedBy,
+      firedByDeviceId: null,
+      submittedBy: source.submittedBy,
+      remindAt: null,
+      holdPrintedAt: source.holdPrintedAt,
+      requestKind: source.requestKind,
+      createdAt: source.createdAt,
+    });
+    expect(await holdStationsOf(copyId)).toEqual([w.grill]);
+    expect(await holdStationsOf(w.g)).toEqual([w.grill, w.pastry].sort());
+    expect((await linesOf(w.bill2)).map((line) => [line.id, line.groupId])).toEqual([
+      [w.cake.id, copyId],
+      [w.rice.id, copyId],
+      [extra, copyId],
+    ]);
+    expect((await lineOf(w.billId, "Flan")).groupId).toBe(w.g);
+    expect(await ticketsOf([w.billId, w.bill2])).toEqual(ticketsBefore);
+  });
+
+  it("A1327 waiting copy: copyWaitingGroups copies the kitchen display that fired its source", async () => {
+    const w = await waitingGroup();
+    const deviceId = v.cfg.origin.deviceId;
+    await inTx(v, (tx) =>
+      tx
+        .update(orderGroups)
+        .set({ firedBy: null, firedByDeviceId: deviceId })
+        .where(eq(orderGroups.id, w.g)),
+    );
+    const b = await otherParty();
+
+    const copies = await copyWaiting(w.bill2, w.partyId, b, [w.cake.id]);
+
+    expect(await groupRow(copies.get(w.g)!)).toMatchObject({
+      state: "fired",
+      firedBy: null,
+      firedByDeviceId: deviceId,
+    });
+  });
+
+  it("A1327 waiting copy: copyWaitingGroups writes one lines_moved event on each side, naming the mover", async () => {
+    const w = await waitingGroup();
+    const b = await otherParty();
+    const before = (await eventsOf(w.g)).length;
+
+    const copies = await copyWaiting(w.bill2, w.partyId, b, [w.cake.id, w.rice.id]);
+
+    const copyId = copies.get(w.g)!;
+    expect((await eventsOf(w.g)).slice(before)).toEqual([
+      {
+        id: expect.any(String),
+        partyId: w.partyId,
+        groupId: w.g,
+        kind: "lines_moved",
+        actorId: MOVER,
+        actorDeviceId: null,
+        detail: { lineIds: [w.cake.id, w.rice.id], to: copyId },
+        createdAt: expect.any(String),
+      },
+    ]);
+    expect(await eventsOf(copyId)).toEqual([
+      {
+        id: expect.any(String),
+        partyId: b,
+        groupId: copyId,
+        kind: "lines_moved",
+        actorId: MOVER,
+        actorDeviceId: null,
+        detail: { lineIds: [w.cake.id, w.rice.id], from: w.g, arrived: true },
+        createdAt: expect.any(String),
+      },
+    ]);
+  });
+
+  it("A1327 waiting copy: copyWaitingGroups keeps a fired source group the copy empties, writing no removed event", async () => {
+    const w = await waitingGroup();
+    const flan = await lineOf(w.billId, "Flan");
+    const command = await commandFor(v, w.partyId);
+    await inTx(v, (tx) =>
+      moveDishes(tx, v.cfg, w.billId, w.bill2, [flan.id], { ...command, partyId: w.partyId }),
+    );
+    const b = await otherParty();
+    const before = (await eventsOf(w.g)).length;
+
+    const copies = await copyWaiting(w.bill2, w.partyId, b, [flan.id, w.cake.id, w.rice.id]);
+
+    const copyId = copies.get(w.g)!;
+    expect((await linesOf(w.bill2)).map((line) => line.groupId)).toEqual([copyId, copyId, copyId]);
+    expect((await groupRow(w.g)).state).toBe("fired");
+    expect((await eventsOf(w.g)).slice(before).map((event) => event.kind)).toEqual(["lines_moved"]);
+  });
+
+  it("A1327 waiting copy: copyWaitingGroups ignores a dish of a held group it is given", async () => {
+    const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
+    const cake = await lineOf(a.billId, "Tarta");
+    const b = await otherParty();
+    const bGroupsBefore = await groupsOf(b);
+
+    const copies = await copyWaiting(a.billId, a.partyId, b, [cake.id]);
+
+    expect([...copies]).toEqual([]);
+    expect((await lineOf(a.billId, "Tarta")).groupId).toBe(cake.groupId);
+    expect(await groupsOf(b)).toEqual(bGroupsBefore);
   });
 });
 
@@ -2047,6 +2242,8 @@ describe("A803 waiting copy: kitchen paper", () => {
   });
 
   describe("A1327 a dish waiting for the pass on HOLD paper changes table", () => {
+    afterEach(() => inTx(v, (tx) => setStationsWaitForPass(tx, false, paperStations)));
+
     let passActor: PassActor | undefined;
 
     async function passDevice(): Promise<PassActor> {
@@ -2070,12 +2267,16 @@ describe("A803 waiting copy: kitchen paper", () => {
       return passActor;
     }
 
-    /** Releases, with the real `releasePassItems`, the pass card holding the line's ticket item. */
-    async function release(stationId: string, lineId: string) {
+    /**
+     * Releases, with the real `releasePassItems`, the pass card holding the line's ticket item, as
+     * the board scoped to `stationId` offers it; null reads every station's, as the pass device does.
+     */
+    async function release(stationId: string | null, lineId: string) {
       const item = await kitchenItemOf(lineId);
+      const stationIds = stationId === null ? null : [stationId];
       const card = await inTx(v, async (tx) =>
-        (await readScopedPassBoard(tx, { stationIds: [stationId], zoneIds: null })).toFire.find(
-          (found) => found.releaseTicketItemIds.includes(item.id),
+        (await readScopedPassBoard(tx, { stationIds, zoneIds: null })).toFire.find((found) =>
+          found.releaseTicketItemIds.includes(item.id),
         ),
       );
       expect(card).toBeDefined();
@@ -2225,7 +2426,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       ]);
     });
 
-    it("A1327: beside a waiting dish at the same station never on HOLD paper, only the tarta is corrected and marked FIRE", async () => {
+    it("A1327: beside a waiting dish at the same station never on HOLD paper, voiding that dish prints no HOLD correction and only the tarta's release is marked FIRE", async () => {
       const t = await waitingTable();
       await inTx(v, (tx) =>
         placeGroups(tx, v.cfg, t.partyId, {
@@ -2272,7 +2473,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect(burger[0]![0]).not.toMatch(/\*\*\*/);
     });
 
-    it("A1327 limit: moved to the counter, the waiting tarta is still left off the slip and released with no FIRE mark", async () => {
+    it("A1368: moved to the counter, the waiting tarta gets no moved notice, is left off the slip and is released with no FIRE mark", async () => {
       const t = await waitingTable();
       const mark = (await printed(t.grill.printer)).length;
       const noticesBefore = new Set((await movedNotices([t.bill2])).map((notice) => notice.id));
@@ -2294,6 +2495,136 @@ describe("A803 waiting copy: kitchen paper", () => {
           await orderNumberOf(t.bill2),
           expect.stringMatching(/^\d\d:\d\d$/),
           "1.000 x TARTA",
+          "",
+        ],
+      ]);
+    });
+
+    it("A1368: a paid bill moved to the counter gives the waiting tarta a moved notice but leaves it off the slip and releases it with no FIRE mark", async () => {
+      const t = await waitingTable();
+      await payWorkingOrder(
+        { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+        v.cfg,
+        { id: t.bill2, tender: { method: "cash", amount: "27.00" }, lines: [] },
+      );
+      const mark = (await printed(t.grill.printer)).length;
+      const noticesBefore = new Set((await movedNotices([t.bill2])).map((notice) => notice.id));
+
+      await inTx(v, async (tx) =>
+        moveSettledBillToCounter(
+          tx,
+          v.cfg,
+          t.bill2,
+          { partyId: t.partyId },
+          await readBillEditState(tx, t.bill2),
+        ),
+      );
+
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, [
+          "1.000 x BURG",
+        ]),
+      ]);
+      expect(
+        (await movedNotices([t.bill2])).filter((notice) => !noticesBefore.has(notice.id)),
+      ).toEqual([
+        { id: expect.any(String), lineName: "BURG", stationId: t.grill.id },
+        { id: expect.any(String), lineName: "TARTA", stationId: t.grill.id },
+      ]);
+      expect(await releaseTarta(t)).toEqual([
+        [
+          t.grill.name,
+          t.label,
+          await orderNumberOf(t.bill2),
+          expect.stringMatching(/^\d\d:\d\d$/),
+          "1.000 x TARTA",
+          "",
+        ],
+      ]);
+    });
+
+    /**
+     * {@link paperTable} with only Grill printing held work and Flan moved to Bill 2 beside the
+     * Tarta, both stations waiting for the pass, G fired: the Tarta waits on Grill's HOLD paper and
+     * the Flan at Pastry, which never had any.
+     */
+    async function mixedStationTable() {
+      const t = await paperTable(false, true);
+      const flan = await lineOf(t.bill1, "Flan");
+      const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
+      await inTx(v, (tx) => moveDishes(tx, v.cfg, t.bill1, t.bill2, [flan.id], command));
+      expect(await holdStationsOf(t.g)).toEqual([t.grill.id]);
+      await inTx(v, (tx) => setStationsWaitForPass(tx, true, [t.grill.id, t.pastry.id]));
+      await fire(t.partyId, t.g);
+      for (const name of ["Tarta", "Flan"])
+        expect(await kitchenItemOf((await lineOf(t.bill2, name)).id)).toMatchObject({
+          requestedAt: expect.any(String),
+          firedAt: null,
+        });
+      const table8 = `Mesa 8 (${t.n})`;
+      const noticesBefore = new Set((await movedNotices([t.bill2])).map((notice) => notice.id));
+      const moved = await moveBill2(t, table8);
+      expect((await lineOf(t.bill2, "Flan")).groupId).toBe(moved.copyId);
+      expect(await holdStationsOf(moved.copyId)).toEqual([t.grill.id]);
+      return { t, table8, noticesBefore, ...moved };
+    }
+
+    it("A1327: a dish of the same group waiting at a station never on HOLD paper is left off the slip, and voiding it prints no HOLD correction", async () => {
+      const { t, table8, partyId, marks, noticesBefore } = await mixedStationTable();
+
+      expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
+        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, [
+          "1.000 x BURG",
+          words.hold,
+          `${words.group} 2 · DESSERTS`,
+          "1.000 x TARTA",
+        ]),
+      ]);
+      expect((await printed(t.pastry.printer)).slice(marks.pastry)).toEqual([]);
+      expect(
+        (await movedNotices([t.bill2])).filter((notice) => !noticesBefore.has(notice.id)),
+      ).toEqual([
+        { id: expect.any(String), lineName: "BURG", stationId: t.grill.id },
+        { id: expect.any(String), lineName: "TARTA", stationId: t.grill.id },
+      ]);
+      await answerNoAllergies(partyId);
+
+      const beforeVoid = {
+        grill: (await printed(t.grill.printer)).length,
+        pastry: (await printed(t.pastry.printer)).length,
+      };
+      await inTx(v, async (tx) =>
+        cancelLine(tx, v.cfg, t.bill2, (await lineOf(t.bill2, "Flan")).lineNo),
+      );
+      expect((await printed(t.grill.printer)).slice(beforeVoid.grill)).toEqual([]);
+      expect((await printed(t.pastry.printer)).slice(beforeVoid.pastry)).toEqual([]);
+
+      expect(await releaseTarta(t)).toEqual([
+        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+      ]);
+    });
+
+    it("A1327: releasing the group's pass card marks the tarta FIRE and the dish of the same group never on HOLD paper with no FIRE mark", async () => {
+      const { t, table8, partyId } = await mixedStationTable();
+      await answerNoAllergies(partyId);
+      const mark = {
+        grill: (await printed(t.grill.printer)).length,
+        pastry: (await printed(t.pastry.printer)).length,
+      };
+
+      await release(null, (await lineOf(t.bill2, "Flan")).id);
+
+      expect((await printed(t.grill.printer)).slice(mark.grill)).toEqual([
+        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+      ]);
+      expect((await printed(t.pastry.printer)).slice(mark.pastry)).toEqual([
+        [
+          t.pastry.name,
+          table8,
+          await orderNumberOf(t.bill2),
+          expect.stringMatching(/^\d\d:\d\d$/),
+          `${words.group} 2 · DESSERTS`,
+          "1.000 x FLAN",
           "",
         ],
       ]);

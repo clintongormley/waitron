@@ -303,11 +303,11 @@ export interface SplitSelection {
  * {@link moveCheckedDishes} moves them, and the new bill numbers last, at the new party, so the
  * staying table's numbers keep no gap. Held dishes not recalled into a draft move to one held copy
  * of each of their groups, however many of the bills share it ({@link copyHeldGroups}), and
- * dishes waiting for the pass on HOLD paper to a fired copy of theirs ({@link copyWaitingGroups});
- * the rest of each bill's dishes group as that bill arrives ({@link groupArrivingDishes}). A
- * staying party whose family is left with no bill that is not abandoned is given a new empty one.
- * The answer's `billIds` are the new party's bills in number order, and `looseSourceIds` the bills
- * that lost loose dishes.
+ * dishes `waitingDishesOnHoldPaper` keeps in a fired group to a fired copy of theirs
+ * ({@link copyWaitingGroups}); the rest of each bill's dishes group as that bill arrives
+ * ({@link groupArrivingDishes}). A staying party whose family is left with no bill that is not
+ * abandoned is given a new empty one. The answer's `billIds` are the new party's bills in number
+ * order, and `looseSourceIds` the bills that lost loose dishes.
  */
 export async function splitTable(
   tx: Transaction,

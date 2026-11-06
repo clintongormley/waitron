@@ -765,9 +765,9 @@ export async function copyHeldGroups(
 }
 
 /**
- * {@link copyHeldGroups} for fired groups, whose copies are fired as their source was: for dishes
- * waiting for the pass on HOLD paper ({@link waitingDishesOnHoldPaper}), so the station their HOLD
- * paper is at is still recorded for the group the pass releases them from.
+ * {@link copyHeldGroups} for fired groups, whose copies are fired as their source was: for the
+ * dishes {@link waitingDishesOnHoldPaper} keeps in their group, so each of the source's HOLD
+ * stations at which a moving dish waits is still recorded for the copy the pass releases them from.
  */
 export async function copyWaitingGroups(
   tx: Transaction,
