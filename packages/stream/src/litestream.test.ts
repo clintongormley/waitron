@@ -33,8 +33,8 @@ function refusalOf(action: () => unknown): { code: string; params: unknown } | u
 }
 
 describe("the Litestream configuration", () => {
-  it("pins the version every measurement was taken on", () => {
-    expect(LITESTREAM_VERSION).toBe("0.5.17");
+  it("pins the version the box runs", () => {
+    expect(LITESTREAM_VERSION).toBe("0.5.18");
   });
 
   it("names the credentials by variable and holds no secret", () => {

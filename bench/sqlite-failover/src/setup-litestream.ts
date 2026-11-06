@@ -18,11 +18,11 @@ const RELEASE_API = `https://api.github.com/repos/benbjohnson/litestream/release
 type ReleaseAsset = { name: string; browser_download_url: string };
 
 /**
- * The asset is matched on its FULL name, never a substring. The `v0.5.17` release lists both
- * `litestream-0.5.17-darwin-arm64.tar.gz` (the CLI) and `litestream-vfs-v0.5.17-darwin-arm64.tar.gz`
- * (a different artefact), so a `includes("darwin-arm64")` test matches two assets and the one it
+ * The asset is matched on its FULL name, never a substring. The `v0.5.18` release lists both
+ * `litestream-0.5.18-darwin-arm64.tar.gz` (the CLI) and `litestream-vfs-v0.5.18-darwin-arm64.tar.gz`
+ * (a different artefact), so a `includes("darwin-arm64")` test matches four assets and the one it
  * picks depends on the order the API happens to return (measured against the release API,
- * 2026-09-18).
+ * 2026-11-06).
  *
  * The name is composed from this host rather than hardcoded, so a platform this rig has not been run
  * on fails on a missing asset instead of installing a darwin binary. Only darwin/arm64 has actually
@@ -31,9 +31,9 @@ type ReleaseAsset = { name: string; browser_download_url: string };
  * (`probes/linux-binaries.ts`) downloaded and ran the two Linux archives in Docker.
  *
  * `x64` maps to `x86_64` because that is what the CLI assets are called — the listing for this tag
- * holds `litestream-0.5.17-darwin-x86_64.tar.gz` and `litestream-0.5.17-linux-x86_64.tar.gz`, and
+ * holds `litestream-0.5.18-darwin-x86_64.tar.gz` and `litestream-0.5.18-linux-x86_64.tar.gz`, and
  * the only `amd64` names in it belong to the `litestream-vfs-…` artefact (read from the release API,
- * 2026-09-18).
+ * 2026-11-06).
  */
 function assetName(): string {
   const arch = process.arch === "x64" ? "x86_64" : process.arch;
