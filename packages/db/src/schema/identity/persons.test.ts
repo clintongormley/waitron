@@ -1,5 +1,6 @@
 import { is, SQL } from "drizzle-orm";
 import { getTableConfig, SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
+import { describe, expect, it } from "vitest";
 import { liveDisplayNameKey, loginEmailKey, pendingEmailKey, persons } from "./persons.js";
 
 const dialect = new SQLiteSyncDialect();
