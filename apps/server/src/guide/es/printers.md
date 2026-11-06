@@ -34,5 +34,4 @@ abrir sus detalles. **Activa** la enciende o la apaga al momento. **Editar** cam
 es de red, su dirección. **Calibrar impresora** repite la calibración.
 
 **Se usa en** muestra los perfiles de dispositivo que imprimen en ella y para qué, las estaciones de
-preparación que le envían comandas y los departamentos de esos perfiles. Cada nombre abre su
-pantalla.
+preparación que le envían comandas y los departamentos de esos perfiles.

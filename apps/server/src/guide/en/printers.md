@@ -33,4 +33,4 @@ Choose a printer's name in the **Printers** tab or the **Print Queue** to open i
 printer, its address. **Calibrate printer** runs calibration again.
 
 **Used by** lists the device profiles that print to it and for what, the prep stations that send it
-tickets, and the departments those profiles belong to. Each name opens its own screen.
+tickets, and the departments those profiles belong to.

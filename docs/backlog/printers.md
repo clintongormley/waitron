@@ -330,7 +330,7 @@ checked on the box).
 
 ## A405 — printer details and the print queue
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a window, landed #2492; PR 2, Used by, in this PR; PRs 3–4 to come).** A modal means the printer page is no longer a sub-page, so the owner
+- **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a window, landed #2492; PR 2 (Used by) done; PRs 3–4 to come).** A modal means the printer page is no longer a sub-page, so the owner
   dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
   3. **No way to pair a Bluetooth printer again after Unpair.** A succeeded Unpair switches the
      printer off (C109, #960), and the only way back is adding it again as a new printer. Offer

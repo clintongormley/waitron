@@ -448,9 +448,9 @@ invoices).
 
 Guide, appended to the Printer details section — English: "**Used by** lists the device profiles
 that print to it and for what, the prep stations that send it tickets, and the departments those
-profiles belong to. Each name opens its own screen." Spanish: "**Se usa en** muestra los perfiles
+profiles belong to." Spanish: "**Se usa en** muestra los perfiles
 de dispositivo que imprimen en ella y para qué, las estaciones de preparación que le envían
-comandas y los departamentos de esos perfiles. Cada nombre abre su pantalla."
+comandas y los departamentos de esos perfiles."
 
 ### PR 3 — dashboard
 
@@ -966,7 +966,7 @@ and list each in the commit.
 
 ## PR 2 — Where a printer is used
 
-### Task 7: The venue-service seat reads department names
+### Task 7: The venue-service seat reads each profile's department
 
 _2026-11-06: changed in Task 8's review from `readDepartmentNames` (names by department id, after
 `readProfileServiceScopes`) to `readProfileDepartments`, one query from profile to department,
@@ -977,16 +977,18 @@ because the old path also ran an allowed-zones query whose answer was thrown awa
   `readProfileDepartments(tx: Transaction, profileIds: readonly string[]): Promise<{ profileId: string; departmentId: string; departmentName: string }[]>`
   with a one-line doc: each named profile's department, switched off or not; a profile with none is absent
 - Modify: `packages/venue-service/src/profile-access.ts` — implement it beside
-  `readProfileServiceScopes` (`:257`): a `departments` select by id, no `active` filter
+  `readProfileServiceScopes` (`:257`): one join from each asked-for profile's
+  `device_profile_service_access` row to `departments`, no `active` filter
 - Modify: `packages/venue-service/src/service.ts` — import it with the others (`:107-112`) and put it
   on the contribution object (beside `readProfileServiceScopes`, `:228`)
 - Test: `packages/venue-service/src/profile-access.test.ts` (beside the `readProfileServiceScopes`
   cases, `:508`); and `packages/venue-service/src/service.test.ts`'s list of the contribution's
   method names (`:89`, compared exactly and sorted) gains `"readProfileDepartments"` at its sorted position
 
-- [ ] **Step 1: Write the failing test.** `it("reads the names of the departments asked for, switched off ones included, and nothing for an unknown id")`
-  — `useVenueDb`; seed two departments, switch one off; ask for both plus a random UUID: two rows,
-  names as seeded; an empty id list returns `[]` without a query error.
+- [ ] **Step 1: Write the failing test.** `it("reads each asked-for profile's department, switched off ones included, and nothing for a profile with none or an unknown id")`
+  — `useVenueDb`; give two profiles departments, switch one department off, give a third profile
+  none; ask for those plus a random UUID: one row per profile with a department, names as seeded;
+  an empty id list returns `[]` without a query error.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/venue-service exec vitest run src/profile-access.test.ts src/service.test.ts`
   — FAIL (no function; the method-name list differs).
 - [ ] **Step 3: Implement.** Use `inArray` and the store's chunking only if the id list can grow
@@ -995,7 +997,7 @@ because the old path also ran an allowed-zones query whose answer was thrown awa
   `pnpm --filter @waitron/venue-service exec tsc --noEmit`, `pnpm --filter @waitron/server exec tsc --noEmit`,
   and `pnpm exec vitest run scripts/module-seams.test.ts` — pass. Any test fake implementing
   `VenueServiceContribution` that fails to typecheck gains the method.
-- [ ] **Step 5: Commit** — `git commit -s -m "The venue-service seat reads department names by id (A405 point 5)"`.
+- [ ] **Step 5: Commit** — `git commit -s -m "The venue-service seat reads each profile's department (A405 point 5)"`.
 
 ### Task 8: The server says which profiles use a printer, for what, and which stations
 
