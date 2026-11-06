@@ -331,6 +331,7 @@ export class DraftSync {
   #commandAbort?: AbortController;
   #recoveryRequired = false;
   #correctingPlaces = false;
+  #saveAfterSend = false;
   #unlockRecovery?: () => void;
   readonly #unsubscribe: () => void;
 
@@ -483,11 +484,7 @@ export class DraftSync {
     if (status === this.store.billStatus) return;
     this.#cancelTimer();
     this.store.billStatus = status;
-    if (status === "open" && this.#unsaved && !this.#ended)
-      this.#timer = setTimeout(() => {
-        this.#timer = undefined;
-        void this.#save();
-      }, DRAFT_SAVE_DELAY_MS);
+    if (status === "open" && this.#unsaved) this.#scheduleSaveOfEdit();
   }
 
   get #billRefusal(): DraftRefused | undefined {
@@ -538,15 +535,7 @@ export class DraftSync {
         bounds?.waitLimitMs ?? limitMs,
         limit.signal,
       );
-      if (
-        !read &&
-        this.#unsaved &&
-        !this.#commanding &&
-        !this.#recoveryRequired &&
-        !this.#correctingPlaces &&
-        !this.store.sending
-      )
-        this.#scheduleSave();
+      if (!read && this.#unsaved) this.#scheduleSave();
       return read;
     } finally {
       limit.done();
@@ -642,7 +631,7 @@ export class DraftSync {
     this.#unlockRecovery?.();
     this.#unlockRecovery = undefined;
     this.#lockAuthority();
-    if (this.#unsaved && !this.store.editsLocked) this.#scheduleSave();
+    if (this.#unsaved) this.#scheduleSave();
     return true;
   }
 
@@ -886,16 +875,32 @@ export class DraftSync {
   }
 
   #onChange(): void {
-    if (this.#muted || this.#dropped || !this.store.dirty) return;
-    this.store.markPersisted();
-    this.#unsaved = true;
-    this.#localGeneration++;
+    if (this.#muted || this.#dropped) return;
+    if (this.store.dirty) {
+      this.store.markPersisted();
+      this.#unsaved = true;
+      this.#localGeneration++;
+      this.#scheduleSaveOfEdit();
+    } else if (this.#saveAfterSend && !this.#sendUnderWay) {
+      this.#saveAfterSend = false;
+      if (this.#unsaved) this.#scheduleSave();
+    }
+  }
+
+  get #sendUnderWay(): boolean {
+    return this.store.sending || this.#correctingPlaces;
+  }
+
+  /** For a new edit, or an edit on a bill that reopens: during a send it waits for the send's end.
+   * An edit a read finds still waiting needs no such wait, because the next read tries it again. */
+  #scheduleSaveOfEdit(): void {
+    this.#saveAfterSend = this.#sendUnderWay;
     this.#scheduleSave();
   }
 
   #scheduleSave(): void {
     this.#cancelTimer();
-    if (this.#ended || this.store.editsLocked) return;
+    if (this.#ended || this.store.editsLocked || this.#sendUnderWay) return;
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
       void this.#save();
