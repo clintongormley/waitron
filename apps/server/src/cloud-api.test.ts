@@ -1,3 +1,4 @@
+import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
@@ -655,3 +656,35 @@ for (const change of ["the manager is suspended", "the box stops being the prima
       await f.close();
     }
   });
+
+it("uses the staff origin for remote Cloud controls and refuses another origin", async () => {
+  const f = await cloudFixture();
+  try {
+    const manager = await person("manager");
+    const local = new Hono();
+    mountCloudApi(
+      local,
+      {
+        db: suite.db,
+        connection: createCloudConnection(f.options),
+        managementOrigin: "https://venue.test",
+        isPrimary: () => true,
+      },
+      () => {},
+    );
+    const staff = createStaffApp(local, "https://staff.example.test");
+    const send = (path: string, origin: string) =>
+      staff.request("https://staff.example.test/management-api/cloud/" + path, {
+        method: "POST",
+        headers: { cookie: manager.cookie, origin, "content-type": "application/json" },
+        body: "{}",
+      });
+    expect((await send("start", "https://attacker.test")).status).toBe(403);
+    expect((await send("start", "https://staff.example.test")).status).toBe(200);
+    const replacement = await send("replacement/check", "https://staff.example.test");
+    expect(replacement.status).toBe(409);
+    expect(await replacement.json()).toMatchObject({ error: { code: "cloud.not_configured" } });
+  } finally {
+    await f.close();
+  }
+});

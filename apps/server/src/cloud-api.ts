@@ -1,3 +1,4 @@
+import { managementOriginFor } from "./request-from-box.js";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { withTransaction, type Database } from "@waitron/db";
@@ -112,7 +113,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
   for (const action of ["prepare", "check"] as const)
     app.post(`/management-api/cloud/replacement/${action}`, (c) =>
       run(c, log, async () => {
-        if (c.req.header("origin") !== deps.managementOrigin)
+        if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
           return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
         await authorize(c);
         const body = await readRawJsonBody<unknown>(c);
@@ -148,7 +149,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
   for (const action of ["start", "check", "complete", "refresh", "revoke"] as const)
     app.post(`/management-api/cloud/${action}`, (c) =>
       run(c, log, async () => {
-        if (c.req.header("origin") !== deps.managementOrigin)
+        if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
           return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
         await authorize(c);
         const body = await readRawJsonBody<unknown>(c);
