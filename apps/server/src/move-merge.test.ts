@@ -1,7 +1,9 @@
+import { readWholePortionLines } from "./order-portions.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -25,6 +27,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
+  assignProductUnit,
   createCatalogue,
   createCategory,
   createProduct,
@@ -36,7 +39,13 @@ import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { listStationQueues, moveOrderLines, storedOrderTotal } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
-import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
+import {
+  kitchenNotices,
+  setRoutingCell,
+  listZoneOffers,
+  recordWorkingLineContexts,
+  workingLineContexts,
+} from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
@@ -84,6 +93,7 @@ import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill
 import { fireGroup } from "./order-groups.js";
 import {
   enqueueCorrectionSlips,
+  enqueueOrderKitchenNoteChange,
   enqueueMovedSlipsForNamesGone,
   readPartiesSentWork,
   reprintOrderTickets,
@@ -641,13 +651,13 @@ describe("a MOVED slip per order per station", () => {
     const dessertsSlips = (await printedBy(desserts)).slice(dessertsBefore);
     expect(grillSlips.map((text) => text.split("\n"))).toEqual(
       expect.arrayContaining([
-        slip(numberOf(tabId), ["2.000 x BURG", "1.000 x PAELLA"], "Grill"),
-        slip(numberOf(checkId), ["1.000 x BURG"], "Grill"),
+        slip(numberOf(tabId), ["2 x BURG", "1 x PAELLA"], "Grill"),
+        slip(numberOf(checkId), ["1 x BURG"], "Grill"),
       ]),
     );
     expect(grillSlips).toHaveLength(2);
     expect(dessertsSlips.map((text) => text.split("\n"))).toEqual([
-      slip(numberOf(tabId), ["1.000 x FLAN"], "Postres"),
+      slip(numberOf(tabId), ["1 x FLAN"], "Postres"),
     ]);
   });
 
@@ -670,11 +680,11 @@ describe("a MOVED slip per order per station", () => {
     const slips = (await printedBy(grill)).slice(before).map((text) => text.split("\n"));
     expect(slips).toHaveLength(1);
     expect(slips[0]!.slice(6)).toEqual([
-      "1.000 x BURG",
+      "1 x BURG",
       `${kitchenTicketWords("es").group} 1`,
-      "1.000 x BURG",
+      "1 x BURG",
       `${kitchenTicketWords("es").group} 2`,
-      "1.000 x PAELLA",
+      "1 x PAELLA",
       "",
     ]);
   });
@@ -898,7 +908,7 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
         `Pedido ${numbers.get(luis.tabId)} -> ${numbers.get(ana.tabId)}`,
         "Mesa 73, 74",
         "Mesa 73, 74",
-        ["1.000 x PAELLA"],
+        ["1 x PAELLA"],
       ),
     ]);
   });
@@ -921,7 +931,7 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
         `Pedido ${numbers.get(second)} -> ${numbers.get(tabId)}`,
         "Mesa 91",
         "Mesa 91",
-        ["1.000 x PAELLA"],
+        ["1 x PAELLA"],
       ),
     ]);
   });
@@ -951,7 +961,7 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
         `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
         "Mesa 91",
         "Mesa 91",
-        ["1.000 x BURG"],
+        ["1 x BURG"],
       ),
     ]);
   });
@@ -975,7 +985,7 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
         `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
         "Mesa 91",
         "Mesa 91",
-        ["1.000 x FLAN"],
+        ["1 x FLAN"],
       ),
     ]);
     expect(await slipsSince(grill, grillBefore)).toEqual([]);
@@ -1034,7 +1044,7 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
         `Pedido ${numbers.get(counter)} -> ${numbers.get(made)}`,
         "(mostrador)",
         "(mostrador)",
-        ["1.000 x BURG"],
+        ["1 x BURG"],
       ),
     ]);
   });
@@ -1115,9 +1125,7 @@ describe("A803 split: what the kitchen is told", () => {
       { workingOrderId: newBill, kind: "moved", lineName: "BURG", movedTo: "Mesa 52" },
     ]);
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", await orderLine(tabId, newBill), "Mesa 51, 52", "Mesa 52", [
-        "1.000 x BURG",
-      ]),
+      movedSlip("Grill", await orderLine(tabId, newBill), "Mesa 51, 52", "Mesa 52", ["1 x BURG"]),
     ]);
   });
 
@@ -1136,9 +1144,7 @@ describe("A803 split: what the kitchen is told", () => {
       { workingOrderId: second, kind: "moved", lineName: "FLAN", movedTo: "Mesa 52" },
     ]);
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", `Pedido ${numbers.get(second)}`, "Mesa 51, 52", "Mesa 52", [
-        "1.000 x FLAN",
-      ]),
+      movedSlip("Grill", `Pedido ${numbers.get(second)}`, "Mesa 51, 52", "Mesa 52", ["1 x FLAN"]),
     ]);
   });
 
@@ -1162,12 +1168,8 @@ describe("A803 split: what the kitchen is told", () => {
       { workingOrderId: newBill, kind: "moved", lineName: "FLAN", movedTo: "Mesa 52" },
     ]);
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", await orderLine(tabId, newBill), "Mesa 51, 52", "Mesa 52", [
-        "1.000 x BURG",
-      ]),
-      movedSlip("Grill", await orderLine(second, newBill), "Mesa 51, 52", "Mesa 52", [
-        "1.000 x FLAN",
-      ]),
+      movedSlip("Grill", await orderLine(tabId, newBill), "Mesa 51, 52", "Mesa 52", ["1 x BURG"]),
+      movedSlip("Grill", await orderLine(second, newBill), "Mesa 51, 52", "Mesa 52", ["1 x FLAN"]),
     ]);
   });
 
@@ -1197,7 +1199,7 @@ describe("A803 split: what the kitchen is told", () => {
       { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 51" },
     ]);
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Terraza", "Mesa 51", ["1.000 x BURG"]),
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Terraza", "Mesa 51", ["1 x BURG"]),
     ]);
   });
 
@@ -1249,8 +1251,8 @@ describe("A803 split: what the kitchen is told", () => {
       { workingOrderId: tabId, kind: "moved", lineName: "FLAN", movedTo: "Mesa 51" },
     ]);
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", await orderLine(tabId, newBill), "Terraza", "Mesa 52", ["1.000 x BURG"]),
-      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Terraza", "Mesa 51", ["1.000 x FLAN"]),
+      movedSlip("Grill", await orderLine(tabId, newBill), "Terraza", "Mesa 52", ["1 x BURG"]),
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Terraza", "Mesa 51", ["1 x FLAN"]),
     ]);
   });
 
@@ -1286,7 +1288,7 @@ describe("A803 split: what the kitchen is told", () => {
       { workingOrderId: newBill, kind: "moved", lineName: "BURG", movedTo: "Mesa 52" },
     ]);
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", await orderLine(tabId, newBill), "Terraza", "Mesa 52", ["1.000 x BURG"]),
+      movedSlip("Grill", await orderLine(tabId, newBill), "Terraza", "Mesa 52", ["1 x BURG"]),
     ]);
   });
 
@@ -1316,7 +1318,7 @@ describe("A803 split: what the kitchen is told", () => {
       { workingOrderId: newBill, kind: "moved", lineName: "BURG", movedTo: "Mesa 52" },
     ]);
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", await orderLine(tabId, newBill), "Terraza", "Mesa 52", ["1.000 x BURG"]),
+      movedSlip("Grill", await orderLine(tabId, newBill), "Terraza", "Mesa 52", ["1 x BURG"]),
     ]);
   });
 
@@ -1348,9 +1350,7 @@ describe("A803 split: what the kitchen is told", () => {
         { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 202" },
       ]);
       expect(await slipsSince(grill, before)).toEqual([
-        movedSlip("Grill", await justOrderLine(tabId), "Mesa 201, 202", "Mesa 202", [
-          "1.000 x BURG",
-        ]),
+        movedSlip("Grill", await justOrderLine(tabId), "Mesa 201, 202", "Mesa 202", ["1 x BURG"]),
       ]);
     });
 
@@ -1370,12 +1370,8 @@ describe("A803 split: what the kitchen is told", () => {
         { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 206" },
       ]);
       expect(await slipsSince(grill, before)).toEqual([
-        movedSlip("Grill", await justOrderLine(flans), "Mesa 205, 206", "Mesa 205", [
-          "1.000 x FLAN",
-        ]),
-        movedSlip("Grill", await justOrderLine(tabId), "Mesa 205, 206", "Mesa 206", [
-          "1.000 x BURG",
-        ]),
+        movedSlip("Grill", await justOrderLine(flans), "Mesa 205, 206", "Mesa 205", ["1 x FLAN"]),
+        movedSlip("Grill", await justOrderLine(tabId), "Mesa 205, 206", "Mesa 206", ["1 x BURG"]),
       ]);
     });
 
@@ -1412,7 +1408,7 @@ describe("A803 split: what the kitchen is told", () => {
         .where(and(eq(partyTables.partyId, partyId), eq(partyTables.tableId, first)));
       expect(left!.at).toBe(slip!.at);
       expect(await slipsSince(grill, 1)).toEqual([
-        movedSlip("Grill", await justOrderLine(tabId), "Mesa 209", "Mesa 210", ["1.000 x BURG"]),
+        movedSlip("Grill", await justOrderLine(tabId), "Mesa 209", "Mesa 210", ["1 x BURG"]),
       ]);
       await join(v, partyId, first);
       const before = (await printedBy(grill)).length;
@@ -1424,9 +1420,7 @@ describe("A803 split: what the kitchen is told", () => {
         { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 209" },
       ]);
       expect(await slipsSince(grill, before)).toEqual([
-        movedSlip("Grill", await justOrderLine(tabId), "Mesa 210, 209", "Mesa 209", [
-          "1.000 x BURG",
-        ]),
+        movedSlip("Grill", await justOrderLine(tabId), "Mesa 210, 209", "Mesa 209", ["1 x BURG"]),
       ]);
     });
 
@@ -1448,9 +1442,7 @@ describe("A803 split: what the kitchen is told", () => {
         { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 208" },
       ]);
       expect(await slipsSince(grill, before)).toEqual([
-        movedSlip("Grill", await justOrderLine(tabId), "Mesa 207, 208", "Mesa 208", [
-          "1.000 x BURG",
-        ]),
+        movedSlip("Grill", await justOrderLine(tabId), "Mesa 207, 208", "Mesa 208", ["1 x BURG"]),
       ]);
     });
 
@@ -1513,9 +1505,7 @@ describe("A803 split: what the kitchen is told", () => {
         { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 236" },
       ]);
       expect(await slipsSince(grill, before)).toEqual([
-        movedSlip("Grill", await justOrderLine(tabId), "Mesa 235, 236", "Mesa 236", [
-          "1.000 x BURG",
-        ]),
+        movedSlip("Grill", await justOrderLine(tabId), "Mesa 235, 236", "Mesa 236", ["1 x BURG"]),
       ]);
     });
 
@@ -1554,9 +1544,7 @@ describe("A803 split: what the kitchen is told", () => {
           "Mesa 219",
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 218, 219", "Mesa 219", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 218, 219", "Mesa 219", ["1 x BURG"]),
         ]);
       });
 
@@ -1579,9 +1567,7 @@ describe("A803 split: what the kitchen is told", () => {
           { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 221" },
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 220, 221", "Mesa 221", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 220, 221", "Mesa 221", ["1 x BURG"]),
         ]);
       });
     });
@@ -1625,7 +1611,7 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(burgers), "Mesa 223, 222", "Mesa 223", [
-            "1.000 x BURG",
+            "1 x BURG",
           ]),
         ]);
         expect(await activeTablesOf(v, into)).toEqual([flanTable]);
@@ -1641,9 +1627,7 @@ describe("A803 split: what the kitchen is told", () => {
           { workingOrderId: flans, kind: "moved", lineName: "FLAN", movedTo: "Mesa 224" },
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(flans), "Mesa 225, 224", "Mesa 224", [
-            "1.000 x FLAN",
-          ]),
+          movedSlip("Grill", await justOrderLine(flans), "Mesa 225, 224", "Mesa 224", ["1 x FLAN"]),
         ]);
         expect(await activeTablesOf(v, into)).toEqual([burgerTable]);
       });
@@ -1696,7 +1680,7 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(tabId), "Mesa 512, 510, 511", "Mesa 512, 511", [
-            "1.000 x BURG",
+            "1 x BURG",
           ]),
         ]);
       });
@@ -1718,7 +1702,7 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(tabId), "Mesa 515, 513, 514", "Mesa 515, 513", [
-            "1.000 x BURG",
+            "1 x BURG",
           ]),
         ]);
       });
@@ -1739,7 +1723,7 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(tabId), "Mesa 522, 520, 521", "Mesa 522, 521", [
-            "1.000 x BURG",
+            "1 x BURG",
           ]),
         ]);
       });
@@ -1761,7 +1745,7 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(tabId), "Mesa 525, 523, 524", "Mesa 525, 523", [
-            "1.000 x BURG",
+            "1 x BURG",
           ]),
         ]);
       });
@@ -1792,7 +1776,7 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(tabId), "Mesa 552, 550, 551", "Mesa 552, 551", [
-            "1.000 x BURG",
+            "1 x BURG",
           ]),
         ]);
       });
@@ -1815,9 +1799,7 @@ describe("A803 split: what the kitchen is told", () => {
           { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 562" },
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 562, 561", "Mesa 562", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 562, 561", "Mesa 562", ["1 x BURG"]),
         ]);
       });
 
@@ -1859,9 +1841,7 @@ describe("A803 split: what the kitchen is told", () => {
           { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 572" },
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 572, 571", "Mesa 572", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 572, 571", "Mesa 572", ["1 x BURG"]),
         ]);
       });
 
@@ -1885,9 +1865,7 @@ describe("A803 split: what the kitchen is told", () => {
           "Mesa 811",
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 811, 812", "Mesa 811", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 811, 812", "Mesa 811", ["1 x BURG"]),
         ]);
       });
 
@@ -1911,9 +1889,7 @@ describe("A803 split: what the kitchen is told", () => {
           { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 851" },
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 851, 852", "Mesa 851", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 851, 852", "Mesa 851", ["1 x BURG"]),
         ]);
       });
 
@@ -1937,9 +1913,7 @@ describe("A803 split: what the kitchen is told", () => {
           { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 611" },
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 611, 610", "Mesa 611", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 611, 610", "Mesa 611", ["1 x BURG"]),
         ]);
       });
 
@@ -1962,7 +1936,7 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(tabId), "Mesa 622, 620, 621", "Mesa 622, 621", [
-            "1.000 x BURG",
+            "1 x BURG",
           ]),
         ]);
       });
@@ -1986,7 +1960,7 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(tabId), "Mesa 632, 630, 631", "Mesa 632, 631", [
-            "1.000 x BURG",
+            "1 x BURG",
           ]),
         ]);
       });
@@ -2036,7 +2010,7 @@ describe("A803 split: what the kitchen is told", () => {
             await justOrderLine(tabId),
             "Terraza (Mesa 541, 542, 540)",
             "Terraza (Mesa 541, 542)",
-            ["1.000 x BURG"],
+            ["1 x BURG"],
           ),
         ]);
       });
@@ -2072,9 +2046,7 @@ describe("A803 split: what the kitchen is told", () => {
           "Mesa 534",
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 532, 534", "Mesa 534", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 532, 534", "Mesa 534", ["1 x BURG"]),
         ]);
       });
 
@@ -2167,10 +2139,10 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
         expect(await slipsSince(grill, before)).toEqual([
           movedSlip("Grill", await justOrderLine(tabId), "Mesa 226, 227", "Mesa 227", [
-            "1.000 x BURG",
+            "1 x BURG",
             kitchenTicketWords("es").hold,
             `${kitchenTicketWords("es").group} 2`,
-            "1.000 x PAELLA",
+            "1 x PAELLA",
           ]),
         ]);
       });
@@ -2200,9 +2172,7 @@ describe("A803 split: what the kitchen is told", () => {
           { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 229" },
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 228, 229", "Mesa 229", [
-            "1.000 x BURG",
-          ]),
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 228, 229", "Mesa 229", ["1 x BURG"]),
         ]);
       });
     });
@@ -2273,8 +2243,8 @@ describe("A803 split: what the kitchen is told", () => {
       ]);
       expect(await slipsSince(grill, printedBefore)).toEqual([
         movedSlip("Grill", await orderLine(tabId, moved.billId), "Mesa 51, 52", "Mesa 52", [
-          "1.000 x BURG",
-          "1.000 x FLAN",
+          "1 x BURG",
+          "1 x FLAN",
         ]),
       ]);
     }
@@ -2377,10 +2347,10 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
 
     expect(await slipsSince(grill, before)).toEqual([
       movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 111", "Mesa 112", [
-        "1.000 x BURG",
+        "1 x BURG",
         kitchenTicketWords("es").hold,
         `${kitchenTicketWords("es").group} 2`,
-        "1.000 x PAELLA",
+        "1 x PAELLA",
       ]),
     ]);
     expect(byDish(await noticesOf([tabId]))).toEqual([
@@ -2431,7 +2401,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
       movedSlip("Kitchen", `Pedido ${numbers.get(tabId)}`, "Mesa 121", "Mesa 122", [
         kitchenTicketWords("es").hold,
         `${kitchenTicketWords("es").group} 1`,
-        "1.000 x BURG",
+        "1 x BURG",
       ]),
     ]);
     expect(await slipsSince(bar, before.bar)).toEqual([]);
@@ -2480,10 +2450,10 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
       movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 118", "Mesa 119", [
         kitchenTicketWords("es").hold,
         `${kitchenTicketWords("es").group} 1`,
-        "1.000 x PAELLA",
-        "1.000 x BURG",
+        "1 x PAELLA",
+        "1 x BURG",
         `${kitchenTicketWords("es").group} 2`,
-        "1.000 x PAELLA",
+        "1 x PAELLA",
       ]),
     ]);
   });
@@ -2503,7 +2473,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     );
 
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 113", "Mesa 114", ["1.000 x BURG"]),
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 113", "Mesa 114", ["1 x BURG"]),
     ]);
     expect(byDish(await noticesOf([tabId]))).toEqual([["BURG", tabId, "Mesa 114"]]);
   });
@@ -2528,7 +2498,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
         `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
         "Mesa 115",
         "Mesa 115",
-        [kitchenTicketWords("es").hold, `${kitchenTicketWords("es").group} 2`, "1.000 x PAELLA"],
+        [kitchenTicketWords("es").hold, `${kitchenTicketWords("es").group} 2`, "1 x PAELLA"],
       ),
     ]);
     expect(byDish(await noticesOf([second]))).toEqual([["PAELLA", second, "Mesa 115"]]);
@@ -2569,7 +2539,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
         `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
         "Mesa 117",
         "Mesa 117",
-        [kitchenTicketWords("es").hold, `${kitchenTicketWords("es").group} 2`, "1.000 x PAELLA"],
+        [kitchenTicketWords("es").hold, `${kitchenTicketWords("es").group} 2`, "1 x PAELLA"],
       ),
     ]);
     expect(byDish(await noticesOf([second]))).toEqual([
@@ -2579,7 +2549,194 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
   });
 });
 
-describe("a MOVED slip lays out each line by the ticket grouping and never adds two lines together (§4)", () => {
+describe("A1378 MOVED follows station grouping and preserves portion boundaries", () => {
+  it("F2 combines whole portions with different recorded late marks on change paper", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const p = await seat(v, await v.table("Late source"));
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        operatorId: OPERATOR,
+        billId: p.tabId,
+        groups: [{ release: "fire", lines: [{ menuItemId: v.item("Burger"), quantity: "2" }] }],
+      }),
+    );
+    const lines = await v.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, p.tabId));
+    await inTx(v, async (tx) => {
+      await tx
+        .delete(workingLineContexts)
+        .where(eq(workingLineContexts.workingOrderLineId, lines[1]!.id));
+      await recordWorkingLineContexts(
+        tx,
+        p.tabId,
+        [
+          {
+            workingOrderLineId: lines[1]!.id,
+            menuItemId: v.item("Burger"),
+            late: { periodName: "Lunch", confirmedBy: OPERATOR },
+          },
+        ],
+        await listZoneOffers(tx, v.tables.zoneId),
+      );
+    });
+    const contexts = await v.db
+      .select()
+      .from(workingLineContexts)
+      .where(
+        inArray(
+          workingLineContexts.workingOrderLineId,
+          lines.map((line) => line.id),
+        ),
+      );
+    expect(contexts.map((context) => context.latePeriodName).sort()).toEqual(
+      ["Lunch", null].sort(),
+    );
+    const beforeReprint = (await printedBy(grill)).length;
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, p.tabId));
+    const reprinted = await slipsSince(grill, beforeReprint);
+    expect(reprinted.map((paper) => paper.filter((line) => / x BURG$/.test(line)))).toEqual([
+      ["1 x BURG", "1 x BURG"],
+    ]);
+    expect(reprinted[0]!.some((line) => line.includes("LUNCH"))).toBe(true);
+    let before = (await printedBy(grill)).length;
+    await inTx(v, (tx) =>
+      enqueueOrderKitchenNoteChange(tx, v.cfg, [p.tabId], { before: null, after: "Together" }),
+    );
+    expect(
+      (await slipsSince(grill, before)).map((paper) =>
+        paper.filter((line) => / x BURG$/.test(line)),
+      ),
+    ).toEqual([["2 x BURG"]]);
+    before = (await printedBy(grill)).length;
+    const destination = await v.table("Late destination");
+    const command = await commandFor(v, p.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.partyId, destination, { ...command, otherPartyId: null }),
+    );
+    expect(
+      (await slipsSince(grill, before)).map((paper) =>
+        paper.filter((line) => / x BURG$/.test(line)),
+      ),
+    ).toEqual([["2 x BURG"]]);
+    before = (await printedBy(grill)).length;
+    const items = await v.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, p.tabId));
+    expect(items.map((item) => item.quantity)).toEqual([1000, 1000]);
+    await inTx(v, (tx) =>
+      enqueueCorrectionSlips(
+        tx,
+        v.cfg,
+        p.tabId,
+        items.map((item) => ({
+          workingOrderLineId: item.workingOrderLineId,
+          stationId: item.stationId,
+          quantity: 1000,
+          wasStarted: false,
+        })),
+        "VOID",
+      ),
+    );
+    expect(
+      await inTx(v, (tx) =>
+        readWholePortionLines(
+          tx,
+          lines.map((line) => line.id),
+        ),
+      ),
+    ).toEqual(new Set(lines.map((line) => line.id)));
+    expect(
+      (await slipsSince(grill, before)).map((paper) =>
+        paper.filter((line) => / x BURG$/.test(line)),
+      ),
+    ).toEqual([["2 x BURG"]]);
+    const cancelled = (
+      await v.db.select().from(kitchenNotices).where(eq(kitchenNotices.workingOrderId, p.tabId))
+    ).filter((notice) => notice.kind === "void");
+    expect(cancelled).toHaveLength(1);
+    expect(cancelled[0]!.quantity).toBe(2000);
+  });
+
+  it("F6 combines identical held portions within the same MOVED group", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { ticketGrouping: "combined", printHeldWork: true }, [
+        await activeStationId(tx, v, "Grill"),
+      ]),
+    );
+    const p = await seat(v, await v.table("Held source"));
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        operatorId: OPERATOR,
+        billId: p.tabId,
+        groups: [{ release: "hold", lines: [{ menuItemId: v.item("Burger"), quantity: "2" }] }],
+      }),
+    );
+    const before = (await printedBy(grill)).length;
+    const destination = await v.table("Held destination");
+    const command = await commandFor(v, p.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.partyId, destination, { ...command, otherPartyId: null }),
+    );
+    const papers = await slipsSince(grill, before);
+    expect(papers).toHaveLength(1);
+    expect(papers[0]).toContain(kitchenTicketWords("es").hold);
+    expect(papers[0]!.filter((line) => / x BURG$/.test(line))).toEqual(["2 x BURG"]);
+  });
+
+  it("keeps two whole measured portions separate under combined", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    await inTx(v, async (tx) => {
+      const [gram] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "g"));
+      await assignProductUnit(tx, v.productId("Burger"), gram!.id);
+      await publishWorkingMenu(tx, v.tables.menuId);
+    });
+    const p = await seat(v, await v.table("Measured source"));
+    await order(v, p.tabId, "Burger", "Burger");
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, p.partyId);
+    const destination = await v.table("Measured destination");
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.partyId, destination, { ...command, otherPartyId: null }),
+    );
+    const papers = await slipsSince(grill, before);
+    expect(papers).toHaveLength(1);
+    expect(papers[0]!.filter((line) => line.endsWith("g x BURG"))).toEqual([
+      "1 g x BURG",
+      "1 g x BURG",
+    ]);
+  });
+
+  it("keeps identical portions from distinct groups separate under combined", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const p = await seat(v, await v.table("Group source"));
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        groups: [
+          { release: "fire", lines: [{ menuItemId: v.item("Burger"), quantity: "1" }] },
+          { release: "fire", lines: [{ menuItemId: v.item("Burger"), quantity: "1" }] },
+        ],
+        billId: p.tabId,
+        operatorId: OPERATOR,
+      }),
+    );
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, p.partyId);
+    const destination = await v.table("Group destination");
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.partyId, destination, { ...command, otherPartyId: null }),
+    );
+    const papers = await slipsSince(grill, before);
+    expect(papers).toHaveLength(1);
+    expect(papers[0]!.slice(-5)).toEqual(["GRUPO 1", "1 x BURG", "GRUPO 2", "1 x BURG", ""]);
+  });
   afterEach(() =>
     withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { ticketGrouping: "combined", printHeldWork: false });
@@ -2613,8 +2770,8 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     );
     expect((await slipsSince(grill, tickets)).map(dishLines)).toEqual(
       expect.arrayContaining([
-        ["1.000 x BURG", "1.000 x BURG", "1.000 x BURG"],
-        ["1.000 x PAELLA", "1.000 x PAELLA"],
+        ["1 x BURG", "1 x BURG", "1 x BURG"],
+        ["1 x PAELLA", "1 x PAELLA"],
       ]),
     );
     const numbers = await numbersOf([tabId]);
@@ -2627,25 +2784,25 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
 
     expect(await slipsSince(grill, before)).toEqual([
       movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 121", "Mesa 122", [
-        "1.000 x BURG",
-        "1.000 x BURG",
-        "1.000 x BURG",
+        "1 x BURG",
+        "1 x BURG",
+        "1 x BURG",
         kitchenTicketWords("es").hold,
         `${kitchenTicketWords("es").group} 2`,
-        "1.000 x PAELLA",
-        "1.000 x PAELLA",
+        "1 x PAELLA",
+        "1 x PAELLA",
       ]),
     ]);
   });
 
-  it("with combined quantities, two lines of one Burger on one ticket print as two entries of 1: lines are never added together", async () => {
+  it("with combined quantities, two lines of one Burger on one ticket print as one entry of 2", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const table124 = await v.table("Mesa 124");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 123"));
     const tickets = (await printedBy(grill)).length;
     await order(v, tabId, "Burger", "Burger");
-    expect((await slipsSince(grill, tickets)).map(dishLines)).toEqual([["2.000 x BURG"]]);
+    expect((await slipsSince(grill, tickets)).map(dishLines)).toEqual([["2 x BURG"]]);
     const numbers = await numbersOf([tabId]);
     const before = (await printedBy(grill)).length;
     const command = await commandFor(v, partyId);
@@ -2655,14 +2812,11 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     );
 
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 123", "Mesa 124", [
-        "1.000 x BURG",
-        "1.000 x BURG",
-      ]),
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 123", "Mesa 124", ["2 x BURG"]),
     ]);
   });
 
-  it("with combined quantities, one Burger sent on each of two tickets prints as two entries of 1", async () => {
+  it("with combined quantities, one Burger sent on each of two tickets prints as one entry of 2", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const table126 = await v.table("Mesa 126");
@@ -2670,10 +2824,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     const tickets = (await printedBy(grill)).length;
     await order(v, tabId, "Burger");
     await order(v, tabId, "Burger");
-    expect((await slipsSince(grill, tickets)).map(dishLines)).toEqual([
-      ["1.000 x BURG"],
-      ["1.000 x BURG"],
-    ]);
+    expect((await slipsSince(grill, tickets)).map(dishLines)).toEqual([["1 x BURG"], ["1 x BURG"]]);
     const numbers = await numbersOf([tabId]);
     const before = (await printedBy(grill)).length;
     const command = await commandFor(v, partyId);
@@ -2683,14 +2834,11 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     );
 
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 125", "Mesa 126", [
-        "1.000 x BURG",
-        "1.000 x BURG",
-      ]),
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 125", "Mesa 126", ["2 x BURG"]),
     ]);
   });
 
-  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2 still print as two entries of 1", async () => {
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2 still print as one entry of 2", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const table128 = await v.table("Mesa 128");
@@ -2699,7 +2847,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     await order(v, tabId, "Burger");
     const reprinted = (await printedBy(grill)).length;
     await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, tabId));
-    expect((await slipsSince(grill, reprinted)).map(dishLines)).toEqual([["2.000 x BURG"]]);
+    expect((await slipsSince(grill, reprinted)).map(dishLines)).toEqual([["2 x BURG"]]);
     const before = (await printedBy(grill)).length;
     const command = await commandFor(v, partyId);
 
@@ -2707,12 +2855,10 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
       moveGuests(tx, v.cfg, partyId, table128, { ...command, otherPartyId: null }),
     );
 
-    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([
-      ["1.000 x BURG", "1.000 x BURG"],
-    ]);
+    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["2 x BURG"]]);
   });
 
-  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as two entries of 1 after Transfer items moves both", async () => {
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as one entry of 2 after Transfer items moves both", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 131"));
@@ -2733,12 +2879,10 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
 
     await inTx(v, (tx) => transferItems(tx, v.cfg, tabId, second, lineNos, command));
 
-    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([
-      ["1.000 x BURG", "1.000 x BURG"],
-    ]);
+    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["2 x BURG"]]);
   });
 
-  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as two entries of 1 after Merge bills", async () => {
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as one entry of 2 after Merge bills", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 132"));
@@ -2752,12 +2896,10 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
 
     await inTx(v, (tx) => mergeBills(tx, v.cfg, second, tabId, command));
 
-    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([
-      ["1.000 x BURG", "1.000 x BURG"],
-    ]);
+    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([["2 x BURG"]]);
   });
 
-  it("with combined quantities, one Burger sent twice while the station had no printer prints as two entries of 1", async () => {
+  it("with combined quantities, one Burger sent twice while the station had no printer prints as one entry of 2", async () => {
     const v = await setupPartyVenue(db);
     const table130 = await v.table("Mesa 130");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 129"));
@@ -2770,9 +2912,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
       moveGuests(tx, v.cfg, partyId, table130, { ...command, otherPartyId: null }),
     );
 
-    expect((await slipsSince(kitchenPrinterId, 0)).map(dishLines)).toEqual([
-      ["1.000 x BURG", "1.000 x BURG"],
-    ]);
+    expect((await slipsSince(kitchenPrinterId, 0)).map(dishLines)).toEqual([["2 x BURG"]]);
   });
 });
 

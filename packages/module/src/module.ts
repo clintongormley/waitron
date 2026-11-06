@@ -1256,6 +1256,7 @@ export interface VenueServiceContribution {
       | "allergy_removed",
     options?: {
       orderNoteChange?: KitchenNoteChange;
+      noteEvent?: { createdAt: string; labels: ReadonlyMap<string, string> };
       allergyBlock?: KitchenAllergyBlock | null;
       movedTo?: string | null;
       direction?: "added" | "removed" | null;

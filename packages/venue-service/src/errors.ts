@@ -176,6 +176,7 @@ declare module "@waitron/shared" {
         | "reroutedTo"
         | "fromNumber"
         | "orderNoteChange"
+        | "noteEvent"
         | "allergyBlock";
     };
     /** `field` is the request path of the refused value, such as `days.2.cell.periods.0.opensAt`. */

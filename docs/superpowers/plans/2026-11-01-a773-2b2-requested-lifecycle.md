@@ -1,5 +1,9 @@
 # A773-2 PR B2: a requested dish through every service action — task plan
 
+> **2026-11-06, A1378:** kitchen paper now prints whole quantities without `.000` and
+> takes its hours from the venue's saved time zone. Paper examples and measured output below
+> record the earlier implementation.
+
 **Goal.** Since PR B1 (#2381), a waiter's fire can leave a kitchen item **Requested**: the waiter
 has asked for it (`ticket_items.requested_at` set) but no pass has released it to its station yet
 (`fired_at` still null, `pass_controlled` true). B2 makes every other service action treat such a

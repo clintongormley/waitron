@@ -4,6 +4,7 @@ import {
   kitchenNoticeKind,
   kitchenNotices,
   kitchenStations,
+  insertInChunks,
   nowIso,
   readVenueClock,
   workingOrderLines,
@@ -60,6 +61,7 @@ export interface KitchenNoticeItem {
 
 export interface KitchenNoticeOptions {
   orderNoteChange?: KitchenNoteChange;
+  noteEvent?: { createdAt: string; labels: ReadonlyMap<string, string> };
   allergyBlock?: KitchenAllergyBlock | null;
   movedTo?: string | null;
   direction?: KitchenNoticeDirection | null;
@@ -73,12 +75,8 @@ const NOTICE_LIMIT = 50;
 /** Notices recorded in one call share a timestamp; the row id keeps them in the order given. */
 const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
 
-/**
- * Kitchen-note change rows with the same order, time and note before and after share this key and
- * show as one notice; any other row's key is its own id. Values, not JSON text, are compared, so
- * key order cannot split a change.
- */
-const FOLD_KEY = sql<string>`case when ${kitchenNotices.orderNoteChange} is null then ${kitchenNotices.id} else json_array(${kitchenNotices.workingOrderId}, ${kitchenNotices.createdAt}, json_extract(${kitchenNotices.orderNoteChange}, '$.before'), json_extract(${kitchenNotices.orderNoteChange}, '$.after')) end`;
+/** A party change keeps its bill rows but shares one display and acknowledgment key. */
+const FOLD_KEY = sql<string>`case when ${kitchenNotices.orderNoteChange} is null then ${kitchenNotices.id} else json_array(case when json_extract(${kitchenNotices.orderNoteChange}, '$.partyId') is null then 'order' else 'party' end, coalesce(json_extract(${kitchenNotices.orderNoteChange}, '$.partyId'), ${kitchenNotices.workingOrderId}), ${kitchenNotices.createdAt}, json_extract(${kitchenNotices.orderNoteChange}, '$.before'), json_extract(${kitchenNotices.orderNoteChange}, '$.after')) end`;
 
 /** Copy line presentation before deleting a line: notices outlive the work they describe. */
 export async function recordKitchenNotices(
@@ -95,8 +93,11 @@ export async function recordKitchenNotices(
     reroutedTo = null,
     fromNumber = null,
     orderNoteChange,
+    noteEvent,
     allergyBlock = null,
   } = options;
+  if (noteEvent !== undefined && (kind !== "changed" || orderNoteChange === undefined))
+    throw new AppError("kitchen_notice.invalid", { field: "noteEvent" });
   if (
     orderNoteChange !== undefined &&
     (kind !== "changed" ||
@@ -180,8 +181,10 @@ export async function recordKitchenNotices(
       ? `#${order.orderNumber}`
       : `#${fromNumber} → #${order.orderNumber}`;
   const orderLabel = order.label === null ? number : `${number} · ${order.label}`;
-  const createdAt = nowIso();
-  await tx.insert(kitchenNotices).values(
+  const createdAt = noteEvent?.createdAt ?? nowIso();
+  await insertInChunks(
+    tx,
+    kitchenNotices,
     items.map((item, index) => {
       const line = lineById.get(item.workingOrderLineId);
       if (line === undefined) {
@@ -192,7 +195,7 @@ export async function recordKitchenNotices(
       return {
         stationId: item.stationId,
         workingOrderId: orderId,
-        orderLabel,
+        orderLabel: noteEvent?.labels.get(item.stationId) ?? orderLabel,
         kind,
         lineName: kitchenPresentationName(line),
         unitName: line.unitName,

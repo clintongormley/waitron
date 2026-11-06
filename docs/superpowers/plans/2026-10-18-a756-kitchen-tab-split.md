@@ -1,5 +1,10 @@
 # A756. The Kitchen tab split up — implementation plan
 
+> **2026-11-06, A1378:** On a shared-printer ticket, FIRE now marks only station sections whose HOLD paper was recorded.
+> A station receiving its first paper stays unmarked. Earlier whole-ticket FIRE descriptions
+> below describe the previous implementation.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.
 
 **Goal:** Move each Kitchen-tab setting to the thing it describes — courses to their own page, the

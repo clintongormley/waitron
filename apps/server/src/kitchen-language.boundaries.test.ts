@@ -216,7 +216,7 @@ describe("A964 language boundaries", () => {
         );
         const lines = printedLines((await v.db.select().from(printJobs)).at(-1)!.payload);
         expect(lines[0]).toBe(`*** ${kitchenTicketWords(language).holdChanged} ***`);
-        expect(lines).toContain(`${direction === "added" ? "+" : "-"}1.000 x Pass roast`);
+        expect(lines).toContain(`${direction === "added" ? "+" : "-"}1 x Pass roast`);
       }
       await inTx(v, (tx) =>
         enqueueHoldCorrections(tx, v.cfg, p.tabId, [heldTarget], { kind: "HOLD CANCELLED" }),

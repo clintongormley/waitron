@@ -5856,7 +5856,9 @@ A dish sent after its period ended, once the kitchen agreed, carries "After {per
 bold, the printing-problem chip's style (`.after-period`, `apps/till/src/widgets/station-queue.ts`).
 On a card it is a row of its own above each run of consecutive dishes with the same mark, within
 one course. The pass shows no mark. The kitchen ticket prints the same words in
-capitals between `**` above each such run; correction and MOVED slips print none.
+capitals between `**` above each such run. A full-width dashed divider separates that run from
+the next unmarked dish within the same group and station; the next group or station heading
+already separates it. Correction and MOVED slips print none.
 
 ### Identical portions share one row
 

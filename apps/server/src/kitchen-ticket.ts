@@ -52,6 +52,7 @@ export interface KitchenTicketItem {
 export interface KitchenTicketStation {
   stationName: string;
   items: KitchenTicketItem[];
+  mark?: "FIRE";
 }
 
 /** One item of the order at another station, as a station's own ticket lists it. */
@@ -168,8 +169,12 @@ export function arrangeTicketItems(
   }));
 }
 
+export function kitchenQuantityText(qty: number | string): string {
+  return String(qty).replace(/\.0+$/, "");
+}
+
 function itemLine(item: KitchenTicketItem): string {
-  return `${item.qty}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
+  return `${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
 }
 
 /**
@@ -249,7 +254,7 @@ function emitItem(
   const text = (s: string, indent: number): void => {
     for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
   };
-  const prefix = `${sign}${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
+  const prefix = `${sign}${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
   text(`${sign}${itemLine(item)}`, prepareText(prefix).length);
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   for (const ref of item.crossRefs ?? []) text(`  > ${ref}`, 4);
@@ -327,11 +332,7 @@ function emitLateMark(
     b.line(line);
 }
 
-/**
- * Emit `items`, heading each with `GROUP n` where its group differs from the item before, `current`
- * before the first, and, where `lateMarks`, the late-send mark before each run of items with the
- * same mark. A MOVED slip describes a move, not the agreed send, so it prints no mark.
- */
+/** MOVED and note-change slips describe a change, so carry no late-send marks or boundaries. */
 function emitGrouped(
   b: ReturnType<typeof esc>,
   items: readonly KitchenTicketItem[],
@@ -354,6 +355,8 @@ function emitGrouped(
       mark = undefined;
     }
     current = item;
+    if (lateMarks && mark !== undefined && item.afterPeriod === undefined)
+      b.line("-".repeat(columns));
     if (lateMarks && item.afterPeriod !== undefined && item.afterPeriod !== mark)
       emitLateMark(b, item.afterPeriod, columns, locale);
     mark = item.afterPeriod;
@@ -361,7 +364,6 @@ function emitGrouped(
   }
 }
 
-/** `order`, then ` · ` and the party's name, wrapping the name under itself. */
 function emitOrderLine(
   b: ReturnType<typeof esc>,
   order: string,
@@ -369,15 +371,32 @@ function emitOrderLine(
   columns: number,
 ): void {
   const label = `${order} · `;
+  const indentRoom = columns - prepareText(label).length;
+  const longestWord =
+    partyName === undefined
+      ? 0
+      : Math.max(
+          ...prepareText(partyName)
+            .split(" ")
+            .map((word) => word.length),
+        );
+  if (partyName !== undefined && indentRoom < Math.min(longestWord, columns)) {
+    for (const part of wrapText(prepareText(order), columns)) b.line(part);
+    for (const part of wrapText(prepareText(partyName), columns)) b.line(part);
+    return;
+  }
   const [line, indent] =
     partyName === undefined ? [order, 0] : [`${label}${partyName}`, prepareText(label).length];
   for (const part of wrapText(prepareText(line), columns, indent)) b.line(part);
 }
 
-function hhmm(at: Date): string {
-  const h = String(at.getHours()).padStart(2, "0");
-  const m = String(at.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
+function hhmm(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(at);
 }
 
 /**
@@ -385,7 +404,11 @@ function hhmm(at: Date): string {
  * items all share one group names it once under the header; one spanning groups heads each group's
  * run of items instead, so callers put group-less items first and the rest in group order.
  */
-export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): Uint8Array {
+export function formatKitchenTicket(
+  ticket: KitchenTicket,
+  layout: EscSetting,
+  timeZone: string,
+): Uint8Array {
   const b = esc(layout).init();
   b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
@@ -401,7 +424,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   emitAllergyHeading(b, lists.flat(), columns, ticket.locale);
   if (ticket.reprintedAt !== undefined)
     text(
-      `*** ${kitchenTicketWords(ticket.locale).reprint.replace("{time}", () => hhmm(ticket.reprintedAt!))} ***`,
+      `*** ${kitchenTicketWords(ticket.locale).reprint.replace("{time}", () => hhmm(ticket.reprintedAt!, timeZone))} ***`,
     );
   if (ticket.mark !== undefined)
     text(`*** ${kitchenTicketWords(ticket.locale)[ticket.mark === "HOLD" ? "hold" : "fire"]} ***`);
@@ -416,7 +439,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     const { order } = kitchenTicketWords(ticket.party.locale);
     emitOrderLine(b, `${order} ${ticket.orderNumber}`, ticket.party.name, columns);
   }
-  b.line(hhmm(ticket.firedAt));
+  b.line(hhmm(ticket.firedAt, timeZone));
   if (ticket.from !== undefined)
     text(`${kitchenTicketWords(ticket.from.locale).fromStation} ${ticket.from.stationName}`);
   emitKitchenNote(b, ticket.kitchenNote, columns);
@@ -429,6 +452,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   else {
     for (const station of ticket.stations) {
       text(station.stationName);
+      if (station.mark === "FIRE") text(`*** ${kitchenTicketWords(ticket.locale).fire} ***`);
       emitList(station.items);
     }
   }
@@ -437,7 +461,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     const { alsoOnOrder: heading, onHold: held } = kitchenTicketWords(alsoOnOrder.locale);
     text(`-- ${heading} --`);
     for (const item of alsoOnOrder.items) {
-      const prefix = `${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
+      const prefix = `${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
       const line = `${prefix}${item.name} — ${item.stationName}${item.held ? ` ${held}` : ""}`;
       for (const part of wrapText(prepareText(line), columns, prepareText(prefix).length)) {
         b.line(part);
@@ -472,6 +496,7 @@ export function joinKitchenTickets(first: Uint8Array, second: Uint8Array): Uint8
 
 export type CorrectionSlip = {
   locale: string;
+  party?: { name: string; locale: string };
   kitchenNote?: KitchenNoteHeading;
   stationName: string;
   tableLabel: string | null;
@@ -552,7 +577,11 @@ function slipHeader(slip: CorrectionSlip): string {
  * Prints the item through {@link emitItem}, as a ticket does; a HOLD CHANGED slip prefixes it with
  * + or -.
  */
-export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): Uint8Array {
+export function formatCorrectionSlip(
+  slip: CorrectionSlip,
+  layout: EscSetting,
+  timeZone: string,
+): Uint8Array {
   const b = esc(layout).init();
   b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
@@ -563,8 +592,15 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
   text(`*** ${slipHeader(slip)} ***`);
   text(slip.stationName);
   if (slip.tableLabel !== null) text(slip.tableLabel);
-  text(slip.orderNumber);
-  b.line(hhmm(new Date(slip.at)));
+  if (slip.party === undefined) text(slip.orderNumber);
+  else
+    emitOrderLine(
+      b,
+      `${kitchenTicketWords(slip.party.locale).order} ${slip.orderNumber}`,
+      slip.party.name,
+      columns,
+    );
+  b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNote(b, slip.kitchenNote, columns);
   if (slip.item.group !== undefined) emitGroup(b, slip.item, [slip.item], columns, slip.locale);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
@@ -592,19 +628,16 @@ export interface KitchenNoteChangeSlip {
   stations: KitchenTicketStation[];
   tableLabel: string | null;
   orderNumber: string;
+  orderNumbers?: readonly string[];
+  party?: { name: string; locale: string };
   at: string;
   orderNoteChange: KitchenNoteChange;
 }
 
-/**
- * One order's kitchen-note change at one printer: the header as a correction slip prints it, then
- * each station's dishes, under the station's name when there is more than one. Dishes that share
- * one group name it once under the note lines; otherwise each group's run is headed, as a ticket
- * heads them, with no late-send marks.
- */
 export function formatKitchenNoteChangeSlip(
   slip: KitchenNoteChangeSlip,
   layout: EscSetting,
+  timeZone: string,
 ): Uint8Array {
   const b = esc(layout).init();
   b.printArea(b.grid.widthDots);
@@ -618,8 +651,18 @@ export function formatKitchenNoteChangeSlip(
   text(`*** ${kitchenNoteChangeHeading(slip.orderNoteChange, slip.locale)} ***`);
   text(slip.stations.map((station) => station.stationName).join(" · "));
   if (slip.tableLabel !== null) text(slip.tableLabel);
-  text(slip.orderNumber);
-  b.line(hhmm(new Date(slip.at)));
+  const numbers = slip.orderNumbers ?? [slip.orderNumber];
+  if (slip.party === undefined && numbers.length === 1) text(slip.orderNumber);
+  else {
+    const words = kitchenTicketWords(slip.locale);
+    emitOrderLine(
+      b,
+      `${numbers.length === 1 ? words.order : words.orders} ${numbers.join(", ")}`,
+      slip.party?.name,
+      columns,
+    );
+  }
+  b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNoteChange(b, slip.orderNoteChange, slip.locale, columns);
   if (onlyGroup !== undefined) emitGroup(b, onlyGroup, allItems, columns, slip.locale);
   for (const station of slip.stations) {
@@ -627,6 +670,39 @@ export function formatKitchenNoteChangeSlip(
     emitGrouped(b, station.items, columns, onlyGroup, slip.locale, false);
   }
 
+  return b.feedAndCut().bytes();
+}
+
+export interface PartyNameChangeSlip {
+  locale: string;
+  stationNames: readonly string[];
+  tableLabel: string | null;
+  orderNumbers: readonly string[];
+  before: string | null;
+  after: string | null;
+  at: string;
+}
+
+export function formatPartyNameChangeSlip(
+  slip: PartyNameChangeSlip,
+  layout: EscSetting,
+  timeZone: string,
+): Uint8Array {
+  const b = esc(layout).init();
+  b.printArea(b.grid.widthDots);
+  const text = (value: string): void => {
+    for (const line of wrapText(prepareText(value), b.grid.columns)) b.line(line);
+  };
+  const words = kitchenTicketWords(slip.locale);
+  text(`*** ${words.nameChanged} ***`);
+  text(slip.stationNames.join(" · "));
+  if (slip.tableLabel !== null) text(slip.tableLabel);
+  text(
+    `${slip.orderNumbers.length === 1 ? words.order : words.orders} ${slip.orderNumbers.join(", ")}`,
+  );
+  text(hhmm(new Date(slip.at), timeZone));
+  text(`${words.was}: ${slip.before ?? words.unnamed}`);
+  text(`${words.now}: ${slip.after ?? words.unnamed}`);
   return b.feedAndCut().bytes();
 }
 
@@ -660,7 +736,7 @@ export function movedPlaceText(
   return place.counter ? kitchenTicketWords(locale).counter : partyTablesName(place.names);
 }
 
-export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array {
+export function formatMovedSlip(slip: MovedSlip, layout: EscSetting, timeZone: string): Uint8Array {
   const b = esc(layout).init();
   b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
@@ -684,7 +760,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   emitOrderLine(b, `${words.order} ${numbers}`, slip.partyName, columns);
   labelled(words.fromPlace, slip.fromText);
   labelled(words.toPlace, slip.toText);
-  b.line(hhmm(new Date(slip.at)));
+  b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNote(b, slip.kitchenNote, columns);
   emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items), slip.locale, false);
   if (slip.held.length > 0) b.line(words.hold);

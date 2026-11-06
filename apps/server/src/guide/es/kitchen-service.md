@@ -55,8 +55,17 @@ original y lleva una corrección cuando las instrucciones actuales son distintas
 
 Cambiar o quitar la nota para cocina del pedido da a tu estación un solo aviso con todos los platos
 afectados, y **Entendido** lo retira. Cada impresora de cocina imprime un solo ticket con los
-platos de las estaciones a las que sirve. Una mesa con más de una cuenta recibe un aviso y un ticket
-por cada cuenta.
+platos de las estaciones a las que sirve. Un grupo de comensales con varias cuentas afectadas recibe
+un aviso por estación y un ticket por impresora, con los números de esas cuentas. Lee la lista antes
+de confirmar.
+
+## Relaciona los nombres cambiados con los pedidos originales {#party-names}
+
+Los tickets de corrección muestran el nombre actual del grupo de comensales junto al número de
+pedido. Si se añade, cambia o quita el nombre de un grupo con trabajo pendiente en cocina, cada
+impresora afectada recibe un ticket **NOMBRE CAMBIADO**. Relaciona sus números de pedido con los
+tickets originales y usa el nombre que aparece después de **Ahora**. Este ticket cambia el nombre;
+no pide que vuelvas a preparar la comida.
 
 ## Conserva las instrucciones anticipadas del trabajo en espera {#held-work}
 
@@ -70,10 +79,9 @@ espera recibe su ticket anticipado de espera; otra estación con el ajuste activ
 recibir más tarde lo que se imprime en espera del grupo: un ticket anticipado de espera cuando se le
 mueve un plato en espera, o una comanda HOLD CHANGED cuando se añade al grupo un plato en espera en
 ella. Una estación que tiene lo impreso en espera del grupo sigue recibiéndolo, junto con sus
-correcciones y la comanda marcada FIRE, aunque se desactive su ajuste. Cualquier otra estación
-imprime su parte sin marca cuando se envía el grupo a preparar, salvo si comparte impresora con una
-estación que tiene lo impreso en espera del grupo: la comanda marcada FIRE de esa impresora lleva
-las dos.
+correcciones y la comanda marcada MARCHAR, aunque se desactive su ajuste. Cualquier otra estación
+imprime su parte sin marca cuando se envía el grupo a preparar, también si comparte impresora:
+solo las secciones que ya recibieron lo impreso en espera llevan la marca MARCHAR.
 
 Enviar a preparar el trabajo en espera en la misma estación no duplica una corrección de alergia
 existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
@@ -93,7 +101,8 @@ conserva las copias con el trabajo de cocina resultante; no sustituye las instru
 persona.
 
 La cabecera de una reimpresión indica cuándo se reimprimió (`*** REPRINT 15:20 ***`). La hora
-bajo el número de pedido sigue siendo la hora a la que se envió el primero de sus platos.
+bajo el número de pedido sigue siendo la hora a la que se envió el primero de sus platos. Lee ambas
+horas en la zona horaria de tu establecimiento.
 
 ## Mantén la comida visible hasta terminar el servicio {#service-lifetime}
 
@@ -345,8 +354,9 @@ puedes cobrar cuando lo has quitado.
 
 Un plato enviado después de que su periodo acabara antes en el mismo día de servicio, una vez que la
 cocina lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de cocina, una
-línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En la pantalla de cocina, la tarjeta muestra
-**Tras Almuerzo — aceptado** encima del plato.
+línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En el papel, una línea separadora termina ese
+bloque antes del siguiente plato sin marca; un nuevo encabezado de grupo o estación también lo
+termina. En la pantalla de cocina, la tarjeta muestra **Tras Almuerzo — aceptado** encima del plato.
 
 Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
 con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y cocina**, en su pestaña

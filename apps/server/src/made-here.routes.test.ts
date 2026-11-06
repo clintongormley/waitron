@@ -1126,7 +1126,7 @@ describe("made-here route wiring", () => {
     expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain(
       kitchenTicketWords("es").holdChanged,
     );
-    expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain("+1.000 x PAELLA");
+    expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain("+1 x PAELLA");
     expect(
       await inTx(venue, (tx) =>
         tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),

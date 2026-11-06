@@ -1,5 +1,10 @@
 # A964 Kitchen Language Implementation Plan
 
+> **2026-11-06, A1378:** kitchen tickets, reprints and correction, note-change and MOVED slips
+> now take the venue's saved time zone explicitly. Whole quantities print without `.000`;
+> fractional quantities retain their stored precision. The clock and quantity examples below
+> describe the earlier implementation.
+
 > 2026-10-27, A965: card slips now take wording, dates and amounts from the saved sale’s receipt language. The `cfg.locale` card-slip trace below records the earlier input; A964 still preserves its other configuration meanings. See [A965’s plan](2026-10-27-a965-receipt-language.md).
 
 

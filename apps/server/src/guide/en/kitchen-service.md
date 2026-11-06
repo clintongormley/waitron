@@ -51,7 +51,15 @@ with a correction when its current instructions differ.
 
 Changing or removing the order's kitchen note gives your station one notice listing every dish it
 affects, and **Got it** clears it. Each kitchen printer prints one slip listing the dishes of the
-stations it serves. A table with more than one bill gets one notice and one slip for each bill.
+stations it serves. A party with more than one affected bill gets one notice per station and one
+slip per printer, listing those bill numbers. Read the list before acknowledging it.
+
+## Match changed names to the original orders {#party-names}
+
+Correction slips show the party's current name beside the order number. If staff name, rename or
+clear the name of a party with kitchen work still outstanding, each affected printer receives a
+**NAME CHANGED** slip. Match its order numbers to the original tickets and use the name shown after
+**Now**. This slip changes the name; it does not ask you to cook the food again.
 
 ## Keep advance HOLD instructions with the work {#held-work}
 
@@ -64,8 +72,7 @@ another station set so may start getting the group's HOLD paper later: a HOLD ti
 dish is moved to it, or a HOLD CHANGED slip when a held dish is added to the group there. A station
 that has the group's HOLD paper keeps getting it, its corrections and the ticket marked FIRE, even
 if its switch is turned off. Any other station prints its part unmarked when the group is fired,
-unless it shares a printer with a station that has the group's HOLD paper: that printer's ticket
-marked FIRE carries both.
+including on a shared printer: only the sections that already received HOLD paper are marked FIRE.
 
 Firing held work at the same station does not duplicate an existing allergy correction. Recalling
 a dish into a draft ends its old kitchen work. Sending that draft again creates a new kitchen copy
@@ -83,7 +90,8 @@ check the station's outstanding notices separately. Splitting dishes between bil
 copies with the resulting kitchen work; it does not replace the guest's instructions.
 
 A reprint's heading shows when it was reprinted (`*** REPRINT 15:20 ***`). The time under the
-order number stays the time the first of its dishes was sent.
+order number stays the time the first of its dishes was sent. Read both times in your venue's
+time zone.
 
 ## Keep food visible until service ends {#service-lifetime}
 
@@ -311,6 +319,7 @@ only once it is removed.
 
 A dish sent after its period ended earlier the same business day, once the kitchen agreed, carries a mark
 with its period's name. On its kitchen ticket a line above it reads `** AFTER LUNCH — AGREED **`.
+A divider ends that run before the next unmarked dish; a new group or station heading also ends it.
 On the kitchen screen, the card shows **After Lunch — agreed** above it.
 
 Each department sets whether sending such a dish needs a manager, or a manager's PIN, with

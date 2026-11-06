@@ -706,7 +706,7 @@ describe("splitting a line the kitchen has", () => {
     const numbers = `${await orderNumberOf(from)} -> ${await orderNumberOf(checkId)}`;
     expect(await printedBy(printerId)).toEqual([
       ...printed,
-      movedSlip("T1", "T1", numbers, "1.000 x Agua"),
+      movedSlip("T1", "T1", numbers, "1 x Agua"),
     ]);
     expect(await noticesOn(from, checkId)).toEqual([
       { orderId: checkId, kind: "moved", quantity: 1000 },
@@ -734,7 +734,7 @@ describe("splitting a line the kitchen has", () => {
     ]);
     const slip = (await printedBy(printerId)).at(-1)!;
     expect(slip).toContain("*** VOID ***");
-    expect(slip).toContain("1.000 x Agua");
+    expect(slip).toContain("1 x Agua");
     expect(await queueAt(cfg, stationId)).toEqual({ [from]: [thousandthsToDecimal(1000)] });
   });
 
@@ -780,7 +780,7 @@ describe("splitting a line the kitchen has", () => {
     expect(kept!.sentAt).toBeNull();
     expect((await ticketOf(kept!.id))!.firedAt).toBeNull();
     expect(await printedBy(printerId)).toHaveLength(1);
-    expect((await printedBy(printerId))[0]).toContain("1.000 x Agua");
+    expect((await printedBy(printerId))[0]).toContain("1 x Agua");
 
     await asApp(cfg, (tx) => sendLines(tx, cfg, from, []));
 
@@ -789,8 +789,8 @@ describe("splitting a line the kitchen has", () => {
     expect((await ticketOf(kept!.id))!.firedAt).not.toBeNull();
     const printed = await printedBy(printerId);
     expect(printed).toHaveLength(2);
-    expect(printed[1]).toContain("1.000 x Agua");
-    expect(printed[1]).not.toContain("2.000 x Agua");
+    expect(printed[1]).toContain("1 x Agua");
+    expect(printed[1]).not.toContain("2 x Agua");
   });
 
   it("names the origin's table on the slip voiding the part moved to a check", async () => {
@@ -815,7 +815,7 @@ describe("splitting a line the kitchen has", () => {
     const slip = (await printedBy(printerId)).at(-1)!;
     expect(slip).toContain("*** VOID ***");
     expect(slip).toContain("T1");
-    expect(slip).toContain("1.000 x Agua");
+    expect(slip).toContain("1 x Agua");
     expect(await noticesOn(checkId)).toEqual([
       { orderId: checkId, kind: "moved", quantity: 2000 },
       { orderId: checkId, kind: "void", quantity: 1000 },
@@ -984,7 +984,7 @@ describe("moving sent work to another table tells the kitchen", () => {
     ]);
     expect(await printedBy(printerId)).toEqual([
       ...printed,
-      movedSlip("T1", "T1", `${checkNumber} -> ${tabNumber}`, "1.000 x Agua"),
+      movedSlip("T1", "T1", `${checkNumber} -> ${tabNumber}`, "1 x Agua"),
     ]);
     expect(await queueAt(cfg, stationId)).toEqual({
       [tabId]: [thousandthsToDecimal(1000), thousandthsToDecimal(1000)],
@@ -1028,6 +1028,6 @@ describe("moving sent work to another table tells the kitchen", () => {
     ]);
     const printed = await printedBy(printerId);
     expect(printed).toHaveLength(2);
-    expect(printed[1]).toEqual(movedSlip("T1", "T2", `${number}`, "2.000 x Agua"));
+    expect(printed[1]).toEqual(movedSlip("T1", "T2", `${number}`, "2 x Agua"));
   });
 });

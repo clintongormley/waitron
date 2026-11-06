@@ -149,13 +149,13 @@ describe("groups with split-off extras", () => {
         );
         const fryer = (await slips(tx, v.printers.fryer)).slice(fryerBefore);
         expect(fryer).toHaveLength(2);
-        expect(fryer[0]).toContain("-2.000 x CHIPS");
-        expect(fryer[1]).toContain("+2.000 x CHIPS");
+        expect(fryer[0]).toContain("-2 x CHIPS");
+        expect(fryer[1]).toContain("+2 x CHIPS");
         const grill = (await slips(tx, v.printers.grill)).slice(grillBefore);
         if (product === "burger") {
           expect(grill).toHaveLength(2);
-          expect(grill[0]).toContain("-1.000 x BURG");
-          expect(grill[1]).toContain("+1.000 x BURG");
+          expect(grill[0]).toContain("-1 x BURG");
+          expect(grill[1]).toContain("+1 x BURG");
         } else expect(grill).toHaveLength(0);
       });
     },
@@ -177,10 +177,10 @@ describe("groups with split-off extras", () => {
         groups: [{ lines: [line(v, "burger")], release: "hold" }],
       });
       expect((await slips(tx, v.printers.fryer)).slice(fryerBefore)).toEqual([
-        expect.stringContaining("+2.000 x CHIPS"),
+        expect.stringContaining("+2 x CHIPS"),
       ]);
       expect((await slips(tx, v.printers.grill)).slice(grillBefore)).toEqual([
-        expect.stringContaining("+1.000 x BURG"),
+        expect.stringContaining("+1 x BURG"),
       ]);
     });
   });

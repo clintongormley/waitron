@@ -12,6 +12,8 @@ import {
 } from "./kitchen-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 
+const TEST_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 const layout = { paperWidth: "80mm", resolution: "180dpi" } as const;
 const firedAt = new Date(2026, 9, 29, 13, 24);
 const item = { qty: "2.000", name: "Pass roast", group: 3 };
@@ -32,12 +34,13 @@ describe("A964 frame catalogue", () => {
           items: [item],
         },
         layout,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).not.toContain(`*** ${mark} ***`);
     expect(lines).not.toContain("*** REPRINT 13:24 ***");
     expect(lines).not.toContain("GROUP 3");
-    expect(lines).toContain("2.000 x Pass roast");
+    expect(lines).toContain("2 x Pass roast");
   });
   it.each(["VOID", "RECALLED", "HOLD CANCELLED"] as const)(
     "translates Spanish %s corrections",
@@ -54,11 +57,12 @@ describe("A964 frame catalogue", () => {
             item,
           },
           layout,
+          TEST_TIME_ZONE,
         ),
       );
       expect(lines).not.toContain(`*** ${kind} ***`);
       expect(lines).not.toContain("GROUP 3");
-      expect(lines).toContain("2.000 x Pass roast");
+      expect(lines).toContain("2 x Pass roast");
     },
   );
   it.each(["added", "removed"] as const)(
@@ -77,10 +81,11 @@ describe("A964 frame catalogue", () => {
             item,
           },
           layout,
+          TEST_TIME_ZONE,
         ),
       );
       expect(lines).not.toContain("*** HOLD CHANGED ***");
-      expect(lines).toContain(`${direction === "added" ? "+" : "-"}2.000 x Pass roast`);
+      expect(lines).toContain(`${direction === "added" ? "+" : "-"}2 x Pass roast`);
     },
   );
   it("translates moved held and group headings", () => {
@@ -97,11 +102,12 @@ describe("A964 frame catalogue", () => {
           held: [{ group: 3, items: [item] }],
         },
         layout,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).not.toContain("HOLD");
     expect(lines).not.toContain("GROUP 3");
-    expect(lines).toContain("2.000 x Pass roast");
+    expect(lines).toContain("2 x Pass roast");
   });
   it("preserves the complete English frame and quantity", () => {
     expect(
@@ -119,6 +125,7 @@ describe("A964 frame catalogue", () => {
             items: [item],
           },
           layout,
+          TEST_TIME_ZONE,
         ),
       ),
     ).toEqual([
@@ -129,7 +136,7 @@ describe("A964 frame catalogue", () => {
       "12",
       "13:24",
       "GROUP 3",
-      "2.000 x Pass roast",
+      "2 x Pass roast",
       "",
     ]);
   });
@@ -179,6 +186,7 @@ describe("A964 complete paper frames", () => {
               },
             },
             layout,
+            TEST_TIME_ZONE,
           ),
         ),
       ).toEqual([
@@ -258,14 +266,14 @@ describe("A964 complete paper frames", () => {
       ],
     ];
     for (const [slip, header, sign, tail] of cases)
-      expect(printedLines(formatCorrectionSlip(slip, layout))).toEqual([
+      expect(printedLines(formatCorrectionSlip(slip, layout, TEST_TIME_ZONE))).toEqual([
         `*** ${header} ***`,
         "Grill",
         "Table 7",
         "12",
         "13:24",
         `${w.group} 3`,
-        `${sign}2.000 x Pass roast`,
+        `${sign}2 x Pass roast`,
         ...tail,
         "",
       ]);
@@ -284,6 +292,7 @@ describe("A964 complete paper frames", () => {
             orderNoteChange: { before: "$& Together", after: null },
           },
           layout,
+          TEST_TIME_ZONE,
         ),
       ),
     ).toEqual([
@@ -294,7 +303,7 @@ describe("A964 complete paper frames", () => {
       w.noteRemovedBody,
       `${w.was}: $& Together`,
       `${w.group} 3`,
-      "2.000 x Pass roast",
+      "2 x Pass roast",
       "",
     ]);
     expect(
@@ -312,6 +321,7 @@ describe("A964 complete paper frames", () => {
             held: [{ group: 3, items: [item] }],
           },
           layout,
+          TEST_TIME_ZONE,
         ),
       ),
     ).toEqual([
@@ -323,7 +333,7 @@ describe("A964 complete paper frames", () => {
       "13:24",
       w.hold,
       `${w.group} 3`,
-      "2.000 x Pass roast",
+      "2 x Pass roast",
       "",
     ]);
   });

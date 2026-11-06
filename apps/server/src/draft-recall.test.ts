@@ -1362,7 +1362,7 @@ describe("party Recall to draft", () => {
       const cancelled = (await paperAt(kitchenPrinterId)).slice(kitchenBefore);
       expect(cancelled).toHaveLength(1);
       expect(cancelled[0]![0]).toBe(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
-      expect(cancelled[0]!.at(-1)).toBe("1.000 x TARTA");
+      expect(cancelled[0]!.at(-1)).toBe("1 x TARTA");
       expect(await paperAt(barPrinterId)).toEqual([]);
       const told = async (station: string) =>
         (

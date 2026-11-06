@@ -17,6 +17,8 @@ import { printedCommands } from "./testing/decode-ticket.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
 
+const TEST_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 const layouts = [
   { paperWidth: "58mm", resolution: "180dpi", width: 360 },
   { paperWidth: "58mm", resolution: "203dpi", width: 384 },
@@ -71,6 +73,7 @@ describe("A964 paper layout", () => {
               ...(hold ? { mark: "HOLD" as const } : {}),
             },
             layout,
+            TEST_TIME_ZONE,
           );
         const fixtures = [
           { name: "regular-allergy", payload: ticket(), contains: ["Grill", "281", "Pass roast"] },
@@ -90,6 +93,7 @@ describe("A964 paper layout", () => {
                 },
               },
               layout,
+              TEST_TIME_ZONE,
             ),
             contains: ["Grill · Fryer", "Pass chips", w.alsoOnOrder],
           },
@@ -107,8 +111,9 @@ describe("A964 paper layout", () => {
                 item,
               },
               layout,
+              TEST_TIME_ZONE,
             ),
-            contains: [w.holdChanged, "-2.000", "Pass roast"],
+            contains: [w.holdChanged, "-2", "Pass roast"],
           },
           {
             name: "note-removed",
@@ -122,6 +127,7 @@ describe("A964 paper layout", () => {
                 orderNoteChange: { before: "Serve together before the train leaves", after: null },
               },
               layout,
+              TEST_TIME_ZONE,
             ),
             contains: [w.noteRemoved, w.noteRemovedBody, "Serve together"],
           },
@@ -140,6 +146,7 @@ describe("A964 paper layout", () => {
                 held: [{ group: 4, items: [{ qty: 1, name: "Pass dessert" }] }],
               },
               layout,
+              TEST_TIME_ZONE,
             ),
             contains: [w.moved, w.counter, "Garden table", w.hold, "Pass dessert"],
           },

@@ -2867,6 +2867,22 @@ Deployment does not set a process time zone in `deploy/Dockerfile`'s runtime `EN
 'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'` printed `UTC`.
 That base-image probe does not measure an operator's configured appliance.
 
+## Kitchen-paper fixtures compare against the venue clock
+
+When paper changes from host time to the saved venue time zone, run all affected paper suites
+under a host zone with a different offset. A focused clock test does not read every integration
+suite's expected-time helper. Keep fixed expected hours literal and construct fixed fixture
+instants with an explicit offset.
+
+A1378's first affected-suite run used a Rome host beside Madrid venue fixtures. Its focused
+Canary/Madrid clock cases passed, but five integration helpers still used `getHours()` and a sixth
+file constructed its fixed reprint clocks in host time. The driver reproduced 56 failures and
+182 passes with `TZ=UTC pnpm --filter @waitron/server exec vitest run --maxWorkers=2` over
+`pass-release.test.ts`, `kitchen-request.alerts.test.ts`, `kitchen-print.concurrency.test.ts`,
+`kitchen-request.hold-paper.test.ts`, `till-api.service-periods.test.ts` and `print-problems.test.ts`
+under `apps/server/src`. The 238 cases passed after replacing those expected hours and instants.
+The six files' assertions still check the same venue hours, order, grouping and concurrency.
+
 ## Wait for a resolved response to reach the screen before checking its late effect
 
 Resolving a deferred request does not mean its consumer has published a snapshot yet. When your
@@ -3760,3 +3776,17 @@ status set used both keys of `print_jobs_pull_idx` before statistics were gather
 fixture planned a full job scan afterwards. The final printer-first candidate lookup names the
 existing index, and its history suite checks both planner states. A separate failed-job lookup
 also names that index so retry ordering does not scan delivered history for each candidate.
+
+
+## HOLD paper can remain after its group stops being held
+
+Exercise requested work at the pass as well as a group still marked held when testing instructions
+sent to stations with recorded HOLD paper. Keep a never-printed requested-work control: a broad
+`requestedAt` arm can send a notice where no HOLD paper was recorded.
+
+A1378's final review found that its new name-change paper reused a note reader that admitted only
+fired items or groups still held. Its recorded-HOLD/pass probe printed no name slip. The new F1
+cases in `party-name-paper.test.ts` and `order-kitchen-note.corrections.test.ts` failed for recorded
+paper and retained the unprinted controls. A temporary base checkout at `1072f1cbd6` reproduced the
+note omission too (one failure, one passing unprinted control). Joining the recorded group/station
+pair admits the waiting work; both name and note cases then pass. No schema change was needed.

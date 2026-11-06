@@ -393,6 +393,6 @@ describe("charged cancellation read projections", () => {
     expect(jobs).toHaveLength(2);
     expect(
       jobs.flatMap((job) => printedLines(job.payload)).filter((line) => /^\+/.test(line)),
-    ).toEqual(["+1.000 x PIZZA", "+2.000 x OLIV"]);
+    ).toEqual(["+1 x PIZZA", "+2 x OLIV"]);
   });
 });

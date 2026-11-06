@@ -65,6 +65,44 @@ afterEach(() => {
 });
 
 describe("kitchen instructions on station work", () => {
+  it.each(["en-GB", "es-ES"] as const)(
+    "shows all party notice bills and acknowledges its shared id in %s",
+    async (locale) => {
+      setLocale(locale);
+      await page.viewport(390, 844);
+      const grouped: KitchenNotice = {
+        ...notice,
+        orderLabel: "#17, #18 · Table 21",
+        orderNoteChange: { before: "Old instruction", after: "Together", partyId: "party-a" },
+        dishes: [
+          {
+            lineName: "Burger",
+            quantity: "2.000",
+            unitName: null,
+            soldInEach: true,
+            note: null,
+            wasStarted: false,
+          },
+        ],
+      };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [group],
+        notices: [grouped],
+      });
+      const rows = el.shadowRoot!.querySelectorAll("[data-notice]");
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.textContent).toContain("#17, #18 · Table 21");
+      expect(rows[0]!.textContent).toContain("Together");
+      expect(rows[0]!.textContent).not.toContain("party-a");
+      const observed: string[] = [];
+      el.addEventListener("acknowledge-notice", (event) =>
+        observed.push((event as CustomEvent<{ noticeId: string }>).detail.noticeId),
+      );
+      await userEvent.click(rows[0]!.querySelector("wt-button")!);
+      expect(observed).toEqual(["notice-a"]);
+    },
+  );
+
   it("places the whole note above dishes and replaces it independently", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [group],

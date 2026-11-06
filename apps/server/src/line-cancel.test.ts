@@ -574,7 +574,7 @@ describe("Cancel item service command", () => {
           },
         ]);
         expect(jobs).toHaveLength(1);
-        expect(printedLines(jobs[0]!.payload).join("\n")).toContain("2.000 x PIZZA");
+        expect(printedLines(jobs[0]!.payload).join("\n")).toContain("2 x PIZZA");
       } else {
         expect(added).toEqual([]);
         expect(jobs).toEqual([]);
@@ -696,7 +696,7 @@ describe("Cancel item service command", () => {
     const afterJobs = await inTx(venue, (tx) => tx.select().from(printJobs));
     const added = afterJobs.filter((row) => !jobs.some((old) => old.id === row.id));
     expect(added).toHaveLength(1);
-    expect(printedLines(added[0]!.payload).join("\n")).toContain("2.000 x PIZZA");
+    expect(printedLines(added[0]!.payload).join("\n")).toContain("2 x PIZZA");
     const parentStation = order.tickets.find(
       (row) => row.workingOrderLineId === order.parent.id,
     )!.stationId;
@@ -1045,7 +1045,7 @@ describe("Cancel item service command", () => {
         expect(jobs).toHaveLength(1);
         const lines = printedLines(jobs[0]!.payload).join("\n");
         expect(lines).toContain(kitchenTicketWords("es").holdCancelled);
-        expect(lines).toContain("3.000 x PIZZA");
+        expect(lines).toContain("3 x PIZZA");
         const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.stationId));
         expect(notices.filter((notice) => notice.workingOrderId === order.billId)).toMatchObject([
           { kind: "void", quantity: "3.000", wasStarted: false },
@@ -1074,7 +1074,7 @@ describe("Cancel item service command", () => {
           (row) => !beforeJobs.some((old) => old.id === row.id),
         );
         expect(jobs).toHaveLength(printed ? 1 : 0);
-        if (printed) expect(printedLines(jobs[0]!.payload).join("\n")).toContain("2.000 x PIZZA");
+        if (printed) expect(printedLines(jobs[0]!.payload).join("\n")).toContain("2 x PIZZA");
         const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.stationId));
         const added = notices.filter((row) => row.workingOrderId === order.billId);
         if (printed)
@@ -1183,7 +1183,7 @@ describe("Cancel item service command", () => {
       ).toEqual([]);
       expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
       expect(printed[0]!.lines).toContain(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
-      expect(printed[0]!.lines.join("\n")).toContain("1.000 x RIBEYE");
+      expect(printed[0]!.lines.join("\n")).toContain("1 x RIBEYE");
       const told = async (stationId: string) =>
         (await inTx(venue, (tx) => listStationNotices(tx, stationId)))
           .filter((notice) => notice.workingOrderId === order.billId)

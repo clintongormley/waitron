@@ -1,6 +1,10 @@
+import { fireGroup } from "./order-groups.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   kitchenStations,
@@ -42,6 +46,7 @@ import {
   inTx,
   OPERATOR,
   order,
+  nameParty,
   pay,
   revisionOf,
   seatWithNoAllergies as seat,
@@ -53,6 +58,136 @@ import {
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let v: PartyVenue;
 let stationId: string;
+
+it("A1378 prints and acknowledges one party note change across two bills", async () => {
+  const output = await printer();
+  const p = await sent();
+  await order(v, p.tabId, "Burger");
+  const second = await split(v, p.partyId, p.tabId, [2]);
+  await nameParty(v, p.partyId, "Ana");
+  const numbers = (
+    await v.db
+      .select({ number: workingOrders.orderNumber })
+      .from(workingOrders)
+      .where(inArray(workingOrders.id, [p.tabId, second]))
+  )
+    .map((row) => row.number)
+    .sort((a, b) => a - b);
+  const before = new Set((await v.db.select().from(printJobs)).map((job) => job.id));
+  await set({ partyId: p.partyId }, "New time");
+  const papers = (
+    await v.db.select().from(printJobs).where(eq(printJobs.printerId, output))
+  ).filter((job) => !before.has(job.id));
+  expect(papers).toHaveLength(1);
+  expect(printedLines(papers[0]!.payload)[3]).toBe(
+    `${kitchenTicketWords("es").orders} ${numbers.join(", ")} · Ana`,
+  );
+  const notes = (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
+    (notice) => notice.orderNoteChange !== undefined,
+  );
+  expect(notes).toHaveLength(1);
+  expect(notes[0]!.orderLabel).toBe(`#${numbers[0]}, #${numbers[1]} · Table 1`);
+  expect(notes[0]!.orderNoteChange).toEqual({
+    before: "Old time",
+    after: "New time",
+    partyId: p.partyId,
+  });
+  expect(notes[0]!.dishes).toEqual([
+    expect.objectContaining({ lineName: "BURG", quantity: "2.000" }),
+  ]);
+  const rows = (await v.db.select().from(kitchenNotices)).filter(
+    (row) => row.orderNoteChange !== null,
+  );
+  expect(rows.map((row) => row.workingOrderId).sort()).toEqual([p.tabId, second].sort());
+  await inTx(v, (tx) => VENUE_SERVICE.acknowledgeKitchenNotice(tx, notes[0]!.id));
+  expect(
+    (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
+      (notice) => notice.orderNoteChange !== undefined,
+    ),
+  ).toEqual([]);
+  expect(
+    (await v.db.select().from(kitchenNotices))
+      .filter((row) => rows.some((old) => old.id === row.id))
+      .every((row) => row.acknowledgedAt !== null),
+  ).toBe(true);
+});
+
+it("A1378 keeps same-name parties and independent counter note changes apart", async () => {
+  await printer();
+  const first = await sent();
+  const second = await seat(v, await v.table("Table 2"));
+  await nameParty(v, first.partyId, "Ana");
+  await nameParty(v, second.partyId, "Ana");
+  await order(v, second.tabId, "Burger");
+  const counters = [await counterOrder(v, "Burger"), await counterOrder(v, "Burger")];
+  for (const id of counters)
+    await placeOrder(
+      { db: v.db, backend: v.backend, clock: v.clock, admission: testTradingAdmission() },
+      v.cfg,
+      id,
+      OPERATOR,
+    );
+  const ids = [first.tabId, second.tabId, ...counters];
+  const before = new Set((await v.db.select().from(printJobs)).map((job) => job.id));
+  await inTx(v, (tx) =>
+    enqueueOrderKitchenNoteChange(tx, v.cfg, ids, { before: null, after: "Together" }),
+  );
+  expect((await v.db.select().from(printJobs)).filter((job) => !before.has(job.id))).toHaveLength(
+    4,
+  );
+  const notes = (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
+    (notice) => notice.orderNoteChange !== undefined,
+  );
+  expect(notes).toHaveLength(4);
+  expect(notes.map((notice) => notice.workingOrderId).sort()).toEqual(ids.sort());
+});
+
+it("A1378 lists only each printer's affected bills on a party note change", async () => {
+  const shared = await printer();
+  const bar = await inTx(v, async (tx) => {
+    const station = await createStation(tx, { name: "Bar" });
+    await routeProductTo(tx, v.productId("Paella"), station.id);
+    const own = await createPrinter(tx, {
+      name: "Bar only",
+      transport: "cloud_poll",
+      pollId: randomUUID(),
+    });
+    await attachPrinterToStation(tx, { stationId: station.id, printerId: shared });
+    await attachPrinterToStation(tx, { stationId: station.id, printerId: own.id });
+    return { id: station.id, printerId: own.id };
+  });
+  const p = await seat(v, await v.table("Table 3"));
+  await order(v, p.tabId, "Burger", "Paella");
+  const second = await split(v, p.partyId, p.tabId, [2]);
+  const rows = await v.db
+    .select({ id: workingOrders.id, number: workingOrders.orderNumber })
+    .from(workingOrders)
+    .where(inArray(workingOrders.id, [p.tabId, second]));
+  const numbers = new Map(rows.map((row) => [row.id, String(row.number)]));
+  const before = new Set((await v.db.select().from(printJobs)).map((job) => job.id));
+  await set({ partyId: p.partyId }, "Together");
+  const jobs = (await v.db.select().from(printJobs)).filter((job) => !before.has(job.id));
+  expect(jobs).toHaveLength(2);
+  expect(printedLines(jobs.find((job) => job.printerId === shared)!.payload)[3]).toBe(
+    `${kitchenTicketWords("es").orders} ${rows
+      .map((row) => row.number)
+      .sort((a, b) => a - b)
+      .join(", ")}`,
+  );
+  expect(printedLines(jobs.find((job) => job.printerId === bar.printerId)!.payload)[3]).toBe(
+    numbers.get(second),
+  );
+  expect(
+    (await inTx(v, (tx) => listStationNotices(tx, stationId)))
+      .filter((notice) => notice.orderNoteChange !== undefined)
+      .map((notice) => notice.orderLabel),
+  ).toEqual([`#${numbers.get(p.tabId)}`]);
+  expect(
+    (await inTx(v, (tx) => listStationNotices(tx, bar.id)))
+      .filter((notice) => notice.orderNoteChange !== undefined)
+      .map((notice) => notice.orderLabel),
+  ).toEqual([`#${numbers.get(second)} · Table 3`]);
+});
 
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
@@ -505,9 +640,7 @@ it("gives a shared instruction one slip at the printer and one notice at the sta
     expect.objectContaining({ lineName: "BURG", quantity: thousandthsToDecimal(3000) }),
   ]);
   const jobs = await v.db.select().from(printJobs);
-  expect(printedLines(jobs.at(-1)!.payload).filter((line) => line === "3.000 x BURG")).toHaveLength(
-    1,
-  );
+  expect(printedLines(jobs.at(-1)!.payload).filter((line) => line === "3 x BURG")).toHaveLength(1);
 
   const rows = await v.db.select().from(kitchenNotices);
   expect(await set(scope, "New shared time", submissionId, starting)).toEqual(saved);
@@ -557,10 +690,10 @@ it("A807 prints one slip per printer for stations that share one", async () => {
   const shared = (await jobsAt(s.shared)).slice(before.shared);
   expect(shared).toHaveLength(1);
   expect(shared[0]!.slice(0, 2)).toEqual(["*** NOTA PARA COCINA CAMBIADA ***", "Grill · Pastry"]);
-  expect(shared[0]!.slice(-5)).toEqual(["Grill", "2.000 x BURG", "Pastry", "1.000 x FLAN", ""]);
+  expect(shared[0]!.slice(-5)).toEqual(["Grill", "2 x BURG", "Pastry", "1 x FLAN", ""]);
   const own = (await jobsAt(s.own)).slice(before.own);
   expect(own).toHaveLength(1);
-  expect(own[0]).toContain("1.000 x PAELLA");
+  expect(own[0]).toContain("1 x PAELLA");
   const dishes = async (id: string) =>
     (await inTx(v, (tx) => listStationNotices(tx, id))).map((notice) =>
       notice.dishes?.map((dish) => dish.lineName),
@@ -584,4 +717,101 @@ it("does not correct retained work on an abandoned bill", async () => {
   );
   expect(await v.db.select().from(kitchenNotices)).toEqual([]);
   expect(await v.db.select().from(printJobs)).toEqual(before);
+});
+
+it.each([true, false])(
+  "F1 changes notes for waiting HOLD work only at recorded stations (%s)",
+  async (recorded) => {
+    const output = await printer();
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: recorded }));
+    await inTx(v, (tx) => setStationsWaitForPass(tx, true, [stationId]));
+    const p = await seat(v, await v.table("Waiting"));
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        operatorId: OPERATOR,
+        billId: p.tabId,
+        groups: [{ release: "hold", lines: [{ menuItemId: v.item("Burger"), quantity: "1" }] }],
+      }),
+    );
+    const [group] = await v.db.select().from(orderGroups);
+    const expected = await commandFor(v, p.partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, p.partyId, group!.id, { ...expected, submissionId: randomUUID() }),
+    );
+    const before = await v.db.select().from(printJobs);
+    await set({ partyId: p.partyId }, "Bring together");
+    const after = await v.db.select().from(printJobs);
+    expect(
+      after.filter((job) => job.printerId === output && !before.some((old) => old.id === job.id)),
+    ).toHaveLength(recorded ? 1 : 0);
+    expect(
+      (await v.db.select().from(kitchenNotices)).filter(
+        (notice) => notice.orderNoteChange !== null,
+      ),
+    ).toHaveLength(recorded ? 1 : 0);
+  },
+);
+
+it("F4 keeps a settled bill's copied table label in the party notice", async () => {
+  await printer();
+  const p = await seat(v, await v.table("Table 21"));
+  await order(v, p.tabId, "Burger", "Burger");
+  const second = await split(v, p.partyId, p.tabId, [2]);
+  await pay(v, second, "12.00");
+  const bills = await v.db
+    .select()
+    .from(workingOrders)
+    .where(inArray(workingOrders.id, [p.tabId, second]));
+  const paid = bills.find((bill) => bill.id === second)!;
+  expect(paid.label).toBe("Table 21");
+  await set({ partyId: p.partyId }, "Together");
+  const notes = (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
+    (notice) => notice.orderNoteChange !== undefined,
+  );
+  expect(notes).toHaveLength(1);
+  expect(notes[0]!.orderLabel).toBe(
+    bills
+      .sort((a, b) => a.orderNumber - b.orderNumber)
+      .map((bill) => `#${bill.orderNumber}${bill.label === null ? "" : ` · ${bill.label}`}`)
+      .join(", "),
+  );
+});
+
+it("F6 folds a retained settled bill under the surviving party identity", async () => {
+  await printer();
+  const sourceTable = await v.table("Source");
+  const source = await seat(v, sourceTable);
+  await order(v, source.tabId, "Burger");
+  await pay(v, source.tabId, "12.00");
+  const target = await seat(v, await v.table("Target"));
+  await order(v, target.tabId, "Burger");
+  const expected = await commandFor(v, target.partyId);
+  const expectedOtherPartyRevision = await revisionOf(v, source.partyId);
+  await inTx(v, (tx) =>
+    joinTables(tx, v.cfg, target.partyId, sourceTable, {
+      ...expected,
+      otherPartyId: source.partyId,
+      expectedOtherPartyRevision,
+    }),
+  );
+  const before = await v.db.select().from(printJobs);
+  await set({ partyId: target.partyId }, "Together");
+  const after = await v.db.select().from(printJobs);
+  const changed = after.filter((job) => !before.some((old) => old.id === job.id));
+  expect(changed).toHaveLength(1);
+  const bills = await v.db
+    .select()
+    .from(workingOrders)
+    .where(inArray(workingOrders.id, [source.tabId, target.tabId]));
+  expect(printedLines(changed[0]!.payload)).toContain(
+    `${kitchenTicketWords("es").orders} ${bills
+      .map((bill) => bill.orderNumber)
+      .sort((a, b) => a - b)
+      .join(", ")}`,
+  );
+  expect(
+    (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
+      (notice) => notice.orderNoteChange?.after === "Together",
+    ),
+  ).toHaveLength(1);
 });

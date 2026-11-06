@@ -2029,10 +2029,10 @@ describe("A803 waiting copy: kitchen paper", () => {
     expect((await groupRow(copyId)).displayNumber).not.toBe((await groupRow(t.g)).displayNumber);
     expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
       movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, [
-        "1.000 x BURG",
+        "1 x BURG",
         words.hold,
         `${words.group} 2 · DESSERTS`,
-        "1.000 x TARTA",
+        "1 x TARTA",
       ]),
     ]);
     expect((await printed(t.pastry.printer)).slice(marks.pastry)).toEqual([]);
@@ -2074,7 +2074,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     await fire(partyId, copyId);
 
     expect((await printed(t.grill.printer)).slice(before.grill)).toEqual([
-      fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+      fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
     ]);
     expect((await printed(t.pastry.printer)).slice(before.pastry)).toEqual([]);
 
@@ -2082,7 +2082,7 @@ describe("A803 waiting copy: kitchen paper", () => {
 
     expect((await printed(t.grill.printer)).slice(before.grill + 1)).toEqual([]);
     expect((await printed(t.pastry.printer)).slice(before.pastry)).toEqual([
-      fireTicket(t.pastry.name, t.label, await orderNumberOf(t.bill1), 3, "1.000 x FLAN"),
+      fireTicket(t.pastry.name, t.label, await orderNumberOf(t.bill1), 3, "1 x FLAN"),
     ]);
   });
 
@@ -2117,7 +2117,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     const { partyId, copyId, marks } = await moveBill2(t, table8);
 
     expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
-      movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1.000 x BURG"]),
+      movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1 x BURG"]),
     ]);
     expect((await groupRow(copyId)).holdPrintedAt).toBeNull();
     await answerNoAllergies(partyId);
@@ -2126,7 +2126,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     await fire(partyId, copyId);
 
     const atFire = (await printed(t.grill.printer)).slice(before);
-    expect(atFire).toEqual([expect.arrayContaining(["1.000 x TARTA"])]);
+    expect(atFire).toEqual([expect.arrayContaining(["1 x TARTA"])]);
     expect(atFire[0]![0]).not.toMatch(/\*\*\*/);
   });
 
@@ -2152,10 +2152,10 @@ describe("A803 waiting copy: kitchen paper", () => {
       .filter((lines) => lines[0] === `*** ${words.moved} ***` && lines[2] === orderLine);
     expect(slips).toHaveLength(1);
     expect(slips[0]!.slice(6)).toEqual([
-      "1.000 x BURG",
+      "1 x BURG",
       words.hold,
       `${words.group} 2 · DESSERTS`,
-      "1.000 x TARTA",
+      "1 x TARTA",
       "",
     ]);
   });
@@ -2199,7 +2199,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         `${words.order} ${fromNumber} -> ${toNumber}`,
         `Mesa 5 (${t.n}), 8 (${t.n})`,
         mesa8,
-        ["1.000 x BURG", words.hold, `${words.group} 2 · DESSERTS`, "1.000 x TARTA"],
+        ["1 x BURG", words.hold, `${words.group} 2 · DESSERTS`, "1 x TARTA"],
       ),
     ]);
     expect((await printed(t.pastry.printer)).slice(marks.pastry)).toEqual([]);
@@ -2210,7 +2210,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     await fire(partyId, copyId);
 
     expect((await printed(t.grill.printer)).slice(beforeFire)).toEqual([
-      fireTicket(t.grill.name, mesa8, toNumber, 2, "1.000 x TARTA"),
+      fireTicket(t.grill.name, mesa8, toNumber, 2, "1 x TARTA"),
     ]);
   });
 
@@ -2232,10 +2232,10 @@ describe("A803 waiting copy: kitchen paper", () => {
     );
     expect((await printed(t.grill.printer)).slice(second.marks.grill)).toEqual([
       movedSlip(t.grill.name, await orderLineOf(t.bill2), table8, table9, [
-        "1.000 x BURG",
+        "1 x BURG",
         words.hold,
         `${words.group} 3 · DESSERTS`,
-        "1.000 x TARTA",
+        "1 x TARTA",
       ]),
     ]);
     expect((await printed(t.pastry.printer)).slice(second.marks.pastry)).toEqual([]);
@@ -2316,15 +2316,15 @@ describe("A803 waiting copy: kitchen paper", () => {
 
       expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
         movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, [
-          "1.000 x BURG",
+          "1 x BURG",
           words.hold,
           `${words.group} 2 · DESSERTS`,
-          "1.000 x TARTA",
+          "1 x TARTA",
         ]),
       ]);
       await answerNoAllergies(partyId);
       expect(await releaseTarta(t)).toEqual([
-        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
     });
 
@@ -2338,14 +2338,14 @@ describe("A803 waiting copy: kitchen paper", () => {
 
       expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
         movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, label, [
-          "1.000 x BURG",
+          "1 x BURG",
           words.hold,
           `${words.group} 3 · DESSERTS`,
-          "1.000 x TARTA",
+          "1 x TARTA",
         ]),
       ]);
       expect(await releaseTarta(t)).toEqual([
-        fireTicket(t.grill.name, label, await orderNumberOf(t.bill2), 3, "1.000 x TARTA"),
+        fireTicket(t.grill.name, label, await orderNumberOf(t.bill2), 3, "1 x TARTA"),
       ]);
     });
 
@@ -2357,11 +2357,11 @@ describe("A803 waiting copy: kitchen paper", () => {
       const { partyId, marks } = await moveBill2(t, table8);
 
       expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
-        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1.000 x BURG"]),
+        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1 x BURG"]),
       ]);
       await answerNoAllergies(partyId);
       const released = await releaseTarta(t);
-      expect(released).toEqual([expect.arrayContaining(["1.000 x TARTA"])]);
+      expect(released).toEqual([expect.arrayContaining(["1 x TARTA"])]);
       expect(released[0]![0]).not.toMatch(/\*\*\*/);
     });
 
@@ -2374,11 +2374,11 @@ describe("A803 waiting copy: kitchen paper", () => {
       const { partyId, marks } = await moveBill2(t, table8);
 
       expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
-        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1.000 x BURG"]),
+        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1 x BURG"]),
       ]);
       await answerNoAllergies(partyId);
       const released = await releaseTarta(t);
-      expect(released).toEqual([expect.arrayContaining(["1.000 x TARTA"])]);
+      expect(released).toEqual([expect.arrayContaining(["1 x TARTA"])]);
       expect(released[0]![0]).not.toMatch(/\*\*\*/);
     });
 
@@ -2392,10 +2392,10 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect((await groupRow(copyId)).state).toBe("held");
       expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
         movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, [
-          "1.000 x BURG",
+          "1 x BURG",
           words.hold,
           `${words.group} 2 · DESSERTS`,
-          "1.000 x TARTA",
+          "1 x TARTA",
         ]),
       ]);
     });
@@ -2414,15 +2414,15 @@ describe("A803 waiting copy: kitchen paper", () => {
 
       expect((await printed(t.grill.printer)).slice(second.marks.grill)).toEqual([
         movedSlip(t.grill.name, await orderLineOf(t.bill2), table8, table9, [
-          "1.000 x BURG",
+          "1 x BURG",
           words.hold,
           `${words.group} 2 · DESSERTS`,
-          "1.000 x TARTA",
+          "1 x TARTA",
         ]),
       ]);
       await answerNoAllergies(second.partyId);
       expect(await releaseTarta(t)).toEqual([
-        fireTicket(t.grill.name, table9, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+        fireTicket(t.grill.name, table9, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
     });
 
@@ -2463,13 +2463,13 @@ describe("A803 waiting copy: kitchen paper", () => {
       ).toEqual([]);
 
       expect(await releaseTarta(t)).toEqual([
-        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
 
       const beforeBurger = (await printed(t.grill.printer)).length;
       await release(t.grill.id, third!.id);
       const burger = (await printed(t.grill.printer)).slice(beforeBurger);
-      expect(burger).toEqual([expect.arrayContaining(["1.000 x BURG"])]);
+      expect(burger).toEqual([expect.arrayContaining(["1 x BURG"])]);
       expect(burger[0]![0]).not.toMatch(/\*\*\*/);
     });
 
@@ -2481,9 +2481,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       await moveWholeBill(t.bill2, t.partyId, { counter: { zoneId: null } });
 
       expect((await printed(t.grill.printer)).slice(mark)).toEqual([
-        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, [
-          "1.000 x BURG",
-        ]),
+        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, ["1 x BURG"]),
       ]);
       expect(
         (await movedNotices([t.bill2])).filter((notice) => !noticesBefore.has(notice.id)),
@@ -2494,7 +2492,7 @@ describe("A803 waiting copy: kitchen paper", () => {
           t.label,
           await orderNumberOf(t.bill2),
           expect.stringMatching(/^\d\d:\d\d$/),
-          "1.000 x TARTA",
+          "1 x TARTA",
           "",
         ],
       ]);
@@ -2521,9 +2519,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       );
 
       expect((await printed(t.grill.printer)).slice(mark)).toEqual([
-        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, [
-          "1.000 x BURG",
-        ]),
+        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, ["1 x BURG"]),
       ]);
       expect(
         (await movedNotices([t.bill2])).filter((notice) => !noticesBefore.has(notice.id)),
@@ -2537,7 +2533,7 @@ describe("A803 waiting copy: kitchen paper", () => {
           t.label,
           await orderNumberOf(t.bill2),
           expect.stringMatching(/^\d\d:\d\d$/),
-          "1.000 x TARTA",
+          "1 x TARTA",
           "",
         ],
       ]);
@@ -2574,10 +2570,10 @@ describe("A803 waiting copy: kitchen paper", () => {
 
       expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
         movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, [
-          "1.000 x BURG",
+          "1 x BURG",
           words.hold,
           `${words.group} 2 · DESSERTS`,
-          "1.000 x TARTA",
+          "1 x TARTA",
         ]),
       ]);
       expect((await printed(t.pastry.printer)).slice(marks.pastry)).toEqual([]);
@@ -2600,7 +2596,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect((await printed(t.pastry.printer)).slice(beforeVoid.pastry)).toEqual([]);
 
       expect(await releaseTarta(t)).toEqual([
-        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
     });
 
@@ -2615,7 +2611,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       await release(null, (await lineOf(t.bill2, "Flan")).id);
 
       expect((await printed(t.grill.printer)).slice(mark.grill)).toEqual([
-        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
       expect((await printed(t.pastry.printer)).slice(mark.pastry)).toEqual([
         [
@@ -2624,7 +2620,7 @@ describe("A803 waiting copy: kitchen paper", () => {
           await orderNumberOf(t.bill2),
           expect.stringMatching(/^\d\d:\d\d$/),
           `${words.group} 2 · DESSERTS`,
-          "1.000 x FLAN",
+          "1 x FLAN",
           "",
         ],
       ]);
@@ -2675,10 +2671,10 @@ describe("A803 waiting copy: kitchen paper", () => {
         .filter((lines) => lines[0] === `*** ${words.moved} ***` && lines[2] === orderLine);
       expect(slips).toHaveLength(1);
       expect(slips[0]!.slice(6)).toEqual([
-        "1.000 x BURG",
+        "1 x BURG",
         words.hold,
         `${words.group} 2 · DESSERTS`,
-        "1.000 x TARTA",
+        "1 x TARTA",
         "",
       ]);
       expect(await newNotices([t.bill1, t.bill2], noticesBefore)).toEqual([
@@ -2687,7 +2683,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       ]);
       await answerNoAllergies(partyId);
       expect(await releaseTarta(t)).toEqual([
-        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
     });
 
@@ -2714,7 +2710,7 @@ describe("A803 waiting copy: kitchen paper", () => {
           `${words.order} ${fromNumber} -> ${toNumber}`,
           `Mesa 5 (${t.n}), 8 (${t.n})`,
           table8,
-          [words.hold, `${words.group} 1 · DESSERTS`, "1.000 x TARTA"],
+          [words.hold, `${words.group} 1 · DESSERTS`, "1 x TARTA"],
         ),
       ]);
       expect(await newNotices([t.bill2, newBill], noticesBefore)).toEqual([
@@ -2724,7 +2720,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       const releaseMark = (await printed(t.grill.printer)).length;
       await release(t.grill.id, (await lineOf(newBill, "Tarta")).id);
       expect((await printed(t.grill.printer)).slice(releaseMark)).toEqual([
-        fireTicket(t.grill.name, table8, toNumber, 1, "1.000 x TARTA"),
+        fireTicket(t.grill.name, table8, toNumber, 1, "1 x TARTA"),
       ]);
     });
 
@@ -2738,10 +2734,10 @@ describe("A803 waiting copy: kitchen paper", () => {
         .slice(mark)
         .filter((lines) => lines[0] === `*** ${words.moved} ***` && lines[2] === orderLine);
       expect(slips).toHaveLength(1);
-      expect(slips[0]!.slice(6)).toEqual(["1.000 x BURG", ""]);
+      expect(slips[0]!.slice(6)).toEqual(["1 x BURG", ""]);
       await answerNoAllergies(partyId);
       const released = await releaseTarta(t);
-      expect(released).toEqual([expect.arrayContaining(["1.000 x TARTA"])]);
+      expect(released).toEqual([expect.arrayContaining(["1 x TARTA"])]);
       expect(released[0]![0]).not.toMatch(/\*\*\*/);
     });
 
@@ -2788,16 +2784,16 @@ describe("A803 waiting copy: kitchen paper", () => {
         const toNumber = await orderNumberOf(to);
         expect((await printed(t.grill.printer)).slice(mark)).toEqual([
           movedSlip(t.grill.name, `${words.order} ${fromNumber} -> ${toNumber}`, t.label, t.label, [
-            ...(action === "Merge bills" ? ["1.000 x BURG"] : []),
+            ...(action === "Merge bills" ? ["1 x BURG"] : []),
             words.hold,
             `${words.group} 3 · DESSERTS`,
-            "1.000 x TARTA",
+            "1 x TARTA",
           ]),
         ]);
         const releaseMark = (await printed(t.grill.printer)).length;
         await release(t.grill.id, (await lineOf(to, "Tarta")).id);
         expect((await printed(t.grill.printer)).slice(releaseMark)).toEqual([
-          fireTicket(t.grill.name, t.label, toNumber, 3, "1.000 x TARTA"),
+          fireTicket(t.grill.name, t.label, toNumber, 3, "1 x TARTA"),
         ]);
       },
     );
@@ -2822,14 +2818,14 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect(await orderNumberOf(t.bill2)).toBe(fromNumber);
       expect((await printed(t.grill.printer)).slice(mark)).toEqual([
         movedSlip(t.grill.name, `${words.order} ${fromNumber}`, t.label, label, [
-          "1.000 x BURG",
+          "1 x BURG",
           words.hold,
           `${words.group} 3 · DESSERTS`,
-          "1.000 x TARTA",
+          "1 x TARTA",
         ]),
       ]);
       expect(await releaseTarta(t)).toEqual([
-        fireTicket(t.grill.name, label, fromNumber, 3, "1.000 x TARTA"),
+        fireTicket(t.grill.name, label, fromNumber, 3, "1 x TARTA"),
       ]);
     });
   });
@@ -2987,10 +2983,10 @@ describe("A803 waiting copy: races", () => {
     ]);
     expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
       movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, labels[side], [
-        "1.000 x BURG",
+        "1 x BURG",
         words.hold,
         `${words.group} 2 · DESSERTS`,
-        "1.000 x TARTA",
+        "1 x TARTA",
       ]),
     ]);
     expect((await printed(t.pastry.printer)).slice(marks.pastry)).toEqual([]);

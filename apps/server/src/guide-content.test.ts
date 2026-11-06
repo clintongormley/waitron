@@ -53,6 +53,7 @@ describe("the user guides", () => {
         "counter-send-retry",
         "allergy-copies",
         "corrections",
+        "party-names",
         "held-work",
         "group-headings",
         "reprints",

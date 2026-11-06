@@ -15,6 +15,8 @@ import {
 } from "./i18n/kitchen-allergy.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 
+const TEST_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 const allergy: KitchenAllergyBlock = {
   who: "Window guest",
   allergens: { gluten: { kinds: ["wheat"] }, milk: {} },
@@ -86,6 +88,7 @@ describe.each(layouts)("A669 paper $paperWidth $resolution", (layout) => {
     const bytes = formatKitchenTicket(
       { ...ticket(), items: [item, { qty: 1, name: "Plain dish" }] },
       layout,
+      TEST_TIME_ZONE,
     );
     const lines = printedLines(bytes);
     const text = words(lines);
@@ -103,7 +106,7 @@ describe.each(layouts)("A669 paper $paperWidth $resolution", (layout) => {
 
   it("selects captured Spanish labels for regional Spanish and English for other locales", () => {
     for (const locale of ["es-ES", "es-MX", "fr-FR"]) {
-      const text = words(printedLines(formatKitchenTicket(ticket(locale), layout)));
+      const text = words(printedLines(formatKitchenTicket(ticket(locale), layout, TEST_TIME_ZONE)));
       if (locale.startsWith("es")) {
         expect(text).toContain(KITCHEN_ALLERGY_WORDS.es.ticketHeading);
         expect(text).toContain(
@@ -135,6 +138,7 @@ describe.each(layouts)("A669 paper $paperWidth $resolution", (layout) => {
         },
       },
       layout,
+      TEST_TIME_ZONE,
     );
     expect(words(printedLines(bytes))).not.toContain("ALLERGY");
     expectArea(bytes, layout.dots);
@@ -151,12 +155,12 @@ describe.each(layouts)("A669 paper $paperWidth $resolution", (layout) => {
       ],
     };
     const payloads = [
-      formatKitchenTicket(multi, layout),
+      formatKitchenTicket(multi, layout, TEST_TIME_ZONE),
       ...[
         { reprintedAt: new Date(2026, 7, 17, 15, 20) },
         { mark: "HOLD" as const },
         { mark: "FIRE" as const },
-      ].map((flags) => formatKitchenTicket({ ...ticket(), ...flags }, layout)),
+      ].map((flags) => formatKitchenTicket({ ...ticket(), ...flags }, layout, TEST_TIME_ZONE)),
       formatMovedSlip(
         {
           stationName: "Grill",
@@ -169,6 +173,7 @@ describe.each(layouts)("A669 paper $paperWidth $resolution", (layout) => {
           locale: "en-GB",
         },
         layout,
+        TEST_TIME_ZONE,
       ),
     ];
     for (const bytes of payloads) {
@@ -198,6 +203,7 @@ describe.each(layouts)("A669 paper $paperWidth $resolution", (layout) => {
             item,
           },
           layout,
+          TEST_TIME_ZONE,
         );
         const text = words(printedLines(bytes));
         expect(text).toContain(
@@ -225,6 +231,7 @@ describe.each(layouts)("A669 paper $paperWidth $resolution", (layout) => {
     const bytes = formatKitchenTicket(
       { ...ticket(), items: [{ ...item, allergy: malicious }] },
       layout,
+      TEST_TIME_ZONE,
     );
     const text = words(printedLines(bytes));
     expect(text).toContain("*** ALLERGY: A p B <b>$</b> ***");

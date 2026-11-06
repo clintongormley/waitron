@@ -889,9 +889,9 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       ...hold!.lines.slice(0, 4),
       TIME,
       "GROUP 1",
-      `2.000 x ${DISHES.burger.kitchen}`,
+      `2 x ${DISHES.burger.kitchen}`,
     ]);
-    expect(hold!.lines.slice(5)).toEqual(["GROUP 1", `2.000 x ${DISHES.burger.kitchen}`]);
+    expect(hold!.lines.slice(5)).toEqual(["GROUP 1", `2 x ${DISHES.burger.kitchen}`]);
     expect(await problemsOf(table4.partyId)).toHaveLength(1);
 
     await setJob(reprint!.id, { status: "done" });
@@ -924,17 +924,17 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         REPRINTED,
         ...head("Kitchen"),
         "GROUP 1",
-        `1.000 x ${DISHES.burger.kitchen}`,
+        `1 x ${DISHES.burger.kitchen}`,
         REPRINTED,
         "*** HOLD ***",
         ...head("Kitchen"),
         "GROUP 2",
-        `1.000 x ${DISHES.fish.kitchen}`,
+        `1 x ${DISHES.fish.kitchen}`,
       ],
     ]);
     const barStationId = (await jobsAt(v.barPrinterId)).slice(1);
     expect(barStationId.map((job) => job.lines)).toEqual([
-      [REPRINTED, "*** HOLD ***", ...head("Bar"), "GROUP 2", `1.000 x ${DISHES.beer.kitchen}`],
+      [REPRINTED, "*** HOLD ***", ...head("Bar"), "GROUP 2", `1 x ${DISHES.beer.kitchen}`],
     ]);
     expect(
       (await links()).slice(before).map((row) => [row.printJobId, row.stationId, row.reprint]),
@@ -964,11 +964,11 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       .spyOn(VENUE_SERVICE, "readLinesSoldInEach")
       .mockImplementation(async (...args) => {
         calls += 1;
-        if (calls === 2) vi.setSystemTime(new Date(2026, 9, 27, 15, 21));
+        if (calls === 2) vi.setSystemTime(new Date("2026-10-27T15:21:00+01:00"));
         return real(...args);
       });
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 9, 27, 15, 20));
+    vi.setSystemTime(new Date("2026-10-27T15:20:00+01:00"));
     try {
       await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     } finally {
@@ -1002,7 +1002,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       .orderBy(sql`rowid`);
     expect(fired).toHaveLength(2);
     const at = (hours: number, minutes: number) =>
-      new Date(2026, 9, 27, hours, minutes).toISOString();
+      new Date(Date.UTC(2026, 9, 27, hours - 1, minutes)).toISOString();
     await db
       .update(ticketItems)
       .set({ firedAt: at(14, 30) })
@@ -1018,7 +1018,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     const before = (await jobsAt(v.kitchenPrinterId)).length;
 
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 9, 27, 15, 20));
+    vi.setSystemTime(new Date("2026-10-27T15:20:00+01:00"));
     try {
       await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     } finally {
@@ -1044,7 +1044,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       lines[3],
       "14:10",
       "GROUP 2",
-      `1.000 x ${DISHES.fish.kitchen}`,
+      `1 x ${DISHES.fish.kitchen}`,
     ]);
   });
 
@@ -1066,7 +1066,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       TIME,
       ...fire!.lines.slice(4),
     ]);
-    expect(fire!.lines.at(-1)).toBe(`1.000 x ${DISHES.burger.kitchen}`);
+    expect(fire!.lines.at(-1)).toBe(`1 x ${DISHES.burger.kitchen}`);
   });
 
   it("reprints a fired group as fired work, not under HOLD, and that clears its failed HOLD ticket", async () => {
@@ -1119,7 +1119,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
         expect.any(String),
         TIME,
         "GROUP 1",
-        `1.000 x ${DISHES.burger.kitchen}`,
+        `1 x ${DISHES.burger.kitchen}`,
       ],
     ]);
   });
@@ -1156,7 +1156,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       expect.any(String),
       TIME,
       expect.stringMatching(/^GROUP 1 · Table (4, 5|5, 4)$/),
-      `1.000 x ${DISHES.fish.kitchen}`,
+      `1 x ${DISHES.fish.kitchen}`,
       REPRINTED,
       "*** HOLD ***",
       "Kitchen",
@@ -1164,7 +1164,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       expect.any(String),
       TIME,
       "GROUP 1 · Table 4",
-      `1.000 x ${DISHES.burger.kitchen}`,
+      `1 x ${DISHES.burger.kitchen}`,
     ]);
     await setJob(reprint.id, { status: "done" });
     expect(await problemsOf(table5.partyId)).toEqual([]);

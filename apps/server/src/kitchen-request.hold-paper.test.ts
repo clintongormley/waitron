@@ -55,10 +55,7 @@ import "./errors.js";
 
 const AT = "2026-03-14T12:00:00.000Z";
 const LATER = "2026-03-14T12:05:00.000Z";
-/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
-const ticketClock = (at: Date) =>
-  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-const LATER_CLOCK = ticketClock(new Date(LATER));
+const LATER_CLOCK = "13:05";
 
 type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
 
@@ -162,7 +159,7 @@ const cancelledBurger = [
   "1",
   LATER_CLOCK,
   "GROUP 1",
-  "1.000 x BURG",
+  "1 x BURG",
   "",
 ];
 
@@ -350,7 +347,7 @@ describe("A773 hold paper: recall and cancel", () => {
         `*** ${words.holdCancelled} ***`,
         ...header,
         groupLine,
-        "2.000 x PIZZA",
+        "2 x PIZZA",
         "  + Olives x2",
         "",
       ]);
@@ -482,7 +479,7 @@ describe("A773 hold paper: extras off and moves", () => {
         "1",
         LATER_CLOCK,
         "GROUP 1",
-        "1.000 x BURG",
+        "1 x BURG",
         "  CANCEL: Chips",
         "",
       ];
@@ -493,7 +490,7 @@ describe("A773 hold paper: extras off and moves", () => {
         "1",
         LATER_CLOCK,
         "GROUP 1",
-        "1.000 x CHIPS",
+        "1 x CHIPS",
         "  > for BURG at Grill",
         "",
       ];
@@ -547,7 +544,7 @@ describe("A773 hold paper: extras off and moves", () => {
       expect(fryer).toHaveLength(1);
       expect(fryer[0]![0]).toBe("*** HOLD ***");
       expect(fryer[0]).toContain("From Grill");
-      expect(fryer[0]).toContain("1.000 x BURG");
+      expect(fryer[0]).toContain("1 x BURG");
       expect(added("pass")).toEqual([cancelledBurger, fryer[0]]);
       const recorded = await tx
         .select({ stationId: orderGroupHoldStations.stationId })
@@ -585,7 +582,7 @@ describe("A773 hold paper: extras off and moves", () => {
     const fired = added("fryer");
     expect(fired).toHaveLength(1);
     expect(fired[0]![0]).toBe(`*** ${kitchenTicketWords("en").fire} ***`);
-    expect(fired[0]).toContain("1.000 x BURG");
+    expect(fired[0]).toContain("1 x BURG");
     expect(added("pass")).toEqual(fired);
     for (const name of ["grill", "kitchen", "bar"]) expect(added(name)).toEqual([]);
   });
@@ -624,7 +621,7 @@ describe("A773 hold paper: extras off and moves", () => {
     LATER_CLOCK,
     `From ${from}`,
     "GROUP 1",
-    "1.000 x BURG",
+    "1 x BURG",
     "",
   ];
   const cancelledAt = (station: string) => [
@@ -786,7 +783,7 @@ describe("A773 hold paper: edits", () => {
         "1",
         LATER_CLOCK,
         "GROUP 1",
-        "-1.000 x BURG",
+        "-1 x BURG",
         "",
       ];
       expect(added("grill")).toEqual([cut]);
@@ -891,7 +888,7 @@ describe("A773 hold paper: added work", () => {
     "",
   ];
 
-  const addedBurger = changed("Grill", "+1.000 x BURG");
+  const addedBurger = changed("Grill", "+1 x BURG");
 
   const comp = async (tx: Transaction, venue: Venue, lineId: string) => {
     await tx
@@ -965,13 +962,13 @@ describe("A773 hold paper: added work", () => {
       const after = await slips(tx, venue);
       const added = (name: string) => after[name]!.slice(before[name]!.length);
       const grill = [
-        changed("Grill", "-1.000 x BURG", "  > with CHIPS from Fryer"),
-        changed("Grill", "+1.000 x BURG", "  > with CHIPS from Fryer", "  > with RINGS from Fryer"),
+        changed("Grill", "-1 x BURG", "  > with CHIPS from Fryer"),
+        changed("Grill", "+1 x BURG", "  > with CHIPS from Fryer", "  > with RINGS from Fryer"),
       ];
       const fryer = [
-        changed("Fryer", "-1.000 x CHIPS", "  > for BURG at Grill"),
-        changed("Fryer", "+1.000 x CHIPS", "  > for BURG at Grill"),
-        changed("Fryer", "+1.000 x RINGS", "  > for BURG at Grill"),
+        changed("Fryer", "-1 x CHIPS", "  > for BURG at Grill"),
+        changed("Fryer", "+1 x CHIPS", "  > for BURG at Grill"),
+        changed("Fryer", "+1 x RINGS", "  > for BURG at Grill"),
       ];
       expect(added("grill")).toEqual(grill);
       expect(added("fryer")).toEqual(fryer);
@@ -1019,9 +1016,9 @@ describe("A773 hold paper: added work", () => {
       const after = await slips(tx, venue);
       const added = (name: string) => after[name]!.slice(before[name]!.length);
       const fryer = [
-        changed("Fryer", "-1.000 x CHIPS", "  > for BURG at Grill"),
-        changed("Fryer", "+1.000 x CHIPS", "  > for BURG at Grill"),
-        changed("Fryer", "+1.000 x RINGS", "  > for BURG at Grill"),
+        changed("Fryer", "-1 x CHIPS", "  > for BURG at Grill"),
+        changed("Fryer", "+1 x CHIPS", "  > for BURG at Grill"),
+        changed("Fryer", "+1 x RINGS", "  > for BURG at Grill"),
       ];
       expect(added("fryer")).toEqual(fryer);
       expect(added("pass")).toEqual(fryer);
@@ -1107,7 +1104,7 @@ describe("A773 hold paper: added work", () => {
         ]);
         const after = await slips(tx, venue);
         const added = (name: string) => after[name]!.slice(before[name]!.length);
-        const addedChips = changed("Fryer", "+1.000 x CHIPS", "  > for H2O, no preparation");
+        const addedChips = changed("Fryer", "+1 x CHIPS", "  > for H2O, no preparation");
         expect(added("fryer")).toEqual([addedChips]);
         expect(added("pass")).toEqual([addedChips]);
         for (const name of ["grill", "kitchen", "bar"]) expect(added(name)).toEqual([]);
@@ -1361,7 +1358,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         "1",
         LATER_CLOCK,
         "GROUP 1",
-        "1.000 x CHIPS",
+        "1 x CHIPS",
         "  > for BURG at Grill",
         "",
       ];
@@ -1501,8 +1498,8 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         const added = (name: string) => after[name]!.slice(before[name]!.length);
         const word = writer === "draft recall" ? "*** RECALLED ***" : "*** VOID ***";
         const head = ["Split extras", "1", LATER_CLOCK];
-        const grill = [word, "Grill", ...head, "1.000 x BURG", "  > with CHIPS from Fryer", ""];
-        const fryer = [word, "Fryer", ...head, "1.000 x CHIPS", "  > for BURG at Grill", ""];
+        const grill = [word, "Grill", ...head, "1 x BURG", "  > with CHIPS from Fryer", ""];
+        const fryer = [word, "Fryer", ...head, "1 x CHIPS", "  > for BURG at Grill", ""];
         expect(added("grill")).toEqual([grill]);
         expect(added("fryer")).toEqual([fryer]);
         expect(added("pass")).toEqual([grill, fryer]);

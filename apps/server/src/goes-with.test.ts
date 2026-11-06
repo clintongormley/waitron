@@ -296,7 +296,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     expect(fromHeading(bar[0]!).slice(0, 3)).toEqual([
       `${words.group} 1 · DESSERTS`,
       CUE,
-      "1.000 x TINTO",
+      "1 x TINTO",
     ]);
     expect(await papers(k, k.grillPrinter)).toEqual([]);
 
@@ -305,7 +305,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     expect(grill).toHaveLength(1);
     expect(fromHeading(grill[0]!).slice(0, 2)).toEqual([
       `${words.group} 1 · DESSERTS`,
-      "1.000 x TARTA",
+      "1 x TARTA",
     ]);
     expect(grill[0]!.filter(startsCue)).toEqual([]);
   });
@@ -356,7 +356,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     expect(fromHeading(bar[0]!).slice(0, 3)).toEqual([
       `${words.group} 1 · DESSERTS`,
       cue("Grill y Pastry"),
-      "1.000 x TINTO",
+      "1 x TINTO",
     ]);
   });
 
@@ -393,7 +393,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     await inTx(k.v, (tx) => reprintOrderTickets(tx, k.v.cfg, k.tabId));
     const after = await papers(k, k.barPrinter);
     expect(after).toHaveLength(3);
-    expect(after[2]).toContain("1.000 x TINTO");
+    expect(after[2]).toContain("1 x TINTO");
     expect(after[2]!.filter(startsCue)).toEqual([]);
   });
 
@@ -429,7 +429,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
       expect(bar).toHaveLength(1);
       expect(fromHeading(bar[0]!).slice(0, 2)).toEqual([
         `${words.group} 1 · DESSERTS`,
-        "1.000 x TINTO",
+        "1 x TINTO",
       ]);
       expect(bar[0]!.filter(startsCue)).toEqual([]);
     });
@@ -455,7 +455,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
       await fire(k, desserts!);
       const bar = await papers(k, k.barPrinter);
       expect(bar).toHaveLength(1);
-      expect(bar[0]).toContain("1.000 x TINTO");
+      expect(bar[0]).toContain("1 x TINTO");
       expect(bar[0]!.filter(startsCue)).toEqual([]);
     });
 

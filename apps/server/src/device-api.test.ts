@@ -847,6 +847,91 @@ describe("GET /api/device/join/status", () => {
 });
 
 describe("Device API — the device-guarded routes", () => {
+  it("delivers one cross-bill party notice and acknowledges only that party and station", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const cold = await withTransaction(suite.db, (tx) =>
+      createStation(tx, { name: "Cold", isDefault: false }),
+    );
+    const first = await fireOrder(venue);
+    const second = await fireOrder(venue);
+    const party = randomUUID();
+    const other = randomUUID();
+    const createdAt = new Date().toISOString();
+    await withTransaction(suite.db, async (tx) => {
+      const firstLines = await tx.execute<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${first.orderId} order by line_no`,
+      );
+      const secondLines = await tx.execute<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${second.orderId} order by line_no`,
+      );
+      const one = (lineId: string, stationId: string) => ({
+        workingOrderLineId: lineId,
+        stationId,
+        quantity: decimal("1"),
+        wasStarted: false,
+      });
+      const change = { before: null, after: "Together", partyId: party };
+      const noteEvent = { createdAt, labels: new Map([[venue.defaultStationId, "#17, #18"]]) };
+      await VENUE_SERVICE.recordKitchenNotices(
+        tx,
+        first.orderId,
+        [one(firstLines.rows[0]!.id, venue.defaultStationId), one(firstLines.rows[0]!.id, cold.id)],
+        "changed",
+        { orderNoteChange: change, noteEvent },
+      );
+      await VENUE_SERVICE.recordKitchenNotices(
+        tx,
+        second.orderId,
+        [one(secondLines.rows[0]!.id, venue.defaultStationId)],
+        "changed",
+        { orderNoteChange: change, noteEvent },
+      );
+      await VENUE_SERVICE.recordKitchenNotices(
+        tx,
+        first.orderId,
+        [one(firstLines.rows[0]!.id, venue.defaultStationId)],
+        "changed",
+        { orderNoteChange: { ...change, partyId: other }, noteEvent },
+      );
+    });
+    const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
+    const read = async () => {
+      const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
+      expect(res.status).toBe(200);
+      return (
+        (await res.json()) as {
+          stations: {
+            notices: { id: string; orderLabel: string; orderNoteChange?: { partyId?: string } }[];
+          }[];
+        }
+      ).stations[0]!.notices;
+    };
+    const visible = await read();
+    expect(visible).toHaveLength(2);
+    const combined = visible.filter((notice) => notice.orderNoteChange?.partyId === party);
+    expect(combined).toHaveLength(1);
+    expect(combined[0]!.orderLabel).toBe("#17, #18");
+    expect(
+      (
+        await send(app, "POST", `/api/device/kitchen-notices/${combined[0]!.id}/acknowledge`, {
+          cookie: jar,
+        })
+      ).status,
+    ).toBe(204);
+    expect((await read()).map((notice) => notice.orderNoteChange?.partyId)).toEqual([other]);
+    expect(
+      await withTransaction(suite.db, (tx) => VENUE_SERVICE.listStationNotices(tx, cold.id)),
+    ).toHaveLength(1);
+    const rows = (await suite.db.select().from(kitchenNotices)).filter(
+      (notice) => notice.orderNoteChange?.partyId === party,
+    );
+    expect(rows.filter((row) => row.acknowledgedAt !== null)).toHaveLength(2);
+    expect(rows.filter((row) => row.acknowledgedAt === null).map((row) => row.stationId)).toEqual([
+      cold.id,
+    ]);
+  });
+
   it("enrols, sets the cookie, and /me reports the device", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);

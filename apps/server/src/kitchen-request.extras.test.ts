@@ -151,7 +151,7 @@ describe("A773 waiter request: extras", () => {
       });
       const grill = await jobsAt(tx, venue.printers.grill);
       expect(grill).toHaveLength(1);
-      expect(grill[0]).toContain("1.000 x BURG");
+      expect(grill[0]).toContain("1 x BURG");
       expect(await jobsAt(tx, venue.printers.fryer)).toEqual([]);
       // The Pass printer serves Grill and Fryer: it gets Grill's ticket and no Fryer ticket.
       expect(await jobsAt(tx, venue.printers.pass)).toEqual(grill);

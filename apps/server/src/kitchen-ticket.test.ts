@@ -22,6 +22,8 @@ import {
 } from "./testing/decode-ticket.js";
 import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
 
+const TEST_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 // Reads the printed text back from the images each line is drawn as; the final three bytes are always
 // the full cut, GS V 0 (0x1D 0x56 0x00).
 const CUT_BYTES = [0x1d, 0x56, 0x00];
@@ -65,6 +67,7 @@ describe("formatKitchenTicket", () => {
           mark: "HOLD",
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -92,6 +95,7 @@ describe("formatKitchenTicket", () => {
           from: { stationName: "Bar", locale: "en-GB" },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -127,6 +131,7 @@ describe("formatKitchenTicket", () => {
             ],
           },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       );
       expect(
@@ -150,6 +155,7 @@ describe("formatKitchenTicket", () => {
               ],
             },
             KITCHEN_80,
+            TEST_TIME_ZONE,
           ),
         ),
       ).toEqual(
@@ -173,6 +179,7 @@ describe("formatKitchenTicket", () => {
           ],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       );
 
       const text = decodeTicket(bytes);
@@ -200,6 +207,7 @@ describe("formatKitchenTicket", () => {
             items: [{ qty: 1, name: "Coffee" }],
           },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       );
       expect(text).toContain("09:05");
@@ -218,6 +226,7 @@ describe("formatKitchenTicket", () => {
             items: [{ qty: "0.375", unit: "kg", name: "Ham", printedAsSold: true }],
           },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       );
       expect(text).toContain("0.375 kg x Ham");
@@ -243,6 +252,7 @@ describe("formatKitchenTicket", () => {
             ],
           },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       );
       const lines = text.split("\n");
@@ -267,6 +277,7 @@ describe("formatKitchenTicket", () => {
             items: [{ qty: 1, name: "Steak", note: "no salt\nwell done" }],
           },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       );
       const lines = text.split("\n");
@@ -286,6 +297,7 @@ describe("formatKitchenTicket", () => {
           items: [{ qty: 1, name: "Chips", note: undefined }],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       );
       const plain = formatKitchenTicket(
         {
@@ -298,6 +310,7 @@ describe("formatKitchenTicket", () => {
           items: [{ qty: 1, name: "Chips" }],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       );
       expect([...withExtras]).toEqual([...plain]);
     });
@@ -314,6 +327,7 @@ describe("formatKitchenTicket", () => {
           items: [],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       );
       expect(decodeTicket(bytes)).toContain("Kitchen");
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
@@ -335,6 +349,7 @@ describe("formatKitchenTicket", () => {
           ],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       );
 
       const text = decodeTicket(bytes);
@@ -380,6 +395,7 @@ describe("one ticket for several stations sharing a printer", () => {
           },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -413,6 +429,7 @@ describe("joinKitchenTickets", () => {
         items: [{ qty: 1, name }],
       },
       KITCHEN_80,
+      TEST_TIME_ZONE,
     );
 
   it("prints both tickets on one paper, with one start and one feed and cut at its end", () => {
@@ -472,6 +489,7 @@ describe("the rest of the order on a station's ticket", () => {
           },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     const own = lines.indexOf("1 x Fish");
@@ -494,6 +512,7 @@ describe("the rest of the order on a station's ticket", () => {
           },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     const own = lines.indexOf("1 x Fish");
@@ -513,16 +532,18 @@ describe("the rest of the order on a station's ticket", () => {
           },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toContain("0.350 kg x Steak — Grill");
   });
 
   it("omits the heading when there are no other items", () => {
-    const without = formatKitchenTicket(stationTicket, KITCHEN_80);
+    const without = formatKitchenTicket(stationTicket, KITCHEN_80, TEST_TIME_ZONE);
     const withEmpty = formatKitchenTicket(
       { ...stationTicket, alsoOnOrder: { locale: "en", items: [] } },
       KITCHEN_80,
+      TEST_TIME_ZONE,
     );
     expect([...withEmpty]).toEqual([...without]);
   });
@@ -546,6 +567,7 @@ describe("the rest of the order on a station's ticket", () => {
           },
         },
         KITCHEN_58,
+        TEST_TIME_ZONE,
       ),
     );
     const itemLine = lines.findIndex((line) => line.startsWith("0.350 kg x "));
@@ -573,6 +595,7 @@ describe("formatCorrectionSlip", () => {
           item: { qty: 1, name: "Steak" },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([header, "Bar", "Table 4", "A-17", "14:30", "1 x Steak", ""]);
@@ -589,6 +612,7 @@ describe("formatCorrectionSlip", () => {
         item: { qty: 2, name: "Tiramisu", modifiers: ["extra cream x2"] },
       },
       KITCHEN_80,
+      TEST_TIME_ZONE,
     );
 
     const text = decodeTicket(bytes);
@@ -616,6 +640,7 @@ describe("formatCorrectionSlip", () => {
           item: { qty: 1, name: "Chips" },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(text).toContain("*** RECALLED ***");
@@ -636,6 +661,7 @@ describe("formatCorrectionSlip", () => {
           item: { qty: 1, name: "Coffee" },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(text).toContain("VOID");
@@ -658,7 +684,7 @@ describe("formatMovedSlip", () => {
   const slip: MovedSlip = { ...sameNumberNoName, toNumber: "27", partyName: "Ana" };
 
   it("prints the English slip at 80 mm: header, order line with the new number and the party, From, To, time, dishes", () => {
-    const bytes = formatMovedSlip(slip, KITCHEN_80);
+    const bytes = formatMovedSlip(slip, KITCHEN_80, TEST_TIME_ZONE);
     expect(printedLines(bytes)).toEqual([
       "*** MOVED ***",
       "Grill",
@@ -666,21 +692,23 @@ describe("formatMovedSlip", () => {
       "From: Table 91",
       "To:   Table 91",
       "13:24",
-      "1.000 x BURG",
+      "1 x BURG",
       "",
     ]);
     expect([...bytes.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
   });
 
   it("prints the Spanish words at 58 mm", () => {
-    expect(printedLines(formatMovedSlip({ ...slip, locale: "es-ES" }, KITCHEN_58))).toEqual([
+    expect(
+      printedLines(formatMovedSlip({ ...slip, locale: "es-ES" }, KITCHEN_58, TEST_TIME_ZONE)),
+    ).toEqual([
       "*** MOVIDO ***",
       "Grill",
       "Pedido 28 -> 27 · Ana",
       "De: Table 91",
       "A:  Table 91",
       "13:24",
-      "1.000 x BURG",
+      "1 x BURG",
       "",
     ]);
   });
@@ -690,6 +718,7 @@ describe("formatMovedSlip", () => {
       formatMovedSlip(
         { ...sameNumberNoName, fromNumber: "26", fromText: "Party", toText: "Party 2" },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines.slice(0, 5)).toEqual([
@@ -709,6 +738,7 @@ describe("formatMovedSlip", () => {
       formatMovedSlip(
         { ...slip, locale, fromText: "Cumpleaños de la abuela García", toText: "Table 6, 9" },
         KITCHEN_58,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines.slice(3, 6)).toEqual(expected);
@@ -724,6 +754,7 @@ describe("formatMovedSlip", () => {
           locale: "es-ES",
         },
         KITCHEN_58,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines.slice(2, 5)).toEqual([
@@ -745,16 +776,17 @@ describe("formatMovedSlip", () => {
           ],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines.slice(5)).toEqual([
       "13:24",
-      "1.000 x BURG",
+      "1 x BURG",
       kitchenTicketWords("es").hold,
       `${kitchenTicketWords("es").group} 2`,
-      "1.000 x STEAK",
+      "1 x STEAK",
       `${kitchenTicketWords("es").group} 3`,
-      "2.000 x FLAN",
+      "2 x FLAN",
       "  * no cream",
       "",
     ]);
@@ -765,14 +797,19 @@ describe("formatMovedSlip", () => {
       formatMovedSlip(
         { ...slip, items: [], held: [{ group: 1, items: [{ qty: "1.000", name: "STEAK" }] }] },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
-    expect(lines.slice(5)).toEqual(["13:24", "HOLD", "GROUP 1", "1.000 x STEAK", ""]);
+    expect(lines.slice(5)).toEqual(["13:24", "HOLD", "GROUP 1", "1 x STEAK", ""]);
   });
 
   it("prints the place text the caller gives, such as the counter", () => {
     const lines = printedLines(
-      formatMovedSlip({ ...slip, fromText: "Table 43", toText: "(counter)" }, KITCHEN_80),
+      formatMovedSlip(
+        { ...slip, fromText: "Table 43", toText: "(counter)" },
+        KITCHEN_80,
+        TEST_TIME_ZONE,
+      ),
     );
     expect(lines.slice(3, 5)).toEqual(["From: Table 43", "To:   (counter)"]);
   });
@@ -789,15 +826,16 @@ describe("formatMovedSlip", () => {
           ],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines.slice(5)).toEqual([
       "13:24",
       "GROUP 1",
-      "1.000 x BURG",
-      "2.000 x CHIPS",
+      "1 x BURG",
+      "2 x CHIPS",
       "GROUP 2",
-      "1.000 x STEAK",
+      "1 x STEAK",
       "",
     ]);
   });
@@ -813,9 +851,10 @@ describe("formatMovedSlip", () => {
           ],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
-    expect(lines.slice(5)).toEqual(["13:24", "1.000 x BURG", "2.000 x CHIPS", ""]);
+    expect(lines.slice(5)).toEqual(["13:24", "1 x BURG", "2 x CHIPS", ""]);
   });
 });
 
@@ -856,7 +895,7 @@ describe("kitchen paper layout", () => {
   it.each([KITCHEN_80, KITCHEN_58])(
     "keeps every line within the $paperWidth column count, indented under its text",
     (layout) => {
-      const lines = printedLines(formatKitchenTicket(ticket, layout));
+      const lines = printedLines(formatKitchenTicket(ticket, layout, TEST_TIME_ZONE));
       const columns = columnsFor(layout.paperWidth);
       for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
       expect(lines).toContain("  + Large");
@@ -864,7 +903,7 @@ describe("kitchen paper layout", () => {
   );
 
   it("wraps item, modifier and note lines at 30 columns with their indents", () => {
-    const lines = printedLines(formatKitchenTicket(ticket, KITCHEN_58));
+    const lines = printedLines(formatKitchenTicket(ticket, KITCHEN_58, TEST_TIME_ZONE));
     const first = lines.indexOf("2 x Dry-aged beef rib from the");
     expect(first).toBeGreaterThan(0);
     expect(lines.slice(first)).toEqual([
@@ -889,7 +928,11 @@ describe("kitchen paper layout", () => {
     "draws every line as an image as wide as $paperWidth at the layout's resolution, selecting no character table",
     (layout, widthDots) => {
       const commands = printedCommands(
-        formatKitchenTicket({ ...ticket, items: [{ qty: 1, name: "Café" }] }, layout),
+        formatKitchenTicket(
+          { ...ticket, items: [{ qty: 1, name: "Café" }] },
+          layout,
+          TEST_TIME_ZONE,
+        ),
       );
       const names = commands.map((command) => command.name);
       expect(names.slice(0, 4)).toEqual(["ESC @", "GS L", "GS W", "GS v 0"]);
@@ -915,6 +958,7 @@ describe("kitchen paper layout", () => {
           item: ticket.items[0]!,
         },
         KITCHEN_58,
+        TEST_TIME_ZONE,
       ),
     );
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
@@ -936,6 +980,7 @@ describe("a note made only of control characters", () => {
           items: [{ qty: 1, name: "Steak", ...(note === undefined ? {} : { note }) }],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       );
     expect([...ticket("\r\n\t\u0007")]).toEqual([...ticket()]);
   });
@@ -958,11 +1003,12 @@ describe("the reprint mark and a party's group numbers", () => {
   // reprint time replaces the send time.
   it("opens a reprint with its reprint time and keeps the send time", () => {
     const items = [{ qty: 2, name: "Steak" }];
-    const plain = printedLines(formatKitchenTicket(station(items), KITCHEN_80));
+    const plain = printedLines(formatKitchenTicket(station(items), KITCHEN_80, TEST_TIME_ZONE));
     const again = printedLines(
       formatKitchenTicket(
         { ...station(items), reprintedAt: new Date(2026, 7, 17, 15, 20) },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(plain).toContain("14:30");
@@ -978,6 +1024,7 @@ describe("the reprint mark and a party's group numbers", () => {
           { qty: 1, name: "Fish", group: 2 },
         ]),
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1003,6 +1050,7 @@ describe("the reprint mark and a party's group numbers", () => {
           { qty: 1, name: "Olives", group: 2 },
         ]),
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1022,7 +1070,7 @@ describe("the reprint mark and a party's group numbers", () => {
 
   it("prints no group line for a ticket with no group, as before", () => {
     const lines = printedLines(
-      formatKitchenTicket(station([{ qty: 1, name: "Chips" }]), KITCHEN_80),
+      formatKitchenTicket(station([{ qty: 1, name: "Chips" }]), KITCHEN_80, TEST_TIME_ZONE),
     );
     expect(lines).toEqual(["Kitchen", "Table 4", "A-17", "14:30", "1 x Chips", ""]);
   });
@@ -1042,6 +1090,7 @@ describe("the reprint mark and a party's group numbers", () => {
             stations,
           },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       );
     expect(
@@ -1231,8 +1280,10 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
         { qty: 2, name: "Steak", group: 4 },
         { qty: 1, name: "Fish", group: 4 },
       ];
-      const plain = printedLines(formatKitchenTicket(station(items), KITCHEN_80));
-      const marked = printedLines(formatKitchenTicket({ ...station(items), mark }, KITCHEN_80));
+      const plain = printedLines(formatKitchenTicket(station(items), KITCHEN_80, TEST_TIME_ZONE));
+      const marked = printedLines(
+        formatKitchenTicket({ ...station(items), mark }, KITCHEN_80, TEST_TIME_ZONE),
+      );
       expect(marked).toEqual([`*** ${mark} ***`, ...plain]);
       expect(plain[4]).toBe("GROUP 4");
     },
@@ -1251,6 +1302,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
           stations: [{ stationName: "Kitchen", items: [{ qty: 1, name: "Fish", group: 4 }] }],
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1280,6 +1332,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
           item: { qty: 1, name: "Steak", group: 4, modifiers: ["Pepper"], note: "rare" },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1301,6 +1354,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
       formatCorrectionSlip(
         { ...slip, kind: "HOLD CANCELLED", item: { qty: 1, name: "Fish", group: 4 } },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1326,6 +1380,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
           item: { qty: 1, name: "Steak with a very long kitchen name indeed", group: 4 },
         },
         KITCHEN_58,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines.slice(6, 8)).toEqual(["-1 x Steak with a very long", "     kitchen name indeed"]);
@@ -1360,6 +1415,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
           item: burger,
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1368,7 +1424,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
       "Table 4",
       "A-17",
       "14:30",
-      "1.000 x BURG",
+      "1 x BURG",
       "  + Fries",
       "  + Salad x2",
       "  * well done",
@@ -1389,6 +1445,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
           item: { ...burger, note: undefined, group: 2 },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1398,7 +1455,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
       "A-17",
       "14:30",
       "GROUP 2",
-      "1.000 x BURG",
+      "1 x BURG",
       "  + Fries",
       "  + Salad x2",
       "  CANCEL: Gherkins",
@@ -1423,6 +1480,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
             item: { qty: "1.000", name: "BURG" },
           },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       );
       expect(lines[0]).toBe(head);
@@ -1443,6 +1501,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
           item: { qty: "1.000", name: "BURG" },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines[0]).toBe("*** CHANGED ***");
@@ -1460,6 +1519,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
         item: { qty: "1.000", name: "BURG" },
       },
       KITCHEN_58,
+      TEST_TIME_ZONE,
     );
     const lines = printedLines(bytes);
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
@@ -1486,6 +1546,7 @@ it.each([KITCHEN_58, KITCHEN_80])("wraps a complete kitchen pair on $paperWidth"
         items: [{ qty: 1, name }],
       },
       printer,
+      TEST_TIME_ZONE,
     ),
   );
   for (const line of lines)
@@ -1509,7 +1570,11 @@ describe("a kitchen ticket for a named party", () => {
   it("prints the order line as Order N · name in English at 80 mm", () => {
     expect(
       printedLines(
-        formatKitchenTicket({ ...unnamed, party: { name: "Ana", locale: "en-GB" } }, KITCHEN_80),
+        formatKitchenTicket(
+          { ...unnamed, party: { name: "Ana", locale: "en-GB" } },
+          KITCHEN_80,
+          TEST_TIME_ZONE,
+        ),
       ),
     ).toEqual(["Grill", "Table 4", "Order 5 · Ana", "13:24", "1 x BURG", ""]);
   });
@@ -1517,7 +1582,11 @@ describe("a kitchen ticket for a named party", () => {
   it("prints the Spanish order word at 58 mm", () => {
     expect(
       printedLines(
-        formatKitchenTicket({ ...unnamed, party: { name: "Ana", locale: "es-ES" } }, KITCHEN_58),
+        formatKitchenTicket(
+          { ...unnamed, party: { name: "Ana", locale: "es-ES" } },
+          KITCHEN_58,
+          TEST_TIME_ZONE,
+        ),
       ),
     ).toEqual(["Grill", "Table 4", "Pedido 5 · Ana", "13:24", "1 x BURG", ""]);
   });
@@ -1525,7 +1594,7 @@ describe("a kitchen ticket for a named party", () => {
   it("wraps a long name under the text after the order number at 58 mm, as a MOVED slip does", () => {
     const party = { name: "Cumpleaños de la abuela", locale: "es-ES" };
     const ticket = printedLines(
-      formatKitchenTicket({ ...unnamed, orderNumber: "7", party }, KITCHEN_58),
+      formatKitchenTicket({ ...unnamed, orderNumber: "7", party }, KITCHEN_58, TEST_TIME_ZONE),
     );
     expect(ticket.slice(2, 5)).toEqual([
       "Pedido 7 · Cumpleaños de la",
@@ -1546,6 +1615,7 @@ describe("a kitchen ticket for a named party", () => {
           locale: party.locale,
         },
         KITCHEN_58,
+        TEST_TIME_ZONE,
       ),
     );
     expect(slip.slice(2, 4)).toEqual(ticket.slice(2, 4));
@@ -1570,6 +1640,7 @@ describe("a kitchen ticket for a named party", () => {
             party: { name: "Ana", locale: "en-GB" },
           },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       ),
     ).toEqual([
@@ -1593,15 +1664,18 @@ describe("a kitchen ticket for a named party", () => {
         formatKitchenTicket(
           { ...unnamed, mark: "FIRE", party: { name: "Ana", locale: "en-GB" } },
           KITCHEN_80,
+          TEST_TIME_ZONE,
         ),
       ).slice(0, 4),
     ).toEqual(["*** FIRE ***", "Grill", "Table 4", "Order 5 · Ana"]);
   });
 
   it("prints a ticket with no party name with the bare order number", () => {
-    const bytes = formatKitchenTicket(unnamed, KITCHEN_80);
+    const bytes = formatKitchenTicket(unnamed, KITCHEN_80, TEST_TIME_ZONE);
     expect(printedLines(bytes)).toEqual(["Grill", "Table 4", "5", "13:24", "1 x BURG", ""]);
-    expect(formatKitchenTicket({ ...unnamed, party: undefined }, KITCHEN_80)).toEqual(bytes);
+    expect(
+      formatKitchenTicket({ ...unnamed, party: undefined }, KITCHEN_80, TEST_TIME_ZONE),
+    ).toEqual(bytes);
   });
 });
 
@@ -1633,6 +1707,7 @@ describe("a dish sent after its period", () => {
             { qty: 1, name: "Chips" },
           ]),
           layout,
+          TEST_TIME_ZONE,
         ),
       );
       expect(banner("Lunch", "en")).toBe("** AFTER LUNCH — AGREED **");
@@ -1644,6 +1719,7 @@ describe("a dish sent after its period", () => {
         "** AFTER LUNCH — AGREED **",
         "1 x Steak",
         "2 x Fish",
+        "-".repeat(layout.paperWidth === "58mm" ? 30 : 42),
         "1 x Chips",
         "",
       ]);
@@ -1655,6 +1731,7 @@ describe("a dish sent after its period", () => {
       formatKitchenTicket(
         ticket([{ qty: 1, name: "Steak", afterPeriod: "Lunch" }], "es-ES"),
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1671,7 +1748,11 @@ describe("a dish sent after its period", () => {
   it("wraps a long period name to the paper", () => {
     const period = "Late afternoon tapas and drinks";
     const lines = printedLines(
-      formatKitchenTicket(ticket([{ qty: 1, name: "Steak", afterPeriod: period }]), KITCHEN_58),
+      formatKitchenTicket(
+        ticket([{ qty: 1, name: "Steak", afterPeriod: period }]),
+        KITCHEN_58,
+        TEST_TIME_ZONE,
+      ),
     );
     expect(columnsFor("58mm")).toBe(30);
     const markLines = lines.slice(4, -2);
@@ -1713,6 +1794,7 @@ describe("a dish sent after its period", () => {
           locale: "en-GB",
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1738,6 +1820,7 @@ describe("a dish sent after its period", () => {
           { qty: 1, name: "Fish", group: 2, afterPeriod: "Lunch" },
         ]),
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toEqual([
@@ -1781,7 +1864,8 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
     orderNumber: "A-17",
     firedAt: at,
   });
-  const lines = (ticket: KitchenTicket) => printedLines(formatKitchenTicket(ticket, KITCHEN_80));
+  const lines = (ticket: KitchenTicket) =>
+    printedLines(formatKitchenTicket(ticket, KITCHEN_80, TEST_TIME_ZONE));
 
   it("A773 fire paper: a group heading names its dishes' course", () => {
     const items = [
@@ -1924,8 +2008,8 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
     expect(arranged).toHaveLength(2);
     expect(lines(station(arranged)).slice(4)).toEqual([
       "GROUP 3 · STARTERS, MAINS",
-      "1.000 x Steak",
-      "1.000 x Steak",
+      "1 x Steak",
+      "1 x Steak",
       "",
     ]);
   });
@@ -1943,6 +2027,7 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
           item: { qty: 1, name: "Steak", group: 2, course: mains },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(correction).toContain("GROUP 2 · MAINS");
@@ -1960,6 +2045,7 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
           orderNoteChange: { before: "Old", after: "New" },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(note).toContain("GROUP 2 · MAINS");
@@ -1980,17 +2066,18 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
           locale: "en-GB",
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(moved.slice(5)).toEqual([
       "14:30",
       "GROUP 1 · STARTERS",
-      "1.000 x SOUP",
+      "1 x SOUP",
       "GROUP 2 · MAINS",
-      "1.000 x STEAK",
+      "1 x STEAK",
       "HOLD",
       "GROUP 3 · DESSERTS",
-      "1.000 x FLAN",
+      "1 x FLAN",
       "",
     ]);
   });
@@ -2036,6 +2123,7 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
           orderNoteChange: { before: "Old", after: "New" },
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(note.filter((line) => line.startsWith("GROUP"))).toEqual(["GROUP 2 · MAINS, DRINKS"]);
@@ -2059,7 +2147,8 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     firedAt: at,
     items,
   });
-  const lines = (t: KitchenTicket) => printedLines(formatKitchenTicket(t, KITCHEN_80));
+  const lines = (t: KitchenTicket) =>
+    printedLines(formatKitchenTicket(t, KITCHEN_80, TEST_TIME_ZONE));
 
   it("A773 fire paper: the cue prints once under its group's heading", () => {
     const flagged: KitchenTicketItem[] = [
@@ -2115,6 +2204,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
           item: flagged[0]!,
         },
         KITCHEN_80,
+        TEST_TIME_ZONE,
       ),
     );
     expect(slip).toContain("GROUP 4 · DESSERTS");
@@ -2142,8 +2232,8 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     expect(lines(ticket(arranged)).slice(4)).toEqual([
       "GROUP 4 · DESSERTS",
       "Goes with Grill",
-      "1.000 x Moscatel",
-      "1.000 x Moscatel",
+      "1 x Moscatel",
+      "1 x Moscatel",
       "",
     ]);
   });

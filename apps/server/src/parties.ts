@@ -27,6 +27,7 @@ import {
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
+import { enqueuePartyNameChange } from "./kitchen-print.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { floorPlanSetsFor } from "./floor-plan-sets.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -233,7 +234,12 @@ export async function setPartyName(
 ): Promise<{ revision: number; name: string | null }> {
   const revision = await checkAndBumpParty(tx, args.partyId, args.expectedPartyRevision, "open");
   const name = normalisePartyName(args.name);
+  const [before] = await tx
+    .select({ name: parties.name })
+    .from(parties)
+    .where(eq(parties.id, args.partyId));
   await tx.update(parties).set({ name }).where(eq(parties.id, args.partyId));
+  await enqueuePartyNameChange(tx, args.partyId, { before: before!.name, after: name });
   return { revision, name };
 }
 

@@ -7,6 +7,7 @@ import type {
   AllergyPatch,
   AllergySendTarget,
   KitchenAllergyBlock,
+  KitchenNoteChange,
   PartyAllergyRead,
 } from "@waitron/module";
 import type {
@@ -1617,12 +1618,12 @@ export type KitchenNoticeKind =
 
 /**
  * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
- * name. `orderLabel` is the order's, and `unitName`, `soldInEach` and `note` are the line's, each
- * copied as it stood when the notice was recorded.
+ * name. `orderLabel` identifies the affected bill or bills; `unitName`, `soldInEach` and `note`
+ * keep the line's recorded presentation.
  */
 export interface KitchenNotice {
   allergyBlock?: KitchenAllergyBlock | null;
-  orderNoteChange?: { before: string | null; after: string | null };
+  orderNoteChange?: KitchenNoteChange;
   /** On a kitchen-note change, the dishes it affects at this station; matching counted dishes (no
    *  unit or sold in each, whole-number quantity) are merged. */
   dishes?: {
