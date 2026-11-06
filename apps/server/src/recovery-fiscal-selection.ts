@@ -44,6 +44,7 @@ export function recoveryFiscalSelection(
   if (
     selected.length !== 1 ||
     owner?.fiscal?.id !== jurisdiction.modules.filing ||
+    owner.migrations === undefined ||
     !Number.isSafeInteger(manifest.modules[owner.name]) ||
     manifest.modules[owner.name]! < 0 ||
     recordedVersions[owner.name] !== manifest.modules[owner.name]
@@ -51,7 +52,7 @@ export function recoveryFiscalSelection(
     return;
   if (
     manifest.modules[owner.name] === 0 &&
-    expectedSchemaVersion(owner.migrations!, migrationsRoot) !== 0
+    expectedSchemaVersion(owner.migrations, migrationsRoot) !== 0
   )
     return;
   return { ...venue, module: owner.name };

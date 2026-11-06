@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import type { WaitronModule } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import { recoveryFiscalSelection } from "./recovery-fiscal-selection.js";
 
@@ -16,7 +17,7 @@ function read(
     text?: string;
     versions?: Record<string, number>;
     recorded?: Record<string, number>;
-    modules?: typeof ALL_MODULES;
+    modules?: readonly WaitronModule[];
     location?: typeof venue;
   } = {},
 ) {
@@ -59,6 +60,15 @@ it("does not choose between two installed providers of the recorded filing slot"
   expect(
     read({ modules: [...ALL_MODULES, { ...owner, name: "another-provider" }] }),
   ).toBeUndefined();
+});
+it("does not select a filing module with no migration set of its own", () => {
+  const modules = ALL_MODULES.map((module) => {
+    if (module.name !== "fiscal-verifactu") return module;
+    const setless: WaitronModule = { ...module, tablesIn: "core" };
+    delete (setless as { migrations?: unknown }).migrations;
+    return setless;
+  });
+  expect(read({ modules })).toBeUndefined();
 });
 it("retains a valid recorded zone instead of replacing it with the country default", () => {
   expect(read({ location: { ...venue, timeZone: "UTC" } })).toEqual({

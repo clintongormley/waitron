@@ -1499,7 +1499,7 @@ export interface WaitronModule {
    * always (e.g. the `core` set's table is `__drizzle_migrations_db`). */
   readonly name: string;
   readonly version: string;
-  /** Migration sets this one depends on, with semver ranges; `orderedMigrationSets` orders by them. */
+  /** Modules this one depends on, with semver ranges; `orderedMigrationSets` orders by them. */
   readonly requires?: {
     readonly core?: string;
     readonly modules?: Readonly<Record<string, string>>;
