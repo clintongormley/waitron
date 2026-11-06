@@ -87,6 +87,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
@@ -6442,7 +6443,13 @@ describe("public holidays in a configuration transfer", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const holidayMigration = journal.entries.findIndex(
+    const frozen = JSON.parse(
+      await readFile(
+        join(historicalSet("venue-service").migrationsFolder, "meta/_journal.json"),
+        "utf8",
+      ),
+    ) as { entries: { tag: string }[] };
+    const holidayMigration = frozen.entries.findIndex(
       (entry) => entry.tag === "0023_public_holidays",
     );
     expect(holidayMigration).toBeGreaterThan(0);

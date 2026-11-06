@@ -10,14 +10,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  locations,
-  nodes,
-  nowIso,
-  stampDeployment,
-  openVenueDatabase,
-} from "@waitron/db";
+import { locations, nodes, nowIso, stampDeployment, openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations } from "@waitron/migrations";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
@@ -26,11 +19,14 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
+
+const core = historicalSet("core");
 
 const prefix = mkdtempSync(join(tmpdir(), "preview-old-schema-"));
 mkdirSync(join(prefix, "meta"));
 const journal = JSON.parse(
-  readFileSync(join(CORE_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
+  readFileSync(join(core.migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as {
   entries: { tag: string }[];
 };
@@ -40,19 +36,16 @@ journal.entries = journal.entries.slice(
   journal.entries.findIndex((entry) => entry.tag.startsWith("0151_")),
 );
 for (const entry of journal.entries)
-  copyFileSync(
-    join(CORE_MIGRATIONS.migrationsFolder, `${entry.tag}.sql`),
-    join(prefix, `${entry.tag}.sql`),
-  );
+  copyFileSync(join(core.migrationsFolder, `${entry.tag}.sql`), join(prefix, `${entry.tag}.sql`));
 writeFileSync(join(prefix, "meta/_journal.json"), JSON.stringify(journal));
 const suite = useVenueDb({
   migrations: [
     {
-      ...CORE_MIGRATIONS,
+      ...core,
       migrationsFolder: prefix,
       appendOnlyTables: predecessorAppendOnly(
-        CORE_MIGRATIONS.appendOnlyTables,
-        CORE_MIGRATIONS.migrationsFolder,
+        core.appendOnlyTables,
+        core.migrationsFolder,
         allTags.slice(0, journal.entries.length),
         allTags.slice(journal.entries.length),
       ),

@@ -19,7 +19,6 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { invoiceSeries } from "@waitron/db";
-import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu/src/migrations.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import * as restore from "./restore.js";
@@ -29,6 +28,7 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { recoveryArchiveSourceId } from "./recovery-source.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const preview = vi.hoisted(() => ({ seen: [] as string[], fail: false }));
 vi.mock("./recovery-backup-preview.js", async (original) => {
@@ -76,7 +76,10 @@ async function olderBackup() {
     now: new Date(),
   });
   const journal = JSON.parse(
-    await readFile(join(FISCAL_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
+    await readFile(
+      join(historicalSet("fiscal-verifactu").migrationsFolder, "meta/_journal.json"),
+      "utf8",
+    ),
   ) as { entries: { idx: number; tag: string; when: number }[] };
   const through = journal.entries.find((entry) => entry.tag === "0008_envio_confirmado_index");
   if (through === undefined)

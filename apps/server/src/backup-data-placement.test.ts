@@ -10,8 +10,9 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { tenants, locations, nodes, invoiceSeries, catalogues } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
-import { migrationOptionsFor, expectedSchemaVersion } from "@waitron/migrations";
-import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
+import { expectedSchemaVersion } from "@waitron/migrations";
+import { type WaitronModule } from "@waitron/module";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { buildManifest } from "./backup-manifest.js";
@@ -45,8 +46,8 @@ async function syncs(run: () => Promise<unknown>): Promise<string[]> {
 }
 
 const modules = ALL_MODULES.filter((m) => ["core", "catalogue"].includes(m.name));
-const options = migrationOptionsFor(orderedMigrationSets(modules), null);
-const catalogue = options.find((s) => s.migrationsTable === "__drizzle_migrations_catalogue")!;
+const options = historicalSets().filter((s) => ["core", "catalogue"].includes(s.name));
+const catalogue = options.find((s) => s.name === "catalogue")!;
 const journal = JSON.parse(
   readFileSync(join(catalogue.migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as {

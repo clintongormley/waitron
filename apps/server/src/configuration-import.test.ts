@@ -30,6 +30,7 @@ import {
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 import { ALL_MODULES } from "./modules.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -925,7 +926,13 @@ describe("routing cells in a staged import", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const routingMigration = journal.entries.findIndex((entry) =>
+    const frozen = JSON.parse(
+      await readFile(
+        join(historicalSet("venue-service").migrationsFolder, "meta/_journal.json"),
+        "utf8",
+      ),
+    ) as { entries: { tag: string }[] };
+    const routingMigration = frozen.entries.findIndex((entry) =>
       entry.tag.endsWith("_routing_cells"),
     );
     expect(routingMigration).toBeGreaterThan(0);
@@ -950,7 +957,10 @@ describe("routing cells in a staged import", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const stationBumpMode = journal.entries.findIndex((entry) =>
+    const frozen = JSON.parse(
+      await readFile(join(historicalSet("core").migrationsFolder, "meta/_journal.json"), "utf8"),
+    ) as { entries: { tag: string }[] };
+    const stationBumpMode = frozen.entries.findIndex((entry) =>
       entry.tag.endsWith("_station_bump_mode"),
     );
     expect(stationBumpMode).toBeGreaterThan(0);
