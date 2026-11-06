@@ -644,15 +644,15 @@ tests `apps/server/src/first-setup-start-again.test.ts`,
 `packages/fiscal-verifactu/src/hour-throwaway-allocation.test.ts:35`,
 `packages/fiscal-verifactu/src/throwaway-allocation.test.ts:54, 83, 159, 209, 243, 274`.
 
-- [ ] **Step 1:** rename the request field in the interface first, then run
+- [x] **Step 1:** rename the request field in the interface first, then run
   `pnpm --filter @waitron/fiscal-verifactu typecheck` and `pnpm --filter @waitron/provisioning typecheck`:
   every caller and implementation fails to compile (this is the failing check; a rename has no
   behaviour to test).
-- [ ] **Step 2:** rename at each site. Inside the seats, the allocation keeps its own field:
+- [x] **Step 2:** rename at each site. Inside the seats, the allocation keeps its own field:
   `taxpayerNif: taxId`. Do NOT rename `allocation.taxpayerNif`, `fiscal_allocations.taxpayer_nif`
   or anything else: `grep -rn "taxpayerNif" packages/module packages/provisioning/src/throwaway-allocation.ts`
   prints nothing afterwards, and `git diff --stat` shows only the files above and their tests.
-- [ ] **Step 3:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/hour-throwaway-allocation.test.ts src/throwaway-allocation.test.ts`,
+- [x] **Step 3:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/hour-throwaway-allocation.test.ts src/throwaway-allocation.test.ts`,
   `pnpm --filter @waitron/provisioning exec vitest run src/throwaway-allocation.test.ts`,
   `pnpm --filter @waitron/server exec vitest run src/provision-throwaway.test.ts src/setup-api.throwaway.test.ts`
   (same `Tests` counts as before the rename); typecheck module, provisioning, fiscal-verifactu and
@@ -666,20 +666,28 @@ tests `apps/server/src/first-setup-start-again.test.ts`,
 allocation through `provision(...)`) and `apps/server/src/backup-recovery-pack-api.make.test.ts:88-110, :382-400`
 (mounting and calling `POST /api/backup/recovery-pack`).
 
-- [ ] **Step 1:** before writing the test, state in the commit message what each outcome would
+- [x] **Step 1:** before writing the test, state in the commit message what each outcome would
   print: a made pack answers 200 `application/pdf`; a refusal answers 4xx with a code.
-- [ ] **Step 2:** write one case: set up a venue with `initialAllocation: throwaway("preproduction")`
+- [x] **Step 2:** write one case: set up a venue with `initialAllocation: throwaway("preproduction")`
   as `provision-throwaway.test.ts:87-113` does, then make the PDF pack through the route as the make
   test does. Run it once with `expect(response.status).toBe(200)`.
   `pnpm --filter @waitron/server exec vitest run src/provision-throwaway.recovery-pack.test.ts`.
-- [ ] **Step 3:** if it passes, assert as the make test does that the PDF reads back
+- [x] **Step 3:** if it passes, assert as the make test does that the PDF reads back
   (`readRecoveryPackPdf`), and add a control in the other direction that must fail for a reason
   you name in the case (so the pass is not vacuous). If it is refused, assert
   the exact `{ error: { code, params } }`, name the case after it, and report the code and the words
   the dashboard draws for it (`apps/dashboard/src/i18n/codes.ts`) for Owner question 4.
-- [ ] **Step 4:** if setting up the venue needs fixture work beyond these two files, stop at about
+- [x] **Step 4:** if setting up the venue needs fixture work beyond these two files, stop at about
   60 tool calls and report what blocked it. Commit: "Test: what a throwaway venue's recovery pack
   answers".
+
+**Answer (run 2026-11-06, `apps/server/src/provision-throwaway.recovery-pack.test.ts`):** the PDF
+pack is made, fiscal page included. A venue set up through `provisionVenue` with
+`initialAllocation: throwaway("preproduction")` answers 200 `application/pdf`, key header
+`replaced`, a server-key part `included` carrying the key, and a key file scoped to the venue's tax
+id in preproduction. A refused fiscal page would not have shown as a 4xx: the route still answers
+200 and marks only the server-key part `failed` (header `failed`), which the test's control
+produces with an unreadable preparation-state file. Owner question 4: nothing changes.
 
 ### Task 11: full-disk words outside the till strip
 
@@ -734,7 +742,8 @@ allocation through `provision(...)`) and `apps/server/src/backup-recovery-pack-a
   the code; Tasks 1-2 run the reachable ones.
 - That the cause-less sites (`first-setup-resolution.ts:120, :257, :272, :274, :287`) are reached
   only through a fault in Waitron: read from the wiring and the page's request builder.
-- That a throwaway venue's PDF recovery pack is not refused for being throwaway: read; Task 10 runs it.
+- That a throwaway venue's PDF recovery pack is not refused for being throwaway: run by Task 10; the
+  pack is made with its fiscal page.
 - That nothing outside this repository uses the seat's `taxpayerNif` request field: a research
   agent's grep of the repositories under `~/workspace/repos` and the campaign folders.
 - That "Update this box" names a step the person can take: it repeats the existing
