@@ -1260,3 +1260,102 @@ it("a connection check refused storage.disk_full keeps the connection-failure wo
   await expect.poll(() => screen()?.errorMessage).toBe(shellEn["shell.connection.server_problem"]);
   expect(q(app, "screen-first-owner")).toBeNull();
 });
+
+it("a record whose claim mark needs repair offers Start again and Recover from backup", async () => {
+  const { app, requests } = await presentDatabase({ inspection: { pair: "repairable" } });
+  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
+  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
+  expect(app.shadowRoot!.querySelector("[data-test=start-again-refused]")).toBeNull();
+  await openStartAgain(app);
+  expect(summaryRequests(requests)).toHaveLength(1);
+  await click(app, "cancel-start-again");
+  await expect.poll(() => q<WtButton>(app, "recover-backup")?.disabled).toBe(false);
+  await click(app, "recover-backup");
+  await expect.poll(() => q(app, "confirm-recover")).not.toBeNull();
+  expect(startAgainRequests(requests)).toEqual([]);
+});
+
+it("a record that cannot be read offers neither, and says why", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await mount({
+    inspection: { pair: "invalid", revision: null, ownerGeneration: null },
+  });
+  for (const name of ["start-again", "recover-backup"])
+    expect(q<WtButton>(app, name)?.disabled ?? true, name).toBe(true);
+  expect(q(app, "start-again-refused").textContent).toBe(t.wipeUnavailable);
+  q(app, "start-again")?.dispatchEvent(new MouseEvent("click"));
+  q(app, "recover-backup")?.dispatchEvent(new MouseEvent("click"));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(summaryRequests(requests)).toEqual([]);
+  expect(startAgainRequests(requests)).toEqual([]);
+});
+
+it.each(["en-GB", "es-ES"] as const)(
+  "after Start again the heading is First setup, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const { app, requests } = await mount();
+    setLocale(locale);
+    await app.updateComplete;
+    await confirmStartAgain(app);
+    await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
+    await expect
+      .poll(() => app.shadowRoot!.querySelector("[role=status]")?.textContent)
+      .toBe(t.restarting);
+    expect(app.shadowRoot!.querySelector("h1")!.textContent).toBe(t.heading);
+  },
+);
+
+/** Every button on the page that reads Start again, whichever step drew it. */
+const startAgainButtons = (app: SetupApp) =>
+  [...app.shadowRoot!.querySelectorAll("wt-button")].filter(
+    (button) => button.textContent!.trim() === initialOwnerStrings.en.startAgain,
+  );
+const startAgainStates: Record<string, () => Promise<SetupApp>> = {
+  closed: async () => (await presentDatabase()).app,
+  "confirmation open": async () => {
+    const { app } = await presentDatabase();
+    await openStartAgain(app);
+    return app;
+  },
+  "with an error": async () => {
+    const { app } = await presentDatabase({
+      summary: (read) => (read === 0 ? refusal("server.internal", 500) : undefined),
+    });
+    await pressStartAgain(app);
+    await expect.poll(() => formErrors(app).filter(Boolean)).toHaveLength(1);
+    return app;
+  },
+  busy: async () => {
+    const { app } = await presentDatabase({ startAgain: () => new Promise<Response>(() => {}) });
+    await confirmStartAgain(app);
+    await expect.poll(() => q<WtButton>(app, "cancel-start-again")?.disabled).toBe(true);
+    return app;
+  },
+  refused: async () => {
+    const { app } = await presentDatabase({ summary: () => refusedCause("trading-settings") });
+    await pressStartAgain(app);
+    await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();
+    return app;
+  },
+  "missing database": async () => {
+    const { app } = await mount({ inspection: { database: "missing", emptyDatabase: false } });
+    await pressStartAgain(app);
+    await expect.poll(() => q(app, "missing-reached")).not.toBeNull();
+    return app;
+  },
+  "Recover's confirmation open": async () => {
+    const { app } = await presentDatabase();
+    await click(app, "recover-backup");
+    await expect.poll(() => q(app, "confirm-recover")).not.toBeNull();
+    return app;
+  },
+};
+it.each(Object.keys(startAgainStates))(
+  "at most one Start again button is drawn in every state: %s",
+  async (state) => {
+    const app = await startAgainStates[state]!();
+    await app.updateComplete;
+    expect(startAgainButtons(app).length).toBeLessThanOrEqual(1);
+  },
+);

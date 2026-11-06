@@ -16,7 +16,14 @@ afterEach(async () => {
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
-      for (const state of ["normal", "confirmation", "uncheckable", "missing", "refusal"] as const)
+      for (const state of [
+        "normal",
+        "confirmation",
+        "uncheckable",
+        "missing",
+        "refusal",
+        "repairable",
+      ] as const)
         it(`${locale} ${theme} ${width} ${state}: accessible interrupted setup`, async () => {
           const previous = [innerWidth, innerHeight];
           try {
@@ -30,7 +37,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   return Response.json({
                     version: 2,
                     inspectionId: "a".repeat(64),
-                    pair: "valid",
+                    pair: state === "repairable" ? "repairable" : "valid",
                     database: state === "missing" ? "missing" : "no-venue-rows",
                     emptyDatabase: !["missing", "uncheckable"].includes(state),
                     password: state === "uncheckable" ? "uncheckable" : "checkable",

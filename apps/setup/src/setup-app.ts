@@ -234,7 +234,7 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 /** Whether the page may ask the box what Start again would delete; the box decides the rest. */
 const wipeOffered = (inspection: FirstSetupInspection) =>
-  inspection.pair === "valid" &&
+  (inspection.pair === "valid" || inspection.pair === "repairable") &&
   inspection.revision !== null &&
   inspection.ownerGeneration !== null;
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
@@ -2336,7 +2336,7 @@ export class SetupApp extends LitElement {
         ? html`<p data-test="start-again-refused" tabindex="-1">${refusalWords}</p>`
         : nothing;
     return html`<section data-test="screen-first-owner">
-      <h1>${inspection ? t.interrupted : t.heading}</h1>
+      <h1>${inspection && !this.firstRestarting ? t.interrupted : t.heading}</h1>
       ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
       ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
       ${missing ? html`<p data-test="missing-database">${t.missingDatabase}</p>` : nothing}
