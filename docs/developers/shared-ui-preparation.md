@@ -18,7 +18,8 @@ The package carries built JavaScript, declarations, CSS, the Lit peer dependency
 Elastic License 2.0 and `LICENSE-GRANTS.md`.
 
 Check the workflow result after a qualifying merge. A publication error fails the
-run; the next qualifying merge attempts a new numbered version. There is no
+run; the next qualifying merge attempts a new numbered version. An older run can
+be refused if a higher package version has already been published. There is no
 scheduled publisher or catch-up process. The first real publication from this
 workflow must still establish that its token can publish to the existing private
 package. Cloud owns authenticated installation, dependency updates and portal/image
