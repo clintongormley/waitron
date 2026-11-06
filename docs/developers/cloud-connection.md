@@ -260,12 +260,23 @@ hostname or revision is stale, so a replacement can name the exact predecessor. 
 returns no CSR, certificate or private key. A request naming a UUID and every submit retain their
 existing bodies and replies; the ordinary status returns a chain only for a current matching request.
 
-On each certificate pass, discover that row and create the CSR from the retained box key.
-If its digest, hostname and revision match, poll that request. Otherwise submit a replacement
-using the discovered request ID as `previousRequestId`, or null when there is no row. A lost
-submit reply is resolved by the next discovery rather than by guessing its predecessor. Cloud's
-existing row holds this request state; no new local request file, table, job or route is needed.
-A valid installed chain stays in place during failures and unrelated configuration changes.
+On each pass, first check the installed chain locally. End the pass without contacting Cloud if
+it is valid for the configured hostname, matches the retained private key and is outside the
+renewal window, regardless of the configuration revision. Otherwise create the CSR, creating
+a missing key through a synced temporary file linked into place. The same key and hostname
+must produce the same CSR bytes.
+
+Refuse discovery unless its installation and configured hostname match and `request` is null
+or fully well formed. A row matches when its CSR digest and stored revision match this CSR
+and the reply's current revision. Poll a matching row. Install a ready chain only when it is
+outside the renewal window and not expired; otherwise submit one replacement naming that row.
+Also replace a nonmatching row, or submit with a null predecessor when no row exists. Use a new
+UUID and the discovery reply's current revision for every replacement.
+
+One existing eight-second deadline covers the complete pass. A lost submit reply is resolved by
+the next discovery rather than by guessing its predecessor. Cloud's existing row holds this
+request state; no local request file, table, job or route is needed. A valid installed chain stays
+in place during failures and unrelated configuration changes.
 
 ### Recover a test venue from a Cloud snapshot
 
