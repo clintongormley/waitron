@@ -28,6 +28,7 @@ afterEach(() => {
 });
 
 const MENU = "menu-lunch";
+const DINNER = "menu-dinner";
 const status: MenuStatus = {
   state: "changed",
   clashes: 0,
@@ -96,6 +97,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
   const home = {} as MenuHome;
   const listCatalogues = vi.fn(async () => [
     { id: MENU, name: state.menuName, active: true, version: 2 },
+    { id: DINNER, name: "Dinner", active: true, version: 1 },
   ]);
   const getMenuRead = vi.fn(async (_id: string, parts: MenuReadPart[]): Promise<MenuReadResult> =>
     Object.fromEntries(
@@ -141,14 +143,48 @@ const words = (panel: MenuPreviewPanel, id: string) =>
 const resultLine = (panel: MenuPreviewPanel) =>
   panel.shadowRoot!.querySelector('[data-test="undo-result"]');
 const text = (node: Element | null) => (node?.textContent ?? "").replace(/\s+/g, " ").trim();
+const publishButton = (panel: MenuPreviewPanel) =>
+  panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>('[data-test="publish"]')!;
+const heading = (el: MenusScreen) => text(el.shadowRoot!.querySelector("h1"));
+const memberError = (el: MenusScreen) =>
+  text(el.shadowRoot!.querySelector('[data-test="member-error"]'));
+
+/** A write that answers only when the test says so. */
+function held<T = void>() {
+  let answer!: (value: T) => void;
+  let refuse!: (error: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    answer = resolve;
+    refuse = reject;
+  });
+  return { promise, answer, refuse };
+}
+
+/** Goes to another address the way the browser's Back and Forward do. */
+function visit(path: string): void {
+  history.pushState(null, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+/** Asks for an Undo the way the Preview does, whatever the Preview would draw. */
+function askUndo(panel: MenuPreviewPanel, changeId: string): void {
+  panel.dispatchEvent(
+    new CustomEvent("wt-menu-undo", {
+      detail: { changeId, change: words(panel, changeId) },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve));
 
 it("undoes a rename with the live name, previews again, says what was undone and reads the menus again", async () => {
-  let fake!: ReturnType<typeof fakeApi>;
   const renameCatalogue = vi.fn(async (_id: string, name: string) => {
     fake.state.menuName = name;
     fake.state.preview = previewOf([recolour]);
   });
-  fake = fakeApi({ renameCatalogue } as Partial<DashboardApi>);
+  const fake = fakeApi({ renameCatalogue } as Partial<DashboardApi>);
   const { panel } = await mount(fake.api);
   const bullet = words(panel(), "own-rename");
   const menuReads = fake.listCatalogues.mock.calls.length;
@@ -183,11 +219,10 @@ it("keeps a refused change listed with its sentence beside it, and says nothing 
 });
 
 it("reports a failed read after a stored Undo as a load failure, keeping the success line", async () => {
-  let fake!: ReturnType<typeof fakeApi>;
   const renameCatalogue = vi.fn(async () => {
     fake.state.readFails = true;
   });
-  fake = fakeApi({ renameCatalogue } as Partial<DashboardApi>);
+  const fake = fakeApi({ renameCatalogue } as Partial<DashboardApi>);
   const { el, panel } = await mount(fake.api);
   const bullet = words(panel(), "own-rename");
   await userEvent.click(undoButton(panel(), "own-rename")!);
@@ -217,4 +252,97 @@ it("sends one write for two quick clicks", async () => {
   answer();
   await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
   expect(renameCatalogue).toHaveBeenCalledTimes(1);
+});
+
+it("names a refused Undo beside the list as not undone once the person has left the Preview", async () => {
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const fake = fakeApi({ updateSection } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  const bullet = words(panel(), "mains-colour");
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+  visit(`/manage/menus/menu/${MENU}/view/structure`);
+  const tabs = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+    '[data-test="menu-tabs"]',
+  )!;
+  await vi.waitFor(() => expect(tabs.value).toBe("structure"));
+  write.refuse({ code: "menu_section.invalid", params: { field: "color" } });
+  await vi.waitFor(() =>
+    expect(memberError(el)).toBe(
+      `${bullet}: not undone. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
+    ),
+  );
+  expect(memberError(el)).not.toContain("not saved");
+});
+
+it("sends no publish of a menu whose Undo is still out after another menu was opened and this one reopened", async () => {
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const publishMenu = vi.fn(async () => ({ number: 3 }));
+  const fake = fakeApi({ updateSection, publishMenu } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+
+  visit(`/manage/menus/menu/${DINNER}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
+  // The other menu lists a change with the same id; it is not the one being undone.
+  expect(text(undoButton(panel(), "mains-colour"))).toBe("Undo");
+
+  visit(`/manage/menus/menu/${MENU}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Lunch Menu"));
+  await vi.waitFor(() => expect(text(undoButton(panel(), "mains-colour"))).toBe("Undoing…"));
+  expect(publishButton(panel()).disabled).toBe(true);
+  panel().dispatchEvent(
+    new CustomEvent("wt-menu-publish", {
+      detail: { hash: "b".repeat(64) },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await settle();
+  expect(publishMenu).not.toHaveBeenCalled();
+
+  write.answer();
+  await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
+});
+
+it("sends no Undo while a publish of this menu is out", async () => {
+  const publishing = held<{ number: number }>();
+  const publishMenu = vi.fn(() => publishing.promise);
+  const updateSection = vi.fn(async () => {});
+  const fake = fakeApi({ updateSection, publishMenu } as unknown as Partial<DashboardApi>);
+  const { panel } = await mount(fake.api);
+  publishButton(panel()).click();
+  await vi.waitFor(() => expect(publishMenu).toHaveBeenCalledTimes(1));
+  askUndo(panel(), "mains-colour");
+  await settle();
+  expect(updateSection).not.toHaveBeenCalled();
+  publishing.answer({ number: 3 });
+  await vi.waitFor(() => expect(panel().publishing).toBe(false));
+});
+
+it("sends no Undo while the preview's read has failed", async () => {
+  const renameCatalogue = vi.fn(async () => {
+    fake.state.readFails = true;
+  });
+  const updateSection = vi.fn(async () => {});
+  const fake = fakeApi({ renameCatalogue, updateSection } as unknown as Partial<DashboardApi>);
+  const { panel } = await mount(fake.api);
+  const recolourWords = words(panel(), "mains-colour");
+  await userEvent.click(undoButton(panel(), "own-rename")!);
+  await vi.waitFor(() => expect(panel().failed).toBe(true));
+  await vi.waitFor(() => expect(panel().undoBlocked).toBe(false));
+  expect(panel().undoing).toBeNull();
+  panel().dispatchEvent(
+    new CustomEvent("wt-menu-undo", {
+      detail: { changeId: "mains-colour", change: recolourWords },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await settle();
+  expect(updateSection).not.toHaveBeenCalled();
 });

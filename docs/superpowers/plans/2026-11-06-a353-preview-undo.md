@@ -237,6 +237,7 @@ link (`menu_preview.hide_change`); the tab names are the existing `menus.tab_str
 | `menu_preview.undoing` (new) | Undoing… | Deshaciendo… |
 | `menu_preview.undone` (new) | Undone: {change}. | Cambio deshecho: {change}. |
 | `menu_preview.undo_refused` (new) | Not undone. {reason} | No se ha deshecho. {reason} |
+| `menu_preview.undo_refused_change` (new) | {change}: not undone. {reason} | {change}: no se ha deshecho. {reason} |
 | `menu_preview.edit_menu` (new) | Edit {menu} | Editar {menu} |
 | `product.edit` (reused) | Edit product | Editar producto |
 | `extras.edit` (reused, only if Q1a says so) | Edit extras list | Editar lista de extras |
@@ -252,15 +253,16 @@ sentences below; a code none of them names falls back to its existing `codeMessa
 | `menu_preview.undo_menu_gone` | `catalogue.not_found`, menu name and Home display | This menu has been deleted, so there is nothing to put back. | Esta carta se ha eliminado, así que no hay nada que deshacer. |
 | `menu_preview.undo_item_gone` | `menu_item.not_found`, a dish's or a variant's price | {name} is no longer on this menu, so its price here cannot be put back. Add it to the menu again first, or hide this change. | {name} ya no está en esta carta, así que no se puede recuperar su precio aquí. Vuelve a añadirlo a la carta o oculta este cambio. |
 | `menu_preview.undo_section_gone` | `menu_section.not_found`, a section | Section {name} has been deleted, so it cannot be put back. | La sección {name} se ha eliminado, así que no se puede recuperar. |
-| `menu_preview.undo_section_invalid` | `menu_section.invalid`, a section | {name}'s published photo or colour can no longer be used. Change it on the Structure tab, or hide this change. | La foto o el color publicados de {name} ya no se pueden usar. Cámbialos en la pestaña Estructura u oculta este cambio. |
+| `menu_preview.undo_section_invalid` | `menu_section.invalid`, a section, when the refusal names the `color` or `image` field, or names none and the Undo sent only those (otherwise the code's own message) | {name}'s published photo or colour can no longer be used. Change it on the Structure tab, or hide this change. | La foto o el color publicados de {name} ya no se pueden usar. Cámbialos en la pestaña Estructura u oculta este cambio. |
 | `menu_preview.undo_language_off` | `content.translation_invalid`, a section | A language {name} was published in has been switched off since, so its name cannot be put back. Change it on the Structure tab, or hide this change. | Desde la publicación se ha desactivado un idioma del nombre de {name}, así que no se puede recuperar. Cámbialo en la pestaña Estructura u oculta este cambio. |
 | `menu_preview.undo_display_invalid` | `menu.home_display_invalid`, Home display | The published {device} display setting is no longer offered. Choose one on the Home page tab, or hide this change. | El ajuste de pantalla publicado para {device} ya no se ofrece. Elige otro en la pestaña Página de inicio u oculta este cambio. |
 
 `{device}` is the existing `home.device_handheld` / `home.device_till` ("Handheld" / "Terminal de
 mano", "Till" / "Caja registradora"). An Undo refused after the person has left this menu's
-Preview tab is named beside the list with the existing `menus.change_not_saved` ("Your change to
-{name} was not saved. {reason}" / "No se ha guardado tu cambio en {name}. {reason}"), as a price
-save refused away from its tab is (`menus-screen.ts:2099-2109`).
+Preview tab is named beside the list with `menu_preview.undo_refused_change` ("{change}: not
+undone. {reason}"), where a price save refused away from its tab is named
+(`menus-screen.ts:2099-2109`). It does not reuse `menus.change_not_saved` ("Your change to {name}
+was not saved."): that would say the change itself was lost, when only the Undo failed.
 
 PRs 2–5 add their own refusal sentences to this section, in the same form, before each lands.
 
@@ -584,18 +586,26 @@ Files: `apps/dashboard/src/screens/menus-screen.ts`; create
 Undoing a dish's own price also removes the bullet of a variant that follows that price, so the
 success line names the change that was undone and must not suggest that nothing else moved.
 
+The screen keeps one record of the Undo that is out, `undoOut = { menuId, changeId }` (change ids
+repeat across menus, so the id alone cannot say which menu's Undo it is). It is set when the write
+is queued and cleared only when that task ends. The Preview widget's `undoing` is the record's
+`changeId` only while the record's menu is the one open, else null.
+
 `#undo(changeId, change)`: return unless `menuId`, `preview` and no `previewError`; return when
-`busy`, `undoing !== null`, `homePending !== null` (`:752,2030`) or this menu is publishing. Take
+`busy`, `undoOut !== null` (one Undo out at a time, on any menu), `homePending !== null`
+(`:752,2030`) or this menu is publishing. Take
 the action from the actions map built from `{ preview, languages: currentContentLanguages().languages }`;
-return unless `undo`. Set `busy`, `undoing`, clear this change's refusal and `undoResult`. Run in
+return unless `undo`. Set `busy`, `undoOut`, clear this change's refusal and `undoResult`. Run in
 `#priceWrites.run("undo:" + <row key>)` for the two price commands (Decision 3), else
 `#writes.run("undo:" + menuId)`. Inside: `await sendMenuUndo(this.api, command)`. While the same
 menu's Preview tab is shown (`this.menuId === menuId && this.view === "preview"`, as `#savePrice`
 judges it, `:2099-2109`): a refusal sets `undoRefusals[changeId] = undoRefusalText(…)`, a success
-sets `undoResult`. When it is not shown, a refusal sets `memberError` with `menus.change_not_saved`
-and a success sets nothing. After a rename success also `await this.#watchMenus().catch(() => undefined)`
-as `#saveMenu` does (`:1427`); after a success `await this.#refresh()`. Always clear `busy` and
-`undoing`. Pass `undoing`, `undoBlocked = busy || homePending !== null || publishing.has(menuId)`,
+sets `undoResult`. When it is not shown, a refusal sets `memberError` with
+`menu_preview.undo_refused_change` ("{change}: not undone. {reason}", `{reason}` from
+`undoRefusalText`) and a success sets nothing. After a rename success also `await this.#watchMenus().catch(() => undefined)`
+as `#saveMenu` does (`:1427`); after a success `await this.#refresh()`. Clear `busy` and
+`undoOut` in a `finally` around the task's body. `#publish` returns while `undoOut`'s menu is the
+menu being published. Pass `undoing` (as above), `undoBlocked = busy || homePending !== null || publishing.has(menuId)`,
 `undoRefusals`, `undoResult` to `dashboard-menu-preview` in `#renderPreview` (`:3029-3058`), and
 listen for `wt-menu-undo`.
 
@@ -607,6 +617,13 @@ listen for `wt-menu-undo`.
   - A write that succeeds followed by a failed re-read: the success line stays and the preview's
     read error shows; nothing says the Undo failed.
   - Two quick clicks send one write.
+  - Refused after the person switched to Structure: `memberError` reads "{change}: not undone.
+    {reason}", never "was not saved".
+  - An Undo held unanswered on one menu, another menu opened (its change with the same id shows
+    "Undo", not "Undoing…"), the first reopened: its Publish is drawn disabled, and a publish
+    asked for anyway sends nothing.
+  - A publish of this menu out, then an Undo asked for: nothing sent.
+  - The preview's read failed, then an Undo asked for: nothing sent.
 - [ ] `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.preview-undo.test.ts src/screens/menus-screen.heading.test.ts`
 
 #### Task 1.10 — the screen: what an Undo out blocks, and leaving
@@ -614,17 +631,20 @@ listen for `wt-menu-undo`.
 Files: `menus-screen.ts`, `apps/dashboard/src/widgets/menu-publications.ts`,
 `menus-screen.preview-undo.test.ts`.
 
-`#publish` (`menus-screen.ts:1442`) returns while `undoing !== null` for this menu. The
-publications widget gains a `blocked` property; while it is set, Schedule is drawn `secondary`
-and disabled rather than hidden (today it is drawn only while `#canSchedule()` answers true,
-`menu-publications.ts:425-435,881-889`). The screen passes `blocked = undoing !== null` at
-`menus-screen.ts:3051-3057`. `#select` (`:1280`) clears `undoRefusals`, `undoResult` and
-`undoing`; `#showView` (`:1249-1262`) clears `undoRefusals` and `undoResult` when leaving the
-Preview tab; `#publish` clears `undoResult`. A refreshed preview drops refusals whose id it no
-longer lists, nothing else.
+Task 1.9 already keeps the record of the Undo that is out (`undoOut = { menuId, changeId }`,
+cleared only when its task ends), already makes `#publish` return while `undoOut`'s menu is the
+menu being published, and already passes the widget `undoing` only while that menu is open. This
+task builds on that record. The publications widget gains a `blocked` property; while it is set,
+Schedule is drawn `secondary` and disabled rather than hidden (today it is drawn only while
+`#canSchedule()` answers true, `menu-publications.ts:425-435,881-889`). The screen passes
+`blocked = undoOut?.menuId === menuId` in `#renderPreview`. `#select` (`:1280`) clears
+`undoRefusals` and `undoResult`, and nothing about `undoOut`: the record must outlive the menu
+being left, or Publish could run on a menu whose Undo is still out. `#showView` (`:1249-1262`)
+clears `undoRefusals` and `undoResult` when leaving the Preview tab; `#publish` clears
+`undoResult`. A refreshed preview drops refusals whose id it no longer lists, nothing else.
 
 - [ ] Failing tests, one at a time:
-  - An Undo held unanswered, then Publish pressed → nothing sent; Schedule is drawn disabled.
+  - An Undo held unanswered → Schedule is drawn disabled (the Publish half is Task 1.9's).
   - A Price overrides save of the same row still out, then a price Undo; once both finish,
     `savingPrices` no longer holds the row's key, and the Undo ran after the save.
   - A Home save held out → Undo is drawn blocked and sends nothing.

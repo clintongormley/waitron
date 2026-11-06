@@ -3080,6 +3080,7 @@ export const en = {
   "menu_preview.undoing": "Undoing…",
   "menu_preview.undone": "Undone: {change}.",
   "menu_preview.undo_refused": "Not undone. {reason}",
+  "menu_preview.undo_refused_change": "{change}: not undone. {reason}",
   "menu_preview.edit_menu": "Edit {menu}",
   "menu_preview.undo_name_taken":
     "Another menu is now called {name}. Rename that menu, then undo this again.",
@@ -6902,6 +6903,7 @@ export const es: Record<StringKey, string> = {
   "menu_preview.undoing": "Deshaciendo…",
   "menu_preview.undone": "Cambio deshecho: {change}.",
   "menu_preview.undo_refused": "No se ha deshecho. {reason}",
+  "menu_preview.undo_refused_change": "{change}: no se ha deshecho. {reason}",
   "menu_preview.edit_menu": "Editar {menu}",
   "menu_preview.undo_name_taken":
     "Otra carta se llama ahora {name}. Cambia el nombre de esa carta y vuelve a deshacer esto.",

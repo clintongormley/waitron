@@ -713,8 +713,8 @@ export class MenusScreen extends LitElement {
    * between, where the link sits under the status. */
   @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
-  /** The Preview change whose Undo is out. */
-  @state() private undoing: string | null = null;
+  /** The Undo that is out, on whichever menu it was sent from: change ids repeat across menus. */
+  @state() private undoOut: { menuId: string; changeId: string } | null = null;
   @state() private undoRefusals: Readonly<Record<string, string>> = {};
   /** The bullet text of the last change undone. */
   @state() private undoResult: string | null = null;
@@ -1445,7 +1445,7 @@ export class MenusScreen extends LitElement {
     const menuId = this.menuId;
     const preview = this.preview;
     if (menuId === null || preview === null || this.previewError) return;
-    if (this.busy || this.undoing !== null || this.homePending !== null) return;
+    if (this.busy || this.undoOut !== null || this.homePending !== null) return;
     if (this.publishing.has(menuId)) return;
     const action = menuChangeActions({
       preview,
@@ -1454,26 +1454,27 @@ export class MenusScreen extends LitElement {
     if (action?.kind !== "undo") return;
     const command = action.command;
     this.busy = true;
-    this.undoing = changeId;
+    this.undoOut = { menuId, changeId };
     this.undoRefusals = without(this.undoRefusals, [changeId]);
     this.undoResult = null;
     const shown = () => this.menuId === menuId && this.view === "preview";
     const task = async () => {
       try {
-        await sendMenuUndo(this.api, command);
-      } catch (error) {
-        const reason = undoRefusalText(error, command);
-        if (shown()) this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
-        else this.memberError = fill("menus.change_not_saved", { name: change, reason });
+        try {
+          await sendMenuUndo(this.api, command);
+        } catch (error) {
+          const reason = undoRefusalText(error, command);
+          if (shown()) this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
+          else this.memberError = fill("menu_preview.undo_refused_change", { change, reason });
+          return;
+        }
+        if (shown()) this.undoResult = change;
+        if (command.method === "renameCatalogue") await this.#watchMenus().catch(() => undefined);
+        await this.#refresh();
+      } finally {
         this.busy = false;
-        this.undoing = null;
-        return;
+        this.undoOut = null;
       }
-      if (shown()) this.undoResult = change;
-      if (command.method === "renameCatalogue") await this.#watchMenus().catch(() => undefined);
-      await this.#refresh();
-      this.busy = false;
-      this.undoing = null;
     };
     if (command.method === "updateMenuItem" || command.method === "setMenuVariantPrice") {
       const row =
@@ -1493,7 +1494,7 @@ export class MenusScreen extends LitElement {
    */
   async #publish(hash: string): Promise<void> {
     const menuId = this.menuId!;
-    if (this.publishing.has(menuId)) return;
+    if (this.publishing.has(menuId) || this.undoOut?.menuId === menuId) return;
     const name = this.#menuName();
     const live = this.status;
     const warnings = this.preview?.warnings ?? [];
@@ -3078,6 +3079,12 @@ export class MenusScreen extends LitElement {
       }`;
   }
 
+  /** The change whose Undo is out, when it was sent from the menu open now. */
+  #undoingHere(): string | null {
+    const out = this.undoOut;
+    return out !== null && out.menuId === this.menuId ? out.changeId : null;
+  }
+
   #renderPreview() {
     return html`<dashboard-menu-preview
       menuName=${this.#menuName()}
@@ -3088,7 +3095,7 @@ export class MenusScreen extends LitElement {
       .failureReason=${this.previewResetRequired ? codeMessage("menu.reset_required") : ""}
       .publishing=${this.publishing.has(this.menuId!)}
       .result=${this.publishResult}
-      .undoing=${this.undoing}
+      .undoing=${this.#undoingHere()}
       .undoBlocked=${this.busy || this.homePending !== null || this.publishing.has(this.menuId!)}
       .undoRefusals=${this.undoRefusals}
       .undoResult=${this.undoResult}
