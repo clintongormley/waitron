@@ -46,7 +46,7 @@ function personActor(authorizedBy: string): PersonActor {
 
 async function askHost<Value extends object, Refusal extends string>(
   call: () => Promise<HostAnswer<Value, Refusal>>,
-  own: Partial<Record<Refusal, OwnRefusalCode>>,
+  own: Record<Exclude<Refusal, ProtocolRefusal>, OwnRefusalCode>,
   onInvalid: () => Error = () =>
     new Error("the host protocol refused a request the route had checked"),
 ): Promise<Value> {
@@ -68,11 +68,18 @@ async function askHost<Value extends object, Refusal extends string>(
     case "invalid":
       throw onInvalid();
     case "refused": {
-      const code = own[result.refusal];
-      if (code !== undefined) throw new AppError(code, {});
-      throw new AppError("box_host.failed", { reason: result.refusal as ProtocolRefusal });
+      const { refusal } = result;
+      if (isOwn(own, refusal)) throw new AppError(own[refusal], {});
+      throw new AppError("box_host.failed", { reason: refusal as ProtocolRefusal });
     }
   }
+}
+
+function isOwn<Refusal extends string>(
+  own: Record<Exclude<Refusal, ProtocolRefusal>, OwnRefusalCode>,
+  refusal: Refusal,
+): refusal is Exclude<Refusal, ProtocolRefusal> {
+  return Object.hasOwn(own, refusal);
 }
 
 type FieldChecks<Body> = { [Key in keyof Body]: (value: unknown) => value is Body[Key] };

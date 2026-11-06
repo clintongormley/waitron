@@ -552,6 +552,47 @@ describe.each([
     });
     expect(host.networkForget).toHaveBeenCalledTimes(0);
   });
+
+  it("checks a supervisor's permission before reading the start screen's body", async () => {
+    const host = fakeHost();
+    const { app } = mount(db(), host);
+    const response = await post(app, SCREEN, supervisor.cookie, json({ start: "Panel" }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "system.manage" } },
+    });
+    expect(host.screenSet).toHaveBeenCalledTimes(0);
+  });
+
+  it.each([
+    [FORGET, json({ nope: 1 })],
+    [SCREEN, json({ start: "Panel" })],
+  ])("checks for a session on %s before reading its body", async (path, body) => {
+    const host = fakeHost();
+    const { app } = mount(db(), host);
+    const response = await post(app, path, undefined, body);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.required", params: {} },
+    });
+    expect(host.networkForget).toHaveBeenCalledTimes(0);
+    expect(host.screenSet).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe("the start screen's answer", () => {
+  it("is the host's reply, not the request", async () => {
+    const host = fakeHost();
+    host.screenSet.mockResolvedValue({ available: true, start: "dashboard" });
+    const { app } = mount(suite.db, host);
+    const response = await post(app, SCREEN, manager.cookie, json({ start: "till" }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ start: "dashboard" });
+    expect(host.screenSet).toHaveBeenCalledWith(
+      { start: "till" },
+      { source: "person", person: manager.id },
+    );
+  });
 });
 
 describe("the host's own words about the network", () => {
@@ -657,6 +698,18 @@ describe("bodies refused before the host is asked", () => {
       error: { code: "management.request_invalid", params: { field: "body" } },
     });
     expect(host.networkForget).toHaveBeenCalledTimes(0);
+  });
+
+  it("a 4097-byte start screen body is refused", async () => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const body = json({ start: "till" }).padEnd(4097, " ");
+    const response = await post(app, SCREEN, manager.cookie, body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    expect(host.screenSet).toHaveBeenCalledTimes(0);
   });
 
   it("a 4096-byte body is taken", async () => {
