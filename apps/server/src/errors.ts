@@ -156,6 +156,9 @@ declare module "@waitron/shared" {
      * read live.
      */
     "node.read_only": Record<string, never>;
+    /** A change carrying the dashboard's sign-in cookie was sent by a page other than the box's
+     * own (`Origin` or `Sec-Fetch-Site`), so it was not run. */
+    "management.origin_refused": Record<string, never>;
     /** The box is stepping down: it takes no new request beyond the few that report its state. */
     "handover.stepping_down": Record<string, never>;
     /**
