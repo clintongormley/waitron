@@ -2231,11 +2231,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Retain failure screenshots for long browser test names.**
   [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
-- **Separate pnpm's ordinary-failure diagnostic from its one-second timeout controls.**
-  The version-failure case expected exit 1 but observed timeout 124 in a normal push.
-  Preserve the status assertions and the deliberately stalled cases' bounds.
-  [Detail](backlog/ci.md#pnpms-ordinary-failure-diagnostic-can-hit-its-one-second-timeout).
-
 - **Root guard deadlines under extreme external load (left open by A751).**
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 

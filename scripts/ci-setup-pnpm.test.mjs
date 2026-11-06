@@ -73,7 +73,9 @@ case "$STUB_NPM_MODE" in
   fail-then-ok) if [ "$attempt" -eq 1 ]; then exit 1; fi ;;
   wrong-version) printed="0.0.1" ;;
   slow-first-version) if [ "$attempt" -eq 1 ]; then before="sleep 2"; fi ;;
-  version-then-fails) after="exit 1" ;;
+  version-then-fails)
+    if [ -n "$STUB_VERSION_DELAY_SECONDS" ]; then before="sleep $STUB_VERSION_DELAY_SECONDS"; fi
+    after="exit 1" ;;
   version-then-hangs) after="exec sleep 300" ;;
 esac
 mkdir -p "$prefix/bin"
@@ -264,16 +266,13 @@ describe("ci-setup-pnpm.sh", () => {
   });
 
   it.each([
-    ["hang", "install", "124"],
-    ["version-then-hangs", "version", "124"],
-    ["version-then-fails", "version", "1"],
+    ["hang", "install", "124", { PNPM_SETUP_ATTEMPT_SECONDS: "1" }],
+    ["version-then-hangs", "version", "124", { PNPM_SETUP_VERSION_SECONDS: "1" }],
+    ["version-then-fails", "version", "1", { STUB_VERSION_DELAY_SECONDS: "2" }],
   ])(
     "identifies each %s failure with its phase, status and elapsed time",
-    (mode, phase, status) => {
-      const result = run(mode, {
-        PNPM_SETUP_ATTEMPT_SECONDS: "1",
-        PNPM_SETUP_VERSION_SECONDS: "1",
-      });
+    (mode, phase, status, env) => {
+      const result = run(mode, env);
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(1);
       for (const attempt of [1, 2, 3]) {
