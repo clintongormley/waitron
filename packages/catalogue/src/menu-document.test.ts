@@ -68,8 +68,22 @@ import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
 import { createExtraList } from "./extras.js";
 import { addShortcut, setHomeDisplay } from "./menu-home.js";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useCatalogueDb();
+beforeEach(() =>
+  seedLibraryImages(
+    fx.db,
+    "bar.jpg",
+    "cloudy.jpg",
+    "drinks.jpg",
+    "huge.jpg",
+    "large.jpg",
+    "lemon.jpg",
+    "lemonade.jpg",
+    "other.jpg",
+  ),
+);
 
 afterEach(() => vi.restoreAllMocks());
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -194,7 +208,7 @@ describe("buildMenuDocument", () => {
       customerName: { en: "Lemonade for guests" },
       kitchenName: "LEMONADE",
       description: { en: "All about Lemonade" },
-      image: "lemonade.jpg",
+      image: libraryImageName("lemonade.jpg"),
       grossPrice: "2.80",
       unitPrice: "2.80",
       placements: [[f.drinks]],
@@ -206,7 +220,7 @@ describe("buildMenuDocument", () => {
       name: "Large",
       customerName: { en: "A big glass" },
       kitchenName: "LRG",
-      image: "large.jpg",
+      image: libraryImageName("large.jpg"),
       unitPrice: "3.50",
     });
   });
@@ -557,7 +571,10 @@ describe("menuDocumentHash", () => {
     ["the extra's VAT class", (tx, f) => updateProduct(tx, f.extraLemon, { vatClass: "general" })],
     ["the dish's name", (tx, f) => updateProduct(tx, f.lemonade, { name: "Still lemonade" })],
     ["the dish's price", (tx, f) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" })],
-    ["the dish's image", (tx, f) => updateProduct(tx, f.lemonade, { image: "other.jpg" })],
+    [
+      "the dish's image",
+      (tx, f) => updateProduct(tx, f.lemonade, { image: libraryImageName("other.jpg") }),
+    ],
     [
       "the dish's ordering",
       (tx, f) => updateProduct(tx, f.lemonade, { ordering: "not_sold_separately" }),
@@ -576,7 +593,10 @@ describe("menuDocumentHash", () => {
     ],
     ["the variant's name", (tx, f) => updateProduct(tx, f.large, { name: "Huge" })],
     ["the variant's price", (tx, f) => updateProduct(tx, f.large, { unitPrice: "3.90" })],
-    ["the variant's image", (tx, f) => updateProduct(tx, f.large, { image: "huge.jpg" })],
+    [
+      "the variant's image",
+      (tx, f) => updateProduct(tx, f.large, { image: libraryImageName("huge.jpg") }),
+    ],
     [
       "the variant's allergens",
       (tx, f) => updateProduct(tx, f.large, { allergens: { sulphites: {} } }),
@@ -593,7 +613,10 @@ describe("menuDocumentHash", () => {
         ]),
     ],
     ["the extra's name", (tx, f) => updateProduct(tx, f.extraLemon, { name: "Lemon wedge" })],
-    ["the extra's image", (tx, f) => updateProduct(tx, f.extraLemon, { image: "lemon.jpg" })],
+    [
+      "the extra's image",
+      (tx, f) => updateProduct(tx, f.extraLemon, { image: libraryImageName("lemon.jpg") }),
+    ],
     ["the extra's deletion", (tx, f) => deactivateProduct(tx, f.extraLemon)],
     [
       "the extra's price",
@@ -663,7 +686,7 @@ describe("applyLiveFields", () => {
       category: "Cold drinks",
       unitPrice: "2.80",
       menuName: "Lunch Menu",
-      image: "lemonade.jpg",
+      image: libraryImageName("lemonade.jpg"),
     });
     expect(lemonade.variants[0]).toMatchObject({
       id: f.large,
@@ -1033,7 +1056,10 @@ describe("diffMenuDocuments", () => {
     const live = await build(f.lunch);
     await app(async (tx) => {
       await updateMenuDetails(tx, f.drinksMenu, { name: "Soft drinks", color: "#112233" });
-      await tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks));
+      await tx
+        .update(sections)
+        .set({ image: libraryImageName("drinks.jpg") })
+        .where(eq(sections.id, f.drinks));
       await updateSection(tx, f.beer, { names: { en: "Cold beers" } });
     });
     expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
@@ -1547,7 +1573,7 @@ describe("diffMenuDocuments", () => {
       await updateProduct(tx, f.lemonade, {
         customerName: { en: "Cloudy lemonade" },
         description: { en: "Freshly squeezed" },
-        image: "cloudy.jpg",
+        image: libraryImageName("cloudy.jpg"),
         allergens: { sulphites: {} },
         dietOverride: { vegan: "yes" },
       });
@@ -1606,7 +1632,7 @@ describe("diffMenuDocuments", () => {
             name: "Huge",
             customerName: { en: "A big glass" },
             kitchenName: "LRG",
-            image: "large.jpg",
+            image: libraryImageName("large.jpg"),
             unitPrice: "3.90",
             available: true,
           },
@@ -1643,7 +1669,7 @@ describe("diffMenuDocuments", () => {
     await app((tx) =>
       updateProduct(tx, f.large, {
         name: "Huge",
-        image: "huge.jpg",
+        image: libraryImageName("huge.jpg"),
         allergens: { sulphites: {} },
         dietOverride: { vegan: "no" },
       }),
@@ -1738,11 +1764,11 @@ describe("diffMenuDocuments", () => {
       .offeredModifiers.find((entry) => entry.kind === "extras");
     expect(extras?.kind === "extras" && extras.items.map((item) => item.image)).toEqual([
       null,
-      "lemonade.jpg",
+      libraryImageName("lemonade.jpg"),
     ]);
     await app(async (tx) => {
-      await updateProduct(tx, f.lemonade, { image: "cloudy.jpg" });
-      await updateProduct(tx, f.extraLemon, { image: "lemon.jpg" });
+      await updateProduct(tx, f.lemonade, { image: libraryImageName("cloudy.jpg") });
+      await updateProduct(tx, f.extraLemon, { image: libraryImageName("lemon.jpg") });
     });
     expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
       {
@@ -1961,17 +1987,20 @@ describe("an include shown as a folder or directly", () => {
       await updateMenuDetails(tx, f.drinksMenu, {
         names: { en: "Drinks and more", es: "Bebidas" },
       });
-      await tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks));
+      await tx
+        .update(sections)
+        .set({ image: libraryImageName("drinks.jpg") })
+        .where(eq(sections.id, f.drinks));
     });
     expect(sectionAt((await build(f.lunch)).root.members, f.drinks)).toMatchObject({
       names: { en: "Bar", es: "Bebidas" },
-      image: "drinks.jpg",
+      image: libraryImageName("drinks.jpg"),
       color: "#112233",
       fixed,
     });
     expect(sectionAt((await build(f.dinner)).root.members, f.drinks)).toMatchObject({
       names: { en: "Drinks and more", es: "Bebidas" },
-      image: "drinks.jpg",
+      image: libraryImageName("drinks.jpg"),
       color: null,
     });
     expect(sectionAt((await build(f.dinner)).root.members, f.drinks)).not.toHaveProperty("fixed");
@@ -1982,27 +2011,30 @@ describe("an include shown as a folder or directly", () => {
     const memberId = await includeIn(f.lunch, f.lunchRoot, f.drinks);
     const fixPhoto = (image: string | null) =>
       app(async (tx) => {
-        await tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks));
+        await tx
+          .update(sections)
+          .set({ image: libraryImageName("drinks.jpg") })
+          .where(eq(sections.id, f.drinks));
         await tx
           .update(sectionMembers)
           .set({ folderOverrides: { image } })
           .where(eq(sectionMembers.id, memberId));
       });
-    await fixPhoto("bar.jpg");
+    await fixPhoto(libraryImageName("bar.jpg"));
     const photo = await build(f.lunch);
     expect(sectionAt(photo.root.members, f.drinks)).toMatchObject({
-      image: "bar.jpg",
-      fixed: { image: "bar.jpg" },
+      image: libraryImageName("bar.jpg"),
+      fixed: { image: libraryImageName("bar.jpg") },
     });
-    expect(documentImages(photo)).toContain("bar.jpg");
-    expect(documentImages(photo)).not.toContain("drinks.jpg");
+    expect(documentImages(photo)).toContain(libraryImageName("bar.jpg"));
+    expect(documentImages(photo)).not.toContain(libraryImageName("drinks.jpg"));
     await fixPhoto(null);
     const none = await build(f.lunch);
     expect(sectionAt(none.root.members, f.drinks)).toMatchObject({
       image: null,
       fixed: { image: null },
     });
-    expect(documentImages(none)).not.toContain("drinks.jpg");
+    expect(documentImages(none)).not.toContain(libraryImageName("drinks.jpg"));
   });
 
   it("switched off, the node shows the included menu's own presentation and keeps the stored overrides", async () => {
@@ -2116,7 +2148,10 @@ describe("an include shown as a folder or directly", () => {
         overrides: { names: { en: "Bar" }, color: "#112233" },
       });
       await app((tx) =>
-        tx.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.drinks)),
+        tx
+          .update(sections)
+          .set({ image: libraryImageName("drinks.jpg") })
+          .where(eq(sections.id, f.drinks)),
       );
       expect(changeBodies(diffMenuDocuments(renamed, await build(f.lunch)))).toEqual([
         { ...drinksChanged(f), fields: ["color"], source: "this_menu" },

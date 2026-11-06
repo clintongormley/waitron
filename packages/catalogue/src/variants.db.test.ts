@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
   captureError,
@@ -29,6 +29,7 @@ import {
 import { staffPresentationName, customerPresentationText } from "@waitron/shared";
 import { createUnit, EACH_UNIT } from "./units.js";
 import { createCategory, setMainReportingCategory } from "./categories.js";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 /**
  * Variants against a real database, plus the pure selection core. A variant is a `products` row
@@ -36,6 +37,7 @@ import { createCategory, setMainReportingCategory } from "./categories.js";
  * `menu_item_variant_overrides`, and a row there exists only while it overrides something.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedLibraryImages(suite.db, "large.jpg"));
 const app = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
 /** Leaves `active` out, as a caller in code may: a new variant is then created Active. */
@@ -371,7 +373,7 @@ describe("setProductVariants stores each variant as a product under its parent",
           wine("175 ml", "5.50", {
             customerName: { en: "Large glass of house wine" },
             kitchenName: "W175",
-            image: "large.jpg",
+            image: libraryImageName("large.jpg"),
           }),
         ],
         "en",
@@ -383,7 +385,7 @@ describe("setProductVariants stores each variant as a product under its parent",
         name: "175 ml",
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
-        image: "large.jpg",
+        image: libraryImageName("large.jpg"),
         unitPrice: "5.50",
         available: true,
         active: true,
@@ -405,7 +407,7 @@ describe("setProductVariants stores each variant as a product under its parent",
         name: "175 ml",
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
-        image: "large.jpg",
+        image: libraryImageName("large.jpg"),
       },
     ]);
   });

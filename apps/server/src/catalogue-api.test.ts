@@ -22,6 +22,7 @@ import type { MenuPreview, MenuStatus } from "@waitron/catalogue";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/catalogue";
 import { nodeId as brandNodeId, type ContentLanguageRules } from "@waitron/shared";
 import type { Logger } from "./logger.js";
+import { libraryImageName, seedLibraryImages } from "@waitron/catalogue/test/library-images.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -1913,6 +1914,7 @@ describe("mountCatalogueApi — products", () => {
 
   it("POST /management-api/products creates one and lists it back (201 → the Product shape)", async () => {
     const app = mountApp();
+    await seedLibraryImages(suite.db, "abc.png");
     const catalogueId = await createCatalogueVia(app, "Product catalogue");
     const catRes = await send(app, "POST", "/management-api/categories", {
       body: { name: "ES coffees" },
@@ -1929,7 +1931,7 @@ describe("mountCatalogueApi — products", () => {
         unitPrice: "1.20",
         vatClass: "general",
         allergens: { milk: {} },
-        image: "abc.png",
+        image: libraryImageName("abc.png"),
       },
     });
     expect(res.status).toBe(201);
@@ -1958,7 +1960,7 @@ describe("mountCatalogueApi — products", () => {
       pricingUnit: "each",
       active: true,
       allergens: { milk: {} },
-      image: "abc.png",
+      image: libraryImageName("abc.png"),
     });
 
     const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);

@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   captureError,
   menuItems,
@@ -15,8 +15,10 @@ import { setIncludeFolder } from "./include-folder.js";
 import { readMenuHome } from "./menu-home.js";
 import { readMenuStructure } from "./menu-structure.js";
 import type { IncludeFolderInput } from "@waitron/shared";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useCatalogueDb();
+beforeEach(() => seedLibraryImages(fx.db, "drinks.jpg"));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 async function refusalOf(fn: () => Promise<unknown>): Promise<unknown> {
@@ -31,7 +33,7 @@ async function fixture(): Promise<MenusFixture & { include: string; soupMember: 
   await app((tx) =>
     tx
       .update(sections)
-      .set({ image: "drinks.jpg", color: "#445566" })
+      .set({ image: libraryImageName("drinks.jpg"), color: "#445566" })
       .where(eq(sections.id, f.drinks)),
   );
   const { nodes } = await app((tx) => readMenuStructure(tx, f.lunch));
@@ -65,7 +67,7 @@ describe("setIncludeFolder", () => {
       folder,
       internalName: "Drinks",
       names: { en: "Something to drink" },
-      image: "drinks.jpg",
+      image: libraryImageName("drinks.jpg"),
       color: "#445566",
     });
     const soup = nodes.find((node) => node.memberId === f.soupMember)!;
@@ -205,7 +207,7 @@ describe("setIncludeFolder", () => {
       [{ color: "#ABCDEF" }, "color"],
       [{ color: 5 }, "color"],
       [{ color: { hex: "#112233" } }, "color"],
-      [{ image: "drinks.jpg" }, "image"],
+      [{ image: libraryImageName("not-in-library.jpg") }, "image"],
       [{ image: 5 }, "image"],
       [{ image: true }, "image"],
       [{ names: { en: 7 } }, "names"],

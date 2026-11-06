@@ -36,8 +36,10 @@ import {
 import { BATCH_SIZE } from "./batches.js";
 import { addMember } from "./sections.js";
 import { updateMenuItem, updateProduct } from "./operations.js";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useCatalogueDb();
+beforeEach(() => seedLibraryImages(fx.db, "soup-a.jpg", "soup-b.jpg"));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const NOW = new Date("2026-10-07T08:00:00.000Z");
@@ -218,13 +220,13 @@ beforeEach(async () => {
 
 describe("queueMenuPublication", () => {
   it("fixes the edition's content and photos when it is queued", async () => {
-    await setSoup("5.50", "soup-a.jpg");
+    await setSoup("5.50", libraryImageName("soup-a.jpg"));
     const preview = await app((tx) => previewMenu(tx, f.lunch));
     const queued = await app((tx) =>
       queueMenuPublication(tx, f.lunch, preview.hash, day(8), ANA, { at: NOW }),
     );
     expect(queued).toMatchObject({ number: 2, activatesAt: "2026-10-08T06:00:00.000Z" });
-    await setSoup("5.00", "soup-b.jpg");
+    await setSoup("5.00", libraryImageName("soup-b.jpg"));
 
     const [version] = await fx.db
       .select()
@@ -237,7 +239,7 @@ describe("queueMenuPublication", () => {
     const soupOffer = await app((tx) => offerOf(tx, f.lunch, f.soup));
     expect(version!.document.offers[soupOffer]).toMatchObject({
       unitPrice: "5.50",
-      image: "soup-a.jpg",
+      image: libraryImageName("soup-a.jpg"),
     });
     const images = await fx.db
       .select({ filename: menuVersionImages.filename })
@@ -245,8 +247,8 @@ describe("queueMenuPublication", () => {
       .where(eq(menuVersionImages.versionId, queued.versionId))
       .orderBy(asc(menuVersionImages.filename));
     expect(images.map(({ filename }) => filename)).toEqual(documentImages(preview.document).sort());
-    expect(images.map(({ filename }) => filename)).toContain("soup-a.jpg");
-    expect(images.map(({ filename }) => filename)).not.toContain("soup-b.jpg");
+    expect(images.map(({ filename }) => filename)).toContain(libraryImageName("soup-a.jpg"));
+    expect(images.map(({ filename }) => filename)).not.toContain(libraryImageName("soup-b.jpg"));
     expect(await scheduleRow(queued.versionId)).toMatchObject({
       menuId: f.lunch,
       state: "queued",
@@ -285,7 +287,7 @@ describe("queueMenuPublication", () => {
 
   it("leaves the live version live while an edition is only queued", async () => {
     const before = await app((tx) => readLiveDocuments(tx, [f.lunch]));
-    await setSoup("5.50", "soup-a.jpg");
+    await setSoup("5.50", libraryImageName("soup-a.jpg"));
     await queue(day(8));
     const status = (await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch);
     expect(status).toMatchObject({ version: 1 });
@@ -581,7 +583,7 @@ describe("the schedule table refuses what the code never writes", () => {
 
 describe("queuing and cancelling write only the publication tables", () => {
   it("names no other table in an insert, update or delete", async () => {
-    await setSoup("5.50", "soup-a.jpg");
+    await setSoup("5.50", libraryImageName("soup-a.jpg"));
     const hash = await hashOf(f.lunch);
     let versionId = "";
     const queued = await statements(async (tx) => {

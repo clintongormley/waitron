@@ -7,6 +7,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { seedLegacySellingUnits, seedVenueWithSeries } from "./fixtures.js";
+import { libraryImageName, seedLibraryImages } from "./library-images.js";
 import { createCatalogue, createProduct, updateMenuItem } from "../src/operations.js";
 import { createCategory } from "../src/categories.js";
 import { createExtraList } from "../src/extras.js";
@@ -60,6 +61,7 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
   const { locationId } = await seedVenueWithSeries(db);
   await seedLegacySellingUnits(db);
   return withTransaction(db, async (tx) => {
+    await seedLibraryImages(tx, "lemonade.jpg", "large.jpg");
     const softDrinks = (await createCategory(tx, { name: "Soft drinks" })).id;
     const coldDrinks = (await createCategory(tx, { name: "Cold drinks" })).id;
     const lunch = await createCatalogue(tx, { name: "Lunch Menu" });
@@ -80,7 +82,7 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
           ...(image === null ? {} : { image }),
         })
       ).id;
-    const lemonade = await make("Lemonade", "3.00", "lemonade.jpg");
+    const lemonade = await make("Lemonade", "3.00", libraryImageName("lemonade.jpg"));
     const [large] = await setProductVariants(
       tx,
       lemonade,
@@ -89,7 +91,7 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
           name: "Large",
           customerName: { en: "A big glass" },
           kitchenName: "LRG",
-          image: "large.jpg",
+          image: libraryImageName("large.jpg"),
           unitPrice: "3.50",
           available: true,
         },
