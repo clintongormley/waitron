@@ -1,0 +1,1 @@
+ALTER TABLE `working_order_lines` ADD `classification` text;

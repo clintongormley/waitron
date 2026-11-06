@@ -17,6 +17,7 @@ import {
 } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
 import { scratchParent } from "./scratch-dir.mjs";
+import { historicalSet } from "./fixtures/a760-history/historical-set.mjs";
 
 const oldMembers = table("section_members", {
   id: id("id"),
@@ -38,7 +39,10 @@ async function stage(control = false) {
   const journals = new Map<string, { entries: { tag: string }[] }>();
   let soupId: string;
   for (const set of sets) {
-    const source = resolveMigrationsFolder(set, null);
+    const source =
+      set.name === "catalogue" || set.name === "media"
+        ? historicalSet(set.name).migrationsFolder
+        : resolveMigrationsFolder(set, null);
     cpSync(source, join(staged, set.name), { recursive: true });
     const journal = JSON.parse(readFileSync(join(source, "meta", "_journal.json"), "utf8"));
     journals.set(set.name, journal);

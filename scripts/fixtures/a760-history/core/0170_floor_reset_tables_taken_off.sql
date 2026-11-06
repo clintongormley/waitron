@@ -1,0 +1,1 @@
+ALTER TABLE `floor_reset_tables` ADD `taken_off` integer DEFAULT false NOT NULL;

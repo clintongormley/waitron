@@ -1,0 +1,1 @@
+ALTER TABLE `kitchen_stations` ADD `changes_after_sending` text DEFAULT 'held-or-waiting' NOT NULL;

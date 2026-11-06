@@ -1,0 +1,83 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790007647804,
+      "tag": "0000_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790121046847,
+      "tag": "0001_person_case_fold",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790212282793,
+      "tag": "0002_session_token_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790212295174,
+      "tag": "0003_session_token_hash_required",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790784739695,
+      "tag": "0004_passkey_provider_last_used",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791045186739,
+      "tag": "0005_session_device_add",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791045187583,
+      "tag": "0006_session_device_drop_till",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791292222285,
+      "tag": "0007_profile_admission",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793309563863,
+      "tag": "0008_webauthn_challenges_clear",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793309586817,
+      "tag": "0009_webauthn_challenge_purpose",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793309595773,
+      "tag": "0010_webauthn_challenge_purpose_check",
+      "breakpoints": true
+    }
+  ]
+}

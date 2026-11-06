@@ -1,0 +1,1 @@
+DROP TABLE `period_extensions`;

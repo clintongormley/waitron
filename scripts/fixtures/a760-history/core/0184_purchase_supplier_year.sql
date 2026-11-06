@@ -1,0 +1,2 @@
+DROP INDEX `purchase_invoices_supplier_number_key`;--> statement-breakpoint
+CREATE UNIQUE INDEX `purchase_invoices_supplier_number_key` ON `purchase_invoices` (`supplier_tax_id`,`supplier_invoice_number`,cast("issued_on" as integer));

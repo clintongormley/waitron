@@ -1,0 +1,1 @@
+ALTER TABLE `working_line_contexts` ADD `sold_in_each` integer DEFAULT false NOT NULL;

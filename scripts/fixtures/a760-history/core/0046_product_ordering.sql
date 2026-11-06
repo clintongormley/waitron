@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `ordering` text DEFAULT 'public' NOT NULL;

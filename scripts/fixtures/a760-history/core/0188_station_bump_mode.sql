@@ -1,0 +1,1 @@
+ALTER TABLE `kitchen_stations` ADD `bump_mode` text DEFAULT 'line' NOT NULL;

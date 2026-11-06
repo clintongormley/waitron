@@ -7,6 +7,7 @@ import { openVenueDatabase, type Database } from "@waitron/db";
 import { isAppError, sqliteFailureOf } from "@waitron/shared";
 import { applyMigrations } from "./apply.js";
 import { manifestSets, migrationOptionsFor, type VenueMigrationOptions } from "./manifest.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const OPEN_DASHBOARD = "dddddddd-0000-4000-8000-000000000001";
 const OPEN_FILING = "dddddddd-0000-4000-8000-000000000002";
@@ -68,10 +69,11 @@ function insertIncident(db: Database, id: string, source: string, acknowledgedAt
 
 async function venueBeforeRebuild() {
   const sets = migrationOptionsFor(manifestSets(), null);
-  const core = sets.find((set) => set.migrationsTable === "__drizzle_migrations_db")!;
+  const current = sets.find((set) => set.migrationsTable === "__drizzle_migrations_db")!;
+  const core = { ...current, migrationsFolder: historicalSet("core").migrationsFolder };
   const directory = scratchDir("wt-incident-source-venue-");
   await applyMigrations(directory, [coreBeforeRebuild(core)]);
-  return { directory, sets };
+  return { directory, sets: sets.map((set) => (set === current ? core : set)) };
 }
 
 it("carries open and handled incidents across the rebuild and the index's return in one start", async () => {

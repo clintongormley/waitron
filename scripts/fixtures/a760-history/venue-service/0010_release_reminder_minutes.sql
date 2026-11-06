@@ -1,0 +1,1 @@
+ALTER TABLE `service_settings` ADD `release_reminder_minutes` integer DEFAULT 10;

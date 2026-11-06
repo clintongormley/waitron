@@ -6,6 +6,7 @@ import { afterAll, expect, it } from "vitest";
 import { captureError, openVenueDatabase, triggerRaised, type Database } from "@waitron/db";
 import { applyMigrations } from "./apply.js";
 import { manifestSets, migrationOptionsFor, type VenueMigrationOptions } from "./manifest.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const PARTY = "cccccccc-0000-4000-8000-000000000001";
 const EVENT = "cccccccc-0000-4000-8000-000000000002";
@@ -79,7 +80,8 @@ async function inVenue<T>(directory: string, body: (db: Database) => Promise<T> 
 
 it("keeps an event written before the rebuild, and a start's migrate still refuses its update and delete", async () => {
   const sets = migrationOptionsFor(manifestSets(), null);
-  const core = sets.find((set) => set.migrationsTable === "__drizzle_migrations_db")!;
+  const current = sets.find((set) => set.migrationsTable === "__drizzle_migrations_db")!;
+  const core = { ...current, migrationsFolder: historicalSet("core").migrationsFolder };
   const directory = scratchDir("wt-order-group-events-venue-");
   await applyMigrations(directory, [coreBeforeRebuild(core)]);
   const now = new Date().toISOString();
@@ -94,7 +96,7 @@ it("keeps an event written before the rebuild, and a start's migrate still refus
 
   await applyMigrations(
     directory,
-    sets.map((set) => (set === core ? coreBeforeMainBillRetired(core) : set)),
+    sets.map((set) => (set === current ? coreBeforeMainBillRetired(core) : set)),
   );
 
   await inVenue(directory, async (db) => {

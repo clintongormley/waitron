@@ -11,6 +11,7 @@ import {
   migrationOptionsFor,
 } from "../packages/migrations/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
+import { historicalSet } from "./fixtures/a760-history/historical-set.mjs";
 import { appendPreReplacementRecord } from "../packages/fiscal-verifactu/test/pre-replacement-fixture.js";
 import { altaFor, seedSale, seedNode } from "../packages/fiscal-verifactu/src/testing/seed.js";
 
@@ -18,7 +19,7 @@ const { sql } = createRequire(new URL("../packages/db/package.json", import.meta
   "drizzle-orm",
 );
 
-const source = join(import.meta.dirname, "../packages/fiscal-verifactu/drizzle");
+const source = historicalSet("fiscal-verifactu").migrationsFolder;
 const journal = JSON.parse(readFileSync(join(source, "meta/_journal.json"), "utf8")) as {
   entries: { tag: string; when: number }[];
 };

@@ -16,11 +16,12 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { stationPrinters } from "./station-printers.js";
 import { venueLocationId } from "../venue.js";
+import { historicalSet } from "../../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 async function migrateThroughTiming(db: Database, includeTiming: boolean): Promise<void> {
   const staged = mkdtempSync(join(tmpdir(), "wt-timing-upgrade-"));
   try {
-    cpSync(CORE_MIGRATIONS.migrationsFolder, staged, { recursive: true });
+    cpSync(historicalSet("core").migrationsFolder, staged, { recursive: true });
     const path = join(staged, "meta", "_journal.json");
     const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: { tag: string }[] };
     const timingIndex = journal.entries.findIndex(({ tag }) =>

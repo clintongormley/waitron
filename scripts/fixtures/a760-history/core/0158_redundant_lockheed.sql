@@ -1,0 +1,1 @@
+ALTER TABLE `invoice_deliveries` ADD `printer_chosen` integer DEFAULT false NOT NULL;

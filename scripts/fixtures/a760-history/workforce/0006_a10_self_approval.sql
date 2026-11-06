@@ -1,0 +1,1 @@
+ALTER TABLE `time_entries` ADD `self_approved` integer DEFAULT false NOT NULL;

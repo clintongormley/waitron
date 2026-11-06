@@ -1,0 +1,1 @@
+ALTER TABLE `order_groups` ADD `hold_printed_at` text;

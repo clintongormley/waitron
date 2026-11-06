@@ -1,0 +1,1 @@
+ALTER TABLE `service_settings` ADD `kitchen_ticket_grouping` text DEFAULT 'combined' NOT NULL;

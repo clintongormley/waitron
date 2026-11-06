@@ -1,0 +1,1 @@
+ALTER TABLE `dining_tables` RENAME COLUMN "needs_cleaning_since" TO "needs_clearing_since";

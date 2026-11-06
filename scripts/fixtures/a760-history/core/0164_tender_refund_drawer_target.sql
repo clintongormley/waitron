@@ -1,0 +1,1 @@
+ALTER TABLE `drawer_opens` ADD `tender_refund_id` text REFERENCES tender_refunds(id);

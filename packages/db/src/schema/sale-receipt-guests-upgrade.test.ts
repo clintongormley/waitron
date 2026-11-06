@@ -14,11 +14,12 @@ import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import { invoiceSeries } from "./series.js";
+import { historicalSet } from "../../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 async function migrateBeforeRename(db: Database): Promise<void> {
   const staged = mkdtempSync(join(tmpdir(), "wt-guest-count-upgrade-"));
   try {
-    cpSync(CORE_MIGRATIONS.migrationsFolder, staged, { recursive: true });
+    cpSync(historicalSet("core").migrationsFolder, staged, { recursive: true });
     const path = join(staged, "meta", "_journal.json");
     const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: { tag: string }[] };
     const renameIndex = journal.entries.findIndex(({ tag }) =>
@@ -94,7 +95,10 @@ it("renames guests to guest_count on a database carrying the append-only trigger
     ),
   ).toEqual([]);
 
-  await runMigrations(db, CORE_MIGRATIONS);
+  await runMigrations(db, {
+    ...CORE_MIGRATIONS,
+    migrationsFolder: historicalSet("core").migrationsFolder,
+  });
   installAppendOnlyTriggers(db, CORE_MIGRATIONS.appendOnlyTables);
 
   expect(db.all(sql`pragma foreign_key_check`)).toEqual([]);

@@ -1,0 +1,1 @@
+ALTER TABLE `card_readers` ADD `prints_own_slip_automatically` integer DEFAULT false NOT NULL;

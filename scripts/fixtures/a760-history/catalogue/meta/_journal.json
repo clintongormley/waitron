@@ -1,0 +1,258 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789995444967,
+      "tag": "0000_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790170534135,
+      "tag": "0001_drop_menu_item_variants",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790170549460,
+      "tag": "0002_menu_item_variant_overrides",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790181060153,
+      "tag": "0003_menu_price_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790216049105,
+      "tag": "0004_drop_product_variants",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790344261400,
+      "tag": "0005_labels",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790344703003,
+      "tag": "0006_drop_product_categories",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790355483890,
+      "tag": "0007_sections",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790365566791,
+      "tag": "0008_menu_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790365571708,
+      "tag": "0009_drop_menu_sections",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790394956138,
+      "tag": "0010_menu_publication",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790482432170,
+      "tag": "0011_device_profile_home_layouts",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790799877333,
+      "tag": "0012_drop_labels",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790801434921,
+      "tag": "0013_drop_category_image_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790801442605,
+      "tag": "0014_drop_category_image_color",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1790869508809,
+      "tag": "0015_drop_menu_extras",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1790869542089,
+      "tag": "0016_menu_offered_three_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790869542835,
+      "tag": "0017_drop_menu_items_active",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790869626167,
+      "tag": "0018_sections_owned_prepare",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790869628584,
+      "tag": "0019_section_members_missing_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1790869629987,
+      "tag": "0020_sections_owned",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1790869631060,
+      "tag": "0021_sections_owned_restore",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791006242080,
+      "tag": "0022_jittery_bromley",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791101998075,
+      "tag": "0023_lean_post",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791162841642,
+      "tag": "0024_drop_menu_offered",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1791202919777,
+      "tag": "0025_category_color",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1791237609900,
+      "tag": "0026_device_home_page",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1791364593038,
+      "tag": "0027_menu_scheduled_publications",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1791397783485,
+      "tag": "0028_legal_glorian",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1791400591457,
+      "tag": "0029_include_folder",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1791400599720,
+      "tag": "0030_include_folder_image_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1791449973239,
+      "tag": "0031_blushing_scarlet_spider",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792033764941,
+      "tag": "0032_content_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1792417462402,
+      "tag": "0033_unit_measure",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1792433298185,
+      "tag": "0034_content_suggestion_collect_cursor",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1792479317961,
+      "tag": "0035_unit_staff_identity",
+      "breakpoints": true
+    }
+  ]
+}

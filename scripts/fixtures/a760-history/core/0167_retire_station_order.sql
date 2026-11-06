@@ -1,0 +1,1 @@
+ALTER TABLE `kitchen_stations` DROP COLUMN `display_order`;

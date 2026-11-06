@@ -1,0 +1,1 @@
+ALTER TABLE `section_members` ADD `missing_name` text;

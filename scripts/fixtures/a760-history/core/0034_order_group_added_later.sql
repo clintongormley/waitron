@@ -1,0 +1,1 @@
+ALTER TABLE `order_groups` ADD `added_later` integer DEFAULT false NOT NULL;

@@ -1,0 +1,524 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790008017000,
+      "tag": "0000_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790426888883,
+      "tag": "0001_service_settings_kitchen_notices",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790449466297,
+      "tag": "0002_clearing_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790468915628,
+      "tag": "0003_working_line_menu_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790495077591,
+      "tag": "0004_kitchen_notice_unit",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790522435678,
+      "tag": "0005_kitchen_ticket_grouping",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790522446315,
+      "tag": "0006_kitchen_ticket_grouping_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790530080461,
+      "tag": "0007_print_held_work_notice_direction",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790531019538,
+      "tag": "0008_kitchen_notice_direction_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790556251346,
+      "tag": "0009_kitchen_notice_sold_in_each",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790595829863,
+      "tag": "0010_release_reminder_minutes",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790808285551,
+      "tag": "0011_kitchen_notice_cancelled_extra",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790809856524,
+      "tag": "0012_kitchen_notice_cancelled_extra_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790869259336,
+      "tag": "0013_station_claims_route_exceptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790872536232,
+      "tag": "0014_drop_preparation_routes",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1790895495276,
+      "tag": "0015_station_times",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1790959466916,
+      "tag": "0016_kitchen_notice_rerouted_to",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790959486913,
+      "tag": "0017_kitchen_notice_rerouted_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1791059147688,
+      "tag": "0018_medical_clint_barton",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1791131686734,
+      "tag": "0019_material_moondragon",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1791270050199,
+      "tag": "0020_retire_invoice_first",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1791284015422,
+      "tag": "0021_hours_calendar",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791287086883,
+      "tag": "0022_retire_legacy_hours",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791302547239,
+      "tag": "0023_public_holidays",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791318137273,
+      "tag": "0024_profile_service_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1791318186829,
+      "tag": "0025_retire_device_zone_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1791335520319,
+      "tag": "0026_department_menus",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1791335701679,
+      "tag": "0027_retire_zone_menus",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1791338970114,
+      "tag": "0028_menu_timetables",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1791358674957,
+      "tag": "0029_department_transfers",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1791382280663,
+      "tag": "0030_routing_cells",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1791382836893,
+      "tag": "0031_retire_routing_lists",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1791411207102,
+      "tag": "0032_orange_blob",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1791449989126,
+      "tag": "0033_aromatic_slapstick",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1791490605863,
+      "tag": "0034_period_end_offset",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1791501789038,
+      "tag": "0035_station_destinations_and_period_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1791501797923,
+      "tag": "0036_station_destination_not_self",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1791536490299,
+      "tag": "0037_first_doctor_doom",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1791536650596,
+      "tag": "0038_clammy_klaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1791542190537,
+      "tag": "0039_calm_joystick",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1791560451808,
+      "tag": "0040_demonic_patriot",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1791560456248,
+      "tag": "0041_remarkable_mordo",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1791583125264,
+      "tag": "0042_order_start_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1791583126375,
+      "tag": "0043_order_start_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1791583127481,
+      "tag": "0044_receipt_modes",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1791583128587,
+      "tag": "0045_retire_service_style",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1791588638835,
+      "tag": "0046_routing_cell_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1791596964775,
+      "tag": "0047_retire_station_hours_fallbacks",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1791626995154,
+      "tag": "0048_department_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1791717889433,
+      "tag": "0049_confused_agent_brand",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1791763736442,
+      "tag": "0050_perfect_sue_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1791845955810,
+      "tag": "0051_wakeful_loa",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "6",
+      "when": 1792009734699,
+      "tag": "0052_mute_groot",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "6",
+      "when": 1792100650715,
+      "tag": "0053_order_kitchen_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1792106418853,
+      "tag": "0054_kitchen_note_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1792172603245,
+      "tag": "0055_party_allergy",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1792199039427,
+      "tag": "0056_device_zone_selection",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1792229426270,
+      "tag": "0057_black_shadow_king",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1792260753968,
+      "tag": "0058_dusty_iron_fist",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1792328709424,
+      "tag": "0059_floor_plan_sets",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "6",
+      "when": 1792339482039,
+      "tag": "0060_certain_the_fallen",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "6",
+      "when": 1792372273208,
+      "tag": "0061_department_needs_clearing",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "6",
+      "when": 1792401399656,
+      "tag": "0062_service_steps",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "6",
+      "when": 1792491433219,
+      "tag": "0063_kitchen_allergy_copies",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "6",
+      "when": 1792491480906,
+      "tag": "0064_kitchen_allergy_notice_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "6",
+      "when": 1792603406781,
+      "tag": "0065_retire_period_end_offset",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "6",
+      "when": 1792640324340,
+      "tag": "0066_service_step_completions",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1792754752053,
+      "tag": "0067_department_release_reminder",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "6",
+      "when": 1792796028770,
+      "tag": "0068_retire_venue_printing_choices",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "6",
+      "when": 1792855801176,
+      "tag": "0069_retire_service_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "6",
+      "when": 1792870778781,
+      "tag": "0070_retire_period_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "6",
+      "when": 1792880441177,
+      "tag": "0071_late_send",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "6",
+      "when": 1793353385831,
+      "tag": "0072_abnormal_kylun",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "6",
+      "when": 1793704688147,
+      "tag": "0073_brief_silver_samurai",
+      "breakpoints": true
+    }
+  ]
+}
