@@ -1130,6 +1130,127 @@ describe("DraftSync: reads and saves stop passing each other", () => {
     expect(server.listDrafts).toHaveBeenCalledTimes(reads);
   });
 
+  describe("while the read after a refused save has no answer", () => {
+    /** Each save this refuses has been answered, and its read inside the save queue is out. */
+    async function refusedWithReadOut(draft: DraftSync, refusal: unknown): Promise<void> {
+      await draft.load();
+      server.saveDraft.mockRejectedValueOnce(refusal);
+      draft.store.addProduct(beer, "1");
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    }
+
+    it.each([
+      ["a refusal of the draft", { code: "draft.out_of_date", status: 409 }],
+      ["no answer", new TypeError("Failed to fetch")],
+    ])("a later read goes out and counts, after %s", async (_name, refusal) => {
+      const draft = sync();
+      await refusedWithReadOut(draft, refusal);
+      const reads = server.listDrafts.mock.calls.length;
+
+      const reading = draft.load({ limitMs: LIMIT / 5 });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
+      expect(await reading).toBe(true);
+    });
+
+    it("a read already waiting for that save goes out too, once the read is out", async () => {
+      const draft = sync();
+      await draft.load();
+      server.saveDraft.mockImplementationOnce(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        throw { code: "draft.out_of_date", status: 409 };
+      });
+      draft.store.addProduct(beer, "1");
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      await settle();
+      const reading = draft.load({ limitMs: LIMIT / 5 });
+      const before = server.listDrafts.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(server.listDrafts).toHaveBeenCalledTimes(before + 2);
+      expect(await reading).toBe(true);
+    });
+
+    it("a read still waits for a save queued behind that one", async () => {
+      const draft = sync();
+      await draft.load();
+      server.saveDraft.mockImplementationOnce(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        throw { code: "draft.out_of_date", status: 409 };
+      });
+      draft.store.addProduct(beer, "1");
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      void draft.flush();
+      await vi.advanceTimersByTimeAsync(0);
+      draft.store.addProduct(steak, "1");
+      void draft.flush();
+      await vi.advanceTimersByTimeAsync(100);
+      const reads = server.listDrafts.mock.calls.length;
+
+      const reading = draft.load({ limitMs: LIMIT / 5 });
+      await vi.advanceTimersByTimeAsync(LIMIT / 5);
+
+      expect(await reading).toBe(false);
+      expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+    });
+  });
+
+  describe("a read with a save out that could never go out", () => {
+    const answersAtOnce = async (reading: Promise<boolean>, reads: number) => {
+      let answer: boolean | undefined;
+      void reading.then((read) => (answer = read));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(answer).toBe(false);
+      expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+    };
+
+    /** A draft with one save out, whose answer stays out until `release` is called. */
+    const withSaveOut = async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      const release = holdSaveAnswer();
+      await settle();
+      return { draft, release, reads: server.listDrafts.mock.calls.length };
+    };
+
+    const starts: [string, (draft: DraftSync) => void][] = [
+      ["a command runs", (draft) => void draft.runCommand(async () => "done")],
+      [
+        "the places are being corrected",
+        (draft) => void draft.correctPlaces(new Map(), new AbortController().signal, () => true),
+      ],
+      ["signed out", (draft) => void draft.close()],
+      ["dropped", (draft) => draft.drop()],
+    ];
+
+    it.each(starts)("answers false at once when asked while %s", async (_name, start) => {
+      const { draft, release, reads } = await withSaveOut();
+      start(draft);
+
+      await answersAtOnce(draft.load(), reads);
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    it.each(starts)("stops waiting at once when %s", async (_name, start) => {
+      const { draft, release, reads } = await withSaveOut();
+      const reading = draft.load();
+      await vi.advanceTimersByTimeAsync(0);
+      start(draft);
+
+      await answersAtOnce(reading, reads);
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  });
+
   describe("an edit waiting when a read fails", () => {
     it("is still sent after a plain read fails", async () => {
       const draft = sync();

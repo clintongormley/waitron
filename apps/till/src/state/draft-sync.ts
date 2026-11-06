@@ -312,6 +312,10 @@ export class DraftSync {
   #unsaved = false;
   #queue: Promise<DraftSaveOutcome> = Promise.resolve("saved");
   #savesQueued = 0;
+  /** The read after a refused save is out inside the queue, so that save no longer holds reads back. */
+  #readingInQueue = false;
+  /** Aborted when a read waiting for a save has reason to look again. */
+  #readWake = new AbortController();
   /** A save is out. */
   #saving = false;
   /** Signing out: no save starts after this. */
@@ -545,12 +549,26 @@ export class DraftSync {
 
   async #loadBetweenSaves(limitMs: number, stop: AbortSignal): Promise<boolean> {
     for (;;) {
-      while (this.#savesQueued > 0 && !stop.aborted) await Promise.race([this.#queue, pause(stop)]);
-      if (stop.aborted || this.#ended || this.#commanding || this.#correctingPlaces) return false;
+      while (this.#saveAhead && !this.#readDeclined && !stop.aborted)
+        await Promise.race([this.#queue, pause(AbortSignal.any([stop, this.#readWake.signal]))]);
+      if (stop.aborted || this.#readDeclined) return false;
       const queue = this.#queue;
       const read = await this.#load({ limitMs, stop }, () => queue !== this.#queue);
       if (queue === this.#queue) return read;
     }
+  }
+
+  get #saveAhead(): boolean {
+    return this.#savesQueued > (this.#readingInQueue ? 1 : 0);
+  }
+
+  get #readDeclined(): boolean {
+    return this.#ended || this.#commanding || this.#correctingPlaces;
+  }
+
+  #wakeWaitingReads(): void {
+    this.#readWake.abort();
+    this.#readWake = new AbortController();
   }
 
   async #load(bounds?: DraftReadBounds, stale?: () => boolean): Promise<boolean> {
@@ -634,6 +652,7 @@ export class DraftSync {
     this.#cancelTimer();
     this.#closed = true;
     this.#lockAuthority();
+    this.#wakeWaitingReads();
     return this.#queue.then(() => (this.#unsaved || this.#saving ? "failed" : "saved"));
   }
 
@@ -761,6 +780,7 @@ export class DraftSync {
     this.#commandsStarted++;
     this.#cancelTimer();
     this.store.sending = true;
+    this.#wakeWaitingReads();
     const abort = new AbortController();
     this.#commandAbort = abort;
     const limit = limited(this.#options.requestLimitMs, abort.signal);
@@ -803,6 +823,7 @@ export class DraftSync {
       return "failed";
     this.#correctingPlaces = true;
     this.#cancelTimer();
+    this.#wakeWaitingReads();
     const read = this.#reads;
     try {
       await this.#queue;
@@ -842,6 +863,7 @@ export class DraftSync {
     this.#cancelTimer();
     this.#unsubscribe();
     this.#lockAuthority();
+    this.#wakeWaitingReads();
   }
 
   get #ended(): boolean {
@@ -959,7 +981,7 @@ export class DraftSync {
       this.retainCandidate();
       this.#recoveryRequired = true;
       this.#lockAuthority();
-      await this.#load();
+      await this.#readInQueue();
       return "failed";
     }
     if (DRAFT_REFUSALS.has(refusal.refused)) {
@@ -967,10 +989,20 @@ export class DraftSync {
       this.retainCandidate();
       this.#recoveryRequired = true;
       this.#lockAuthority();
-      await this.#load();
+      await this.#readInQueue();
     } else this.#unsaved = true;
     this.#options.onRefused(refusal.refused, refusal.ownerName);
     return refusal;
+  }
+
+  async #readInQueue(): Promise<void> {
+    this.#readingInQueue = true;
+    this.#wakeWaitingReads();
+    try {
+      await this.#load();
+    } finally {
+      this.#readingInQueue = false;
+    }
   }
 
   #take(draft: Draft | null): void {
