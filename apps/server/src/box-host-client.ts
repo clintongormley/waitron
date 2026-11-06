@@ -235,27 +235,29 @@ export type WifiNoCopyReason =
   | "password-invalid";
 export type JoinChangeRefusal = "password-rejected" | "network-not-found" | "timed-out" | "failed";
 export type ForgetChangeRefusal = "failed";
-export type NetworkChange =
+export type NetworkChange = Readonly<
   | { kind: "join"; ssidHex: string; state: "running" | "applied"; reason: null }
   | { kind: "join"; ssidHex: string; state: "refused"; reason: JoinChangeRefusal }
   | { kind: "forget"; ssidHex: string; state: "running" | "applied"; reason: null }
-  | { kind: "forget"; ssidHex: string; state: "refused"; reason: ForgetChangeRefusal };
+  | { kind: "forget"; ssidHex: string; state: "refused"; reason: ForgetChangeRefusal }
+>;
+/** The nested objects arrive frozen by `parseHostReply`; the answer's own fields are a copy. */
 export interface NetworkSnapshot {
-  wired: { connected: boolean; address: string | null };
-  wifi: { connectedSsidHex: string | null; savedSsidHex: string | null };
+  wired: { readonly connected: boolean; readonly address: string | null };
+  wifi: { readonly connectedSsidHex: string | null; readonly savedSsidHex: string | null };
   change: NetworkChange | null;
   bootCopy: {
-    state: WifiCopyState;
-    reason: WifiNoCopyReason | null;
-    failure: WifiCopyFailure | null;
+    readonly state: WifiCopyState;
+    readonly reason: WifiNoCopyReason | null;
+    readonly failure: WifiCopyFailure | null;
   };
 }
 export type StartScreen = "dashboard" | "till";
 export type ScanSecurity = "wpa-psk" | "sae" | "other";
 export interface ScannedNetwork {
-  ssidHex: string;
-  signal: number;
-  security: ScanSecurity;
+  readonly ssidHex: string;
+  readonly signal: number;
+  readonly security: ScanSecurity;
 }
 export type WifiJoin = {
   ssidHex: string;

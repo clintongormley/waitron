@@ -20,7 +20,9 @@ import {
   type NetworkForgetRefusal,
   type NetworkJoinRefusal,
   type NetworkScanRefusal,
+  type NetworkSnapshot,
   type ProtocolRefusal,
+  type ScannedNetwork,
   type ScanSecurity,
   type StartScreen,
   type TagOutcome,
@@ -163,6 +165,27 @@ describe("the server's types and the protocol's lists", () => {
     expect(REPLY_REFUSALS["network.read"]).toEqual([]);
     expect(REPLY_REFUSALS["screen.read"]).toEqual([]);
     expect(REPLY_REFUSALS["screen.set"]).toEqual([]);
+  });
+});
+
+describe("the reply values the parser freezes", () => {
+  it("type each frozen object's fields readonly; the answer's own fields are a copy", () => {
+    const write = (snapshot: NetworkSnapshot, network: ScannedNetwork): void => {
+      // @ts-expect-error frozen
+      snapshot.wired.connected = true;
+      // @ts-expect-error frozen
+      snapshot.wifi.savedSsidHex = null;
+      // @ts-expect-error frozen
+      snapshot.bootCopy.reason = null;
+      if (snapshot.change !== null) {
+        // @ts-expect-error frozen
+        snapshot.change.ssidHex = SSID;
+      }
+      // @ts-expect-error frozen
+      network.signal = 0;
+      snapshot.change = null;
+    };
+    expectTypeOf(write).toBeFunction();
   });
 });
 

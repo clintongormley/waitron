@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,7 +60,8 @@ const SHELL_HANDLER = fileURLToPath(
 
 /**
  * Each connection runs the real deploy/box/waitron-box.sh with the connection as its standard
- * input and output, as systemd's Accept=yes does; the connection closes when the handler exits.
+ * input and output, as systemd's Accept=yes does; the connection closes once the handler has
+ * exited and its standard error has been read.
  * `stderr()` is everything the handlers wrote to their standard error.
  */
 export async function shellBoxHost(): Promise<{ path: string; stderr(): string }> {
@@ -69,13 +70,26 @@ export async function shellBoxHost(): Promise<{ path: string; stderr(): string }
   dirs.add(stateDir);
   const uptime = join(stateDir, "uptime");
   writeFileSync(uptime, "12345.67 0\n");
+  const ntpUnits = join(stateDir, "ntp-units.d");
+  mkdirSync(ntpUnits);
+  const timesyncClock = join(stateDir, "clock");
+  writeFileSync(timesyncClock, "");
+  const synchronized = join(stateDir, "synchronized");
+  writeFileSync(synchronized, "");
   let stderr = "";
   const server = createServer({ pauseOnConnect: true }, (socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
     const child = spawn("bash", [SHELL_HANDLER, "test"], {
       stdio: [socket, socket, "pipe"],
-      env: { ...process.env, WAITRON_BOX_UPTIME: uptime, WAITRON_BOX_STATE_DIR: stateDir },
+      env: {
+        ...process.env,
+        WAITRON_BOX_UPTIME: uptime,
+        WAITRON_BOX_STATE_DIR: stateDir,
+        WAITRON_BOX_NTP_UNITS_DIRS: ntpUnits,
+        WAITRON_BOX_TIMESYNC_CLOCK: timesyncClock,
+        WAITRON_BOX_TIMESYNC_SYNCHRONIZED: synchronized,
+      },
     });
     children.add(child);
     child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
