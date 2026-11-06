@@ -35,6 +35,10 @@ dos pasos.
 En **Seguridad**, elige **Añadir passkey** junto a **Passkeys**.
 Sigue las instrucciones de tu gestor de contraseñas para añadirla.
 
+Si tu local tiene una dirección web para el personal desde fuera, inicia sesión allí con tu
+correo y contraseña habituales. Para usar una passkey en esa dirección, abre allí
+**Configuración de la cuenta** y añade una, aunque ya uses una en la dirección de la red local.
+
 ## Descargar tus datos {#own-data}
 
 Abre **Configuración de la cuenta** desde el menú de cuenta y, en **Tus datos**, pulsa

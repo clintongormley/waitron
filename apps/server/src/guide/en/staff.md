@@ -31,6 +31,10 @@ email, password, PIN, passkeys and two-factor settings remain yours to manage.
 In **Security**, choose **Add passkey** beside **Passkeys**.
 Follow your password manager’s prompt to add it.
 
+If your venue has a staff address for access from outside, sign in there with your usual email
+and password. To use a passkey at that address, open **Account settings** there and add one,
+even if you already use a passkey at the venue's local address.
+
 ## Download your data {#own-data}
 
 Open **Account settings** from the account menu and, on **Your details**, press **Download**
