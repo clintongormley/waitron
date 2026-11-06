@@ -997,6 +997,91 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
 // `payWorkingOrderIntegrated` over a `FakeStripe`-backed provider. These cases pin the reader
 // ROUTING: which reader a collect drives, and which id lands on `payments.reader_id`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
+  it.each([
+    { tip: undefined, tipsEnabled: true, charged: 150, recordedTip: 0 },
+    { tip: "0", tipsEnabled: true, charged: 150, recordedTip: 0 },
+    { tip: "0.3", tipsEnabled: true, charged: 180, recordedTip: 30 },
+    { tip: "0.30", tipsEnabled: false, charged: 150, recordedTip: 0 },
+  ])(
+    "accepts tip $tip with tipsEnabled $tipsEnabled and records the charged amount",
+    async ({ tip, tipsEnabled, charged, recordedTip }) => {
+      const { cfg: baseCfg, available, operatorId } = await setupVenue();
+      const cfg = { ...baseCfg, tipsEnabled };
+      const each = available.find((product) => product.pricingUnit === "each")!;
+      const client = new FakeStripe();
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), noopLog);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+      await connectStripe();
+      const reader = await seedReader();
+      await setChosenReader(deviceIdOf(deviceCookie), reader.id);
+      const id = randomUUID();
+
+      const response = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({ id, lines: [{ menuItemId: each.menuItemId, quantity: "1" }], tip }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        outcome: "captured",
+        ticket: { total: "1.50" },
+      });
+      expect(suite.db.all(sql`select amount from payments where working_order_id = ${id}`)).toEqual(
+        [{ amount: charged }],
+      );
+      expect(
+        suite.db.all(
+          sql`select t.amount, t.tip_amount from tenders t join sales s on s.id = t.sale_id where s.working_order_id = ${id}`,
+        ),
+      ).toEqual([{ amount: charged, tip_amount: recordedTip }]);
+    },
+  );
+
+  it.each(
+    [null, "-5.00", "-0.50", "0.001", 1, [], {}, "", "1000000000000.00"].flatMap((tip) => [
+      { tip, tipsEnabled: true },
+      { tip, tipsEnabled: false },
+    ]),
+  )(
+    "refuses invalid tip $tip with tipsEnabled $tipsEnabled before creating a payment or asking the reader",
+    async ({ tip, tipsEnabled }) => {
+      const { cfg: baseCfg, available, operatorId } = await setupVenue();
+      const cfg = { ...baseCfg, tipsEnabled };
+      const each = available.find((product) => product.pricingUnit === "each")!;
+      const client = new FakeStripe();
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), noopLog);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+      await connectStripe();
+      const reader = await seedReader();
+      await setChosenReader(deviceIdOf(deviceCookie), reader.id);
+      const id = randomUUID();
+
+      const response = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          id,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+          tip,
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "tip" } },
+      });
+      expect(client.lastCreateIntent).toBeUndefined();
+      expect(suite.db.all(sql`select id from payments where working_order_id = ${id}`)).toEqual([]);
+      expect(suite.db.all(sql`select id from working_orders where id = ${id}`)).toEqual([]);
+      expect(suite.db.all(sql`select id from sales where working_order_id = ${id}`)).toEqual([]);
+    },
+  );
+
   it("routes to the device's chosen reader, captures, and STAMPS payments.reader_id", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)

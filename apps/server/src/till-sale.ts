@@ -1047,6 +1047,7 @@ async function fileImmediateSale(
       label: (await readReceiptOrder(tx, workingOrderId, { atIssuance: true })).orderLabel,
       status: "settled",
       settledAt: settledAt.toISOString(),
+      paymentAttemptAt: null,
     })
     .where(eq(workingOrders.id, workingOrderId));
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
