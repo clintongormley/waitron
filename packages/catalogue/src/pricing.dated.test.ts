@@ -10,8 +10,9 @@ import {
 
 // The shipped table with a general rate of 23.00 from 2027-01-01, standing for a release that ships
 // a future-dated rate.
-vi.mock("./vat-rates.js", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./vat-rates.js")>();
+vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@waitron/shared/src/menu-document/vat-rates.js")>();
   const table = {
     ...original.VAT_RATE_TABLE,
     general: [

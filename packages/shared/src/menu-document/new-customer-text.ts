@@ -1,4 +1,4 @@
-import type { ContentLanguages } from "@waitron/shared";
+import type { ContentLanguages } from "../content-languages.js";
 import { resolveMenuText } from "./customer-menu-presentation.js";
 import type { ProductPresentation } from "./product-presentation.js";
 

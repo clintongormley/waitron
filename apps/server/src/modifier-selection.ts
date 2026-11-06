@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { EACH_UNIT, validateExtraSelections, validateOptionSelections } from "@waitron/catalogue";
-import { newCustomerText } from "@waitron/catalogue/src/new-customer-text.js";
+import { newCustomerText } from "@waitron/shared";
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/catalogue";
 import {

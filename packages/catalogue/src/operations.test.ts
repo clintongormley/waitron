@@ -10,8 +10,9 @@ import { products, withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
-import type { PriceableProduct, PricingUnit } from "./pricing.js";
-import { customerPresentationText } from "./product-presentation.js";
+import type { PriceableProduct } from "./pricing.js";
+import type { PricingUnit } from "@waitron/shared";
+import { customerPresentationText } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 
 // The till resolves an AvailableProduct's customer-facing text (customerName, falling back to the

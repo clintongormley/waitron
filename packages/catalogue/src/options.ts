@@ -10,7 +10,7 @@ import {
   type OptionList,
   type ParsedOptionList,
 } from "./option-contract.js";
-import type { OptionListDependants, OptionListRow } from "./modifier-list-types.js";
+import type { OptionListDependants, OptionListRow } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
   mergeOptionalTranslations,
@@ -62,7 +62,7 @@ async function withLabels(
   return lists.map((list) => ({ ...list, labels: grouped.get(list.id) ?? [] }));
 }
 
-export type { OptionListRow } from "./modifier-list-types.js";
+export type { OptionListRow } from "@waitron/shared";
 
 /** Every list with its labels and the number of products carrying it, counted in one grouped query. */
 export async function listOptionLists(tx: Transaction): Promise<OptionListRow[]> {
@@ -252,7 +252,7 @@ export async function deleteOptionList(tx: Transaction, optionListId: string): P
   await tx.delete(optionLists).where(eq(optionLists.id, optionListId));
 }
 
-export type { OptionListDependants } from "./modifier-list-types.js";
+export type { OptionListDependants } from "@waitron/shared";
 
 /**
  * What deleting this list would touch — read by the dashboard's Used by popup and its delete

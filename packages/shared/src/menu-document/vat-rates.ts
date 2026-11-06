@@ -1,5 +1,5 @@
-import { decimal } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import { decimal } from "../money.js";
+import type { Decimal } from "../money.js";
 
 export const VAT_CLASSES = ["general", "reduced", "super_reduced", "zero"] as const;
 export type VatClass = (typeof VAT_CLASSES)[number];

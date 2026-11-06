@@ -2,14 +2,9 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-icon.js";
-import {
-  ALLERGEN_CODES,
-  CEREAL_KINDS,
-  NUT_KINDS,
-  type Kind,
-} from "@waitron/catalogue/src/allergens.js";
-import { DIETARY_LABELS, type DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
-import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
+import { ALLERGEN_CODES, CEREAL_KINDS, NUT_KINDS, type Kind } from "@waitron/shared";
+import { DIETARY_LABELS, type DietaryLabel } from "@waitron/shared";
+import type { InheritedValues } from "@waitron/shared";
 import { allergenName, allergenKindName } from "../i18n/domain.js";
 import { fill, t } from "../i18n/t.js";
 import {

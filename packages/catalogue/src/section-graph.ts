@@ -7,7 +7,7 @@ import type {
   SectionMember,
   SectionRole,
   TileRef,
-} from "./section-types.js";
+} from "@waitron/shared";
 
 export interface SectionRow {
   id: string;

@@ -6,13 +6,9 @@ import {
   expectMessageAboveButtons,
   mountWidget,
 } from "./test-helpers.js";
-import type {
-  IncludeFolder,
-  IncludeFolderInput,
-  Presentation,
-} from "@waitron/catalogue/src/section-types.js";
+import type { IncludeFolder, IncludeFolderInput, Presentation } from "@waitron/shared";
 import { folderPresentation } from "@waitron/catalogue/src/include-folder-presentation.js";
-import { resolveMenuText } from "@waitron/catalogue/src/customer-menu-presentation.js";
+import { resolveMenuText } from "@waitron/shared";
 import "./include-folder-form.js";
 afterEach(cleanupWidgets);
 

@@ -14,7 +14,7 @@ import {
   starterNames,
 } from "@waitron/country-packs";
 import { catalogueSettings } from "./schema/settings.js";
-import type { VatClass } from "./vat-rates.js";
+import type { VatClass } from "@waitron/shared";
 import { contentLanguages } from "./schema/menu.js";
 import { createMenuShell } from "./menu-structure.js";
 import { assignCatalogueToVenue } from "./operations.js";

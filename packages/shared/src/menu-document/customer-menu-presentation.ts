@@ -1,10 +1,9 @@
 import {
-  compareDecimal,
   contentLanguageCode,
-  decimal,
   resolveContentText,
   type ContentLanguages,
-} from "@waitron/shared";
+} from "../content-languages.js";
+import { compareDecimal, decimal } from "../money.js";
 import type { FrozenOffer } from "./menu-document-types.js";
 
 export type MenuView = { kind: "internal" } | { kind: "customer"; language: string };

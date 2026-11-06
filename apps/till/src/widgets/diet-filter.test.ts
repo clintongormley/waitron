@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { ALLERGEN_CODES } from "@waitron/catalogue/src/allergens.js";
+import { ALLERGEN_CODES } from "@waitron/shared";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

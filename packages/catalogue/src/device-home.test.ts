@@ -13,7 +13,7 @@ import {
   tileFill,
   tilePaths,
 } from "./device-home.js";
-import type { DocumentMember } from "./menu-document-types.js";
+import type { DocumentMember } from "@waitron/shared";
 
 describe("display settings", () => {
   it("defaults a handheld to three columns and a till to six, colours, Device Home Page first", () => {
@@ -275,6 +275,6 @@ it("imports nothing but the colour rule and the document types, so a browser app
   const specifiers = [...source.matchAll(/^import\s+(type\s+)?[^;]*?from\s+"([^"]+)";/gms)].map(
     ([, type, from]) => `${type ? "type " : ""}${from}`,
   );
-  expect(specifiers).toEqual(["./color-inheritance.js", "type ./menu-document-types.js"]);
+  expect(specifiers).toEqual(["./color-inheritance.js", "type @waitron/shared"]);
   expect(source).not.toMatch(/^import\s+"/m);
 });

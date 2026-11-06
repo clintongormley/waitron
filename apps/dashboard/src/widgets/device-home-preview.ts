@@ -41,7 +41,7 @@ import {
   type HomeIndex,
   type SectionStep,
 } from "@waitron/catalogue/src/device-home.js";
-import type { DocumentTile, HomeTileMode } from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentTile, HomeTileMode } from "@waitron/shared";
 import type {
   DocumentMember,
   FrozenOffer,

@@ -2,10 +2,7 @@ import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import {
-  newCustomerPresentation,
-  newCustomerText,
-} from "@waitron/catalogue/src/new-customer-text.js";
+import { newCustomerPresentation, newCustomerText } from "@waitron/shared";
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";

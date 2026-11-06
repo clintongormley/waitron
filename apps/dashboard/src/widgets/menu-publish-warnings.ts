@@ -1,6 +1,6 @@
 import { css, html, type TemplateResult } from "lit";
 import type { MenuPreview } from "../api/client.js";
-import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
+import { staffPresentationName } from "@waitron/shared";
 import { localizedName } from "../i18n/localized.js";
 import { fill, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";

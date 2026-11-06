@@ -1,10 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type {
-  IncludeFolder,
-  IncludeFolderInput,
-  Presentation,
-} from "@waitron/catalogue/src/section-types.js";
+import type { IncludeFolder, IncludeFolderInput, Presentation } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./include-folder-form.js";
 

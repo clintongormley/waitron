@@ -1,6 +1,6 @@
-import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
+import { staffPresentationName } from "@waitron/shared";
 import { contentLanguageCode, resolveContentText } from "@waitron/shared";
-import type { ProductPresentation } from "@waitron/catalogue/src/product-presentation.js";
+import type { ProductPresentation } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
 import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
@@ -27,9 +27,7 @@ export function productName(product: TillProduct): string {
 }
 
 /**
- * The staff name of a line, including its product and any selected relative variant. Deep-imported
- * because `product-presentation.ts` depends only on `@waitron/shared`, so no catalogue barrel reaches the
- * browser bundle.
+ * The staff name of a line, including its product and any selected relative variant.
  */
 export function lineProductName(product: TillProduct): string {
   return staffPresentationName({ name: product.name, variantName: product.variantName ?? null });

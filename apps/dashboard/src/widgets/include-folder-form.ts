@@ -10,7 +10,7 @@ import {
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
-import { resolveMenuText } from "@waitron/catalogue/src/customer-menu-presentation.js";
+import { resolveMenuText } from "@waitron/shared";
 import {
   FOLLOWING_FOLDER,
   folderOverridesFrom,
@@ -21,7 +21,7 @@ import type {
   IncludeFolderInput,
   IncludeFolderOverrides,
   Presentation,
-} from "@waitron/catalogue/src/section-types.js";
+} from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";

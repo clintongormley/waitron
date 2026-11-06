@@ -1,4 +1,4 @@
-import type { ProductAllergens as AllergenMap } from "@waitron/catalogue/src/allergens.js";
+import type { ProductAllergens as AllergenMap } from "@waitron/shared";
 import { mergeAllergenMaps } from "@waitron/catalogue/src/derivation.js";
 
 export function allergyClashes(allergens: AllergenMap | null, avoids: AllergenMap): string[] {

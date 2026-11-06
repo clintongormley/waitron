@@ -4,7 +4,7 @@ import type {
   FrozenOfferVariant,
   FrozenOfferedModifier,
   MenuDocument,
-} from "@waitron/catalogue/src/menu-document-types.js";
+} from "@waitron/shared";
 import type { ContentLanguages } from "@waitron/shared";
 import { MenuPatchDraft, patchTree, type PatchTreeNode } from "./menu-patch-draft.js";
 import { documentProduct, documentSection, menuDocument } from "./test-helpers.js";

@@ -5,8 +5,9 @@ import { AppError } from "@waitron/shared";
 import { issueMoment } from "./issue-moment.js";
 
 // A release that ships a reduced rate of 11% from 1 January 2027, the shipped table otherwise.
-vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@waitron/catalogue/src/vat-rates.js")>();
+vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@waitron/shared/src/menu-document/vat-rates.js")>();
   const table = {
     ...original.VAT_RATE_TABLE,
     reduced: [

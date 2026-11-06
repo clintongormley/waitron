@@ -12,7 +12,7 @@ import {
   table,
 } from "@waitron/db";
 import { HOME_DISPLAY_DEFAULTS } from "../device-home.js";
-import type { HomeOrder, HomeTileMode } from "../menu-document-types.js";
+import type { HomeOrder, HomeTileMode } from "@waitron/shared";
 import { sections } from "./sections.js";
 
 /** The one content-language policy shared by the reusable catalogue and media: at most one row,

@@ -9,7 +9,7 @@ import {
   shownMenu,
   visibleProducts,
 } from "./menu-filter.js";
-import { ALLERGEN_CODES } from "@waitron/catalogue/src/allergens.js";
+import { ALLERGEN_CODES } from "@waitron/shared";
 import type { DietProfile, TillProduct } from "./api/client.js";
 
 function product(id: string, catalogueId?: string): TillProduct {

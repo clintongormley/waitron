@@ -1,6 +1,17 @@
 export * from "./pricing.js";
-export * from "./vat-rates.js";
-export * from "./product-ordering.js";
+export type { PricingUnit } from "@waitron/shared";
+export {
+  vatRateOn,
+  vatRatesOn,
+  localCalendarDate,
+  localToday,
+  VAT_CLASSES,
+  VAT_RATE_TABLE,
+  type VatClass,
+  type DatedRate,
+  type VatRateTable,
+} from "@waitron/shared";
+export { isProductOrdering, PRODUCT_ORDERINGS, type ProductOrdering } from "@waitron/shared";
 export * from "./units.js";
 // Listed rather than `export *`: `createProductSkippingNameCheck`,
 // `updateProductSkippingNameCheck` and `writeProductVariantsSkippingNameCheck` skip the
@@ -55,9 +66,34 @@ export { foldName } from "./name-uniqueness.js";
 export * from "./content-languages.js";
 export { validateOptionalTranslations } from "./optional-translations.js";
 export * from "./content-translation-report.js";
-export * from "./allergens.js";
+export {
+  allergenKinds,
+  validateAllergens,
+  ALLERGEN_CODES,
+  CEREAL_KINDS,
+  NUT_KINDS,
+  type AllergenCode,
+  type Kind,
+  type AllergenDeclaration,
+  type ProductAllergens,
+} from "@waitron/shared";
 export * from "./derivation.js";
-export * from "./dietary.js";
+export {
+  validateOrigin,
+  validateContainsTag,
+  validateDietOverride,
+  deriveDietProfile,
+  overlayDietProfile,
+  assertDietOverrideDisjoint,
+  DIETARY_ORIGINS,
+  CONTAINS_TAGS,
+  type DietaryOrigin,
+  type ContainsTag,
+  type DietLabel,
+  type DietDerivation,
+  type DietOverride,
+  type DietProfile,
+} from "@waitron/shared";
 export * from "./invoice-descriptions.js";
 export * from "./media.js";
 export * from "./schema/index.js";
@@ -68,7 +104,20 @@ export { CATALOGUE_CLASSIFICATION } from "./classification.js";
 export { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
 export * from "./categories.js";
 export * from "./schema/categories.js";
-export * from "./section-types.js";
+export type {
+  SectionRole,
+  MemberRef,
+  TileRef,
+  SectionMember,
+  SectionDetails,
+  IncludeFolderOverrides,
+  IncludeFolder,
+  IncludeFolderInput,
+  Presentation,
+  SectionInput,
+  HomeTile,
+  MenuHome,
+} from "@waitron/shared";
 export * from "./section-graph.js";
 export * from "./menu-inclusion.js";
 export * from "./sections.js";
@@ -95,7 +144,47 @@ export {
   readLiveState,
   type OmittedShortcut,
 } from "./menu-document.js";
-export type * from "./menu-document-types.js";
+export type {
+  OverlayOfferField,
+  FrozenExtraItem,
+  FrozenOptionLabel,
+  FrozenOfferedModifier,
+  FrozenOfferVariant,
+  FrozenOffer,
+  DocumentMember,
+  DocumentList,
+  DocumentTile,
+  HomeDevice,
+  HomeTileMode,
+  HomeOrder,
+  HomeDisplay,
+  DeviceHome,
+  MenuDocument,
+  LiveExtraItem,
+  LiveOptionsList,
+  LiveOfferedModifier,
+  LiveOffer,
+  MenuField,
+  MenuTarget,
+  MenuOccurrence,
+  MenuChangeSource,
+  MenuChangeBody,
+  MenuChange,
+  ProductChangeField,
+  SectionChangeField,
+  MenuStatus,
+  MenuPreview,
+  PublishedMenuVersion,
+  OvertakenEdition,
+  QueuedEdition,
+  MenuEdition,
+  MenuPublications,
+  LocalTime,
+  MenuPublicationsAnswer,
+  MenuUnavailable,
+  ServedMenu,
+  MenuState,
+} from "@waitron/shared";
 export {
   assertLiveVersions,
   menuStatus,
@@ -152,12 +241,27 @@ export type {
   SellingValues,
 } from "./variants.js";
 export * from "./variant-fallback.js";
-export * from "./dietary-declarations.js";
+export {
+  validateDietaryDeclarations,
+  expandDietaryDeclarations,
+  validateDietarySuitability,
+  DIETARY_LABELS,
+  DIETARY_SUITABILITY,
+  type DietaryLabel,
+  type DietarySuitability,
+} from "@waitron/shared";
 export * from "./product-editor.js";
-export * from "./product-presentation.js";
+export {
+  staffPresentationName,
+  joinCustomerPresentationText,
+  nonBlankTranslations,
+  customerPresentationText,
+  kitchenPresentationName,
+  type ProductPresentation,
+} from "@waitron/shared";
 export * from "./option-snapshot-labels.js";
 export * from "./default-language-text.js";
-export type { ProductRouting, ProductEditorBody } from "./product-types.js";
+export type { ProductRouting, ProductEditorBody } from "@waitron/shared";
 
 export * from "./catalogue-items.js";
 export { menusHolding } from "./menu-removal.js";

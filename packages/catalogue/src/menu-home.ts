@@ -3,7 +3,7 @@ import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { homeDisplayProblem } from "./device-home.js";
-import type { HomeDevice, HomeDisplay } from "./menu-document-types.js";
+import type { HomeDevice, HomeDisplay } from "@waitron/shared";
 import { menuDetails } from "./schema/menu.js";
 import { sectionMembers } from "./schema/sections.js";
 import {
@@ -22,7 +22,7 @@ import {
   refColumns,
   requirePosition,
 } from "./section-members.js";
-import type { MemberRef, MenuHome, SectionMember, TileRef } from "./section-types.js";
+import type { MemberRef, MenuHome, SectionMember, TileRef } from "@waitron/shared";
 import "./errors.js";
 
 // A shortcut writes no `menu_items` row: no menu's root reaches a Device Home Page section.

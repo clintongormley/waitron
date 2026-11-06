@@ -10,7 +10,7 @@ import {
   type NutritionChange,
   type NutritionValue,
 } from "./product-nutrition.js";
-import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
+import type { InheritedValues } from "@waitron/shared";
 
 registerIcons(DASHBOARD_ICONS);
 const locale = currentLocale();

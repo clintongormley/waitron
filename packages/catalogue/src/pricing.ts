@@ -12,9 +12,7 @@ import type { Decimal, OptionSnapshot } from "@waitron/shared";
 import type { RecordSaleLine } from "@waitron/core/src/sale-line.js";
 import type { VatBreakdownLine } from "@waitron/fiscal/src/vat-breakdown.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
-import { localToday, vatRatesOn, type VatClass } from "./vat-rates.js";
-
-export type PricingUnit = "each" | "weight";
+import { localToday, vatRatesOn, type VatClass } from "@waitron/shared";
 
 export interface UnitSnapshot {
   staffName: string;

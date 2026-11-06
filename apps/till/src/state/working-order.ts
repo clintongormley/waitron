@@ -8,8 +8,8 @@
  * pulls in nothing at runtime beyond `@waitron/shared` and its own siblings.
  */
 import { type BasketItem, priceBasket } from "@waitron/catalogue/src/pricing.js";
-import { localToday } from "@waitron/catalogue/src/vat-rates.js";
-import { customerPresentationText } from "@waitron/catalogue/src/product-presentation.js";
+import { localToday } from "@waitron/shared";
+import { customerPresentationText } from "@waitron/shared";
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";

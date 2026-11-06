@@ -1,4 +1,4 @@
-import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
+import { VAT_CLASSES, type VatClass } from "@waitron/shared";
 import { AppError, type ContentLanguages } from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
 import { readTenant, readVenue, type Transaction } from "@waitron/db";

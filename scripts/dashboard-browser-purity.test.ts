@@ -186,7 +186,7 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
 
   describe("the catalogue wire-shape leaves stay type-only (emit no runtime)", () => {
     // Each leaf holds wire shapes a browser app imports DIRECTLY
-    // (`@waitron/catalogue/src/<leaf>.js`), so each must be a PURE type module that compiles to an
+    // (through `@waitron/shared`), so each must be a PURE type module that compiles to an
     // empty runtime module. The reachable-specifier scan above would false-positive here on an
     // erased `import type` edge, so the check is on each leaf's own statements instead.
     //
@@ -196,12 +196,12 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     // statement (`sideEffect();`), and nothing transpiles these leaves on a pull request that
     // leaves `deploy/` alone.
     const LEAVES = [
-      "packages/catalogue/src/product-types.ts",
-      "packages/catalogue/src/menu-types.ts",
-      "packages/catalogue/src/menu-combine-types.ts",
-      "packages/catalogue/src/modifier-list-types.ts",
-      "packages/catalogue/src/section-types.ts",
-      "packages/catalogue/src/menu-document-types.ts",
+      "packages/shared/src/menu-document/product-types.ts",
+      "packages/shared/src/menu-document/menu-types.ts",
+      "packages/shared/src/menu-document/menu-combine-types.ts",
+      "packages/shared/src/menu-document/modifier-list-types.ts",
+      "packages/shared/src/menu-document/section-types.ts",
+      "packages/shared/src/menu-document/menu-document-types.ts",
       "packages/catalogue/src/content-translation-report-types.ts",
     ];
 

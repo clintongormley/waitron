@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateAllergens, type ProductAllergens } from "./allergens.js";
+import { validateAllergens, type ProductAllergens } from "@waitron/shared";
 import { mergeAllergenMaps } from "./derivation.js";
 
 describe("allergen kinds", () => {

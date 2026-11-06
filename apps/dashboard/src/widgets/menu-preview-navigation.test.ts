@@ -2,11 +2,7 @@ import { afterEach, beforeEach, expect, it, onTestFinished } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
 import type { WtCombobox } from "@waitron/ui/src/components/wt-combobox.js";
-import type {
-  MenuChange,
-  MenuDocument,
-  MenuTarget,
-} from "@waitron/catalogue/src/menu-document-types.js";
+import type { MenuChange, MenuDocument, MenuTarget } from "@waitron/shared";
 import { setLocale } from "../i18n/t.js";
 import { MenuPreviewPanel } from "./menu-preview.js";
 import type { MenuDocumentTree } from "./menu-document-tree.js";

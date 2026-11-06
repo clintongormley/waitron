@@ -1,5 +1,5 @@
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
-import type { SectionInput } from "./section-types.js";
+import type { SectionInput } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
@@ -23,7 +23,7 @@ import {
   replaceMember,
   updateSection,
 } from "./sections.js";
-import type { MemberRef, SectionMember } from "./section-types.js";
+import type { MemberRef, SectionMember } from "@waitron/shared";
 
 // Section authoring and member writes. The cases with two transactions started together, and the
 // constraint experiments on the tables themselves, are in sections.db.test.ts.

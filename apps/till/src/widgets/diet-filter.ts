@@ -7,7 +7,7 @@ import {
   NUT_KINDS,
   type AllergenCode,
   type Kind,
-} from "@waitron/catalogue/src/allergens.js";
+} from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { LocaleChangeController } from "../state/locale-controller.js";

@@ -9,7 +9,7 @@ import { effectiveColor } from "./color-inheritance.js";
 import { readCatalogueSettings } from "./settings.js";
 import { includedMenus } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
-import type { CombinedOffer, MenuClash, ValueSource } from "./menu-combine-types.js";
+import type { CombinedOffer, MenuClash, ValueSource } from "@waitron/shared";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
 import { homeDisplaysOf } from "./menu-home.js";
@@ -23,8 +23,8 @@ import { optionLabels } from "./schema/options.js";
 import { sections } from "./schema/sections.js";
 import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
-import type { MenuOffer } from "./menu-types.js";
-import type { TileRef } from "./section-types.js";
+import type { MenuOffer } from "@waitron/shared";
+import type { TileRef } from "@waitron/shared";
 import { HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "./device-home.js";
 import type {
   DocumentMember,
@@ -40,10 +40,50 @@ import type {
   MenuUnavailable,
   ProductChangeField,
   SectionChangeField,
-} from "./menu-document-types.js";
+} from "@waitron/shared";
 import "./errors.js";
 
-export type * from "./menu-document-types.js";
+export type {
+  OverlayOfferField,
+  FrozenExtraItem,
+  FrozenOptionLabel,
+  FrozenOfferedModifier,
+  FrozenOfferVariant,
+  FrozenOffer,
+  DocumentMember,
+  DocumentList,
+  DocumentTile,
+  HomeDevice,
+  HomeTileMode,
+  HomeOrder,
+  HomeDisplay,
+  DeviceHome,
+  MenuDocument,
+  LiveExtraItem,
+  LiveOptionsList,
+  LiveOfferedModifier,
+  LiveOffer,
+  MenuField,
+  MenuTarget,
+  MenuOccurrence,
+  MenuChangeSource,
+  MenuChangeBody,
+  MenuChange,
+  ProductChangeField,
+  SectionChangeField,
+  MenuStatus,
+  MenuPreview,
+  PublishedMenuVersion,
+  OvertakenEdition,
+  QueuedEdition,
+  MenuEdition,
+  MenuPublications,
+  LocalTime,
+  MenuPublicationsAnswer,
+  MenuUnavailable,
+  ServedMenu,
+  MenuState,
+} from "@waitron/shared";
 
 export const MENU_DOCUMENT_FORMAT = 3;
 

@@ -62,6 +62,15 @@ describe("deriveDietProfile", () => {
 
 describe("overlayDietProfile", () => {
   const base: DietProfile = { vegan: "unknown", vegetarian: "unknown", contains: [] };
+  it("with no override returns the derived profile with its contains-tags sorted", () => {
+    const derived: DietProfile = { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] };
+    expect(overlayDietProfile(derived, null)).toEqual({
+      vegan: "no",
+      vegetarian: "no",
+      contains: ["fish", "meat"],
+    });
+    expect(derived.contains).toEqual(["meat", "fish"]);
+  });
   it("override forces a label", () => {
     expect(overlayDietProfile(base, { vegan: "yes" }).vegan).toBe("yes");
   });

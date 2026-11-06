@@ -3,7 +3,7 @@ import {
   joinCustomerPresentationText,
   kitchenPresentationName,
   staffPresentationName,
-} from "./product-presentation.js";
+} from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -12,12 +12,12 @@ import { readProductExtras } from "./extra-projection.js";
 import type { ResolvedExtraList } from "./extra-projection.js";
 import { readOptionListsByIds } from "./options.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { expandDietaryDeclarations, validateDietaryDeclarations } from "./dietary-declarations.js";
-import type { OptionList } from "./modifier-list-types.js";
-import type { ProductModifierRef } from "./product-types.js";
-import type { VatClass } from "./vat-rates.js";
+import { expandDietaryDeclarations, validateDietaryDeclarations } from "@waitron/shared";
+import type { OptionList } from "@waitron/shared";
+import type { ProductModifierRef } from "@waitron/shared";
+import type { VatClass } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
-import type { OfferedExtraItem, OfferedModifier } from "./menu-types.js";
+import type { OfferedExtraItem, OfferedModifier } from "@waitron/shared";
 
 /**
  * One dish whose attachments are being resolved: the product it sells, and the menu offer it was

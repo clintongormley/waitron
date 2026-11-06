@@ -4,7 +4,7 @@ import { AppError } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { readContentLanguages } from "./content-languages.js";
 import { mergeOptionalTranslations } from "./optional-translations.js";
-import { validateDietaryDeclarations } from "./dietary-declarations.js";
+import { validateDietaryDeclarations } from "@waitron/shared";
 import {
   createProductSkippingNameCheck,
   updateProduct,
@@ -18,9 +18,9 @@ import { assertFamilyNamesFree, readUpdatedName, type StoredName } from "./produ
 import { listProductVariants, writeProductVariantsSkippingNameCheck } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
-import type { InheritedValues, ProductEditorValue } from "./product-types.js";
-export type { InheritedValues, ProductEditorValue } from "./product-types.js";
-import type { VatClass } from "./vat-rates.js";
+import type { InheritedValues, ProductEditorValue } from "@waitron/shared";
+export type { InheritedValues, ProductEditorValue } from "@waitron/shared";
+import type { VatClass } from "@waitron/shared";
 import "./errors.js";
 
 /** The row as stored: a variant's blanks read blank here, never as its parent's. */

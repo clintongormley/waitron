@@ -20,7 +20,7 @@ list — never both (`product_modifiers_one_reference_ck`,
 staff `name`, translated `customerName`, plain `kitchenName` — follow the product convention, and
 which surface reads which is in [products.md](products.md).
 
-The wire shapes are declared once, in `packages/catalogue/src/modifier-list-types.ts`: `OptionList`,
+The wire shapes are declared once, in `packages/shared/src/menu-document/modifier-list-types.ts`: `OptionList`,
 `OptionLabel`, `ExtraList`, `ExtraListItem`, their `…Input` twins, the two `…Row` shapes
 (`OptionListRow`, `ExtraListRow`) and the two `…Dependants` shapes.
 That file is types only and imports nothing, so a browser client can import the same copy the server

@@ -18,7 +18,7 @@ import { liveVersions, previewMenu, publishMenu } from "./menu-publication.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { applyMenuPatch, fixedLanguages, parseMenuPatch, patchFieldValue } from "./menu-patch.js";
 import { PATCH_FIELDS, type MenuPatchChange } from "./menu-patch-types.js";
-import type { DocumentMember, FrozenOfferedModifier, MenuDocument } from "./menu-document-types.js";
+import type { DocumentMember, FrozenOfferedModifier, MenuDocument } from "@waitron/shared";
 
 const fx = useCatalogueDb();
 const languages: ContentLanguages = { defaultLanguage: "en", languages: ["en", "es"] };

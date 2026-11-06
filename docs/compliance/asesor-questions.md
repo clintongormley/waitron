@@ -2777,7 +2777,7 @@ collection. The owner decided on 2026-09-27 how the two things that can change a
   venue's local time. The customer pays the same gross price either way, so only the VAT split is
   affected.
 
-Since 2026-09-27 this is how the product works (`vatRateOn`, `packages/catalogue/src/vat-rates.ts`;
+Since 2026-09-27 this is how the product works (`vatRateOn`, `packages/shared/src/menu-document/vat-rates.ts`;
 the issuing paths in `apps/server/src/till-sale.ts`, `bill-payments.ts` and `working-order.ts`).
 The invoice is issued at payment on every path except orders invoiced when they are placed and paid
 on collection, where it is issued at placing, so there the placing day's rate applies.

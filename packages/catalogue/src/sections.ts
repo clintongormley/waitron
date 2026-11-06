@@ -31,7 +31,7 @@ import {
   requirePosition,
 } from "./section-members.js";
 import { onStructureChanged } from "./section-structure.js";
-import type { SectionDetails, MemberRef, SectionInput, SectionMember } from "./section-types.js";
+import type { SectionDetails, MemberRef, SectionInput, SectionMember } from "@waitron/shared";
 import "./errors.js";
 
 /*

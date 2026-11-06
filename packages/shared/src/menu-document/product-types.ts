@@ -1,4 +1,4 @@
-import type { PricingUnit } from "./pricing.js";
+import type { PricingUnit } from "./pricing-unit.js";
 import type { VatClass } from "./vat-rates.js";
 import type { ProductAllergens } from "./allergens.js";
 import type { DietDerivation, DietOverride } from "./dietary.js";

@@ -22,7 +22,7 @@ export { createCategory, listCategories, updateCategory } from "./categories.js"
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
 import "./errors.js"; // load the code registry for the `catalogue.*`/`product.*`/`menu_*` codes thrown below
-import { validateAllergens, type ProductAllergens } from "./allergens.js";
+import { validateAllergens, type ProductAllergens } from "@waitron/shared";
 import { republish, type RecipeDerivation } from "./derivation.js";
 import {
   deriveDietProfile,
@@ -31,10 +31,10 @@ import {
   type DietDerivation,
   type DietOverride,
   type DietProfile,
-} from "./dietary.js";
-import type { PricingUnit } from "./pricing.js";
-import type { ProductOrdering } from "./product-ordering.js";
-import type { VatClass } from "./vat-rates.js";
+} from "@waitron/shared";
+import type { PricingUnit } from "@waitron/shared";
+import type { ProductOrdering } from "@waitron/shared";
+import type { VatClass } from "@waitron/shared";
 import { menuItems } from "./schema/menu.js";
 import { sections } from "./schema/sections.js";
 import {
@@ -67,7 +67,7 @@ import {
   unitMeasure,
   type SellableUnit,
 } from "./units.js";
-import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
+import { validateDietaryDeclarations, type DietaryLabel } from "@waitron/shared";
 import {
   clearedPricingUnit,
   effectiveProductColumns as effective,
@@ -77,7 +77,7 @@ import {
   productWithId,
   unitOwnerJoin,
 } from "./variant-fallback.js";
-import type { ListedVariant, Product } from "./product-types.js";
+import type { ListedVariant, Product } from "@waitron/shared";
 import type {
   AccessibleCatalogue,
   AvailableProduct,
@@ -85,7 +85,7 @@ import type {
   MenuOffer,
   MenuOfferVariant,
   MenuPriceRow,
-} from "./menu-types.js";
+} from "@waitron/shared";
 export type {
   AccessibleCatalogue,
   AvailableProduct,
@@ -98,8 +98,8 @@ export type {
   OfferedExtrasList,
   OfferedModifier,
   OfferedOptionsList,
-} from "./menu-types.js";
-export type { ListedVariant, Product } from "./product-types.js";
+} from "@waitron/shared";
+export type { ListedVariant, Product } from "@waitron/shared";
 
 /**
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ALLERGEN_CODES, CEREAL_KINDS, NUT_KINDS } from "../packages/catalogue/src/allergens.js";
+import {
+  ALLERGEN_CODES,
+  CEREAL_KINDS,
+  NUT_KINDS,
+} from "../packages/shared/src/menu-document/allergens.js";
 import {
   ALLERGEN_NAMES as printedNames,
   kitchenAllergenLabel,

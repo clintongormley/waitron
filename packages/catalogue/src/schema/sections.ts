@@ -13,7 +13,7 @@ import {
   products,
   table,
 } from "@waitron/db";
-import type { IncludeFolderOverrides, SectionRole } from "../section-types.js";
+import type { IncludeFolderOverrides, SectionRole } from "@waitron/shared";
 
 // Not in section-types.ts: the dashboard imports that file, and
 // scripts/dashboard-browser-purity.test.ts refuses a runtime value in it.

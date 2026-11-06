@@ -4,11 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
-import type {
-  IncludeFolder,
-  IncludeFolderInput,
-  Presentation,
-} from "@waitron/catalogue/src/section-types.js";
+import type { IncludeFolder, IncludeFolderInput, Presentation } from "@waitron/shared";
 import {
   cleanupWidgets,
   closeReportsDelivered,

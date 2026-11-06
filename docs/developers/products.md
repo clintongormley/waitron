@@ -20,7 +20,7 @@ A variant is itself a `products` row whose `parent_id` names its parent, so it c
 three in the same three columns.
 
 Two rules govern how those six fields become one displayed string, and both of them live in
-`packages/catalogue/src/product-presentation.ts`. New option answers use the shared customer-text
+`packages/shared/src/menu-document/product-presentation.ts`. New option answers use the shared customer-text
 resolver for their list and label separately; recorded answers use the snapshot readers described
 under _What a sold line freezes_ below.
 
@@ -124,7 +124,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   them, `variant_descriptions` resolved and stored like `descriptions` above), plus the product's
   (the parent's) kitchen name. A variant with no customer text in any language resolves its own
   staff name, never the parent's (`customerPresentationText`,
-  `packages/catalogue/src/product-presentation.ts`). A staff name containing only spaces resolves
+  `packages/shared/src/menu-document/product-presentation.ts`). A staff name containing only spaces resolves
   to empty customer entries; the receipt still takes its separately frozen `variant_name`.
   Keeping both sets is what lets a report group variant lines under their parent.
   An extras item naming a variant resolves the published parent and variant independently in
@@ -160,7 +160,7 @@ Unpublished changes. Patching a live menu (`patchLiveMenu`, `packages/catalogue/
 changes a class in that menu's live version alone; the product keeps its own.
 
 Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateOn`,
-`packages/catalogue/src/vat-rates.ts`): a legal change ships as a new entry dated from the day it
+`packages/shared/src/menu-document/vat-rates.ts`): a legal change ships as a new entry dated from the day it
 takes effect. Issuing the invoice takes one clock reading, prices every line's class at the rate in
 force on that reading's local calendar date, and dates the invoice with the same reading
 (`issueMoment`, `apps/server/src/issue-moment.ts`). An order open across a change therefore pays the

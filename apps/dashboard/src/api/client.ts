@@ -1,19 +1,14 @@
 import type { RecipientIdentifier } from "@waitron/country-packs";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type { TenderRefundView, StuckTenderRefundRow } from "./tender-refund-types.js";
-import type { AllergenDeclaration as AllergenEntry } from "@waitron/catalogue/src/allergens.js";
+import type { AllergenDeclaration as AllergenEntry } from "@waitron/shared";
 export type { AllergenEntry };
 import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
 import type { PlanPlacement, VenueThemeAnswer } from "@waitron/ui";
 import type { ThemeChoices, ThemeWarning } from "@waitron/ui-core/theme";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
-import type {
-  Setting,
-  CombinedOffer,
-  ValueSource,
-  Place,
-} from "@waitron/catalogue/src/menu-combine-types.js";
+import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared";
 export type { Setting, CombinedOffer, ValueSource, Place };
 import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@waitron/shared";
 
@@ -50,7 +45,7 @@ import type {
   ProductEditorValue,
   ProductVariantInput as ProductEditorVariant,
   ProductEditorBody as ProductEditorInput,
-} from "@waitron/catalogue/src/product-types.js";
+} from "@waitron/shared";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
 export type { DepartmentReceiptModel as DepartmentReceiptSettings } from "./department-receipts.js";
@@ -203,7 +198,7 @@ import type {
   OptionListDependants,
   OptionListInput,
   OptionListRow,
-} from "@waitron/catalogue/src/modifier-list-types.js";
+} from "@waitron/shared";
 import type {
   HomeTile,
   IncludeFolder,
@@ -215,7 +210,7 @@ import type {
   SectionInput,
   SectionMember,
   TileRef,
-} from "@waitron/catalogue/src/section-types.js";
+} from "@waitron/shared";
 export type {
   HomeTile,
   IncludeFolder,
@@ -270,7 +265,7 @@ export type {
   SuggestionRunView,
 };
 
-import type { MenuPriceRow, MenuPriceVariant } from "@waitron/catalogue/src/menu-types.js";
+import type { MenuPriceRow, MenuPriceVariant } from "@waitron/shared";
 export type { MenuPriceRow, MenuPriceVariant };
 import type {
   LiveMenu,
@@ -294,7 +289,7 @@ import type {
   PublishedMenuVersion,
   QueuedEdition,
   SectionChangeField,
-} from "@waitron/catalogue/src/menu-document-types.js";
+} from "@waitron/shared";
 export type {
   DocumentMember,
   FrozenOffer,

@@ -1,4 +1,4 @@
-import { newCustomerText } from "./new-customer-text.js";
+import { newCustomerText } from "@waitron/shared";
 
 /** Every receipt key in `keys` holds the default content language's text. */
 export function defaultLanguageDescriptions(

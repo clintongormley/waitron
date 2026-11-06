@@ -476,9 +476,9 @@ export function combinedFixture(
   ownPrice: string | null = null,
   cataloguePrice = price,
   catalogueVariants: Record<string, string | null> = {},
-): import("@waitron/catalogue/src/menu-combine-types.js").CombinedOffer {
+): import("@waitron/shared").CombinedOffer {
   type Decimal = import("@waitron/shared").Decimal;
-  type Setting<T> = import("@waitron/catalogue/src/menu-combine-types.js").Setting<T>;
+  type Setting<T> = import("@waitron/shared").Setting<T>;
   const decided = <T>(
     value: T,
     kind: "own" | "product" | "parent" = "product",

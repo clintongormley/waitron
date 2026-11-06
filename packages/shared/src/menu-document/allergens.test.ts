@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AppError } from "@waitron/shared";
+import { AppError } from "../errors.js";
 import { ALLERGEN_CODES, validateAllergens } from "./allergens.js";
 
 describe("ALLERGEN_CODES", () => {
@@ -63,5 +63,36 @@ describe("validateAllergens", () => {
   it("accepts an ordinary allergen without kinds", () => {
     const a = { milk: {} };
     expect(validateAllergens(a)).toEqual(a);
+  });
+});
+
+describe("validateAllergens refuses a malformed declaration body", () => {
+  function codeOf(value: unknown): string {
+    try {
+      validateAllergens(value);
+    } catch (e) {
+      return (e as AppError).code;
+    }
+    throw new Error("should have thrown");
+  }
+
+  it("refuses a declaration that is not an object", () => {
+    expect(codeOf({ milk: "contains" })).toBe("allergen.invalid_kind");
+    expect(codeOf({ milk: null })).toBe("allergen.invalid_kind");
+    expect(codeOf({ milk: [] })).toBe("allergen.invalid_kind");
+  });
+
+  it("refuses a declaration carrying a key other than kinds", () => {
+    expect(codeOf({ milk: { presence: "contains" } })).toBe("allergen.invalid_kind");
+  });
+
+  it("refuses kinds on an allergen that has none, and kinds that are not a list", () => {
+    expect(codeOf({ milk: { kinds: ["wheat"] } })).toBe("allergen.invalid_kind");
+    expect(codeOf({ gluten: { kinds: "wheat" } })).toBe("allergen.invalid_kind");
+  });
+
+  it("requires kinds on cereals and nuts", () => {
+    expect(codeOf({ gluten: {} })).toBe("allergen.kinds_required");
+    expect(codeOf({ nuts: { kinds: [] } })).toBe("allergen.kinds_required");
   });
 });

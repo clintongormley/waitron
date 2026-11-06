@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { colorOrNull } from "./color-inheritance.js";
 import { catalogueSettings } from "./schema/settings.js";
-import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
+import { VAT_CLASSES, type VatClass } from "@waitron/shared";
 import "./errors.js";
 
 import type { CatalogueSettings } from "./settings-types.js";

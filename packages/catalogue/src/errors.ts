@@ -2,8 +2,8 @@
 import "@waitron/shared";
 // Type-only, so it adds no runtime edge back to the module that side-effect-imports this file.
 import type { ProductUsingUnit } from "./unit-types.js";
-import type { MemberRef } from "./section-types.js";
-import type { HomeDevice, OvertakenEdition } from "./menu-document-types.js";
+import type { MemberRef } from "@waitron/shared";
+import type { HomeDevice, OvertakenEdition } from "@waitron/shared";
 
 /** @waitron/catalogue's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {
@@ -74,18 +74,6 @@ declare module "@waitron/shared" {
     "content.translation_required": { language: string };
     /** A content-language save leaves out a language the venue's country pack keeps enabled for its area. */
     "content.language_required": { language: string };
-    /** A key in a product's allergen declaration is not one of the EU-14 codes. */
-    "allergen.invalid_code": { code: string };
-    "allergen.kinds_required": { code: string };
-    "allergen.invalid_kind": { code: string };
-    /** A direct dietary declaration is not one of the supported suitability labels. */
-    "diet.declaration_invalid": Record<string, never>;
-    /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */
-    "diet.invalid_origin": { origin: string };
-    /** A supplied diet label (`vegan`/`vegetarian`/…) is not an accepted value for `field`. */
-    "diet.invalid_label": { field: string; value: string };
-    /** A diet override both adds and removes the same contains-tag — a contradiction. */
-    "diet.add_remove_conflict": { tag: string };
     /** `detected` names the type when it is recognisable: a fact about the bytes, never the
      * bytes. */
     "media.unsupported_type": { detected?: string };

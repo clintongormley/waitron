@@ -1,4 +1,4 @@
-import type { TileRef } from "@waitron/catalogue/src/section-types.js";
+import type { TileRef } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 
 /** A member's staff-facing name, or a placeholder when the product or section is not known here. */

@@ -4,7 +4,7 @@ import type {
   FrozenOffer,
   FrozenOfferedModifier,
   MenuDocument,
-} from "@waitron/catalogue/src/menu-document-types.js";
+} from "@waitron/shared";
 import {
   applyMenuPatch,
   fixedLanguages,

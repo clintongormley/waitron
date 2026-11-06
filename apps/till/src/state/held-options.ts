@@ -1,5 +1,5 @@
 import { currentContentLanguages } from "@waitron/ui";
-import { newCustomerText } from "@waitron/catalogue/src/new-customer-text.js";
+import { newCustomerText } from "@waitron/shared";
 import type { OfferedModifier, OfferedOptionsList } from "../api/client.js";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 

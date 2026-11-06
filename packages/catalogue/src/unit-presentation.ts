@@ -1,5 +1,5 @@
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
-import type { Unit } from "./product-types.js";
+import type { Unit } from "@waitron/shared";
 import type { UnitSnapshot } from "./pricing.js";
 
 export function prepareUnitSnapshot(unit: UnitSnapshot, config: ContentLanguages): UnitSnapshot {

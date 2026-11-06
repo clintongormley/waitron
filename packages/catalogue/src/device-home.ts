@@ -5,7 +5,7 @@ import type {
   HomeDisplay,
   HomeOrder,
   HomeTileMode,
-} from "./menu-document-types.js";
+} from "@waitron/shared";
 
 /**
  * How a menu's Device Home Page is presented, shared by the server's checks, the till's menu

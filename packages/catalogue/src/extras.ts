@@ -17,7 +17,7 @@ import {
   type ExtraListItem,
   type ExtraListInput,
 } from "./extra-contract.js";
-import type { ExtraListDependants, ExtraListRow } from "./modifier-list-types.js";
+import type { ExtraListDependants, ExtraListRow } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
   mergeOptionalTranslations,
@@ -88,7 +88,7 @@ async function withItems(tx: Transaction, lists: Omit<ExtraList, "items">[]): Pr
   return lists.map((list) => ({ ...list, items: grouped.get(list.id) ?? [] }));
 }
 
-export type { ExtraListRow } from "./modifier-list-types.js";
+export type { ExtraListRow } from "@waitron/shared";
 
 /** Every list with its items and its usage: one grouped count per carrying table, never one per list. */
 export async function listExtraLists(tx: Transaction): Promise<ExtraListRow[]> {
@@ -376,7 +376,7 @@ export async function deleteExtraList(tx: Transaction, extraListId: string): Pro
 }
 
 // The shape lives in `modifier-list-types.ts`, the browser-safe leaf the dashboard imports.
-export type { ExtraListDependants } from "./modifier-list-types.js";
+export type { ExtraListDependants } from "@waitron/shared";
 
 export async function extraListDependants(
   tx: Transaction,

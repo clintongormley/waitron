@@ -11,7 +11,7 @@ import {
   settleDue,
 } from "./menu-publication.js";
 import { menuScheduledPublications, menuVersions } from "./schema/publication.js";
-import type { MenuEdition, MenuPublications, QueuedEdition } from "./menu-document-types.js";
+import type { MenuEdition, MenuPublications, QueuedEdition } from "@waitron/shared";
 import "./errors.js";
 
 const SETTLED_LISTED = 10;

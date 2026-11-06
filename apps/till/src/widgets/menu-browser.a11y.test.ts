@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { DocumentMember } from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentMember } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget, type Theme } from "./test-helpers.js";
 import { page, userEvent } from "vitest/browser";

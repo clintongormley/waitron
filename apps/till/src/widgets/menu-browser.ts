@@ -26,12 +26,7 @@ import {
   type HomeIndex,
   type SectionStep,
 } from "@waitron/catalogue/src/device-home.js";
-import type {
-  DocumentMember,
-  DocumentTile,
-  HomeDisplay,
-  HomeTileMode,
-} from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentMember, DocumentTile, HomeDisplay, HomeTileMode } from "@waitron/shared";
 import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";

@@ -20,7 +20,7 @@ import type {
   SubmittedDraft,
   SubmittedGroups,
 } from "../api/client.js";
-import type { DocumentMember, ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentMember, ServedMenu } from "@waitron/shared";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { png } from "@waitron/ui/test/venue-logo-fixture.js";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // Deep import, not the barrel, so the browser test does not pull in the whole catalogue.
-import { ALLERGEN_CODES } from "@waitron/catalogue/src/allergens.js";
+import { ALLERGEN_CODES } from "@waitron/shared";
 
 import { ALLERGEN_NAMES, allergenName } from "./allergen-names.js";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { documentProductIds } from "./archive.js";
-import type { MenuDocument } from "./menu-document-types.js";
+import type { MenuDocument } from "@waitron/shared";
 
 const home: MenuDocument["home"] = {
   shortcuts: [],

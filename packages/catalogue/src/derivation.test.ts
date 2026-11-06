@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Kind, ProductAllergens } from "./allergens.js";
+import type { Kind, ProductAllergens } from "@waitron/shared";
 import { mergeAllergenMaps, republish } from "./derivation.js";
 
 describe("mergeAllergenMaps", () => {

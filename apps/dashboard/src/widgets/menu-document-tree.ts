@@ -4,15 +4,8 @@ import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import type { ContentLanguages } from "@waitron/shared";
-import {
-  resolveMenuText,
-  type MenuView,
-} from "@waitron/catalogue/src/customer-menu-presentation.js";
-import type {
-  DocumentMember,
-  MenuDocument,
-  MenuTarget,
-} from "@waitron/catalogue/src/menu-document-types.js";
+import { resolveMenuText, type MenuView } from "@waitron/shared";
+import type { DocumentMember, MenuDocument, MenuTarget } from "@waitron/shared";
 import { indexMenuOccurrences } from "@waitron/catalogue/src/menu-navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";

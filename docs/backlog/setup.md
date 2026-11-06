@@ -950,7 +950,7 @@ row by `apps/server/scripts/demo-seed/seed-sales.golden.test.ts`, and a United K
 are ordinary sales with no fiscal record. No real pack reaches the fallback today. Known limits,
 not built: practice sales sit at fixed hours chosen for a Madrid business day, stamped with the
 host's offset; they carry Spain's VAT rates, as every till sale does whatever the country
-(`packages/catalogue/src/vat-rates.ts`); and the guard holds a pack offered for Prepare or Live to
+(`packages/shared/src/menu-document/vat-rates.ts`); and the guard holds a pack offered for Prepare or Live to
 a demo identity too, because the venue screen has one country list for every mode (the plan's
 reading of the owner's answer A — the alternative is hiding only the Demo choice). Correction to
 the plan's prediction: a fallback demo in an area that requires languages does NOT list them as

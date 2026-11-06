@@ -14,7 +14,7 @@ import {
 } from "./optional-translations.js";
 import { sectionMembers } from "./schema/sections.js";
 import { loadSectionGraph } from "./section-graph.js";
-import type { IncludeFolder, IncludeFolderInput, IncludeFolderOverrides } from "./section-types.js";
+import type { IncludeFolder, IncludeFolderInput, IncludeFolderOverrides } from "@waitron/shared";
 import { sectionColorOf, sectionImageOf, writableMember } from "./sections.js";
 import "./errors.js";
 

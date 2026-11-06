@@ -4,7 +4,7 @@ import { products, type AllergenMap } from "./catalogue.js";
 
 /** A single dietary origin per ingredient. NULL = not yet categorised (a diet-PENDING ingredient,
  * contagious up a recipe — the diet analogue of `allergens IS NULL`). Drives BOTH the contains-tags
- * and the vegan/vegetarian derivation (see @waitron/catalogue `dietary.ts`). */
+ * and the vegan/vegetarian derivation (see @waitron/shared `menu-document/dietary.ts`). */
 export const dietaryOrigin = enumType([
   "plant",
   "meat",

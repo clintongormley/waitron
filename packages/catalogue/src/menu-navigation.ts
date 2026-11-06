@@ -14,7 +14,7 @@ import type {
   MenuField,
   MenuOccurrence,
   MenuTarget,
-} from "./menu-document-types.js";
+} from "@waitron/shared";
 
 export function indexMenuOccurrences(document: MenuDocument): MenuOccurrence[] {
   const occurrences: MenuOccurrence[] = [];

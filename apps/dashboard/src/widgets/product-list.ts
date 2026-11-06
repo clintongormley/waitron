@@ -61,10 +61,7 @@ import {
   type Product,
 } from "../api/client.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
-import {
-  PRODUCT_ORDERINGS,
-  type ProductOrdering,
-} from "@waitron/catalogue/src/product-ordering.js";
+import { PRODUCT_ORDERINGS, type ProductOrdering } from "@waitron/shared";
 
 export const ROOT_KEY = "root";
 

@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import type {
-  FrozenExtraItem,
-  FrozenOfferVariant,
-  MenuDocument,
-} from "@waitron/catalogue/src/menu-document-types.js";
+import type { FrozenExtraItem, FrozenOfferVariant, MenuDocument } from "@waitron/shared";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import { changeLines, placeRefusal, refusalWords, reviewNotes } from "./menu-patch-review.js";

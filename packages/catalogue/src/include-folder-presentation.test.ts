@@ -4,7 +4,7 @@ import {
   folderOverridesFrom,
   folderPresentation,
 } from "./include-folder-presentation.js";
-import type { Presentation } from "./section-types.js";
+import type { Presentation } from "@waitron/shared";
 
 const own: Presentation = {
   names: { en: "Drinks", es: "Bebidas" },

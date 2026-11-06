@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { decimal } from "@waitron/shared";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { decimal } from "../money.js";
 import {
   VAT_RATE_TABLE,
   localCalendarDate,
+  localToday,
   vatRateOn,
   vatRatesOn,
   type DatedRate,
@@ -196,5 +197,19 @@ describe("localCalendarDate", () => {
   it("puts local midnight on the new day", () => {
     expect(localCalendarDate(new Date("2026-12-31T23:00:00.000Z"), 60)).toBe("2027-01-01");
     expect(localCalendarDate(new Date("2026-12-31T22:59:59.999Z"), 60)).toBe("2026-12-31");
+  });
+});
+
+describe("localToday", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is this process's local calendar date", () => {
+    vi.useFakeTimers();
+    for (const instant of ["2026-12-31T23:30:00.000Z", "2027-01-01T00:30:00.000Z"]) {
+      vi.setSystemTime(new Date(instant));
+      expect(localToday()).toBe(new Date().toLocaleDateString("en-CA"));
+    }
   });
 });

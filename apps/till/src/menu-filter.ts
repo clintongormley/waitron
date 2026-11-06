@@ -1,4 +1,4 @@
-import type { AllergenCode, Kind } from "@waitron/catalogue/src/allergens.js";
+import type { AllergenCode, Kind } from "@waitron/shared";
 import type { TillProduct } from "./api/client.js";
 
 /**

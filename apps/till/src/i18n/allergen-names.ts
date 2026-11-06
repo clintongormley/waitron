@@ -1,4 +1,4 @@
-import type { AllergenCode } from "@waitron/catalogue/src/allergens.js";
+import type { AllergenCode } from "@waitron/shared";
 import { pickLocale } from "./t.js";
 
 // Display names for the 14 EU allergens (Regulation (EU) No 1169/2011, Annex II). They live in

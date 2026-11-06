@@ -1,8 +1,8 @@
 import { AppError, decimal, isUuid, multiplyDecimal, toScale } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
-import type { ExtraList, ExtraListItemInput, ExtraListInput } from "./modifier-list-types.js";
+import type { ExtraList, ExtraListItemInput, ExtraListInput } from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "./modifier-limits.js";
-import { nonBlankTranslations } from "./product-presentation.js";
+import { nonBlankTranslations } from "@waitron/shared";
 import { validateOptionalTranslations } from "./optional-translations.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
 import "./errors.js";
@@ -10,12 +10,7 @@ import "./errors.js";
 export type { ExtraSelection } from "@waitron/shared";
 
 // The four shapes live in `modifier-list-types.ts`, the browser-safe leaf the dashboard imports.
-export type {
-  ExtraList,
-  ExtraListInput,
-  ExtraListItem,
-  ExtraListItemInput,
-} from "./modifier-list-types.js";
+export type { ExtraList, ExtraListInput, ExtraListItem, ExtraListItemInput } from "@waitron/shared";
 
 function invalid(field: string): never {
   throw new AppError("extras.invalid", { field });

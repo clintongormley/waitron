@@ -10,7 +10,7 @@ import type {
   HomeTile,
   MenuDocument,
 } from "../api/client.js";
-import type { DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
+import type { DocumentTile } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,

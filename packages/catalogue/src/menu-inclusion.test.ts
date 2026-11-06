@@ -227,7 +227,7 @@ describe("menu inclusions and owned sections", () => {
   it("refuses a malformed direct member ref with the domain code", async () => {
     const f = await fixture();
     await expect(
-      app((tx) => addMember(tx, f.ar, null as unknown as import("./section-types.js").MemberRef)),
+      app((tx) => addMember(tx, f.ar, null as unknown as import("@waitron/shared").MemberRef)),
     ).rejects.toMatchObject({ code: "menu_section.membership_invalid" });
   });
 

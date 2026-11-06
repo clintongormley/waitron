@@ -28,7 +28,7 @@ import type {
   TenderRefundView,
   TenderRefundAcknowledgment,
 } from "./tender-refund-types.js";
-import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
+import type { ProductAllergens } from "@waitron/shared";
 import { readTransferEvents } from "./transfer-events.js";
 import type {
   BillRow,
@@ -74,14 +74,9 @@ import type {
   TableSignal,
   TimingBand,
 } from "@waitron/shared";
-import type { AccessibleCatalogue, OfferedModifier } from "@waitron/catalogue/src/menu-types.js";
-import type { ProductOrdering } from "@waitron/catalogue/src/product-ordering.js";
-import type {
-  LiveOffer,
-  MenuState,
-  MenuUnavailable,
-  ServedMenu,
-} from "@waitron/catalogue/src/menu-document-types.js";
+import type { AccessibleCatalogue, OfferedModifier } from "@waitron/shared";
+import type { ProductOrdering } from "@waitron/shared";
+import type { LiveOffer, MenuState, MenuUnavailable, ServedMenu } from "@waitron/shared";
 
 export type { JoinSide } from "@waitron/shared";
 
@@ -92,7 +87,7 @@ export type {
   OfferedExtrasList,
   OfferedModifier,
   OfferedOptionsList,
-} from "@waitron/catalogue/src/menu-types.js";
+} from "@waitron/shared";
 
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
@@ -267,7 +262,7 @@ export interface VatBreakdownEntry {
 }
 
 /**
- * LOCAL copies of catalogue's `dietary.ts` types, structurally identical so a value crosses the
+ * LOCAL copies of `@waitron/shared`'s `menu-document/dietary.ts` types, structurally identical so a value crosses the
  * boundary. `DietLabel` is a cautious tri-state: `"unknown"` when the base recipe is unreviewed — never
  * a positive claim.
  */

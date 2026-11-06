@@ -9,7 +9,7 @@ import { readMenuHome } from "./menu-home.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { menuItems } from "./schema/menu.js";
 import { sectionMembers, sections } from "./schema/sections.js";
-import type { IncludeFolderInput } from "./section-types.js";
+import type { IncludeFolderInput } from "@waitron/shared";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { grossBasketWithOptions, grossLockedLines, priceBasket, rateLines } from "./pricing.js";
-import * as vatRates from "./vat-rates.js";
+import * as vatRates from "@waitron/shared";
 import type {
   BasketItemWithOptions,
   LockedLine,

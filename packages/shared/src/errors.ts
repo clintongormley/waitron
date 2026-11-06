@@ -63,6 +63,18 @@ export interface ErrorParams {
   /** The box's disk is full, so a write was refused. `restartDeletesLogs` says restarting the box
    *  deletes old logs to make room; absent, the answer says nothing about restarting. */
   "storage.disk_full": { restartDeletesLogs?: true };
+  /** A key in a product's allergen declaration is not one of the EU-14 codes. */
+  "allergen.invalid_code": { code: string };
+  "allergen.kinds_required": { code: string };
+  "allergen.invalid_kind": { code: string };
+  /** A direct dietary declaration is not one of the supported suitability labels. */
+  "diet.declaration_invalid": Record<string, never>;
+  /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */
+  "diet.invalid_origin": { origin: string };
+  /** A supplied diet label (`vegan`/`vegetarian`/…) is not an accepted value for `field`. */
+  "diet.invalid_label": { field: string; value: string };
+  /** A diet override both adds and removes the same contains-tag — a contradiction. */
+  "diet.add_remove_conflict": { tag: string };
 }
 
 export type ErrorCode = keyof ErrorParams;

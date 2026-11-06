@@ -7,7 +7,7 @@ import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
 import { directIncludedMenus, includableMenus } from "./menu-inclusion.js";
-import type { IncludeFolder, MemberRef, SectionInput, SectionDetails } from "./section-types.js";
+import type { IncludeFolder, MemberRef, SectionInput, SectionDetails } from "@waitron/shared";
 import "./errors.js";
 
 /** One member of a menu's structure; `children` is present exactly when the member is a section. */

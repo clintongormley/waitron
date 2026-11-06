@@ -1,5 +1,5 @@
 import { countryNameFor, recipientIdentifierLabel } from "@waitron/country-packs";
-import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
+import { staffPresentationName } from "@waitron/shared";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, formatDecimalInput } from "@waitron/ui";

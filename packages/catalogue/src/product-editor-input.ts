@@ -1,16 +1,16 @@
 import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitron/shared";
-import { validateAllergens } from "./allergens.js";
+import { validateAllergens } from "@waitron/shared";
 import { colorOrNull } from "./color-inheritance.js";
 import { isProductPrice } from "./modifier-limits.js";
-import { validateDietaryDeclarations } from "./dietary-declarations.js";
-import { nonBlankTranslations } from "./product-presentation.js";
+import { validateDietaryDeclarations } from "@waitron/shared";
+import { nonBlankTranslations } from "@waitron/shared";
 import { validateOptionalTranslations } from "./optional-translations.js";
-import { isProductOrdering, type ProductOrdering } from "./product-ordering.js";
+import { isProductOrdering, type ProductOrdering } from "@waitron/shared";
 import { isModifierListKind } from "./product-modifiers.js";
 import type { ProductVariantInput } from "./variants.js";
-import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
-import type { ProductEditorInput, ProductModifierRef } from "./product-types.js";
-export type { ProductEditorInput } from "./product-types.js";
+import { VAT_CLASSES, type VatClass } from "@waitron/shared";
+import type { ProductEditorInput, ProductModifierRef } from "@waitron/shared";
+export type { ProductEditorInput } from "@waitron/shared";
 import "./errors.js";
 
 function invalid(field: string): never {
