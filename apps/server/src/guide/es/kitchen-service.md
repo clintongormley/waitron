@@ -214,6 +214,8 @@ terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pe
 pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
+Cuando se cierra una mesa, sus platos pagados desaparecen solos de las pantallas de cocina.
+
 Cuando una tarjeta tiene un plato que se empezó sin esperar al pase y su grupo tiene platos para el
 pase, la tarjeta muestra debajo de sus platos **Sale con** y los nombres de las estaciones de esos
 platos, por ejemplo **Sale con Parrilla y Pastelería** ([Haz que una estación espere

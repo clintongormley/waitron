@@ -53,6 +53,7 @@ import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import {
   billWith,
   inTx,
+  PINS,
   provisionAdjustmentVenue,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
@@ -975,5 +976,123 @@ describe("a full invoice's guests line follows the bill's party (A1033)", () => 
 
     expect(await guestsOf(t.billIds[0]!)).toBeUndefined();
     expect(await guestsOf(t.billIds[1]!)).toBe(4);
+  });
+});
+
+async function cardsFor(billId: string) {
+  return (await inTx(venue, (tx) => listStationQueue(tx, venue.stationId))).filter(
+    (group) => group.orderId === billId,
+  );
+}
+
+async function closedAt(partyId: string) {
+  const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
+  return party!.closedAt;
+}
+
+describe("a finished table's paid food leaves the kitchen screens (A1344)", () => {
+  it("takes a served, paid bill's card off the station when the table finishes", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const billId = t.billIds[0]!;
+    await serveAll(t, billId);
+    expect(await cardsFor(billId)).toHaveLength(1);
+
+    expect(await post(t.partyId, await bodyFor(t))).toEqual({
+      status: 200,
+      body: { state: "closed" },
+    });
+
+    expect(await cardsFor(billId)).toEqual([]);
+    const at = await closedAt(t.partyId);
+    expect(at).not.toBeNull();
+    expect((await billRow(billId)).collectedAt).toBe(at);
+  });
+
+  it("takes every paid bill of a split table off the station", async () => {
+    const t = await table(
+      [{ name: "Burger" }, { name: "Burger" }],
+      "fire",
+      [[2]],
+      ["12.00", "12.00"],
+    );
+    for (const billId of t.billIds) await serveAll(t, billId);
+
+    expect(await post(t.partyId, await bodyFor(t))).toMatchObject({ status: 200 });
+
+    for (const billId of t.billIds) expect(await cardsFor(billId)).toEqual([]);
+  });
+
+  it("keeps a combined table's cards until the surviving table finishes, then takes them all", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const other = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    await serveAll(t, t.billIds[0]!);
+    await serveAll(other, other.billIds[0]!);
+    await combine(t, other);
+    expect(await cardsFor(other.billIds[0]!)).toHaveLength(1);
+
+    expect(await post(t.partyId, await bodyFor(t))).toMatchObject({ status: 200 });
+
+    for (const billId of [t.billIds[0]!, other.billIds[0]!]) {
+      expect(await cardsFor(billId)).toEqual([]);
+      expect((await billRow(billId)).collectedAt).not.toBeNull();
+    }
+  });
+
+  it("keeps the first hand-over time of a bill collected before the table finishes", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const billId = t.billIds[0]!;
+    await serveAll(t, billId);
+    const handOver = await venue.app.request(`/api/orders/${billId}/collect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: venue.cookie.staff },
+      body: JSON.stringify({ submissionId: randomUUID() }),
+    });
+    expect(handOver.status, await handOver.clone().text()).toBe(200);
+    const collected = (await billRow(billId)).collectedAt;
+    expect(collected).not.toBeNull();
+
+    expect(await post(t.partyId, await bodyFor(t))).toEqual({
+      status: 200,
+      body: { state: "closed" },
+    });
+
+    expect((await billRow(billId)).collectedAt).toBe(collected);
+  });
+
+  it("keeps a paid bill's card while the table cannot finish for an unpaid one", async () => {
+    const t = await table([{ name: "Burger" }, { name: "Burger" }], "fire", [[2]], ["12.00", null]);
+    await serveAll(t, t.billIds[0]!);
+
+    expect(await post(t.partyId, await bodyFor(t))).toMatchObject({
+      body: { error: { code: "party.bill_outstanding" } },
+    });
+
+    expect(await cardsFor(t.billIds[0]!)).toHaveLength(1);
+    expect((await billRow(t.billIds[0]!)).collectedAt).toBeNull();
+  });
+
+  it("keeps every bill's card after an unpaid departure", async () => {
+    const t = await table([{ name: "Burger" }, { name: "Burger" }], "fire", [[2]], ["12.00", null]);
+    const [paid, unpaid] = t.billIds as [string, string];
+    await serveAll(t, paid);
+    const { expectedPartyRevision, expectedEdits } = await bodyFor(t);
+
+    const response = await venue.app.request(`/api/parties/${t.partyId}/unpaid-departure`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: venue.cookie.staff },
+      body: JSON.stringify({
+        expectedPartyRevision,
+        expectedEdits,
+        reason: "Left",
+        override: { personId: venue.supervisorId, pin: PINS.supervisor },
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toMatchObject({ state: "closed" });
+
+    expect(await cardsFor(paid)).toHaveLength(1);
+    expect((await billRow(paid)).collectedAt).toBeNull();
+    expect(await cardsFor(unpaid)).toHaveLength(1);
+    expect(await billRow(unpaid)).toMatchObject({ status: "placed", collectedAt: null });
   });
 });

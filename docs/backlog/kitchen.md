@@ -199,6 +199,15 @@ cancellation slips before closing the party, using Finish table's choices withou
 A773-2 retires the pass's per-device Done action; assess this decision against its service
 lifetime rather than adding another manual clearing action. Bring the owner a worked example.
 
+## A1367. A table closed by Record unpaid departure keeps its dishes on the kitchen screens (left open by A1344)
+
+A1344 clears a table's paid dishes from the station screens when the table is finished. Departure
+is not Finish, so it clears nothing: the unpaid bills' dishes stay on every station and on the
+manager's overdue report for good (Collect refuses an unpaid table bill); a paid bill of the same
+table, possibly with a dish still cooking, and a departed bill paid later, stay until someone
+presses Collect. Owner question asked 2026-11-06 (lane C): clear them all at the departure
+(recommended), give staff a way to clear them, or decide with A908.
+
 ## The earliest fire time is picked by comparing the stored times as text
 
 - Left by C78's review: the earliest fire time is picked by comparing the stored times as text,

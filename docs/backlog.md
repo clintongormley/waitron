@@ -1705,6 +1705,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19).**
   [Detail](backlog/kitchen.md#a908-kitchen-cancellation-on-record-unpaid-departure-left-open-by-a758s-q43-revision-2026-10-19)
 
+- **A1367. A table closed by Record unpaid departure keeps its dishes on the kitchen screens (left open by A1344, #2499).**
+  Departure is not Finish, so it clears nothing from the station screens or the overdue report.
+  Owner question asked 2026-11-06 (lane C).
+  [Detail](backlog/kitchen.md#a1367-a-table-closed-by-record-unpaid-departure-keeps-its-dishes-on-the-kitchen-screens-left-open-by-a1344)
+
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
   `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a
   dish held 20 minutes is listed Forgotten while the floor counts only fired dishes (A757 Q17). It
