@@ -231,7 +231,7 @@ export class MenuPublicationsPanel extends LitElement {
   @property() menuId = "";
   @property() menuName = "";
   @property({ attribute: false }) preview: MenuPreview | null = null;
-  /** Set while a write that would change the preview is out, such as the Preview's Undo. */
+  /** Set by the screen while an Undo of this menu is out. */
   @property({ type: Boolean }) blocked = false;
 
   @state() private answer: MenuPublicationsAnswer | null = null;

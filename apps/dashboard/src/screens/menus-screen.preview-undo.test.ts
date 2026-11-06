@@ -277,7 +277,7 @@ it("names a refused Undo beside the list as not undone once the person has left 
   write.refuse({ code: "menu_section.invalid", params: { field: "color" } });
   await vi.waitFor(() =>
     expect(memberError(el)).toBe(
-      `Not undone: ${bullet}. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
+      `Not undone on Lunch Menu: ${bullet}. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
     ),
   );
   expect(memberError(el)).not.toContain("not saved");
@@ -295,7 +295,8 @@ it("sends no publish of a menu whose Undo is still out after another menu was op
   visit(`/manage/menus/menu/${DINNER}/view/preview`);
   await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
   await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
-  // The other menu lists a change with the same id; it is not the one being undone.
+  // The fixture gives Dinner a change with the same id, to check the Undo is drawn out only on
+  // the menu it was sent from.
   expect(text(undoButton(panel(), "mains-colour"))).toBe("Undo");
 
   visit(`/manage/menus/menu/${MENU}/view/preview`);
@@ -314,6 +315,46 @@ it("sends no publish of a menu whose Undo is still out after another menu was op
 
   write.answer();
   await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
+});
+
+it("lets another menu publish, and draws its Undo disabled, while an Undo of the first menu is out", async () => {
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const publishMenu = vi.fn(async () => ({ number: 3 }));
+  const getMenuPublications = vi.fn(async () => ({
+    timeZone: "Europe/Madrid",
+    live: null,
+    editions: [],
+  }));
+  const fake = fakeApi({
+    updateSection,
+    publishMenu,
+    getMenuPublications,
+  } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+
+  visit(`/manage/menus/menu/${DINNER}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
+  await vi.waitFor(() => expect(scheduleButton(panel())).not.toBeNull());
+  await panel().updateComplete;
+  expect(publishButton(panel()).disabled).toBe(false);
+  expect(scheduleButton(panel())!.disabled).toBe(false);
+  expect(undoButton(panel(), "mains-colour")!.getAttribute("aria-disabled")).toBe("true");
+  panel().dispatchEvent(
+    new CustomEvent("wt-menu-publish", {
+      detail: { hash: "b".repeat(64) },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() => expect(publishMenu).toHaveBeenCalledTimes(1));
+  expect(publishMenu).toHaveBeenCalledWith(DINNER, "b".repeat(64));
+
+  write.answer();
+  await vi.waitFor(() => expect(panel().publishing).toBe(false));
 });
 
 it("sends no Undo while a publish of this menu is out", async () => {
@@ -576,7 +617,7 @@ it("names an Undo refused after another menu was opened beside the list", async 
   write.refuse({ code: "menu_section.invalid", params: { field: "color" } });
   await vi.waitFor(() =>
     expect(memberError(el)).toBe(
-      `Not undone: ${bullet}. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
+      `Not undone on Lunch Menu: ${bullet}. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
     ),
   );
   expect(refusalIn(panel(), "mains-colour")).toBeNull();
@@ -611,7 +652,8 @@ it("shows another menu none of the refusals and success line said on the menu le
   await userEvent.click(undoButton(panel(), "own-rename")!);
   await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
 
-  // Dinner lists a change with the same id as the one refused on Lunch.
+  // The fixture gives Dinner a change with the same id as the one refused on Lunch, to check the
+  // refusal is drawn only on the menu it was sent from.
   visit(`/manage/menus/menu/${DINNER}/view/preview`);
   await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
   await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
@@ -677,4 +719,83 @@ it("forgets a refusal once a fresh preview no longer lists its change", async ()
   await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
   await settle();
   expect(refusalIn(panel(), "mains-colour")).toBeNull();
+});
+
+it("names a refused Undo beside the list when a fresh preview stopped listing its change while it was out", async () => {
+  const live = new LiveData();
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const fake = fakeApi({ updateSection, liveData: live } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  const bullet = words(panel(), "mains-colour");
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+
+  fake.state.preview = previewOf([rename]);
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).toBeNull());
+
+  write.refuse({ code: "menu_section.not_found" });
+  await vi.waitFor(() =>
+    expect(memberError(el)).toBe(
+      `Not undone on Lunch Menu: ${bullet}. Section Mains has been deleted, so it cannot be put back.`,
+    ),
+  );
+  expect(tabsOf(el).value).toBe("preview");
+});
+
+it("names the menu the refused Undo was sent from by its name now, or by the name it had once it is gone", async () => {
+  const live = new LiveData();
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const menus = [
+    { id: MENU, name: "Lunch Menu", active: true, version: 2 },
+    { id: DINNER, name: "Dinner", active: true, version: 1 },
+  ];
+  const listCatalogues = vi.fn(async () => menus.map((menu) => ({ ...menu })));
+  const fake = fakeApi({
+    updateSection,
+    listCatalogues,
+    liveData: live,
+  } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  const bullet = words(panel(), "mains-colour");
+  const reason = "Section Mains has been deleted, so it cannot be put back.";
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+  visit(`/manage/menus/menu/${DINNER}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
+
+  menus[0]!.name = "Brunch";
+  let reads = listCatalogues.mock.calls.length;
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(listCatalogues.mock.calls.length).toBeGreaterThan(reads));
+  await settle();
+  write.refuse({ code: "menu_section.not_found" });
+  await vi.waitFor(() =>
+    expect(memberError(el)).toBe(`Not undone on Brunch: ${bullet}. ${reason}`),
+  );
+
+  const second = held();
+  updateSection.mockImplementation(() => second.promise);
+  visit(`/manage/menus/menu/${MENU}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Brunch"));
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(undoButton(panel(), "mains-colour")!.getAttribute("aria-disabled")).toBeNull(),
+  );
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(2));
+  visit(`/manage/menus/menu/${DINNER}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
+  expect(memberError(el)).toBe("");
+  menus.splice(0, 1);
+  reads = listCatalogues.mock.calls.length;
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(listCatalogues.mock.calls.length).toBeGreaterThan(reads));
+  await settle();
+  second.refuse({ code: "menu_section.not_found" });
+  await vi.waitFor(() =>
+    expect(memberError(el)).toBe(`Not undone on Brunch: ${bullet}. ${reason}`),
+  );
 });

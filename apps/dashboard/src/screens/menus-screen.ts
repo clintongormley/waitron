@@ -713,7 +713,7 @@ export class MenusScreen extends LitElement {
    * between, where the link sits under the status. */
   @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
-  /** The Undo that is out, on whichever menu it was sent from: change ids repeat across menus. */
+  /** The Undo that is out, and the menu it was sent from. */
   @state() private undoOut: { menuId: string; changeId: string } | null = null;
   @state() private undoRefusals: Readonly<Record<string, string>> = {};
   /** The bullet text of the last change undone. */
@@ -1450,7 +1450,7 @@ export class MenusScreen extends LitElement {
   }
 
   /** Puts one Preview change back with the write its own form would make. A refusal stays beside
-   * the change; once the person has left this menu's Preview, it is named beside the list. */
+   * the change; once that change is no longer drawn, it is named beside the list. */
   #undo(changeId: string, change: string): void {
     const menuId = this.menuId;
     const preview = this.preview;
@@ -1463,19 +1463,27 @@ export class MenusScreen extends LitElement {
     }).get(changeId);
     if (action?.kind !== "undo") return;
     const command = action.command;
+    const sentFrom = this.#menuName();
     this.busy = true;
     this.undoOut = { menuId, changeId };
     this.undoRefusals = without(this.undoRefusals, [changeId]);
     this.undoResult = null;
     const shown = () => this.menuId === menuId && this.view === "preview";
+    const listed = () =>
+      shown() &&
+      !this.previewError &&
+      this.preview?.changes.some(({ id }) => id === changeId) === true;
     const task = async () => {
       try {
         try {
           await sendMenuUndo(this.api, command);
         } catch (error) {
           const reason = undoRefusalText(error, command);
-          if (shown()) this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
-          else this.memberError = fill("menu_preview.undo_refused_change", { change, reason });
+          if (listed()) this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
+          else {
+            const menu = this.menus.find(({ id }) => id === menuId)?.name ?? sentFrom;
+            this.memberError = fill("menu_preview.undo_refused_change", { menu, change, reason });
+          }
           return;
         }
         if (shown()) this.undoResult = change;
@@ -3107,7 +3115,12 @@ export class MenusScreen extends LitElement {
       .publishing=${this.publishing.has(this.menuId!)}
       .result=${this.publishResult}
       .undoing=${this.#undoingHere()}
-      .undoBlocked=${this.busy || this.homePending !== null || this.publishing.has(this.menuId!)}
+      .undoBlocked=${
+        this.busy ||
+        this.homePending !== null ||
+        this.publishing.has(this.menuId!) ||
+        this.undoOut !== null
+      }
       .undoRefusals=${this.undoRefusals}
       .undoResult=${this.undoResult}
       @wt-menu-undo=${(event: CustomEvent<{ changeId: string; change: string }>) => {

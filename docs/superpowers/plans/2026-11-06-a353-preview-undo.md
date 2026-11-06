@@ -237,13 +237,17 @@ link (`menu_preview.hide_change`); the tab names are the existing `menus.tab_str
 | `menu_preview.undoing` (new) | Undoing… | Deshaciendo… |
 | `menu_preview.undone` (new) | Undone: {change}. | Cambio deshecho: {change}. |
 | `menu_preview.undo_refused` (new) | Not undone. {reason} | No se ha deshecho. {reason} |
-| `menu_preview.undo_refused_change` (new) | Not undone: {change}. {reason} | No se ha deshecho: {change}. {reason} |
+| `menu_preview.undo_refused_change` (new) | Not undone on {menu}: {change}. {reason} | No se ha deshecho en {menu}: {change}. {reason} |
 | `menu_preview.edit_menu` (new) | Edit {menu} | Editar {menu} |
 | `product.edit` (reused) | Edit product | Editar producto |
 | `extras.edit` (reused, only if Q1a says so) | Edit extras list | Editar lista de extras |
 
-`{change}` is the change's own bullet text as the list shows it. `{reason}` is one of the
-sentences below; a code none of them names falls back to its existing `codeMessage` text.
+`{change}` is the change's own bullet text as the list shows it. `{menu}` is the name of the menu
+the Undo was sent from, as the menu list names it when the refusal arrives, or the name it had
+when the Undo was sent once it is gone from the list: shown on another menu, a reason such as
+"This menu has been deleted…" would otherwise read as being about the menu open now. `{reason}` is
+one of the sentences below; a code none of them names falls back to its existing `codeMessage`
+text.
 
 **Refusal sentences, one per foreseeable refusal (PR 1)** — each fills `{reason}` above.
 
@@ -258,9 +262,10 @@ sentences below; a code none of them names falls back to its existing `codeMessa
 | `menu_preview.undo_display_invalid` | `menu.home_display_invalid`, Home display | The published {device} display setting is no longer offered. Choose one on the Home page tab, or hide this change. | El ajuste de pantalla publicado para {device} ya no se ofrece. Elige otro en la pestaña Página de inicio u oculta este cambio. |
 
 `{device}` is the existing `home.device_handheld` / `home.device_till` ("Handheld" / "Terminal de
-mano", "Till" / "Caja registradora"). An Undo refused after the person has left this menu's
-Preview tab is named beside the list with `menu_preview.undo_refused_change` ("Not undone:
-{change}. {reason}"), where a price save refused away from its tab is named
+mano", "Till" / "Caja registradora"). An Undo refused once its change is no longer drawn (the
+person has left this menu's Preview tab, or a fresh preview no longer lists the change) is named
+beside the list with `menu_preview.undo_refused_change` ("Not undone on {menu}: {change}.
+{reason}"), where a price save refused away from its tab is named
 (`menus-screen.ts:2099-2109`). It does not reuse `menus.change_not_saved` ("Your change to {name}
 was not saved."): that would say the change itself was lost, when only the Undo failed.
 
@@ -601,13 +606,16 @@ return unless `undo`. Set `busy`, `undoOut`, clear this change's refusal and `un
 `#priceWrites.run("undo:" + <row key>)` for the two price commands (Decision 3), else
 `#writes.run("undo:" + menuId)`. Inside: `await sendMenuUndo(this.api, command)`. While the same
 menu's Preview tab is shown (`this.menuId === menuId && this.view === "preview"`, as `#savePrice`
-judges it, `:2099-2109`): a refusal sets `undoRefusals[changeId] = undoRefusalText(…)`, a success
-sets `undoResult`. When it is not shown, a refusal sets `memberError` with
-`menu_preview.undo_refused_change` ("Not undone: {change}. {reason}", `{reason}` from
-`undoRefusalText`) and a success sets nothing. After a rename success also `await this.#watchMenus().catch(() => undefined)`
+judges it, `:2099-2109`): a success sets `undoResult`, and a refusal sets
+`undoRefusals[changeId] = undoRefusalText(…)` when the current preview read has not failed and
+still lists `changeId`. Otherwise a refusal sets `memberError` with
+`menu_preview.undo_refused_change` ("Not undone on {menu}: {change}. {reason}", `{menu}` the
+menu list's name for the menu the Undo was sent from, or the name taken when it was sent once
+that menu is gone, `{reason}` from `undoRefusalText`), and a success away from the Preview sets
+nothing. After a rename success also `await this.#watchMenus().catch(() => undefined)`
 as `#saveMenu` does (`:1427`); after a success `await this.#refresh()`. Clear `busy` and
 `undoOut` in a `finally` around the task's body. `#publish` returns while `undoOut`'s menu is the
-menu being published. Pass `undoing` (as above), `undoBlocked = busy || homePending !== null || publishing.has(menuId)`,
+menu being published. Pass `undoing` (as above), `undoBlocked = busy || homePending !== null || publishing.has(menuId) || undoOut !== null`,
 `undoRefusals`, `undoResult` to `dashboard-menu-preview` in `#renderPreview` (`:3029-3058`), and
 listen for `wt-menu-undo`.
 
@@ -619,11 +627,17 @@ listen for `wt-menu-undo`.
   - A write that succeeds followed by a failed re-read: the success line stays and the preview's
     read error shows; nothing says the Undo failed.
   - Two quick clicks send one write.
-  - Refused after the person switched to Structure: `memberError` reads "Not undone: {change}.
-    {reason}", never "was not saved".
-  - An Undo held unanswered on one menu, another menu opened (its change with the same id shows
-    "Undo", not "Undoing…"), the first reopened: its Publish is drawn disabled, and a publish
-    asked for anyway sends nothing.
+  - Refused after the person switched to Structure: `memberError` reads "Not undone on {menu}:
+    {change}. {reason}", never "was not saved".
+  - Refused after a fresh preview stopped listing the change while the Undo was out: the same
+    sentence in `memberError`.
+  - Refused after the menu was renamed, and after it was deleted, while the Undo was out:
+    `{menu}` is the new name, then the name taken when the Undo was sent.
+  - An Undo held unanswered on one menu, another menu opened (the fixture gives it a change with
+    the same id, which shows "Undo", not "Undoing…"), the first reopened: its Publish is drawn
+    disabled, and a publish asked for anyway sends nothing.
+  - On the other menu while that Undo is out: Publish and Schedule are enabled, its Undo is
+    drawn blocked, and a publish asked for is sent.
   - A publish of this menu out, then an Undo asked for: nothing sent.
   - The preview's read failed, then an Undo asked for: nothing sent.
 - [ ] `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.preview-undo.test.ts src/screens/menus-screen.heading.test.ts`
@@ -650,9 +664,10 @@ clears `undoRefusals` and `undoResult` when leaving the Preview tab; `#publish` 
   - A Price overrides save of the same row still out, then a price Undo; once both finish,
     `savingPrices` no longer holds the row's key, and the Undo ran after the save.
   - A Home save held out → Undo is drawn blocked and sends nothing.
-  - Switching to Structure while the Undo is out: refused → the sentence is beside the list in
-    `memberError`; succeeded → no success line when the person comes back to Preview.
-  - Opening another menu while the Undo is out: refused → named beside the list; succeeded →
+  - Switching to Structure while the Undo is out: refused → "Not undone on {menu}: {change}.
+    {reason}" is beside the list in `memberError`; succeeded → no success line when the person comes back to Preview.
+  - Opening another menu while the Undo is out: refused → "Not undone on {menu}: {change}.
+    {reason}", naming the menu the Undo was sent from, beside the list; succeeded →
     nothing shown on the other menu.
   - A live feed snapshot arriving while a refusal is shown keeps the refusal.
 - [ ] `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.preview-undo.test.ts src/widgets/menu-publications.test.ts`
