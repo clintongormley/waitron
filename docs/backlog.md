@@ -110,7 +110,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1391. Backup status tells the truth and leaks nothing](backlog/box.md#bundle-a1391-backup-status-tells-the-truth-and-leaks-nothing)
 - [A1392. Discard and Cancel fail on a table bill reached from the counter](backlog/till.md#bundle-a1392-discard-and-cancel-fail-on-a-table-bill-reached-from-the-counter)
 - [A1393. A table of every till route's device check, with a guard](backlog/till.md#bundle-a1393-a-table-of-every-till-routes-device-check-with-a-guard)
-- [A1395. Cancelling or settling a placed order respects stored card payments](backlog/payments.md#bundle-a1395-cancelling-or-settling-a-placed-order-respects-stored-card-payments)
 - [A1396. A save refused after the person left must say so](backlog/dashboard.md#bundle-a1396-a-save-refused-after-the-person-left-must-say-so)
 - [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
 - [A1399. What happens when a bill payment is sent again under one id](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
@@ -1349,7 +1348,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **A1389. Refuse bad tips and compare the amount captured on the whole-order card path** (bundle of 3, 3 important, size S). [Detail](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 
-- **A1395. Cancelling or settling a placed order respects stored card payments** (bundle of 2, 2 important, size S). [Detail](backlog/payments.md#bundle-a1395-cancelling-or-settling-a-placed-order-respects-stored-card-payments)
 
 - **A875. Check two writes the bill payments design says a pending card refund refuses.**
   Next: one route case each during a pending refund, then fix the design's wording, or the code

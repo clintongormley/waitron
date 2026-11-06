@@ -1578,17 +1578,7 @@ export async function releaseStalePaymentAttempts(db: Database): Promise<number>
   });
 }
 
-/**
- * P3 of {@link payWorkingOrderIntegrated}: file the immediate card sale, link the captured payment and
- * settle the order in ONE transaction.
- *
- * A second Pay can file this payment's charge (`finalizeRecovery`) before this runs; `recordSale` is
- * then refused by `sales_working_order_id_key`, and this replays that sale's ticket instead of
- * filing a second record. The replay prints nothing.
- *
- * The tender records the WHOLE card charge (`total + tip`) with the tip on it; the fiscal `total`
- * stays ex-tip, a tip being on no invoice.
- */
+/** File the captured card and settle the order in the same transaction. */
 async function finalizeCapture(
   deps: IntegratedPayDeps,
   cfg: DeviceRequestConfig,
@@ -1726,6 +1716,12 @@ async function finalizeCapture(
       throw error;
     }
     return withTransaction(deps.db, async (tx) => {
+      const [order] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, req.id));
+      // An issued invoice alone does not account for the captured card.
+      if (order?.status !== "settled") throw error;
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     });
   }
