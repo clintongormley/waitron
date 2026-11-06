@@ -52,6 +52,17 @@ owner keeps it, because a wrong clock means corrective invoices. The clock must 
 payments restart, which is how it is built: a confirmation counts only if it agrees with the box's
 clock to within a minute. The advisers are told this is a choice.
 
+**2b. What the box does when its clock is wrong (owner, 2026-11-06).**
+
+- Setting the clock from an accepted source counts as confirming it, so trading carries on. Records dated
+  in the future beyond the margin are flagged for correction, and only a wrong date needs one.
+- AEAT refusing the latest record as too far in the future stops trading until the clock is reset.
+- Any accepted source showing the clock outside the margin stops trading until it is corrected.
+- A start with no internet, and a latest record in the future beyond the margin, needs the time
+  confirmed before trading.
+
+Being unable to reach AEAT never stops trading. The margin is still to be chosen.
+
 **3. Tips are held (owner, 2026-11-06).** T9 and T10 below stay out of what is sent until A793 is
 revived.
 
@@ -80,12 +91,19 @@ database, which waits for A760.
 - **T3. A false time from a crafted request.** During a stop found at start-up, a signed-in staff
   member confirms a till's time, and a crafted request could send a false one. It would then date
   invoices. Past records stay untouched, the person is named and the owner is alerted. Does this risk
-  breaching Reglamento article 8.2.b or LGT article 201 bis (a fine of €150,000), or our declaration?
+  breaching Reglamento article 8.2.b, or LGT article 201 bis.1, which fines a producer €150,000 a year
+  for systems that let recorded sales be altered or fall short of the traceability rules? Or our declaration?
   What limits would make it safe? The DGT declined to judge a similar mechanism (V5067-26).
 - **T4. "Online access" to a box at the venue.** RD 1619/2012 articles 21.2 and 23 require «acceso en
   línea» and «carga remota» for the tax authority. If the electronic copy is on the venue's server,
   with no public address and a download on request, is that enough, or is permanent remote access
   needed? No source says what satisfies this.
+
+- **T4b. A record AEAT refuses for a future date.** AEAT refuses an issue date later than its own date
+  (error 1112), and the date is part of the invoice's identity, so the refused record cannot be fixed by
+  a correcting record. Our earlier idea was to resend it unchanged when the date arrives, then correct
+  it, which fails if the date is months away. What is the right route: a corrective invoice, a new
+  invoice, or something else? What happens to later records chained after it?
 
 ### Confirmations: clocks
 
@@ -96,8 +114,7 @@ database, which waits for A760.
   simplified one, with the real operation date and no VAT change (V1665-22, V0902-22). One corrective
   may cover many invoices. The VAT period follows the day VAT fell due, and a return already filed
   wrongly is fixed with a complementary return.
-- **T8.** There is no duty or channel to tell AEAT. A record AEAT refused for a future date is resent
-  unchanged when that date arrives, then corrected.
+- **T8.** There is no duty or channel to tell AEAT.
 
 ### Confirmations: tips (hold, see decision 3)
 

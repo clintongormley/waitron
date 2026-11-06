@@ -1649,6 +1649,7 @@ once released. Belongs with A1016.
 
 ## Decisions and deliberate limits
 
+- **What the box does when its clock is wrong (owner, 2026-11-06, for slice 9c and A1407).** Setting the clock from an accepted source counts as confirming it, so trading carries on, and records dated in the future beyond the margin are flagged for correction. AEAT refusing the latest record as too far in the future stops trading until the clock is reset. Any accepted source showing the clock outside the margin stops trading until it is corrected, and AEAT disagreeing during normal trading is such a source. A start with no internet whose latest record is in the future beyond the margin needs the time confirmed first. Being unable to reach AEAT never stops trading. The margin is not chosen yet.
 - **A restart may forget that AEAT disagreed with the clock (owner, 2026-11-06).** The disagreement is kept in memory only, and this stays. It matters only if the box's own correction fails, the server restarts, AEAT is out of reach and a device matches the wrong clock, and misdated sales have a remedy (A1407).
 **A798-B clock, disk and printer decisions.**
 
