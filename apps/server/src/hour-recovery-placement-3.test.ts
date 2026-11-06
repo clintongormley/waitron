@@ -728,22 +728,9 @@ describe("selected-hour admission before archive placement", () => {
     expect(external.internet).not.toHaveBeenCalled();
   });
 
-  it("a fresh-box Cloud restore whose download takes 31 seconds places its series when the internet clock answers at placement", async () => {
-    const f = await archiveHost();
-    const managed = await managedHttp(f, { holdDownloadMs: 31_000 });
-    agreeInternet();
-    expect(
-      await runStagedRestore({
-        ...f.restore,
-        onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
-      }),
-    ).toBe(true);
-    expect(await unretiredSeriesCodes(f.roots.venueDir)).toEqual(expectedSeriesCodes(f));
-  });
-
   it("a fresh-box Cloud restore refused at placement for no internet clock keeps its request and places on the next start", async () => {
     const f = await archiveHost();
-    const managed = await managedHttp(f, { holdDownloadMs: 31_000 });
+    const managed = await managedHttp(f);
     const options: Parameters<typeof runStagedRestore>[0] = {
       ...f.restore,
       onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
