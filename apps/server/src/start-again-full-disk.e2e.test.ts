@@ -4,17 +4,21 @@
 // "The full-disk start tests run on a small filesystem").
 import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { stat, writeFile } from "node:fs/promises";
+import { readdir, stat, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
-import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
+import type { Hono } from "hono";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { SPARE_SPACE_FILE } from "@waitron/provisioning";
 import { heldSetup } from "../test/held-setup-database.js";
-import { diskSnapshot } from "../test/start-again-deleted.js";
+import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import "./testing/hour-test-clock.js";
 import { PASSWORD } from "../test/first-fiscal.js";
+import { loadBoxEnv } from "./box-env.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { runEntry } from "./node-entry.js";
+import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { SPARE_SPACE_BYTES } from "./spare-space.js";
 
@@ -144,4 +148,81 @@ it("in the held state, on a full disk with the box's spare file, the spare is no
   }
   expect(await diskSnapshot(f.roots)).toEqual(before);
   expect((await stat(spare)).size).toBe(SPARE_SPACE_BYTES);
+});
+
+describe("on a full disk, a restart", () => {
+  async function restart(roots: { stateDir: string; venueDir: string }) {
+    const served: Hono[] = [];
+    const log = vi.fn();
+    await runEntry({
+      args: [],
+      baseEnv: { WAITRON_ENV: "preproduction", WAITRON_HTTP_LANDING_PORT: "0" },
+      stateDir: roots.stateDir,
+      venueDir: roots.venueDir,
+      loadBoxEnv,
+      readRecoveryState,
+      writeRecoveryState,
+      startServer: () => Promise.reject(new Error("a held setup must not start the server")),
+      serveRecovery: async (app) => {
+        served.push(app);
+      },
+      installShutdownHandlers: () => {},
+      scheduleStayedUp: () => {},
+      log,
+      exit: () => {},
+    });
+    expect(served).toHaveLength(1);
+    return { app: served[0]!, events: log.mock.calls.map((call) => call[1] as string) };
+  }
+
+  it("with the box's spare file, releases it and serves the repair page, whose summary and Start again finish", async (ctx) => {
+    const small = needDisk(ctx);
+    const f = await heldSetup();
+    await writeRecoveryState(f.roots.stateDir, FRESH);
+    await writeFile(join(f.roots.stateDir, SPARE_SPACE_FILE), Buffer.alloc(SPARE_SPACE_BYTES, 1));
+    small.fill(0);
+    expect(small.free()).toBeLessThan(65_536);
+
+    const { app, events } = await restart(f.roots);
+
+    expect(events).toContain("storage.spare_released");
+    const status = await app.request("/setup-api/status", {}, tls());
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ needs: ["first-setup-resolution"] });
+    const inspected = (await (await app.request(ROUTE, {}, tls())).json()) as Inspection;
+    const body = JSON.stringify({
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision,
+      ownerGeneration: inspected.ownerGeneration,
+    });
+    for (const path of ["/start-again/summary", "/start-again"]) {
+      const answer = await app.request(
+        `${ROUTE}${path}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body },
+        tls(),
+      );
+      expect(answer.status, `${path}: ${await answer.clone().text()}`).toBe(200);
+    }
+    await expectStartAgainDeleted(f.roots);
+    expect(
+      (await readdir(f.roots.venueDir)).filter((name) => !/^venue\.(lock|holder)/.test(name)),
+    ).toEqual([]);
+  });
+
+  it("without a spare file, serves the full-disk recovery page and no setup routes", async (ctx) => {
+    const small = needDisk(ctx);
+    const f = await heldSetup();
+    await writeRecoveryState(f.roots.stateDir, FRESH);
+    small.fill(0);
+    expect(small.free()).toBeLessThan(65_536);
+
+    const { app, events } = await restart(f.roots);
+
+    expect(events).not.toContain("storage.spare_released");
+    expect(events).toContain("recovery.serving_disk_full");
+    const page = await (await app.request("/", {}, tls())).text();
+    expect(page).toContain("The box&#39;s disk is full, so Waitron cannot save anything.");
+    expect((await app.request("/setup-api/status", {}, tls())).status).toBe(404);
+    expect((await app.request(ROUTE, {}, tls())).status).toBe(404);
+  });
 });
