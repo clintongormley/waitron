@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
+  departments,
   enumCheck,
   enumType,
   id,
@@ -9,13 +10,14 @@ import {
   label,
   locations,
   newId,
+  persons,
+  seasons,
+  specialDayDates,
   table,
   timeOfDay,
 } from "@waitron/db";
-import { persons } from "@waitron/identity";
-import { departments, seasons, specialDayDates } from "@waitron/venue-service";
 import { CALENDAR_COLOURS } from "@waitron/shared";
-import { shifts } from "@waitron/workforce";
+import { shifts } from "../shifts.js";
 
 const calendarColour = enumType(CALENDAR_COLOURS);
 const STEP = (column: unknown) => sql`substr(${column}, 4, 2) in ('00', '15', '30', '45')`;

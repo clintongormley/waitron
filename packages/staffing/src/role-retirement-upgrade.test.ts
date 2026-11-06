@@ -7,10 +7,16 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
-import { WORKFORCE_MIGRATIONS, shifts, shiftSwaps, shiftTemplates } from "@waitron/workforce";
+import {
+  WORKFORCE_MIGRATIONS,
+  shiftAssignments,
+  shifts,
+  shiftSwaps,
+  shiftTemplates,
+  staffRoles,
+} from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
-import { staffRoles, shiftAssignments } from "./schema/staffing.js";
 
 const suite = useVenueDb({
   migrations: [

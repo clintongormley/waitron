@@ -26,15 +26,17 @@ import {
   WorkforceBackend,
   absences,
   employments,
+  personStaffRoles,
+  shiftAssignments,
   shifts,
   shiftSwaps,
   listShiftsForPerson,
+  staffRoles,
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import * as staffing from "./index.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { saveSeasonStaffing } from "./paint.js";
-import { staffRoles, personStaffRoles, shiftAssignments } from "./schema/staffing.js";
 import type { AreaRef } from "./slots.js";
 import type { RotaWeek } from "./staffing-types.js";
 

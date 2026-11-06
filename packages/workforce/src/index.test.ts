@@ -51,6 +51,11 @@ describe("the public surface", () => {
         "shiftTemplates",
         "shiftSwaps",
         "shiftSwapStatus",
+        "personStaffRoles",
+        "shiftAssignments",
+        "staffingBlocks",
+        "staffingDays",
+        "staffRoles",
         "createAbsence",
         "setAbsenceStatus",
         "listPendingAbsences",
@@ -258,5 +263,65 @@ describe("shift_swaps constraint declarations (forces the lazy extraConfig callb
         "shift_swaps_decided_by_person_fk",
       ]),
     );
+  });
+});
+
+describe("staffing's tables' constraint declarations (forces the lazy extraConfig callbacks)", () => {
+  it("declares each table's foreign keys, keys and checks by name", () => {
+    const names = (table: Parameters<typeof getTableConfig>[0]) => {
+      const config = getTableConfig(table);
+      return {
+        foreignKeys: config.foreignKeys.map((fk) => fk.getName()).sort(),
+        primaryKeys: config.primaryKeys.map((pk) => pk.getName()),
+        checks: config.checks.map((c) => c.name).sort(),
+        indexes: config.indexes.map((i) => i.config.name).sort(),
+      };
+    };
+
+    expect(names(api.staffRoles)).toEqual({
+      foreignKeys: ["staff_roles_location_fk"],
+      primaryKeys: [],
+      checks: ["staff_roles_colour_ck", "staff_roles_name_ck"],
+      indexes: ["staff_roles_location_name_key"],
+    });
+    expect(names(api.personStaffRoles)).toEqual({
+      foreignKeys: ["person_staff_roles_person_fk", "person_staff_roles_role_fk"],
+      primaryKeys: ["person_staff_roles_pk"],
+      checks: [],
+      indexes: [],
+    });
+    expect(names(api.staffingDays)).toEqual({
+      foreignKeys: [
+        "staffing_days_date_fk",
+        "staffing_days_department_fk",
+        "staffing_days_season_fk",
+        "staffing_days_station_fk",
+      ],
+      primaryKeys: [],
+      checks: ["staffing_days_one_area_ck", "staffing_days_one_day_ck", "staffing_days_weekday_ck"],
+      indexes: [
+        "staffing_days_department_date_key",
+        "staffing_days_department_season_key",
+        "staffing_days_station_date_key",
+        "staffing_days_station_season_key",
+      ],
+    });
+    expect(names(api.staffingBlocks)).toEqual({
+      foreignKeys: ["staffing_blocks_day_fk", "staffing_blocks_role_fk"],
+      primaryKeys: [],
+      checks: ["staffing_blocks_headcount_ck", "staffing_blocks_step_ck"],
+      indexes: ["staffing_blocks_day_idx"],
+    });
+    expect(names(api.shiftAssignments)).toEqual({
+      foreignKeys: [
+        "shift_assignments_department_fk",
+        "shift_assignments_role_fk",
+        "shift_assignments_shift_fk",
+        "shift_assignments_station_fk",
+      ],
+      primaryKeys: [],
+      checks: ["shift_assignments_one_area_ck"],
+      indexes: [],
+    });
   });
 });

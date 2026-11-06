@@ -11,7 +11,15 @@ import {
   readSeasons,
   resolveDepartmentsDays,
 } from "@waitron/venue-service";
-import { WorkforceBackend, absences, employments, shifts, shiftSwaps } from "@waitron/workforce";
+import {
+  WorkforceBackend,
+  absences,
+  employments,
+  shiftAssignments,
+  shifts,
+  shiftSwaps,
+  staffRoles,
+} from "@waitron/workforce";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
 import { parseArea } from "./paint-rules.js";
 import { mondayOf, readRotaRows } from "./rota-data.js";
@@ -24,7 +32,6 @@ import {
   type AreaRef,
 } from "./slots.js";
 import { listStaffRoles } from "./staff-roles.js";
-import { shiftAssignments, staffRoles } from "./schema/staffing.js";
 import type { RotaWeek, RotaShiftInput, RotaShiftPatch } from "./staffing-types.js";
 import "./errors.js";
 

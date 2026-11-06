@@ -33,7 +33,7 @@ import {
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
-import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, staffingBlocks, staffingDays, staffRoles } from "@waitron/workforce";
 import { AppError } from "@waitron/shared";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
@@ -45,7 +45,6 @@ import {
   saveSeasonStaffing,
   saveSpecialDayStaffing,
 } from "./paint.js";
-import { staffingBlocks, staffingDays, staffRoles } from "./schema/staffing.js";
 import type { AreaRef, StaffingBlock } from "./slots.js";
 
 const suite = useVenueDb({

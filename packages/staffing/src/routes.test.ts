@@ -30,12 +30,16 @@ import {
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
-import { WORKFORCE_MIGRATIONS, shifts, WorkforceBackend } from "@waitron/workforce";
+import {
+  WORKFORCE_MIGRATIONS,
+  shiftAssignments,
+  shifts,
+  WorkforceBackend,
+} from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 import { STAFFING_ROUTES } from "./routes.js";
-import { shiftAssignments } from "./schema/staffing.js";
 import type { StaffingMonth, StaffRole } from "./staffing-types.js";
 import type { AreaRef, StaffingBlock } from "./slots.js";
 

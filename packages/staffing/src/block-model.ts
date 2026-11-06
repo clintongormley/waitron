@@ -6,7 +6,8 @@ const DAY_MINUTES = 1440;
 /** The server refuses a block whose start and end are the same clock time, so one never spans
  *  the whole business day. */
 export const MAX_BLOCK_MINUTES = DAY_MINUTES - STEP_MINUTES;
-/** `staffing_blocks_headcount_ck` (schema/staffing.ts) holds the same bound. */
+/** `staffing_blocks_headcount_ck` (packages/workforce/src/schema/staffing/staffing.ts) holds the
+ *  same bound. */
 export const MAX_HEADCOUNT = 50;
 
 /** A copy of each block; a null day, which follows the season, stays null. */

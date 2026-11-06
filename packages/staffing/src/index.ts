@@ -1,6 +1,14 @@
 import "./errors.js";
 
-export * from "./schema/index.js";
+// The tables are defined in `@waitron/workforce`; this package goes on exporting them under its own
+// name.
+export {
+  personStaffRoles,
+  shiftAssignments,
+  staffingBlocks,
+  staffingDays,
+  staffRoles,
+} from "@waitron/workforce";
 export type * from "./staffing-types.js";
 export { STAFFING_MIGRATIONS } from "./migrations.js";
 export { STAFFING_CLASSIFICATION, STAFFING_CHANGE_SOURCES } from "./classification.js";

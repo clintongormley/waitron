@@ -13,9 +13,15 @@ import {
   specialDays,
 } from "@waitron/venue-service";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
-import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
+import {
+  WORKFORCE_MIGRATIONS,
+  shiftAssignments,
+  shifts,
+  staffRoles,
+  staffingBlocks,
+  staffingDays,
+} from "@waitron/workforce";
 import { STAFFING_MIGRATIONS } from "../migrations.js";
-import { shiftAssignments, staffRoles, staffingBlocks, staffingDays } from "./staffing.js";
 
 const suite = useVenueDb({
   migrations: [

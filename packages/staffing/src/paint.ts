@@ -14,7 +14,7 @@ import {
   specialDays,
   weekdayOf,
 } from "@waitron/venue-service";
-import { staffingBlocks, staffingDays, staffRoles } from "./schema/staffing.js";
+import { staffingBlocks, staffingDays, staffRoles } from "@waitron/workforce";
 import { areaKey, blockSpan, type AreaRef, type StaffingBlock } from "./slots.js";
 import type {
   SeasonStaffing,
