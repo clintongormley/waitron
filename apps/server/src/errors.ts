@@ -1648,6 +1648,13 @@ declare module "@waitron/shared" {
         | "fields_invalid"
         | "host_failed";
     };
+    /** The box's host service answered `busy` to a scan, join or forget. */
+    "box_network.busy": Record<string, never>;
+    /** The box's host service answered `no_wifi` to a scan or join. */
+    "box_network.no_wifi": Record<string, never>;
+    /** The box's host service answered `not_saved` to a forget: the network named is not the one
+     * the box has saved. */
+    "box_network.not_saved": Record<string, never>;
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */

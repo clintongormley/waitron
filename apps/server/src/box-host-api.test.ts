@@ -441,3 +441,245 @@ describe("the log", () => {
     expect(log).toHaveBeenCalledTimes(0);
   });
 });
+
+const SCAN = "/api/box/network/scan";
+const FORGET = "/api/box/network/forget";
+const SSID = "4361666550657065";
+
+function post(
+  app: Hono,
+  path: string,
+  cookie?: string,
+  body?: string,
+  headers: Record<string, string> = {},
+) {
+  return app.request(path, {
+    method: "POST",
+    headers: { ...(cookie === undefined ? {} : { cookie }), ...headers },
+    ...(body === undefined ? {} : { body }),
+  });
+}
+
+const json = (value: unknown) => JSON.stringify(value);
+
+describe.each([
+  ["with room", () => suite.db],
+  ["on a full disk", () => lockRefusingDb(DISK_FULL())],
+])("the changes, %s", (_label, db) => {
+  it("a manager scans, forgets a network and sets the start screen as themselves", async () => {
+    const host = fakeHost();
+    host.networkScan.mockResolvedValue({
+      available: true,
+      networks: [{ ssidHex: SSID, signal: 71, security: "wpa-psk" }],
+    });
+    const { app } = mount(db(), host);
+    const actor = { source: "person", person: manager.id };
+
+    const scan = await post(app, SCAN, manager.cookie);
+    expect(scan.status).toBe(200);
+    expect(await scan.json()).toEqual({
+      networks: [{ ssidHex: SSID, signal: 71, security: "wpa-psk" }],
+    });
+    expect(host.networkScan).toHaveBeenCalledTimes(1);
+    expect(host.networkScan).toHaveBeenCalledWith(actor);
+
+    const forget = await post(app, FORGET, manager.cookie, json({ ssidHex: SSID }));
+    expect(forget.status).toBe(200);
+    expect(await forget.json()).toEqual({});
+    expect(host.networkForget).toHaveBeenCalledTimes(1);
+    expect(host.networkForget).toHaveBeenCalledWith({ ssidHex: SSID }, actor);
+
+    const screen = await post(app, SCREEN, manager.cookie, json({ start: "till" }));
+    expect(screen.status).toBe(200);
+    expect(await screen.json()).toEqual({ start: "till" });
+    expect(host.screenSet).toHaveBeenCalledTimes(1);
+    expect(host.screenSet).toHaveBeenCalledWith({ start: "till" }, actor);
+  });
+
+  async function expectRefused(cookie: string | undefined, status: number, code: string) {
+    const host = fakeHost();
+    const { app } = mount(db(), host);
+    for (const response of [
+      await post(app, SCAN, cookie),
+      await post(app, FORGET, cookie, json({ ssidHex: SSID })),
+      await post(app, SCREEN, cookie, json({ start: "till" })),
+    ]) {
+      expect(response.status).toBe(status);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe(code);
+    }
+    expect(host.networkScan).toHaveBeenCalledTimes(0);
+    expect(host.networkForget).toHaveBeenCalledTimes(0);
+    expect(host.screenSet).toHaveBeenCalledTimes(0);
+  }
+
+  it("refuses a request with no session", async () => {
+    await expectRefused(undefined, 401, "management_session.required");
+  });
+
+  it("refuses a supervisor, who may not manage the system", async () => {
+    await expectRefused(supervisor.cookie, 403, "authorization.not_permitted");
+  });
+
+  it("refuses an ended session", async () => {
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(managementSessions)
+        .set({ endedAt: new Date().toISOString() })
+        .where(eq(managementSessions.tokenHash, hashSessionToken(manager.token))),
+    );
+    await expectRefused(manager.cookie, 401, "management_session.required");
+  });
+
+  it("refuses a session idle for 31 minutes", async () => {
+    await setLastSeen(manager, new Date(Date.now() - 31 * 60_000));
+    await expectRefused(manager.cookie, 401, "management_session.expired");
+  });
+
+  it("refuses a suspended person", async () => {
+    await withTransaction(suite.db, (tx) =>
+      tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id)),
+    );
+    await expectRefused(manager.cookie, 403, "person.suspended");
+  });
+
+  it("checks a supervisor's permission before reading the body", async () => {
+    const host = fakeHost();
+    const { app } = mount(db(), host);
+    const response = await post(app, FORGET, supervisor.cookie, json({ nope: 1 }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "system.manage" } },
+    });
+    expect(host.networkForget).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe("the host's own words about the network", () => {
+  it.each([
+    ["busy", 409, "box_network.busy"],
+    ["no_wifi", 409, "box_network.no_wifi"],
+  ] as const)("a scan refused %s answers %i %s", async (refusal, status, code) => {
+    const host = fakeHost();
+    host.networkScan.mockResolvedValue({ available: false, reason: "refused", refusal });
+    const { app } = mount(suite.db, host);
+    const response = await post(app, SCAN, manager.cookie);
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: { code, params: {} } });
+  });
+
+  it.each([
+    ["busy", 409, "box_network.busy"],
+    ["not_saved", 409, "box_network.not_saved"],
+  ] as const)("a forget refused %s answers %i %s", async (refusal, status, code) => {
+    const host = fakeHost();
+    host.networkForget.mockResolvedValue({ available: false, reason: "refused", refusal });
+    const { app } = mount(suite.db, host);
+    const response = await post(app, FORGET, manager.cookie, json({ ssidHex: SSID }));
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: { code, params: {} } });
+  });
+});
+
+describe("the shared answers on the changes", () => {
+  const SHARED_ROWS = new Set([
+    "missing ENOENT",
+    "unsupported unknown_request",
+    "timeout",
+    "refused fields_invalid",
+    "invalid",
+  ]);
+  const rows = MAPPING.filter(([label]) => SHARED_ROWS.has(label));
+
+  it.each(rows)("scan: %s", async (_label, hostAnswer, status, body) => {
+    const host = fakeHost();
+    host.networkScan.mockResolvedValue(hostAnswer);
+    const { app } = mount(suite.db, host);
+    const response = await post(app, SCAN, manager.cookie);
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual(body);
+  });
+
+  it.each(rows)("forget: %s", async (_label, hostAnswer, status, body) => {
+    const host = fakeHost();
+    host.networkForget.mockResolvedValue(hostAnswer);
+    const { app } = mount(suite.db, host);
+    const response = await post(app, FORGET, manager.cookie, json({ ssidHex: SSID }));
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual(body);
+  });
+
+  it.each(rows)("screen: %s", async (_label, hostAnswer, status, body) => {
+    const host = fakeHost();
+    host.screenSet.mockResolvedValue(hostAnswer);
+    const { app } = mount(suite.db, host);
+    const response = await post(app, SCREEN, manager.cookie, json({ start: "till" }));
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual(body);
+  });
+});
+
+describe("bodies refused before the host is asked", () => {
+  it.each([
+    [FORGET, json({}), "ssidHex"],
+    [FORGET, json({ ssidHex: "FF" }), "ssidHex"],
+    [FORGET, json({ ssidHex: "ff", extra: 1 }), "body"],
+    [FORGET, "[]", "body"],
+    [FORGET, "null", "body"],
+    [FORGET, '"x"', "body"],
+    [FORGET, undefined, "body"],
+    [FORGET, "not json", "body"],
+    [SCREEN, json({ start: "Panel" }), "start"],
+    [SCREEN, json({ start: "dashboard", note: "x" }), "body"],
+    [SCREEN, undefined, "body"],
+  ])("%s with %s names %s", async (path, body, field) => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const response = await post(app, path, manager.cookie, body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+    expect(host.networkForget).toHaveBeenCalledTimes(0);
+    expect(host.screenSet).toHaveBeenCalledTimes(0);
+  });
+
+  const padded = (size: number) => json({ ssidHex: "ff" }).padEnd(size, " ");
+
+  it.each([
+    ["read to the limit", {}],
+    ["refused from its Content-Length", { "content-length": "4097" }],
+  ])("a 4097-byte body is refused, %s", async (_label, headers) => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const response = await post(app, FORGET, manager.cookie, padded(4097), headers);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    expect(host.networkForget).toHaveBeenCalledTimes(0);
+  });
+
+  it("a 4096-byte body is taken", async () => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host);
+    const response = await post(app, FORGET, manager.cookie, padded(4096));
+    expect(response.status).toBe(200);
+    expect(host.networkForget).toHaveBeenCalledTimes(1);
+    expect(host.networkForget).toHaveBeenCalledWith(
+      { ssidHex: "ff" },
+      { source: "person", person: manager.id },
+    );
+  });
+});
+
+describe("a scan asked with the live header", () => {
+  it("still moves the session's last-seen time, since only a GET is passive", async () => {
+    const { app } = mount(suite.db);
+    const before = new Date(Date.now() - 60_000);
+    await setLastSeen(manager, before);
+    expect(
+      (await post(app, SCAN, manager.cookie, undefined, { "x-waitron-live": "1" })).status,
+    ).toBe(200);
+    expect(Date.parse(await lastSeen(manager))).toBeGreaterThan(before.getTime());
+  });
+});
