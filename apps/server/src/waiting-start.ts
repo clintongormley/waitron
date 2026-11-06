@@ -34,6 +34,11 @@ export interface WaitingStartDeps {
   readMembership: () => Promise<SignedMembershipDocument | null>;
   /** The venue's cross-origin layer for `/api/*`, as the full start has. */
   cors: MiddlewareHandler;
+  /**
+   * The check that a change carrying the dashboard's sign-in cookie came from the box's own page;
+   * the full start's, so both apps answer it the same.
+   */
+  pageCheck: MiddlewareHandler;
   /** The boxes this one waits for, as the check that began the wait named them. */
   waitingOn: readonly string[];
   /** The page's name for each box, or `null` where it has none. */
@@ -92,6 +97,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   });
   const gate = createHandoverGate();
   app.use("*", gate.middleware);
+  app.use("*", deps.pageCheck);
   app.use("/api/*", deps.cors);
   mountNodeApi(
     app,

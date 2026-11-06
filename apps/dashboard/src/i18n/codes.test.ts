@@ -803,6 +803,13 @@ it("has English and Spanish copy for a recovery pack asked for insecurely or fro
   }
 });
 
+it("has English and Spanish copy for a change sent from another page", () => {
+  const code = "management.origin_refused";
+  expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+});
+
 it("has English and Spanish copy for a recovery pack request the box could not read", () => {
   const code = "recovery.pack_invalid";
   expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { eq } from "drizzle-orm";
@@ -25,6 +26,7 @@ import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { corsForVenue } from "./cors.js";
 import { createHealthState } from "./health.js";
+import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { startWaiting, type WaitingStartDeps } from "./waiting-start.js";
 
@@ -85,6 +87,10 @@ function harness(
     closeStore,
     restart,
     log: () => {},
+    pageCheck: requireManagementChangeFromOwnPage(
+      async () => false,
+      () => {},
+    ),
     ...extra,
   });
   return { waiting, app: () => app!, health, closeListeners, closeStore, restart };
@@ -365,6 +371,88 @@ describe("the waiting start", () => {
           new Promise((done) => setTimeout(() => done("waiting"), 20)),
         ]),
       ).toBe("waiting");
+
+    const REFUSED = { error: { code: "management.origin_refused", params: {} } };
+    const cookie = `waitron_management_session=${randomUUID()}`;
+    const postFrom = (headers: Record<string, string>, fields: Record<string, string>) =>
+      h.app().request(
+        "https://box.test/carry-on",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            "accept-language": "en-GB",
+            ...headers,
+          },
+          body: new URLSearchParams(fields).toString(),
+        },
+        tls(),
+      );
+
+    it("refuses a carry-on posted from another page while a management cookie rides along", async () => {
+      const answer = await postFrom(
+        { cookie, origin: "https://box.test:8443", "sec-fetch-site": "same-site" },
+        { ...ADMIN, ...BOTH },
+      );
+      expect({ status: answer.status, body: await answer.json() }).toEqual({
+        status: 403,
+        body: REFUSED,
+      });
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
+
+    it("takes a carry-on posted from its own page while a stale management cookie rides along", async () => {
+      const own = { origin: "https://box.test", "sec-fetch-site": "same-origin" };
+      const wrong = { ...ADMIN, password: "notThePassword", ...BOTH };
+      const withCookie = await postFrom({ cookie, ...own }, wrong);
+      const without = await postFrom(own, wrong);
+      const withText = await withCookie.text();
+      expect({ status: withCookie.status, text: withText }).toEqual({
+        status: without.status,
+        text: await without.text(),
+      });
+      expect(withText).not.toContain("management.origin_refused");
+      await stillWaiting();
+    });
+
+    it("refuses the attack on every write route the waiting app registers", async () => {
+      const id = randomUUID();
+      const writes = [
+        ...new Set(
+          h
+            .app()
+            .routes.filter((route) => ["POST", "PUT", "PATCH", "DELETE"].includes(route.method))
+            .map((route) => `${route.method} ${route.path}`),
+        ),
+      ];
+      expect(writes).toEqual(expect.arrayContaining(["POST /carry-on"]));
+      const uncovered: string[] = [];
+      for (const write of writes) {
+        const [method, path] = write.split(" ") as [string, string];
+        const concrete = path
+          .split("/")
+          .map((segment) => (segment.startsWith(":") ? id : segment === "*" ? "x" : segment))
+          .join("/");
+        const answer = await h.app().request(
+          `https://box.test${concrete}`,
+          {
+            method,
+            headers: {
+              cookie: `waitron_management_session=${randomUUID()}`,
+              origin: "https://box.test:8443",
+              "sec-fetch-site": "same-site",
+            },
+          },
+          tls(),
+        );
+        const body = await answer.text();
+        if (answer.status !== 403 || body !== JSON.stringify(REFUSED)) uncovered.push(write);
+      }
+      expect(uncovered).toEqual([]);
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
 
     it("carry on with a correct sign-in and both statements restarts normally and records the decision", async () => {
       const answer = await post({ ...ADMIN, ...BOTH });

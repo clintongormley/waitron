@@ -1,5 +1,6 @@
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
+import type { OriginAllowlist } from "./allowed-origins.js";
 import { DEVICE_CLOCK_HEADER, DEV_DEVICE_HEADER } from "./device-session.js";
 
 /**
@@ -10,7 +11,7 @@ import { DEVICE_CLOCK_HEADER, DEV_DEVICE_HEADER } from "./device-session.js";
  * A same-origin request carries no `Origin` header: it is passed straight through, so the
  * allow-list is not read and no Vary / Allow-Credentials headers are added.
  */
-export function corsForVenue(allow: (origin: string) => Promise<boolean>): MiddlewareHandler {
+export function corsForVenue(allow: OriginAllowlist): MiddlewareHandler {
   const middleware = cors({
     origin: async (origin) => ((await allow(origin)) ? origin : null),
     credentials: true,

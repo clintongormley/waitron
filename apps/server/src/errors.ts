@@ -156,6 +156,9 @@ declare module "@waitron/shared" {
      * read live.
      */
     "node.read_only": Record<string, never>;
+    /** A change carrying the dashboard's sign-in cookie was sent by a page other than the box's
+     * own (`Origin` or `Sec-Fetch-Site`), so it was not run. */
+    "management.origin_refused": Record<string, never>;
     /** The box is stepping down: it takes no new request beyond the few that report its state. */
     "handover.stepping_down": Record<string, never>;
     /**
@@ -1651,9 +1654,6 @@ declare module "@waitron/shared" {
     /** The network and screen routes already have as many requests open to the box's host service
      * as they allow, so this one was not sent. */
     "box_host.busy": Record<string, never>;
-    /** A scan, forget or start-screen change was sent by a page other than the box's own
-     * (`Origin` or `Sec-Fetch-Site`), so nothing was sent to the host. */
-    "box_host.origin_refused": Record<string, never>;
     /** The box's host service answered `busy` to a scan, join or forget. */
     "box_network.busy": Record<string, never>;
     /** The box's host service answered `no_wifi` to a scan or join. */

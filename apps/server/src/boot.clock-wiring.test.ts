@@ -389,7 +389,7 @@ describe("boot's authority clock wiring", () => {
           }),
         });
       const refused = await saveTranslation(
-        "https://untrusted.example",
+        `http://127.0.0.1:${httpPort()}`,
         originalCell.expected,
         "Wrong origin",
       );

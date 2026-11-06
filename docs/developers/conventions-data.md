@@ -1554,6 +1554,92 @@ live box.
 and only the dashboard's stored hash is tried as a token
 (`packages/identity/src/management-session.test.ts`); a new login table is seen by nothing.
 
+## A change carrying the dashboard's sign-in cookie is checked for the page that sent it
+
+**The rule.** `requireManagementChangeFromOwnPage` (`apps/server/src/own-page.ts`) judges every
+request whose method is not `GET`, `HEAD` or `OPTIONS` and that carries a
+`waitron_management_session` cookie, whatever its value. It takes the request when it came from the
+box's own page or a trusted one, and otherwise answers 403 `management.origin_refused` and logs a
+warning with the method, `origin` and `site` (the `Sec-Fetch-Site` value), and `lookupFailed: true`
+when the trusted-page lookup failed. On the waiting start's app the logged `requestId` is
+`undefined`: that app mounts no request-id middleware (`grep -n requestId
+apps/server/src/waiting-start.ts` printed nothing, 2026-11-06). The check reads headers only, never
+the body.
+
+**Where it runs.** `startServer` builds it once (`apps/server/src/boot.ts:1314-1317`) and mounts it
+with `app.use("*", …)` straight after the request-id and build-header middleware on the main app
+(`boot.ts:1319`), so it runs ahead of every route registered after it, in the full, restricted and
+setup starts, and ahead of routes merged in with `app.route()`. The waiting start gets the same
+middleware through `WaitingStartDeps.pageCheck` and mounts it ahead of its routes
+(`apps/server/src/waiting-start.ts:100`). A new route on either app needs nothing, but must not be
+registered ahead of it. The recovery listener's own app (`recovery-surface.ts`,
+`recovery-start-again.ts`, `recovery-listener.ts`), the first-setup apps (`first-setup-entry.ts`,
+`first-setup-launch.ts`), `landing-app.ts` and `node-entry.ts` never reach it; none of them read the
+management cookie (A1371's plan, D1).
+
+**What counts as the box's own page** (`sentFromThisOrigin` and `sentFromOwnPage`, `own-page.ts`).
+"Absent" means the header was not sent; an empty header counts as present and foreign.
+
+- Taken when `Origin` is absent or equals the request's own origin, and `Sec-Fetch-Site` is absent,
+  `same-origin` or `none`. The page checks in other files under `apps/server/src/` call
+  `sentFromThisOrigin` for the same test.
+- Also taken when `Origin` is some other address, not `""` and not `null`, that the trusted-page
+  lookup accepts, whatever its `Sec-Fetch-Site`, since a browser rightly calls a trusted page on
+  another address `same-site` or `cross-site`. If the lookup fails the change is refused.
+- The trusted pages are `managementOrigin` and whatever the CORS allow-list accepts
+  (`apps/server/src/allowed-origins.ts:57-58`): this server's advertised address, every routable
+  server address in the held membership document, and, in dev mode only, the dev Vite pages. Those
+  addresses can already make signed-in cross-origin requests to `/api/*` and read the answers.
+- No `Origin` and no `Sec-Fetch-Site` is taken: that is a tool, not a browser. A browser always sends
+  `Origin` on a request that is not a `GET` or `HEAD`. The Fetch standard's "append a request
+  `Origin` header" (`curl -sL https://fetch.spec.whatwg.org/`, 2026-11-06): "Otherwise, if request’s
+  method is neither `GET` nor `HEAD`, then: If request’s mode is not "cors", then switch on
+  request’s referrer policy: "no-referrer" Set serializedOrigin to `null`." So a post from another
+  page arrives with its real address or `null`, never with none. `Sec-Fetch-Site` is a second
+  signal only: Fetch Metadata sends it only to a potentially trustworthy address (`curl -sL
+  https://w3c.github.io/webappsec-fetch-metadata/`, 2026-11-06: "To append the Fetch metadata
+  headers for a request, given request r: If r’s current URL is not an potentially trustworthy URL,
+  return."), so on a box served over plain HTTP at a LAN name or address the check rests on
+  `Origin`. Loopback is potentially trustworthy even over HTTP (`curl -sL
+  https://w3c.github.io/webappsec-secure-contexts/`, 2026-11-06: "If origin’s host matches one of
+  the CIDR notations 127.0.0.0/8 or ::1/128 [RFC4632], return "Potentially Trustworthy".").
+
+**Why.** SameSite ignores the port: the HTML standard's "Sites" are "(origin's scheme, origin's host's
+registrable domain)", with no port. So a page on another port of the box's own name is sent the
+manager's cookie, and a post with a plain-text body, or with none, reaches the route with no
+preflight. B3 PR 9's review showed such a page, in real Chromium, changing the start screen and
+forgetting the saved Wi-Fi network.
+
+**Deliberate limits** (each recorded in `docs/backlog/box.md` → _Decisions and deliberate limits_):
+the cookie's presence decides, not a live session; `GET`, `HEAD` and `OPTIONS` pass, so another page
+can still move a session's last-seen time, and the Google sign-in's return is a cross-site `GET` by
+design; `cloud-api.ts`, `content-suggestions-api.ts`, `content-translations-api.ts` and
+`venue-zone-repair-api.ts` keep their own stricter checks, which require `Origin` to be exactly
+`managementOrigin`; and a page on another of the venue's servers is trusted through the allow-list
+with no started-server test sending one.
+
+**Left open:** the till's sign-in cookie and the device cookie are `SameSite=Strict` too, and the
+check does not look at them; see the backlog entry "Till changes do not check which page sent them".
+
+**Guards, weaker than their names:** the "refuses the attack on every write route" cases in
+`apps/server/src/boot.management-origin.test.ts` and `apps/server/src/waiting-start.test.ts` send
+one attack shape (a random cookie, another port's `Origin`, `Sec-Fetch-Site: same-site`) to every
+write route in their own app's route table, as their harness mounts it:
+
+- The main-app sweep runs over a full start only, so a module the harness leaves off, and a route
+  mounted only on the restricted or setup start, is swept by nothing.
+- The waiting sweep runs over a waiting app built with its own stand-in check
+  (`requireManagementChangeFromOwnPage(async () => false, …)`), so it proves the waiting app mounts
+  whatever check it is given ahead of its routes. That boot hands it the server's real check is
+  proved by "the waiting start refuses a carry-on from another port of the box's address, and takes
+  its own pages'" in `apps/server/src/boot.start-check.test.ts`: on a started box waiting for a peer,
+  the attack on `POST /carry-on` answers 403 `management.origin_refused`, and neither the box's own
+  page nor `managementOrigin` is refused. That case sends one route, not a sweep.
+- A route registered on any other app is seen by no sweep. The recovery listener's, first-setup's,
+  landing and node-entry apps are seen by neither the check nor the sweeps.
+Since the check refuses a cookie-carrying change to any path, matched or not, a path no route
+serves would also look covered.
+
 ## A migration set depends on another through a foreign key, a trigger on its table, or a trigger body naming its table
 
 FK `REFERENCES`, and a `CREATE TRIGGER … ON <table>` where the TABLE is owned by a different

@@ -21,6 +21,7 @@ import { FULL_DISK_BYTES, fullDiskFailure } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import { publicFirstSetupState, type FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { Logger } from "./logger.js";
+import { sentFromThisOrigin } from "./own-page.js";
 import "./errors.js";
 
 export type FirstFiscalHost = ReturnType<typeof createFirstSetupModuleHost>;
@@ -96,13 +97,7 @@ function shownSummary(value: unknown): StartAgainSummary {
   };
 }
 function assertFirstFiscalRequest(c: Context): void {
-  const origin = c.req.header("Origin"),
-    site = c.req.header("Sec-Fetch-Site");
-  if (
-    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
-    (site !== undefined && !["same-origin", "none"].includes(site))
-  )
-    throw new AppError("setup.owner_required", {});
+  if (!sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
   if (
     c.req.method === "POST" &&
     c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json"

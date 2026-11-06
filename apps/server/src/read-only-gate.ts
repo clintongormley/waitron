@@ -14,7 +14,7 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * narrower `!isMirror`. Gating the whole surface at request time instead is deferred to promotion
  * Slice 3.
  */
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+export const SAFE_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
  * Refuses every write verb while `isReadOnly()` is true. Read PER REQUEST so a live promotion opens

@@ -156,6 +156,7 @@ import { buildHeaderMiddleware } from "./build-header.js";
 import { requestIdMiddleware } from "./request-id.js";
 import { restartProcess } from "./run-server.js";
 import { createOriginAllowlist } from "./allowed-origins.js";
+import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import { mountAlertsApi } from "./alerts-api.js";
@@ -983,6 +984,8 @@ export interface StartServerSeams {
   boxHost?: BoxHostClient;
   /** The box's host requests; unset, the server talks to the host's socket. */
   boxHostRequests?: BoxHostRequests;
+  /** Hands a test the main app every route is registered on; production leaves it unset. */
+  observeApp?: (app: Hono) => void;
   /** Every card provider the till and the card sweeps reach, built on the server's own handle. */
   cardPool?: (deps: { db: Database }) => CardProviderPool;
   /**
@@ -1282,6 +1285,7 @@ async function bootServer(
   const build = applicationVersion(process.env);
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
+  seams.observeApp?.(app);
   const handoverGate = createHandoverGate();
   // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs.
   app.use("*", handoverGate.middleware);
@@ -1307,6 +1311,12 @@ async function bootServer(
   // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
   app.use("*", buildHeaderMiddleware(build));
+  const ownPageCheck = requireManagementChangeFromOwnPage(
+    async (origin) => origin === config.managementOrigin || (await allowOrigin(origin)),
+    log,
+  );
+  // Must stay ahead of every route, so a route added later is covered without being named.
+  app.use("*", ownPageCheck);
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
       await withPassiveManagementRead(next);
@@ -1848,6 +1858,7 @@ async function bootServer(
         environment: config.environment,
         readMembership: () => readNodeMembership(db),
         cors: corsForVenue(allowOrigin),
+        pageCheck: ownPageCheck,
         waitingOn: outcome.waitingOn ?? [],
         namesOf: (ids) => readPeerNames(db, ids),
         carryOn: {
