@@ -204,7 +204,7 @@ The only hard refusal is 1112, an issue date later than AEAT's date.
 | Signal | Built? | What it shows |
 | --- | --- | --- |
 | The box reads behind the newest record | Yes, this is the stop | The clock is behind, or an earlier record was ahead |
-| AEAT's time, from its public QR page and from each reply | Read at start-up and during a stop. Using it in normal trading is slice 9c | Whether the clock is right now |
+| AEAT's time, from its public QR page and from each reply | The page is read only during a stop or a check. Each filing reply gives a reading that shows only as a warning. Acting on it in normal trading is slice 9c | Whether the clock is right now |
 | Tills' own clocks | Yes | Whether they agree with the box |
 | The box's boot-time clock, which clock changes do not move | Used to work out when a stop began. Watching every change is slice 9c | The exact size of a change, within one run |
 
