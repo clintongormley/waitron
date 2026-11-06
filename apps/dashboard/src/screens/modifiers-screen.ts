@@ -206,6 +206,7 @@ export class ModifiersScreen extends LitElement {
     const id = this.#linkedList;
     if (id === null) return;
     this.#linkedList = null;
+    if (this.editing?.kind === this.tab && this.editing.value?.id === id) return;
     const list = this.#lists(this.tab).find((each) => each.id === id);
     if (list) this.#edit(this.tab, list);
     else this.#url.write({ list: null }, true);
