@@ -1123,6 +1123,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The box could not read the request to make a recovery pack. This is a fault in Waitron. Reload the page and make the pack again.",
     es: "La caja no pudo leer la solicitud para hacer un paquete de recuperación. Es un fallo de Waitron. Recarga la página y vuelve a hacer el paquete.",
   },
+  "management.origin_refused": {
+    en: "This change came from a page that is not this box's dashboard, so it was not made. Open the dashboard at its own address and make the change there.",
+    es: "Este cambio llegó desde una página que no es el panel de esta caja, así que no se ha hecho. Abre el panel en su propia dirección y haz el cambio allí.",
+  },
   "recovery.pack_origin_refused": {
     en: "Make the pack from the dashboard's own page, not from another site.",
     es: "Haz el paquete desde la propia página del panel, no desde otro sitio.",
