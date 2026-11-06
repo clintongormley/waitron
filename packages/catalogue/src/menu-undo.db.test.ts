@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { products, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
 import { readContentLanguages, writeContentLanguages } from "./content-languages.js";
@@ -9,11 +9,13 @@ import { readMenuHome, setHomeDisplay } from "./menu-home.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
 import { menuChangeActions, type MenuChangeAction, type MenuUndoCommand } from "./menu-undo.js";
-import { updateMenuDetails, updateMenuItem } from "./operations.js";
+import { updateMenuDetails, updateMenuItem, updateProduct } from "./operations.js";
+import { menuItems } from "./schema/menu.js";
+import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { createSectionIn, updateSection } from "./sections.js";
-import { setMenuVariantPrice } from "./variants.js";
+import { setMenuVariantPrice, setProductVariants } from "./variants.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -334,5 +336,307 @@ describe("own section Undo", () => {
     );
 
     expect(action).toEqual({ kind: "edit_menu", menuId: f.drinksMenu, tab: "structure" });
+  });
+});
+
+/** The stored price settings of one offer: the menu's own dish price and every variant row. */
+async function storedPrices(menuId: string, productId: string) {
+  return app(async (tx) => {
+    const menuItemId = await offerOf(tx, menuId, productId);
+    const [item] = await tx
+      .select({ grossPrice: menuItems.grossPrice })
+      .from(menuItems)
+      .where(eq(menuItems.id, menuItemId));
+    const variants = await tx
+      .select({
+        variantId: menuItemVariantOverrides.variantId,
+        price: menuItemVariantOverrides.price,
+      })
+      .from(menuItemVariantOverrides)
+      .where(eq(menuItemVariantOverrides.menuItemId, menuItemId))
+      .orderBy(menuItemVariantOverrides.variantId);
+    return { grossPrice: item!.grossPrice, variants };
+  });
+}
+
+async function setDishPrice(menuId: string, productId: string, grossPrice: string | null) {
+  await app(async (tx) =>
+    updateMenuItem(tx, menuId, await offerOf(tx, menuId, productId), { grossPrice }),
+  );
+}
+
+async function setVariantPrice(
+  menuId: string,
+  productId: string,
+  variantId: string,
+  price: string | null,
+) {
+  await app(async (tx) =>
+    setMenuVariantPrice(tx, await offerOf(tx, menuId, productId), variantId, price, menuId),
+  );
+}
+
+/** The menu's own offer of the product in the preview's working document. */
+function offerIn(preview: MenuPreview, productId: string) {
+  return Object.values(preview.document.offers).find((offer) => offer.productId === productId)!;
+}
+
+const isPriceOf = (productId: string) => (change: MenuChange) =>
+  change.kind === "price_changed" &&
+  change.productId === productId &&
+  change.source === "this_menu";
+const isOwnVariantsOf = (productId: string) => (change: MenuChange) =>
+  change.kind === "product_changed" &&
+  change.productId === productId &&
+  change.source === "this_menu";
+
+interface PriceCase {
+  dish: string;
+  /** The change's bullet name. */
+  name: string;
+  /** The menu that sets the price, and the menu every Undo leaves alone. */
+  menu: (f: MenusFixture) => string;
+  other: (f: MenusFixture) => string;
+  product: (f: MenusFixture) => string;
+}
+
+const priceCases: PriceCase[] = [
+  {
+    dish: "Burger on Dinner",
+    name: "Burger",
+    menu: (f) => f.dinner,
+    other: (f) => f.lunch,
+    product: (f) => f.burger,
+  },
+  {
+    dish: "Lemonade on Lunch, reached through Drinks",
+    name: "Lemonade",
+    menu: (f) => f.lunch,
+    other: (f) => f.dinner,
+    product: (f) => f.lemonade,
+  },
+];
+
+describe.each(priceCases)("dish price Undo: $dish", ({ name, menu, other, product }) => {
+  it.each<{ live: string | null; now: string | null }>([
+    { live: "4.00", now: "9.99" },
+    { live: "4.00", now: null },
+    { live: "0.00", now: "5.00" },
+    { live: null, now: "5.00" },
+  ])("puts back a published price of $live set to $now", async ({ live, now }) => {
+    const f = await menusFixture(fx.db);
+    await setDishPrice(menu(f), product(f), live);
+    await publish(menu(f));
+    const stored = await storedPrices(menu(f), product(f));
+    await setDishPrice(menu(f), product(f), now);
+    await app((tx) => updateMenuDetails(tx, menu(f), { name: "Renamed" }));
+
+    const command = await undoAndCheck(menu(f), other(f), isPriceOf(product(f)));
+
+    expect(command).toEqual({
+      method: "updateMenuItem",
+      menuId: menu(f),
+      menuItemId: await app((tx) => offerOf(tx, menu(f), product(f))),
+      input: { grossPrice: live },
+      name,
+    });
+    expect(await storedPrices(menu(f), product(f))).toEqual(stored);
+    expect(offerIn(await readPreview(menu(f)), product(f)).grossPrice).toBe(live);
+  });
+
+  it("offers nothing when the price it would inherit moved too", async () => {
+    const f = await menusFixture(fx.db);
+    await setDishPrice(menu(f), product(f), null);
+    await publish(menu(f));
+    await setDishPrice(menu(f), product(f), "5.00");
+    await app((tx) => updateProduct(tx, product(f), { unitPrice: "7.25" }));
+
+    const { change, action } = await changeAndAction(
+      await readPreview(menu(f)),
+      isPriceOf(product(f)),
+    );
+
+    expect(change).toMatchObject({ inheritedPrice: "7.25" });
+    expect(action).toEqual({ kind: "none" });
+  });
+});
+
+describe("a shared product's price change", () => {
+  it("sends Burger's own price change to its product editor", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.dinner);
+    await app((tx) => updateProduct(tx, f.burger, { unitPrice: "12.50" }));
+
+    const { change, action } = await changeAndAction(
+      await readPreview(f.dinner),
+      (found) => found.kind === "price_changed" && found.productId === f.burger,
+    );
+
+    expect(change.source).toBe("shared_product");
+    expect(action).toEqual({ kind: "edit_product", productId: f.burger });
+  });
+});
+
+describe("variant price Undo", () => {
+  const large = (f: MenusFixture, unitPrice: string | null) => ({
+    id: f.large,
+    name: "Large",
+    customerName: { en: "A big glass" },
+    kitchenName: "LRG",
+    image: "large.jpg",
+    unitPrice,
+    available: true,
+  });
+
+  /** Gives Lemonade a second variant, Small, and returns its id. */
+  async function addSmall(f: MenusFixture, largePrice: string | null = "3.50"): Promise<string> {
+    const variants = await app((tx) =>
+      setProductVariants(
+        tx,
+        f.lemonade,
+        [
+          large(f, largePrice),
+          {
+            name: "Small",
+            customerName: { en: "A little glass" },
+            kitchenName: "SML",
+            image: null,
+            unitPrice: "2.50",
+            available: true,
+          },
+        ],
+        "en",
+      ),
+    );
+    return variants.find((variant) => variant.name === "Small")!.id;
+  }
+
+  it.each<{ live: string | null; now: string | null }>([
+    { live: null, now: "4.00" },
+    { live: "4.00", now: "0.00" },
+  ])("puts back one variant's published price of $live set to $now", async ({ live, now }) => {
+    const f = await menusFixture(fx.db);
+    const small = await addSmall(f);
+    await setVariantPrice(f.lunch, f.lemonade, small, "2.20");
+    await setVariantPrice(f.lunch, f.lemonade, f.large, live);
+    await publish(f.lunch);
+    const stored = await storedPrices(f.lunch, f.lemonade);
+    await setVariantPrice(f.lunch, f.lemonade, f.large, now);
+    await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Renamed" }));
+
+    const command = await undoAndCheck(f.lunch, f.dinner, isOwnVariantsOf(f.lemonade));
+
+    expect(command).toEqual({
+      method: "setMenuVariantPrice",
+      menuId: f.lunch,
+      menuItemId: await app((tx) => offerOf(tx, f.lunch, f.lemonade)),
+      variantId: f.large,
+      price: live,
+      name: "Lemonade",
+      variantName: "Large",
+    });
+    expect(await storedPrices(f.lunch, f.lemonade)).toEqual(stored);
+  });
+
+  it("offers nothing when two variants' prices changed", async () => {
+    const f = await menusFixture(fx.db);
+    const small = await addSmall(f);
+    await publish(f.lunch);
+    await setVariantPrice(f.lunch, f.lemonade, small, "2.20");
+    await setVariantPrice(f.lunch, f.lemonade, f.large, "4.00");
+
+    const { action } = await changeAndAction(
+      await readPreview(f.lunch),
+      isOwnVariantsOf(f.lemonade),
+    );
+
+    expect(action).toEqual({ kind: "none" });
+  });
+
+  it("leaves a variant that follows the dish's price to the dish's Undo", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => setProductVariants(tx, f.lemonade, [large(f, null)], "en"));
+    await publish(f.lunch);
+    await setDishPrice(f.lunch, f.lemonade, "3.30");
+    await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Renamed" }));
+    const before = await readPreview(f.lunch);
+    const variants = await changeAndAction(before, isOwnVariantsOf(f.lemonade));
+    expect(variants.action).toEqual({ kind: "none" });
+    const price = await changeAndAction(before, isPriceOf(f.lemonade));
+
+    await app((tx) => run(tx, commandOf(price.action)));
+
+    const after = await readPreview(f.lunch);
+    const gone = new Set([variants.change.id, price.change.id]);
+    expect(after.changes).toEqual(before.changes.filter(({ id }) => !gone.has(id)));
+    expect(after.changes.length).toBeGreaterThan(0);
+  });
+
+  it("offers nothing for one variant's price when another moved with the dish's price", async () => {
+    const f = await menusFixture(fx.db);
+    const small = await addSmall(f, null);
+    await setVariantPrice(f.lunch, f.lemonade, small, "2.20");
+    await publish(f.lunch);
+    await setDishPrice(f.lunch, f.lemonade, "3.30");
+    await setVariantPrice(f.lunch, f.lemonade, small, "2.40");
+
+    const { action } = await changeAndAction(
+      await readPreview(f.lunch),
+      isOwnVariantsOf(f.lemonade),
+    );
+
+    expect(action).toEqual({ kind: "none" });
+  });
+
+  it("offers nothing for a variant that had no price here while the dish's price moved", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => setProductVariants(tx, f.lemonade, [large(f, null)], "en"));
+    await publish(f.lunch);
+    await setDishPrice(f.lunch, f.lemonade, "3.30");
+    await setVariantPrice(f.lunch, f.lemonade, f.large, "4.00");
+
+    const { action } = await changeAndAction(
+      await readPreview(f.lunch),
+      isOwnVariantsOf(f.lemonade),
+    );
+
+    expect(action).toEqual({ kind: "none" });
+  });
+
+  it("is refused for a variant made Inactive since the preview was read", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await setVariantPrice(f.lunch, f.lemonade, f.large, "4.00");
+    const { action } = await changeAndAction(
+      await readPreview(f.lunch),
+      isOwnVariantsOf(f.lemonade),
+    );
+    const command = commandOf(action);
+    // The product editor refuses it while a published menu holds Large ...
+    await expect(
+      app((tx) =>
+        setProductVariants(tx, f.lemonade, [{ ...large(f, "3.50"), active: false }], "en"),
+      ),
+    ).rejects.toMatchObject({ code: "product.on_live_menu" });
+    // ... so this stands in for it with the same two effects: Inactive, and its menu rows gone.
+    await fx.db.update(products).set({ active: false }).where(eq(products.id, f.large));
+    await fx.db
+      .delete(menuItemVariantOverrides)
+      .where(eq(menuItemVariantOverrides.variantId, f.large));
+
+    await expect(app((tx) => run(tx, command))).rejects.toMatchObject({
+      code: "product.variant_not_found",
+    });
+
+    const after = (await readPreview(f.lunch)).changes;
+    expect(after.filter(isOwnVariantsOf(f.lemonade))).toEqual([]);
+    expect(after).toContainEqual(
+      expect.objectContaining({
+        kind: "product_changed",
+        productId: f.lemonade,
+        source: "shared_product",
+        fields: expect.arrayContaining(["variants"]),
+      }),
+    );
   });
 });

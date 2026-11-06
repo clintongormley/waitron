@@ -1,5 +1,6 @@
 import type {
   DocumentMember,
+  FrozenOffer,
   HomeDevice,
   HomeDisplay,
   MenuChange,
@@ -90,6 +91,10 @@ function thisMenuAction(input: MenuUndoInput, live: Live, change: MenuChange): M
       return homeDisplayUndo(live.document, now, change.device);
     case "section_changed":
       return ownSectionUndo(input.languages, live.document, now, change);
+    case "price_changed":
+      return dishPriceUndo(live.document, now, change);
+    case "product_changed":
+      return variantPriceUndo(live.document, now, change);
     default:
       return NONE;
   }
@@ -111,6 +116,69 @@ function homeDisplayUndo(
   ) as Partial<HomeDisplay>;
   if (Object.keys(patch).length === 0) return NONE;
   return undo({ method: "setHomeDisplay", menuId: now.menuId, device, patch });
+}
+
+function offerOf(
+  document: MenuDocument,
+  productId: string,
+): { menuItemId: string; offer: FrozenOffer } | null {
+  for (const [menuItemId, offer] of Object.entries(document.offers))
+    if (offer.productId === productId) return { menuItemId, offer };
+  return null;
+}
+
+/** Writing back this menu's own price puts back the whole live price only when the live version
+ * set one (an own price always wins) or what it would inherit now is the live price. */
+function dishPriceUndo(
+  live: MenuDocument,
+  now: MenuDocument,
+  change: Extract<MenuChange, { kind: "price_changed" }>,
+): MenuChangeAction {
+  const was = offerOf(live, change.productId)?.offer;
+  const is = offerOf(now, change.productId);
+  if (was === undefined || is === null) return NONE;
+  if (was.grossPrice === null && change.inheritedPrice !== was.unitPrice) return NONE;
+  return undo({
+    method: "updateMenuItem",
+    menuId: now.menuId,
+    menuItemId: is.menuItemId,
+    input: { grossPrice: was.grossPrice },
+    name: change.name,
+  });
+}
+
+/** One variant's own menu price put back. Not while the dish's own menu price moved and another
+ * variant's price moved with no setting of its own changing (the same bullet lists it, and this
+ * write leaves it), nor when the variant would go back to following a dish price that moved. */
+function variantPriceUndo(
+  live: MenuDocument,
+  now: MenuDocument,
+  change: Extract<MenuChange, { kind: "product_changed" }>,
+): MenuChangeAction {
+  const was = offerOf(live, change.productId)?.offer;
+  const is = offerOf(now, change.productId);
+  if (was === undefined || is === null) return NONE;
+  const dishMoved = was.grossPrice !== is.offer.grossPrice;
+  const before = new Map(was.variants.map((variant) => [variant.id, variant]));
+  const differing = [];
+  for (const variant of is.offer.variants) {
+    const old = before.get(variant.id);
+    if (old === undefined) continue;
+    if (old.menuPrice !== variant.menuPrice) differing.push({ old, variant });
+    else if (dishMoved && old.unitPrice !== variant.unitPrice) return NONE;
+  }
+  if (differing.length !== 1) return NONE;
+  const { old, variant } = differing[0]!;
+  if (dishMoved && old.menuPrice === null) return NONE;
+  return undo({
+    method: "setMenuVariantPrice",
+    menuId: now.menuId,
+    menuItemId: is.menuItemId,
+    variantId: variant.id,
+    price: old.menuPrice,
+    name: change.name,
+    variantName: variant.name,
+  });
 }
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
