@@ -536,7 +536,9 @@ interface RefreshRetry {
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
 /** How long a floor poll's read may stay out before it is cancelled: longer than the floor screen's
- * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. */
+ * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. A
+ * bill's refresh waits this long for a save that is out, so one with no answer holds up what follows
+ * the refresh, such as the tables after Move guests, by no more than a floor poll's limit. */
 const FLOOR_POLL_LIMIT_MS = 25_000;
 /** A refusal's reads hold a waiter at a closed panel with nothing said, and failing one costs no more
  * than the last answer kept, so they take a floor poll's limit rather than a request's. */
@@ -11986,7 +11988,9 @@ export class TillApp extends LitElement {
     const before = sync.edit;
     this.#billDraftReading = sync;
     try {
-      const loaded = await sync.load(this.#draftReadBounds() ?? { limitMs: FLOOR_POLL_LIMIT_MS });
+      const loaded = await sync.load(
+        this.#draftReadBounds() ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
+      );
       if (
         !loaded ||
         sync !== this.#draftSync ||

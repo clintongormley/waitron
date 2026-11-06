@@ -765,6 +765,37 @@ describe("A768 the left draft saves in the background", () => {
     expect(savedLines()).toContain("offer-beer ×1");
   });
 
+  it("a timed read slower than the floor read's limit still shows the order after a read failed", async () => {
+    const SLOW_READ_MS = FLOOR_READ_LIMIT_MS + 5_000;
+    let slow = false;
+    const { el } = await mountApp({
+      listDrafts: vi.fn(async (...args: Parameters<DraftServer["listDrafts"]>) => {
+        if (slow) await new Promise((resolve) => setTimeout(resolve, SLOW_READ_MS));
+        return server.listDrafts(...args);
+      }),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    api.listDrafts.mockRejectedValueOnce(new TypeError("offline"));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(tableOrder(el)!.draftStore).toBeNull();
+      slow = true;
+
+      await vi.advanceTimersByTimeAsync(15_000 + SLOW_READ_MS);
+      await el.updateComplete;
+
+      expect(tableOrder(el)!.draftStore).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("a background save that fails is said on the next table", async () => {
     const { el } = await mountApp();
     await openTable(el);
