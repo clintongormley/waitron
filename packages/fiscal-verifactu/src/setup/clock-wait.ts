@@ -13,10 +13,13 @@ export interface ClockWords {
   whyWait: string;
   nothingToDo: string;
   continuesIn: string;
+  pressAtZero: string;
+  timeLeft: string;
   whySecondClock: string;
   onBox: string;
   secondClockDo: string;
   secondClockEnds: string;
+  secondClockAgain: string;
   whyRefused: string;
   differ: string;
   differDo: string;
@@ -43,9 +46,12 @@ export const clockWaitStrings = {
     whyWait: "Waiting to confirm the time, so no invoice series is ever repeated.",
     nothingToDo: "Nothing to do; keep this page open.",
     continuesIn: "Continues in",
+    pressAtZero: "When the time left reaches zero, press “Make the series”.",
+    timeLeft: "Time left:",
     whySecondClock:
       "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
     onBox: "This screen is on the box itself, so it does not count.",
+    secondClockAgain: "Once the box reaches the internet, press “Check again”.",
     whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
     differ: "This box's time and this device's differ by more than 30 seconds.",
     later: "The series cannot be made yet: a later minute is already in use.",
@@ -59,9 +65,12 @@ export const clockWaitStrings = {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
     nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
     continuesIn: "Sigue en",
+    pressAtZero: "Cuando el tiempo restante llegue a cero, pulsa «Crear las series».",
+    timeLeft: "Tiempo restante:",
     whySecondClock:
       "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
     onBox: "Esta pantalla está en el propio equipo y no cuenta.",
+    secondClockAgain: "Cuando el equipo tenga internet, pulsa «Comprobar otra vez».",
     whyRefused: "Sin una hora confirmada no se crean series, para que ninguna se repita.",
     differ: "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
     later:
@@ -266,8 +275,9 @@ export class ClockWait<Selected extends { status: "selected" }> {
     }
   }
 
-  renderWait(words: ClockWords) {
-    return renderWait(words, this.#countdown, this.#minuteTaken);
+  /** `carriesOn` false: the person did not start this wait, so its end sends nothing. */
+  renderWait(words: ClockWords, carriesOn = true) {
+    return renderWait(words, this.#countdown, this.#minuteTaken, carriesOn);
   }
 }
 
@@ -275,6 +285,7 @@ export function renderClockProblem(
   problem: ClockProblem | undefined,
   words: ClockWords,
   clock: HourClockDecision | undefined,
+  carriesOn = true,
 ) {
   if (problem?.kind === "second-clock")
     return html`<section data-test="clock-wait">
@@ -285,7 +296,7 @@ export function renderClockProblem(
           : nothing
       }
       <p>${words.secondClockDo}</p>
-      <p>${words.secondClockEnds}</p>
+      <p>${carriesOn ? words.secondClockEnds : words.secondClockAgain}</p>
     </section>`;
   if (problem?.kind === "disagreement")
     return html`<section data-test="clock-refused">
@@ -303,19 +314,26 @@ export function renderClockProblem(
   return nothing;
 }
 
-function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: boolean) {
+function renderWait(
+  words: ClockWords,
+  countdown: WaitCountdown,
+  minuteTaken: boolean,
+  carriesOn: boolean,
+) {
+  // A taken minute is reached only through a press, so its words always carry on.
+  const pressLater = !carriesOn && !minuteTaken;
   return html`<section data-test="hour-wait">
     ${
       minuteTaken
         ? html`<p role="status" data-test="minute-taken">${words.minuteTaken}</p>`
         : html`<p role="status">${words.whyWait}</p>`
     }
-    <p>${words.nothingToDo}</p>
+    <p>${pressLater ? words.pressAtZero : words.nothingToDo}</p>
     ${
       countdown.remainingMs === undefined
         ? nothing
         : html`<p>
-            ${minuteTaken ? words.newCodeIn : words.continuesIn}
+            ${minuteTaken ? words.newCodeIn : pressLater ? words.timeLeft : words.continuesIn}
             <span role="timer" data-test="remaining"
               >${
                 minuteTaken

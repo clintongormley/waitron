@@ -414,6 +414,24 @@ it("a reload during the box's wait ends at zero with no request, and Make the se
     vi.useRealTimers();
   }
 });
+it("a reload during the box's wait says to press Make the series at zero", async () => {
+  fakeClock();
+  try {
+    const { el } = await mount({
+      preview: { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 },
+    });
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("1:01");
+    expect(text(el)).toContain("When the time left reaches zero, press “Make the series”.");
+    expect(text(el)).toContain("Time left: 1:01");
+    expect(text(el)).not.toContain(NOTHING_TO_DO);
+    expect(text(el)).not.toContain("Continues in");
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("Check again after Make the series starts over: the wait it shows ends with no request", async () => {
   let previews = 0;
   let compared = 0;

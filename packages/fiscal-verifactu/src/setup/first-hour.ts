@@ -520,10 +520,10 @@ export class FirstSetupHour extends LitElement {
             </section>`
           : nothing
       }
-      ${renderClockProblem(this.#wait.problem, t, clock)}
+      ${renderClockProblem(this.#wait.problem, t, clock, this.#pressed)}
       ${
         this.#wait.counting
-          ? this.#wait.renderWait(t)
+          ? this.#wait.renderWait(t, this.#pressed)
           : result?.status === "selected"
             ? html`<section data-test="selected-hour">
                 <p role="status">${t.chosen}: <strong>${result.identity}</strong></p>
