@@ -264,8 +264,12 @@ PRs 2–5 add their own refusal sentences to this section, in the same form, bef
 **Q1 — three changes where the scope's link cannot do the job.** (a) An extras item's portion or
 maximum quantity is labelled "shared product", but only the extras-list form can change it; the
 product editor cannot. (b) After Task 1.1, a price change credited to an included menu is one that
-menu set (or a menu it includes), and it is set on that menu's Price overrides tab, not its
-Structure tab. (c) A deleted product's editor refuses every save.
+menu set or cleared (or a menu it includes did), and it is set on that menu's Price overrides tab,
+not its Structure tab. A price set two includes down is credited to the outer include (Brunch
+includes Lunch, which includes Drinks; Drinks sets a price → credited to Lunch), so "Edit {menu}"
+opens the outer menu's Price overrides tab. A product's own price change seen only through an
+include is credited to the included menu as well (A1373). (c) A deleted product's editor refuses
+every save.
 **Recommended:** (a) **Edit extras list**, to `/manage/modifiers/view/extras/list/<listId>`; (b)
 **Edit {menu}** to that menu's `…/view/prices` for `price_changed` and variant-price
 `product_changed` from an included menu, Structure for every other included change; (c) no link
@@ -345,23 +349,34 @@ Today the source comes from the proposed combined price before `grossPrice` is l
 included menu's candidate always carries `source.kind === "menu"` (`menu-combine.ts:25-33`), so
 clearing this menu's own price on a product it reaches only through an include is credited to the
 included menu (the review ran it: Lunch clears Lemonade's price → `included_menu`, Drinks; the
-control, Dinner clearing Burger's, → `this_menu`). The included candidate's `from` holds where
-that menu's own value came from (`menu-combine.ts:32`), so a product's own price change reached
-only through an include is, by the same reading, credited to the included menu too.
+control, Dinner clearing Burger's, → `this_menu`).
+
+The fix is one rule: when this menu's own price setting changed, the change is `this_menu`. Every
+other price change is credited as before. Following the included candidate's `from` chain to tell
+a product's own price change apart from an included menu's was tried and reverted: when an
+included menu clears its own price the proposed price comes from the product, so that reading
+credits the shared product where the included menu made the change, and the live published
+document does not record where its price came from. A product's own price change that reaches a
+menu only through an include, where no menu sets a price, therefore stays credited to the included
+menu; that is backlog item A1373.
+
+When this menu's own dish price moved and a variant's price follows the dish, the variant's
+`product_changed` is credited to `this_menu` too (`productFields`, the `priceSource.kind ===
+"parent"` branch); every other variant price change is credited as before.
 
 - [ ] Failing cases first (`useCatalogueDb` + `menusFixture`, publish, change, `previewMenu`):
   1. Lunch clears its own price for Lemonade (reached only through Drinks) → `this_menu`.
   2. Control: Dinner sets, then clears, its own price for Burger → `this_menu` both times.
-  3. Lemonade's own product price changes and neither Lunch nor Drinks sets one → `shared_product`
-     (predicted by reading; if the run shows it is already `shared_product`, keep the case as a
-     guard and change nothing for it).
-  4. Drinks sets its own price for Lemonade and Lunch sets none → `included_menu`, Drinks.
-- [ ] Implement: `was.grossPrice !== offer.grossPrice` → `this_menu`; otherwise, when the decided
-  source is an included menu, follow `from` to where the value was set: an included menu's own
-  setting → `included_menu` with the outer included menu as now; a product's own price →
-  `shared_product`.
-- [ ] Existing assertions that pin the old label for these exact shapes change only in that label;
-  list each in the PR under "changed test checks".
+  3. Drinks sets its own price for Lemonade and Lunch sets none → `included_menu`, Drinks.
+  4. Drinks sets 3.40 for Lemonade, Dinner is published, Drinks clears it → `included_menu`,
+     Drinks.
+  5. Brunch includes Lunch, Brunch is published, Lunch clears its 2.80 → `included_menu`, Lunch.
+  6. Lemonade's variant has no price of its own, Lunch is published, Lunch clears its own price →
+     the dish's `price_changed` and the variant's `product_changed` are both `this_menu`.
+- [ ] Implement: `was.grossPrice !== offer.grossPrice` → `this_menu`; otherwise as before. In
+  `productFields`, a variant whose price follows the dish while the dish's own menu price moved →
+  `this_menu`.
+- [ ] No existing assertion changes.
 - [ ] `pnpm --filter @waitron/catalogue exec vitest run src/menu-publication.test.ts src/menu-document.test.ts src/menu-change-navigation.test.ts src/menu-preview-includers.test.ts`
 
 #### Task 1.2 — a this-menu price change says what this menu would inherit now
@@ -608,7 +623,7 @@ longer lists, nothing else.
   waiting). Keep them in a scratch folder outside the repository and show them to the owner;
   never commit them.
 - [ ] The PR description lists every kind left without Undo (section 2), the section 3 words, and
-  the "changed test checks" from Tasks 1.1 and 1.2.
+  any "changed test checks" (Tasks 1.1 and 1.2 have none).
 - [ ] Tell the owner the branch is ready for `finish-branch`.
 
 ### PR 2 — an include's own presentation

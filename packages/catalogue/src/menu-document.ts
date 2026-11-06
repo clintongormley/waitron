@@ -840,12 +840,14 @@ function productFields(
     if (was.menuPrice !== variant.menuPrice) menu.add("variants");
     else if (was.unitPrice !== variant.unitPrice) {
       const priceSource = setting?.price.state === "decided" ? setting.price.source : undefined;
-      fromSetting(
-        priceSource?.kind === "parent" && decision?.price.state === "decided"
-          ? decision.price.source
-          : priceSource,
-        a.grossPrice === b.grossPrice ? shared : menu,
-      );
+      if (priceSource?.kind === "parent" && a.grossPrice !== b.grossPrice) menu.add("variants");
+      else
+        fromSetting(
+          priceSource?.kind === "parent" && decision?.price.state === "decided"
+            ? decision.price.source
+            : priceSource,
+          a.grossPrice === b.grossPrice ? shared : menu,
+        );
     }
   }
   if (!same(extrasTerms(a), extrasTerms(b))) shared.add("extras");
@@ -1022,16 +1024,12 @@ export function diffEntries(
               inheritedPrice: otherwise?.state === "decided" ? otherwise.value : null,
             };
           }
-          if (price?.state !== "decided" || price.source.kind !== "menu")
-            return { source: "shared_product" as const };
-          let setAt: ValueSource = price.source.from;
-          while (setAt.kind === "menu") setAt = setAt.from;
-          return setAt.kind === "product"
-            ? { source: "shared_product" as const }
-            : {
+          return price?.state === "decided" && price.source.kind === "menu"
+            ? {
                 source: "included_menu" as const,
                 includedMenu: { id: price.source.menuId, name: price.source.menuName },
-              };
+              }
+            : { source: "shared_product" as const };
         })(),
       });
     const { shared, menu, included } = productFields(was, offer, combined.get(productId));

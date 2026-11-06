@@ -23,7 +23,7 @@ import {
 import * as menuDocument from "./menu-document.js";
 import * as operations from "./operations.js";
 import * as sectionGraph from "./section-graph.js";
-import { requireMenuRoot } from "./menu-structure.js";
+import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { applyLiveFields, MENU_DOCUMENT_FORMAT, menuDocumentHash } from "./menu-document.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import {
@@ -1741,18 +1741,6 @@ describe("previewMenu", () => {
       expect((await priceChange(f.dinner)).map((change) => change.source)).toEqual(["this_menu"]);
     });
 
-    it("credits Lemonade's own price to the shared product when neither Lunch nor Drinks sets one", async () => {
-      const f = await menusFixture(fx.db);
-      await app(async (tx) =>
-        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
-      );
-      await publish(f.lunch);
-      await app((tx) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" }));
-      expect(
-        (await priceChange(f.lunch)).map(({ source, includedMenu }) => ({ source, includedMenu })),
-      ).toEqual([{ source: "shared_product", includedMenu: undefined }]);
-    });
-
     it("credits Drinks' own Lemonade price to Drinks when Lunch sets none", async () => {
       const f = await menusFixture(fx.db);
       await app(async (tx) =>
@@ -1767,6 +1755,103 @@ describe("previewMenu", () => {
       expect(
         (await priceChange(f.lunch)).map(({ source, includedMenu }) => ({ source, includedMenu })),
       ).toEqual([{ source: "included_menu", includedMenu: { id: f.drinksMenu, name: "Drinks" } }]);
+    });
+
+    it("credits Drinks clearing its own Lemonade price to Drinks on Dinner", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: "3.40",
+        }),
+      );
+      await publish(f.dinner);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: null,
+        }),
+      );
+      expect(
+        (await priceChange(f.dinner)).map(({ source, includedMenu, from, to }) => ({
+          source,
+          includedMenu,
+          from,
+          to,
+        })),
+      ).toEqual([
+        {
+          source: "included_menu",
+          includedMenu: { id: f.drinksMenu, name: "Drinks" },
+          from: "3.40",
+          to: "3.00",
+        },
+      ]);
+    });
+
+    it("credits Lunch clearing its own Lemonade price to Lunch on Brunch, which includes Lunch", async () => {
+      const f = await menusFixture(fx.db);
+      const brunch = await app(async (tx) => {
+        const created = await createCatalogue(tx, { name: "Brunch Menu" });
+        const root = (await readMenuStructure(tx, created.id)).rootSectionId;
+        await addMember(tx, root, section(f.lunchRoot));
+        return created.id;
+      });
+      await publish(brunch);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
+      );
+      expect(
+        (await priceChange(brunch)).map(({ source, includedMenu, from, to }) => ({
+          source,
+          includedMenu,
+          from,
+          to,
+        })),
+      ).toEqual([
+        {
+          source: "included_menu",
+          includedMenu: { id: f.lunch, name: "Lunch Menu" },
+          from: "2.80",
+          to: "3.00",
+        },
+      ]);
+    });
+
+    it("credits a Lemonade variant that follows the dish to Lunch when Lunch clears its own price", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        setProductVariants(
+          tx,
+          f.lemonade,
+          [
+            {
+              id: f.large,
+              name: "Large",
+              customerName: { en: "A big glass" },
+              kitchenName: "LRG",
+              image: "large.jpg",
+              unitPrice: null,
+              available: true,
+            },
+          ],
+          "en",
+        ),
+      );
+      await publish(f.lunch);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
+      );
+      expect(
+        changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)
+          .filter((change) => change.kind === "price_changed" || change.kind === "product_changed")
+          .map((change) => ({
+            kind: change.kind,
+            source: change.source,
+            ...("fields" in change ? { fields: change.fields } : {}),
+          })),
+      ).toEqual([
+        { kind: "price_changed", source: "this_menu" },
+        { kind: "product_changed", source: "this_menu", fields: ["variants"] },
+      ]);
     });
   });
 
@@ -1830,7 +1915,6 @@ describe("previewMenu", () => {
       const f = await menusFixture(fx.db);
       await publish(f.dinner);
       await app(async (tx) => {
-        // Dinner places Lemonade itself (3.00) and reaches it through Drinks, which sets 3.40.
         await addMember(tx, f.dinnerRoot, product(f.lemonade));
         await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
           grossPrice: "3.40",
@@ -2007,7 +2091,8 @@ describe("previewMenu", () => {
         name: "Lemonade",
         from: "3.00",
         to: "3.20",
-        source: "shared_product",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
       },
     ]);
   });
