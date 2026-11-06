@@ -12,6 +12,7 @@ import {
   serviceCommands,
   partyTables,
   parties,
+  ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -732,7 +733,47 @@ export async function finishTable(
     throw new AppError("party.bill_outstanding", { partyId });
   }
   const empty = bills.filter((bill) => bill.status === "open").map((bill) => bill.id);
-  return closeParty(tx, partyId, empty, args.operatorId, attendance, args.expectedEdits);
+  const closed = await closeParty(
+    tx,
+    partyId,
+    empty,
+    args.operatorId,
+    attendance,
+    args.expectedEdits,
+  );
+  await handOverFinishedBills(tx, partyId);
+  return closed;
+}
+
+/** A finished table's paid bills have left the kitchen, at the moment the table closed. */
+async function handOverFinishedBills(tx: Transaction, partyId: string): Promise<void> {
+  const [party] = await tx
+    .select({ closedAt: parties.closedAt })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  const bills = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(
+      and(
+        inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
+        eq(workingOrders.status, "settled"),
+        isNull(workingOrders.collectedAt),
+      ),
+    );
+  const fired = tx
+    .select({ id: ticketItems.workingOrderId })
+    .from(ticketItems)
+    .where(
+      inArray(
+        ticketItems.workingOrderId,
+        bills.map((bill) => bill.id),
+      ),
+    );
+  await tx
+    .update(workingOrders)
+    .set({ collectedAt: party!.closedAt })
+    .where(inArray(workingOrders.id, fired));
 }
 
 export async function requirePartyClosingEdits(

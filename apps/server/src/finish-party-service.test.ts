@@ -20,7 +20,7 @@ import { adjustments } from "@waitron/adjustments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
-import { advanceTicketItem, markServed } from "./working-order.js";
+import { advanceTicketItem, listStationQueue, markServed } from "./working-order.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { fireGroup } from "./order-groups.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -723,5 +723,37 @@ describe("A773 requested lifecycle", () => {
       body: { error: { code: "party.unserved_dishes" } },
     });
     expect(await snapshot(p)).toEqual(before);
+  });
+});
+
+describe("a finished table's paid food leaves the kitchen screens (A1344)", () => {
+  it("takes the card off the station when the dish still being made is cancelled at Finish", async () => {
+    const p = await fixture(true, "fire");
+    await inTx(venue, (tx) =>
+      markServed(
+        tx,
+        venue.cfg,
+        p.partyId,
+        [
+          { lineId: p.lines[0]!.id, quantity: "1" },
+          { lineId: p.lines[1]!.id, quantity: "1" },
+        ],
+        {
+          expectedPartyRevision: p.body.expectedPartyRevision,
+          operatorId: venue.staffId,
+          submissionId: randomUUID(),
+        },
+      ),
+    );
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+    p.body.expectedPartyRevision = party!.revision;
+    const body = await confirm(p);
+    body.cancellations = [body.cancellations[0]!];
+    body.cancellations[0]!.quantity = "1.000";
+
+    expect(await post(p, body)).toMatchObject({ status: 200 });
+
+    const cards = await inTx(venue, (tx) => listStationQueue(tx, venue.stationId));
+    expect(cards.filter((group) => group.orderId === p.billId)).toEqual([]);
   });
 });
