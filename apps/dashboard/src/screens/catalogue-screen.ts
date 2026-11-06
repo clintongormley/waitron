@@ -355,6 +355,7 @@ export class CatalogueScreen extends LitElement {
     const id = this.#linkedProduct;
     if (id === null || !this.#knows(id)) return;
     this.#linkedProduct = null;
+    if (this.editorValue?.id === id) return;
     await this.#openProduct(id, new URL(location.href).searchParams.get("field") ?? "");
   }
 

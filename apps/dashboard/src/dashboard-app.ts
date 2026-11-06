@@ -885,6 +885,9 @@ export class DashboardApp extends LitElement {
   @state() private navSearch = "";
 
   @state() private profileOpen = false;
+  /** The address Your profile opened over: closing it writes that back, keeping the words a screen
+   * keeps in it, such as the editor it has open. */
+  #beneathProfile: string | null = null;
 
   /** Reported by profile-screen via `profile-tab-change`: the Edit action lives in this shell's modal
    * footer, shown only while "details" is active. */
@@ -1585,6 +1588,7 @@ export class DashboardApp extends LitElement {
     this.drawerOpen = false;
     this.navSearch = "";
     this.profileOpen = false;
+    this.#beneathProfile = null;
   }
 
   /**
@@ -2411,13 +2415,17 @@ export class DashboardApp extends LitElement {
 
   /** A pushed navigation, so the browser's Back button closes the modal. */
   #openProfile(): void {
+    if (!this.profileOpen) this.#beneathProfile = navigationGuardFor(window)?.href ?? location.href;
     this.#url.write({ dashboard: "profile" }, false);
   }
 
   /** Replaces the current entry, so "profile" does not stay behind as its own Back-button stop. A
    * Back-button close goes through `#onHistory` instead. */
   #closeProfile(): void {
-    this.#writeScreenUrl(this.screen, true);
+    const guard = navigationGuardFor(window);
+    if (this.#beneathProfile !== null && guard !== undefined)
+      void guard.write(this.#beneathProfile, true);
+    else this.#writeScreenUrl(this.screen, true);
   }
 
   readonly #onHistory = (): void => {
@@ -2429,6 +2437,7 @@ export class DashboardApp extends LitElement {
       return;
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#writeCurrentUrl(true);
+    if (!this.profileOpen) this.#beneathProfile = navigationGuardFor(window)?.href ?? location.href;
     this.drawerOpen = false;
     diag.record("info", "nav", { screen: this.screen });
   };

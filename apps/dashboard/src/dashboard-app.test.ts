@@ -89,6 +89,20 @@ const people: PersonSummary[] = [
   },
 ];
 
+const ownProfile = {
+  displayName: "Ada",
+  firstNames: "Ada",
+  lastNames: "Lovelace",
+  telephone: null,
+  email: "manager@example.com",
+  pendingEmail: null,
+  locale: "en-GB",
+  hasPassword: true,
+  hasTotp: false,
+  hasGoogle: false,
+  passkeys: [],
+};
+
 const meResponse = {
   personId: "p1",
   role: "manager",
@@ -260,6 +274,11 @@ const mySchedule = (el: DashboardApp) =>
 const overview = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-overview-screen");
 const sales = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-sales-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
+function unsavedOnUnload(): boolean {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
 const units = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-units-screen");
 const navUnits = (el: DashboardApp) =>
@@ -1103,6 +1122,177 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
     await expect.poll(() => new URL(location.href).pathname).toBe("/manage/catalogue");
+  });
+
+  it.each([
+    [
+      "its close button",
+      (el: DashboardApp) =>
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click(),
+    ],
+    ["Back", () => history.back()],
+  ])(
+    "closing Your profile with %s keeps the device profile editor it opened over, with its unsaved name",
+    async (_how, close) => {
+      history.replaceState(null, "", "/manage/device-profiles/profile/dp1");
+      const deviceProfile = {
+        id: "dp1",
+        name: "Front counter",
+        capabilities: [],
+        formFactor: "till",
+        inactivityTimeoutSeconds: null,
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: [],
+        cashDrawerPrinterIds: [],
+        receiptPrinterDefaultId: null,
+        paymentSlipPrinterDefaultId: null,
+        cashDrawerPrinterDefaultId: null,
+        invoicePrinterIds: [],
+        invoicePrinterDefaultId: null,
+        departmentId: null,
+        allowedZoneIds: null,
+        startingZoneId: null,
+        admittedRoles: ["staff", "supervisor", "manager", "admin"],
+        personExceptions: [],
+        startingScreen: null,
+      };
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getProfile: vi.fn().mockResolvedValue(ownProfile),
+          listDeviceProfiles: vi.fn().mockResolvedValue([deviceProfile]),
+          getDeviceProfile: vi.fn().mockResolvedValue(deviceProfile),
+          listPagePrinters: vi.fn().mockResolvedValue([]),
+          listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
+          getProfileScopeChoices: vi.fn().mockResolvedValue({ departments: [], zones: [] }),
+          listReaders: vi.fn().mockResolvedValue([]),
+          getProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
+          liveData: new LiveData(),
+        }),
+      });
+      await flush(el);
+      const screen = el.shadowRoot!.querySelector("dashboard-device-profiles-screen")!;
+      const name = () => screen.shadowRoot!.querySelector<WtInput>("[data-test=profile-name]");
+      await expect.poll(() => name()?.value).toBe("Front counter");
+      name()!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Back counter" } }));
+      await screen.updateComplete;
+
+      expect(unsavedOnUnload()).toBe(true);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+      await flush(el);
+      expect(location.pathname).toBe("/manage/profile");
+      close(el);
+      await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+      await flush(el);
+      await screen.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+      expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+      expect(name()?.value).toBe("Back counter");
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    },
+  );
+
+  it("closing Your profile keeps the product editor it opened over, with its unsaved price", async () => {
+    history.replaceState(null, "", "/manage/catalogue/product/p1");
+    const product = {
+      id: "p1",
+      modifiers: [],
+      catalogueId: "cat-a",
+      categoryId: null,
+      primaryCategoryId: null,
+      name: "Croquettes",
+      customerName: null,
+      unitId: "u1",
+      unit: {
+        id: "u1",
+        staffName: "Unit",
+        staffAbbreviation: "u",
+        name: { es: "unidad" },
+        abbreviation: { es: "u" },
+        precision: 0,
+      },
+      description: null,
+      kitchenName: null,
+      dietaryDeclarations: [],
+      pricingUnit: "each",
+      unitPrice: "8.50",
+      vatClass: "reduced",
+      active: true,
+      available: true,
+      ordering: "public",
+      allergens: null,
+      dietOverride: null,
+      dietDerivation: null,
+      manualAllergens: null,
+      image: null,
+      color: null,
+      variants: [],
+      courseId: null,
+    };
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["product.manage"] }),
+        getProfile: vi.fn().mockResolvedValue(ownProfile),
+        listCatalogues: vi
+          .fn()
+          .mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true, version: 1 }]),
+        listProducts: vi.fn().mockResolvedValue([product]),
+        listUnits: vi.fn().mockResolvedValue([]),
+        listExtraLists: vi.fn().mockResolvedValue([]),
+        listOptionLists: vi.fn().mockResolvedValue([]),
+        listMadeAt: vi.fn().mockResolvedValue({}),
+        getProductEditor: vi.fn().mockResolvedValue({
+          id: "p1",
+          parentId: null,
+          inherited: null,
+          name: "Croquettes",
+          customerName: null,
+          description: null,
+          kitchenName: null,
+          image: null,
+          unitId: "u1",
+          unitPrice: "8.50",
+          active: true,
+          available: true,
+          ordering: "public",
+          vatClass: "reduced",
+          variants: [],
+          primaryCategoryId: null,
+          color: null,
+          modifiers: [],
+          allergens: {},
+          dietaryDeclarations: [],
+          courseId: null,
+        }),
+        liveData: new LiveData(),
+      }),
+    });
+    await flush(el);
+    const editor = () =>
+      catalogue(el)?.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "dashboard-product-editor",
+      );
+    const price = () => editor()?.shadowRoot!.querySelector<WtInput>("[name=unit-price]");
+    await expect.poll(() => editor()?.open).toBe(true);
+    await expect.poll(() => price()?.value).toBe("8.50");
+    price()!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "9.25" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(unsavedOnUnload()).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+    expect(location.pathname).toBe("/manage/catalogue/product/p1");
+    expect(editor()?.open).toBe(true);
+    expect(price()?.value).toBe("9.25");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 
   it("disables the relocated Edit button until profile data has actually loaded, and never throws if clicked early", async () => {
