@@ -26,7 +26,7 @@ for invoices. Start again and Recover from backup still delete it.
 Neither is offered, and the page says why in the same words for both, if the setup already saved
 the settings the box sells with (continue with your setup password to finish it), if the setup
 already finished, or if the setup database holds an invoice or another record Waitron never
-deletes. If the box cannot confirm that deleting the setup is safe, the page says why and offers
+deletes. If the box cannot confirm that deleting the setup is safe, the page says so and offers
 neither. That includes a setup whose own record cannot be read: then the only way out is to
 reinstall Waitron. Over a plain connection neither works: set up the secure connection first.
 

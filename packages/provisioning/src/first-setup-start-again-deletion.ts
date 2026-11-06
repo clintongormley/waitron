@@ -375,6 +375,8 @@ export async function assertNoStartAgainDeletion(venueDir: string): Promise<void
 }
 
 export async function writeStartAgainMarker(roots: Roots, marker: StartAgainMarker): Promise<void> {
+  // No cause: the server refuses an oversized marker first, as "too-large", so only a fault in
+  // Waitron reaches this.
   if (markerSize(marker) > MARKER_LIMIT) throw new AppError("setup.not_ready", {});
   const value = parseMarker(marker);
   const canonical = await canonicalFirstSetupRoots(roots);

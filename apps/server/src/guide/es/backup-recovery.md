@@ -29,7 +29,7 @@ No se ofrece ninguna de las dos, y la página dice por qué con las mismas palab
 configuración ya guardó los ajustes con los que vende el equipo (continúa con tu contraseña de
 configuración para terminarla), si la configuración ya terminó, o si la base de datos de
 configuración tiene una factura u otro registro que Waitron nunca borra. Si el equipo no puede
-confirmar que borrar la configuración sea seguro, la página dice por qué y no ofrece ninguna. Eso
+confirmar que borrar la configuración sea seguro, la página lo indica y no ofrece ninguna. Eso
 incluye una configuración cuyo propio registro no se puede leer: entonces la única salida es
 reinstalar Waitron. Con una conexión sin cifrar no funciona ninguna: configura antes la conexión
 segura.
