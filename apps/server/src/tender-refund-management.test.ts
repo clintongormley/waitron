@@ -55,6 +55,7 @@ beforeEach(async () => {
   mountPaymentsApi(
     app,
     {
+      isPrimary: () => true,
       admission: testTradingAdmission(),
       db: store.db,
       cfg: venue.cfg,

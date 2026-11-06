@@ -97,6 +97,7 @@ function managerApp(clock: TrustedClock = systemClock()): Hono {
   mountPaymentsApi(
     app,
     {
+      isPrimary: () => true,
       admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,

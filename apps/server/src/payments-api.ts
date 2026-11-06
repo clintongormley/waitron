@@ -6,7 +6,8 @@ import "./errors.js";
 import { profileAllows } from "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { readTakenOverFrom } from "./handover-collection.js";
 import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
 import {
   billPaymentRefunds,
@@ -118,6 +119,7 @@ export interface PaymentsApiDeps {
   backend: FiscalBackend;
   clock: TrustedClock;
   cfg: TradingContext;
+  isPrimary: () => boolean;
   ring: KeyRing;
   environment: DeploymentEnvironment;
   pool: CardProviderPool;
@@ -319,6 +321,14 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
  * runs first, in its own transaction, so an unauthorised caller never reaches the provider.
  */
 export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger): void {
+  const collectionScope = async (tx: Transaction) =>
+    or(
+      inArray(payments.nodeId, [
+        deps.cfg.nodeId,
+        ...(await readTakenOverFrom(tx, deps.cfg.nodeId)),
+      ]),
+      deps.isPrimary() ? isNull(payments.nodeId) : undefined,
+    );
   const gated = <T>(
     sessionId: string,
     fn: (tx: Transaction, personId: string) => Promise<T>,
@@ -1027,12 +1037,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // A card payment nothing is driving any more: the order is still marked in flight and the payment
-  // still `attempting`, typically because the server stopped mid-collect.
   app.get("/management-api/payments/stuck", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) =>
+      const rows = await gated(sessionId, async (tx) =>
         tx
           .select({
             paymentId: payments.id,
@@ -1053,8 +1061,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .where(
             and(
               eq(payments.state, "attempting"),
-              eq(workingOrders.status, "open"),
-              isNotNull(workingOrders.paymentAttemptAt),
+              isNull(payments.billPaymentId),
+              or(
+                and(eq(workingOrders.status, "open"), isNotNull(workingOrders.paymentAttemptAt)),
+                eq(workingOrders.status, "placed"),
+              ),
+              await collectionScope(tx),
             ),
           )
           .orderBy(payments.createdAt, sql`${payments}.rowid`),
@@ -1089,11 +1101,17 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           })
           .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-          .where(eq(payments.id, paymentId));
+          .where(
+            and(
+              eq(payments.id, paymentId),
+              isNull(payments.billPaymentId),
+              await collectionScope(tx),
+            ),
+          );
         if (
           row?.state !== "attempting" ||
-          row.orderStatus !== "open" ||
-          row.attemptAt === null ||
+          (row.orderStatus !== "open" && row.orderStatus !== "placed") ||
+          (row.orderStatus === "open" && row.attemptAt === null) ||
           paymentAttemptIsLive(deps.db, row.workingOrderId)
         ) {
           throw new AppError("payment.not_stuck", { paymentId });
@@ -1125,7 +1143,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // Only the mark read above: an attempt started since has written its own.
         // Read back rather than trusting the update: the work loop may have cleared the mark first.
         const orderUnlocked = await gated(sessionId, async (tx) => {
-          await clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt);
+          if (stuck.attemptAt !== null)
+            await clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt);
           await finishIntegratedAttendance(tx, deps.attendance, stuck.attendanceKey, "refused");
           const [order] = await tx
             .select({ mark: workingOrders.paymentAttemptAt })
@@ -1168,6 +1187,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     if (row.state !== "pending" || billPaymentIsLive(deps.db, id)) {
       throw new AppError("bill.payment_not_stuck", { paymentId: id });
     }
+    const [owned] = await tx
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
+      .where(and(eq(billPayments.id, id), await collectionScope(tx)));
+    if (owned === undefined) throw new AppError("bill.payment_not_stuck", { paymentId: id });
     return row;
   };
   const fiscal = {
@@ -1184,7 +1209,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/bill-payments", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) =>
+      const rows = await gated(sessionId, async (tx) =>
         tx
           .select({
             billPaymentId: billPayments.id,
@@ -1205,7 +1230,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
           .leftJoin(devices, eq(devices.id, billPayments.deviceId))
           .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
-          .where(eq(billPayments.state, "pending"))
+          .where(and(eq(billPayments.state, "pending"), await collectionScope(tx)))
           .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`),
       );
       return c.json(

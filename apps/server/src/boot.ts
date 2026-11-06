@@ -2574,6 +2574,7 @@ async function bootServer(
         admission: tradingAdmission,
         clock: tillClock,
         cfg: tradingContext,
+        isPrimary: () => holders.singletonRole.current === "primary",
         ring,
         environment: config.environment,
         pool: cardPool,
