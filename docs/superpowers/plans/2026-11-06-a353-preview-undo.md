@@ -117,8 +117,8 @@ queue, and finishes with `#refresh()` (`menus-screen.ts:1263-1265`), as `#saveSe
 row key: the tab clears a field's "saving" mark only when that key's count is down to one
 (`:2070-2075`), so an Undo counted under the same key would leave the mark set for good (the
 review ran this against the real `ListWriteQueue`). The queue is one chain whatever the scope
-(`apps/dashboard/src/widgets/section-writes.ts:38-49`), so the Undo still runs after a save that
-is out.
+(`ListWriteQueue.run` in `apps/dashboard/src/widgets/section-writes.ts`), so the Undo still runs
+after a save that is out.
 
 ### Decision 4 — the guide gains nothing
 

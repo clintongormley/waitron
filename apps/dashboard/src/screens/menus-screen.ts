@@ -51,7 +51,7 @@ import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
 import "../widgets/include-folder-form.js";
-import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
+import { ListWriteQueue } from "../widgets/section-writes.js";
 import { countOf } from "../widgets/count-text.js";
 import type {
   CatalogueSummary,
@@ -88,8 +88,8 @@ import {
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
-import { codeMessage, codeOf } from "../i18n/codes.js";
-import { homeDeviceLabel } from "../i18n/domain.js";
+import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
+import { homeDeviceName } from "../i18n/domain.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
 type Tab = (typeof TABS)[number];
@@ -1044,6 +1044,7 @@ export class MenusScreen extends LitElement {
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           setContentLanguages(value);
+          this.#forgetStaleRefusals();
         }),
       ]);
     } catch {
@@ -1109,9 +1110,7 @@ export class MenusScreen extends LitElement {
       }
       if (part === "preview") {
         this.preview = response.body as MenuReadModels["preview"];
-        const listed = new Set(this.preview.changes.map(({ id }) => id));
-        const unlisted = Object.keys(this.undoRefusals).filter((id) => !listed.has(id));
-        if (unlisted.length > 0) this.undoRefusals = without(this.undoRefusals, unlisted);
+        this.#forgetStaleRefusals();
         this.previewError = false;
         this.previewResetRequired = false;
         this.status = this.preview.status;
@@ -1450,6 +1449,18 @@ export class MenusScreen extends LitElement {
     this.#followStatus(true);
   }
 
+  /** A refusal is kept only while its change offers Undo: one that offers it again later, say once
+   * a language is switched back on, would otherwise show a sentence that is no longer true. A
+   * change the person hid still offers Undo, so its refusal stays. */
+  #forgetStaleRefusals(): void {
+    const preview = this.preview;
+    const ids = Object.keys(this.undoRefusals);
+    if (preview === null || ids.length === 0) return;
+    const input = { preview, languages: currentContentLanguages().languages };
+    const stale = ids.filter((id) => menuChangeAction(input, id).kind !== "undo");
+    if (stale.length > 0) this.undoRefusals = without(this.undoRefusals, stale);
+  }
+
   #undoBlocked(menuId: string): boolean {
     return (
       this.busy || this.undoOut !== null || this.homePending !== null || this.publishing.has(menuId)
@@ -1475,16 +1486,22 @@ export class MenusScreen extends LitElement {
     this.undoRefusals = without(this.undoRefusals, [changeId]);
     this.undoResult = null;
     const shown = () => this.menuId === menuId && this.view === "preview";
-    const drawn = () =>
-      shown() &&
-      this.renderRoot.querySelector("dashboard-menu-preview")?.drawsUndo(changeId) === true;
     const task = async () => {
       try {
         try {
           await sendMenuUndo(this.api, command);
         } catch (error) {
           const reason = undoRefusalText(error, command);
-          if (drawn()) this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
+          // The Preview is asked only once it and the screen have drawn what they hold, a preview
+          // taken just before the refusal included, and in the same turn as the refusal is placed.
+          let panel = this.renderRoot.querySelector("dashboard-menu-preview");
+          while (this.isUpdatePending || panel?.isUpdatePending) {
+            await this.updateComplete;
+            await panel?.updateComplete;
+            panel = this.renderRoot.querySelector("dashboard-menu-preview");
+          }
+          if (shown() && panel?.drawsUndo(changeId) === true)
+            this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
           else {
             const menu = this.menus.find(({ id }) => id === menuId)?.name ?? sentFrom;
             this.memberError = fill("menu_preview.undo_refused_change", { menu, change, reason });
@@ -3215,7 +3232,7 @@ export class MenusScreen extends LitElement {
                     this.homeDevice = each;
                     this.homeFieldErrors = {};
                   }}
-                />${homeDeviceLabel(each)}</label
+                />${homeDeviceName(each)}</label
               >`,
           )}
         </div>

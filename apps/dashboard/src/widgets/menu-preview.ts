@@ -23,7 +23,7 @@ import type {
 } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
-import { homeDeviceLabel } from "../i18n/domain.js";
+import { homeDeviceName } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";
 import {
   openProduct,
@@ -672,7 +672,7 @@ export class MenuPreviewPanel extends LitElement {
         return t("menu_preview.home_shortcuts_changed");
       case "home_display_changed":
         return fill("menu_preview.home_display_changed", {
-          device: homeDeviceLabel(change.device),
+          device: homeDeviceName(change.device),
         });
       case "menu_renamed":
         return fill("menu_preview.menu_renamed", { from: change.from, to: change.to });

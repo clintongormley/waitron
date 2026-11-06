@@ -19,8 +19,7 @@ import { colorField, colorFieldStyles } from "./color-field.js";
 import { textField, optionalTextFields } from "./form-fields.js";
 import type { ImageUploader } from "./image-upload.js";
 import type { SectionDetails, SectionInput } from "../api/client.js";
-import { fieldOf } from "./section-writes.js";
-import { codeMessage, codeOf } from "../i18n/codes.js";
+import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 @customElement("dashboard-section-details-form")
 export class SectionDetailsForm extends LitElement {

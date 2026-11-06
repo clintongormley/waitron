@@ -1,4 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
@@ -96,6 +97,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
     preview: previewOf([rename, recolour]),
     readFails: false,
     menuName: "Lunch Menu",
+    languages: ["en"],
   };
   const home: MenuHome = {
     homeSectionId: "home",
@@ -121,7 +123,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
     listLibraryProducts: async () => [],
     listCategories: async () => [],
     getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
-    getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
+    getContentLanguages: async () => ({ defaultLanguage: "en", languages: state.languages }),
     getMenuStructure: async () => structure,
     getMenuHome: async () => home,
     getMenuStatus: async () => status,
@@ -721,6 +723,79 @@ it("forgets a refusal once a fresh preview no longer lists its change", async ()
   expect(refusalIn(panel(), "mains-colour")).toBeNull();
 });
 
+it("forgets a refusal once a fresh preview still lists its change but no longer offers Undo", async () => {
+  const live = new LiveData();
+  const renameCatalogue = vi.fn(async () => {
+    throw { code: "menu.name_taken" };
+  });
+  const fake = fakeApi({ renameCatalogue, liveData: live } as unknown as Partial<DashboardApi>);
+  const { panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "own-rename")!);
+  await vi.waitFor(() => expect(refusalIn(panel(), "own-rename")).not.toBeNull());
+
+  fake.state.preview = { ...previewOf([rename, recolour]), live: null };
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(undoButton(panel(), "own-rename")).toBeNull());
+
+  fake.state.preview = previewOf([rename, recolour]);
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(undoButton(panel(), "own-rename")).not.toBeNull());
+  await settle();
+  expect(refusalIn(panel(), "own-rename")).toBeNull();
+});
+
+it("forgets a refusal once a content language switched off takes its Undo away, and says nothing when it is back", async () => {
+  const before = currentContentLanguages();
+  try {
+    const live = new LiveData();
+    const updateSection = vi.fn(async () => {
+      throw { code: "content.translation_invalid" };
+    });
+    const fake = fakeApi({ updateSection, liveData: live } as unknown as Partial<DashboardApi>);
+    const mainsNamed = (es: string) => {
+      const node = documentSection("s-mains", "Mains", []);
+      return node.kind === "section" ? { ...node, names: { en: "Mains", es } } : node;
+    };
+    const mainsRenamed: MenuChange = {
+      id: "mains-renamed",
+      targets: { before: [], after: [] },
+      kind: "section_changed",
+      sectionId: "s-mains",
+      name: "Mains",
+      fields: ["names"],
+      source: "this_menu",
+    };
+    fake.state.languages = ["en", "es"];
+    fake.state.preview = {
+      ...previewOf([rename, mainsRenamed]),
+      live: { versionId: "v-2", document: menuDocument([mainsNamed("Principales")], {}, "Lunch") },
+      document: menuDocument([mainsNamed("Segundos")], {}),
+    };
+    const { panel } = await mount(fake.api);
+    await vi.waitFor(() => expect(undoButton(panel(), "mains-renamed")).not.toBeNull());
+    await userEvent.click(undoButton(panel(), "mains-renamed")!);
+    await vi.waitFor(() =>
+      expect(text(refusalIn(panel(), "mains-renamed"))).toBe(
+        "Not undone. A language Mains was published in has been disabled since, so its name cannot be restored.",
+      ),
+    );
+    // No preview arrives meanwhile, so only the languages' own update can take the refusal away.
+    fake.getMenuRead.mockImplementation(() => new Promise<MenuReadResult>(() => undefined));
+
+    fake.state.languages = ["en"];
+    live.invalidate([{ type: "content_languages" }]);
+    await vi.waitFor(() => expect(undoButton(panel(), "mains-renamed")).toBeNull());
+
+    fake.state.languages = ["en", "es"];
+    live.invalidate([{ type: "content_languages" }]);
+    await vi.waitFor(() => expect(undoButton(panel(), "mains-renamed")).not.toBeNull());
+    await settle();
+    expect(refusalIn(panel(), "mains-renamed")).toBeNull();
+  } finally {
+    setContentLanguages(before);
+  }
+});
+
 it("names a refused Undo beside the list when a fresh preview stopped listing its change while it was out", async () => {
   const live = new LiveData();
   const write = held();
@@ -843,5 +918,23 @@ it("names the menu the refused Undo was sent from by its name now, or by the nam
   second.refuse({ code: "menu_section.not_found" });
   await vi.waitFor(() =>
     expect(memberError(el)).toBe(`Not undone on Brunch: ${bullet}. ${reason}`),
+  );
+});
+
+it("names a refused Undo beside the list when a preview not drawn yet no longer lists its change", async () => {
+  const updateSection = vi.fn(() => {
+    // The refusal is handled a turn after the screen takes a preview that no longer lists the
+    // change, so before the Preview has drawn it.
+    (el as unknown as { preview: MenuPreview }).preview = previewOf([rename]);
+    throw { code: "menu_section.not_found" };
+  });
+  const fake = fakeApi({ updateSection } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  const bullet = words(panel(), "mains-colour");
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() =>
+    expect(memberError(el)).toBe(
+      `Not undone on Lunch Menu: ${bullet}. Section Mains has been deleted, so it cannot be restored.`,
+    ),
   );
 });

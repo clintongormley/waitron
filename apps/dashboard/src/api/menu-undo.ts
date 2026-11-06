@@ -1,9 +1,8 @@
 import type { MenuUndoCommand } from "@waitron/catalogue/src/menu-undo.js";
-import { codeMessage, codeOf } from "../i18n/codes.js";
-import { homeDeviceLabel } from "../i18n/domain.js";
+import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
+import { homeDeviceName } from "../i18n/domain.js";
 import { fill } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
-import { fieldOf } from "../widgets/section-writes.js";
 import type { DashboardApi } from "./client.js";
 
 export type MenuUndoApi = Pick<DashboardApi, MenuUndoCommand["method"]>;
@@ -72,7 +71,7 @@ function refusalSentence(
       if (code === "menu.home_display_invalid")
         return {
           key: "menu_preview.undo_display_invalid",
-          values: { device: homeDeviceLabel(command.device) },
+          values: { device: homeDeviceName(command.device) },
         };
       return null;
   }

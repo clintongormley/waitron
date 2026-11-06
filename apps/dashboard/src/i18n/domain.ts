@@ -191,7 +191,7 @@ export function statusName(value: string, locale: string = currentLocale()): str
   return resolveNameTable(STATUS_NAMES, value, locale);
 }
 
-export function homeDeviceLabel(device: HomeDevice): string {
+export function homeDeviceName(device: HomeDevice): string {
   return t(device === "handheld" ? "home.device_handheld" : "home.device_till");
 }
 

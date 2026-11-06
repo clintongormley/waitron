@@ -5423,9 +5423,10 @@ Preview tab or hidden the change, or the preview can no longer be read, no longe
 or no longer offers its Undo) it shows in the error line under the screen's heading as "Not undone
 on {menu}: {change}. {reason}", naming the menu the Undo was sent from. A refusal already in its
 bullet stays there when the change is hidden, and comes back with Show all changes without being
-announced again; it goes once the change no longer offers Undo. A success shows one status line under
-the Unpublished changes heading, "Undone: {change}.", and the preview is read again. Undo never asks
-for confirmation. Checks: `apps/dashboard/src/widgets/menu-preview.undo.test.ts` and
+announced again; it goes once the change no longer offers Undo, and does not come back if Undo does.
+A success shows one status line under the Unpublished changes heading, "Undone: {change}.", and the
+preview is read again. Undo never asks for confirmation. Checks:
+`apps/dashboard/src/widgets/menu-preview.undo.test.ts` and
 `apps/dashboard/src/screens/menus-screen.preview-undo.test.ts`.
 
 Widget checks: `apps/dashboard/src/widgets/menu-preview-tree.test.ts` and

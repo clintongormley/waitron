@@ -1,6 +1,6 @@
 import { en, es } from "./strings.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { codeMessage, codeOf } from "./codes.js";
+import { codeMessage, codeOf, fieldOf } from "./codes.js";
 import { setLocale, t } from "./t.js";
 
 afterEach(() => {
@@ -128,6 +128,21 @@ describe("codeOf", () => {
     // The passkey flows pass this fallback so a code-less rejection reads as a verification failure.
     expect(codeOf({}, "passkey.verification_failed")).toBe("passkey.verification_failed");
   });
+});
+
+it("places a translation refusal beside its language's name, and any other by the field it names", () => {
+  expect(fieldOf({ code: "menu_section.translation_required", params: { language: "en" } })).toBe(
+    "names-en",
+  );
+  expect(fieldOf({ code: "menu_section.invalid", params: { field: "internalName" } })).toBe(
+    "internalName",
+  );
+  // A translation refusal naming no language falls back like any other.
+  expect(fieldOf({ code: "menu_section.translation_required", params: { field: "names" } })).toBe(
+    "names",
+  );
+  expect(fieldOf({ code: "management.request_invalid" })).toBe("_form");
+  expect(fieldOf(new Error("down"))).toBe("_form");
 });
 
 it("has a sentence for each staff self-service code (my-schedule portal)", () => {
