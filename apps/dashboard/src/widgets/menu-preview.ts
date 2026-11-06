@@ -7,6 +7,7 @@ import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import type { MenuView } from "@waitron/catalogue/src/customer-menu-presentation.js";
 import type { MenuTarget } from "@waitron/catalogue/src/menu-document-types.js";
 import { menuTargetKey } from "@waitron/catalogue/src/menu-navigation.js";
+import { menuChangeActions, type MenuChangeAction } from "@waitron/catalogue/src/menu-undo.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { MenuDocumentTree } from "./menu-document-tree.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -24,6 +25,7 @@ import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { conjunctionList } from "../i18n/list.js";
 import {
+  openProduct,
   publishWarningStyles,
   renderMenuWarnings,
   renderPublishWarningConfirmation,
@@ -274,6 +276,7 @@ export class MenuPreviewPanel extends LitElement {
   @state() private selectedView: string | null = null;
   @state() private hiddenChangeIds = new Set<string>();
   #menuId: string | null = null;
+  #actions: ReadonlyMap<string, MenuChangeAction> = new Map();
   #navigation = 0;
   @state() private navigationUnavailable = false;
 
@@ -375,7 +378,12 @@ export class MenuPreviewPanel extends LitElement {
       this.confirmingPreview = null;
       this.navigationUnavailable = false;
       this.#navigation++;
+      this.#actions = new Map();
       if (this.preview === null) return;
+      this.#actions = menuChangeActions({
+        preview: this.preview,
+        languages: currentContentLanguages().languages,
+      });
       const menuId = this.preview.document.menuId;
       if (this.#menuId !== menuId) {
         this.selectedView = null;
@@ -639,6 +647,7 @@ export class MenuPreviewPanel extends LitElement {
                               >(${t("menu_preview.view_change")})</a
                             >`
                       }
+                      ${this.#renderEdit(change)}
                       <a
                         data-own-click
                         data-hide-change=${change.id}
@@ -673,6 +682,34 @@ export class MenuPreviewPanel extends LitElement {
       </div>
       ${body}
     </section>`;
+  }
+
+  #renderEdit(change: MenuChange) {
+    const action = this.#actions.get(change.id);
+    switch (action?.kind) {
+      case "edit_product":
+        return html`<a
+          data-own-click
+          data-edit-change=${change.id}
+          href=${`/manage/catalogue/product/${encodeURIComponent(action.productId)}`}
+          @click=${(event: MouseEvent) => openProduct(event, action.productId)}
+          >${t("product.edit")}</a
+        >`;
+      case "edit_menu":
+        return html`<a
+          data-edit-change=${change.id}
+          href=${`/manage/menus/menu/${encodeURIComponent(action.menuId)}/view/${action.tab}`}
+          >${fill("menu_preview.edit_menu", { menu: change.includedMenu?.name ?? "" })}</a
+        >`;
+      case "edit_extras_list":
+        return html`<a
+          data-edit-change=${change.id}
+          href=${`/manage/modifiers/view/extras/list/${encodeURIComponent(action.listId)}`}
+          >${t("extras.edit")}</a
+        >`;
+      default:
+        return nothing;
+    }
   }
 
   #renderWarnings() {
