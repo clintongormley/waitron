@@ -236,7 +236,7 @@ describe("the box host routes in the running server", () => {
           ),
         ).toEqual({
           status: 403,
-          body: { error: { code: "box_host.origin_refused", params: {} } },
+          body: { error: { code: "management.origin_refused", params: {} } },
         });
       }
       expect(host.screenSet).toHaveBeenCalledTimes(0);
