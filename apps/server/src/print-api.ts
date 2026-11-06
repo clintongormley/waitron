@@ -1637,7 +1637,7 @@ interface PrinterProfileUse {
   departmentName: string | null;
 }
 
-/** One row per printer or page printer and live profile listing it, its roles in list order. */
+/** One row per printer or page printer and live profile listing it, its roles in a fixed order. */
 async function readPrinterProfileUses(tx: Transaction): Promise<PrinterProfileUse[]> {
   const rows = await tx
     .select({
@@ -1678,20 +1678,13 @@ async function readPrinterProfileUses(tx: Transaction): Promise<PrinterProfileUs
       (a, b) => PROFILE_PRINTER_ROLE_ORDER.indexOf(a) - PROFILE_PRINTER_ROLE_ORDER.indexOf(b),
     );
   const profileIds = [...new Set(result.map((use) => use.profileId))];
-  const scopes = await VENUE_SERVICE.readProfileServiceScopes(tx, profileIds);
-  const departmentOf = new Map(scopes.map((scope) => [scope.profileId, scope.departmentId]));
-  const departmentIds = [
-    ...new Set(
-      scopes.flatMap((scope) => (scope.departmentId === null ? [] : [scope.departmentId])),
-    ),
-  ];
-  const names = new Map(
-    (await VENUE_SERVICE.readDepartmentNames(tx, departmentIds)).map((d) => [d.id, d.name]),
+  const departments = new Map(
+    (await VENUE_SERVICE.readProfileDepartments(tx, profileIds)).map((d) => [d.profileId, d]),
   );
   for (const use of result) {
-    const departmentId = departmentOf.get(use.profileId) ?? null;
-    use.departmentId = departmentId;
-    use.departmentName = departmentId === null ? null : (names.get(departmentId) ?? null);
+    const department = departments.get(use.profileId);
+    use.departmentId = department?.departmentId ?? null;
+    use.departmentName = department?.departmentName ?? null;
   }
   return result;
 }

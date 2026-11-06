@@ -22,7 +22,7 @@ import {
 } from "./operations.js";
 import {
   assertProfileZone,
-  readDepartmentNames,
+  readProfileDepartments,
   readProfileServiceAccess,
   readProfileServiceScopes,
   readProfileZones,
@@ -506,19 +506,36 @@ describe("a profile's service access", () => {
   });
 });
 
-describe("department names", () => {
-  it("reads the names of the departments asked for, switched off ones included, and nothing for an unknown id", async () => {
+describe("profile departments", () => {
+  it("reads each asked-for profile's department, switched off ones included, and nothing for a profile with none or an unknown id", async () => {
     const venue = await seedVenueWithZones();
+    await save(venue, restaurantScope(venue));
+    const deliProfile = await seedProfile();
+    await db.insert(deviceProfileServiceAccess).values({
+      deviceProfileId: deliProfile,
+      departmentId: venue.deli,
+      everyZone: true,
+      startingZoneId: venue.counter,
+    });
     await db.update(departments).set({ active: false }).where(eq(departments.id, venue.deli));
-    await scoped((tx) => createDepartment(tx, { name: "Bar", orderStart: "counter" }));
-    const names = await scoped((tx) =>
-      readDepartmentNames(tx, [venue.restaurant, venue.deli, randomUUID()]),
+    const unasked = await seedProfile();
+    await db.insert(deviceProfileServiceAccess).values({
+      deviceProfileId: unasked,
+      departmentId: venue.restaurant,
+      everyZone: true,
+      startingZoneId: venue.dining,
+    });
+    const noDepartment = await seedProfile();
+    const rows = await scoped((tx) =>
+      readProfileDepartments(tx, [venue.profile, deliProfile, noDepartment, randomUUID()]),
     );
-    expect(names).toEqual([
-      { id: venue.deli, name: "Deli" },
-      { id: venue.restaurant, name: "Restaurant" },
-    ]);
-    await expect(scoped((tx) => readDepartmentNames(tx, []))).resolves.toEqual([]);
+    expect(rows.sort((a, b) => a.profileId.localeCompare(b.profileId))).toEqual(
+      [
+        { profileId: venue.profile, departmentId: venue.restaurant, departmentName: "Restaurant" },
+        { profileId: deliProfile, departmentId: venue.deli, departmentName: "Deli" },
+      ].sort((a, b) => a.profileId.localeCompare(b.profileId)),
+    );
+    await expect(scoped((tx) => readProfileDepartments(tx, []))).resolves.toEqual([]);
   });
 });
 
