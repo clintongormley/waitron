@@ -127,10 +127,10 @@ is found out is explained under
   - It is an R4 on a full invoice and an R5 on a simplified one. It states the real date of the sale and
     changes no VAT, because the amount has not changed (V0305-24).
   - One corrective may cover many invoices, if it identifies them all (article 15.4).
-  - The VAT period follows the day VAT fell due, not the ticket's date (LIVA article 75.Uno.2.º). A sale at
-    23:30 on 30 September stays in the third quarter even if its ticket says 1 October.
-  - A return already filed in the wrong period is fixed with a complementary return (LGT article 122),
-    with a late surcharge starting at 1% (article 27.2), and by correcting the later return.
+  - VAT follows the real date of the sale (LIVA article 75.Uno.2.º). If the corrective moves a sale into
+    a period whose return is already filed, that return is fixed with a complementary return (LGT article
+    122), with a late surcharge starting at 1% (article 27.2), and the later return is corrected.
+  - This applies when the real date can be shown. T2 covers the case where it cannot.
 - **T8. Telling AEAT.** We think there is no duty or channel to report a clock incident. A text search of
   the Reglamento, the Orden, both FAQs, the validation document and the service description found none.
   The corrective record reaches AEAT anyway. Article 16.4 asks for justification only of incidents that
