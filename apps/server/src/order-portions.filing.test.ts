@@ -1750,6 +1750,7 @@ describe("A803 portions: raising a dish", () => {
       "POST",
       `/api/parties/${bill.partyId}/lines/${lineId}/recall`,
       {
+        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),

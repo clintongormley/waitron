@@ -89,6 +89,7 @@ async function setup(recalled: boolean, release: "hold" | "fire" = "hold", shape
   let draft: Draft | undefined;
   if (recalled) {
     const answer = await call("POST", `/api/parties/${partyId}/lines/${line!.id}/recall`, {
+      personId: venue.operatorId,
       ...(await command(partyId)),
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
     });

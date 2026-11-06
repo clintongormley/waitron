@@ -667,8 +667,8 @@ declare module "@waitron/shared" {
      */
     "draft.not_found": { draftId: string };
     /**
-     * A till saved an order naming a person who is not the one signed in on the device. `personId`
-     * is the person the save named.
+     * A till's request named a person who is not the one signed in on the device. `personId` is the
+     * person the request named.
      */
     "draft.person_not_signed_in": { personId: string };
     /**

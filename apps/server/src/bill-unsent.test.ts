@@ -173,6 +173,7 @@ describe("payment reservations and previously received money", () => {
           "POST",
           `/api/parties/${p.partyId}/lines/${line!.id}/recall`,
           {
+            personId: venue.operatorId,
             submissionId: randomUUID(),
             expectedPartyRevision: await partyRevisionOf(venue, p.tabId),
             expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.tabId)),
@@ -259,6 +260,7 @@ describe("payment reservations and previously received money", () => {
       "POST",
       `/api/parties/${p.partyId}/lines/${line!.id}/recall`,
       {
+        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevisionOf(venue, p.tabId),
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.tabId)),

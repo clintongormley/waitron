@@ -180,6 +180,7 @@ async function recalledDraft(now: number, paid: boolean) {
     "POST",
     `/api/parties/${party.partyId}/lines/${line!.id}/recall`,
     {
+      personId: venue.operatorId,
       submissionId: randomUUID(),
       expectedPartyRevision: await partyRevisionOf(venue, party.tabId),
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),

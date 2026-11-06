@@ -2052,6 +2052,84 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
 });
 
 describe("POST /api/parties/:id/groups/split-line", () => {
+  async function heldTwo() {
+    const party = await seated();
+    const submitted = await submitGrouped(party, [
+      { lines: [dish("Tarta", "2")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const lineId = (submitted.json as unknown as SubmitAnswer).groups[0]!.lineIds[0]!;
+    return { party, lineId };
+  }
+
+  it("refuses 409 draft.person_not_signed_in for a split naming someone else, changing nothing, and goes through once it names the session's person", async () => {
+    const { party, lineId } = await heldTwo();
+    const splitNaming = async (personId: string) =>
+      call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        lineId,
+        personId,
+      });
+    const before = await snapshot(party);
+
+    for (const named of [venue.adminId, venue.adminId.toUpperCase()]) {
+      const refused = await splitNaming(named);
+      expect(refused.status).toBe(409);
+      expect(refused.json).toEqual(
+        refusal("draft.person_not_signed_in", { personId: venue.adminId }),
+      );
+    }
+    expect(await snapshot(party)).toEqual(before);
+
+    const taken = await splitNaming(venue.operatorId);
+    expect(taken.status).toBe(200);
+    expect(taken.json).toEqual({ revision: before.revision + 1 });
+    const after = await snapshot(party);
+    expect(after).not.toEqual(before);
+    expect(after.lines.length).toBeGreaterThan(before.lines.length);
+  });
+
+  it("goes through when the session's person is named with a capitalised id", async () => {
+    const { party, lineId } = await heldTwo();
+    const expectedPartyRevision = await revisionOf(party.partyId);
+
+    const taken = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision,
+      lineId,
+      personId: venue.operatorId.toUpperCase(),
+    });
+
+    expect(taken.status).toBe(200);
+    expect(taken.json).toEqual({ revision: expectedPartyRevision + 1 });
+  });
+
+  it.each([
+    ["missing", {}],
+    ["not an id", { personId: "ana" }],
+    ["a number", { personId: 7 }],
+    ["null", { personId: null }],
+    ["empty", { personId: "" }],
+  ] as const)(
+    "refuses a split 400 management.request_invalid naming personId when it is %s",
+    async (_, person) => {
+      const { party, lineId } = await heldTwo();
+      const before = await snapshot(party);
+
+      const refused = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        lineId,
+        ...person,
+      });
+
+      expect(refused.status).toBe(400);
+      expect(refused.json).toEqual(refusal("management.request_invalid", { field: "personId" }));
+      expect(await snapshot(party)).toEqual(before);
+    },
+  );
+
   it("splits the stored quantity into single units under one revision and replays without writing", async () => {
     const party = await seated();
     const submitted = await submitGrouped(party, [
@@ -2060,6 +2138,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     expect(submitted.status).toBe(200);
     const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const body = {
+      personId: venue.operatorId,
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
       lineId: group.lineIds[0],
@@ -2180,6 +2259,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     });
     try {
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         lineId: group.lineIds[0],
@@ -2207,6 +2287,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       );
       const before = await snapshot(party);
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         lineId,
@@ -2223,6 +2304,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       const party = await withGroups();
       const before = await snapshot(party);
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         lineId,
@@ -2241,6 +2323,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const path = `/api/parties/${party.partyId}/groups/split-line`;
     const command = {
+      personId: venue.operatorId,
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
     };
@@ -2273,6 +2356,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     const copy = vi.spyOn(VENUE_SERVICE, "copyLineContext");
     try {
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         lineId,
@@ -2304,6 +2388,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     expect(payment.status).toBe(200);
     const before = await snapshot(party);
     const body = {
+      personId: venue.operatorId,
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
       lineId: group.lineIds[0]!,
