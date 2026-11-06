@@ -67,16 +67,22 @@ jobs:
       - name: Install Chromium
         run: |
           for attempt in 1 2 3; do
-            timeout 180 pnpm --filter @waitron/ui-core exec playwright install --with-deps chromium && break
+            timeout 180 pnpm --filter @waitron/ui-core exec playwright install chromium && break
             [ "$attempt" -lt 3 ] || exit 1
             sleep 5
           done
       - id: checks
         name: Check the source package
         run: |
+          set -euo pipefail
+          for check in typecheck lint test:coverage test:package; do
+            pnpm --filter @waitron/ui-core ls --depth -1 --json \
+              | node scripts/changed-packages.mjs runnable "$check"
+          done
           pnpm --filter @waitron/ui-core typecheck
           pnpm --filter @waitron/ui-core lint
-          pnpm --filter @waitron/ui-core test:coverage
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter @waitron/ui-core test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
       - id: prepare
         name: Prepare the numbered release
         run: |

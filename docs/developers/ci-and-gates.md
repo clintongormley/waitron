@@ -43,11 +43,21 @@ The publisher uses its own concurrency group with `queue: max` and no cancellati
 of a running publication. This serializes uploads separately from `ci.yml`, whose
 main runs still have distinct groups. GitHub documents a maximum of 100 pending
 runs and ordering by when they begin waiting, so this is not an unlimited queue or
-a guarantee that release numbers execute in increasing order.
+a guarantee that release numbers execute in increasing order. If a lower-numbered
+run reaches npm after a newer release, npm can refuse its default `latest` tag
+before upload. Keep that run red and read the error; the next qualifying merge
+gets a new number. The local npm 11.20.0 probe accepted `0.2.742` above `0.2.0`
+and refused it above `0.2.743`, sending no upload in the refused case.
 
-The workflow tests read trigger, queue, credential and check wiring as text, then
-execute the publish shell with an npm stand-in to check its arguments and failure
-status. Existing preparation and independent-consumer checks cover the tarball.
+Before running checks, the workflow verifies that the selected package declares
+all four required scripts with the existing `runnable` guard. Chromium setup
+matches the ordinary CI job without `--with-deps`; coverage uses its diagnostic
+deadline wrapper and file-progress reporter.
+
+The workflow tests read trigger, queue, credential and check wiring as text. They
+execute the source-check, consumer and publish shells with controlled package-manager
+boundaries, and the real selection/deadline helpers. Missing scripts and failed
+checks must stop execution. Existing preparation and independent-consumer checks cover the tarball.
 These local checks do not establish hosted Actions behavior or registry authority;
 retain the first real publication result after landing.
 
