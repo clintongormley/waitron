@@ -482,7 +482,10 @@ and shows a clear message.
   hand-keyed full-disk refusals with no row keep their specific refusal without a new hold.
   A recheck refused before lookup (such as `reader.not_held`) retains the existing release with
   a warning: the first payment may have gone through, so inspect the bill’s payments before
-  taking it again. That answer does not establish the first payment’s outcome.
+  taking it again. That answer does not establish the first payment’s outcome. The watcher’s
+  2026-11-07 00:29 clarification keeps a known charge held through every refusal until its row
+  reaches a recorded end. Its warning links to Card payments, including dashboard sign-in,
+  where the existing bill-payment recovery records the provider’s confirmed outcome.
 
 - **Handheld reader selection** (owner decisions 2026-09-18)
   ([2026-09-18-handheld-and-till-hardware-decisions.md](../superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)

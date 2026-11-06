@@ -315,6 +315,9 @@ se fueron sin pagar.
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba
 registrado, puede cobrar la tarjeta o registrar el efectivo.
+Si la tarjeta ya se ha cobrado pero el pago no se ha registrado, no vuelvas a cobrar. Elige **Pagos
+con tarjeta / acceder** e inicia sesión para consultar o registrar el resultado confirmado por el
+proveedor. Vuelve a abrir el cobro de la cuenta cuando esté registrado para ver el resultado.
 
 ## Mover platos a otra cuenta {#move-dishes}
 

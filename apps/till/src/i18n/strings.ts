@@ -1669,6 +1669,11 @@ export const en = {
     "This phone no longer has that card reader. Choose the reader in your hand. The first payment may have gone through: look at the bill’s payments before taking it again.",
   "bill_pay.not_checked":
     "The server could not check this payment. The first payment may have gone through: look at the bill's payments before taking it again.",
+  "bill_pay.card_recovery":
+    "Open Card payments and sign in to finish recording this payment. Do not take it again.",
+  "bill_pay.card_recovery_open": "Card payments / sign in",
+  "bill_pay.charged_clock_behind":
+    "Card charged, but the sale is not recorded: the box's clock reads earlier than its last sale. Do not charge again.",
   "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
   "bill_pay.choose_later":
     "These items cost more than is left to pay on the bill. Choose how to pay for them.",
@@ -3571,6 +3576,11 @@ export const es: Record<StringKey, string> = {
     "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. El primer cobro puede haberse realizado: mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.not_checked":
     "El servidor no ha podido comprobar este cobro. El primer cobro puede haberse realizado: mira los pagos de la cuenta antes de volver a cobrarlo.",
+  "bill_pay.card_recovery":
+    "Abre Pagos con tarjeta e inicia sesión para terminar de registrar este pago. No vuelvas a cobrarlo.",
+  "bill_pay.card_recovery_open": "Pagos con tarjeta / acceder",
+  "bill_pay.charged_clock_behind":
+    "Cobrado con tarjeta, pero la venta no se ha registrado: la hora del equipo es anterior a su última venta. No vuelvas a cobrar.",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",
   "bill_pay.choose_later":
     "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",

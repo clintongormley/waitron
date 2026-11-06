@@ -19357,6 +19357,8 @@ export class TillApp extends LitElement {
         pending && submission.pendingRefusal !== undefined
           ? submission
           : unansweredAfter(submission, error);
+      if (error !== undefined && submission.pendingRefusal?.code === "sale.charged_not_recorded")
+        unanswered = { ...submission, unconfirmed: true };
       const code = (error as { code?: unknown } | undefined)?.code;
       if (
         unanswered !== null &&
@@ -19368,6 +19370,8 @@ export class TillApp extends LitElement {
             : refusalOf(error, true);
         const manual = asked.pay.method === "card" && asked.card?.entry === "manual";
         if (manual) refusal.manualCard = true;
+        if (refusal.code === "sale.charged_not_recorded")
+          refusal.recoveryUrl ??= "/manage/payments";
         unanswered = {
           ...unanswered,
           pendingRefusal: refusal,
