@@ -58,7 +58,7 @@ const ACTOR_SOURCES = Object.freeze({
   "tag.write": ["server"],
 });
 
-const START_SCREENS = Object.freeze(["dashboard", "till"]);
+export const START_SCREENS = Object.freeze(["dashboard", "till"]);
 
 const PRINTABLE_ASCII = /^[ -~]*$/;
 const NOT_PRINTABLE_ASCII = /[^ -~]/g;
@@ -215,28 +215,33 @@ export function formatHostRequest(request) {
   return canonicalLine(verb, checkedValues, checked);
 }
 
-const PARSER_REFUSALS = ["request_invalid", "unknown_request", "actor_invalid", "fields_invalid"];
+export const PARSER_REFUSALS = Object.freeze([
+  "request_invalid",
+  "unknown_request",
+  "actor_invalid",
+  "fields_invalid",
+]);
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
-const REPLY_REFUSALS = Object.freeze({
-  "network.read": [],
-  "network.scan": ["busy", "no_wifi"],
-  "network.join": ["busy", "no_wifi"],
-  "network.forget": ["busy", "not_saved"],
-  "screen.read": [],
-  "screen.set": [],
-  "tag.write": ["busy", "no_free_token", "header_unreadable", "no_space"],
+export const REPLY_REFUSALS = Object.freeze({
+  "network.read": Object.freeze([]),
+  "network.scan": Object.freeze(["busy", "no_wifi"]),
+  "network.join": Object.freeze(["busy", "no_wifi"]),
+  "network.forget": Object.freeze(["busy", "not_saved"]),
+  "screen.read": Object.freeze([]),
+  "screen.set": Object.freeze([]),
+  "tag.write": Object.freeze(["busy", "no_free_token", "header_unreadable", "no_space"]),
 });
 
-const CHANGE_KINDS = ["join", "forget"];
-const CHANGE_STATES = ["running", "applied", "refused"];
+export const CHANGE_KINDS = Object.freeze(["join", "forget"]);
+export const CHANGE_STATES = Object.freeze(["running", "applied", "refused"]);
 /** @type {Readonly<Record<string, readonly string[]>>} */
-const CHANGE_REFUSALS = Object.freeze({
-  join: ["password-rejected", "network-not-found", "timed-out", "failed"],
-  forget: ["failed"],
+export const CHANGE_REFUSALS = Object.freeze({
+  join: Object.freeze(["password-rejected", "network-not-found", "timed-out", "failed"]),
+  forget: Object.freeze(["failed"]),
 });
-const SCAN_SECURITY = ["wpa-psk", "sae", "other"];
-const TAG_OUTCOMES = ["written", "removed", "unchanged"];
+export const SCAN_SECURITY = Object.freeze(["wpa-psk", "sae", "other"]);
+export const TAG_OUTCOMES = Object.freeze(["written", "removed", "unchanged"]);
 
 /** @param {unknown} value */
 const ssidOrNull = (value) => value === null || isSsidHex(value);
