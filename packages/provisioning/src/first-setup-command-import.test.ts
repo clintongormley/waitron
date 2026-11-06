@@ -15,6 +15,7 @@ import { createCatalogue, createProduct } from "@waitron/catalogue";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { appliedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, modulesWithSets, type WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import {
   completeFirstSetupCommand,
   createFirstSetupCommandDeployment,
@@ -238,14 +239,10 @@ it.each([false, true])(
 );
 
 it("command completion imports a configuration when a module has no set of its own", async () => {
-  const setless: WaitronModule = {
-    name: "synthetic-setless",
-    version: "0.0.0",
-    tier: "toggleable",
+  const setless = fakeSetlessModule("synthetic-setless", "core", {
     requires: { core: "*" },
-    tablesIn: "core",
     configurationTransfer: { kind: "none" },
-  };
+  });
   const f = await fixture(false, undefined, [...ALL_MODULES, setless]);
   expect(Object.keys(f.bundle.modules)).not.toContain("synthetic-setless");
   await completeFirstSetupCommand(

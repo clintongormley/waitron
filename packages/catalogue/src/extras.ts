@@ -375,7 +375,6 @@ export async function deleteExtraList(tx: Transaction, extraListId: string): Pro
   await tx.delete(extraLists).where(eq(extraLists.id, extraListId));
 }
 
-// The shape lives in `modifier-list-types.ts`, the browser-safe leaf the dashboard imports.
 export type { ExtraListDependants } from "@waitron/shared";
 
 export async function extraListDependants(

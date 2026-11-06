@@ -21,7 +21,7 @@ import type { ModuleTimeRecordExport } from "./record-export.js";
 import type { ModulePersonalData } from "./personal-data.js";
 import semver from "semver";
 import type { Hono } from "hono";
-import { AppError } from "@waitron/shared";
+import { AppError, type ErrorParams } from "@waitron/shared";
 import type { AllergenMap, Database, SQL, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { RecoveryPackPage } from "@waitron/recovery-pack";
@@ -1575,6 +1575,21 @@ export function modulesWithSets(
   );
 }
 
+/** Why `m` breaks "its tables live in exactly one set", or null when they do. A set-less module's
+ * classification is refused because `orderedMigrationSets` reads append-only tables from set
+ * owners only, so its tables would go unprotected. */
+function setOwnershipFault(
+  m: WaitronModule,
+  byName: ReadonlyMap<string, WaitronModule>,
+): ErrorParams["module.set_ownership_invalid"]["reason"] | null {
+  if (m.migrations !== undefined) return m.tablesIn === undefined ? null : "two_sets";
+  if (m.tablesIn === undefined) return "no_set";
+  const host = byName.get(m.tablesIn);
+  if (host === undefined) return "host_missing";
+  if (host.migrations === undefined) return "host_has_no_set";
+  return m.classification === undefined ? null : "classified_without_set";
+}
+
 /** Each declared dependency as `[dependencyName, semverRange]`; `requires.core` names "core". */
 function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
   if (m.requires?.core !== undefined) yield ["core", m.requires.core];
@@ -1591,7 +1606,8 @@ function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
  * may be `state`.
  *
  * Throws `module.requires_invalid`, `module.dependency_missing`, `module.incompatible_version`,
- * `module.dependency_cycle` or `module.start_again_deletable_invalid`.
+ * `module.set_ownership_invalid`, `module.dependency_cycle` or
+ * `module.start_again_deletable_invalid`.
  */
 export function orderedMigrationSets(modules: readonly WaitronModule[]): MigrationSet[] {
   const byName = new Map(modules.map((m) => [m.name, m]));
@@ -1615,6 +1631,13 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
           actual: target.version,
         });
       }
+    }
+  }
+
+  for (const m of modules) {
+    const reason = setOwnershipFault(m, byName);
+    if (reason !== null) {
+      throw new AppError("module.set_ownership_invalid", { module: m.name, reason });
     }
   }
 

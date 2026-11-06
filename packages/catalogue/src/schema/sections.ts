@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import type { IncludeFolderOverrides, SectionRole } from "@waitron/shared";
 
-// Not in section-types.ts: the dashboard imports that file, and
+// Not in `@waitron/shared`'s menu-document/section-types.ts: the dashboard imports that file, and
 // scripts/dashboard-browser-purity.test.ts refuses a runtime value in it.
 const SECTION_ROLES = [
   "section",

@@ -31,15 +31,12 @@ const removals = vi.hoisted(() => ({
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
-  const setless: WaitronModule = {
-    name: "synthetic-setless",
-    version: "0.0.0",
-    tier: "toggleable",
+  const { fakeSetlessModule } = await import("@waitron/module/src/testing/fake-module.js");
+  const setless = fakeSetlessModule("synthetic-setless", "core", {
     requires: { core: "*" },
-    tablesIn: "core",
     configurationTransfer: { kind: "none" },
     tableRemoval: removals.setless,
-  };
+  });
   return {
     ...actual,
     ALL_MODULES: [...actual.ALL_MODULES, setless],

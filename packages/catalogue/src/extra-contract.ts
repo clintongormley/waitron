@@ -19,7 +19,6 @@ import "./errors.js";
 
 export type { ExtraSelection } from "@waitron/shared";
 
-// The four shapes live in `modifier-list-types.ts`, the browser-safe leaf the dashboard imports.
 export type { ExtraList, ExtraListInput, ExtraListItem, ExtraListItemInput } from "@waitron/shared";
 
 function invalid(field: string): never {

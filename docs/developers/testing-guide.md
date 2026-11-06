@@ -3273,7 +3273,7 @@ gives. So when a script reads the exit status, don't pass `-s`, or read the prin
 
 `list --path manifest` takes the list of migration sets, their order and their folders from
 `packages/migrations/migrations.manifest.json` instead of the module descriptors; the default is
-`--path descriptor`. On 2026-11-06, on `feat/a760-prepare` at `7cbcc9ccc8` plus this change, a
+`--path descriptor`. On 2026-11-06, on A760 PR 1's branch rebased on `e589fe0271`, a
 manifest list compared with a descriptor list printed `EQUAL`.
 
 ### How a slice uses it
@@ -3306,16 +3306,18 @@ report as well, as above.) None runs in CI; their unit tests run in `apps/server
   stored text; the old triggers follow in the order the old database created them, across all
   the named old sets. It refuses a generated table or index the old sets do not have,
   one the generator lost, a generated table or index that enforces something different from the
-  old one (a different column order alone is allowed), and an old set that owns nothing. It never
-  writes the journal or snapshot, and a second run changes nothing. So far it has run only on the
+  old one (a different column order alone is allowed), an old set that owns nothing, and a
+  reference whose compositions disagree about the old objects, their text or their owners, or the
+  order in which they create the triggers that share a table, timing and event. It never writes
+  the journal or snapshot, and a second run changes nothing. So far it has run only on the
   small fixtures in `preserve.test.ts`, not on the real schema.
 - **`controls --reference <list dir> --out <empty dir>`** copies the reference's databases under
   `--out`, makes one change in each copy (dropping or editing a trigger, index, CHECK or foreign key,
   changing a column's type or default or a key's columns, adding a table, changing a seeded value)
   and compares the copy with the reference. Each control names exactly the differences it must
   produce; an unchanged copy and a whitespace-only edit must print `EQUAL`. It prints `PASS` or
-  `FAIL` for each and writes the same to `controls.txt`. On 2026-11-06 at `7cbcc9ccc8` plus this
-  change, run on a fresh list of the real schema, every control printed `PASS` and it exited 0.
+  `FAIL` for each and writes the same to `controls.txt`. On 2026-11-06, on A760 PR 1's branch rebased on
+  `e589fe0271`, run on a fresh list of the real schema, every control printed `PASS` and it exited 0.
 - **`copies --dist <dir> --image-root <dir> --report <file>`** compares every file under each
   manifest set's source folder with `drizzle/<set>/` in the built `apps/server/dist` and in an
   image's `/app`, by SHA-256, and reports each `missing`, `extra` or `stale` file and any folder no

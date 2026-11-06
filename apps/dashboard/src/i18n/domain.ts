@@ -2,9 +2,6 @@ import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashbo
 import type { AllergenDeclaration, HomeDevice, PersonRole, Printer } from "../api/client.js";
 import { fill, t } from "./t.js";
 
-// Each table is a local, `string`-keyed copy of a server token set; api/client.ts says why the
-// dashboard does not import `@waitron/catalogue`'s main entry.
-
 const ROLE_NAMES: NameTable = {
   staff: { en: "Staff", es: "Empleado" },
   supervisor: { en: "Supervisor", es: "Supervisor" },

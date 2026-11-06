@@ -28,6 +28,14 @@ declare module "@waitron/shared" {
     /** `module` lists `table` in `startAgainDeletable`, but its own classification does not mark
      * that table append-only. */
     "module.start_again_deletable_invalid": { module: string; table: string };
+    /** `module` names no set to hold its tables (`no_set`), or both its own set and a `tablesIn`
+     * (`two_sets`); its `tablesIn` names a module absent from the list (`host_missing`) or one with
+     * no set of its own (`host_has_no_set`); or it has no set yet carries a classification
+     * (`classified_without_set`). */
+    "module.set_ownership_invalid": {
+      module: string;
+      reason: "no_set" | "two_sets" | "host_missing" | "host_has_no_set" | "classified_without_set";
+    };
     /** "No regime" is itself a module, never an empty slot. */
     "module.fiscal_slot_empty": Record<string, never>;
     "module.fiscal_slot_ambiguous": { candidates: readonly string[] };

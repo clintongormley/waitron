@@ -769,12 +769,27 @@ describe("strict backup compatibility", () => {
 });
 
 describe("a module whose tables live in another module's set", () => {
-  function staffing(): WaitronModule {
-    return { ...module("staffing", ["shifts"]), migrations: undefined, tablesIn: "extra" };
+  /** Adds staffing with no set of its own; its host `extra` classifies `shifts`. */
+  function addStaffing(): void {
+    const at = modules.findIndex((m) => m.name === "extra");
+    const extra = modules[at]!;
+    modules[at] = {
+      ...extra,
+      classification: [
+        ...extra.classification!,
+        { table: "shifts", class: "state", reason: "Synthetic verification fixture" },
+      ],
+    };
+    modules.push({
+      ...module("staffing", ["shifts"]),
+      migrations: undefined,
+      tablesIn: "extra",
+      classification: undefined,
+    });
   }
 
   it("has its tables checked as part of its host's set", async () => {
-    modules.push(staffing());
+    addStaffing();
     bindTarget();
     expect(target.modules.map((m) => m.name)).toEqual(["core", "extra"]);
     await expect(run()).resolves.toBe("invalid");
@@ -788,7 +803,7 @@ describe("a module whose tables live in another module's set", () => {
   });
 
   it.each([true, false])("accepts a modules.json that sets it to %s", async (enabled) => {
-    modules.push(staffing());
+    addStaffing();
     bindTarget();
     execute("create table shifts (id text)");
     setEntry("secrets/modules.json", JSON.stringify({ modules: { staffing: enabled } }));
@@ -796,14 +811,14 @@ describe("a module whose tables live in another module's set", () => {
   });
 
   it("still covers its tables when modules.json switches it off", async () => {
-    modules.push(staffing());
+    addStaffing();
     bindTarget();
     setEntry("secrets/modules.json", JSON.stringify({ modules: { staffing: false } }));
     await expect(run()).resolves.toBe("invalid");
   });
 
   it("still refuses an override naming a module nobody supplied", async () => {
-    modules.push(staffing());
+    addStaffing();
     bindTarget();
     execute("create table shifts (id text)");
     setEntry("secrets/modules.json", JSON.stringify({ modules: { ghost: true } }));

@@ -55,6 +55,7 @@ import {
 } from "@waitron/membership";
 import { imageMigrationHashes, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import {
   appendHandoverEventTx,
   readHandoverEvent,
@@ -688,12 +689,7 @@ describe("compareFinalCopy", () => {
 
     it("a module with no set of its own, held on both boxes, is accepted", async () => {
       const r = await rig();
-      const setless: WaitronModule = {
-        name: "synthetic-setless",
-        version: "0.0.0",
-        tier: "toggleable",
-        tablesIn: "core",
-      };
+      const setless = fakeSetlessModule("synthetic-setless", "core");
       const indicator = r.resigned(
         (body) => void body.snapshot.modules.push({ name: setless.name, version: setless.version }),
       );

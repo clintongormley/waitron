@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { readVenue, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   enabledModules,
@@ -252,13 +253,9 @@ it.each([
 });
 
 it("validates a bundle without a module that has no set of its own, and refuses one naming it", () => {
-  const setless: WaitronModule = {
-    name: "synthetic-setless",
-    version: "0.0.0",
-    tier: "toggleable",
-    tablesIn: "synthetic-transfer",
+  const setless = fakeSetlessModule("synthetic-setless", "synthetic-transfer", {
     configurationTransfer: { kind: "none" },
-  };
+  });
   const modules = [moduleWith([]), setless];
   const versions = { "synthetic-transfer": 1 };
   const bundle = { ...configurationBundle(), modules: { "synthetic-transfer": 1 } };

@@ -15,7 +15,7 @@ declare global {
 }
 
 // `?raw` so the sources are read as text and never evaluated.
-const sources = import.meta.glob(["./*.ts", "!./*.test.ts"], {
+const sources = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"], {
   query: "?raw",
   import: "default",
   eager: true,

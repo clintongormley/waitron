@@ -11,8 +11,8 @@ import {
   withOperationAuthority,
   type ModuleOperationHost,
   type OperationBinding,
-  type WaitronModule,
 } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import * as hour from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -525,13 +525,7 @@ it("leaves a module with no set of its own out of the sets an empty database mus
   roots.push(root);
   const venueDir = join(root, "venue");
   await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
-  const setless: WaitronModule = {
-    name: "synthetic-setless",
-    version: "0.0.0",
-    tier: "toggleable",
-    requires: { core: "*" },
-    tablesIn: "core",
-  };
+  const setless = fakeSetlessModule("synthetic-setless", "core", { requires: { core: "*" } });
   const host = createFirstSetupModuleHost({
     stateDir: join(root, "state"),
     venueDir,

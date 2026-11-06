@@ -11,7 +11,8 @@ export type BackupManifest = {
   readonly manifestVersion: 1;
   readonly createdAt: string;
   readonly environment: DeploymentEnvironment;
-  /** 0 for a module in the list that was never migrated here, never omitted. */
+  /** 0 for a module with a set of its own that was never migrated here, never omitted; a module
+   * with no set has no key. */
   readonly modules: Record<string, number>;
 };
 

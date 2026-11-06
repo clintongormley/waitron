@@ -242,15 +242,13 @@ export function validateBackupModuleResult(
   if (checks.length !== expected.length || checks.some((check) => !expected.includes(check.code)))
     refuse();
   if (notApplicable && status !== "passed") refuse();
-  const aggregate = [...STATUSES]
-    .reverse()
-    .find((candidate) => checks.some((check) => check.status === candidate));
-  if (status !== aggregate) refuse();
+  if (status !== worst(checks.map((check) => check.status))) refuse();
   return Object.freeze({ status, checks });
 }
 
-function worst(statuses: readonly BackupModuleStatus[]): BackupModuleStatus {
-  return STATUSES.reduce((found, status) => (statuses.includes(status) ? status : found));
+/** The most severe of `statuses`, the latest in `STATUSES`; undefined for none. */
+function worst(statuses: readonly BackupModuleStatus[]): BackupModuleStatus | undefined {
+  return [...STATUSES].reverse().find((candidate) => statuses.includes(candidate));
 }
 
 function union<T>(lists: readonly (readonly T[])[]): T[] {
@@ -310,8 +308,9 @@ export function combineBackupVerification(
         for (const check of result.checks)
           statuses.set(check.code, [...(statuses.get(check.code) ?? []), check.status]);
       }
-      const checks = [...statuses].map(([code, found]) => ({ code, status: worst(found) }));
-      return { status: worst(checks.map((c) => c.status)), checks };
+      // Never empty: each code holds the status that added it, and every part has a check.
+      const checks = [...statuses].map(([code, found]) => ({ code, status: worst(found)! }));
+      return { status: worst(checks.map((c) => c.status))!, checks };
     },
   });
 }

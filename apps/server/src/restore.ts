@@ -344,7 +344,7 @@ async function validateEntryMetadata(
     throw new AppError("restore.archive_incomplete", { missing: NODE_DUMP_NAME });
   }
 
-  // GATE — before any write. `expectedVersions` is read from THIS binary's own migrations per module
+  // GATE — before any write. `expectedVersions` is read from THIS binary's own migrations per migration set
   // (`expectedSchemaVersion`), never a hardcoded number — the same shape `buildManifest` builds from a
   // database, just off the shipped folders instead.
   const expectedVersions = Object.fromEntries(

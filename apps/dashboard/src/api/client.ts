@@ -28,7 +28,8 @@ export interface NodeRecoveryPack {
 /**
  * Most types below are hand-kept copies of the server's JSON shapes, so nothing compares them with
  * the server at compile time. The product and modifier-list shapes are imported instead, from
- * catalogue's type-only leaf files (`scripts/dashboard-browser-purity.test.ts`).
+ * `@waitron/shared`'s type-only `menu-document/*-types.ts` leaves
+ * (`scripts/dashboard-browser-purity.test.ts`).
  */
 import type { TimingBand } from "@waitron/shared";
 import type { RoutingView } from "@waitron/venue-service/routing";
@@ -472,47 +473,15 @@ export type VatClass = "general" | "reduced" | "super_reduced" | "zero";
  * present. */
 export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 
-export type DietaryOrigin =
-  "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
-
-/** Local copies of `@waitron/catalogue`'s runtime lists, as are the two below: a runtime import
- * from that package's main entry would load its `operations.ts`, which imports `@waitron/db`. */
-export const DIETARY_ORIGINS = [
-  "plant",
-  "meat",
-  "fish",
-  "shellfish",
-  "dairy",
-  "egg",
-  "honey",
-  "other_animal",
-] as const;
-
-export const DIETARY_LABELS = [
-  "vegan",
-  "vegetarian",
-  "halal",
-  "kosher",
-  "no_meat",
-  "no_fish",
-] as const;
-export type DietaryLabel = (typeof DIETARY_LABELS)[number];
-
-export const DIETARY_SUITABILITY = ["vegan", "vegetarian", "halal", "kosher"] as const;
-export type DietarySuitability = (typeof DIETARY_SUITABILITY)[number];
-
-export type ContainsTag = "meat" | "fish";
-
-/** A present label field forces that label over the recipe-derived one; an absent field defers to
- * it. */
-export interface DietOverride {
-  vegan?: "yes" | "no";
-  vegetarian?: "yes" | "no";
-  halal?: "yes" | "no";
-  kosher?: "yes" | "no";
-  addContains?: ContainsTag[];
-  removeContains?: ContainsTag[];
-}
+export { DIETARY_ORIGINS, DIETARY_LABELS, DIETARY_SUITABILITY } from "@waitron/shared";
+export type {
+  DietaryOrigin,
+  DietaryLabel,
+  DietarySuitability,
+  ContainsTag,
+  DietOverride,
+} from "@waitron/shared";
+import type { DietaryOrigin } from "@waitron/shared";
 
 export interface CatalogueSummary {
   id: string;

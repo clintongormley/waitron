@@ -1,3 +1,4 @@
+import { AppError } from "../errors.js";
 import { decimal } from "../money.js";
 import type { Decimal } from "../money.js";
 
@@ -37,7 +38,7 @@ function assertCalendarDate(caller: Caller, value: string): void {
     Number.isNaN(parsed.getTime()) ||
     parsed.toISOString().slice(0, 10) !== value
   ) {
-    throw new Error(`${caller}: "${value}" is not a calendar date (YYYY-MM-DD)`);
+    throw new AppError("vat_rate.date_invalid", { caller, value });
   }
 }
 
@@ -50,13 +51,21 @@ function assertWellFormed(caller: Caller, table: VatRateTable): void {
   for (const vatClass of VAT_CLASSES) {
     const entries = table[vatClass];
     if (entries[0]?.from !== null) {
-      throw new Error(`${caller}: the first entry for ${vatClass} must have from: null`);
+      throw new AppError("vat_rate.table_invalid", {
+        caller,
+        vatClass,
+        reason: "first_entry_missing_or_dated",
+      });
     }
     for (let i = 1; i < entries.length; i += 1) {
       const from = entries[i]!.from;
       const previous = entries[i - 1]!.from;
       if (from === null || (previous !== null && from <= previous)) {
-        throw new Error(`${caller}: the entries for ${vatClass} must be dated oldest first`);
+        throw new AppError("vat_rate.table_invalid", {
+          caller,
+          vatClass,
+          reason: "not_oldest_first",
+        });
       }
       assertCalendarDate(caller, from);
     }

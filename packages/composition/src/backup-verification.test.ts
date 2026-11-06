@@ -207,7 +207,7 @@ it.each(["scheduler", "bookings", "fiscal-none", "handover"])(
 
 describe("a set's entry covers every module whose tables it holds", () => {
   function hostedIn(host: string, module: WaitronModule): WaitronModule {
-    return { ...module, migrations: undefined, tablesIn: host };
+    return { ...module, migrations: undefined, tablesIn: host, classification: undefined };
   }
   const real = (name: string) => ALL_MODULES.find((m) => m.name === name)!;
 

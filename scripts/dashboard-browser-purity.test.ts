@@ -184,10 +184,9 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     expect(forbiddenImports(probe)).toEqual(["@waitron/db"]);
   });
 
-  describe("the catalogue wire-shape leaves stay type-only (emit no runtime)", () => {
-    // Each leaf holds wire shapes a browser app imports through `@waitron/shared`'s index, so
-    // each must be a PURE type module that compiles to an
-    // empty runtime module. The reachable-specifier scan above would false-positive here on an
+  describe("the wire-shape leaves stay type-only (emit no runtime)", () => {
+    // Each leaf holds wire shapes only and is kept a PURE type module that compiles to an empty
+    // runtime module. The reachable-specifier scan above would false-positive here on an
     // erased `import type` edge, so the check is on each leaf's own statements instead.
     //
     // HEDGE (it reads TEXT, not the compiler): it flags an `import` that is not `import type`, an

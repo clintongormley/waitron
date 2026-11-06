@@ -37,6 +37,7 @@ export function backupVerificationInventory(modules: readonly WaitronModule[]): 
         "module.requires_invalid",
         "module.dependency_missing",
         "module.incompatible_version",
+        "module.set_ownership_invalid",
         "module.dependency_cycle",
       ].includes(String(error.code))
     ) {
@@ -45,11 +46,7 @@ export function backupVerificationInventory(modules: readonly WaitronModule[]): 
     throw error;
   }
   const withSets = modulesWithSets(modules);
-  const hosts = new Set(withSets.map((module) => module.name));
   const setless = modules.filter((module) => module.migrations === undefined);
-  if (setless.some((module) => module.tablesIn === undefined || !hosts.has(module.tablesIn))) {
-    throw new BackupVerificationUnsupported("target_incompatible");
-  }
   return Object.freeze(
     withSets.map((module) => {
       const hosted = setless

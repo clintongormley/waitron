@@ -268,41 +268,15 @@ export interface VatBreakdownEntry {
   tax: string;
 }
 
-/**
- * LOCAL copies of `@waitron/shared`'s `menu-document/dietary.ts` types, structurally identical so a value crosses the
- * boundary. `DietLabel` is a cautious tri-state: `"unknown"` when the base recipe is unreviewed — never
- * a positive claim.
- */
-export type DietaryOrigin =
-  "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
-export type ContainsTag = "meat" | "fish";
-export type DietLabel = "yes" | "no" | "unknown";
-
-/** The recipe-derived diet basis: `pending` is true while the recipe is unreviewed (holding
- * vegan/vegetarian at "unknown"). */
-export interface DietDerivation {
-  origins: DietaryOrigin[];
-  pending: boolean;
-}
-/** A staff diet OVERRIDE: an explicit label wins over the derivation; halal/kosher are never derived.
- * Absent fields don't override. */
-export interface DietOverride {
-  vegan?: "yes" | "no";
-  vegetarian?: "yes" | "no";
-  halal?: "yes" | "no";
-  kosher?: "yes" | "no";
-  addContains?: ContainsTag[];
-  removeContains?: ContainsTag[];
-}
-/** The PUBLISHED diet profile — the derivation folded with the override. halal/kosher appear only when
- * the override set them. */
-export interface DietProfile {
-  vegan: DietLabel;
-  vegetarian: DietLabel;
-  contains: ContainsTag[];
-  halal?: "yes" | "no";
-  kosher?: "yes" | "no";
-}
+export type {
+  DietaryOrigin,
+  ContainsTag,
+  DietLabel,
+  DietDerivation,
+  DietOverride,
+  DietProfile,
+} from "@waitron/shared";
+import type { DietDerivation, DietOverride, DietProfile } from "@waitron/shared";
 
 /**
  * One sellable product as the till's widgets consume it, built from exactly two payloads:

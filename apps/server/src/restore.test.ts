@@ -41,6 +41,7 @@ import { FISCAL_RESTORE, currentSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
 import { enabledModules, fiscalSlot } from "@waitron/module";
 import type { RestoreHook, WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { readModuleConfig } from "./module-config.js";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
@@ -359,12 +360,7 @@ setInterval(() => db, 1000);`;
   });
 
   it("restores with a module that has no set of its own in the list", async () => {
-    const setless: WaitronModule = {
-      name: "synthetic-setless",
-      version: "0.0.0",
-      tier: "toggleable",
-      tablesIn: "core",
-    };
+    const setless = fakeSetlessModule("synthetic-setless", "core");
     await restoreFromArtifact(deps({ modules: [...withHooks({}), setless] }));
     await expectVenueRestored();
   });

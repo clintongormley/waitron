@@ -1,7 +1,7 @@
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
-import type { WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { buildManifest, schemaVersionsByModule } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 
@@ -32,12 +32,7 @@ describe("buildManifest", () => {
 
 describe("schemaVersionsByModule", () => {
   it("has no key for a module with no set of its own", async () => {
-    const setless: WaitronModule = {
-      name: "synthetic-setless",
-      version: "0.0.0",
-      tier: "toggleable",
-      tablesIn: "core",
-    };
+    const setless = fakeSetlessModule("synthetic-setless", "core");
     const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, [
       ...ALL_MODULES,
       setless,
