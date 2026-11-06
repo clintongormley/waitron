@@ -40,6 +40,7 @@ import {
   party,
   resetAllergyFixture,
   server,
+  shell,
   table,
   table7,
   tableOrder,
@@ -373,11 +374,13 @@ describe("a refusal's own reads have a time limit", () => {
     expect(panelOpen(el)).toBe(true);
     const rowsRead = api.getSplitSources!.mock.calls.length;
     const bills = tableOrder(el)!.bills;
+    const floorList = tableOrder(el)!.tables;
 
     floorRead.calls[0]!.answer(atFloor(9));
     await flush(el);
 
     expect(tableOrder(el)!.party?.revision).toBe(3);
+    expect(tableOrder(el)!.tables).toBe(floorList);
     expect(tableOrder(el)!.bills).toBe(bills);
     expect(api.getSplitSources!.mock.calls.length).toBe(rowsRead);
     await expectPressCarriesTheRows(el, { "20.00": 3 });
@@ -1086,7 +1089,7 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
 });
 
 describe("a refusal's read, once the waiter has left its party", () => {
-  it("starts no rows read: the other party's panel keeps its own rows, and a press carries them", async () => {
+  it("starts no rows read, from Back on: the other party's panel keeps its own rows, and a press carries them", async () => {
     const other = party({
       id: "v2",
       revision: 50,
@@ -1111,6 +1114,7 @@ describe("a refusal's read, once the waiter has left its party", () => {
       bills: [{ billId: "wo-6", lines: [dish("pulpo", 1)], balance: balance("wo-6", "50.00") }],
     };
     const sources = api.getSplitSources!.mockReset().mockResolvedValue(otherRows);
+    const left = tableOrder(el)!.party!.id;
     emit(tableOrder(el)!, "back-to-floor");
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t6", seated: true });
@@ -1119,6 +1123,7 @@ describe("a refusal's read, once the waiter has left its party", () => {
     await press(el, '[data-action="split-table"]');
     await press(el, '[data-target="t7"]');
     expect(picker(el)!.sources.map((each) => each.bill.workingOrderId)).toEqual(["wo-6"]);
+    expect(sources.mock.calls.filter(([partyId]) => partyId === left)).toEqual([]);
     sources.mockClear();
 
     bills.calls[0]!.answer(listAt("20.00", 0));
@@ -1250,5 +1255,39 @@ describe("a refusal naming someone else's hold on a bill whose drafts did not an
 
     expect(api.splitTable).toHaveBeenCalledTimes(2);
     expect(api.splitTable!.mock.calls[1]![4]).toEqual([freed]);
+  });
+});
+
+describe("party.out_of_date answering while Find bill is open, after a failed floor read emptied the floor", () => {
+  it("still reads the panel's rows again, though the till cannot say what changed", async () => {
+    const el = await billTwoTicked({ setPartyName: vi.fn() });
+    const partyId = tableOrder(el)!.party!.id;
+    let refuse: (error: unknown) => void = () => {};
+    api
+      .splitTable!.mockReset()
+      .mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject)));
+    await press(el, "[data-split-confirm]");
+    expect(api.splitTable).toHaveBeenCalledOnce();
+
+    // Another device has changed the party, so a rename is refused too, and the reload after it has
+    // its floor read fail: with the panel closed by the press, that empties the floor.
+    api
+      .setPartyName!.mockReset()
+      .mockRejectedValue({ code: "party.out_of_date", partyId, revision: 9 });
+    api.getTablesState!.mockReset().mockRejectedValue(lost());
+    emit(tableOrder(el)!, "name-party", { name: "Ana" });
+    await flush(el);
+    expect(api.setPartyName).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.party!.revision).toBe(3);
+    expect(tableOrder(el)!.tables).toEqual([]);
+    emit(shell(el), "find-bill");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-find-bill-screen")).not.toBeNull();
+    const rowsRead = api.getSplitSources!.mock.calls.length;
+
+    refuse({ code: "party.out_of_date", partyId, revision: 9 });
+    await flush(el);
+
+    expect(api.getSplitSources!.mock.calls.slice(rowsRead).map(([id]) => id)).toEqual([partyId]);
   });
 });

@@ -15931,7 +15931,6 @@ export class TillApp extends LitElement {
   ): BillEditExpected {
     return (
       observed.get(billId) ??
-      this.#billEditIfReady(billId) ??
       this.#splitToldEdits.get(prompt)?.get(billId) ?? {
         billId,
         editorVersion: 0,
