@@ -363,6 +363,9 @@ elige **Guardar**. Vacía el campo para quitar el nombre. **Poner nombre a los c
 la mesa** del mismo menú, pone nombre a todo el grupo. Si otra persona tiene platos sin enviar en la
 cuenta, toma primero su pedido.
 
+Para cambiar el nombre que ve cocina, usa **Poner nombre a los clientes**. Si queda trabajo
+pendiente en cocina, sus impresoras reciben un [ticket de cambio de nombre](kitchen-service.md#party-names).
+
 Una cuenta conserva su número mientras sigue con esos clientes. Juntar una cuenta con otra deja un
 hueco: junta la Cuenta 2 con la Cuenta 1 y quedan las Cuentas 1 y 3. Una cuenta que llega de otra
 mesa o del mostrador toma el siguiente número de los clientes, y también las cuentas de una mesa que

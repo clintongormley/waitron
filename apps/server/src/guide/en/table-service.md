@@ -346,6 +346,9 @@ choose **Name this bill**, type up to 40 characters and choose **Save**. Empty t
 the name. **Name the party**, under **Whole table** in the same menu, names the whole party instead.
 If someone else has dishes on the bill that are not sent yet, take over their order first.
 
+To change the name the kitchen sees, use **Name the party**. If kitchen work is still outstanding,
+its printers receive a [name-change slip](kitchen-service.md#party-names).
+
 A bill keeps its number for as long as it stays with the party. Merging one bill into another leaves
 a gap: merge Bill 2 into Bill 1 and Bills 1 and 3 remain. A bill that arrives from another table or
 from the counter takes the party's next number, and so do the bills of a table you join. A table
