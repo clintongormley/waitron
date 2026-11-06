@@ -605,8 +605,9 @@ and shows a clear message.
   (`fencedOrMirror`, `apps/server/src/boot.ts`): a fenced box's open payments that never reached the new main
   box stay open, as they do on a restricted box. Only sale recovery and bill completion check for primary. Coordination between two boxes collecting at the same time is not
   built. The manager's stuck-payment lists, resolve routes and bill-payment attestations apply the
-  same collection ownership (`apps/server/src/payments-api.ts`). Today's venue has one node
-  (CLAUDE.md §5).
+  same collection ownership. The primary named in the held chart also recovers payments from boxes
+  the chart fences or revokes, so plain promotion retains a manager fallback
+  (`apps/server/src/payments-api.ts`). Today's venue has one node (CLAUDE.md §5).
   [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

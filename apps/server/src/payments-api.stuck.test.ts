@@ -12,6 +12,9 @@ import {
   withTransaction,
   workingOrders,
   venueLocationId,
+  readNodeMembership,
+  stampDeployment,
+  writeNodeMembership,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -82,6 +85,13 @@ import {
   watchedOrder,
   watchedDerivationCount,
 } from "./testing/watched-scrypt.js";
+import { setSingletonRole } from "@waitron/node-db";
+import { generateNodeKeyPair } from "@waitron/membership";
+import { createDeploymentHolders } from "./deployment-holders.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import { promoteLocalSecondaryToPrimary } from "./promote.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { seedDevice, seedNode } from "@waitron/db/testing/seed.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
@@ -466,6 +476,167 @@ describe("A1381 manager collection ownership", () => {
     },
   );
 
+  it.each(["evicted", "revoked", "active", "other-primary", "secondary", "malformed"] as const)(
+    "applies the held chart's collection limits (%s)",
+    async (caseName) => {
+      const v = await setup({ isPrimary: caseName !== "secondary" });
+      const previous = await seedNode(suite.db);
+      const old = { ...v, cfg: { ...v.cfg, nodeId: previous } };
+      const orderId = await openOrder(v);
+      const whole = await strandPayment(old, orderId, { status: "requires_payment_method" });
+      const chartPrimary = caseName === "other-primary" ? await seedNode(suite.db) : v.cfg.nodeId;
+      const chart = signedMembershipDoc(2, {
+        signerNodeId: chartPrimary,
+        nodes: [
+          {
+            nodeId: chartPrimary,
+            standing: "serving-primary",
+            contactUrl: "https://main.example.test",
+          },
+          ...(caseName === "revoked"
+            ? []
+            : [
+                {
+                  nodeId: previous,
+                  standing:
+                    caseName === "active" ? ("serving-secondary" as const) : ("evicted" as const),
+                  contactUrl: "https://old.example.test",
+                },
+              ]),
+        ],
+        ...(caseName === "revoked" ? { revoked: [previous] } : {}),
+      });
+      await writeNodeMembership(
+        suite.db,
+        caseName === "malformed"
+          ? ({ ...chart, body: { term: 2 } } as unknown as typeof chart)
+          : chart,
+      );
+      const owned = caseName === "evicted" || caseName === "revoked";
+      const listed = await send(v, "GET", "/management-api/payments/stuck");
+      expect(listed.status).toBe(200);
+      expect(
+        ((await listed.json()) as { paymentId: string }[]).map(({ paymentId }) => paymentId),
+      ).toEqual(owned ? [whole.paymentId] : []);
+      const res = await send(v, "POST", resolvePath(whole.paymentId));
+      expect(res.status).toBe(owned ? 200 : 409);
+      if (!owned) expect((await errorOf(res)).code).toBe("payment.not_stuck");
+      expect((await paymentRow(whole.paymentId)).state).toBe(owned ? "failed" : "attempting");
+      expect(v.client.cancelledIntents).toEqual(owned ? [whole.piId] : []);
+      expect(saleIdsFor(orderId)).toEqual([]);
+    },
+  );
+
+  it("recovers the replaced primary's payments after a real plain promotion", async () => {
+    const role = { isPrimary: false };
+    const v = await setup(role);
+    const previous = await seedNode(suite.db);
+    const other = await seedNode(suite.db);
+    const old = { ...v, cfg: { ...v.cfg, nodeId: previous } };
+    const oldOrder = await openOrder(v);
+    const whole = await strandPayment(old, oldOrder, { status: "succeeded", amountReceived: 150 });
+    const billOrder = await openOrder(v);
+    const bill = await strandBillPayment(old, billOrder, { kind: "captured" });
+    const attested = await strandBillPayment(old, await openOrder(v), { kind: "failed" });
+    const oldFailedOrder = await openOrder(v);
+    const oldFailed = await strandPayment(old, oldFailedOrder, {
+      status: "requires_payment_method",
+    });
+    const peer = { ...v, cfg: { ...v.cfg, nodeId: other } };
+    const peerPayment = await strandPayment(peer, await openOrder(v), {
+      status: "requires_payment_method",
+    });
+    const key = generateNodeKeyPair();
+    await stampDeployment(suite.db, "preproduction");
+    await setSingletonRole({ venue: suite.db, node: suite.node }, v.cfg.nodeId, "secondary");
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, v.cfg.nodeId);
+    await pinMainBoxKey(suite.node, v.cfg.nodeId, { nodeId: previous, publicKey: key.publicKey });
+    await writeNodeMembership(
+      suite.db,
+      signedMembershipDoc(1, {
+        signerNodeId: previous,
+        keyPair: key,
+        nodes: [
+          { nodeId: previous, standing: "serving-primary", contactUrl: "https://old.example.test" },
+          {
+            nodeId: v.cfg.nodeId,
+            standing: "serving-secondary",
+            contactUrl: "https://self.example.test",
+          },
+          { nodeId: other, standing: "serving-secondary", contactUrl: "https://peer.example.test" },
+        ],
+      }),
+    );
+    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
+    role.isPrimary = true;
+    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
+    role.isPrimary = false;
+    const holders = createDeploymentHolders("primary", "secondary");
+    await promoteLocalSecondaryToPrimary(
+      {
+        db: suite.db,
+        node: suite.node,
+        nodeId: v.cfg.nodeId,
+        holders,
+        ring: RING,
+        log: noopLog,
+      },
+      { oldNodeNeutralised: true },
+    );
+    role.isPrimary = holders.singletonRole.current === "primary";
+    expect(
+      (await readNodeMembership(suite.db))!.body.nodes.map(({ nodeId, standing }) => ({
+        nodeId,
+        standing,
+      })),
+    ).toEqual([
+      { nodeId: previous, standing: "sell-only" },
+      { nodeId: v.cfg.nodeId, standing: "serving-primary" },
+      { nodeId: other, standing: "serving-secondary" },
+    ]);
+    role.isPrimary = false;
+    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
+    const refused = await send(v, "POST", resolvePath(whole.paymentId));
+    expect(refused.status).toBe(409);
+    expect((await errorOf(refused)).code).toBe("payment.not_stuck");
+    role.isPrimary = true;
+    const wholeList = await send(v, "GET", "/management-api/payments/stuck");
+    expect(wholeList.status).toBe(200);
+    expect(
+      ((await wholeList.json()) as { paymentId: string }[]).map(({ paymentId }) => paymentId),
+    ).toEqual([whole.paymentId, oldFailed.paymentId]);
+    const billList = await send(v, "GET", "/management-api/payments/bill-payments");
+    expect(billList.status).toBe(200);
+    expect(
+      ((await billList.json()) as { billPaymentId: string }[]).map(
+        ({ billPaymentId }) => billPaymentId,
+      ),
+    ).toEqual([bill, attested]);
+    expect((await send(v, "POST", resolvePath(whole.paymentId))).status).toBe(200);
+    expect((await send(v, "POST", billResolvePath(bill))).status).toBe(200);
+    expect((await send(v, "POST", resolvePath(oldFailed.paymentId))).status).toBe(200);
+    const peerRefused = await send(v, "POST", resolvePath(peerPayment.paymentId));
+    expect(peerRefused.status).toBe(409);
+    expect((await errorOf(peerRefused)).code).toBe("payment.not_stuck");
+    expect(
+      (
+        await post(v, attestPath(attested), {
+          outcome: "failed",
+          note: "No charge confirmed",
+          pin: "1234",
+        })
+      ).status,
+    ).toBe(200);
+    expect((await billPaymentOf(attested)).state).toBe("failed");
+    expect((await paymentRow(peerPayment.paymentId)).state).toBe("attempting");
+    expect((await orderOf(oldOrder)).status).toBe("settled");
+    expect(saleIdsFor(oldOrder)).toHaveLength(1);
+    expect((await billPaymentOf(bill)).state).toBe("received");
+    expect(saleIdsFor(billOrder)).toHaveLength(1);
+    expect((await orderOf(oldFailedOrder)).mark).toBeNull();
+    expect(v.client.cancelledIntents).toEqual([oldFailed.piId]);
+  });
+
   it("collects a predecessor's payments after a recorded handover", async () => {
     const v = await setup();
     const previous = await seedNode(suite.db);
@@ -562,6 +733,28 @@ describe("A1381 manager collection ownership", () => {
 });
 
 describe("A1381 placed whole-order payments", () => {
+  it("refuses a stranded payment on an abandoned order before asking Stripe", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(
+      v,
+      orderId,
+      { status: "requires_payment_method" },
+      { mark: null },
+    );
+    await suite.db
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(eq(workingOrders.id, orderId));
+    const res = await send(v, "POST", resolvePath(paymentId));
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("payment.not_stuck");
+    expect(v.client.cancelledIntents).toEqual([]);
+    expect((await paymentRow(paymentId)).state).toBe("attempting");
+    expect(await orderOf(orderId)).toEqual({ status: "abandoned", mark: null });
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
   it("keeps a placed bill contribution out of the whole-order fallback", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
