@@ -951,8 +951,13 @@ before treating an implementation as a rule violation.
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
 unprompted, and **update it in the same change that makes it stale**. A change that finishes an
-entry DELETES it rather than marking it done, and each point it leaves open becomes its own short
-entry in the same area; an entry's long detail goes in its area's file under `docs/backlog/`. A decision a comment or doc cites moves to its area's
+entry DELETES it rather than marking it done. **A loose end found in review is fixed in that pull
+request; if that really cannot be done, it joins an existing bundle in its area. It, or a point a
+finished entry leaves open, gets a short entry of its own in the same area only if a person would
+notice it, it could cost money or a filing, or it breaks a written rule. Everything else stays in
+the pull request thread** (owner, 2026-11-06). Cost: the list grew by about 25 entries a day, about
+half of them from reviews. An entry's long detail goes in its area's file under `docs/backlog/`. A
+decision a comment or doc cites moves to its area's
 `## Decisions and deliberate limits` instead of being deleted, and entries there are never deleted
 for being finished. How: `docs/backlog.md` → _How to keep this file honest_.
 Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`,
