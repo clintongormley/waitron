@@ -233,6 +233,7 @@ for (const operation of operations)
         `/api/parties/${p.partyId}/groups/${operation === "split" ? "split-line" : "move"}`,
         {
           ...(await command(p)),
+          personId: venue.operatorId,
           lineId: p.line.id,
           moves: [{ lineId: p.line.id, quantity: "3" }],
           target: "new",
@@ -256,6 +257,7 @@ for (const operation of operations)
         `/api/parties/${p.partyId}/groups/${operation === "split" ? "split-line" : "move"}`,
         {
           ...(await command(p)),
+          personId: venue.operatorId,
           operatorId: venue.adminId,
           lineId: p.line.id,
           moves: [{ lineId: p.line.id, quantity: "3" }],
@@ -402,6 +404,7 @@ it.each(operations)("HTTP %s forwards the full valid expectation", async (operat
     `/api/parties/${p.partyId}/groups/${operation === "split" ? "split-line" : "move"}`,
     {
       ...(await command(p)),
+      personId: venue.operatorId,
       lineId: p.line.id,
       moves: [{ lineId: p.line.id, quantity: "3" }],
       target: "new",

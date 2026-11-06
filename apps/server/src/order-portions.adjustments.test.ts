@@ -1091,6 +1091,7 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
         "POST",
         `/api/parties/${bill.partyId}/lines/${lineId}/recall`,
         {
+          personId: venue.staffId,
           submissionId: randomUUID(),
           expectedPartyRevision: (
             await inTx(venue, (tx) =>
@@ -1960,6 +1961,7 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     const party = `/api/parties/${bill.partyId}`;
     const recalled = ok(
       await send(venue.app, venue.cookie.manager, "POST", `${party}/lines/${lineId}/recall`, {
+        personId: venue.managerId,
         submissionId: randomUUID(),
         ...(await expected()),
       }),
@@ -3237,6 +3239,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         "POST",
         `/api/parties/${bill.partyId}/lines/${lineId}/recall`,
         {
+          personId: venue.managerId,
           submissionId: randomUUID(),
           expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
@@ -3402,7 +3405,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         venue.cookie.manager,
         "POST",
         `${party}/lines/${burger}/recall`,
-        { submissionId: randomUUID(), ...(await expected()) },
+        { personId: venue.managerId, submissionId: randomUUID(), ...(await expected()) },
       );
       expect(recalled.status, JSON.stringify(recalled.json)).toBe(200);
       const draft = (recalled.json as { draft: Draft }).draft;

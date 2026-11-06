@@ -104,6 +104,7 @@ async function setup(release: "hold" | "fire" = "hold", shape?: "grouped") {
   for (const lineId of row.lineIds ?? [row.lineId]) {
     const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
     answer = await call("POST", `/api/parties/${p.partyId}/lines/${lineId}/recall`, {
+      personId: venue.staffId,
       submissionId: randomUUID(),
       expectedPartyRevision: party!.revision,
     });
@@ -275,6 +276,7 @@ describe("adjusting an owned recalled family", () => {
     const water = { id: (await todayLine(venue, p.billId, 3)).lineId };
     const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
     const recalled = await call("POST", `/api/parties/${p.partyId}/lines/${water.id}/recall`, {
+      personId: venue.staffId,
       submissionId: randomUUID(),
       expectedPartyRevision: party!.revision,
     });
@@ -306,6 +308,7 @@ describe("adjusting an owned recalled family", () => {
     const water = { id: (await todayLine(venue, p.billId, 3)).lineId };
     const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
     const recalled = await call("POST", `/api/parties/${p.partyId}/lines/${water.id}/recall`, {
+      personId: venue.staffId,
       submissionId: randomUUID(),
       expectedPartyRevision: party!.revision,
     });

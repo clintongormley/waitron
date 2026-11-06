@@ -3555,6 +3555,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const command = groupCommand(session.personId, body);
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
       const lineId = body.lineId.toLowerCase();
+      requireNamesSessionPerson(body, session.personId);
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
         return splitHeldLineIntoUnits(
@@ -3612,6 +3613,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ...groupCommand(session.personId, body),
         expectedEdit: parseBillEditExpected(body.expectedEdit),
       };
+      requireNamesSessionPerson(body, session.personId);
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
         return recallToDraft(

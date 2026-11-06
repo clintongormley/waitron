@@ -81,6 +81,7 @@ async function recall(partyId: string, lineId: string) {
     .from(workingOrderLines)
     .where(eq(workingOrderLines.id, lineId));
   const answer = await call("POST", `/api/parties/${partyId}/lines/${lineId}/recall`, {
+    personId: venue.staffId,
     expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, line!.workingOrderId)),
     submissionId: randomUUID(),
     expectedPartyRevision: party!.revision,

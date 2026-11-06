@@ -639,6 +639,7 @@ describe("bill editor in real save and takeover commands", () => {
       "POST",
       `/api/parties/${p.partyId}/lines/${source.id}/recall`,
       {
+        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: party!.revision,
         expectedEdit: blank(p.tabId),

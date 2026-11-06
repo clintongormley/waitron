@@ -1099,7 +1099,12 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/groups/split-line",
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups/split-line`,
-    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, lineId: randomUUID() }),
+    () => ({
+      submissionId: randomUUID(),
+      expectedPartyRevision: 0,
+      lineId: randomUUID(),
+      personId,
+    }),
     deliTableZone,
   ],
   [
@@ -1146,6 +1151,7 @@ const ROUTES: readonly Row[] = [
       submissionId: randomUUID(),
       expectedPartyRevision: 0,
       expectedEdit: { billId: x.deliOrder, editorVersion: 0, draftId: null, draftRevision: null },
+      personId,
     }),
     deliTableZone,
   ],
