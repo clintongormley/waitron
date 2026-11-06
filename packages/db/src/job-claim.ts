@@ -32,7 +32,6 @@ export interface ClaimSpec {
    *
    * To read a neighbour of the claimed row — the printer a print job names — write a correlated
    * subquery here: SQLite's `returning` cannot read a second table put into the statement's `FROM`.
-   * A table the PREDICATE reads is a different thing and still joins — {@link claimableJoin}.
    */
   readonly returning: SQL;
 }

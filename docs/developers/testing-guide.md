@@ -3708,3 +3708,9 @@ subquery's selected bill id in an identity function on the test connection. It c
 the real subquery emits, alongside its plan and public result. Replacing the subquery's filter
 with a condition that admits every bill fails that check in the disposable control. Checking
 the index name alone missed the historical candidates being passed to the lookup.
+
+Exercise a hot query both before and after `ANALYZE`. A1372's printer-id subquery and explicit
+status set used both keys of `print_jobs_pull_idx` before statistics were gathered, but the same
+fixture planned a full job scan afterwards. The final printer-first candidate lookup names the
+existing index, and its history suite checks both planner states. A separate failed-job lookup
+also names that index so retry ordering does not scan delivered history for each candidate.
