@@ -1256,6 +1256,10 @@ export class MenusScreen extends LitElement {
   #showView(view: Tab): void {
     this.view = view;
     this.#followStatus();
+    if (view !== "preview") {
+      this.undoRefusals = {};
+      this.undoResult = null;
+    }
     if (view !== "preview" && view !== "home") this.#releasePreview();
     if (view !== "home") this.#releaseHome();
     if (view !== "prices") {
@@ -1312,6 +1316,9 @@ export class MenusScreen extends LitElement {
     this.priceRefusals = {};
     this.priceOutcome = null;
     this.publishResult = null;
+    // `undoOut` is kept: it outlives the menu left, so that menu's Publish waits for its Undo.
+    this.undoRefusals = {};
+    this.undoResult = null;
     this.patching = false;
     this.#releasePrices();
     this.#releasePreview();

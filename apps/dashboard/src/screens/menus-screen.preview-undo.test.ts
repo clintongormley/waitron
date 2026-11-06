@@ -505,3 +505,108 @@ it("draws Undo blocked and sends nothing while a Home save is out", async () => 
     expect(undoButton(panel(), "handheld-display")!.getAttribute("aria-disabled")).toBeNull(),
   );
 });
+
+const refusalIn = (panel: MenuPreviewPanel, id: string) =>
+  panel.shadowRoot!.querySelector(`[data-change-row="${id}"] [data-undo-refusal]`);
+const tabsOf = (el: MenusScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement & { value: string }>('[data-test="menu-tabs"]')!;
+
+it("shows no success line on coming back to the Preview when the Undo succeeded on the Structure tab", async () => {
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const fake = fakeApi({ updateSection } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+  visit(`/manage/menus/menu/${MENU}/view/structure`);
+  await vi.waitFor(() => expect(tabsOf(el).value).toBe("structure"));
+  fake.state.preview = previewOf([rename]);
+  write.answer();
+  await settle();
+  await vi.waitFor(() => expect(panel().undoing).toBeNull());
+  await settle();
+  visit(`/manage/menus/menu/${MENU}/view/preview`);
+  await vi.waitFor(() => expect(undoButton(panel(), "own-rename")).not.toBeNull());
+  await settle();
+  expect(resultLine(panel())).toBeNull();
+  expect(memberError(el)).toBe("");
+});
+
+it("forgets a shown refusal and success line once the person leaves the Preview tab", async () => {
+  const updateSection = vi.fn(async () => {
+    throw { code: "menu_section.invalid", params: { field: "color" } };
+  });
+  const renameCatalogue = vi.fn(async () => {});
+  const fake = fakeApi({ updateSection, renameCatalogue } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(refusalIn(panel(), "mains-colour")).not.toBeNull());
+  await userEvent.click(undoButton(panel(), "own-rename")!);
+  await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
+  expect(refusalIn(panel(), "mains-colour")).not.toBeNull();
+
+  visit(`/manage/menus/menu/${MENU}/view/structure`);
+  await vi.waitFor(() => expect(tabsOf(el).value).toBe("structure"));
+  visit(`/manage/menus/menu/${MENU}/view/preview`);
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
+  await settle();
+  expect(refusalIn(panel(), "mains-colour")).toBeNull();
+  expect(resultLine(panel())).toBeNull();
+});
+
+it("names an Undo refused after another menu was opened beside the list", async () => {
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const fake = fakeApi({ updateSection } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  const bullet = words(panel(), "mains-colour");
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+  visit(`/manage/menus/menu/${DINNER}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
+  write.refuse({ code: "menu_section.invalid", params: { field: "color" } });
+  await vi.waitFor(() =>
+    expect(memberError(el)).toBe(
+      `Not undone: ${bullet}. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
+    ),
+  );
+  expect(refusalIn(panel(), "mains-colour")).toBeNull();
+});
+
+it("shows nothing on another menu opened while an Undo that then succeeds was out", async () => {
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const fake = fakeApi({ updateSection } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+  visit(`/manage/menus/menu/${DINNER}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
+  write.answer();
+  await vi.waitFor(() => expect(panel().undoBlocked).toBe(false));
+  await settle();
+  expect(resultLine(panel())).toBeNull();
+  expect(refusalIn(panel(), "mains-colour")).toBeNull();
+  expect(memberError(el)).toBe("");
+});
+
+it("shows another menu none of the refusals and success line said on the menu left", async () => {
+  const updateSection = vi.fn(async () => {
+    throw { code: "menu_section.invalid", params: { field: "color" } };
+  });
+  const renameCatalogue = vi.fn(async () => {});
+  const fake = fakeApi({ updateSection, renameCatalogue } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(refusalIn(panel(), "mains-colour")).not.toBeNull());
+  await userEvent.click(undoButton(panel(), "own-rename")!);
+  await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
+
+  // Dinner lists a change with the same id as the one refused on Lunch.
+  visit(`/manage/menus/menu/${DINNER}/view/preview`);
+  await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
+  await settle();
+  expect(refusalIn(panel(), "mains-colour")).toBeNull();
+  expect(resultLine(panel())).toBeNull();
+});
