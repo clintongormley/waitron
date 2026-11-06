@@ -866,6 +866,30 @@ describe("choosing the Counter zone the counter is already on, with an order in 
     expect(api.listZoneOffers).not.toHaveBeenCalled();
   });
 
+  it("brings the menu back with an order in flight and an empty basket, and refuses another zone", async () => {
+    const { el, api } = await mount(selection(["bar", "shop"], "bar"));
+    expect(counter(el)!.store!.lines).toHaveLength(0);
+    Object.assign(el, { submitting: true });
+    emit(shell(el), "show-counter-orders", { kind: "waiting" });
+    await vi.waitFor(() => expect(counter(el)?.orderList).toBe("waiting"));
+
+    await pickZone(el, "bar");
+
+    await vi.waitFor(() => expect(counter(el)!.orderList).toBeNull());
+    expect(alert(el)).toBeNull();
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+
+    emit(shell(el), "show-counter-orders", { kind: "waiting" });
+    await vi.waitFor(() => expect(counter(el)?.orderList).toBe("waiting"));
+
+    await pickZone(el, "shop");
+
+    await vi.waitFor(() => expect(alert(el)).toBe(REFUSAL));
+    expect(counter(el)!.selectedServiceZoneId).toBe("bar");
+    expect(counter(el)!.orderList).toBe("waiting");
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+  });
+
   it("adds no history entry and re-reads no stations when the menu is already showing", async () => {
     const { el, api } = await mount(selection(["bar", "shop"], "bar"));
     counter(el)!.store!.addProduct(counter(el)!.products[0]!, "1");
