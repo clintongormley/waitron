@@ -112,3 +112,14 @@ export function fromMajorUnits(major: number): Decimal {
   const s = String(Math.abs(cents)).padStart(3, "0");
   return decimal(`${sign}${s.slice(0, -2)}.${s.slice(-2)}`);
 }
+
+/**
+ * Refusals of `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds` that SumUp's
+ * OpenAPI file (`RefundTransaction`, read 2026-09-27) documents as the refund not happening: "'400':
+ * The refund request is invalid.", "'403': The request is authenticated but not permitted for this
+ * operation.", "'404': The requested transaction does not exist or does not belong to the
+ * merchant.", "'409': The transaction cannot be refunded due to business constraints." and "'422':
+ * The refund could not be processed by the payment processor." None says "not created" in those
+ * words. No 401, 429 or 5xx is documented for this operation, so those settle nothing.
+ */
+export const DOCUMENTED_REFUND_REFUSALS: ReadonlySet<number> = new Set([400, 403, 404, 409, 422]);

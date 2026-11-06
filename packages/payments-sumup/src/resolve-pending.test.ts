@@ -6,6 +6,7 @@ import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
   getPaymentByRef,
+  failAttempting,
   insertAttempting,
   stampAttemptingRef,
 } from "@waitron/payments";
@@ -72,6 +73,130 @@ async function setup(incidentRecorded = true) {
 }
 
 describe("SumUpCloudProvider.resolvePending", () => {
+  it.each([true, false])(
+    "alerts a capture that lost to a contradictory failure and continues, incident recorded %s",
+    async (recorded) => {
+      const { fake, provider, attempting, state, raised } = await setup(recorded);
+      const checkout = await attempting("contradicting", { status: "SUCCESSFUL" });
+      await attempting("later", { status: "SUCCESSFUL" });
+      const find = fake.findTransaction.bind(fake);
+      let changed = false;
+      vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => {
+        const answer = await find(query);
+        if (!changed && "clientTransactionId" in query && query.clientTransactionId === checkout) {
+          changed = true;
+          await withTransaction(suite.db, (tx) =>
+            failAttempting(tx, { provider: "sumup", paymentRef: "contradicting" }),
+          );
+        }
+        return answer;
+      });
+
+      const result = await provider.resolvePending(T0, await ownsEveryPayment(suite.db));
+
+      expect(result).toEqual({
+        nextDueAt: null,
+        forwarded: 1,
+        declined: 0,
+        incidentsRaised: recorded ? 1 : 0,
+      });
+      expect((await state("contradicting")).state).toBe("failed");
+      expect((await state("later")).state).toBe("captured");
+      expect(raised).toHaveLength(1);
+      expect(raised[0]).toMatchObject({
+        error: {
+          code: "payment.pending_outcome_unactionable",
+          params: { paymentRef: "contradicting", status: "SUCCESSFUL" },
+        },
+      });
+    },
+  );
+
+  it.each([
+    { label: "ordinary error", failure: new Error("incident storage failed") },
+    {
+      label: "the current payment's refusal from incident storage",
+      failure: new AppError("payment.not_found", { provider: "sumup", paymentRef: "unrelated" }),
+    },
+    {
+      label: "another domain refusal",
+      failure: new AppError("management.request_invalid", { field: "incident" }),
+    },
+    {
+      label: "another provider's refusal",
+      failure: new AppError("payment.not_found", {
+        provider: "another-provider",
+        paymentRef: "unrelated",
+      }),
+    },
+    {
+      label: "another payment's refusal",
+      failure: new AppError("payment.not_found", {
+        provider: "sumup",
+        paymentRef: "another-payment",
+      }),
+    },
+  ])(
+    "propagates $label from incident storage and leaves the row attempting",
+    async ({ failure }) => {
+      const { fake, attempting, state } = await setup();
+      await attempting("unrelated", { status: "REFUNDED" });
+      const provider = new SumUpCloudProvider({
+        client: fake,
+        db: suite.db,
+        incidents: () => Promise.reject(failure),
+      });
+      await expect(provider.resolvePending(T0, await ownsEveryPayment(suite.db))).rejects.toBe(
+        failure,
+      );
+      expect((await state("unrelated")).state).toBe("attempting");
+    },
+  );
+
+  it.each(["SUCCESSFUL", "FAILED", "REFUNDED", "missing"])(
+    "concurrent passes skip rows already resolved for %s and finish the later rows",
+    async (status) => {
+      const { fake, provider, attempting, state, raised } = await setup();
+      await attempting("race-a", { status });
+      await attempting("race-b", { status });
+      const find = fake.findTransaction.bind(fake);
+      let entered = 0;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => {
+        entered += 1;
+        if (entered === 2) release();
+        await gate;
+        return status === "missing" ? null : find(query);
+      });
+      const now = new Date(Date.now() + NOT_FOUND_GRACE_MS + 1);
+      const owners = await ownsEveryPayment(suite.db);
+
+      const results = await Promise.allSettled([
+        provider.resolvePending(now, owners),
+        provider.resolvePending(now, owners),
+      ]);
+
+      expect(results.map((result) => result.status)).toEqual(["fulfilled", "fulfilled"]);
+      const passes = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
+      );
+      expect(passes.reduce((sum, pass) => sum + pass.forwarded, 0)).toBe(
+        status === "SUCCESSFUL" ? 2 : 0,
+      );
+      expect(passes.reduce((sum, pass) => sum + pass.declined, 0)).toBe(
+        status === "SUCCESSFUL" ? 0 : 2,
+      );
+      expect(passes.map((pass) => pass.nextDueAt)).toEqual([null, null]);
+      expect([(await state("race-a")).state, (await state("race-b")).state]).toEqual(
+        status === "SUCCESSFUL" ? ["captured", "captured"] : ["failed", "failed"],
+      );
+      expect(raised).toHaveLength(status === "REFUNDED" || status === "missing" ? 2 : 0);
+    },
+  );
+
   it("captures a row SumUp now reports SUCCESSFUL, stamping the refundable transaction id", async () => {
     const { provider, attempting, state } = await setup();
     await attempting("a", { status: "SUCCESSFUL" });

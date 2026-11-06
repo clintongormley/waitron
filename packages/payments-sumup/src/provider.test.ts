@@ -222,6 +222,25 @@ function fullDiskOnCapture(db: Database): { lift: () => void } {
 }
 
 describe("SumUpCloudProvider.collect when a full disk refuses the capture's save", () => {
+  it("propagates the sweep's page-limit refusal, keeps the attempt and captures after the limit is lifted", async () => {
+    const { fake, provider, params, row } = await setup(suite, (client) => client.stallNext());
+    const started = await provider.collect(params);
+    fake.setStatus((await row(started.paymentRef)).externalRef!, "SUCCESSFUL");
+    const owners = await ownsEveryPayment(suite.db);
+    const disk = fullDiskOnCapture(suite.db);
+    try {
+      await expect(provider.resolvePending(new Date(), owners)).rejects.toMatchObject({
+        code: "storage.disk_full",
+      });
+    } finally {
+      disk.lift();
+    }
+    expect((await row(started.paymentRef)).state).toBe("attempting");
+    const recovered = await provider.resolvePending(new Date(), owners);
+    expect(recovered).toEqual({ nextDueAt: null, forwarded: 1, declined: 0, incidentsRaised: 0 });
+    expect((await row(started.paymentRef)).state).toBe("captured");
+  });
+
   it("says the card was charged, still as a full disk, and leaves the row for resolvePending", async () => {
     const { fake, provider, params, row } = await setup(suite);
     const disk = fullDiskOnCapture(suite.db);

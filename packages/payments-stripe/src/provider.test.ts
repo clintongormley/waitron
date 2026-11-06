@@ -358,6 +358,58 @@ describe("StripeTerminalProvider.collect under the device profile the request wa
 });
 
 describe("StripeTerminalProvider reversals", () => {
+  it("sends exact partial amounts under distinct keys for independent equal refunds", async () => {
+    const fake = new FakeStripe();
+    const send = vi.spyOn(fake, "refund");
+    const provider = providerFor(fake);
+    const paid = await provider.collect(await collectParams());
+    const intentId = (await rowFor(paid.paymentRef))!.externalRef;
+
+    const first = await provider.partialRefund(paid.paymentRef, decimal("2.00"));
+    const second = await provider.partialRefund(paid.paymentRef, decimal("2.00"));
+
+    expect([first.state, second.state]).toEqual(["partially_refunded", "partially_refunded"]);
+    expect([first.amount, second.amount]).toEqual(["2.00", "2.00"]);
+    expect(
+      send.mock.calls.map(([request]) => ({
+        paymentIntentId: request.paymentIntentId,
+        amount: request.amount,
+      })),
+    ).toEqual([
+      { paymentIntentId: intentId, amount: "2.00" },
+      { paymentIntentId: intentId, amount: "2.00" },
+    ]);
+    const keys = send.mock.calls.map(([request]) => request.idempotencyKey);
+    expect(new Set(keys).size).toBe(2);
+    expect(keys).toEqual([expect.any(String), expect.any(String)]);
+    for (const key of keys) expect(key).not.toBe("");
+    expect(
+      suite.db.all(
+        sql`select amount, state from payment_refunds where payment_ref = ${paid.paymentRef}`,
+      ),
+    ).toEqual([
+      { amount: 200, state: "succeeded" },
+      { amount: 200, state: "succeeded" },
+    ]);
+  });
+
+  it("keeps the legacy pending refund outcome accepted and records its full amount", async () => {
+    const fake = new FakeStripe();
+    vi.spyOn(fake, "refund").mockResolvedValue({ id: "re_pending", status: "pending" });
+    const provider = providerFor(fake);
+    const paid = await provider.collect(await collectParams());
+
+    const result = await provider.refund(paid.paymentRef);
+
+    expect(result).toMatchObject({ state: "refunded", amount: "12.10" });
+    expect((await rowFor(paid.paymentRef))!.state).toBe("refunded");
+    expect(
+      suite.db.all(
+        sql`select amount, state from payment_refunds where payment_ref = ${paid.paymentRef}`,
+      ),
+    ).toEqual([{ amount: 1210, state: "succeeded" }]);
+  });
+
   it("refund: full refund via Stripe -> state refunded", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();

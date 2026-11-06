@@ -21,6 +21,7 @@ import type {
 import {
   captureAttempting,
   failAttempting,
+  getPaymentByRef,
   insertAttempting,
   listAttempting,
   refundLookupOf,
@@ -28,7 +29,7 @@ import {
   stampAttemptingRef,
 } from "@waitron/payments";
 import type { SumUpClient, SumUpTransaction } from "./client.js";
-import { SUMUP_PROVIDER } from "./client.js";
+import { DOCUMENTED_REFUND_REFUSALS, SUMUP_PROVIDER } from "./client.js";
 import { reverseViaSumUp } from "./reverse.js";
 import "./errors.js";
 
@@ -46,17 +47,6 @@ export const RESOLVE_RETRY_MS = 60_000;
  * lost may have been accepted; SumUp's own 60 s reader window plus a generous tap allowance is far
  * inside 15 min. After it, SumUp having nothing means no money moved: `failed`, no incident. */
 export const NOT_FOUND_GRACE_MS = 15 * 60_000;
-
-/**
- * Refusals of `POST /v1.0/merchants/{merchant_code}/payments/{transaction_id}/refunds` that SumUp's
- * OpenAPI file (`RefundTransaction`, read 2026-09-27) documents as the refund not happening: "'400':
- * The refund request is invalid.", "'403': The request is authenticated but not permitted for this
- * operation.", "'404': The requested transaction does not exist or does not belong to the
- * merchant.", "'409': The transaction cannot be refunded due to business constraints." and "'422':
- * The refund could not be processed by the payment processor." None says "not created" in those
- * words. No 401, 429 or 5xx is documented for this operation, so those settle nothing.
- */
-const DOCUMENTED_REFUND_REFUSALS = new Set([400, 403, 404, 409, 422]);
 
 /**
  * How far before `sentAt` SumUp may stamp a REFUND event that is still the refund sent then: the
@@ -328,24 +318,31 @@ export class SumUpCloudProvider implements PaymentProvider {
     let declined = 0;
     let incidentsRaised = 0;
     let deferred = false;
-    /** `failAttempting` + (for an unactionable outcome) the incident, in ONE transaction. Returns
-     * whether an incident was raised. */
+    // A listed attempt may already have been resolved when this pass reaches its write.
+    const resolve = async <T>(action: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        return await action();
+      } catch (error) {
+        if (error instanceof AppError && error.code === "payment.not_found") return undefined;
+        throw error;
+      }
+    };
+    const unresolved = (tx: Transaction, paymentRef: string, status: string) =>
+      this.opts.incidents(tx, {
+        origin: jobOrigin("payment_check"),
+        error: new AppError("payment.pending_outcome_unactionable", { paymentRef, status }),
+        severity: "error",
+        detectedAt: now,
+      });
+    // Keep a refused outcome and its alert in the same transaction.
     const failWith = (
       key: { provider: string; paymentRef: string },
       status: string | null,
-    ): Promise<boolean> =>
+    ): Promise<boolean | undefined> =>
       this.inTransaction(async (tx) => {
-        await failAttempting(tx, key);
-        if (status === null) return false;
-        return this.opts.incidents(tx, {
-          origin: jobOrigin("payment_check"),
-          error: new AppError("payment.pending_outcome_unactionable", {
-            paymentRef: key.paymentRef,
-            status,
-          }),
-          severity: "error",
-          detectedAt: now,
-        });
+        const failed = await resolve(() => failAttempting(tx, key));
+        if (failed === undefined) return undefined;
+        return status === null ? false : unresolved(tx, key.paymentRef, status);
       });
     for (const row of rows) {
       if (signal?.aborted) {
@@ -370,7 +367,9 @@ export class SumUpCloudProvider implements PaymentProvider {
           continue;
         }
         // A not-found we cannot correlate to a key SumUp recorded is an uncertain charge — surface it.
-        if (await failWith(key, "not_found")) incidentsRaised++;
+        const failed = await failWith(key, "not_found");
+        if (failed === undefined) continue;
+        if (failed) incidentsRaised++;
         declined++;
         continue;
       }
@@ -380,20 +379,30 @@ export class SumUpCloudProvider implements PaymentProvider {
         continue;
       }
       if (outcome.kind === "captured") {
-        await this.inTransaction((tx) =>
-          captureAttempting(tx, {
-            ...key,
-            settledAt: outcome.settledAt,
-            externalRef: outcome.transactionId,
-            card: outcome.card,
-          }),
-        );
-        forwarded++;
+        const result = await this.inTransaction(async (tx) => {
+          const captured = await resolve(() =>
+            captureAttempting(tx, {
+              ...key,
+              settledAt: outcome.settledAt,
+              externalRef: outcome.transactionId,
+              card: outcome.card,
+            }),
+          );
+          if (captured !== undefined) return { captured: true, incident: false };
+          const current = await getPaymentByRef(tx, key);
+          const incident =
+            current?.state === "failed" && (await unresolved(tx, key.paymentRef, t.status));
+          return { captured: false, incident };
+        });
+        if (result.captured) forwarded++;
+        if (result.incident) incidentsRaised++;
         continue;
       }
       // failed → no incident; deferred (REFUNDED / unknown) → incident naming the status.
       const status = outcome.kind === "deferred" ? t.status : null;
-      if (await failWith(key, status)) incidentsRaised++;
+      const failed = await failWith(key, status);
+      if (failed === undefined) continue;
+      if (failed) incidentsRaised++;
       declined++;
     }
     return {
