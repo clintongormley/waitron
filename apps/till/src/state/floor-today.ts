@@ -53,6 +53,27 @@ export function nextFloorMoment(): number {
   return ++floorMoments;
 }
 
+/** A room's revision as an answer gave it, and when, numbered by `nextFloorMoment`. */
+export interface CarriedRevision {
+  revision: number;
+  answeredAt: number;
+}
+
+/** `carried` with an answer's rooms in place, each answered now. */
+export function carryRevisions(
+  carried: ReadonlyMap<string, CarriedRevision>,
+  zoneRevisions: Readonly<Record<string, number>> | undefined,
+): ReadonlyMap<string, CarriedRevision> {
+  const answeredAt = nextFloorMoment();
+  return new Map([
+    ...carried,
+    ...Object.entries(zoneRevisions ?? {}).map(([zoneId, revision]): [string, CarriedRevision] => [
+      zoneId,
+      { revision, answeredAt },
+    ]),
+  ]);
+}
+
 export function shownName(table: TableState): string {
   return table.today?.name ?? table.label;
 }

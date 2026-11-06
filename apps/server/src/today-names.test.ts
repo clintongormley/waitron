@@ -18,7 +18,7 @@ import {
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
-import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
+import { oneBill, partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { listOrders } from "./orders-list.js";
 import { finishTable, holderOf } from "./testing/party-close-fixture.js";
@@ -456,7 +456,7 @@ async function seatedPair(names: { own: string; nine: string } | null) {
 async function splitTableOff(partyId: string, tableId: string, billId: string | null) {
   await post(`/api/parties/${partyId}/split-table`, {
     tableId,
-    billId,
+    selection: oneBill(billId),
     expectedPartyRevision: await revisionOf(v, partyId),
     expectedEdits: await inTx(v, async (tx) =>
       billId === null ? [] : [await readBillEditState(tx, billId)],
@@ -496,18 +496,17 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
     expect(slips.filter((s) => s.includes(fromTo(name, nine)))).toHaveLength(1);
   });
 
-  it("Table 9 split off an unnamed group with no bill prints one MOVED slip to Counter 6", async () => {
+  it("Table 9 split off an unnamed group with no bill prints no MOVED slip: Counter 6's name is still on the paper", async () => {
     const { table, guests } = await seatedPair(null);
-    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+    const sent = await jobsFrom(() => orderForParty(v, guests.partyId, ["Burger"], guests.tabId));
+    expect(sent.length).toBeGreaterThan(0);
 
     const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
 
-    const slips = printed.filter(isMovedSlip);
-    expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(prepareText(`A:  ${await labelOf(table.c6!)}`));
+    expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 
-  it("Table 9 split off an unnamed group taking a bill prints a MOVED slip for each bill", async () => {
+  it("Table 9 split off an unnamed group taking a bill prints one MOVED slip, for the bill that left", async () => {
     const { table, guests } = await seatedPair(null);
     await orderForParty(v, guests.partyId, ["Burger", "Burger"], guests.tabId);
     const second = await split(v, guests.partyId, guests.tabId, [2]);
@@ -515,11 +514,9 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
     const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, second));
 
     const slips = printed.filter(isMovedSlip).map((lines) => lines.join(" "));
-    expect(slips).toHaveLength(2);
-    const counter6 = prepareText(`A:  ${await labelOf(table.c6!)}`);
-    const table9 = prepareText(`A:  ${await labelOf(table.t9!)}`);
-    expect(slips.filter((s) => s.includes(counter6))).toHaveLength(1);
-    expect(slips.filter((s) => s.includes(table9))).toHaveLength(1);
+    expect(slips).toEqual([
+      expect.stringContaining(prepareText(`A:  ${await labelOf(table.t9!)}`)),
+    ]);
   });
 });
 
@@ -760,6 +757,16 @@ describe("a counter order delivered to a table split off a seated group, as the 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
     expect(slips[0]!.join(" ")).toContain(fromTo(name, nine));
+  });
+
+  it("a counter order delivered to a table of an unnamed group prints no MOVED slip when the other table is split off: its table keeps its name", async () => {
+    const { table, zoneId, guests } = await seatedPair(null);
+    const sent = await jobsFrom(() => deliveredCounterOrder(zoneId, table.c6!));
+    expect(sent.length).toBeGreaterThan(0);
+
+    const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
+
+    expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 });
 

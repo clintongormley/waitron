@@ -9,6 +9,7 @@ import type {
   TodayPlacement,
 } from "../api/client.js";
 import {
+  carryRevisions,
   dropAction,
   groupName,
   groupSplitOf,
@@ -25,6 +26,7 @@ import {
   sparesOf,
   takenOffOf,
   joinMembersById,
+  nextFloorMoment,
   tightName,
 } from "./floor-today.js";
 
@@ -95,6 +97,28 @@ const seatedBy = (p: TableParty): Partial<TableState> => ({
 
 const startLocale = currentLocale();
 afterEach(() => setLocale(startLocale));
+
+describe("carryRevisions", () => {
+  const answeredAt = nextFloorMoment();
+  const earlier = new Map([["z1", { revision: 9, answeredAt }]]);
+
+  it("keeps a room an answer does not name, and adds the one it does", () => {
+    const carried = carryRevisions(earlier, { z2: 4 });
+    expect(carried.get("z1")).toEqual({ revision: 9, answeredAt });
+    expect(carried.get("z2")?.revision).toBe(4);
+    expect(carried.get("z2")?.answeredAt).toBeGreaterThan(answeredAt);
+  });
+
+  it("replaces a room an answer names, as of now", () => {
+    const carried = carryRevisions(earlier, { z1: 12 });
+    expect(carried.get("z1")?.revision).toBe(12);
+    expect(carried.get("z1")?.answeredAt).toBeGreaterThan(answeredAt);
+  });
+
+  it("keeps every room when an answer names none", () => {
+    expect([...carryRevisions(earlier, undefined)]).toEqual([...earlier]);
+  });
+});
 
 describe("dropAction", () => {
   const a = table("a", "4", { today: today({ placement: place(0, 0) }) });

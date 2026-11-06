@@ -284,16 +284,6 @@ than two tables still joined, and the till shows the same sentence ("That table 
 table") for it, which is not accurate. Next: give that case its own wording, or its own code if the
 server should say which case it is.
 
-## A590. Splitting a table from the order screen drops the room's new revision
-
-**A590 (2026-10-13).** Since A579 part 2b (#1624) the floor screen keeps the room's revision from
-each floor answer until a newer floor read replaces it. The order screen's table split
-(`#onSplitTable`, `apps/till/src/till-app.ts`) calls `splitTable` and ignores the `zoneRevisions` the
-server answers when the split ends a group, then re-reads the floor (`#reloadTables`). Read, not
-run: a floor change sent before that read arrives would carry the old revision and be refused
-`floor_today.out_of_date` once, and the re-read fixes it. Next: hand the answer to the floor screen
-as its own floor answers are, or confirm the window cannot be hit and close this.
-
 ## A591. A split down to one loses a table that had guests when its joined table went live
 
 **A591 (2026-10-13).** A table that holds guests when its joined table is put on the map is not a
@@ -2004,7 +1994,8 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   the Name window by the owner's answer, 2026-10-15).** Asked whether such a save should be
   refused so the waiter sees the other count first, the owner answered "(a) keep it — the last count
   saved wins", and gave the same answer, (a), for the Name window. The Name window's save sends the
-  party revision this till holds (`#onNameParty`, `apps/till/src/till-app.ts`).
+  party revision this till holds (`#onNameParty`, `apps/till/src/till-app.ts`). 2026-11-06, A803 4c:
+  Split a table has no window of its own any more; both counts are set in its panel, beside the ticks.
 - **Guests: the waiter changes the count at any time, joined tables add their counts, and only Split
   a table asks again (A713, owner 2026-10-15).** Owner's words: "add joined counts. the waiter should
   always be able to update the number of people sitting at a table. when they split, the waiter
@@ -2015,7 +2006,8 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   `apps/server/src/table-actions.ts`); and Split a table opens a window asking each side's count
   before the split goes through. A bill split by item has no count of its own, so it prints no guests
   line. A bill moved to a free table still starts a party with no count; the waiter sets it with
-  Guests.
+  Guests. 2026-11-06, A803 4c: both counts are now set in Split a table's own panel, beside the
+  ticks; there is no separate window.
 - **An emptied name field says what it goes back to only as its placeholder (A665, owner
   2026-10-14: "leave it").** Owner 2026-10-14: the name windows show what an emptied field goes back
   to as the placeholder only; no hidden description for screen readers. The windows are the till's
@@ -2032,7 +2024,10 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   `From: García birthday` / `To: Counter 6, Table 9`; Bar back to its saved place inside a named
   group prints nothing, as the party keeps every table and the name; and an unnamed group of two
   ended the same way prints nothing
-  ([plan](../superpowers/plans/2026-10-14-a650-moved-slips-design.md)).
+  ([plan](../superpowers/plans/2026-10-14-a650-moved-slips-design.md)). 2026-11-04, A803 4c: Split a
+  table no longer tells bills that stay, by spec §3.7, except where a name on their paper has gone:
+  a staying dish is told only when no name its paper printed is still one of its places (the owner's
+  answer to the 4c plan's Question 3, choice B).
 - **The table screen shows no "(was N)" (A650 question A, owner 2026-10-14: the default kept).** A
   party's bills stay named "Ana · Bill 1" with no order number; "(was 28)" shows where numbers
   already show, such as the Pass screen, because a waiter answering a kitchen call looks there
@@ -2994,14 +2989,67 @@ landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill
 main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1286–A1294 and A1298–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454); it
-leaves open A1327. Remaining slices: 4c,
-Split a table through the same picker, with A590; pre-bills after asesor S2 (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
+leaves open A1327. Slice 4c, Split a table through the same picker with any whole bills and single
+dishes in one panel, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which
+no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval
 during implementation. Each new seating starts at Bill 1
 (owner, 2026-10-19); bills staying at their table retain their numbers.
 [Spec](../superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
 [plan](../superpowers/plans/2026-10-19-a803-bills-and-tables.md).
+
+## A1350. A row can read Paid on money a card in progress has only reserved
+
+**A1350. A row can read Paid on money a card in progress has only reserved (seen in A803 slice
+4c).** Split a table's bill header counts money received only (`table.split_bill_part_paid`), so a
+bill holding only money a card in progress has reserved draws no paid words there. Its rows still
+can, in Split a table and in Move dishes, which share the picker (`widgets/portion-picker.ts`):
+
+- a row a pending item payment covers reads `Paid` (`bill_pay.paid`), because `paidLines` includes
+  pending item payments (`paidQuantitiesOf`, `apps/server/src/bill-payments.ts`);
+- a row the money floor stops reads "{amount} is already paid on this bill: move fewer dishes"
+  (`table.move_dishes_floor`).
+
+So a waiter can read Paid on a dish whose card is then declined. The row's words came with slice 4a
+(`9a7efbb6b0`). The picker's floor itself still counts the reserved money, which is what keeps that
+money with its bill.
+
+## A1353. On a desktop, the till's own stop at Split writes its sentence after the waiter has left
+
+**A1353. On a desktop, the till's own stop at Split writes its sentence after the waiter has left
+(left open by A803 slice 4c).** Found by 4c's review of fix round G, by running it: the committed
+"till's own stop at Send" case, on a desktop. The till is taken off the page with the drafts read
+hung, then put back. After the put-back the order is closed (`tableOrder` null) and the banner is
+empty, but `splitRefusal` holds `{ tableId: "t5", …, message: "Bill 2 changed while you were
+choosing. Check its row, then choose Split again." }`. The server-refusal path in the same state
+leaves `splitRefusal` null.
+
+Cause, read: the server-refusal path compares the visit taken at the press (`here()`), while the
+till's own stop runs `#onSplitBillChanged` (`apps/till/src/till-app.ts`), which takes
+`this.#orderVisit` when it starts; on a desktop the put-back has already moved the visit by then.
+Nothing visible was found: opening the table again clears it. Suggested fix, not tried: give the own
+stop's `live` the press's visit, `() => live() && visit === this.#orderVisit`, and add this as a
+desktop twin of the committed case.
+
+## A1357. The till's draft saves and reads can still pass each other
+
+**A1357. The till's draft saves and reads can still pass each other (seen in A803 slice 4c's
+review; two of the three are the same on main).** All three are in `DraftSync`
+(`apps/till/src/state/draft-sync.ts`), found with its fake draft server, not the real app:
+
+- **A failed read leaves a waiting edit unsent until the next read or edit** (same on main). `#load`
+  cancels the save timer before it reads and its failure restarts nothing. Example: Ana adds a dish,
+  takes over within the save delay, and the read fails; the dish is on this till only until the next
+  read, and is lost if the browser dies first. Do not add a bare restart to `#load`'s catch: `#saveNow`
+  checks neither recovery nor a running command, so a save could go out during one.
+- **A plain read can overtake a save's answer** (same on main). `load()` does not wait for the save
+  queue. When a save has reached the server and its answer is slow, a read sees the till's own save
+  as someone else's change: the dishes go to the kept candidate, the bill locks, and the waiter has
+  to review their own dishes. Nothing is lost.
+- **A save that starts while a take-over waits can race the read after it** (4c's own). After a
+  take-over, `#readAfterTakeOver` waits for the save queue and then reads; a save started during that
+  wait is not waited for.
 
 ## A1261. A full invoice for a bill already paid, from the table's ⋮
 

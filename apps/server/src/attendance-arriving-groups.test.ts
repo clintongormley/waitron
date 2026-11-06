@@ -1,5 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { observedRelocationSender } from "./testing/table-action-fixture.js";
+import { oneBill, observedRelocationSender } from "./testing/table-action-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -114,7 +114,7 @@ function command(app: Hono, action: Action, p: Awaited<ReturnType<typeof prepare
     return send(app, v.cookie, "POST", `/api/parties/${p.source.partyId}/split-table`, {
       ...spoofed,
       tableId: p.tableId,
-      billId: p.billId,
+      selection: oneBill(p.billId),
       expectedPartyRevision: p.revision,
     });
   return send(app, v.cookie, "POST", `/api/bills/${p.billId}/move`, {

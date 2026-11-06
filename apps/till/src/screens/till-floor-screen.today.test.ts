@@ -515,6 +515,117 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     }
   });
 
+  /** What the app hands down: a split answered the room at `revision`, at this moment. */
+  const answeredByTheApp = (revision: number) =>
+    new Map([["z1", { revision, answeredAt: nextFloorMoment() }]]);
+
+  it("a poll started before the app's answer and applied after it leaves that answer as the revision sent", async () => {
+    const api = stubApi();
+    const el = await mount(at7(), api);
+    const pollStarted = nextFloorMoment();
+    el.carriedRevisions = answeredByTheApp(9);
+    el.tablesReadAt = pollStarted;
+    el.tables = at7();
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 9);
+  });
+
+  it("a read started after the app's answer replaces it, higher or lower", async () => {
+    for (const read of [12, 6]) {
+      const api = stubApi();
+      const el = await mount(at7(), api);
+      el.carriedRevisions = answeredByTheApp(9);
+      el.tablesReadAt = nextFloorMoment();
+      el.tables = [
+        planned("t1", 2, { zoneRevision: read }),
+        planned("t2", 20, { zoneRevision: read }),
+      ];
+      await el.updateComplete;
+      await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+      expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, read);
+      cleanupWidgets();
+    }
+  });
+
+  it("the higher of two answers after the read is sent: the app's, then the screen's own higher one", async () => {
+    const api = stubApi();
+    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 9 });
+    const el = await mount(at7(), api);
+    el.tablesReadAt = nextFloorMoment();
+    el.carriedRevisions = answeredByTheApp(8);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 8);
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
+  });
+
+  it("the higher of two answers after the read is sent: the app's, then the screen's own lower one", async () => {
+    const api = stubApi();
+    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 8 });
+    const el = await mount(at7(), api);
+    el.tablesReadAt = nextFloorMoment();
+    el.carriedRevisions = answeredByTheApp(9);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
+  });
+
+  it.each(["app's", "screen's own"])(
+    "the %s answer that arrives after a read holding a higher revision leaves the read's revision",
+    async (whose) => {
+      const api = stubApi();
+      let answerMove!: (answer: { zoneId: string; revision: number }) => void;
+      api.moveToday.mockReturnValueOnce(new Promise((resolve) => (answerMove = resolve)));
+      const el = await mount(at7(), api);
+      el.tablesReadAt = nextFloorMoment();
+      const own = whose !== "app's";
+      if (own) await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+      el.tablesReadAt = nextFloorMoment();
+      el.tables = [planned("t1", 2, { zoneRevision: 12 }), planned("t2", 20, { zoneRevision: 12 })];
+      await el.updateComplete;
+      if (own) answerMove({ zoneId: "z1", revision: 8 });
+      else el.carriedRevisions = answeredByTheApp(8);
+      await settle(el);
+      await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+      expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 12);
+    },
+  );
+
+  it("the higher of two answers after the read is sent: the screen's own, then the app's higher one", async () => {
+    const { api, el } = await movedTo8();
+    el.carriedRevisions = answeredByTheApp(9);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
+  });
+
+  it("the higher of two answers after the read is sent: the screen's own, then the app's lower one", async () => {
+    const api = stubApi();
+    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 9 });
+    const el = await mount(at7(), api);
+    el.tablesReadAt = nextFloorMoment();
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    el.carriedRevisions = answeredByTheApp(8);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
+  });
+
+  it("the app's answer for another room leaves this room's revision alone", async () => {
+    const api = stubApi();
+    const el = await mount(at7(), api);
+    el.carriedRevisions = new Map([["z2", { revision: 9, answeredAt: nextFloorMoment() }]]);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 7);
+  });
+
   it("a change in another room keeps the first room's answer as the revision sent", async () => {
     const api = stubApi();
     api.moveToday

@@ -28,7 +28,7 @@ export interface PickRow {
   limit: number;
   /** Why no (more) member of this row can be picked, or why it holds more picks than its limit;
    * null when one more can be, or when all are picked within the limit. */
-  blocked: { reason: "paid" } | { reason: "floor"; kept: string } | null;
+  blocked: { reason: "paid" } | { reason: "floor"; kept: string } | { reason: "presented" } | null;
 }
 
 export type Picks = ReadonlySet<string>;
@@ -49,8 +49,9 @@ interface PickGroup {
  * one grouping serves every drawing of the rows until what it is grouped from changes. */
 export interface PickGroups {
   readonly groups: readonly PickGroup[];
-  /** The bill's total and what it has received or reserved; null with no balance read. */
-  readonly floor: { total: Decimal; kept: Decimal } | null;
+  /** The bill's total, what it has received, and `kept`: that plus what a card in progress has
+   * reserved, which is the least the bill may hold. Null with no balance read. */
+  readonly floor: { total: Decimal; received: Decimal; kept: Decimal } | null;
 }
 
 /**
@@ -91,6 +92,7 @@ export function pickGroups(
         ? null
         : {
             total: decimal(balance.total),
+            received: decimal(balance.received),
             kept: moneyPlus(balance.received, balance.reserved),
           },
   };
@@ -100,7 +102,7 @@ const pickedOf = (members: readonly TabLine[], picks: Picks) =>
   members.filter((member) => picks.has(member.id)).length;
 
 /** What the picks on unpaid rows take off the bill. */
-function pickedTotal(bill: PickGroups, picks: Picks): Decimal {
+export function pickedTotal(bill: PickGroups, picks: Picks): Decimal {
   return sumDecimals(
     bill.groups
       .filter((group) => !group.paid)

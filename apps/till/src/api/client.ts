@@ -2225,6 +2225,12 @@ export interface TableActionResult {
   zoneRevisions?: Record<string, number>;
 }
 
+/** Which bills go whole, and which dishes go loose, to the party Split a table starts. */
+export interface SplitSelection {
+  wholeBillIds: string[];
+  loose: { billId: string; lineIds: string[] }[];
+}
+
 /** What a bill action sends of the party the till read the bill under: its revision and its id. Both
  * are left out for a bill of no party. */
 export interface BillRevisions {
@@ -2354,8 +2360,16 @@ export interface TabLines {
   revision: number;
 }
 
+/** `GET /api/parties/:id/split-sources`: the party's own open and presented bills, in number order,
+ * and the party's revision read in the same transaction. */
+export interface SplitSources {
+  partyRevision: number;
+  bills: { billId: string; lines: TabLine[]; balance: BillBalance }[];
+}
+
 /**
- * One line of an open tab from `GET /api/working-orders/:id/lines`. A tab does NOT re-price:
+ * One line of a bill: an open one from `GET /api/working-orders/:id/lines`, an open or presented
+ * one from `GET /api/parties/:id/split-sources`. A tab does NOT re-price:
  * `unitPriceGross` is the gross unit price LOCKED at add-time.
  */
 export interface TabLine {
@@ -2411,6 +2425,9 @@ export interface TabLine {
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved in from another party's bill or from a bill with no party. */
   groupId: string | null;
+  /** On a dish its held group has still to release, by the rule of the order screen's `released`;
+   * absent otherwise. */
+  waitsInHeldGroup?: true;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
    * dish. */
@@ -3962,6 +3979,11 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/drafts`, "GET", undefined, options.signal);
   }
 
+  /** Every open and presented bill of this party, with its dishes and balance. */
+  getSplitSources(partyId: string, options: ReadOptions = {}): Promise<SplitSources> {
+    return this.#request(`/api/parties/${partyId}/split-sources`, "GET", undefined, options.signal);
+  }
+
   /** Replace this bill's outbox at its observed editing state. */
   saveDraft(
     partyId: string,
@@ -4696,26 +4718,28 @@ export class TillApi {
   }
 
   /**
-   * `tableId` leaves the party and a new party starts there with `billId`, or with a new empty bill
-   * when it is null → `POST /api/parties/:id/split-table`, answering the new party and its bill. `guestCounts`, when given, is each side's
-   * guest count afterwards; without it the staying party keeps its count. Rejects, among others, `table.not_shared`,
-   * `table.not_joined` and `party.out_of_date`.
+   * `tableId` leaves the party and a new party starts there with the selection's whole bills and a
+   * new bill holding its loose dishes, or a new empty bill when nothing is selected →
+   * `POST /api/parties/:id/split-table`, answering the new party and its bills in number order.
+   * `guestCounts`, when given, is each side's guest count afterwards; without it the staying party
+   * keeps its count. Rejects, among others, `table.not_shared`, `table.not_joined` and
+   * `party.out_of_date`.
    */
   splitTable(
     partyId: string,
     tableId: string,
-    billId: string | null,
+    selection: SplitSelection,
     expectedPartyRevision: number,
     expectedEdits: BillEditExpected[],
     guestCounts?: { staying: number | null; leaving: number | null },
   ): Promise<{
     partyId: string;
-    billId: string;
+    billIds: string[];
     zoneRevisions?: Record<string, number>;
   }> {
     return this.#request(`/api/parties/${partyId}/split-table`, "POST", {
       tableId,
-      billId,
+      selection,
       expectedPartyRevision,
       expectedEdits,
       ...(guestCounts === undefined ? {} : { guestCounts }),

@@ -74,6 +74,8 @@ import {
   advanceSet,
   bumpRevision,
   clearGroups,
+  dishesWithHeldExtra,
+  dishReleased,
   fireLines,
   fireableLineColumns,
   fireOrderLines,
@@ -2143,17 +2145,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     tx,
     lines.map((line) => line.id),
   );
-  const heldExtras = new Set(
-    lines
-      .filter(
-        (line) =>
-          line.parentLineId !== null &&
-          line.ticketItemId !== null &&
-          initiatedAt({ requestedAt: line.ticketRequestedAt, firedAt: line.ticketFiredAt }) ===
-            null,
-      )
-      .map((line) => line.parentLineId),
-  );
+  const heldExtras = dishesWithHeldExtra(lines);
   for (const line of lines) {
     if (line.parentLineId === null) continue;
     extras.set(line.parentLineId, [
@@ -2250,10 +2242,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       unitPrecision: line.unitPrecision,
       servedQuantity: thousandthsToDecimal(line.servedQuantity),
       servedAt: line.servedAt,
-      released:
-        line.quantity > line.cancelledQuantity &&
-        serviceRequested(line) &&
-        !heldExtras.has(line.id),
+      released: dishReleased(line, heldExtras.has(line.id)),
       kitchen:
         line.ticketState === null
           ? null

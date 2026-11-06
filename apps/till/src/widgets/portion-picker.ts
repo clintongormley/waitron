@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { baseStyles, formatDecimalInput } from "@waitron/ui";
@@ -17,6 +17,35 @@ import {
 } from "../state/portion-selection.js";
 import { trimQuantity } from "./dish-format.js";
 
+/** The picker's ticks: the bill header beside a row of them draws the same box. */
+export const tickStyles = css`
+  input {
+    flex: none;
+    inline-size: var(--wt-space-5);
+    block-size: var(--wt-space-5);
+    margin: 0;
+    accent-color: var(--wt-color-primary);
+  }
+  /* The browser's own disabled box is too faint to see on the light page. */
+  input:disabled {
+    appearance: none;
+    border: 1px solid var(--wt-color-text-muted);
+    border-radius: var(--wt-radius-sm);
+    background: var(--wt-color-track);
+  }
+  input:disabled:checked {
+    display: grid;
+    place-content: center;
+    background: var(--wt-color-text-muted);
+  }
+  input:disabled:checked::after {
+    content: "✓";
+    color: var(--wt-color-bg);
+    font-size: var(--wt-font-size-sm);
+    line-height: 1;
+  }
+`;
+
 /**
  * One bill's dishes as ticks, identical portions as one row with a count, and the reason a dish
  * cannot be picked beside it. It holds no picks of its own: each change is a `portion-picks` event
@@ -30,6 +59,7 @@ export class TillPortionPicker extends LitElement {
   }
   static override styles = [
     baseStyles,
+    tickStyles,
     css`
       :host {
         display: block;
@@ -53,25 +83,30 @@ export class TillPortionPicker extends LitElement {
       label:has(input:disabled) {
         cursor: default;
       }
-      input {
-        flex: none;
-        inline-size: var(--wt-space-5);
-        block-size: var(--wt-space-5);
-        margin: 0;
-        accent-color: var(--wt-color-primary);
+      /* A tick still works on this row, so its text keeps a readable contrast: at
+         --wt-opacity-disabled it fails axe on the light page. The tick itself stays in full colour:
+         at that opacity it measures under the 3:1 the picker's accessibility suite holds, and axe
+         cannot see it. */
+      .quiet label {
+        color: var(--wt-color-text-muted);
       }
-      /* The browser's own disabled box is too faint to see on the light page. A disabled tick is
-         never checked (a row holding picks keeps its tick so it can be cleared), so only the empty
-         box is drawn. */
-      input:disabled {
-        appearance: none;
-        border: 1px solid var(--wt-color-text-muted);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-track);
+      .pale .name,
+      .pale .qty,
+      .pale .amount {
+        opacity: var(--wt-opacity-disabled);
       }
       .name {
         flex: 1;
         overflow-wrap: anywhere;
+      }
+      .mark {
+        display: inline-block;
+        margin-inline-start: var(--wt-space-2);
+        padding-inline: var(--wt-space-2);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface-lifted);
+        color: var(--wt-color-primary-text);
+        font-size: var(--wt-font-size-sm);
       }
       .extra {
         display: block;
@@ -107,9 +142,28 @@ export class TillPortionPicker extends LitElement {
   ];
   @property({ attribute: false }) rows: readonly PickRow[] = [];
   @property({ attribute: false }) picks: Picks = new Set();
+  /** The whole bill is chosen: every row draws ticked with no stepper, whatever `picks` holds, and
+   * unticking a row emits the other rows' members. */
+  @property({ type: Boolean }) whole = false;
   /** Names a dish or an extra. */
   @property({ attribute: false }) nameOf: (line: TabLine) => string = (line) => line.name ?? "";
+  /** Words to mark a dish with, such as what it is waiting for; empty for none. */
+  @property({ attribute: false }) markOf: (line: TabLine) => string = () => "";
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
+
+  /** The other stepper button, once this press has moved the picks: the pressed one is disabled at
+   * its limit, which would drop focus to the page. The row's tick, when that press made the bill
+   * whole and the row has no stepper left. */
+  #stepperFocus?: { button: string; tick: string };
+
+  override updated(changed: PropertyValues<this>): void {
+    if (!changed.has("picks") || this.#stepperFocus === undefined) return;
+    const { button: other, tick } = this.#stepperFocus;
+    this.#stepperFocus = undefined;
+    const button = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(other);
+    if (button === null) this.renderRoot.querySelector<HTMLElement>(tick)?.focus();
+    else void button.updateComplete.then(() => button.focus());
+  }
 
   #emit(next: Picks): void {
     this.dispatchEvent(
@@ -123,8 +177,15 @@ export class TillPortionPicker extends LitElement {
     this.requestUpdate();
   }
 
+  #toggled(row: PickRow): Picks {
+    if (!this.whole) return toggleRow(row, this.picks);
+    return new Set(
+      this.rows.filter((other) => other !== row).flatMap((other) => other.members.map((m) => m.id)),
+    );
+  }
+
   #reason(row: PickRow): string {
-    if (row.blocked === null) return "";
+    if (row.blocked === null || row.blocked.reason === "presented") return "";
     if (row.blocked.reason === "paid") return t("bill_pay.paid");
     return fill(t("table.move_dishes_floor"), { amount: this.money(row.blocked.kept) });
   }
@@ -140,38 +201,52 @@ export class TillPortionPicker extends LitElement {
 
   #row(row: PickRow): TemplateResult {
     const id = row.members[0]!.id;
-    const count = row.blocked?.reason === "paid" ? 0 : pickedCount(row, this.picks);
+    const count = this.whole
+      ? row.members.length
+      : row.blocked?.reason === "paid"
+        ? 0
+        : pickedCount(row, this.picks);
+    const stepped = row.counted && count > 0 && !this.whole;
+    const off = row.blocked !== null && (count === 0 || this.whole);
+    const look =
+      row.blocked?.reason === "presented" || (this.whole && off)
+        ? "pale"
+        : this.whole
+          ? "quiet"
+          : "";
     const dish = this.#what(row.members[0]!);
     const extras = row.extras.map((extra) => this.#what(extra));
     const name = [dish, ...extras].join(", ");
     const reason = this.#reason(row);
     const reasonId = `pick-reason-${id}`;
+    const mark = this.markOf(row.members[0]!);
     const amount = toScale(
       multiplyDecimal(decimal(row.each), decimal(String(count > 0 ? count : row.members.length))),
       MONEY_SCALE,
     );
-    return html`<div class="row" data-pick-row=${id}>
+    return html`<div class="row ${look}" data-pick-row=${id}>
       <label>
         <input
           type="checkbox"
           data-pick=${id}
           .checked=${live(count > 0)}
-          ?disabled=${row.blocked !== null && count === 0}
+          ?disabled=${off}
           aria-describedby=${reason === "" ? nothing : reasonId}
-          @change=${() => this.#emit(toggleRow(row, this.picks))}
+          aria-description=${row.blocked?.reason === "presented" ? t("table.split_presented") : nothing}
+          @change=${() => this.#emit(this.#toggled(row))}
         />
         <span class="name"
-          >${dish}${extras.map((extra) => html`<span class="extra">${extra}</span>`)}</span
+          >${dish}${mark === "" ? nothing : html`<span class="mark" data-pick-mark=${id}>${mark}</span>`}${extras.map((extra) => html`<span class="extra">${extra}</span>`)}</span
         >
         ${
-          row.counted && count === 0
+          row.counted && !stepped
             ? html`<span class="qty" data-pick-qty=${id}>${row.members.length}</span>`
             : nothing
         }
         <span class="amount" data-pick-amount=${id}>${this.money(amount)}</span>
       </label>
       ${reason === "" ? nothing : html`<p class="reason" id=${reasonId}>${reason}</p>`}
-      ${row.counted && count > 0 ? this.#stepper(row, count, name, reason) : nothing}
+      ${stepped ? this.#stepper(row, count, name, reason) : nothing}
     </div>`;
   }
 
@@ -183,7 +258,14 @@ export class TillPortionPicker extends LitElement {
         data-pick-dec=${id}
         aria-label=${`${t("basket.decrease")} ${name}`}
         ?disabled=${count <= 1}
-        @click=${() => this.#emit(setCount(row, count - 1, this.picks))}
+        @click=${() => {
+          if (count - 1 <= 1)
+            this.#stepperFocus = {
+              button: `[data-pick-inc="${CSS.escape(id)}"]`,
+              tick: `[data-pick="${CSS.escape(id)}"]`,
+            };
+          this.#emit(setCount(row, count - 1, this.picks));
+        }}
       >
         <span aria-hidden="true">−</span>
       </wt-button>
@@ -199,7 +281,14 @@ export class TillPortionPicker extends LitElement {
         aria-label=${`${t("basket.increase")} ${name}`}
         aria-description=${count >= row.limit && reason !== "" ? reason : nothing}
         ?disabled=${count >= row.limit}
-        @click=${() => this.#emit(setCount(row, count + 1, this.picks))}
+        @click=${() => {
+          if (count + 1 >= row.limit)
+            this.#stepperFocus = {
+              button: `[data-pick-dec="${CSS.escape(id)}"]`,
+              tick: `[data-pick="${CSS.escape(id)}"]`,
+            };
+          this.#emit(setCount(row, count + 1, this.picks));
+        }}
       >
         <span aria-hidden="true">+</span>
       </wt-button>

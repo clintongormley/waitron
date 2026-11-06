@@ -133,6 +133,10 @@ export interface DraftRefused {
 
 export type TakeOverOutcome = "taken" | "failed" | "unsaved" | DraftRefused;
 
+/** `reloaded` says whether the read after the take-over counted; the bill's own row and edit state
+ * come from the take-over's answer either way. */
+export type TakeOverOnOutcome = { taken: true; reloaded: boolean } | DraftRefused | "failed";
+
 export type DraftCommandOutcome<T> =
   { applied: T; reloaded: boolean } | "failed" | "unsaved" | DraftRefused;
 
@@ -175,6 +179,12 @@ export interface DraftSyncOptions {
  * stopped when the wait began is killed before the till gives up.
  */
 export const TABLE_REQUEST_LIMIT_MS = 150_000;
+
+/** A read shorter than a request's limit, which `stop` ends early. */
+export interface DraftReadBounds {
+  limitMs: number;
+  stop: AbortSignal;
+}
 
 /** A signal that aborts after `ms`, or with `also`; `done` clears the timer. */
 export function limited(ms: number, also?: AbortSignal): { signal: AbortSignal; done: () => void } {
@@ -285,6 +295,8 @@ export class DraftSync {
   readonly personId: string;
   /** Other people's open drafts on this bill, as last read. */
   others: Draft[] = [];
+  /** Every bill's open drafts in the party, as last read. */
+  partyDrafts: Draft[] = [];
   readonly #options: DraftSyncOptions;
   readonly #candidates: Map<string, RetainedDraftCandidate>;
   #edit: BillEditState | null = null;
@@ -506,19 +518,29 @@ export class DraftSync {
   }
 
   /** A read never turns a retained local candidate into saved work. */
-  async load(): Promise<boolean> {
+  async load(bounds?: DraftReadBounds): Promise<boolean> {
     if (this.#commanding || this.#correctingPlaces) return false;
-    return this.#load();
+    return this.#load(bounds);
   }
 
-  async #load(): Promise<boolean> {
+  async #load(bounds?: DraftReadBounds): Promise<boolean> {
     const command = this.#commandsStarted;
     const read = ++this.#reads;
     this.#cancelTimer();
-    const limit = limited(this.#options.requestLimitMs, this.#commandAbort?.signal);
+    const stops = [this.#commandAbort?.signal, bounds?.stop].filter((stop) => stop !== undefined);
+    const limit = limited(
+      bounds?.limitMs ?? this.#options.requestLimitMs,
+      stops.length === 0 ? undefined : AbortSignal.any(stops),
+    );
     let answer;
     try {
-      answer = await this.#options.api.listDrafts(this.partyId, { signal: limit.signal });
+      // What a read answers past its limit goes nowhere, whether or not its request stopped.
+      answer = await Promise.race([
+        this.#options.api.listDrafts(this.partyId, { signal: limit.signal }),
+        pause(limit.signal).then(() => {
+          throw new DOMException("A drafts read ended", "AbortError");
+        }),
+      ]);
     } catch {
       return false;
     } finally {
@@ -539,10 +561,18 @@ export class DraftSync {
       null;
     if ((draft === null) !== (edit.draftId === null)) return false;
     const previous = new Map(this.#billEdits.map((edit) => [edit.billId, edit]));
+    const newerThanRead = new Set<string>();
     this.#billEdits = answer.billEdits.map((edit) => {
       const known = previous.get(edit.billId);
-      return known !== undefined && this.#olderEdit(edit, known) ? known : { ...edit };
+      if (known === undefined || !this.#olderEdit(edit, known)) return { ...edit };
+      newerThanRead.add(edit.billId);
+      return known;
     });
+    // A bill's rows stay with its edit state, or a read older than a take-over brings the old owner back.
+    this.partyDrafts = [
+      ...answer.drafts.filter((row) => !newerThanRead.has(row.billId)),
+      ...this.partyDrafts.filter((row) => newerThanRead.has(row.billId)),
+    ];
     this.applyBillSnapshot({ draft, edit }, read);
     this.#recoveryRequired = false;
     this.#unlockRecovery?.();
@@ -636,10 +666,57 @@ export class DraftSync {
     } finally {
       limit.done();
     }
-    if (this.#ended || read !== this.#reads) return "failed";
+    if (this.#ended) return "failed";
     this.#unsaved = false;
-    this.applyBillSnapshot(taken, read);
+    this.#recordTakeOver(taken, draftId);
+    // Against the latest read, not the one this began under: whichever read overlapped it, the
+    // older-edit check keeps the newer of the two, and the server has already said yes.
+    this.applyBillSnapshot(taken, this.#reads);
     return "taken";
+  }
+
+  /** Takes over a draft on a bill not on screen; the bill on screen keeps `takeOver`. The read goes
+   * through `load`, because a read inside a command would end its recovery. */
+  async takeOverOn(billId: string, draftId: string, revision: number): Promise<TakeOverOnOutcome> {
+    if (this.#ended || this.#correctingPlaces || this.#recoveryRequired || this.store.sending)
+      return "failed";
+    const expectedEdit = this.expectedEditFor(billId);
+    if (expectedEdit === null) return "failed";
+    const limit = limited(this.#options.requestLimitMs);
+    let taken: BillDraftSnapshot;
+    try {
+      taken = await this.#options.api.takeOverDraft(
+        this.partyId,
+        draftId,
+        { revision, expectedEdit, submissionId: crypto.randomUUID() },
+        { signal: limit.signal },
+      );
+    } catch (error) {
+      if (this.#ended) return "failed";
+      await this.#readAfterTakeOver();
+      return this.#ended ? "failed" : (asRefusal(error) ?? "failed");
+    } finally {
+      limit.done();
+    }
+    if (this.#ended) return "failed";
+    this.#recordTakeOver(taken, draftId);
+    const reloaded = await this.#readAfterTakeOver();
+    return this.#ended ? "failed" : { taken: true, reloaded };
+  }
+
+  #recordTakeOver({ draft, edit }: BillDraftSnapshot, draftId: string): void {
+    if (this.#olderEdit(edit, this.expectedEditFor(edit.billId))) return;
+    this.#billEdits = [...this.#billEdits.filter((row) => row.billId !== edit.billId), { ...edit }];
+    this.partyDrafts = [
+      ...this.partyDrafts.filter((row) => row.id !== draftId),
+      ...(draft === null ? [] : [draft]),
+    ];
+  }
+
+  /** A read overtaking a save's answer would take the till's own save for someone else's change. */
+  async #readAfterTakeOver(): Promise<boolean> {
+    await this.#queue;
+    return this.#ended ? false : this.load();
   }
 
   /** Source commands change stored bill rows and their draft together. No edit or save may use

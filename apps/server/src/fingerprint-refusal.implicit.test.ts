@@ -14,6 +14,9 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
+import { createTable } from "./testing/live-table.js";
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import type { BillDraftSnapshot } from "./order-drafts.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelBody } from "./testing/cancel-line.js";
@@ -92,6 +95,34 @@ async function paid(billId: string, amount: number) {
   });
 }
 
+async function partyRevision(partyId: string): Promise<number> {
+  const [party] = await suite.db.select().from(parties).where(eq(parties.id, partyId));
+  return party!.revision;
+}
+
+/** A second table for the party, which Split a table can then take away. */
+async function joinSecondTable(partyId: string): Promise<string> {
+  const { id: tableId } = await withTransaction(suite.db, (tx) =>
+    createTable(tx, venue.cfg, {
+      label: `Second ${randomUUID().slice(0, 8)}`,
+      zoneId: venue.zoneId,
+    }),
+  );
+  const path = `/api/parties/${partyId}/join`;
+  const joined = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    path,
+    await observedTableActionBody(suite.db, path, {
+      tableId,
+      expectedPartyRevision: await partyRevision(partyId),
+    }),
+  );
+  expect(joined.status, JSON.stringify(joined.json)).toBe(200);
+  return tableId;
+}
+
 describe("late issuance rolls back its initiating command", () => {
   it.each([
     "held save",
@@ -100,6 +131,7 @@ describe("late issuance rolls back its initiating command", () => {
     "line cancellation",
     "bill split",
     "bill move-dishes",
+    "table split",
     "draft save",
     "draft split",
     "draft submit",
@@ -108,9 +140,13 @@ describe("late issuance rolls back its initiating command", () => {
     const [first, second] = await suite.db.select().from(products);
     if (first?.unitPrice == null || second?.unitPrice == null)
       throw new Error("fixture needs priced products");
-    const reduces = ["adjustment", "line cancellation", "bill split", "bill move-dishes"].includes(
-      kind,
-    );
+    const reduces = [
+      "adjustment",
+      "line cancellation",
+      "bill split",
+      "bill move-dishes",
+      "table split",
+    ].includes(kind);
     const billId = await tabWith(venue, first.name, ...(reduces ? [second.name] : []));
     const [bill] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
     const partyId = bill!.partyId!;
@@ -177,6 +213,7 @@ describe("late issuance rolls back its initiating command", () => {
       await paid(billId, first.unitPrice + (kind === "draft submit" ? second.unitPrice : 0));
     } else {
       await paid(billId, first.unitPrice);
+      const leaving = kind === "table split" ? await joinSecondTable(partyId) : null;
       const edit = await readBillEditState(suite.db, billId);
       const lines = await suite.db
         .select()
@@ -217,6 +254,17 @@ describe("late issuance rolls back its initiating command", () => {
           lineIds: [lines.find((line) => line.lineNo === 2)!.id],
           toBillId: null,
         };
+      } else if (kind === "table split") {
+        path = `/api/parties/${partyId}/split-table`;
+        body = {
+          tableId: leaving,
+          selection: {
+            wholeBillIds: [],
+            loose: [{ billId, lineIds: [lines.find((line) => line.lineNo === 2)!.id] }],
+          },
+          expectedPartyRevision: party!.revision,
+          expectedEdits: [edit],
+        };
       } else if (kind === "line cancellation") {
         path = `/api/parties/${partyId}/lines/${lines[1]!.id}/cancel-item`;
         body = {
@@ -252,6 +300,79 @@ describe("late issuance rolls back its initiating command", () => {
       { count: 1 },
     ]);
   });
+
+  it.each([1, 2])(
+    "a table split refused at invoice %i of two rolls back the split and takes no number",
+    async (failAt) => {
+      const { partyId, tabId: bill1 } = await seatedWith(venue, "Caña", "Caña", "Paella", "Caña");
+      const leaving = await joinSecondTable(partyId);
+      const carvePath = `/api/bills/${bill1}/split`;
+      const carved = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        carvePath,
+        await observedBillActionBody(suite.db, carvePath, {
+          transfers: [{ lineNo: 3 }, { lineNo: 4 }],
+          expectedPartyRevision: await partyRevision(partyId),
+        }),
+      );
+      expect(carved.status, JSON.stringify(carved.json)).toBe(200);
+      const bill2 = carved.json.billId as string;
+      const lastCaña = async (billId: string) => {
+        const lines = await suite.db
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, billId));
+        return lines.sort((a, b) => b.lineNo - a.lineNo)[0]!;
+      };
+      const [cañaOfBill1, cañaOfBill2] = [await lastCaña(bill1), await lastCaña(bill2)];
+      await paid(bill1, cañaOfBill1.unitPriceGross);
+      await paid(bill2, 3500);
+      const path = `/api/parties/${partyId}/split-table`;
+      const body = await observedTableActionBody(suite.db, path, {
+        tableId: leaving,
+        selection: {
+          wholeBillIds: [],
+          loose: [
+            { billId: bill2, lineIds: [cañaOfBill2.id] },
+            { billId: bill1, lineIds: [cañaOfBill1.id] },
+          ],
+        },
+        expectedPartyRevision: await partyRevision(partyId),
+      });
+      const before = snapshot();
+      fault.enabled = true;
+      fault.failAt = failAt;
+
+      const answer = await send(venue.app, venue.cookie, "POST", path, body);
+
+      expect(fault.calls).toBe(failAt);
+      expect(answer).toEqual({
+        status: 409,
+        json: { code: "fiscal.fingerprint_mismatch", params: {} },
+      });
+      expect(snapshot()).toEqual(before);
+      expect(
+        (await suite.db.select().from(incidents)).map((row) => ({
+          code: row.code,
+          saleId: row.saleId,
+        })),
+      ).toEqual([{ code: "fiscal.fingerprint_mismatch", saleId: null }]);
+
+      fault.enabled = false;
+      const repaired = await send(venue.app, venue.cookie, "POST", path, body);
+
+      expect(repaired.status, JSON.stringify(repaired.json)).toBe(200);
+      const issued = suite.db.all<{ bill: string; numSerie: string }>(sql`
+        select s.working_order_id as bill, r.num_serie_factura as numSerie
+        from registros_facturacion r join sales s on s.id = r.sale_id
+        order by s.invoice_number
+      `);
+      expect(issued.map((row) => row.bill)).toEqual([bill1, bill2]);
+      expect(issued.map((row) => row.numSerie)).toEqual(["A/1", "A/2"]);
+    },
+  );
 
   it("a second refused departure invoice rolls back both bills and the party close", async () => {
     const [product] = await suite.db.select().from(products);

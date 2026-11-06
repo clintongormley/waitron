@@ -2,11 +2,14 @@ import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
+import { moveCheckedDishes, reservedRefusal, resolveMoveLines } from "./bill-actions.js";
 import {
   readPartyBillIds,
   relocateBillEditor,
   requireRelocatableBillEditors,
+  requireSplitEditors,
 } from "./bill-editing.js";
+import { assertBillInvariant } from "./bill-payments.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import {
@@ -19,6 +22,13 @@ import {
 import { VENUE_SERVICE } from "./modules.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import { moveBillDraftsToParty, moveDraftsToParty } from "./order-drafts.js";
+import {
+  enqueueMovedSlipsFor,
+  enqueueMovedSlipsForNamesGone,
+  enqueueMovedSlipsOnto,
+  readNamesOnPaper,
+  readPartiesSentWork,
+} from "./kitchen-print.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
   copyHeldGroups,
@@ -37,6 +47,7 @@ import {
   openParty,
   partyFamily,
   partyZone,
+  requireBillOfParty,
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import type { OrderAttendance } from "./working-order.js";
@@ -276,19 +287,31 @@ export interface SplitGuestCounts {
   leaving: number | null;
 }
 
+/** Which bills go whole, and which dishes go loose, to the party Split a table starts. */
+export interface SplitSelection {
+  wholeBillIds: string[];
+  loose: { billId: string; lineIds: string[] }[];
+}
+
 /**
  * `tableId` leaves the party and its today's merge ({@link leaveMergesRestoring}), and a new,
- * unnamed party starts on it, taking `billId`, or a new empty bill when none is chosen. The chosen
- * bill must be an open or presented bill of the party. Its held dishes not recalled into a draft
- * move to the new party's own held copy of each of their groups ({@link copyHeldGroups}). A
- * staying party whose family is left with no bill that is not abandoned is given a new empty one.
+ * unnamed party starts on it, taking the selection's whole bills and one new bill holding its loose
+ * dishes, or a new empty bill when nothing is selected. A whole bill must be an open or presented
+ * bill of the party; it takes its next number at the new party in its old number order, and keeps
+ * its payments. A loose source must be an open bill of the party; its dishes move as
+ * {@link moveCheckedDishes} moves them, and the new bill numbers last, at the new party, so the
+ * staying table's numbers keep no gap. Held dishes not recalled into a draft move to one held copy
+ * of each of their groups, however many of the bills share it ({@link copyHeldGroups}); the rest of
+ * each bill's dishes group as that bill arrives ({@link groupArrivingDishes}). A staying party whose
+ * family is left with no bill that is not abandoned is given a new empty one. The answer's `billIds`
+ * are the new party's bills in number order, and `looseSourceIds` the bills that lost loose dishes.
  */
 export async function splitTable(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
   tableId: string,
-  billId: string | null,
+  selection: SplitSelection,
   options: {
     expectedPartyRevision: number;
     operatorId: string;
@@ -296,7 +319,7 @@ export async function splitTable(
     expectedEdits: BillEditExpected[];
   },
   attendance?: OrderAttendance,
-): Promise<{ partyId: string; billId: string }> {
+): Promise<{ partyId: string; billIds: string[]; looseSourceIds: string[] }> {
   await checkAndBumpParty(
     tx,
     partyId,
@@ -307,63 +330,137 @@ export async function splitTable(
   const held = await memberTables(tx, partyId);
   if (!held.includes(tableId)) throw new AppError("table.not_joined", { tableId, partyId });
   if (held.length === 1) throw new AppError("table.not_shared", { tableId, partyId });
-  await requireRelocatableBillEditors(
+  const { wholeBillIds, loose } = selection;
+  const looseIds = loose.map((entry) => entry.billId);
+  const named = [...wholeBillIds, ...looseIds];
+  if (new Set(named).size !== named.length || loose.some((entry) => entry.lineIds.length === 0))
+    throw new AppError("management.request_invalid", { field: "selection" });
+  const edits = await requireSplitEditors(
     tx,
-    billId === null ? [] : [billId],
+    wholeBillIds,
+    looseIds,
     options.operatorId,
     options.expectedEdits,
   );
-  let firers: ReadonlyMap<string, Firer> = new Map();
-  let heldLineIds: string[] = [];
-  if (billId !== null) {
-    await refuseUnsplittableBill(tx, partyId, billId);
-    ({ firers, heldLineIds } = await leaveParty(tx, billId, "keep"));
+  for (const billId of wholeBillIds) await refuseUnsplittableBill(tx, partyId, billId);
+  const looseSourceIds = await inNumberOrder(tx, looseIds);
+  const looseMoves: { billId: string; transfers: { lineNo: number }[] }[] = [];
+  for (const billId of looseSourceIds) {
+    await requireBillOfParty(tx, partyId, billId);
+    const { lineIds } = loose.find((entry) => entry.billId === billId)!;
+    const { transfers, recalled } = await resolveMoveLines(tx, billId, lineIds);
+    if (recalled)
+      throw reservedRefusal(
+        billId,
+        edits.find((edit) => edit.billId === billId)!,
+      );
+    looseMoves.push({ billId, transfers });
+  }
+  const leaving: { billId: string; firers: ReadonlyMap<string, Firer> }[] = [];
+  const heldLineIds: string[] = [];
+  for (const billId of await inNumberOrder(tx, wholeBillIds)) {
+    const left = await leaveParty(tx, billId, "keep");
+    leaving.push({ billId, firers: left.firers });
+    heldLineIds.push(...left.heldLineIds);
   }
 
-  return withMovedSlips(tx, cfg, { parties: [partyId] }, async () => {
-    await leaveTables(tx, [tableId]);
-    const [table] = await tx
-      .select({ zoneId: diningTables.zoneId })
-      .from(diningTables)
-      .where(eq(diningTables.id, tableId));
-    const { partyId: newParty } = await openParty(tx, {
-      guestCount: options.guestCounts?.leaving ?? null,
-      operatorId: options.operatorId,
-      tableId,
-    });
-    await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
-    await VENUE_SERVICE.splitPartyAllergies(tx, partyId, newParty, billId, options.operatorId);
-    let taken: string;
-    if (billId === null) {
-      taken = await insertPartyBill(tx, cfg, newParty);
-    } else {
-      taken = billId;
-      await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
-      await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
-      await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
-      const activity =
-        attendance === undefined
-          ? undefined
-          : {
-              recorder: attendance.recorder,
-              at: attendance.clock.now().instant.toISOString(),
-            };
-      const { held } = await groupArrivingDishes(
-        tx,
-        cfg,
-        newParty,
-        billId,
-        options.operatorId,
-        firers,
-        activity,
-      );
-      await copyHeldGroups(tx, partyId, newParty, heldLineIds, options.operatorId, activity);
-      await printHoldTickets(tx, cfg, held);
-      await ensureFamilyBill(tx, cfg, partyId);
-    }
-    await leaveMergesRestoring(tx, [tableId]);
-    return { partyId: newParty, billId: taken };
+  // Read while held dishes are still in their groups and loose dishes still on their sources: what
+  // the kitchen is told at the end is measured against this.
+  const sentWork = await readPartiesSentWork(tx, [partyId]);
+  const wholeIds = new Set(wholeBillIds);
+  const notWhole = new Map([...sentWork].filter(([billId]) => !wholeIds.has(billId)));
+  const namesOnPaper = await readNamesOnPaper(tx, notWhole, tableId);
+  await leaveTables(tx, [tableId]);
+  const [table] = await tx
+    .select({ zoneId: diningTables.zoneId })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId));
+  const { partyId: newParty } = await openParty(tx, {
+    guestCount: options.guestCounts?.leaving ?? null,
+    operatorId: options.operatorId,
+    tableId,
   });
+  await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
+  for (const { billId } of leaving) await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
+  const arriving = [...leaving];
+  const carved: { billId: string; splitFrom: ReadonlyMap<string, string> }[] = [];
+  let newBill: string | null = null;
+  if (looseMoves.length > 0) {
+    newBill = await insertPartyBill(tx, cfg, newParty);
+    for (const { billId, transfers } of looseMoves) {
+      const splitFrom = await moveCheckedDishes(tx, cfg, billId, newBill, transfers, {
+        refuseHeld: true,
+        actorId: options.operatorId,
+      });
+      carved.push({ billId, splitFrom });
+    }
+    await assertBillInvariant(tx, looseSourceIds);
+    const left = await leaveParty(tx, newBill, "keep");
+    arriving.push({ billId: newBill, firers: left.firers });
+    heldLineIds.push(...left.heldLineIds);
+  }
+  await VENUE_SERVICE.splitPartyAllergies(
+    tx,
+    partyId,
+    newParty,
+    arriving.map(({ billId }) => billId),
+    options.operatorId,
+  );
+  if (arriving.length === 0) await insertPartyBill(tx, cfg, newParty);
+  for (const { billId } of leaving) {
+    await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
+    await moveBillDraftsToParty(
+      tx,
+      billId,
+      newParty,
+      options.expectedEdits.find((edit) => edit.billId === billId)!,
+    );
+  }
+  const activity =
+    attendance === undefined
+      ? undefined
+      : {
+          recorder: attendance.recorder,
+          at: attendance.clock.now().instant.toISOString(),
+        };
+  const heldGroups: string[] = [];
+  for (const { billId, firers } of arriving) {
+    const { held: groups } = await groupArrivingDishes(
+      tx,
+      cfg,
+      newParty,
+      billId,
+      options.operatorId,
+      firers,
+      activity,
+    );
+    heldGroups.push(...groups);
+  }
+  await copyHeldGroups(tx, partyId, newParty, heldLineIds, options.operatorId, activity);
+  await printHoldTickets(tx, cfg, heldGroups);
+  if (leaving.length > 0) await ensureFamilyBill(tx, cfg, partyId);
+  await leaveMergesRestoring(tx, [tableId]);
+  await enqueueMovedSlipsFor(
+    tx,
+    cfg,
+    new Map([...sentWork].filter(([billId]) => wholeIds.has(billId))),
+  );
+  if (newBill !== null)
+    await enqueueMovedSlipsOnto(
+      tx,
+      cfg,
+      newBill,
+      carved.map(({ billId, splitFrom }) => ({
+        before: sentWork.get(billId) ?? null,
+        splitFrom,
+      })),
+    );
+  await enqueueMovedSlipsForNamesGone(tx, cfg, notWhole, namesOnPaper);
+  return {
+    partyId: newParty,
+    billIds: await shownBillIds(tx, cfg, newParty),
+    looseSourceIds,
+  };
 }
 
 /**
@@ -424,14 +521,17 @@ async function shownBillIds(
     .from(workingOrders)
     .where(notAbandonedInFamily(await partyFamily(tx, partyId)));
   if (rows.length === 0) return [await insertPartyBill(tx, cfg, partyId)];
-  const numbers = await VENUE_SERVICE.readBillIdentities(
+  return inNumberOrder(
     tx,
     rows.map((row) => row.id),
   );
+}
+
+/** The bills in number order, unnumbered last, then by id. */
+async function inNumberOrder(tx: Transaction, billIds: readonly string[]): Promise<string[]> {
+  const numbers = await VENUE_SERVICE.readBillIdentities(tx, billIds);
   const numberOf = (id: string) => numbers.get(id)?.number ?? Number.POSITIVE_INFINITY;
-  return rows
-    .map((row) => row.id)
-    .sort((a, b) => numberOf(a) - numberOf(b) || (a < b ? -1 : a > b ? 1 : 0));
+  return [...billIds].sort((a, b) => numberOf(a) - numberOf(b) || (a < b ? -1 : a > b ? 1 : 0));
 }
 
 async function addTable(tx: Transaction, partyId: string, tableId: string): Promise<void> {

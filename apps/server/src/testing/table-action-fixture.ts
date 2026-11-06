@@ -8,6 +8,7 @@ import {
   joinTables as join,
   moveGuests as move,
   splitTable as split,
+  type SplitSelection,
   type TableActionOptions as Options,
 } from "../table-actions.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
@@ -75,30 +76,70 @@ export async function combineParties(
   });
 }
 
+/** The selection of one whole bill; null selects nothing, so the new party gets an empty bill. */
+export function oneBill(billId: string | null): SplitSelection {
+  return { wholeBillIds: billId === null ? [] : [billId], loose: [] };
+}
+
+/** The bills a selection names, each once and sorted; a malformed one names only what it spells. */
+function billsNamedBy(selection: unknown): string[] {
+  if (selection === null || typeof selection !== "object") return [];
+  const { wholeBillIds, loose } = selection as { wholeBillIds?: unknown; loose?: unknown };
+  const named: unknown[] = [
+    ...(Array.isArray(wholeBillIds) ? wholeBillIds : []),
+    ...(Array.isArray(loose) ? loose.map((entry) => (entry as { billId?: unknown })?.billId) : []),
+  ];
+  return [...new Set(named.filter((id): id is string => typeof id === "string"))].sort();
+}
+
+type SplitOptions = Omit<Parameters<typeof split>[5], "expectedEdits"> & {
+  expectedEdits?: BillEditExpected[];
+};
+
+/** A bill id or null answers the one bill; a selection answers the new party's bills too. */
 export async function splitTable(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
   tableId: string,
-  billId: string | null,
-  options: Omit<Parameters<typeof split>[5], "expectedEdits"> & {
-    expectedEdits?: BillEditExpected[];
-  },
+  chosen: string | null,
+  options: SplitOptions,
   attendance?: OrderAttendance,
-) {
-  return split(
+): Promise<{ partyId: string; billId: string }>;
+export async function splitTable(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  tableId: string,
+  chosen: SplitSelection,
+  options: SplitOptions,
+  attendance?: OrderAttendance,
+): Promise<{ partyId: string; billId: string; billIds: string[] }>;
+export async function splitTable(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  tableId: string,
+  chosen: string | null | SplitSelection,
+  options: SplitOptions,
+  attendance?: OrderAttendance,
+): Promise<{ partyId: string; billId: string; billIds?: string[] }> {
+  const selection = chosen === null || typeof chosen === "string" ? oneBill(chosen) : chosen;
+  const expectedEdits: BillEditExpected[] = [];
+  if (options.expectedEdits === undefined)
+    for (const billId of billsNamedBy(selection))
+      expectedEdits.push(await readBillEditState(tx, billId));
+  const { partyId: leavingParty, billIds } = await split(
     tx,
     cfg,
     partyId,
     tableId,
-    billId,
-    {
-      ...options,
-      expectedEdits:
-        options.expectedEdits ?? (billId === null ? [] : [await readBillEditState(tx, billId)]),
-    },
+    selection,
+    { ...options, expectedEdits: options.expectedEdits ?? expectedEdits },
     attendance,
   );
+  const answer = { partyId: leavingParty, billId: billIds[0]! };
+  return typeof chosen === "object" && chosen !== null ? { ...answer, billIds } : answer;
 }
 
 export async function observedTableActionBody(
@@ -117,12 +158,12 @@ export async function observedTableActionBody(
     return body;
   const ask = body as Record<string, unknown>;
   return withTransaction(db, async (tx) => {
-    if (match[2] === "split-table")
-      return {
-        expectedEdits:
-          typeof ask.billId === "string" ? [await readBillEditState(tx, ask.billId)] : [],
-        ...ask,
-      };
+    if (match[2] === "split-table") {
+      const expectedEdits: BillEditExpected[] = [];
+      for (const billId of billsNamedBy(ask.selection))
+        expectedEdits.push(await readBillEditState(tx, billId));
+      return { expectedEdits, ...ask };
+    }
     const tableId = match[2] === "join" ? ask.tableId : ask.toTableId;
     const other = typeof tableId === "string" ? await holderOf(tx, tableId.toLowerCase()) : null;
     return {

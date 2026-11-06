@@ -1318,6 +1318,8 @@ review first. Review weight FULL (kitchen release state; concurrency).
 
 ## Cut 4c (outline): Split a table through the same picker
 
+_(2026-11-06: built from `2026-11-04-a803-4c-split-table-picker.md`, whose findings correct this outline.)_
+
 **Branch** `feat/a803-4c-split-table-picker`, after 4a and 4b land. Its own task plan and review.
 Review weight FULL (wire contract, concurrency, money floor, allergies across packages).
 

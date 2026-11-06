@@ -607,7 +607,7 @@ only the app keeps from deletion; no trigger protects it either.
   only the wire fields and the drizzle property: `readBillGuests` and `guestsOfParty`
   (`apps/server/src/receipt-guests.ts`, `apps/till/src/state/receipt-guests.ts`),
   `setPartyGuests` (server `parties.ts`, `till-api.ts`; till `api/client.ts`, `till-app.ts`), and
-  `splitGuests` / `#savedGuests` (`apps/till/src/screens/till-table-order-screen.ts`). Renaming
+  `#savedGuests` (`apps/till/src/screens/till-table-order-screen.ts`). Renaming
   them to `…GuestCount` is free before go-live; no behaviour changes.
 - On the bill-paid-in-parts dialog, a count marked wrong stays marked after Back
   (`guestsAttempted` is cleared only on a new payment, `#startAgain`,

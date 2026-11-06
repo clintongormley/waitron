@@ -1005,6 +1005,7 @@ export class TillTenderPay extends LitElement {
     );
   }
 
+  /** No draft scope tracks this field (A663 Part 3b plan). */
   #renderGuests() {
     if (!this.asksGuests) return nothing;
     return guestsStepper({

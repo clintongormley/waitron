@@ -66,7 +66,7 @@ import {
   split,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { moveGuests } from "./testing/table-action-fixture.js";
+import { oneBill, moveGuests } from "./testing/table-action-fixture.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
@@ -170,7 +170,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/parties/:id/bills                             | party                  | refuses POST /api/parties/:id/bills                  |
  * | PUT  /api/parties/:id/guests                            | party                  | refuses PUT /api/parties/:id/guests                  |
  * | POST /api/parties/:id/move, /join                       | party; body table      | refuses POST /api/parties/:id/<move|join> (party), (table) |
- * | POST /api/parties/:id/split-table                       | party                  | refuses POST /api/parties/:id/split-table            |
+ * | POST /api/parties/:id/split-table                       | party; each bill of the selection | refuses POST /api/parties/:id/split-table, (whole bill), (loose source) |
  * | GET  /api/parties/:id/bills|groups|current-orders|drafts | party                  | refuses GET /api/parties/:id/<read>                  |
  * | POST /api/parties/:id/groups                            | party                  | refuses POST /api/parties/:id/groups                 |
  * | POST /api/parties/:id/groups/:gid/fire|ready|served|snooze|unsnooze | party | refuses POST /api/parties/:id/groups/:gid/<verb>  |
@@ -178,6 +178,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | PUT  /api/parties/:id/groups/order                      | party                  | refuses PUT /api/parties/:id/groups/order            |
  * | POST /api/parties/:id/groups/move, /groups/split-line, /groups/fire-line | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
  * | PUT  /api/parties/:id/drafts                            | party                  | refuses PUT /api/parties/:id/drafts                  |
+ * | GET  /api/parties/:id/split-sources                     | party                  | refuses GET /api/parties/:id/split-sources           |
  * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
  * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | party, current profile inside the transaction | line-cancel-api.test.ts: "checks the party zone for %s and admits it once allowed" |
  * | POST /api/parties/:id/drafts/:did/discard | party | own refusing row below; allowed: draft-discard.test.ts |
@@ -1015,7 +1016,36 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/split-table",
     "POST",
     (x) => `/api/parties/${x.deliParty}/split-table`,
-    (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0, expectedEdits: [] }),
+    (x) => ({
+      tableId: x.deliTable,
+      selection: oneBill(null),
+      expectedPartyRevision: 0,
+      expectedEdits: [],
+    }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/parties/:id/split-table (whole bill)",
+    "POST",
+    (x) => `/api/parties/${x.restParty}/split-table`,
+    (x) => ({
+      tableId: x.restTable,
+      selection: { wholeBillIds: [x.deliTab], loose: [] },
+      expectedPartyRevision: 0,
+      expectedEdits: [],
+    }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/parties/:id/split-table (loose source)",
+    "POST",
+    (x) => `/api/parties/${x.restParty}/split-table`,
+    (x) => ({
+      tableId: x.restTable,
+      selection: { wholeBillIds: [], loose: [{ billId: x.deliTab, lineIds: [id] }] },
+      expectedPartyRevision: 0,
+      expectedEdits: [],
+    }),
     deliTableZone,
   ],
   ...(["bills", "groups", "current-orders", "drafts"] as const).map((read): Row => [
@@ -1084,6 +1114,13 @@ const ROUTES: readonly Row[] = [
     "PUT",
     (x) => `/api/parties/${x.deliParty}/drafts`,
     () => ({ draftId: null, revision: 0, personId }),
+    deliTableZone,
+  ],
+  [
+    "GET /api/parties/:id/split-sources",
+    "GET",
+    (x) => `/api/parties/${x.deliParty}/split-sources`,
+    undefined,
     deliTableZone,
   ],
   ...(["take-over", "submit", "split"] as const).map((verb): Row => [

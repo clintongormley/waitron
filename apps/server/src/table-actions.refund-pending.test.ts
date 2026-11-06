@@ -13,7 +13,7 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 import { createTable } from "./testing/live-table.js";
-import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 
 // Joining and unjoining tables while a card refund of a bill is pending (bill payments design §5.2):
@@ -296,7 +296,7 @@ describe("a pending card refund and the table actions", () => {
 
     const split = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
@@ -328,12 +328,12 @@ describe("a pending card refund and the table actions", () => {
 
     const split = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId,
+      selection: oneBill(billId),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
     expect(split.status).toBe(200);
-    expect(split.json).toEqual({ partyId: expect.any(String), billId });
+    expect(split.json).toEqual({ partyId: expect.any(String), billIds: [billId] });
     expect(partyOfBill(billId)).toBe(split.json.partyId);
     const after = await charges(billId);
     expect(after).toEqual(before);
@@ -351,7 +351,7 @@ describe("a pending card refund and the table actions", () => {
     expect(joined.status).toBe(200);
     const split = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
     expect(split.status).toBe(200);

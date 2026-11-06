@@ -290,7 +290,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
-    splitTable: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-new" }),
+    splitTable: vi.fn().mockResolvedValue({ partyId: "v-new", billIds: ["wo-new"] }),
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
     setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
@@ -1144,7 +1144,15 @@ describe("till-app table ordering: a handheld's order screen with no table opene
     ],
     ["move-guests", { toTableId: "t9" }, "moveGuests"],
     ["join-tables", { tableId: "t9" }, "joinTables"],
-    ["split-table", { tableId: "t9", billId: null }, "splitTable"],
+    [
+      "split-table",
+      {
+        tableId: "t9",
+        selection: { wholeBillIds: [], loose: [] },
+        guestCounts: { staying: null, leaving: null },
+      },
+      "splitTable",
+    ],
     ["name-party", { name: "Ana" }, "setPartyName"],
     ["guests-party", { guestCount: 4 }, "setPartyGuests"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
@@ -1183,6 +1191,15 @@ describe("till-app table ordering: refused and failed table actions", () => {
     ],
     ["send-lines", { lineNos: [1] }, "sendLines"],
     ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
+    [
+      "split-table",
+      {
+        tableId: "t9",
+        selection: { wholeBillIds: [], loose: [] },
+        guestCounts: { staying: 2, leaving: null },
+      },
+      "splitTable",
+    ],
   ] as const)(
     "a %s refused because a card payment of the order is running says so",
     async (type, detail, method) => {
@@ -1228,6 +1245,15 @@ describe("till-app table ordering: refused and failed table actions", () => {
     ["join-tables", { tableId: "t9" }, "joinTables"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
     ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
+    [
+      "split-table",
+      {
+        tableId: "t9",
+        selection: { wholeBillIds: [], loose: [] },
+        guestCounts: { staying: 2, leaving: null },
+      },
+      "splitTable",
+    ],
   ] as const)(
     "a refused %s shows table.error and re-reads neither the tab nor the floor",
     async (type, detail, method) => {
@@ -1346,7 +1372,18 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
-  it.each([["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"]] as const)(
+  it.each([
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
+    [
+      "split-table",
+      {
+        tableId: "t9",
+        selection: { wholeBillIds: [], loose: [] },
+        guestCounts: { staying: 2, leaving: null },
+      },
+      "splitTable",
+    ],
+  ] as const)(
     "a %s refused because an item is already paid for says so in that code's own words",
     async (type, detail, method) => {
       const { el } = await mountApp({
@@ -3320,13 +3357,17 @@ describe("A803 action results: the bill on screen after a table action", () => {
       ),
       splitTable: vi.fn(async () => {
         floorAfter = true;
-        return { partyId: "v-new", billId: "wo-8" };
+        return { partyId: "v-new", billIds: ["wo-8"] };
       }),
     });
     const screen = await toTableOrder(el);
     expect(screen.orderId).toBe("wo-8");
 
-    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    emit(screen, "split-table", {
+      tableId: "t3",
+      selection: { wholeBillIds: ["wo-8"], loose: [] },
+      guestCounts: { staying: null, leaving: null },
+    });
     await flush(el);
     await flush(el);
 
@@ -3369,13 +3410,17 @@ describe("A803 action results: the bill on screen after a table action", () => {
       }),
       splitTable: vi.fn(async () => {
         floorAfter = true;
-        return { partyId: "v-new", billId: "wo-8" };
+        return { partyId: "v-new", billIds: ["wo-8"] };
       }),
     });
     const screen = await toTableOrder(el);
     expect(screen.orderId).toBe("wo-8");
 
-    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    emit(screen, "split-table", {
+      tableId: "t3",
+      selection: { wholeBillIds: ["wo-8"], loose: [] },
+      guestCounts: { staying: null, leaving: null },
+    });
     await flush(el);
     await flush(el);
 
@@ -3413,11 +3458,15 @@ describe("A803 action results: the bill on screen after a table action", () => {
       }),
       splitTable: vi.fn(async () => {
         floorAfter = true;
-        return { partyId: "v-new", billId: "wo-8" };
+        return { partyId: "v-new", billIds: ["wo-8"] };
       }),
     });
     const screen = await toTableOrder(mounted.el);
-    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    emit(screen, "split-table", {
+      tableId: "t3",
+      selection: { wholeBillIds: ["wo-8"], loose: [] },
+      guestCounts: { staying: null, leaving: null },
+    });
     await flush(mounted.el);
     await flush(mounted.el);
     return mounted;
@@ -3522,6 +3571,190 @@ describe("A803 action results: the bill on screen after a table action", () => {
     await nameParty(el, "Ana");
     expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["wo-9"]);
     expect(tableOrder(el)!.orderId).toBeUndefined();
+  });
+
+  describe("the room's revision a split answered", () => {
+    const layoutOffer: FloorZone = {
+      ...floorZone,
+      hasPlan: true,
+      layoutSetName: "Lunch",
+      layoutDue: { setId: "set-dinner", revision: 3, periodName: "Dinner" },
+    };
+    const inRoom = (table: TableState, zoneRevision: number): TableState => ({
+      ...table,
+      today: {
+        placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+        seats: 4,
+        fixed: false,
+        takenOff: false,
+        joinId: null,
+        joinSeats: null,
+        inJoinedTable: null,
+        joined: null,
+        splitOffFrom: null,
+        zoneRevision,
+      },
+    });
+
+    /** A server that holds the room at `room.revision` and refuses any other: the split moves it
+     * to 9, and every floor read after the split finds the room at `readRevision`. A read waits for
+     * `letTheReadAnswer`, except one made while `holdAnswer` keeps the split's answer back until
+     * `answerTheSplit`. */
+    async function splitWithReadHeld(
+      formFactor: FormFactor,
+      { readRevision = 12, holdAnswer = false } = {},
+    ) {
+      const room = { revision: 1 };
+      const t3 = { id: "t3", label: "3" };
+      const before = { revision: 3, openingBillId: "wo-8", tableIds: ["t2", "t3"] };
+      const atOne = [inRoom(seated(openTable, before), 1), inRoom(seated(t3, before), 1)];
+      const afterSplit = [
+        inRoom(
+          seated(openTable, { revision: 4, openingBillId: null, tableIds: ["t2"] }),
+          readRevision,
+        ),
+        inRoom(
+          seated(t3, { id: "v-new", revision: 0, openingBillId: null, tableIds: ["t3"] }),
+          readRevision,
+        ),
+      ];
+      let split = false;
+      let answerHeld = false;
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      let answer!: () => void;
+      const answered = new Promise<void>((resolve) => (answer = resolve));
+      const updateLayoutToday = vi.fn(async (_zone: string, _layout: unknown, sent: number) => {
+        if (sent !== room.revision) throw { code: "floor_today.out_of_date" };
+        room.revision = sent + 1;
+        return { zoneId: "z1", revision: room.revision };
+      });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor, capabilities: ["take-orders"] }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "d1", formFactor }),
+        listZones: vi.fn().mockResolvedValue([layoutOffer]),
+        getTablesState: vi.fn(async () => {
+          if (!split) return atOne;
+          if (!answerHeld) await released;
+          room.revision = readRevision;
+          return afterSplit;
+        }),
+        getPartyBills: vi.fn(async () => [partyBill("wo-8", "v-2", 1)]),
+        splitTable: vi.fn(async () => {
+          split = true;
+          room.revision = 9;
+          if (holdAnswer) {
+            answerHeld = true;
+            await answered;
+            answerHeld = false;
+          }
+          return { partyId: "v-new", billIds: ["wo-8"], zoneRevisions: { z1: 9 } };
+        }),
+        updateLayoutToday,
+      });
+      const screen = await toTableOrder(el);
+      const readsBefore = vi.mocked(api.getTablesState).mock.calls.length;
+      emit(screen, "split-table", {
+        tableId: "t3",
+        guestCounts: { staying: 2, leaving: 2 },
+        selection: { wholeBillIds: ["wo-8"], loose: [] },
+      });
+      await flush(el);
+      await flush(el);
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      if (!holdAnswer) {
+        expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(readsBefore);
+      }
+      const settled = async () => {
+        await flush(el);
+        await flush(el);
+      };
+      const backToFloor = async () => {
+        if (formFactor === tillFormFactor) emit(tableOrder(el)!, "back-to-floor");
+        else emit(shell(el), "screen-select", { screen: "floor" });
+        await settled();
+      };
+      const refreshFloor = async () => {
+        emit(floor(el)!, "floor-refresh");
+        await settled();
+      };
+      const pressUpdateLayout = async () => {
+        floor(el)!.shadowRoot!.querySelector<HTMLElement>("[data-update-layout]")!.click();
+        await settled();
+      };
+      const letTheReadAnswer = async () => {
+        release();
+        await settled();
+      };
+      const answerTheSplit = async () => {
+        answer();
+        await settled();
+      };
+      const floorRevision = () => floor(el)!.tables[0]!.today!.zoneRevision;
+      const refusalShown = () =>
+        `${banner(el)?.textContent ?? ""}${floor(el)!.shadowRoot!.textContent}`.includes(
+          codeMessage("floor_today.out_of_date"),
+        );
+      return {
+        backToFloor,
+        refreshFloor,
+        pressUpdateLayout,
+        letTheReadAnswer,
+        answerTheSplit,
+        floorRevision,
+        refusalShown,
+        updateLayoutToday,
+      };
+    }
+
+    it("A803 applies split room revision before reload", async () => {
+      const floorEdit = await splitWithReadHeld(tillFormFactor);
+      await floorEdit.backToFloor();
+      await floorEdit.pressUpdateLayout();
+      expect(floorEdit.updateLayoutToday.mock.calls.map(([, , revision]) => revision)).toEqual([9]);
+      expect(floorEdit.refusalShown()).toBe(false);
+    });
+
+    it("A803 applies split room revision before reload on a handheld, whose floor mounts after the split", async () => {
+      const floorEdit = await splitWithReadHeld(phoneFormFactor);
+      await floorEdit.backToFloor();
+      await floorEdit.pressUpdateLayout();
+      expect(floorEdit.updateLayoutToday.mock.calls.map(([, , revision]) => revision)).toEqual([9]);
+      expect(floorEdit.refusalShown()).toBe(false);
+    });
+
+    it("A803 the read started after a split's answer takes over from the revision it answered", async () => {
+      const floorEdit = await splitWithReadHeld(tillFormFactor);
+      await floorEdit.backToFloor();
+      await floorEdit.letTheReadAnswer();
+      await floorEdit.pressUpdateLayout();
+      expect(floorEdit.updateLayoutToday.mock.calls.map(([, , revision]) => revision)).toEqual([
+        12,
+      ]);
+      expect(floorEdit.refusalShown()).toBe(false);
+    });
+
+    it("A803 the read started after a split's answer takes over even when it holds a lower revision", async () => {
+      const floorEdit = await splitWithReadHeld(tillFormFactor, { readRevision: 2 });
+      await floorEdit.backToFloor();
+      await floorEdit.letTheReadAnswer();
+      await floorEdit.pressUpdateLayout();
+      expect(floorEdit.updateLayoutToday.mock.calls.map(([, , revision]) => revision)).toEqual([2]);
+      expect(floorEdit.refusalShown()).toBe(false);
+    });
+
+    it("A803 a split's answer that arrives after a floor read holding a newer revision leaves the read's revision", async () => {
+      const floorEdit = await splitWithReadHeld(tillFormFactor, { holdAnswer: true });
+      await floorEdit.backToFloor();
+      await floorEdit.refreshFloor();
+      expect(floorEdit.floorRevision()).toBe(12);
+      await floorEdit.answerTheSplit();
+      await floorEdit.pressUpdateLayout();
+      expect(floorEdit.updateLayoutToday.mock.calls.map(([, , revision]) => revision)).toEqual([
+        12,
+      ]);
+      expect(floorEdit.refusalShown()).toBe(false);
+    });
   });
 });
 

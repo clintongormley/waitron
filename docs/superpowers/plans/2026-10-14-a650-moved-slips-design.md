@@ -20,6 +20,7 @@ Given about 14:10–14:15, relayed by the campaign watcher. Each line says what 
    prints "From: Cumple Ana / To: Mesa 6, 9"; renaming a seated group "Fiesta" to "Fiesta 2"
    prints "From: Fiesta / To: Fiesta 2". **Split a table prints**: "From: Mesa 51, 52 / To: Mesa
    51" for the bills that stay. _Changes:_ §3's rename row and split rows are settled as "prints".
+   _(2026-11-04, A803 4c: Split a table no longer tells bills that stay, by spec §3.7, except where a name on their paper has gone; see `2026-11-04-a803-4c-split-table-picker.md`, Question 3.)_
 2. **One slip per order per station**, as recommended. _Changes:_ nothing; §4 already said so.
 3. **The party's own name shows** on the order line: "Order 5 · Ana" / "Pedido 5 · Ana" (the
    alternative drawn in picture 4). _Changes:_ §4's order line; the old "not printed" bullet is
@@ -116,6 +117,8 @@ How an order's place is decided today:
 | 16 | **Merge bills**, **Transfer items**, **Split the bill** (one party) | nothing moves; sent dishes change order number | nothing |
 | 17 | **Reset to saved plan**, **Reset table**, **Name the party** | nothing moves or no name the kitchen sees changes (2026-10-15: since A683 a rename changes the name later kitchen tickets print) | nothing (Reset table read, not run) |
 
+_(2026-11-04, A803 4c: Split a table no longer tells bills that stay, by spec §3.7, except where a name on their paper has gone: rows 8 and 9 above no longer describe Split a table; see `2026-11-04-a803-4c-split-table-picker.md`.)_
+
 Two more things the probe showed, outside the design's rule:
 
 - A held dish already printed on a HOLD ticket gets no slip when its guests move (`readSentWork`
@@ -175,6 +178,8 @@ that station: fired dishes, and held dishes already printed on a HOLD ticket (ru
 | 16c | **Split the bill** | Mesa 91 → Mesa 91 (a counter order: the counter → the counter) | **yes (c)** — was "no" | `Order 28 -> 29` (the new order) | only the dishes split off |
 | 17 | Reset to saved plan, Reset table, Name the party | unchanged | no | — | — |
 | 18 | **New:** a counter order delivered to a table whose shown name changes (that table's group ends, is renamed, or the table is split off) | e.g. Cumple Ana → Mesa 6 | yes (b) | `Order 44` | all |
+
+_(2026-11-04, A803 4c: Split a table no longer tells bills that stay, by spec §3.7, except where a name on their paper has gone: rows 8, 9 and 18 above no longer describe Split a table; see `2026-11-04-a803-4c-split-table-picker.md`.)_
 
 "Only the order number changed" is rows 7 (other bill, bills merging), 16a, 16b and 16c: the
 places read the same before and after, and From and To print the same text. The design's bracket

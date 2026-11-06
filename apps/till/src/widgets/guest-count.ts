@@ -4,6 +4,12 @@ import { isValidGuestCount, MAX_GUEST_COUNT } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { t } from "../i18n/t.js";
 
+/** null records no count for that side. */
+export interface SplitGuestsDetail {
+  staying: number | null;
+  leaving: number | null;
+}
+
 /** A blank field records no count; anything else must be a whole number from 1. */
 export function parseGuestCount(value: string): { guestCount: number | null } | undefined {
   const trimmed = value.trim();
@@ -35,23 +41,26 @@ export const guestsStepperStyles = css`
   }
 `;
 
-/** No draft scope tracks this field (A663 Part 3b plan). */
 export function guestsStepper(field: {
   text: string;
   disabled: boolean;
   error: string;
   onChange: (event: Event) => void;
+  name?: string;
+  label?: string;
+  /** What the empty field says; by default that the receipt prints no guests line. */
+  placeholder?: string;
   /** A help badge, placed in the stepper's `help` slot. */
   help?: TemplateResult;
 }): TemplateResult {
   return html`<wt-number-stepper
-    name="guests"
+    name=${field.name ?? "guests"}
     class="guests"
     clearable
     .min=${1}
     .max=${MAX_GUEST_COUNT}
-    .label=${t("seat.guest_count")}
-    .placeholder=${t("receipt.guests_none")}
+    .label=${field.label ?? t("seat.guest_count")}
+    .placeholder=${field.placeholder ?? t("receipt.guests_none")}
     .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
     .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
     .value=${live(field.text)}

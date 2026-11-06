@@ -160,6 +160,36 @@ export async function requireRelocatableBillEditors(
   return edits;
 }
 
+/**
+ * A whole bill relocates, so one foreign editor across the whole bills may keep it; a loose source
+ * gives up dishes, so its editor must be the actor (A773 §6). A refusal names every foreign bill in
+ * the set, as A773 §6 defines the list.
+ */
+export async function requireSplitEditors(
+  tx: Transaction,
+  wholeIds: readonly string[],
+  looseSourceIds: readonly string[],
+  operatorId: string,
+  expected: BillEditExpected[],
+): Promise<BillEditState[]> {
+  const { wanted, edits } = await readExpectedBillEdits(
+    tx,
+    [...wholeIds, ...looseSourceIds],
+    expected,
+  );
+  const loose = new Set(looseSourceIds);
+  const foreign = edits.filter((edit) => edit.editorId !== null && edit.editorId !== operatorId);
+  const wholeOwners = new Set(
+    edits.flatMap((edit) =>
+      edit.editorId === null || loose.has(edit.billId) ? [] : [edit.editorId],
+    ),
+  );
+  if (wholeOwners.size > 1 || foreign.some((edit) => loose.has(edit.billId)))
+    throw editorConflict(foreign[0]!, foreign);
+  for (const [index, edit] of edits.entries()) requireExpectedState(edit, wanted[index]!);
+  return edits;
+}
+
 export function parseBillEditExpected(value: unknown): BillEditExpected {
   return parseExpectedAt(value, "expectedEdit");
 }

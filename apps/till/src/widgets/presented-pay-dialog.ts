@@ -624,6 +624,7 @@ export class TillPresentedPayDialog extends LitElement {
       ></till-pay-equipment>`;
   }
 
+  /** No draft scope tracks this field (A663 Part 3b plan). */
   #guests(error: string | undefined): TemplateResult {
     return guestsStepper({
       text: this.#guestsText(),

@@ -299,6 +299,9 @@ read, with the review's own `…` for the lines it left out,
 `["*** MOVIDO ***",…,"De: Mesa 8 (7)","A:  Mesa 9 (7)","15:26","1.000 x BURG",""]`, and again names
 no tarta. The release ticket after that second route was not quoted.
 
+2026-11-06, A803 4c: a single dish in that state that Split a table moves has the same gap, because
+its MOVED slip's list also comes from `readSentItems`, which 4c did not change (read, not run).
+
 Whether a cook may be left with two tickets for one dish is the owner's to judge. Nothing is decided
 and 4b changes none of it.
 

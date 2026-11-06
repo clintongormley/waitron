@@ -89,6 +89,7 @@ import {
   spareSpot,
   tableSentence,
   withoutTodaysNames,
+  type CarriedRevision,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
@@ -903,6 +904,9 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** When the read that drew `tables` started, numbered by `nextFloorMoment`. */
   @property({ attribute: false }) tablesReadAt = 0;
+  /** Rooms' revisions a change the app sent was answered with, as `tablesReadAt` is numbered. */
+  @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
+    new Map();
   @property({ attribute: false }) api?: TillApi;
   @property({ attribute: false }) operatorSession = 0;
   @property({ attribute: false }) canExitToCounter = true;
@@ -991,7 +995,7 @@ export class TillFloorScreen extends LitElement {
   /** Where a dropped group is drawn until the next floor read, a refusal or a cancel. */
   #pending: Map<string, TodayPlacement> | null = null;
   /** Each room's revision as this screen's last change there answered it, and that answer's `nextFloorMoment`. */
-  #carried = new Map<string | null, { revision: number; answeredAt: number }>();
+  #carried = new Map<string | null, CarriedRevision>();
   #mapCopy = { locale: "", copy: { label: "", allergy: "" } };
 
   /** The clock the last render was drawn by. */
@@ -1374,14 +1378,19 @@ export class TillFloorScreen extends LitElement {
     this.requestUpdate();
   }
 
-  /** The room's revision as this screen last saw it: its read, unless its own answer came after that read started. */
+  /** The room's revision as this screen last saw it: the highest of its read and each answer, its
+   * own or the app's, that came after that read started. A room's revision only rises within one
+   * venue database, so of a read and an answer that overlapped, the higher is the later; an answer
+   * that came before the read started is left out, so a lower revision a read brings still counts. */
   #revision(zoneId: string | null): number | null {
-    const carried = this.#carried.get(zoneId);
-    if (carried !== undefined && this.tablesReadAt < carried.answeredAt) return carried.revision;
-    return (
+    const read =
       this.tables.find((each) => each.zoneId === zoneId && each.today !== null)?.today!
-        .zoneRevision ?? null
+        .zoneRevision ?? null;
+    const answered = [this.#carried.get(zoneId), this.carriedRevisions.get(zoneId)].flatMap(
+      (carried) =>
+        carried !== undefined && this.tablesReadAt < carried.answeredAt ? [carried.revision] : [],
     );
+    return answered.length === 0 ? read : Math.max(...answered, read ?? 0);
   }
 
   /** The room of the table a drop acted on, which `dropAction` found in `#zone.visible`. */

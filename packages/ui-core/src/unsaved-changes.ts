@@ -36,6 +36,8 @@ export interface LeaveCoordinator {
   register<T>(owner: DraftOwner<T>): DraftScope<T>;
   request(request: LeaveRequest): Promise<LeaveOutcome>;
   isDirty(scopes?: readonly object[], except?: readonly object[]): boolean;
+  /** A leave question is on screen, waiting for its answer. */
+  isAsking(): boolean;
   forceReset(): void;
   dispose(): void;
 }
@@ -239,6 +241,7 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
     isDirty(scopes, except) {
       return selected(scopes, except).some((owner) => owner.dirty());
     },
+    isAsking: () => pending?.deciding === true,
     forceReset: clear,
     dispose() {
       disposed = true;

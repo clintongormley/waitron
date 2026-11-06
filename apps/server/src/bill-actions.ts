@@ -71,7 +71,7 @@ async function requireUnreservedTransfers(
   if (reserved !== undefined) throw reservedRefusal(billId, edit);
 }
 
-function reservedRefusal(billId: string, edit: BillEditState): AppError {
+export function reservedRefusal(billId: string, edit: BillEditState): AppError {
   return new AppError("draft.out_of_date", {
     billId,
     draftId: edit.draftId,
@@ -320,7 +320,7 @@ export async function transferItems(
  * recalled into a draft. The ids travel as one JSON value, so they take one bound value however many
  * are named.
  */
-async function resolveMoveLines(
+export async function resolveMoveLines(
   tx: Transaction,
   billId: string,
   lineIds: readonly string[],
@@ -413,12 +413,29 @@ export async function moveDishes(
       );
   }
   const before = await readSentWork(tx, fromBillId);
-  const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, destinationId, transfers, {
+  const splitFrom = await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
     refuseHeld: toBillId === null,
     actorId: command.operatorId,
   });
-  await bumpRevision(tx, [fromBillId, destinationId]);
   await assertBillInvariant(tx, [fromBillId]);
   await enqueueMovedSlips(tx, cfg, before, destinationId, splitFrom);
   return { billId: destinationId };
+}
+
+/**
+ * {@link moveDishes} after its checks: the dishes cross, and both bills count one more write,
+ * refused on a bill being paid. The caller runs `assertBillInvariant` once its source has lost all
+ * it will lose, and tells the kitchen.
+ */
+export async function moveCheckedDishes(
+  tx: Transaction,
+  cfg: OriginConfig,
+  fromBillId: string,
+  toBillId: string,
+  transfers: Transfers,
+  options: { refuseHeld: boolean; actorId: string },
+): Promise<Map<string, string>> {
+  const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, options);
+  await bumpRevision(tx, [fromBillId, toBillId]);
+  return splitFrom;
 }

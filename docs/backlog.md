@@ -1877,6 +1877,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   where the paper prints `*** MARCHAR ***` and `EN ESPERA CAMBIADO`.
   [Detail](backlog/kitchen.md#a1328-older-lines-of-the-spanish-kitchen-guide-name-markers-spanish-kitchen-paper-does-not-print)
 
+- **A1351. `kitchen_notices` has no index on `working_order_id` (left open by A803 slice 4c).** Split
+  a table's MOVED-slip read scans it once per split: 9.29 ms at 200,000 rows and 48 ms at 1,000,000,
+  measured on a Mac with a warm cache (the 4c plan's R15). Add the index once the A1308 hold on table
+  changes ends.
+
+- **A1366. Two dishes alike on one bill share a MOVED notice, so Split a table can miss a slip
+  (left open by A803 slice 4c).** `readNamesOnPaper` (`apps/server/src/kitchen-print.ts`) matches a
+  dish's last MOVED notice by bill, station and dish name, so a notice written for one Burger also
+  counts for another Burger on that bill, and a split can print no slip for a dish whose ticket still
+  names the table that left. Ran twice: the 4c plan's D6 (`Mesa 431` leaving: no notice, no slip),
+  and the finish-branch review (two Burgers sent at Mesa 940, one moved to another bill, Mesa 941
+  joined, that Burger moved back, Mesa 940 split away: no slip; with a Flan as the second dish the
+  slip printed). `kitchen_notices` names no ticket item, so telling the two apart needs a column,
+  which waits for the A1308 hold.
+
 ### The till, devices and table service
 
 - **A1330. A step started by a serving comes back after its bill moves (seen in A803 slice 4b's re-read;
@@ -1894,7 +1909,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   A table that sent its own order keeps those order times after every bill has left, so the step
   stays. Run at `c11d7ff0c3`, before 4b's service-step fix, a party moving its one fired bill to a
   free table left its old table on "Another order?". Decide whether that is wrong: the people may
-  still be sitting there. See #2454's "Left open".
+  still be sitting there. See #2454's "Left open". Since A803 4c, Split anyway (everything ticked
+  goes) reaches this state more easily; it stays the owner's question.
 
 - **A Spanish invoice recipient's locality or province holding a comma is refused only at the
   server.** The server checks a Spanish recipient's joined address by splitting it on commas
@@ -2008,10 +2024,98 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   there. [Detail](backlog/till.md#a922-discard-on-a-tables-bill-from-parked-orders-fails)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
-  2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4b, waiting dishes that leave with
-  their own copy of the course, has landed (#2454); it leaves open A1327. Remaining: 4c, Split a table
-  through the same picker, with A590; pre-bills through A446, which no longer waits for asesor S2.
+  2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
+  picker, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which no longer
+  waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
+
+- **A1347. Join tables and Move guests from the order screen drop the room's new revision (left
+  open by A803 slice 4c).** `#onJoinTables` and `#onMoveGuests` (`apps/till/src/till-app.ts`) ignore
+  the `zoneRevisions` their answer carries, which Split a table now hands to the floor through
+  `carryRevisions`. Read, not run: a floor change sent before the next floor read would be refused once.
+
+- **A1348. A split whose answer is lost leaves the floor on the room's old revision (left open by
+  A803 slice 4c).** When the split's reply never arrives and the till's reads show it went through,
+  `#followSplit` runs with no `zoneRevisions` to carry, so A590's window, closed for an answered
+  split, stays open on that path until the next floor read.
+
+- **A1349. Take-over rows exist only in Split a table (left open by A803 slice 4c).** The rows that
+  let a waiter take over someone else's unsent dishes on a bill not on screen (A773 §6) are drawn by
+  `widgets/split-picker.ts` alone; Join tables and the moves still read no `conflicts` from
+  `draft.taken_over`.
+
+- **A1350. A row can read Paid on money a card in progress has only reserved (seen in A803 slice
+  4c).** A bill holding only reserved money draws no paid words in its header, but its rows say
+  `Paid` (`bill_pay.paid`) or "{amount} is already paid on this bill" (`table.move_dishes_floor`),
+  because `paidQuantitiesOf` counts pending item payments. The row's words came with slice 4a.
+  [Detail](backlog/till.md#a1350-a-row-can-read-paid-on-money-a-card-in-progress-has-only-reserved)
+
+- **A1352. Split a table's own reads have no time limit outside a refusal (left open by A803 slice
+  4c).** A first rows read that hangs leaves the panel blank, Split quiet and no words; a hung
+  first-bill reload leaves that panel without the party's drafts. Back and the same table read again.
+  Only the reads after a refused press stop at 25 seconds.
+
+- **A1353. On a desktop, the till's own stop at Split writes its sentence after the waiter has left
+  (left open by A803 slice 4c).** Taken off the page with the drafts read hung, then put back:
+  `splitRefusal` holds "Bill 2 changed…" with the order closed. Nothing visible; reopening clears it.
+  [Detail](backlog/till.md#a1353-on-a-desktop-the-tills-own-stop-at-split-writes-its-sentence-after-the-waiter-has-left)
+
+- **A1354. "Your last change to an order was not saved" shows after a put-back during a refused
+  Split's reads (seen in A803 slice 4c's review).** After a desktop put-back and a reopen, and after a
+  handheld put-back followed by Back. The string dates from #806; whether main showed it after a
+  put-back was not checked.
+
+- **A1355. Split's foot can ask for a take-over the row cannot offer yet (seen in A803 slice 4c's
+  review).** While the drafts read behind a ticked bill fails, the foot says "Take over unsent items
+  from Luis before splitting." but the row offers no Take over until a read answers; a later read,
+  or Back and the table again, gives the choice.
+
+- **A1356. Find bill, Hours and a station screen do not end the order visit (seen in A803 slice
+  4c).** A Split refused while one of them is open still reads and reopens the panel behind it,
+  which the waiter is not looking at (the case "party.out_of_date answering while Find bill is
+  open…", `till-app-split-table.reads.test.ts`). Whether that is meant was not looked into.
+
+- **A1357. The till's draft saves and reads can still pass each other (seen in A803 slice 4c's
+  review; two of the three are the same on main).** A failed read leaves a waiting edit unsent until
+  the next read or edit, a plain read can overtake a save's answer, and a save starting while a
+  take-over waits can race the read after it (`apps/till/src/state/draft-sync.ts`).
+  [Detail](backlog/till.md#a1357-the-tills-draft-saves-and-reads-can-still-pass-each-other)
+
+- **A1358. A number stepper's − and + are 24 by 32 px, against the 44 px tap size (seen in A803
+  slice 4c's LOOK; predates it).** Measured on Split a table's guest steppers at 390 wide. The
+  buttons are `wt-number-stepper`'s, which 4c did not change, so every form using it has them.
+
+- **A1359. At 1280 by 800, Split a table's panel opens low (seen in A803 slice 4c's LOOK).** Its
+  heading sits at 579 of 800 px with about three rows showing, because the side panel sits below the
+  order; Move dishes sits in the same place but is short enough to fit.
+
+- **A1360. The demo's Counter device says "This device isn't set up — ask to join this venue" under
+  the Demo banner (seen in A803 slice 4c's LOOK).** On every screen after sign-in. The words are
+  main's (`apps/till/src/i18n/codes.ts`); why it shows was not looked into.
+
+- **A1361. A presented bill's balance answered nothing outstanding (seen in A803 slice 4c's LOOK, on
+  the demo venue).** `getBillBalance` answered `total 9.10, received 0.00, outstanding 0.00`.
+  Whether that is meant was not looked into.
+
+- **A1362. After a split, both bills reads failing leaves the till on the bill that left paid
+  (left open by A803 slice 4c).** The list is empty and the timed read does not move it; the bill
+  switcher still works. Found in 4c's fix round 12 and not run again at the head, where
+  `#followSplit` (`apps/till/src/till-app.ts`) still reads the bills only once.
+
+- **A1363. Two loose ends in Split's press code (left open by A803 slice 4c).** `#draftReady` in
+  `#billEditIfReady` changed no answer in any state tried. In a timing run, a press fired at one
+  promise step (k = 13) sent nothing and said nothing; not looked into. A browser click lands only
+  after every pending promise step, shown by run only for the step the removed fallback needed.
+
+- **A1364. Split's different-people question ends the press with nothing said when the bill or party
+  changes (seen in A803 slice 4c's review).** With the question open, a bill switch or a new party
+  makes Confirm send nothing and say nothing (`#askDifferentPeople`, `apps/till/src/till-app.ts`).
+  Sending nothing is the plan's D20; whether it should say why is open. Reached only by events sent
+  behind the question, or by a made-up floor answer.
+
+- **A1365. No case covers the follow-up after a split when the bill's draft arrives during it (left
+  open by A803 slice 4c).** Since fix I1, `#followSplit` carries on in that state, where before it
+  stopped. The till suites stay green, but nothing pins what it does there.
 
 - **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** "12 ×
   Croquetas" is twelve rows to tick, because A739's payment window holds those files
@@ -2808,10 +2912,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A563. The till says "part of a joined table" for a joined table that has come apart
   (2026-10-13).** `table.in_joined_table` covers both cases since #1604.
   [Detail](backlog/till.md#a563-the-till-says-part-of-a-joined-table-for-a-joined-table-that-has-come-apart)
-
-- **A590. Splitting a table from the order screen drops the room's new revision
-  (2026-10-13).** Left open by A579 part 2b (#1624); the floor re-reads straight after.
-  [Detail](backlog/till.md#a590-splitting-a-table-from-the-order-screen-drops-the-rooms-new-revision)
 
 - **A591. A split down to one loses a table that had guests when its joined table went live
   (2026-10-13).** It is off the map once they leave. Reset table still reaches it; a room's reset

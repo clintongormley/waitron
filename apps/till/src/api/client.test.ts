@@ -3075,17 +3075,22 @@ describe("TillApi", () => {
     });
   });
 
-  it("splitTable POSTs the table, the chosen bill or null, and the revision to the party's /split-table route", async () => {
-    const answer = { partyId: "v-new", billId: "wo-check" };
+  it("splitTable POSTs the table, the selection, and the revision to the party's /split-table route", async () => {
+    const answer = { partyId: "v-new", billIds: ["wo-check", "wo-new"] };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
+    const selection = {
+      wholeBillIds: ["wo-check"],
+      loose: [{ billId: "wo-1", lineIds: ["line-1"] }],
+    };
 
     await expect(
-      api.splitTable("v1", "tbl-5", "wo-check", 3, [
+      api.splitTable("v1", "tbl-5", selection, 3, [
+        { billId: "wo-1", editorVersion: 1, draftId: null, draftRevision: null },
         { billId: "wo-check", editorVersion: 2, draftId: null, draftRevision: null },
       ]),
     ).resolves.toEqual(answer);
-    await api.splitTable("v1", "tbl-5", null, 4, []);
+    await api.splitTable("v1", "tbl-5", { wholeBillIds: [], loose: [] }, 4, []);
 
     expect(fetchStub).toHaveBeenNthCalledWith(
       1,
@@ -3094,9 +3099,10 @@ describe("TillApi", () => {
         method: "POST",
         body: JSON.stringify({
           tableId: "tbl-5",
-          billId: "wo-check",
+          selection,
           expectedPartyRevision: 3,
           expectedEdits: [
+            { billId: "wo-1", editorVersion: 1, draftId: null, draftRevision: null },
             { billId: "wo-check", editorVersion: 2, draftId: null, draftRevision: null },
           ],
         }),
@@ -3108,7 +3114,7 @@ describe("TillApi", () => {
       expect.objectContaining({
         body: JSON.stringify({
           tableId: "tbl-5",
-          billId: null,
+          selection: { wholeBillIds: [], loose: [] },
           expectedPartyRevision: 4,
           expectedEdits: [],
         }),
@@ -3117,17 +3123,20 @@ describe("TillApi", () => {
   });
 
   it("splitTable sends each side's guest count as the body's guestCounts when given one", async () => {
-    const fetchStub = vi.fn(async () => jsonResponse({ partyId: "v-new", billId: "wo-13" }));
+    const fetchStub = vi.fn(async () => jsonResponse({ partyId: "v-new", billIds: ["wo-13"] }));
     const api = new TillApi("", fetchStub);
 
-    await api.splitTable("v1", "tbl-4", null, 3, [], { staying: 3, leaving: null });
+    await api.splitTable("v1", "tbl-4", { wholeBillIds: [], loose: [] }, 3, [], {
+      staying: 3,
+      leaving: null,
+    });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/split-table",
       expect.objectContaining({
         body: JSON.stringify({
           tableId: "tbl-4",
-          billId: null,
+          selection: { wholeBillIds: [], loose: [] },
           expectedPartyRevision: 3,
           expectedEdits: [],
           guestCounts: { staying: 3, leaving: null },
@@ -4658,6 +4667,22 @@ describe("TillApi: a party's drafts", () => {
   const edit = { ...observed, editorId: "p-alex", editorName: "Alex" };
   const takeover = { revision: 1, expectedEdit: observed, submissionId: "takeover-1" };
 
+  it("getSplitSources reads the party's route and hands a caller's abort signal to fetch", async () => {
+    const answer = { partyRevision: 3, bills: [] };
+    const fetchStub = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
+    const signal = new AbortController().signal;
+
+    await expect(new TillApi("", fetchStub).getSplitSources("v1", { signal })).resolves.toEqual(
+      answer,
+    );
+
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/parties/v1/split-sources", {
+      method: "GET",
+      credentials: "include",
+      signal,
+    });
+  });
+
   it("listDrafts and saveDraft hand a caller's abort signal to fetch", async () => {
     const fetchStub = vi
       .fn()
@@ -5910,12 +5935,12 @@ describe("A803 action results", () => {
     expect(bodyOf(fetchStub, 1)).toEqual({ to: { tableId: "tbl-7" }, ...revisions });
   });
 
-  it("splitTable answers the leaving party and the bill it took", async () => {
-    const answer = { partyId: "v-new", billId: "wo-12" };
+  it("splitTable answers the leaving party and its bills", async () => {
+    const answer = { partyId: "v-new", billIds: ["wo-12"] };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
 
     await expect(
-      new TillApi("", fetchStub).splitTable("v1", "tbl-5", null, 3, []),
+      new TillApi("", fetchStub).splitTable("v1", "tbl-5", { wholeBillIds: [], loose: [] }, 3, []),
     ).resolves.toEqual(answer);
   });
 

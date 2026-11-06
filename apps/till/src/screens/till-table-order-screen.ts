@@ -18,6 +18,7 @@ import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
   ContentLanguageController,
   formatDecimalInput,
+  formMessageStyles,
   Gestures,
   inNumberOrder,
   leaveCoordinatorFor,
@@ -39,13 +40,14 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
 import { sentPanel, type SentSlice } from "../state/sent-panel.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
+  conjunctionList,
   addDecimal,
   allowsChangeAfterSending,
   compareDecimal,
@@ -94,7 +96,14 @@ import {
   tableTargetStyles,
   type SeatedRead,
 } from "../widgets/table-targets.js";
-import { billLabel, billName, owing, paidInPart, shownBills } from "../state/bill-state.js";
+import {
+  billLabel,
+  billName,
+  billNumberLabel,
+  owing,
+  paidInPart,
+  shownBills,
+} from "../state/bill-state.js";
 import { receiptLanguageLabel, shownReceiptLanguage } from "../widgets/receipt-language.js";
 import { helpBadge } from "../widgets/help-badge.js";
 import {
@@ -108,13 +117,11 @@ import {
 import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
 import "../widgets/party-name-dialog.js";
 import "../widgets/party-guests-dialog.js";
-import "../widgets/split-guests-dialog.js";
 import "../widgets/table-status.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import "../widgets/bill-name-dialog.js";
 import type { BillNameDetail } from "../widgets/bill-name-dialog.js";
 import type { PartyGuestsDetail } from "../widgets/party-guests-dialog.js";
-import type { SplitGuestsDetail } from "../widgets/split-guests-dialog.js";
 import type {
   BillBalance,
   CurrentOrderGroup,
@@ -135,6 +142,8 @@ import type {
   TillProduct,
   TillZoneMenu,
   PartyBill,
+  Draft as PartyDraft,
+  SplitSources,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
@@ -172,6 +181,29 @@ import {
   type Picks,
 } from "../state/portion-selection.js";
 import "../widgets/portion-picker.js";
+import "../widgets/split-picker.js";
+import type { SplitTakeOverDetail, TillSplitPicker } from "../widgets/split-picker.js";
+import {
+  leftWithNothingToPay,
+  anywayNote,
+  nothingStays,
+  rowsOf,
+  heldSelected,
+  splitSourcesFrom,
+  splitSummary,
+  tidySplit,
+  toSelection,
+  type SplitPicks,
+  type SplitSelection,
+  type SplitSource,
+} from "../state/split-selection.js";
+import {
+  guestsStepper,
+  guestsStepperStyles,
+  parseGuestCount,
+  sameGuestCount,
+  type SplitGuestsDetail,
+} from "../widgets/guest-count.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
@@ -211,7 +243,16 @@ export interface OtherDraft {
 export interface TakeOverDraftDetail {
   draftId: string;
   revision: number;
+  /** Set when Split a table's panel asked, with that panel's prompt: the bill the draft is on. */
+  billId?: string;
+  prompt?: object;
 }
+
+/** A bill-less draft comes from the order screen, a bill's from Split a table's panel. */
+type TakeOverAsked = Pick<OtherDraft, "id" | "revision"> & {
+  ownerName: string | null;
+  billId?: string;
+};
 
 export interface SplitDraftSourceDetail {
   store: WorkingOrderStore;
@@ -245,6 +286,10 @@ interface ActionDraft {
   tableId: string | null;
   picks: Picks;
   moveTo: string | null | undefined;
+  whole: ReadonlySet<string>;
+  billPicks: ReadonlyMap<string, Picks>;
+  staying: string;
+  leaving: string;
 }
 
 /** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
@@ -260,23 +305,34 @@ export interface TableRelocationOpenDetail {
   ready: () => void;
 }
 
-export interface SplitTableDetail {
+export type SplitTableDetail = {
   tableId: string;
-  billId: string | null;
+  selection: SplitSelection;
   guestCounts: SplitGuestsDetail;
   prompt?: object;
-}
+  /** The revision of the read that drew the rows the waiter pressed on. */
+  partyRevision: number;
+};
 
-/** The app's answer to a split whose count for one side the server refused: what was sent, and
- * why, shown under that side's field. */
-export interface SplitRefusal {
+type SplitSide = "staying" | "leaving";
+
+/** The app's answer to a refused split: what was sent, and why. The panel reopens from `selection`,
+ * with the message under `field`'s stepper, or above the buttons with no `field`. */
+export type SplitRefusal = {
   tableId: string;
-  billId: string | null;
+  selection: SplitSelection;
   staying: string;
   leaving: string;
-  field: "staying" | "leaving";
-  message: string;
   prompt?: object;
+} & (
+  | { field: SplitSide; message: string }
+  | { field?: undefined; message: string | TemplateResult | null }
+);
+
+/** `split-refusal-declined`: the panel did not reopen because the waiter has other work open, so
+ * nothing on screen has said the refusal and the app says it on its banner. */
+export interface SplitRefusalDeclinedDetail {
+  refusal: SplitRefusal;
 }
 
 interface DraftMoveOpening {
@@ -290,6 +346,51 @@ interface DraftMoveOpening {
 function samePicks(a: Picks, b: Picks): boolean {
   return a.size === b.size && [...a].every((id) => b.has(id));
 }
+
+function sameBillPicks(a: ReadonlyMap<string, Picks>, b: ReadonlyMap<string, Picks>): boolean {
+  return (
+    a.size === b.size &&
+    [...a].every(([id, picks]) => {
+      const other = b.get(id);
+      return other !== undefined && samePicks(picks, other);
+    })
+  );
+}
+
+function sameActionDraft(a: ActionDraft, b: ActionDraft): boolean {
+  return (
+    a.tableId === b.tableId &&
+    a.moveTo === b.moveTo &&
+    samePicks(a.picks, b.picks) &&
+    samePicks(a.whole, b.whole) &&
+    sameBillPicks(a.billPicks, b.billPicks) &&
+    sameGuestCount(a.staying, b.staying) &&
+    sameGuestCount(a.leaving, b.leaving)
+  );
+}
+
+/** What Split a table's rows are made from. */
+interface SplitInputs {
+  read: SplitSources;
+  bills: readonly PartyBill[];
+  drafts: readonly PartyDraft[];
+  personId: string;
+  allergy: PartyAllergyRead["snapshot"] | null;
+  recalled: ReadonlySet<string>;
+}
+
+function sameSplitInputs(a: SplitInputs, b: SplitInputs): boolean {
+  return (
+    a.read === b.read &&
+    a.bills === b.bills &&
+    a.drafts === b.drafts &&
+    a.personId === b.personId &&
+    a.allergy === b.allergy &&
+    samePicks(a.recalled, b.recalled)
+  );
+}
+
+const NO_SPLIT_PICKS: SplitPicks = { whole: new Set(), picks: new Map() };
 
 /** What the list of the bill's dishes and Move dishes…' rows are grouped from. */
 interface DishSources {
@@ -441,7 +542,14 @@ class TabPayStore extends WorkingOrderStore {
   }
 }
 
-type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-table-bill";
+type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-table-pick";
+
+/** What the foot says when a refusal's own sentence would claim the rows were read again and they
+ * were not. */
+const splitRowsUnreadSentence = (): string => t("table.split_updated_elsewhere");
+
+const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
+  read !== null && read !== "failed";
 
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
@@ -499,7 +607,45 @@ export class TillTableOrderScreen extends LitElement {
   static override styles = [
     priceWasStyles,
     billControlStyles,
+    guestsStepperStyles,
+    formMessageStyles,
     css`
+      .actions[data-split-pick],
+      .split-lines {
+        display: flex;
+        flex-direction: column;
+      }
+      .actions[data-split-pick] {
+        gap: var(--wt-space-4);
+      }
+      .split-lines {
+        gap: var(--wt-space-2);
+      }
+      .split-lines h2,
+      .split-summary,
+      .split-note {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .split-summary {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .split-note {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .error-part {
+        display: block;
+      }
+      .error-action {
+        display: block;
+        margin-top: var(--wt-space-2);
+      }
+      .split-counts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+      }
       .allergy-heading {
         display: flex;
         align-items: center;
@@ -1167,6 +1313,14 @@ export class TillTableOrderScreen extends LitElement {
   /** The app's answer to a guest count the server refused: the count sent, and why. */
   @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
   @property({ attribute: false }) splitRefusal: SplitRefusal | null = null;
+  /** The refusal whose sentence says the table was reloaded, when the panel's rows were not. */
+  @property({ attribute: false }) splitRowsUnread: SplitRefusal | null = null;
+  /** The party's bills for the panel: null until the read answers, "failed" when it could not. */
+  @property({ attribute: false }) splitRead: SplitSources | "failed" | null = null;
+  /** The last drafts read's drafts, of every bill of the party. */
+  @property({ attribute: false }) partyDrafts: readonly PartyDraft[] = [];
+  /** Who is signed in, which tells their own drafts from someone else's. */
+  @property() personId = "";
   /** A handheld form factor, whose menu browser shows the menu's handheld display and whose pay
    * section opens the pay sheet. */
   @property({ type: Boolean }) handheld = false;
@@ -1291,15 +1445,40 @@ export class TillTableOrderScreen extends LitElement {
   /** The Name this bill window, while open: the bill, the name it starts from and a refusal. */
   @state() private billNaming: { billId: string; value: string; refusal: string } | null = null;
   @state() private counting: { value: string; refusal: string } | null = null;
-  /** Split a table's choice, while its guests window is open. */
-  @state() private splitGuests: {
-    tableId: string;
-    billId: string | null;
-    staying: string;
-    leaving: string;
-    refusal: { field: "staying" | "leaving"; message: string } | null;
-    prompt?: object;
-  } | null = null;
+  @state() private splitPicks: SplitPicks = NO_SPLIT_PICKS;
+  @state() private splitStaying = "";
+  @state() private splitLeaving = "";
+  /** Split was pressed, so the panel's counts are checked from now on. */
+  @state() private splitAttempted = false;
+  /** A refusal naming one count, until that count changes or Split is pressed. */
+  @state() private splitCountRefusal: { field: SplitSide; message: string } | null = null;
+  /** A refusal naming no count, until Split is pressed. */
+  @state() private splitMessage: string | TemplateResult | null = null;
+  /** Its own field: a refused take-over leaves a bill held, and a held bill clears {@link splitMessage}. */
+  @state() private splitTakeOverMessage: string | TemplateResult | null = null;
+  /** Split was pressed with nothing left to stay, so the panel asks what to do. */
+  @state() private splitAsking = false;
+  #splitPrompt?: object;
+  /** The rows last drawn, which a read's picks are carried over from. */
+  #splitDrawn?: SplitSource[];
+  /** The selected bills the app was last told of; null when it must be told whatever they are. */
+  #splitObserved: string | null = "";
+  /** The last read this panel saw answer: a later failed read keeps its rows. */
+  #splitAnswered?: SplitSources;
+  /** A refusal not yet weighed against what is open, which only a screen in the page can see. */
+  #splitRefusalDue: SplitRefusal | null = null;
+  /** A refusal the panel did not reopen for, until the app can be told. */
+  #splitDeclined?: SplitRefusal;
+  /** The count's control that held focus when the till went busy. */
+  #busyFocus?: HTMLElement;
+  /** Bills a read took away or changed, each stopping one press with its name as last drawn. */
+  #splitGone = new Map<string, string>();
+  #splitChanged = new Map<string, string>();
+  /** The stop on screen: no press says it again, so a read that moves its bill re-words it. */
+  #splitSaid?: { billId: string; name: string; text: string };
+  /** Outlives the panel, so a bill gone from a refused selection is still named when it reopens. */
+  #splitNames = new Map<string, string>();
+  #splitRows?: { inputs: SplitInputs; sources: SplitSource[] };
   @state() private moveDishesPicks: Picks = new Set();
   /** Where Move dishes… sends the picks: a bill's id, null for a new bill, undefined while none is
    * chosen. */
@@ -1331,14 +1510,35 @@ export class TillTableOrderScreen extends LitElement {
       tableId: this.splitTableId,
       picks: new Set(this.moveDishesPicks),
       moveTo: this.#moveDishesChosen(),
+      whole: new Set(this.splitPicks.whole),
+      billPicks: new Map(this.splitPicks.picks),
+      staying: this.splitStaying,
+      leaving: this.splitLeaving,
     };
+  }
+
+  /** What the panel holds now is what its unsaved work is measured from. */
+  #moveActionBaseline(): void {
+    this.#actionBaseline = this.#actionPayload();
+    this.#actionScope?.commit(this.#actionBaseline);
+  }
+
+  /** An untouched staying side follows the stored count; a typed one stays, measured against it. */
+  #followStoredGuests(): void {
+    if (this.actionStep !== "split-table-pick") return;
+    const stored = this.#savedGuests();
+    const baseline = this.#actionBaseline!;
+    if (sameGuestCount(stored, baseline.staying)) return;
+    if (sameGuestCount(this.splitStaying, baseline.staying)) this.splitStaying = stored;
+    this.#actionBaseline = { ...baseline, staying: stored };
+    this.#actionScope?.commit(this.#actionBaseline);
   }
 
   #watchActions(): void {
     if (
       this.actionVerb !== "move-dishes" &&
       this.actionStep !== "split-table" &&
-      this.actionStep !== "split-table-bill"
+      this.actionStep !== "split-table-pick"
     ) {
       this.#retireActions();
       return;
@@ -1351,13 +1551,20 @@ export class TillTableOrderScreen extends LitElement {
       id: this.#actionId,
       parent: this,
       current: () => this.#actionPayload(),
-      snapshot: (value) => ({ ...value, picks: new Set(value.picks) }),
-      equal: (a, b) =>
-        a.tableId === b.tableId && a.moveTo === b.moveTo && samePicks(a.picks, b.picks),
+      snapshot: (value) => ({
+        ...value,
+        picks: new Set(value.picks),
+        whole: new Set(value.whole),
+        billPicks: new Map(value.billPicks),
+      }),
+      equal: sameActionDraft,
       restore: (value) => {
         this.splitTableId = value.tableId;
         this.moveDishesPicks = new Set(value.picks);
         this.moveDishesTo = value.moveTo;
+        this.splitPicks = { whole: new Set(value.whole), picks: new Map(value.billPicks) };
+        this.splitStaying = value.staying;
+        this.splitLeaving = value.leaving;
       },
     });
     this.#actionScope.commit(this.#actionBaseline);
@@ -1390,11 +1597,13 @@ export class TillTableOrderScreen extends LitElement {
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
   /** The draft whose take-over has just answered, until its dialog has closed. */
-  #takeOverAnswered?: string;
+  #takeOverAnswered?: TakeOverAsked;
   /** The draft whose take-over is being asked about. */
-  @state() private takeOverPending: OtherDraft | null = null;
+  @state() private takeOverPending: TakeOverAsked | null = null;
   /** {@link takeOversAnswered} when a take-over was sent; unset while none is out. */
   @state() private takeOverSent: number | null = null;
+  /** Why the app refused a take-over the panel asked for, read when {@link takeOversAnswered} moves. */
+  @property({ attribute: false }) splitTakeOverRefusal: string | TemplateResult | null = null;
   /** The bill a quiet Pay was tapped on, while it still has unsent dishes. */
   @state() private payUnsentFor: { billId: string | undefined } | null = null;
 
@@ -1940,7 +2149,9 @@ export class TillTableOrderScreen extends LitElement {
       this.#draftMoveOpening = undefined;
     }
     if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
-      this.#takeOverAnswered = this.takeOverPending?.id;
+      this.#takeOverAnswered = this.takeOverPending ?? undefined;
+      if (this.#takeOverAnswered?.billId !== undefined)
+        this.splitTakeOverMessage = this.splitTakeOverRefusal;
       this.takeOverSent = null;
       this.takeOverPending = null;
     }
@@ -1964,10 +2175,22 @@ export class TillTableOrderScreen extends LitElement {
       this.reviewing = false;
       this.#browsingScroll = undefined;
     }
+    // The app re-points this screen at whichever party holds the table, so a window opened for the
+    // old party would otherwise save to the new one. A screen drawn afresh counts its first party as
+    // a switch, which keeps a refusal the app still holds from reopening its window.
+    const partySwitched = changed.has("party") && changed.get("party")?.id !== this.party?.id;
+    this.#followSplitPanel(changed.has("splitRefusal"), partySwitched);
+    if (
+      (changed as PropertyValues).get("actionStep") === "split-table-pick" &&
+      this.actionStep !== "split-table-pick"
+    )
+      this.#dispatch("split-table-leave", {});
     this.#watchServe();
     this.#watchActions();
+    this.#followStoredGuests();
     this.#countMoveDestination();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
+    if (changed.has("busy")) this.#followBusyFocus();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
     if (
       this.payUnsentFor !== null &&
@@ -2002,24 +2225,10 @@ export class TillTableOrderScreen extends LitElement {
     if (changed.has("guestsRefusal") && this.guestsRefusal !== null) {
       this.counting = { value: this.guestsRefusal.value, refusal: this.guestsRefusal.message };
     }
-    if (changed.has("splitRefusal") && this.splitRefusal !== null) {
-      const { tableId, billId, staying, leaving, field, message, prompt } = this.splitRefusal;
-      this.splitGuests = { tableId, billId, staying, leaving, refusal: { field, message }, prompt };
-    }
-    // The app re-points this screen at whichever party holds the table, so a window opened for the
-    // old party would otherwise save to the new one. A screen drawn afresh counts its first party as
-    // a switch, which keeps a refusal the app still holds from reopening its window.
-    const partySwitched = changed.has("party") && changed.get("party")?.id !== this.party?.id;
     if (partySwitched) {
       this.naming = null;
       this.billNaming = null;
       this.counting = null;
-    }
-    if (
-      this.splitGuests !== null &&
-      (partySwitched || !this.party?.tableIds.includes(this.splitGuests.tableId))
-    ) {
-      this.splitGuests = null;
     }
     if (changed.has("cancelOffer") && this.cancelOffer !== null) {
       const offered = this.lines.find(
@@ -2032,11 +2241,14 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The app clears its offer on this event, so a screen mounted later does not open it again. Taken
    * even when the line is gone, for the same reason. */
-  override updated(): void {
+  override updated(changed: PropertyValues<this>): void {
     this.#refocusMenu();
     this.#placeStepFocus();
+    if (changed.has("splitRead")) this.#returnToSplitFoot();
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
+    this.#observeSplit();
+    this.#tellSplitDeclined();
     if (!this.#offerTaken) return;
     this.#offerTaken = false;
     const offered = this.#offeredCancel;
@@ -2047,14 +2259,10 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** The naming, guests and split-guests windows open from the ⋮, so focus goes back to it when
-   * the last of them closes. */
+  /** The naming and guests windows open from the ⋮, so focus goes back to it when the last of them
+   * closes. */
   #refocusMenu(): void {
-    const open =
-      this.naming !== null ||
-      this.billNaming !== null ||
-      this.counting !== null ||
-      this.splitGuests !== null;
+    const open = this.naming !== null || this.billNaming !== null || this.counting !== null;
     if (this.#menuWindowOpen && !open)
       this.renderRoot.querySelector<HTMLElement>("[data-table-menu]")?.focus();
     this.#menuWindowOpen = open;
@@ -2088,7 +2296,46 @@ export class TillTableOrderScreen extends LitElement {
     const panel = this.renderRoot.querySelector<HTMLElement>("[data-action-panel]");
     if (panel === null) return;
     panel.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
-    void this.#scrollIntoViewOnceDrawn(panel);
+    // A refusal is said at the foot, beside Split, which a tall panel's top leaves below the window.
+    const foot = this.#splitFootDue ? panel.querySelector("wt-form-actions") : null;
+    this.#splitFootDue = false;
+    if (foot !== null) this.#awaitSplitFootRows();
+    void this.#scrollIntoViewOnceDrawn(panel).then(() =>
+      foot?.scrollIntoView({ block: "nearest" }),
+    );
+  }
+
+  /** The read after a refusal can draw rows above a foot just brought into view. It follows that
+   * one answer, unless the waiter has touched the screen since. */
+  #awaitSplitFootRows(): void {
+    this.#splitFootRows?.abort();
+    const touched = new AbortController();
+    for (const type of ["pointerdown", "wheel", "touchstart", "keydown"])
+      this.addEventListener(type, () => touched.abort(), {
+        capture: true,
+        passive: true,
+        signal: touched.signal,
+      });
+    this.#splitFootRows = touched;
+  }
+
+  #returnToSplitFoot(): void {
+    const awaiting = this.#splitFootRows;
+    if (awaiting === undefined || awaiting.signal.aborted || !isAnswer(this.splitRead)) return;
+    awaiting.abort();
+    const panel = this.renderRoot.querySelector<HTMLElement>("[data-action-panel]");
+    const foot = panel?.querySelector("wt-form-actions");
+    if (panel == null || foot == null) return;
+    const picker = panel.querySelector("till-split-picker");
+    void (async () => {
+      await picker?.updateComplete;
+      await Promise.all(
+        [...(picker?.shadowRoot?.querySelectorAll("till-portion-picker") ?? [])].map(
+          (rows) => rows.updateComplete,
+        ),
+      );
+      if (foot.isConnected) foot.scrollIntoView({ block: "nearest" });
+    })();
   }
 
   /** The step's buttons draw after the screen does, and only then does the panel have its height. */
@@ -2111,6 +2358,8 @@ export class TillTableOrderScreen extends LitElement {
 
   #drawnStep: ActionStep = "closed";
   #stepFocus?: "step" | "menu";
+  #splitFootDue = false;
+  #splitFootRows?: AbortController;
 
   /** Copies the draft bar's height to `--draft-bar-size` on `.round-bar`, the bar's parent, from
    * which the basket's lines inherit it. Measured at once when the bar is drawn or shown, because
@@ -2438,7 +2687,7 @@ export class TillTableOrderScreen extends LitElement {
         </div>
         ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
         ${this.#takeOverDialog()} ${this.#nameDialog()} ${this.#billNameDialog()}
-        ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
+        ${this.#guestsDialog()}
       </section>
     `;
   }
@@ -3153,9 +3402,20 @@ export class TillTableOrderScreen extends LitElement {
     this.#takeOverAnswered = undefined;
     if (taken === undefined) return;
     await this.updateComplete;
-    const still = this.otherDrafts.some((other) => other.id === taken);
+    if (taken.billId !== undefined) {
+      await this.renderRoot
+        .querySelector<TillSplitPicker>("till-split-picker")
+        ?.focusBill(taken.billId);
+      // The refused line is at the foot, which the bill's row can leave below the window.
+      if (this.splitTakeOverMessage !== null)
+        this.renderRoot
+          .querySelector("[data-split-pick] wt-form-actions")
+          ?.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    const still = this.otherDrafts.some((other) => other.id === taken.id);
     this.renderRoot
-      .querySelector<HTMLElement>(still ? `[data-take-over="${taken}"]` : "#draft-title")
+      .querySelector<HTMLElement>(still ? `[data-take-over="${taken.id}"]` : "#draft-title")
       ?.focus();
   }
 
@@ -3164,7 +3424,16 @@ export class TillTableOrderScreen extends LitElement {
     const other = this.takeOverPending;
     if (other === null || this.takeOverSent !== null) return;
     this.takeOverSent = this.takeOversAnswered;
-    const detail: TakeOverDraftDetail = { draftId: other.id, revision: other.revision };
+    const detail: TakeOverDraftDetail = {
+      draftId: other.id,
+      revision: other.revision,
+      ...(other.billId === undefined
+        ? {}
+        : {
+            billId: other.billId,
+            ...(this.#splitPrompt === undefined ? {} : { prompt: this.#splitPrompt }),
+          }),
+    };
     this.#dispatch("take-over-draft", detail);
   }
 
@@ -4787,6 +5056,7 @@ export class TillTableOrderScreen extends LitElement {
     this.actionStep = "closed";
     this.actionVerb = null;
     this.splitTableId = null;
+    this.#resetSplitPick();
     this.moveDishesPicks = new Set();
     this.moveDishesTo = undefined;
   }
@@ -4948,58 +5218,27 @@ export class TillTableOrderScreen extends LitElement {
     ></till-party-guests-dialog>`;
   }
 
-  /** The party's bills Split a table can give the new party: open or presented. */
-  #splitTableBills(): { bill: PartyBill; name: string }[] {
-    const party = this.party;
-    if (party === null) return [];
-    return this.#shownBills().flatMap((bill) =>
-      bill.partyId === party.id && owing(bill) ? [{ bill, name: this.#billName(bill) }] : [],
-    );
-  }
-
   #splitTableStep(): TemplateResult {
     const party = this.party!;
-    const scope = this.#partyScope(party);
-    const table = this.tables.find((row) => row.id === this.splitTableId);
-    const choosingBill = this.actionStep === "split-table-bill" && table !== undefined;
-    const targets = choosingBill
-      ? [
-          ...this.#splitTableBills().map(({ bill, name }) => ({
-            id: bill.workingOrderId,
-            name: `${name} · ${this.#money(bill.total)}`,
-            pick: () => this.#splitTable(table.id, bill.workingOrderId),
-          })),
-          {
-            id: "none",
-            name: t("table.split_no_bill"),
-            pick: () => this.#splitTable(table.id, null),
-          },
-        ]
-      : party.tableIds.flatMap((id) => {
-          const row = this.tables.find((candidate) => candidate.id === id);
-          return row === undefined
-            ? []
-            : [
-                {
-                  id,
-                  name: tableShownName(row),
-                  pick: () => {
-                    this.splitTableId = id;
-                    this.actionStep = "split-table-bill";
-                    this.#actionScope?.changed();
-                  },
-                },
-              ];
-        });
+    const targets = party.tableIds.flatMap((id) => {
+      const row = this.tables.find((candidate) => candidate.id === id);
+      return row === undefined
+        ? []
+        : [
+            {
+              id,
+              name: tableShownName(row),
+              pick: () => {
+                this.splitTableId = id;
+                this.#openSplitPick(id);
+                this.#actionScope?.changed();
+              },
+            },
+          ];
+    });
     return html`<section class="actions" data-split-table>
       <h2 tabindex="-1">
-        ${
-          choosingBill
-            ? t("table.split_table_bill_heading")
-                .replace("{table}", () => tableShownName(table))
-                .replace("{party}", () => scope)
-            : t("table.split_table_heading").replace("{party}", () => scope)
-        }
+        ${t("table.split_table_heading").replace("{party}", () => this.#partyScope(party))}
       </h2>
       <div class="action-options">
         ${targets.map(
@@ -5020,51 +5259,597 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #splitTable(tableId: string, billId: string | null): void {
-    this.#closeActions();
-    const prompt = {};
-    this.#dispatch("split-table-open", { tableId, billId, prompt });
-    this.splitGuests = {
-      tableId,
-      billId,
-      staying: this.#savedGuests(),
-      leaving: "",
-      refusal: null,
-      prompt,
-    };
+  #openSplitPick(tableId: string): void {
+    this.#resetSplitPick();
+    this.splitStaying = this.#savedGuests();
+    this.#splitPrompt = {};
+    this.actionStep = "split-table-pick";
+    this.#moveActionBaseline();
+    this.#dispatch("split-table-open", { tableId, prompt: this.#splitPrompt });
   }
 
-  #splitGuestsDialog(): TemplateResult | typeof nothing {
-    const splitting = this.splitGuests;
-    const party = this.party;
-    if (splitting === null || party === null) return nothing;
-    const leaving = this.tables.find((row) => row.id === splitting.tableId);
-    return html`<till-split-guests-dialog
-      .stayingLabel=${tablesLabel(
-        party.tableIds.filter((id) => id !== splitting.tableId),
-        this.tables,
-      )}
-      .leavingLabel=${leaving === undefined ? "" : tableShownName(leaving)}
-      .staying=${splitting.staying}
-      .savedStaying=${this.#savedGuests()}
-      .leaving=${splitting.leaving}
-      .stayingRefusal=${splitting.refusal?.field === "staying" ? splitting.refusal.message : ""}
-      .leavingRefusal=${splitting.refusal?.field === "leaving" ? splitting.refusal.message : ""}
-      @split-guests-confirm=${(event: Event) => {
+  #resetSplitPick(): void {
+    this.splitPicks = NO_SPLIT_PICKS;
+    this.splitStaying = "";
+    this.splitLeaving = "";
+    this.splitAttempted = false;
+    this.splitCountRefusal = null;
+    this.splitMessage = null;
+    this.splitTakeOverMessage = null;
+    this.splitAsking = false;
+    this.#splitPrompt = undefined;
+    this.#splitFootRows?.abort();
+    this.#splitAnswered = undefined;
+    this.#splitRows = undefined;
+    this.#splitDrawn = undefined;
+    this.#splitObserved = "";
+    this.#splitGone.clear();
+    this.#splitChanged.clear();
+    this.#splitSaid = undefined;
+  }
+
+  /** A party on one table is never offered Split a table, so it has no panel to stay on. */
+  #splitPanelHolds(tableId: string | null): boolean {
+    const held = this.party?.tableIds ?? [];
+    return tableId !== null && held.length > 1 && held.includes(tableId);
+  }
+
+  #followSplitPanel(refusalChanged: boolean, partySwitched: boolean): void {
+    const onList = this.actionStep === "split-table";
+    const onTable = this.actionStep === "split-table-pick";
+    if (
+      ((onList || onTable) && partySwitched) ||
+      (onList && (this.party?.tableIds.length ?? 0) < 2) ||
+      (onTable && !this.#splitPanelHolds(this.splitTableId))
+    )
+      this.#closeActions();
+    if (refusalChanged) this.#splitRefusalDue = this.splitRefusal;
+    if (partySwitched) this.#splitRefusalDue = null;
+    if (this.isConnected) {
+      const refusal = this.#splitRefusalDue;
+      this.#splitRefusalDue = null;
+      if (refusal !== null && this.#splitPanelHolds(refusal.tableId)) {
+        if (this.#actionsHoldWork()) this.#splitDeclined = refusal;
+        else this.#reopenSplitPick(refusal);
+      }
+    }
+    this.#tidySplit();
+  }
+
+  /** Read directly from the baseline, since a screen just put back has no scope to ask yet. A
+   * question is checked anywhere in the till: replacing this step's scope would close one covering
+   * it. */
+  #actionsHoldWork(): boolean {
+    const baseline = this.#actionBaseline;
+    return (
+      (baseline !== undefined && !sameActionDraft(baseline, this.#actionPayload())) ||
+      leaveCoordinatorFor(this)?.isAsking() === true
+    );
+  }
+
+  #tellSplitDeclined(): void {
+    const refusal = this.#splitDeclined;
+    if (refusal === undefined) return;
+    this.#splitDeclined = undefined;
+    this.#dispatch("split-refusal-declined", { refusal } satisfies SplitRefusalDeclinedDetail);
+  }
+
+  /** Unsaved work is measured from a panel opened afresh, so what comes back is protected. */
+  #reopenSplitPick(refusal: SplitRefusal): void {
+    this.#closeActions();
+    this.actionStep = "split-table-pick";
+    this.splitTableId = refusal.tableId;
+    this.splitPicks = {
+      whole: new Set(refusal.selection.wholeBillIds),
+      picks: new Map(
+        refusal.selection.loose.map(({ billId, lineIds }) => [billId, new Set(lineIds)]),
+      ),
+    };
+    this.splitStaying = refusal.staying;
+    this.splitLeaving = refusal.leaving;
+    this.#splitPrompt = refusal.prompt;
+    if (refusal.field === undefined) this.splitMessage = refusal.message;
+    else this.splitCountRefusal = { field: refusal.field, message: refusal.message };
+    this.#actionBaseline = {
+      ...this.#actionPayload(),
+      whole: new Set(),
+      billPicks: new Map(),
+      staying: this.#savedGuests(),
+      leaving: "",
+    };
+    this.#splitObserved = null;
+    this.#stepFocus = "step";
+    this.#splitFootDue = true;
+  }
+
+  /** A panel with no rows drawn yet may be holding a refused selection, so it is compared with the
+   * rows it is about to draw. */
+  #tidySplit(): void {
+    if (this.actionStep !== "split-table-pick") return;
+    const sources = this.#splitSources();
+    if (sources === undefined || sources === this.#splitDrawn) return;
+    const picks = this.splitPicks;
+    const before = new Map(
+      (this.#splitDrawn ?? sources).map((source) => [
+        source.bill.workingOrderId,
+        rowsOf(source, picks),
+      ]),
+    );
+    const { split, gone, changed } = tidySplit(before, sources, picks);
+    const lastDrawn = (id: string) =>
+      this.#splitNames.get(id) ?? billNumberLabel({ billNumber: null });
+    for (const id of gone) {
+      this.#splitGone.set(id, lastDrawn(id));
+      this.#splitChanged.delete(id);
+    }
+    for (const id of changed) this.#splitChanged.set(id, lastDrawn(id));
+    // A bill listed again has not left, yet it came back unticked, so it still stops one press. A
+    // bill comes back under a new number, so a sentence names what its row says now.
+    const listed = new Map(sources.map((source) => [source.bill.workingOrderId, source.bill]));
+    for (const [id, bill] of listed)
+      if (this.#splitGone.delete(id) || this.#splitChanged.has(id))
+        this.#splitChanged.set(id, billLabel(bill));
+    for (const [id, name] of this.#splitChanged)
+      if (!listed.has(id)) {
+        this.#splitChanged.delete(id);
+        this.#splitGone.set(id, name);
+      }
+    this.#followSplitSaid(listed);
+    const [held] = heldSelected(sources, split);
+    if (held !== undefined) this.splitMessage = null;
+    const active = (this.renderRoot as ShadowRoot).activeElement;
+    const onQuestion = active?.matches("[data-split-move-guests], [data-split-anyway]") === true;
+    const questionGoes = this.splitAsking && (held !== undefined || !nothingStays(sources, split));
+    if (questionGoes) this.#leaveSplitQuestion();
+    if (held !== undefined) {
+      if ((onQuestion || active?.matches("[data-split-confirm]")) && this.#stepFocus === undefined)
+        void this.#focusTakeOver(held.bill.workingOrderId);
+    } else if (questionGoes && onQuestion) void this.#focusOnceDrawn("[data-split-confirm]");
+    if (samePicks(split.whole, picks.whole) && sameBillPicks(split.picks, picks.picks)) return;
+    this.splitPicks = split;
+    this.#actionScope?.changed();
+  }
+
+  #splitHeld(sources = this.#splitSources()): SplitSource[] {
+    return sources === undefined ? [] : heldSelected(sources, this.splitPicks);
+  }
+
+  #splitTakenSentence(held: readonly SplitSource[]): string {
+    const names = held.map((source) => source.held!.ownerName);
+    if (names.includes(null)) return t("table.split_taken_unnamed");
+    return fill(t("table.split_taken"), {
+      who: conjunctionList([...new Set(names as string[])], currentLocale()),
+    });
+  }
+
+  /** Takes the next waiting stop, a gone bill before a changed one. */
+  #takeSplitStop(): string | null {
+    const [gone] = this.#splitGone;
+    if (gone !== undefined) {
+      this.#splitGone.delete(gone[0]);
+      return this.#saySplitStop(gone[0], gone[1], false);
+    }
+    const [changed] = this.#splitChanged;
+    if (changed === undefined) return null;
+    this.#splitChanged.delete(changed[0]);
+    if (this.#splitPrompt !== undefined)
+      this.#dispatch("split-table-stopped", { prompt: this.#splitPrompt, billId: changed[0] });
+    return this.#saySplitStop(changed[0], changed[1], true);
+  }
+
+  #saySplitStop(billId: string, name: string, listed: boolean): string {
+    const text = fill(t(listed ? "table.split_changed" : "table.split_bill_gone"), { bill: name });
+    this.#splitSaid = { billId, name, text };
+    return text;
+  }
+
+  #followSplitSaid(listed: ReadonlyMap<string, PartyBill>): void {
+    const said = this.#splitSaid;
+    if (said === undefined || this.splitMessage !== said.text) return;
+    const bill = listed.get(said.billId);
+    this.splitMessage = this.#saySplitStop(
+      said.billId,
+      bill === undefined ? said.name : billLabel(bill),
+      bill !== undefined,
+    );
+    // It says now what that stop would say, so no later press says it again.
+    if (bill === undefined) this.#splitGone.delete(said.billId);
+  }
+
+  /** Dispatched only in the page, so a change made while taken out is told once it is put back. */
+  #observeSplit(): void {
+    if (this.actionStep !== "split-table-pick" || !this.isConnected) return;
+    const billIds = [...this.splitPicks.whole, ...this.splitPicks.picks.keys()].sort();
+    const observed = billIds.join(" ");
+    if (observed === this.#splitObserved) return;
+    this.#splitObserved = observed;
+    if (this.#splitPrompt !== undefined)
+      this.#dispatch("split-table-observe", { prompt: this.#splitPrompt, billIds });
+  }
+
+  #leaveSplitQuestion(): void {
+    this.splitAsking = false;
+    this.#relocationPrompt = null;
+    this.actionVerb = null;
+  }
+
+  async #focusOnceDrawn(selector: string): Promise<void> {
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>(selector)?.focus();
+  }
+
+  /** Split can no longer take focus once a bill is held, so it goes to what the sentence asks for. */
+  async #focusTakeOver(billId: string): Promise<void> {
+    await this.updateComplete;
+    await this.renderRoot
+      .querySelector<TillSplitPicker>("till-split-picker")
+      ?.focusTakeOver(billId);
+  }
+
+  /** A disabled control drops focus to the page, where no key reaches the panel, and it stays there. */
+  #followBusyFocus(): void {
+    if (this.busy) {
+      const active = (this.renderRoot as ShadowRoot).activeElement;
+      this.#busyFocus = active?.matches("[data-split-pick] wt-number-stepper")
+        ? ((active.shadowRoot?.activeElement as HTMLElement | null) ?? undefined)
+        : undefined;
+      return;
+    }
+    const control = this.#busyFocus;
+    this.#busyFocus = undefined;
+    if (control !== undefined) void this.#refocusCount(control);
+  }
+
+  async #refocusCount(control: HTMLElement): Promise<void> {
+    await this.updateComplete;
+    await ((control.getRootNode() as ShadowRoot).host as LitElement).updateComplete;
+    if (document.activeElement === document.body) control.focus();
+  }
+
+  #anyBillPaid(): boolean {
+    return this.bills.some((bill) => bill.status === "settled");
+  }
+
+  /** The word the order screen gives a held dish, and the course it waits for when it has one. */
+  #waitingMark(line: TabLine): string {
+    if (line.waitsInHeldGroup !== true) return "";
+    const held = t("table.group_held");
+    return line.course === undefined ? held : `${held} · ${line.course.name}`;
+  }
+
+  /** The panel's rows, or undefined until a read has answered and the person is known: with no person,
+   * every draft would read as someone else's and hold its bill. */
+  #splitSources(): SplitSource[] | undefined {
+    if (this.splitRead !== null && this.splitRead !== "failed")
+      this.#splitAnswered = this.splitRead;
+    const read = this.#splitAnswered;
+    if (read === undefined || this.personId === "") return undefined;
+    const inputs: SplitInputs = {
+      read,
+      bills: this.bills,
+      drafts: this.partyDrafts,
+      personId: this.personId,
+      allergy: this.#allergy()?.snapshot ?? null,
+      recalled: this.#recalledLineIds(),
+    };
+    if (this.#splitRows !== undefined && sameSplitInputs(this.#splitRows.inputs, inputs))
+      return this.#splitRows.sources;
+    const sources = splitSourcesFrom(
+      read,
+      this.bills,
+      this.partyDrafts,
+      this.personId,
+      inputs.recalled,
+      (lines, balance) =>
+        fallbackPortionKeys({
+          lines,
+          balance,
+          allergy: inputs.allergy,
+          recalled: inputs.recalled,
+        }),
+    );
+    this.#splitRows = { inputs, sources };
+    return sources;
+  }
+
+  #splitCountError(text: string): string {
+    return this.splitAttempted && parseGuestCount(text) === undefined
+      ? t("seat.guest_count_invalid")
+      : "";
+  }
+
+  #splitGuestsField(side: SplitSide, table: string, text: string, set: (value: string) => void) {
+    const refused = this.splitCountRefusal?.field === side ? this.splitCountRefusal.message : "";
+    return guestsStepper({
+      name: `${side}Guests`,
+      label: fill(t("table.split_guests_at"), { table }),
+      text,
+      placeholder: "",
+      disabled: this.busy,
+      error: this.#splitCountError(text) || refused,
+      onChange: (event) => {
         event.stopPropagation();
-        this.splitGuests = null;
-        this.#dispatch("split-table", {
-          tableId: splitting.tableId,
-          billId: splitting.billId,
-          guestCounts: (event as CustomEvent<SplitGuestsDetail>).detail,
-          ...(splitting.prompt === undefined ? {} : { prompt: splitting.prompt }),
-        } satisfies SplitTableDetail);
-      }}
-      @split-guests-cancel=${(event: Event) => {
-        event.stopPropagation();
-        this.splitGuests = null;
-      }}
-    ></till-split-guests-dialog>`;
+        if (!this.#actionControlCurrent(event)) return;
+        set((event as CustomEvent<{ value: string }>).detail.value);
+        if (refused !== "") this.splitCountRefusal = null;
+        this.#actionScope?.changed();
+      },
+    });
+  }
+
+  /** The one line for each table, with its bills in number order. */
+  #splitSummaryLines(sources: readonly SplitSource[], leaving: string, kept: string) {
+    const { takes, keeps } = splitSummary(sources, this.splitPicks);
+    const list = (parts: string[]) => conjunctionList(parts, currentLocale());
+    const takesParts = [
+      ...takes.whole.map(({ bill }) => billLabel(bill)),
+      ...takes.loose.map(({ source: { bill }, count }) =>
+        count === 1
+          ? fill(t("table.split_dish_from"), { bill: billLabel(bill) })
+          : fill(t("table.split_dishes_from"), { count: String(count), bill: billLabel(bill) }),
+      ),
+    ];
+    const keepsParts = [
+      ...keeps.whole.map(({ bill }) => billLabel(bill)),
+      ...keeps.rest.map(({ bill }) => fill(t("table.split_rest_of"), { bill: billLabel(bill) })),
+    ];
+    // The server makes a staying party a bill only when one leaves it, so with none it has none.
+    const keepsLine =
+      sources.length === 0 || leftWithNothingToPay(sources, this.splitPicks, this.#anyBillPaid())
+        ? fill(t("table.split_nothing_to_pay"), { table: kept })
+        : fill(t("table.split_keeps"), {
+            table: kept,
+            what: keepsParts.length > 0 ? list(keepsParts) : t("table.split_empty_bill"),
+            amount: this.#money(keeps.amount),
+          });
+    return html`<div class="split-lines">
+      <p class="split-summary" data-split-takes>
+        ${fill(t("table.split_takes"), {
+          table: leaving,
+          what: takesParts.length > 0 ? list(takesParts) : t("table.split_empty_bill"),
+          amount: this.#money(takes.amount),
+        })}
+      </p>
+      <p class="split-summary" data-split-keeps>${keepsLine}</p>
+      ${
+        takes.loose.length > 0
+          ? html`<p class="split-note" data-split-new-bill-note>
+              ${fill(t("table.split_new_bill_note"), { table: leaving })}
+            </p>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  #splitPickStep(): TemplateResult {
+    const party = this.party!;
+    const row = this.tables.find((candidate) => candidate.id === this.splitTableId);
+    const leaving = row === undefined ? "" : tableShownName(row);
+    const kept = tablesLabel(
+      party.tableIds.filter((id) => id !== this.splitTableId),
+      this.tables,
+    );
+    const sources = this.#splitSources();
+    this.#splitDrawn = sources;
+    if (sources !== undefined)
+      this.#splitNames = new Map(
+        sources.map((source) => [source.bill.workingOrderId, billLabel(source.bill)]),
+      );
+    const held = this.#splitHeld(sources);
+    const message =
+      held.length > 0
+        ? this.#splitTakenSentence(held)
+        : this.splitRowsUnread !== null && this.splitMessage === this.splitRowsUnread.message
+          ? splitRowsUnreadSentence()
+          : this.splitMessage;
+    // A take-over's answer reaches the drafts before its record is replaced; Split waits for both.
+    const holding = held.length > 0 || this.takeOverSent !== null;
+    const countsBad =
+      parseGuestCount(this.splitStaying) === undefined ||
+      parseGuestCount(this.splitLeaving) === undefined;
+    const readFailed = sources === undefined && this.splitRead === "failed";
+    return html`<section class="actions" data-split-pick>
+      <div class="split-lines">
+        <h2 tabindex="-1">
+          ${fill(t("table.split_pick_heading"), { table: leaving, party: this.#partyScope(party) })}
+        </h2>
+        ${
+          sources?.length === 0 || readFailed
+            ? nothing
+            : html`<p class="split-note" data-split-hint>
+                ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
+              </p>`
+        }
+      </div>
+      ${
+        sources === undefined
+          ? nothing
+          : html`<till-split-picker
+                .sources=${sources}
+                .split=${this.splitPicks}
+                .nameOf=${(line: TabLine) => this.#nameForLine(line)}
+                .markOf=${(line: TabLine) => this.#waitingMark(line)}
+                .money=${(amount: string) => this.#money(amount)}
+                @split-picks=${(event: CustomEvent<{ split: SplitPicks }>) => {
+                  event.stopPropagation();
+                  if (!this.#actionControlCurrent(event)) return;
+                  this.splitPicks = event.detail.split;
+                  if (this.splitAsking) this.#leaveSplitQuestion();
+                  this.#actionScope?.changed();
+                }}
+                @split-bills-gone=${(event: Event) => {
+                  event.stopPropagation();
+                  this.renderRoot.querySelector<HTMLElement>("[data-split-pick] h2")?.focus();
+                }}
+                @split-take-over=${(event: CustomEvent<SplitTakeOverDetail>) => {
+                  event.stopPropagation();
+                  if (!this.#actionControlCurrent(event)) return;
+                  const { billId, draftId, revision, ownerName } = event.detail;
+                  this.splitTakeOverMessage = null;
+                  this.takeOverPending = { id: draftId, revision, ownerName, billId };
+                }}
+              ></till-split-picker>
+              ${this.#splitSummaryLines(sources, leaving, kept)}`
+      }
+      <div
+        class="split-counts"
+        @keydown=${(event: KeyboardEvent) => {
+          if (!this.#actionControlCurrent(event)) return;
+          submitOnEnter(event, this.renderRoot.querySelector<HTMLElement>("[data-split-confirm]"));
+        }}
+      >
+        ${this.#splitGuestsField("staying", kept, this.splitStaying, (value) => {
+          this.splitStaying = value;
+        })}
+        ${this.#splitGuestsField("leaving", leaving, this.splitLeaving, (value) => {
+          this.splitLeaving = value;
+        })}
+      </div>
+      ${
+        this.splitAsking && sources !== undefined
+          ? this.#splitQuestion(sources, leaving, kept)
+          : nothing
+      }
+      ${
+        message === null
+          ? nothing
+          : html`<p
+              class="form-message"
+              role="alert"
+              data-split-refusal
+              @refund-excess=${(event: CustomEvent<{ billId?: string; bill?: string }>) =>
+                this.#refundFromSplit(event)}
+            >
+              ${message}
+            </p>`
+      }
+      ${
+        this.splitTakeOverMessage === null
+          ? nothing
+          : html`<p class="form-message" role="alert" data-split-take-over-refusal>
+              ${this.splitTakeOverMessage}
+            </p>`
+      }
+      <wt-form-actions
+        .error=${
+          readFailed
+            ? t("table.split_read_failed")
+            : (this.splitAttempted && countsBad) || this.splitCountRefusal !== null
+              ? t("form.fix_fields")
+              : ""
+        }
+      >
+        ${this.#backButton("cancel")}
+        ${
+          this.splitAsking
+            ? html`<wt-button
+                  data-split-anyway
+                  slot="secondary"
+                  variant="secondary"
+                  ?disabled=${countsBad}
+                  @click=${(event: Event) => void this.#confirmSplitPick(event, true)}
+                >
+                  ${t("table.split_anyway")}
+                </wt-button>
+                <wt-button
+                  data-split-move-guests
+                  variant="primary"
+                  @click=${(event: Event) => this.#splitMoveGuests(event)}
+                >
+                  ${t("table.action_move_guests")}
+                </wt-button>`
+            : html`<wt-button
+                data-split-confirm
+                variant=${sources === undefined || holding ? "secondary" : "primary"}
+                ?disabled=${sources === undefined || holding || (this.splitAttempted && countsBad)}
+                @click=${(event: Event) => void this.#confirmSplitPick(event)}
+              >
+                ${t("table.split_confirm")}
+              </wt-button>`
+        }
+      </wt-form-actions>
+    </section>`;
+  }
+
+  #splitQuestion(sources: readonly SplitSource[], leaving: string, kept: string): TemplateResult {
+    const note =
+      anywayNote(sources, this.splitPicks, this.#anyBillPaid()) === "paid"
+        ? t("table.split_anyway_note_paid")
+        : t("table.split_anyway_note");
+    return html`<div class="split-lines" role="alert">
+      <p class="split-summary" data-split-question>
+        ${fill(t("table.split_nothing_stays"), { kept, table: leaving })}
+      </p>
+      <p class="split-note" data-split-anyway-note>${fill(note, { kept })}</p>
+    </div>`;
+  }
+
+  /** Refund for another bill leaves the panel, so it asks first, as any bill switch does. */
+  #refundFromSplit(event: CustomEvent<{ billId?: string; bill?: string }>): void {
+    const { billId, bill } = event.detail;
+    if (billId === undefined || billId === this.orderId) return;
+    event.stopPropagation();
+    if (!this.#actionControlCurrent(event)) return;
+    const sources = this.#splitSources();
+    if (sources?.some((source) => source.bill.workingOrderId === billId) === false) {
+      const name = bill ?? billNumberLabel({ billNumber: null });
+      this.#splitGone.delete(billId);
+      this.splitMessage = this.#saySplitStop(billId, name, false);
+      return;
+    }
+    this.#leavingActions(() => this.#dispatch("refund-excess", event.detail));
+  }
+
+  /** The party keeps its count and leaves all its tables, so the steppers play no part. */
+  #splitMoveGuests(event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
+    const table = this.tables.find((row) => row.id === this.splitTableId);
+    if (table === undefined) return;
+    this.actionVerb = "move";
+    this.#prepareRelocation("move", table, (prompt) => {
+      this.#retireActions();
+      this.#sendTableAction("move", table, prompt);
+    });
+  }
+
+  async #confirmSplitPick(event: Event, anyway = false): Promise<void> {
+    if (!this.#actionControlCurrent(event)) return;
+    const sources = this.#splitSources();
+    const tableId = this.splitTableId;
+    if (sources === undefined || tableId === null || this.#splitHeld(sources).length > 0) return;
+    this.splitAttempted = true;
+    this.splitCountRefusal = null;
+    this.splitMessage = null;
+    this.splitTakeOverMessage = null;
+    const staying = parseGuestCount(this.splitStaying);
+    const leaving = parseGuestCount(this.splitLeaving);
+    if (staying === undefined || leaving === undefined) {
+      await this.updateComplete;
+      const section = this.renderRoot.querySelector("[data-split-pick]");
+      if (section !== null) await focusFirstInvalid(section);
+      return;
+    }
+    const stop = this.#takeSplitStop();
+    if (stop !== null) {
+      this.splitMessage = stop;
+      return;
+    }
+    if (!anyway && nothingStays(sources, this.splitPicks)) {
+      this.splitAsking = true;
+      await this.#focusOnceDrawn("[data-split-move-guests]");
+      return;
+    }
+    const prompt = this.#splitPrompt;
+    const selection = toSelection(sources, this.splitPicks);
+    this.#retireActions();
+    this.#dispatch("split-table", {
+      tableId,
+      selection,
+      guestCounts: { staying: staying.guestCount, leaving: leaving.guestCount },
+      ...(prompt === undefined ? {} : { prompt }),
+      partyRevision: this.#splitAnswered!.partyRevision,
+    } satisfies SplitTableDetail);
+    this.#closeActions();
   }
 
   #pickBill(bill: PartyBill): void {
@@ -5074,6 +5859,11 @@ export class TillTableOrderScreen extends LitElement {
 
   #actionBack(event: Event): void {
     if (!this.#actionControlCurrent(event)) return;
+    if (this.splitAsking) {
+      this.#leaveSplitQuestion();
+      void this.#focusOnceDrawn("[data-split-confirm]");
+      return;
+    }
     if (!this.#actionScope) {
       this.#actionBackNow();
       return;
@@ -5107,9 +5897,11 @@ export class TillTableOrderScreen extends LitElement {
       case "split-table":
         this.#closeActions();
         break;
-      case "split-table-bill":
+      case "split-table-pick":
         this.splitTableId = null;
+        this.#resetSplitPick();
         this.actionStep = "split-table";
+        this.#moveActionBaseline();
         break;
     }
   }
@@ -5149,8 +5941,9 @@ export class TillTableOrderScreen extends LitElement {
       case "move-dishes":
         return this.#moveDishesStep();
       case "split-table":
-      case "split-table-bill":
         return this.#splitTableStep();
+      case "split-table-pick":
+        return this.#splitPickStep();
     }
   }
 
@@ -5507,6 +6300,7 @@ export class TillTableOrderScreen extends LitElement {
         .rows=${rows}
         .picks=${this.moveDishesPicks}
         .nameOf=${(line: TabLine) => this.#nameForLine(line)}
+        .markOf=${(line: TabLine) => this.#waitingMark(line)}
         .money=${(amount: string) => this.#money(amount)}
         @portion-picks=${(event: CustomEvent<{ picks: string[] }>) => {
           event.stopPropagation();
