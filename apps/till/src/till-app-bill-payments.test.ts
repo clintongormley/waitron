@@ -5318,6 +5318,67 @@ describe("till-app: a bill payment on the card reader", () => {
     return el;
   }
 
+  it.each([{ code: "server.internal", status: 502 }, { status: 500 }, {}])(
+    "A1399: keeps the same complete card confirmation after an uncertain server answer %j",
+    async (error) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce(error)
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        )
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "80.00", outstanding: "40.00" }),
+        );
+      const el = await takeOnReader(takeBillPayment);
+
+      expect(dialog(el)!.confirmationLocked).toBe(true);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+      expect(inDialog(el, "[data-pay-confirm]")!.textContent).toContain(t("bill_pay.recheck"));
+      expect(sent()).toHaveLength(1);
+
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(2);
+      expect(sent()[1]).toEqual(sent()[0]);
+      expect(dialog(el)!.confirmationLocked).toBe(true);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(3);
+      expect(sent()[2]).toEqual(sent()[0]);
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+
+      await type(el, "amount", "40");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(4);
+      expect(sent()[3]!.submissionId).not.toBe(sent()[0]!.submissionId);
+      expect(sent()[3]!.amount).toBe(sent()[0]!.amount);
+    },
+  );
+
+  it("A1399: checks a cash payment under its original id after a server error", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal", status: 502 })
+      .mockResolvedValueOnce(takenOf({}, { received: "40.00", outstanding: "80.00" }));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "40");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+
+    await press(el, "[data-pay-confirm]");
+    expect(sent()).toHaveLength(2);
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
   it("A532 leaves cash payment waits subject to the ordinary idle sign-out", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 30 }),
@@ -5482,6 +5543,34 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "A1399: a replay recorded as failed does not claim the bank declined it in %s",
+    async (locale) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockResolvedValueOnce(onReader("failed", "failed", {}))
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        );
+      const el = await takeOnReader(takeBillPayment);
+      try {
+        setLocale(locale);
+        await flush(el);
+
+        expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.payment_failed"));
+        expect(inDialog(el, "[data-pay-taken]")).toBeNull();
+        expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
+
+        await press(el, "[data-pay-confirm]");
+        expect(sent()).toHaveLength(2);
+        expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
+        expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+      } finally {
+        setLocale("en");
+      }
+    },
+  );
+
   // The server refuses a reader it cannot reach before it looks the submission id up, so the
   // refusal says nothing of whether the card that got no answer was charged.
   it("sends a card that got no answer under the same submission id after the reader is refused", async () => {
@@ -5493,11 +5582,12 @@ describe("till-app: a bill payment on the card reader", () => {
 
     takeBillPayment.mockRejectedValueOnce({ code: "reader.provider_disconnected", status: 503 });
     await press(el, "[data-pay-confirm]");
-    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+    expect(inDialog(el, "[data-pay-confirm]")!.textContent).toContain(t("bill_pay.recheck"));
     takeBillPayment.mockResolvedValueOnce(
       onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
     );
-    await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
 
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
@@ -5982,17 +6072,15 @@ describe("till-app: a bill payment on the card reader", () => {
       await takenAsANewPayment(el, takeBillPayment);
     });
 
-    it("a resend under the id a kept refusal answered, refused reader.not_held, says the server could not check it", async () => {
+    it("an uncertain server answer checked again, then refused reader.not_held, says the server could not check it", async () => {
       const takeBillPayment = vi
         .fn()
         .mockRejectedValueOnce({ code: "payment.provider_credential_rejected", status: 502 })
         .mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
       const el = await takeOnReader(takeBillPayment);
-      expect(inDialog(el, "wt-form-actions")!.error).toBe(
-        codeMessage("payment.provider_credential_rejected"),
-      );
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+      expect(dialog(el)!.confirmationLocked).toBe(true);
 
-      await press(el, "[data-pay-continue]");
       await press(el, "[data-pay-confirm]");
       expect(sent()).toHaveLength(2);
       expect(sent()[1]!.submissionId).toBe(sent()[0]!.submissionId);

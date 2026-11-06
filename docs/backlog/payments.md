@@ -334,19 +334,6 @@ payment is still on the bill. Move dishes… refuses `bill.refund_in_progress` o
 (`apps/server/src/move-dishes.test.ts`). Next: one route case each during a pending refund, then fix the
 design's wording, or the code if a move can change what a bill charges (ask the owner first).
 
-## The next identical bill payment can be answered with one that got a server error
-
-(narrowed
-by A796). A payment that got no answer, or is still being sent, now holds the bill on its locked
-confirmation (A773-1, #1897, and A796). What is left: a first send answered with a 5xx or an
-error with no code keeps its submission without holding the bill (`unansweredAfter`,
-`apps/till/src/state/bill-payment.ts`), so if the server did record it, the next
-identical payment on that bill from this phone reuses its id (`submissionFor`, same
-file) and the server replays the first (`beginBillPayment`, `apps/server/src/bill-payments.ts`):
-the second guest's payment is never recorded. A796's plan ran the scratch case (a contribution
-refused `server.internal` with status 502 left the dialog unlocked) and chose not to hold the
-bill, because a server that kept failing would hold it for good (plan, decision 1, B5).
-
 ## Check first: on a venue with no fiscal module, replaying a settled bill may throw
 
 (read, not
@@ -510,19 +497,6 @@ and shows a clear message.
   while the card's charge stays on no sale. Measured before A526 through an unpaid departure
   that A526 now refuses; no other way to reach it is known. Left open by A526.
   [Detail](payments.md#finalizecaptures-duplicate-fallback-can-show-a-receipt-for-an-order-that-is-not-settled)
-
-## Bundle A1399: What happens when a bill payment is sent again under one id
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The next identical bill payment can be answered with one that got a server error** (narrowed
-  by A796). What is left: a first send answered with a 5xx or an error with no code keeps its
-  submission without holding the bill, so the second guest's identical payment may be replayed.
-  [Detail](payments.md#the-next-identical-bill-payment-can-be-answered-with-one-that-got-a-server-error)
-- **If the till never receives a bill reader payment's `device.profile_changed` answer**, its
-  automatic resend under the same id gets the failed payment back and tells staff the card was
-  declined: no card was charged, but the reason shown is wrong; the next tap starts a fresh
-  payment (read, not run). Left open by W97 (#1311).
 
 ## Bundle: Stripe adapter upkeep
 
