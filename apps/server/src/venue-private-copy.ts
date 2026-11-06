@@ -22,7 +22,10 @@ export async function copyVenueFiles(
         constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
       );
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      const { code } = error as NodeJS.ErrnoException;
+      if (code === "ENOENT") return false;
+      // O_NOFOLLOW refuses a link with ELOOP.
+      if (code === "ELOOP") refuse();
       throw error;
     }
     try {
