@@ -61,9 +61,8 @@ clock to within a minute. The advisers are told this is a choice.
 - A start with no internet, and a latest record in the future beyond the margin, needs the time
   confirmed before trading.
 
-Being unable to reach AEAT never stops trading. A box whose time service says it is in sync cannot set
-its own clock, and a disagreement there needs an administrator to confirm. The margin is still to be
-chosen.
+Being unable to reach AEAT never stops trading. The margin is one minute. A box whose time service says it is in
+sync raises an alert rather than stopping when AEAT disagrees.
 
 **3. Tips are held (owner, 2026-11-06).** T9 and T10 below stay out of what is sent until A793 is
 revived.

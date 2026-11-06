@@ -3281,8 +3281,8 @@ record fields (case 2.b); such a correction came back `Correcto` from AEAT's tes
 2026-09-27. What is open is which case each refusal we expect falls under. The two most likely,
 a wrong registered name and an issue date in the future, are both printed invoice content (RD
 1619/2012 art. 7.1.b and 7.1.d), so they look like case 2.a. A credit note here does not have Q35's
-problem: AEAT holds nothing under the refused invoice's key. Whether AEAT accepts a credit note
-naming an invoice it never received remains a live-probe question. The original plan excluded
+problem: AEAT holds nothing under the refused invoice's key. AEAT's test service accepted a credit note
+naming a refused invoice on 2026-10-05 (verifactu run 37286368370). The original plan excluded
 the correction-record builder; the revised scope must explicitly decide how operators resolve
 these rejections. Advancing the queue does not resolve the rejected invoice.
 
