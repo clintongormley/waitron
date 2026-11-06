@@ -415,7 +415,8 @@ export class DraftSync {
       }
     }
     this.#candidates.delete(this.#candidateKey);
-    if (reviewedLines === null && this.#recoveryRequired) this.#show(this.#authoritative);
+    if (reviewedLines === null && (this.#recoveryRequired || this.#unsaved))
+      this.#show(this.#authoritative);
     this.#lockAuthority();
     if (reviewedLines !== null) {
       this.#quietly(() => this.store.loadFrom(this.store.id, structuredClone([...reviewedLines])));

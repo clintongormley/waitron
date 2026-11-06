@@ -687,6 +687,31 @@ describe("DraftSync: a refused save", () => {
     draft.drop();
   });
 
+  it("discarding kept lines before the next read puts the server's lines back at once", async () => {
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({ code: "group.not_found", status: 409 });
+    draft.store.addProduct(beer, "1");
+    expect(await draft.flush()).toEqual({ refused: "group.not_found" });
+    seed("p2", steak);
+    expect(await draft.correctPlaces(new Map(), new AbortController().signal, () => true)).toEqual({
+      refused: "draft.out_of_date",
+    });
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+
+    draft.resolveCandidate(null);
+
+    expect({
+      screen: rows(draft),
+      waiting: draft.ownEditWaiting,
+      kept: draft.candidate,
+    }).toEqual({ screen: [], waiting: false, kept: null });
+    expect(await draft.load()).toBe(true);
+    expect(draft.candidate).toBeNull();
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+  });
+
   it("discarding a candidate after failed recovery never saves its discarded lines on the next read", async () => {
     const draft = sync();
     await draft.load();
