@@ -408,13 +408,16 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       : undefined;
   return {
     async staffCertificate(hostname: string, signal?: AbortSignal): Promise<boolean> {
-      const state = await leaseState(signal);
+      const deadline = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+        : AbortSignal.timeout(8000);
+      const state = await leaseState(deadline);
       const registration = registrationOf(state);
       return refreshStaffCertificate(
         state,
         options.stateDir,
         hostname,
-        signal,
+        deadline,
         recordRefusal,
         async () => {
           const current = await read();

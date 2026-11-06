@@ -1,88 +1,48 @@
-import { createHash, randomUUID, X509Certificate } from "node:crypto";
-import { lstat, open, readFile, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createHash, createPrivateKey, randomUUID, X509Certificate } from "node:crypto";
+import { lstat, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { SavedCloudState } from "./cloud-client.js";
 import { createStaffCsr, installStaffCertificate } from "./cloud-remote.js";
 import { serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
 
-interface Request {
-  operationId: string;
-  version: 1;
-  hostname: string;
-  revision: number;
-  csr: string;
-  previousRequestId: string | null;
-  submitted?: boolean;
-  installed?: boolean;
-}
 const uuid = (v: unknown): v is string =>
   typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
-const absent = (error: unknown) =>
-  error instanceof Error && "code" in error && error.code === "ENOENT";
+const revision = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
+const digest = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
 
-async function save(path: string, request: Request): Promise<void> {
-  const temporary = path + "." + randomUUID();
-  try {
-    const file = await open(temporary, "wx", 0o600);
-    try {
-      await file.writeFile(JSON.stringify(request));
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-    await rename(temporary, path);
-    const directory = await open(dirname(path), "r");
-    try {
-      await directory.sync();
-    } finally {
-      await directory.close();
-    }
-  } finally {
-    await rm(temporary, { force: true });
-  }
+function fresh(chain: string | Buffer, key: string | Buffer, hostname: string): boolean {
+  const cert = new X509Certificate(chain),
+    from = Date.parse(cert.validFrom),
+    until = Date.parse(cert.validTo);
+  if (
+    cert.checkHost(hostname) !== hostname ||
+    !cert.checkPrivateKey(createPrivateKey(key)) ||
+    from > Date.now()
+  )
+    throw new Error();
+  return until - Date.now() > Math.min(30 * 86400000, (until - from) / 3);
 }
-
-async function load(path: string): Promise<Request | undefined> {
+async function installedFresh(stateDir: string, hostname: string): Promise<boolean> {
   try {
-    const info = await lstat(path);
-    if (!info.isFile() || info.size > 16384 || (info.mode & 0o077) !== 0) throw new Error();
-    const value: unknown = JSON.parse(await readFile(path, "utf8"));
+    const key = join(stateDir, "cloud-staff.key"),
+      chain = join(stateDir, "cloud-staff.crt");
+    const info = await lstat(key),
+      certInfo = await lstat(chain);
     if (
-      !object(value) ||
-      value.version !== 1 ||
-      !uuid(value.operationId) ||
-      typeof value.hostname !== "string" ||
-      typeof value.csr !== "string" ||
-      !Number.isSafeInteger(value.revision) ||
-      Number(value.revision) < 0 ||
-      (value.previousRequestId !== null && !uuid(value.previousRequestId)) ||
-      (value.submitted !== undefined && typeof value.submitted !== "boolean") ||
-      (value.installed !== undefined && typeof value.installed !== "boolean")
+      !info.isFile() ||
+      info.size > 8192 ||
+      (info.mode & 0o077) !== 0 ||
+      !certInfo.isFile() ||
+      certInfo.size > 16384
     )
-      throw new Error();
-    return value as unknown as Request;
-  } catch (error) {
-    if (absent(error)) return undefined;
-    throw new AppError("cloud.state_invalid", {});
-  }
-}
-
-async function needsRenewal(stateDir: string, hostname: string): Promise<boolean> {
-  try {
-    const cert = new X509Certificate(await readFile(join(stateDir, "cloud-staff.crt")));
-    const from = Date.parse(cert.validFrom),
-      until = Date.parse(cert.validTo);
-    return (
-      cert.checkHost(hostname) !== hostname ||
-      from > Date.now() ||
-      until - Date.now() <= Math.min(30 * 86400000, (until - from) / 3)
-    );
+      return false;
+    return fresh(await readFile(chain), await readFile(key), hostname);
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -94,74 +54,105 @@ export async function refreshStaffCertificate(
   onRefusal?: OnRefusal,
   isCurrent?: () => Promise<boolean>,
 ): Promise<boolean> {
-  signal?.throwIfAborted();
-  const lease = state.lifecycle?.lease,
-    revision = state.lifecycle?.view?.revision;
+  const deadline = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+    : AbortSignal.timeout(8000);
+  deadline.throwIfAborted();
   if (
     !state.view?.registration ||
     state.environment !== "test" ||
     state.lifecycle?.revoked ||
-    !lease ||
-    revision === undefined
+    !state.lifecycle?.lease ||
+    !state.lifecycle.view
   )
     throw new AppError("cloud.not_configured", {});
-  const path = join(stateDir, "staff-certificate-request.json");
-  let request = await load(path);
-  const changed = request && (request.hostname !== hostname || request.revision !== revision);
-  if (
-    request?.installed &&
-    request.hostname === hostname &&
-    !(await needsRenewal(stateDir, hostname))
-  )
-    return true;
-  if (!request || changed || request.installed) {
-    request = {
-      operationId: randomUUID(),
-      version: 1,
-      hostname,
-      revision,
-      csr: await createStaffCsr(stateDir, hostname),
-      previousRequestId: request?.operationId ?? null,
-    };
-    await save(path, request);
-  }
-  const { operationId, version, csr, previousRequestId } = request;
-  const action = request.submitted ? "staff-certificate-status" : "staff-certificate-submit";
   try {
-    const reply = await serviceExchange(
-      state,
-      action,
-      request.submitted ? randomUUID() : operationId,
-      JSON.stringify(
-        request.submitted
-          ? { version, requestId: operationId }
-          : { version, hostname, revision, csr, previousRequestId },
-      ),
-      {},
-      signal,
-      onRefusal,
-    );
-    if (isCurrent && !(await isCurrent())) throw new AppError("cloud.not_configured", {});
+    if (await installedFresh(stateDir, hostname)) return true;
+    const csr = await createStaffCsr(stateDir, hostname),
+      csrDigest = createHash("sha256").update(csr).digest("hex");
+    const exchange = async (
+      action: "staff-certificate-submit" | "staff-certificate-status",
+      body: object,
+      operationId = randomUUID(),
+    ) => {
+      deadline.throwIfAborted();
+      const reply = await serviceExchange(
+        state,
+        action,
+        operationId,
+        JSON.stringify(body),
+        {},
+        deadline,
+        onRefusal,
+      );
+      deadline.throwIfAborted();
+      if (isCurrent && !(await isCurrent())) throw new AppError("cloud.not_configured", {});
+      if (
+        reply.installationId !== state.view!.registration!.installationId ||
+        reply.hostname !== hostname
+      )
+        throw new Error();
+      return reply;
+    };
+    const discovered = await exchange("staff-certificate-status", { version: 1, requestId: null });
+    if (!revision(discovered.revision) || discovered.revision < state.lifecycle.view.revision)
+      throw new Error();
+    const current = discovered.request;
     if (
-      !object(reply) ||
-      reply.version !== 1 ||
-      reply.installationId !== state.view.registration.installationId ||
-      reply.requestId !== operationId ||
-      reply.hostname !== hostname ||
-      reply.revision !== revision ||
-      reply.csrDigest !== createHash("sha256").update(csr).digest("hex") ||
-      !["pending", "ready"].includes(String(reply.state)) ||
-      (reply.state === "ready" && typeof reply.certificate !== "string")
+      current !== null &&
+      (!object(current) ||
+        !uuid(current.requestId) ||
+        typeof current.hostname !== "string" ||
+        current.hostname.length === 0 ||
+        current.hostname.length > 253 ||
+        !revision(current.revision) ||
+        !digest(current.csrDigest))
     )
       throw new Error();
-    signal?.throwIfAborted();
-    if (reply.state === "ready") {
-      await installStaffCertificate(stateDir, hostname, reply.certificate as string);
-      request.installed = true;
+    const ready = async (reply: Record<string, unknown>, requestId: string) => {
+      if (
+        reply.requestId !== requestId ||
+        reply.revision !== discovered.revision ||
+        reply.csrDigest !== csrDigest ||
+        !["pending", "ready"].includes(String(reply.state))
+      )
+        throw new Error();
+      if (reply.state !== "ready") return false;
+      if (typeof reply.certificate !== "string" || Buffer.byteLength(reply.certificate) > 16384)
+        throw new Error();
+      if (!fresh(reply.certificate, await readFile(join(stateDir, "cloud-staff.key")), hostname))
+        return false;
+      deadline.throwIfAborted();
+      if (isCurrent && !(await isCurrent())) throw new AppError("cloud.not_configured", {});
+      await installStaffCertificate(stateDir, hostname, reply.certificate);
+      return true;
+    };
+    if (
+      object(current) &&
+      current.csrDigest === csrDigest &&
+      current.hostname === hostname &&
+      current.revision === discovered.revision
+    ) {
+      const reply = await exchange("staff-certificate-status", {
+        version: 1,
+        requestId: current.requestId,
+      });
+      if (await ready(reply, current.requestId as string)) return true;
+      if (reply.state === "pending") return false;
     }
-    request.submitted = true;
-    await save(path, request);
-    return request.installed === true;
+    const operationId = randomUUID();
+    const reply = await exchange(
+      "staff-certificate-submit",
+      {
+        version: 1,
+        hostname,
+        revision: discovered.revision,
+        csr,
+        previousRequestId: object(current) ? current.requestId : null,
+      },
+      operationId,
+    );
+    return await ready(reply, operationId);
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw new AppError("cloud.unavailable", {});

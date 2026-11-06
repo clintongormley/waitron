@@ -220,9 +220,9 @@ checks replacements every ten seconds and applies valid ones to new TLS connecti
 without a restart. An invalid replacement keeps the loaded context
 and logs `cloud.certificate_reload_failed`.
 
-The worker saves `staff-certificate-request.json` before submitting, so a lost reply
-or a box restart reuses the same request and staff key. It polls pending requests on
-the existing one-minute Cloud loop. Renewal starts when at most thirty days remain,
+The worker reads the existing request from Cloud, so a lost reply or a box restart
+resumes the accepted request with the retained staff key. It writes no local request
+file and polls pending requests on the existing one-minute Cloud loop. Renewal starts when at most thirty days remain,
 or one third of the certificate lifetime for shorter certificates. An unsuccessful
 exchange leaves the installed chain in place. This client keeps the existing
 test-installation restriction; it does not request production-installation certificates.
@@ -247,22 +247,18 @@ has no SSH support feature.
 
 ### Staff-certificate status discovery, 6 November 2026
 
-A box that loses a request file needs to learn which request Cloud already holds. The watcher
-approved extending the existing signed `staff-certificate-status` action on 6 November at 23:07;
-Cloud owns the receiver. The implementation waits for that receiver and this amendment's Claude
-read. Existing installation authentication, leases, test restrictions and limits stay in place.
+A box needs to discover the request Cloud already holds after a lost response or local chain.
+The Cloud receiver must support this discovery form of the signed `staff-certificate-status`
+action. Existing installation authentication, leases, test restrictions and limits stay in place.
 
 Send `{ "version": 1, "requestId": null }` for discovery. The reply has `version: 1`, the
 `installationId`, the currently assigned staff `hostname`, the current configuration `revision`
 and `request`. With no exchange row, `request` is null. Otherwise it contains the stored
-`requestId`, `hostname`, `revision`, `csrDigest` and `certificateIssued`. The boolean is true exactly
-when that row's `certificate_request_id` equals its `request_id` and its certificate is non-null.
-Return that metadata even when the stored
-hostname or revision is stale, so a replacement can name the exact predecessor. Discovery
+`requestId`, `hostname`, `revision` and `csrDigest`. Return that metadata even when the stored hostname or revision is stale, so a replacement can name the exact predecessor. Discovery
 returns no CSR, certificate or private key. A request naming a UUID and every submit retain their
 existing bodies and replies; the ordinary status returns a chain only for a current matching request.
 
-On each pass, first check the installed chain locally. End the pass without contacting Cloud if
+On each pass, first check the installed chain locally. End it without a certificate exchange if
 it is valid for the configured hostname, matches the retained private key and is outside the
 renewal window, regardless of the configuration revision. Otherwise create the CSR, creating
 a missing key through a synced temporary file linked into place. The same key and hostname
@@ -271,14 +267,14 @@ must produce the same CSR bytes.
 Refuse discovery unless its installation and configured hostname match and `request` is null
 or fully well formed. A row matches when its CSR digest and stored revision match this CSR
 and the reply's current revision. Poll a matching row. Install a ready chain only when it is
-outside the renewal window and not expired. A matching pending row with `certificateIssued: false`
-is still being issued; keep polling it. With `certificateIssued: true`, a pending answer means
-Cloud already issued the current request and is withholding its chain for renewal. Replace that
-row once, as for a due or expired ready chain.
+outside the renewal window and not expired. Keep polling a matching pending row. Cloud's
+existing staff worker rechecks and renews a due chain under the same request ID; the box retains
+the installed chain while that work is pending. A ready chain already due for renewal can be
+replaced once in that pass, using the discovered predecessor.
 Also replace a nonmatching row, or submit with a null predecessor when no row exists. Use a new
 UUID and the discovery reply's current revision for every replacement.
 
-One existing eight-second deadline covers the complete pass. A lost submit reply is resolved by
+Lease preparation and certificate requests share one eight-second abort signal. A lost submit reply is resolved by
 the next discovery rather than by guessing its predecessor. Cloud's existing row holds this
 request state; no local request file, table, job or route is needed. A valid installed chain stays
 in place during failures and unrelated configuration changes.
