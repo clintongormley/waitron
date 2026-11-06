@@ -764,11 +764,7 @@ describe("made-here route wiring", () => {
     );
     expect(recalled.json.code).toBe("ticket.already_started");
   });
-  /**
-   * Sends `quantity` Cañas from the first till's device as one stored line of that count; answers
-   * status 200.
-   */
-  async function sendCañasGrouped(party: { partyId: string; tabId: string }, quantity: number) {
+  async function sendGroupedDrinks(party: { partyId: string; tabId: string }, quantity: number) {
     const deviceId = venue.cookie.match(/waitron_device=([0-9a-f-]+)\./)![1]!;
     await inTx(venue, (tx) =>
       placeGroupedRound(
@@ -800,7 +796,7 @@ describe("made-here route wiring", () => {
                 },
               ],
             })
-          : await sendCañasGrouped(party, quantity);
+          : await sendGroupedDrinks(party, quantity);
       expect(sent.status).toBe(200);
       const [item] = await inTx(venue, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
@@ -910,7 +906,7 @@ describe("made-here route wiring", () => {
   });
   it("keeps the made-here mark when splitting a drink onto another bill", async () => {
     const party = await seatedWith(venue);
-    const sent = await sendCañasGrouped(party, 2);
+    const sent = await sendGroupedDrinks(party, 2);
     expect(sent.status).toBe(200);
     const [item] = await inTx(venue, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),

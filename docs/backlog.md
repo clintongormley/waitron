@@ -6936,7 +6936,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot and counter-payment fixtures; shared-fixture consumers in the
   server split-bill and move-bill suites; bill-editing and other order fixtures;
-  the till's moved-dish suite; shared helper consumers and file names.
+  the till's moved-dish suite; accented bindings in the portion-selection, counter-portion-rows
+  and till-ticket-view tests; shared helper consumers and file names.
   Keep accented search fixtures unchanged.
   Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
