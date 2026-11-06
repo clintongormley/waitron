@@ -327,7 +327,6 @@ export class DraftSync {
   #muted = false;
   #dropped = false;
   #commanding = false;
-  #commandsStarted = 0;
   #commandAbort?: AbortController;
   #recoveryRequired = false;
   #correctingPlaces = false;
@@ -577,7 +576,6 @@ export class DraftSync {
   }
 
   async #load(bounds?: DraftReadBounds, stale?: () => boolean): Promise<boolean> {
-    const command = this.#commandsStarted;
     const read = ++this.#reads;
     this.#cancelTimer();
     const stops = [this.#commandAbort?.signal, bounds?.stop].filter((stop) => stop !== undefined);
@@ -603,7 +601,6 @@ export class DraftSync {
       this.#dropped ||
       (this.#commanding && this.#closed) ||
       read !== this.#reads ||
-      command !== this.#commandsStarted ||
       stale?.() === true
     )
       return false;
@@ -782,7 +779,6 @@ export class DraftSync {
     )
       return "failed";
     this.#commanding = true;
-    this.#commandsStarted++;
     this.#cancelTimer();
     this.store.sending = true;
     this.#wakeWaitingReads();

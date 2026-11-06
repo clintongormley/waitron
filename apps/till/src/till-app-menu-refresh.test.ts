@@ -11,6 +11,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -1206,6 +1207,29 @@ describe("a table round refused because the menu changed", () => {
         { menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" },
       ],
     ]);
+  });
+
+  it("saves the lines it took when the re-send is refused too and the menu has moved again", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, { submitDraft: vi.fn().mockRejectedValue(versionRefusal) }),
+    );
+    await toTable(el);
+    const versions = ["v2", "v3"];
+    api.listZoneOffers.mockImplementation((zoneId: string) =>
+      Promise.resolve(
+        zoneId === "zone-dining"
+          ? { ...catalogue(versions.shift() ?? "v3", V1.offers), context: DINING.context }
+          : V1,
+      ),
+    );
+    await sendLemonadeRound(el);
+    expect(api.submitDraft).toHaveBeenCalledTimes(2);
+    expect(banner(el)!.textContent).toContain(codeMessage("menu.version_changed"));
+
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+
+    const lastSave = drafts.saveDraft.mock.calls.at(-1)![1];
+    expect(lastSave.lines.map((line) => line.menuVersionId)).toEqual(["v3"]);
   });
 
   it("keeps the round and shows the dialog when a price in it changed, sending nothing more", async () => {

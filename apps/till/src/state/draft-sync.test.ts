@@ -824,29 +824,6 @@ describe("DraftSync: a refused save", () => {
     expect(rows(draft)).toEqual(["Beer ×1"]);
     expect(refused).toEqual(["party.not_open"]);
   });
-
-  it("accepts a newer save answer after a read with the same observation", async () => {
-    let answer!: () => void;
-    const draft = sync();
-    await draft.load();
-    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
-      await new Promise<void>((resolve) => (answer = resolve));
-      return server.snapshot(server.save(partyId, save));
-    });
-    draft.store.addProduct(beer, "1");
-    const saving = draft.flush();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(server.saveDraft).toHaveBeenCalledOnce();
-    const reading = draft.load();
-
-    answer();
-    await saving;
-    await reading;
-
-    expect(draft.draftId).toBe(server.drafts[0]!.id);
-    expect(draft.candidate).toBeNull();
-    expect(rows(draft)).toEqual(["Beer ×1"]);
-  });
 });
 
 describe("DraftSync: a save or read that does not come back", () => {
@@ -2276,7 +2253,7 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
       await recordsTheTakeOver(draft, elsewhere.id);
     });
 
-    it("when a command starts during the read and stops at its save", async () => {
+    it("when a command stops at its save during the read, which goes round again and counts", async () => {
       draft.store.addProduct(beer, "1");
       const answerRead = holdRead();
       const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
@@ -2309,7 +2286,7 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
       await recordsTheTakeOver(draft, elsewhere.id);
     });
 
-    it("when a save on the bill on screen makes the read older than the bill", async () => {
+    it("when a save on the bill on screen starts during the read, which goes round again and counts", async () => {
       const older = await server.listDrafts("v1");
       const answerRead = holdRead();
       const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
