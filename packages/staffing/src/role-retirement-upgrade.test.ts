@@ -17,6 +17,7 @@ import {
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const suite = useVenueDb({
   migrations: [
@@ -80,7 +81,7 @@ it("keeps assignments, both swap legs and templates across the free-text role dr
       .foreign_keys,
   ).toBe(1);
   const migration = readFileSync(
-    join(WORKFORCE_MIGRATIONS.migrationsFolder, "0009_real_lockheed.sql"),
+    join(historicalSet("workforce").migrationsFolder, "0009_real_lockheed.sql"),
     "utf8",
   );
   for (const statement of migration.split("--> statement-breakpoint"))

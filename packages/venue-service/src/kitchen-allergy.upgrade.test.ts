@@ -4,9 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
-  CORE_MIGRATIONS,
   installChangeFeed,
   kitchenStations,
   parties,
@@ -22,7 +20,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations } from "@waitron/migrations";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { savePartyAllergy, setAllergyLineTicks } from "./party-allergy.js";
 
@@ -35,12 +33,14 @@ function removeMigrations(folder: string, entries: readonly { tag: string }[]): 
       created.add(name!);
     rmSync(file);
   }
-  return (VENUE_SERVICE_MIGRATIONS.appendOnlyTables ?? []).filter((name) => !created.has(name));
+  return (historicalSet("venue-service").appendOnlyTables ?? []).filter(
+    (name) => !created.has(name),
+  );
 }
 
 const predecessor = mkdtempSync(join(tmpdir(), "kitchen-allergy-predecessor-"));
 afterAll(() => rmSync(predecessor, { recursive: true, force: true }));
-cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, predecessor, { recursive: true });
+cpSync(historicalSet("venue-service").migrationsFolder, predecessor, { recursive: true });
 const journalPath = join(predecessor, "meta", "_journal.json");
 const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
 const introduced = journal.entries.findIndex(({ tag }) =>
@@ -51,15 +51,15 @@ const introduced = journal.entries.findIndex(({ tag }) =>
 const predecessorAppendOnly =
   introduced >= 0
     ? removeMigrations(predecessor, journal.entries.splice(introduced))
-    : (VENUE_SERVICE_MIGRATIONS.appendOnlyTables ?? []);
+    : (historicalSet("venue-service").appendOnlyTables ?? []);
 if (introduced >= 0) writeFileSync(journalPath, JSON.stringify(journal));
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
+    historicalSet("core"),
+    historicalSet("catalogue"),
     {
-      ...VENUE_SERVICE_MIGRATIONS,
+      ...historicalSet("venue-service"),
       migrationsFolder: predecessor,
       appendOnlyTables: predecessorAppendOnly,
     },
@@ -223,7 +223,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   expect(inbound).toEqual([]);
   expect(suite.db.all(sql`pragma foreign_keys`)).toEqual([{ foreign_keys: 1 }]);
   const [{ file }] = suite.db.all<{ file: string }>(sql`pragma database_list`);
-  await applyMigrations(dirname(file!), [VENUE_SERVICE_MIGRATIONS]);
+  await applyMigrations(dirname(file!), [historicalSet("venue-service")]);
   expect(suite.db.all(sql`pragma foreign_keys`)).toEqual([{ foreign_keys: 1 }]);
   expect(
     suite.db

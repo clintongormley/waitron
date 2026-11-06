@@ -5,14 +5,15 @@ import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { captureError, triggerRaised, withTransaction } from "@waitron/db";
 import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { seedPreReplacementEnvio } from "../test/pre-replacement-fixture.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 const PERSON = "33333333-3333-4333-8333-333333333333";
-const FISCAL_SET = TEST_MIGRATIONS.find(
+const HISTORY = historicalSets();
+const FISCAL_SET = HISTORY.find(
   (set) => set.migrationsTable === FISCAL_MIGRATIONS.migrationsTable,
 )!;
 
@@ -21,7 +22,7 @@ const suite = useVenueDb({
   migrations: [],
   setup: async (db) => {
     directory = await mkdtemp(join(tmpdir(), "waitron-clock-confirmations-upgrade-"));
-    await cp(FISCAL_MIGRATIONS.migrationsFolder, directory, { recursive: true });
+    await cp(FISCAL_SET.migrationsFolder, directory, { recursive: true });
     const journalPath = join(directory, "meta/_journal.json");
     const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
       entries: { tag: string }[];
@@ -30,7 +31,7 @@ const suite = useVenueDb({
       (entry) => entry.tag < "0012_clock_confirmations_staff",
     );
     await writeFile(journalPath, JSON.stringify(journal));
-    for (const set of TEST_MIGRATIONS) {
+    for (const set of HISTORY) {
       await applyMigrationSet(
         db,
         set === FISCAL_SET

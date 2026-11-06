@@ -5,7 +5,10 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, expect, it } from "vitest";
 import { captureError, triggerRaised, withTransaction } from "@waitron/db";
 import { applyMigrationSet, migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { TEST_MIGRATIONS } from "../test/migrations.js";
+import {
+  historicalSet,
+  historicalSets,
+} from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { seedPreReplacementEnvio } from "../test/pre-replacement-fixture.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
@@ -17,7 +20,7 @@ const suite = useVenueDb({
   migrations: [],
   setup: async (db) => {
     directory = await mkdtemp(join(tmpdir(), "waitron-record-replacement-upgrade-"));
-    await cp(FISCAL_MIGRATIONS.migrationsFolder, directory, { recursive: true });
+    await cp(historicalSet("fiscal-verifactu").migrationsFolder, directory, { recursive: true });
     const journalPath = join(directory, "meta/_journal.json");
     const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
       entries: { tag: string }[];
@@ -26,7 +29,7 @@ const suite = useVenueDb({
       (entry) => entry.tag < "0014_w41s8_record_replacements",
     );
     await writeFile(journalPath, JSON.stringify(journal));
-    for (const set of TEST_MIGRATIONS) {
+    for (const set of historicalSets()) {
       await applyMigrationSet(
         db,
         set.migrationsTable === FISCAL_MIGRATIONS.migrationsTable
@@ -83,7 +86,7 @@ it("adds an empty replacement link while preserving every populated row and fisc
     expect(before[name]).toHaveLength(1);
   }
 
-  await applyMigrationSet(suite.db, FISCAL_MIGRATIONS);
+  await applyMigrationSet(suite.db, historicalSet("fiscal-verifactu"));
   const expected = {
     ...before,
     fiscal_lookup_conflicts: [],

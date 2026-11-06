@@ -6,11 +6,11 @@ import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { parties, runMigrations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { validateAllergens } from "@waitron/catalogue";
 
-const options = migrationOptionsFor(manifestSets(), null);
-const core = options.find((set) => set.migrationsFolder.endsWith("/db/drizzle"))!;
+const options = historicalSets();
+const core = options.find((set) => set.name === "core")!;
 const journal = JSON.parse(
   readFileSync(join(core.migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as { entries: { tag: string }[] };

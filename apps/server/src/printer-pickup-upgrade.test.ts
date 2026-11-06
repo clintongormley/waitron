@@ -7,14 +7,14 @@ import { eq, sql } from "drizzle-orm";
 import { installChangeFeed, printers, runMigrations, venueLocationId } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import {
   beforeMissingCoreTables,
   predecessorAppendOnly,
 } from "./testing/predecessor-append-only.js";
 
-const options = migrationOptionsFor(manifestSets(), null);
-const core = options.find((set) => set.migrationsFolder.endsWith("/db/drizzle"))!;
+const options = historicalSets();
+const core = options.find((set) => set.name === "core")!;
 const journal = JSON.parse(
   readFileSync(join(core.migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as {

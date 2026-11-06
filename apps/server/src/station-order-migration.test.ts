@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
-  CORE_MIGRATIONS,
   installChangeFeed,
   venueLocationId,
   stationPrinters,
@@ -14,12 +13,11 @@ import {
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
+import { applyMigrations, type VenueMigrationOptions } from "@waitron/migrations";
 import {
-  applyMigrations,
-  manifestSets,
-  migrationOptionsFor,
-  type VenueMigrationOptions,
-} from "@waitron/migrations";
+  historicalSet,
+  historicalSets,
+} from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { createPrinter } from "@waitron/printing";
 import { shifts } from "@waitron/workforce";
 import { ALL_MODULES } from "./modules.js";
@@ -32,35 +30,35 @@ const readJournal = (folder: string) =>
   JSON.parse(readFileSync(join(folder, "meta/_journal.json"), "utf8")) as Journal;
 const scratch = mkdtempSync(join(tmpdir(), "waitron-station-order-prefix-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
-const retirement = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+const retirement = readJournal(historicalSet("core").migrationsFolder).entries.find(({ tag }) =>
   tag.endsWith("_retire_station_order"),
 );
 if (retirement === undefined) throw new Error("the station-order retirement is missing");
-const printing = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+const printing = readJournal(historicalSet("core").migrationsFolder).entries.find(({ tag }) =>
   tag.endsWith("_station_printing_choices"),
 );
 if (printing === undefined) throw new Error("the station printing choices migration is missing");
-const bump = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+const bump = readJournal(historicalSet("core").migrationsFolder).entries.find(({ tag }) =>
   tag.endsWith("_station_bump_mode"),
 );
 if (bump === undefined) throw new Error("the station bump mode migration is missing");
-const changes = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+const changes = readJournal(historicalSet("core").migrationsFolder).entries.find(({ tag }) =>
   tag.endsWith("_station_changes_after_sending"),
 );
 if (changes === undefined)
   throw new Error("the station changes after sending migration is missing");
-const readyWarning = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+const readyWarning = readJournal(historicalSet("core").migrationsFolder).entries.find(({ tag }) =>
   tag.endsWith("_station_ready_warning"),
 );
 if (readyWarning === undefined) throw new Error("the station ready warning migration is missing");
-const requested = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+const requested = readJournal(historicalSet("core").migrationsFolder).entries.find(({ tag }) =>
   tag.endsWith("_requested_release"),
 );
 if (requested === undefined) throw new Error("the requested release migration is missing");
 
 // Every set cut at the same moment, so no set references a table a later core migration made.
 function setsAsOf(name: string, keep: (when: number) => boolean): VenueMigrationOptions[] {
-  return migrationOptionsFor(manifestSets(), null).map((set, index) => {
+  return historicalSets().map((set, index) => {
     const journal = readJournal(set.migrationsFolder);
     const kept = journal.entries.filter(({ when }) => keep(when));
     if (kept.length === journal.entries.length) return set;

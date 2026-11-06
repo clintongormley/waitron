@@ -3,9 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
-  CORE_MIGRATIONS,
   installChangeFeed,
   kitchenNotices,
   kitchenStations,
@@ -17,7 +15,7 @@ import {
 } from "@waitron/db";
 import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { readKitchenNotes, writeKitchenNote } from "./order-kitchen-notes.js";
 
@@ -30,12 +28,14 @@ function removeMigrations(folder: string, entries: readonly { tag: string }[]): 
       created.add(name!);
     rmSync(file);
   }
-  return (VENUE_SERVICE_MIGRATIONS.appendOnlyTables ?? []).filter((name) => !created.has(name));
+  return (historicalSet("venue-service").appendOnlyTables ?? []).filter(
+    (name) => !created.has(name),
+  );
 }
 
 const predecessor = mkdtempSync(join(tmpdir(), "kitchen-note-predecessor-"));
 afterAll(() => rmSync(predecessor, { recursive: true, force: true }));
-cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, predecessor, { recursive: true });
+cpSync(historicalSet("venue-service").migrationsFolder, predecessor, { recursive: true });
 const journalPath = join(predecessor, "meta", "_journal.json");
 const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
 const introduced = journal.entries.findIndex(({ tag }) =>
@@ -49,7 +49,7 @@ writeFileSync(journalPath, JSON.stringify(journal));
 // (`installChangeFeed`, apps/server/src/boot.ts).
 const upgraded = mkdtempSync(join(tmpdir(), "kitchen-note-upgraded-"));
 afterAll(() => rmSync(upgraded, { recursive: true, force: true }));
-cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, upgraded, { recursive: true });
+cpSync(historicalSet("venue-service").migrationsFolder, upgraded, { recursive: true });
 const upgradedJournalPath = join(upgraded, "meta", "_journal.json");
 const upgradedJournal = JSON.parse(readFileSync(upgradedJournalPath, "utf8")) as {
   entries: { tag: string }[];
@@ -68,10 +68,10 @@ writeFileSync(upgradedJournalPath, JSON.stringify(upgradedJournal));
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
+    historicalSet("core"),
+    historicalSet("catalogue"),
     {
-      ...VENUE_SERVICE_MIGRATIONS,
+      ...historicalSet("venue-service"),
       migrationsFolder: predecessor,
       appendOnlyTables: predecessorAppendOnly,
     },
@@ -131,7 +131,7 @@ it("adds order instructions to a populated predecessor without changing its dish
   ).not.toContain("order_note_change");
 
   await applyMigrationSet(suite.db, {
-    ...VENUE_SERVICE_MIGRATIONS,
+    ...historicalSet("venue-service"),
     migrationsFolder: upgraded,
     appendOnlyTables: upgradedAppendOnly,
   });

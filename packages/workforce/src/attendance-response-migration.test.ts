@@ -11,6 +11,7 @@ import { computeEntryHash, verifyChain } from "./chain-hash.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { attendanceMail, attendanceQuestions } from "./schema/attendance.js";
 
 const suite = useVenueDb({
@@ -146,13 +147,13 @@ it("accepts a manager command with no question and keeps the exact command id un
 const previousFolder = mkdtempSync(join(tmpdir(), "a10-4-before-response-"));
 mkdirSync(join(previousFolder, "meta"));
 const journal = JSON.parse(
-  readFileSync(join(WORKFORCE_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
+  readFileSync(join(historicalSet("workforce").migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as { entries: { tag: string }[] };
 journal.entries = journal.entries.slice(0, 8);
 writeFileSync(join(previousFolder, "meta/_journal.json"), JSON.stringify(journal));
 for (const { tag } of journal.entries)
   copyFileSync(
-    join(WORKFORCE_MIGRATIONS.migrationsFolder, `${tag}.sql`),
+    join(historicalSet("workforce").migrationsFolder, `${tag}.sql`),
     join(previousFolder, `${tag}.sql`),
   );
 afterAll(() => rmSync(previousFolder, { recursive: true, force: true }));
@@ -161,13 +162,13 @@ afterAll(() => rmSync(previousFolder, { recursive: true, force: true }));
 const through0011Folder = mkdtempSync(join(tmpdir(), "a10-4-through-0011-"));
 mkdirSync(join(through0011Folder, "meta"));
 const through0011Journal = JSON.parse(
-  readFileSync(join(WORKFORCE_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
+  readFileSync(join(historicalSet("workforce").migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as { entries: { tag: string }[] };
 through0011Journal.entries = through0011Journal.entries.slice(0, 12);
 writeFileSync(join(through0011Folder, "meta/_journal.json"), JSON.stringify(through0011Journal));
 for (const { tag } of through0011Journal.entries)
   copyFileSync(
-    join(WORKFORCE_MIGRATIONS.migrationsFolder, `${tag}.sql`),
+    join(historicalSet("workforce").migrationsFolder, `${tag}.sql`),
     join(through0011Folder, `${tag}.sql`),
   );
 afterAll(() => rmSync(through0011Folder, { recursive: true, force: true }));
@@ -176,9 +177,9 @@ describe("populated A10-3 response-table upgrade", () => {
   const old = useVenueDb({
     resetPerTest: false,
     migrations: [
-      CORE_MIGRATIONS,
-      IDENTITY_MIGRATIONS,
-      { ...WORKFORCE_MIGRATIONS, migrationsFolder: previousFolder },
+      historicalSet("core"),
+      historicalSet("identity"),
+      { ...historicalSet("workforce"), migrationsFolder: previousFolder },
     ],
   });
   it("adds only the empty receipt table and retains legal rows, heads, questions and attempted mail byte for byte", async () => {
@@ -272,7 +273,7 @@ describe("populated A10-3 response-table upgrade", () => {
         )
         .rows.map((r) => r.name),
     };
-    await runMigrations(db, { ...WORKFORCE_MIGRATIONS, migrationsFolder: through0011Folder });
+    await runMigrations(db, { ...historicalSet("workforce"), migrationsFolder: through0011Folder });
     expect(
       JSON.stringify(db.execute(sql`select * from time_entries order by sequence_no`).rows),
     ).toBe(before.entries);

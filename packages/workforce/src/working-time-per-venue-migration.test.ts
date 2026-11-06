@@ -4,38 +4,41 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, expect, it } from "vitest";
-import { CORE_MIGRATIONS, newId, openVenueDatabase, type Database } from "@waitron/db";
+import { newId, openVenueDatabase, type Database } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { applyMigrations } from "@waitron/migrations";
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { appendToChain, readChain } from "./chain.js";
 import { computeEntryHash, verifyChain } from "./chain-hash.js";
-import { WORKFORCE_MIGRATIONS } from "./migrations.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { attendanceMail, attendanceQuestions } from "./schema/attendance.js";
 
 const appendOnlyTables = ["time_entries", "pay_period_closures"];
 const previousFolder = mkdtempSync(join(tmpdir(), "a1268-workforce-before-"));
 mkdirSync(join(previousFolder, "meta"));
 const journal = JSON.parse(
-  readFileSync(join(WORKFORCE_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
+  readFileSync(join(historicalSet("workforce").migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as { entries: { tag: string }[] };
 journal.entries = journal.entries.slice(0, 12);
 writeFileSync(join(previousFolder, "meta/_journal.json"), JSON.stringify(journal));
 for (const { tag } of journal.entries)
   copyFileSync(
-    join(WORKFORCE_MIGRATIONS.migrationsFolder, `${tag}.sql`),
+    join(historicalSet("workforce").migrationsFolder, `${tag}.sql`),
     join(previousFolder, `${tag}.sql`),
   );
 afterAll(() => rmSync(previousFolder, { recursive: true, force: true }));
 
 const before = [
-  CORE_MIGRATIONS,
-  IDENTITY_MIGRATIONS,
-  { ...WORKFORCE_MIGRATIONS, migrationsFolder: previousFolder, appendOnlyTables },
+  historicalSet("core"),
+  historicalSet("identity"),
+  { ...historicalSet("workforce"), migrationsFolder: previousFolder, appendOnlyTables },
 ];
-const after = [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, { ...WORKFORCE_MIGRATIONS, appendOnlyTables }];
+const after = [
+  historicalSet("core"),
+  historicalSet("identity"),
+  { ...historicalSet("workforce"), appendOnlyTables },
+];
 
 async function withVenue(body: (directory: string) => Promise<void>) {
   const directory = await mkdtemp(join(tmpdir(), "a1268-venue-"));
