@@ -1378,18 +1378,19 @@ export class TillFloorScreen extends LitElement {
     this.requestUpdate();
   }
 
-  /** The room's revision as this screen last saw it: its read, unless an answer, its own or the
-   * app's, came after that read started; the later answer of the two. */
+  /** The room's revision as this screen last saw it: the highest of its read and each answer, its
+   * own or the app's, that came after that read started. A room's revision only rises within one
+   * venue database, so of a read and an answer that overlapped, the higher is the later; an answer
+   * that came before the read started is left out, so a lower revision a read brings still counts. */
   #revision(zoneId: string | null): number | null {
-    const own = this.#carried.get(zoneId);
-    const app = this.carriedRevisions.get(zoneId);
-    const carried =
-      own === undefined || (app !== undefined && app.answeredAt > own.answeredAt) ? app : own;
-    if (carried !== undefined && this.tablesReadAt < carried.answeredAt) return carried.revision;
-    return (
+    const read =
       this.tables.find((each) => each.zoneId === zoneId && each.today !== null)?.today!
-        .zoneRevision ?? null
+        .zoneRevision ?? null;
+    const answered = [this.#carried.get(zoneId), this.carriedRevisions.get(zoneId)].flatMap(
+      (carried) =>
+        carried !== undefined && this.tablesReadAt < carried.answeredAt ? [carried.revision] : [],
     );
+    return answered.length === 0 ? read : Math.max(...answered, read ?? 0);
   }
 
   /** The room of the table a drop acted on, which `dropAction` found in `#zone.visible`. */

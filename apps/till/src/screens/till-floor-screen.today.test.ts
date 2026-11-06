@@ -550,17 +550,38 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
 
   it("the screen's own answer after the app's is the revision sent", async () => {
     const api = stubApi();
-    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 8 });
+    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 9 });
     const el = await mount(at7(), api);
     el.tablesReadAt = nextFloorMoment();
-    el.carriedRevisions = answeredByTheApp(5);
+    el.carriedRevisions = answeredByTheApp(8);
     await el.updateComplete;
     await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
     await settle(el);
-    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 5);
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 8);
     await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
-    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 8);
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
   });
+
+  it.each(["app's", "screen's own"])(
+    "the %s answer that arrives after a read holding a higher revision leaves the read's revision",
+    async (whose) => {
+      const api = stubApi();
+      let answerMove!: (answer: { zoneId: string; revision: number }) => void;
+      api.moveToday.mockReturnValueOnce(new Promise((resolve) => (answerMove = resolve)));
+      const el = await mount(at7(), api);
+      el.tablesReadAt = nextFloorMoment();
+      const own = whose !== "app's";
+      if (own) await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+      el.tablesReadAt = nextFloorMoment();
+      el.tables = [planned("t1", 2, { zoneRevision: 12 }), planned("t2", 20, { zoneRevision: 12 })];
+      await el.updateComplete;
+      if (own) answerMove({ zoneId: "z1", revision: 8 });
+      else el.carriedRevisions = answeredByTheApp(8);
+      await settle(el);
+      await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+      expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 12);
+    },
+  );
 
   it("the app's answer after the screen's own is the revision sent", async () => {
     const { api, el } = await movedTo8();
