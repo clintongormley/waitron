@@ -5095,13 +5095,37 @@ it("links each name to its screen only where the person may open it", async () =
   ]);
 });
 
-it("gives each Used by link a full-height touch target", async () => {
-  const el = await openUsedBy(() => true);
-  const links = [...q(el, "[data-test=printer-section-used-by]")!.querySelectorAll("a")];
-  expect(links).toHaveLength(5);
-  for (const link of links)
-    expect(link.getBoundingClientRect().height, link.textContent!).toBeGreaterThanOrEqual(44);
-});
+it.each([
+  [1280, 800],
+  [390, 844],
+])(
+  "gives each Used by link a full-height touch target no other link covers at %ix%i",
+  async (w, h) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(w, h);
+    try {
+      const el = await openUsedBy(() => true);
+      const links = [...q(el, "[data-test=printer-section-used-by]")!.querySelectorAll("a")];
+      expect(links).toHaveLength(5);
+      for (const link of links) {
+        link.scrollIntoView({ block: "center" });
+        const box = link.getBoundingClientRect();
+        const x = (box.left + box.right) / 2;
+        const middle = (box.top + box.bottom) / 2;
+        for (const y of [middle - 21, middle + 21]) {
+          const hit = el.shadowRoot!.elementFromPoint(x, y);
+          expect(
+            hit !== null && link.contains(hit),
+            `${link.textContent!} at ${y} hit ${hit?.textContent}`,
+          ).toBe(true);
+        }
+      }
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);
 
 it("says nothing uses a printer that no profile or station names", async () => {
   const el = await openUsedBy(
@@ -5159,7 +5183,7 @@ it.each(["listPrinterProfiles", "listPrinterStationNames"] as const)(
       stubApi({
         listPrinterProfiles: vi.fn().mockResolvedValue([]),
         listPrinterStationNames: vi.fn().mockResolvedValue([]),
-        [failing]: vi.fn().mockRejectedValue({ code: "server.unexpected" }),
+        [failing]: vi.fn().mockRejectedValue({ code: "server.internal" }),
       }),
     );
     expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();

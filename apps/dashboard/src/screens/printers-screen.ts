@@ -404,9 +404,12 @@ export class PrintersScreen extends LitElement {
         width: 100%;
         max-width: var(--wt-form-max-width);
       }
-      /* Block padding on an inline link makes its target tap-height without making its line taller. */
+      /* Tap-height as a box of its own, so a link's line grows to hold it and no link's target
+         overlaps the line above or below. */
       .used-by a {
-        padding-block: calc((var(--wt-tap-min) - 1lh) / 2);
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
         color: var(--wt-color-primary-text);
       }
       .used-by a:focus-visible {
