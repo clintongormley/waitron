@@ -51,6 +51,7 @@ describe("bill editing over the till client", () => {
   it("sends the shown bill observation and command identity in a takeover", async () => {
     const ask = {
       revision: 3,
+      personId: "person-1",
       expectedEdit: { billId: "bill-2", editorVersion: 7, draftId: "draft-2", draftRevision: 3 },
       submissionId: "takeover-1",
     };

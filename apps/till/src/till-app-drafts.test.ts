@@ -18,6 +18,7 @@ import {
   draftServer,
   floorPartyBills,
   mountWidget,
+  openedSyncs,
   partyBillOf,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -4936,6 +4937,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       alexs.id,
       {
         revision: alexs.revision,
+        personId: SAM,
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -4995,6 +4997,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       alexs.id,
       {
         revision: alexs.revision,
+        personId: SAM,
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -8292,6 +8295,34 @@ describe("recalled draft source splitting", () => {
     return { ...mounted, order, button };
   }
 
+  it("names the person the draft sync hands it on a split, not the person the screen shows", async () => {
+    const runCommand = DraftSync.prototype.runCommand;
+    const command = vi.spyOn(DraftSync.prototype, "runCommand").mockImplementation(async function <
+      T,
+    >(
+      this: DraftSync,
+      send: (state: DraftCommandState, options: { signal: AbortSignal }) => Promise<T>,
+    ): Promise<DraftCommandOutcome<T>> {
+      return (runCommand<T>).call(this, (state, options) =>
+        send({ ...state, personId: "p-sync" }, options),
+      );
+    });
+    try {
+      const split = vi.fn(async () => {
+        saveSplit();
+        return { revision: 4 };
+      });
+      const { el, button } = await opening(split);
+      await userEvent.click(button);
+      await flush(el);
+      expect(split.mock.calls).toEqual([
+        ["v1", "source-7", expect.objectContaining({ personId: "p-sync" }), expect.anything()],
+      ]);
+    } finally {
+      command.mockRestore();
+    }
+  });
+
   it("keeps the original family until the server splits and hydrates distinct recorded charges", async () => {
     let answer!: () => void;
     const split = vi.fn(async () => {
@@ -8312,6 +8343,7 @@ describe("recalled draft source splitting", () => {
       {
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
+        personId: "p1",
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -8720,6 +8752,19 @@ describe("recalled draft source splitting", () => {
       return { ...mounted, order };
     }
 
+    it("names the draft sync's person on a recall, not the person the screen shows", async () => {
+      const { syncs, restore } = openedSyncs();
+      try {
+        const { el, order } = await recallOpening();
+        Object.assign(syncs.at(-1)!, { personId: "p-sync" });
+        emit(order, "recall-lines", { lineNos: [7] });
+        await flush(el, 6);
+        expect(api.recallToDraft.mock.calls[0]![2].personId).toBe("p-sync");
+      } finally {
+        restore();
+      }
+    });
+
     it("recalls the recorded family into its bill's draft and reads it before allowing edits", async () => {
       const { el, order } = await recallOpening();
       const reads = api.listDrafts.mock.calls.length;
@@ -8734,6 +8779,7 @@ describe("recalled draft source splitting", () => {
         "source-7",
         {
           expectedPartyRevision: 3,
+          personId: "p1",
           submissionId: expect.any(String),
           expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         },
@@ -9232,6 +9278,7 @@ describe("recalled draft source splitting", () => {
             "source-7",
             {
               expectedPartyRevision: 4,
+              personId: "p1",
               submissionId: expect.any(String),
               expectedEdit: {
                 billId: "wo-4",
