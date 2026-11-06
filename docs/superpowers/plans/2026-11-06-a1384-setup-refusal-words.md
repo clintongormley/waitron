@@ -163,10 +163,13 @@ three fields, one sentence), `apps/server/src/configuration-import.test.ts:225-2
 `packages/provisioning/src/configuration-transfer.boundaries.test.ts:53, :237`.
 
 **Decision.** A new code, `setup.configuration_newer` (params `{}`), for the format version above 10
-and for an export module version above the box's. An export module version below the box's (or a
-module the export lacks) answers the existing `setup.configuration_outdated`, whose words already
-say the export is older. A module the box does not run (`modules`) and a module the box runs with no
-transfer contribution (`configuration-transfer.ts:171-172`) keep `setup.request_invalid` and the key
+and for an export module version above the box's. An export module version below the box's answers
+the existing `setup.configuration_outdated`, whose words already say the export is older. A module
+the export lacks answers `setup.request_invalid { field: "module:<name>" }`: since bd8a22a445 an
+export lists only the modules switched on at its box, so a missing one means the two boxes run
+different modules, and exporting again would give the same file. That, a module the box does not run
+(`modules`) and a module the box runs with no transfer contribution
+(`configuration-transfer.ts:171-172`) keep `setup.request_invalid` and the key
 `shell.configuration.incompatible_version`, whose words change so they blame neither side; neither
 is a version direction. Wording follows the
 existing "newer software" refusals (`shell.bucket.newer_software`, `shell.cloud.newer_software`,
@@ -567,8 +570,11 @@ tests `apps/server/src/first-setup-start-again.test.ts`,
   - Change the six existing expectations listed under "Existing tests whose expected code flips"
     (Entry 2), each to the code named there; these are behaviour changes and go in the PR
     description's "Tests changed because the behaviour changed".
-  - `configuration-transfer.boundaries.test.ts`, new case: "a module missing from the export
-    answers setup.configuration_outdated" (`modules: {}`, box 1).
+  - `configuration-transfer.boundaries.test.ts`, new case: "refuses an export that lacks a module
+    the box runs as a module mismatch, not an older export" (`modules: {}`, box 1), answering
+    `setup.request_invalid { field: "module:synthetic-transfer" }`. `boot.setup-routes.test.ts`
+    exports through the real route from a Spanish box with `bookings` switched off and expects
+    staging to answer `module:bookings`.
   - `setup-app.test.ts`: new `it.each` over en-GB and es-ES, "explains an export from newer
     software", rejecting `stageConfiguration` with `{ code: "setup.configuration_newer", params: {},
     status: 400 }` and expecting the new sentence on `live-source`, no draft import, no preview
@@ -580,9 +586,9 @@ tests `apps/server/src/first-setup-start-again.test.ts`,
   `pnpm --filter @waitron/setup exec vitest run src/setup-app.test.ts -t "configuration"`; red.
 - [ ] **Step 3: change.** Register `"setup.configuration_newer": Record<string, never>`.
   `parseConfigurationBundle`: `version > 10` throws it. `validateConfigurationBundle`: for each
-  module, `exported > target` throws `setup.configuration_newer`; `exported === undefined ||
-  exported < target` throws `setup.configuration_outdated`; `target === undefined` keeps
-  `setup.request_invalid { field: "module:<name>" }`. `setup-api.ts`'s status map gains
+  module, `target === undefined || exported === undefined` throws `setup.request_invalid { field:
+  "module:<name>" }`; `exported > target` throws `setup.configuration_newer`; `exported < target`
+  throws `setup.configuration_outdated`. `setup-api.ts`'s status map gains
   `"setup.configuration_newer": 400`. `describeConfigurationRefusal` maps it to
   `shell.configuration.newer`; drop `params.field === "version"` there. Add the EN and ES strings
   and reword `shell.configuration.incompatible_version` (words table).
@@ -774,3 +780,6 @@ The fresh-context plan review's findings, each checked against the code before t
   `setup-app-wipe.test.ts:294-304` pins the not-offered path; the page's own `setup.not_ready` is
   unreachable on this path and gets no new words.
 - **M9:** Task 2 asserts `params` explicitly per site, including `:84`, `:250`, `:275`, `:295`.
+- **After bd8a22a445:** a module missing from the export answers the module-mismatch refusal, not
+  `setup.configuration_outdated`; the export lists only switched-on modules, so "export it again"
+  was false there (Entry 2, Task 6).

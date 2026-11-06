@@ -266,7 +266,6 @@ it.each([
 it.each([
   { exported: { "synthetic-transfer": 2 }, code: "setup.configuration_newer" },
   { exported: { "synthetic-transfer": 0 }, code: "setup.configuration_outdated" },
-  { exported: {}, code: "setup.configuration_outdated" },
 ])("names which side is newer when a module's version differs: $exported", ({ exported, code }) => {
   const bundle = { ...configurationBundle(), modules: exported as Record<string, number> };
   expect(() =>
@@ -274,6 +273,15 @@ it.each([
       "synthetic-transfer": 1,
     }),
   ).toThrow(expect.objectContaining({ code, params: {} }));
+});
+
+it("refuses an export that lacks a module the box runs as a module mismatch, not an older export", () => {
+  const bundle = { ...configurationBundle(), modules: {} };
+  expect(() =>
+    validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
+      "synthetic-transfer": 1,
+    }),
+  ).toThrow(expect.objectContaining(invalid("module:synthetic-transfer")));
 });
 
 it("validates a bundle without a module that has no set of its own, and refuses one naming it", () => {
