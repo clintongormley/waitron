@@ -3955,6 +3955,16 @@ This records a question; no enquiry has been sent.
 
 ---
 
+### Q62. The box's continuous copy of the database is not encrypted before it leaves (added 2026-11-06)
+
+For the privacy specialist. The box copies its whole database, with customer and staff data, to storage
+the restaurant chooses, and does not encrypt it first: it relies on the provider's encryption, which
+does not protect against someone holding valid credentials. The owner kept this on 2026-11-06 (A1324),
+because the key would have to sit on the same box as those credentials. Is that adequate under GDPR
+article 32? If the copy leaked, would the people affected have to be told, since the article 34(3)(a)
+exception for unintelligible data would not apply? Sent in the
+[batch of 2026-11-05](2026-11-05-consultas-para-asesores.md).
+
 ### Sources checked for the 2026-10-04 revision
 
 The recovery-pack and allocation procedures are product proposals. The following external
