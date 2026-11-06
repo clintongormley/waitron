@@ -49,6 +49,7 @@ async function setup(role: "manager" | "staff" = "manager") {
   mountPaymentsApi(
     app,
     {
+      isPrimary: () => true,
       admission: testTradingAdmission(),
       db: suite.db,
       backend: new FakeFiscalBackend(suite.db),

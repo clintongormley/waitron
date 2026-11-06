@@ -1260,6 +1260,7 @@ describe("a deleted reader", () => {
     mountPaymentsApi(
       paymentsApp,
       {
+        isPrimary: () => true,
         admission: testTradingAdmission(),
         db: suite.db,
         backend: venue.backend,

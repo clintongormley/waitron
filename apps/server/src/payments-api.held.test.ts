@@ -64,6 +64,7 @@ async function setup() {
   mountPaymentsApi(
     app,
     {
+      isPrimary: () => true,
       admission: testTradingAdmission(),
       db: suite.db,
       backend: new FakeFiscalBackend(suite.db),

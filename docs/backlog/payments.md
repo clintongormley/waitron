@@ -299,15 +299,6 @@ screens' reads are not limited, and it was not measured in a real browser agains
 provider. Left open by A260 (several card readers' status reads at once can use up the browser's
 connections to the box; W18c #1145 and W48 #1162).
 
-## A manager's stuck-payment resolution must act only on the collection owner's payments before a second box sells
-
-The dashboard's two stuck lists, whole-order payments (`apps/server/src/payments-api.ts:1032`) and
-held bill payments (`payments-api.ts:1184`), read every box's payments; each list's "still at a
-reader" check (`paymentAttemptIsLive`, `apps/server/src/till-sale.ts:1465`; `billPaymentIsLive`,
-`apps/server/src/bill-payments.ts:1260`) sees only this box. Both resolve routes (`payments-api.ts:1073` and `:1226`) reach the same
-`resolveAbandonedAttempt` call (`payments-api.ts:420`), so a manager could cancel a payment another
-box is still taking. Left open by A764 (A1018 Slice 4b, #2422).
-
 ## Two concurrent passes of the SumUp provider's `resolvePending` over `listAttempting` (`packages/payments/src/store.ts`) do not both succeed
 
 The second pass throws partway instead of skipping the rows the first resolved. The Stripe
@@ -457,18 +448,6 @@ and shows a clear message.
 - [Check equipment labels on a physical venue printer](#check-equipment-labels-on-a-physical-venue-printer).
 
 <a id="slice-2--the-handheld-nfcqr-link"></a>
-
-## Bundle A1381: A manager's stuck-payment actions cover placed orders and only this box's own payments
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A manager's stuck-payment resolution must act only on the collection owner's payments before a
-  second box sells.** Both dashboard stuck lists read every box's payments, so a manager could
-  cancel a payment another box is still taking. Left open by A764 (A1018 Slice 4b, #2422).
-  [Detail](payments.md#a-managers-stuck-payment-resolution-must-act-only-on-the-collection-owners-payments-before-a-second-box-sells)
-- **A placed order with an unknown Stripe payment has no manager fallback.** Automatic checks
-  retry it, but the stuck-payment manager route still takes only open orders
-  (`apps/server/src/payments-api.ts`). The route restriction is read, not run here. Left open by A526.
 
 ## Bundle A1389: Refuse bad tips and compare the amount captured on the whole-order card path
 
@@ -625,10 +604,9 @@ and shows a clear message.
   (`listAttempting`, `packages/payments/src/store.ts:510`; `sweepOwners`, `apps/server/src/boot.ts`). The sweep runs on every box except a mirror and a box fenced by the chart it holds, decided at start
   (`fencedOrMirror`, `apps/server/src/boot.ts`): a fenced box's open payments that never reached the new main
   box stay open, as they do on a restricted box. Only sale recovery and bill completion check for primary. Coordination between two boxes collecting at the same time is not
-  built. A manager's stuck-payment resolution still acts on every box's payments, through both
-  dashboard lists (`apps/server/src/payments-api.ts:1032` for whole orders, `:1184` for held bill
-  payments) and both resolve routes (`:1073` and `:1226`); it has its own entry under Payments in
-  [the backlog](../backlog.md). Today's venue has one node (CLAUDE.md §5).
+  built. The manager's stuck-payment lists, resolve routes and bill-payment attestations apply the
+  same collection ownership (`apps/server/src/payments-api.ts`). Today's venue has one node
+  (CLAUDE.md §5).
   [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

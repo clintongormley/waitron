@@ -1,4 +1,4 @@
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { readActivationRows } from "@waitron/handover";
 import { nodeId as brandNodeId, type NodeId } from "@waitron/shared";
 
@@ -7,7 +7,10 @@ import { nodeId as brandNodeId, type NodeId } from "@waitron/shared";
  * each of those took over from, so a payment left open two handovers back still has an owner. A box
  * that handed over and later took back appears in its own walk, and is left out.
  */
-export async function readTakenOverFrom(db: Database, nodeId: NodeId): Promise<readonly NodeId[]> {
+export async function readTakenOverFrom(
+  db: Database | Transaction,
+  nodeId: NodeId,
+): Promise<readonly NodeId[]> {
   const seen = new Set<string>([nodeId]);
   const takenOverFrom: NodeId[] = [];
   const toFollow: string[] = [nodeId];

@@ -79,6 +79,7 @@ beforeEach(async () => {
   mountPaymentsApi(
     app,
     {
+      isPrimary: () => true,
       admission: testTradingAdmission(),
       db: suite.db,
       backend: venue.backend,
