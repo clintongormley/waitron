@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 export const GUIDE_LANGUAGES = ["en", "es"] as const;
 export const GUIDE_PAGES = [
+  "email",
   "products",
   "modifiers",
   "content-and-images",

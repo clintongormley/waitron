@@ -362,8 +362,9 @@ Live; saved-relay changes and captured messages remain admin-only. The sender di
 venue's name. Keep current invoice documents, outbox outcomes and public reset privacy.
 
 Cut A supplies the structured failure classifier, bounded account sends and reminder adapters;
-its diagnostics preserve rejected versus unknown outcomes. Continue at Cut B's diagnostic screens,
-then the settings and atomic Prepare wizard/routing cut, checking source reservations before each.
+its diagnostics preserve rejected versus unknown outcomes. Cut B shows those diagnostics beside
+the relevant field or at the bottom of both SMTP forms, with the matching English and Spanish
+guide. Continue with Prepare settings, then the atomic Prepare wizard/routing cut.
 Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
 joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
 The setup-test network-target issue below remains separate open work.

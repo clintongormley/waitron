@@ -384,3 +384,160 @@ it("explains a missing account recipient without marking a mail-server field", a
   );
   expect(field(el, "from").error).toBe("");
 });
+
+const diagnostics = [
+  ["email.test_host_not_found", "server", "No mail server has this name. Check the spelling."],
+  [
+    "email.test_connection_refused",
+    "port",
+    "Check the port: nothing at this mail server accepts connections on it.",
+  ],
+  [
+    "email.test_starttls_refused",
+    null,
+    "This mail server would not start encryption on this port. Try TLS on port 465 or STARTTLS on port 587, or try again later.",
+  ],
+  ["email.test_tls_refused", null, "This port does not start with TLS. Try STARTTLS on this port."],
+  [
+    "email.test_certificate_untrusted",
+    "server",
+    "This mail server's certificate is not trusted, so Waitron will not send it your password.",
+  ],
+  [
+    "email.test_login_refused",
+    null,
+    "The mail server refused this user and password. Check both, then send the test again.",
+  ],
+  [
+    "email.test_login_required",
+    null,
+    "This mail server needs a user and password. Turn on Use authentication.",
+  ],
+  [
+    "email.test_timeout",
+    null,
+    "The mail server did not answer in time. Check the port and the encryption.",
+  ],
+  [
+    "email.test_refused",
+    null,
+    "The mail server refused the test message. Check the settings and try again.",
+  ],
+  [
+    "email.test_future_provider_detail",
+    null,
+    "The mail server refused the test message. Check the settings and try again.",
+  ],
+] as const;
+it.each(diagnostics)(
+  "shows %s at its field or footer and permits retry",
+  async (code, target, message) => {
+    const client = api();
+    vi.mocked(client.testEmailSettings).mockResolvedValue({ accepted: false, code } as never);
+    const { el } = await mount(stored, client);
+    await credentials(el);
+    button(el, "test").click();
+    await vi.waitFor(() => expect(button(el, "test").disabled).toBe(false));
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.error).toBe(target ? "Correct the highlighted fields to continue." : message);
+    await vi.waitFor(() =>
+      expect(actions.shadowRoot!.querySelectorAll("[role=alert]")).toHaveLength(1),
+    );
+    for (const key of ["server", "port", "user", "password", "from"]) {
+      const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        `[data-test=${key}]`,
+      )!;
+      await control.updateComplete;
+      const native = control.shadowRoot!.querySelector("input")!;
+      expect(native.getAttribute("aria-invalid")).toBe(key === target ? "true" : "false");
+      expect(control.error).toBe(key === target ? message : "");
+      if (key === target) expect(control.shadowRoot!.textContent).toContain(message);
+    }
+    expect(button(el, "test").disabled).toBe(false);
+    expect(el.shadowRoot!.textContent).not.toContain(code);
+  },
+);
+it("suggests a port for the encryption without replacing the entered port", async () => {
+  const { el } = await mount();
+  const port = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=port]")!;
+  const encryption = el.shadowRoot!.querySelector("[data-test=encryption]")!;
+  for (const [value, placeholder] of [
+    ["starttls", "587"],
+    ["tls", "465"],
+  ]) {
+    encryption.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    await port.updateComplete;
+    expect(port.shadowRoot!.querySelector("input")!.placeholder).toBe(placeholder);
+    expect(port.value).toBe("465");
+  }
+});
+
+it("keeps a save's field validation message specific to that field", async () => {
+  const client = api();
+  vi.mocked(client.saveEmailSettings).mockRejectedValue({
+    code: "email.settings_invalid",
+    params: { field: "from" },
+  });
+  const { el } = await mount(stored, client);
+  await credentials(el);
+  button(el, "save").click();
+  await vi.waitFor(() =>
+    expect(field(el, "from").error).toBe("Enter a valid sender email address."),
+  );
+});
+
+it.each(["edit", "reconnect"] as const)(
+  "ignores a diagnostic test reply after %s",
+  async (mode) => {
+    const pending = deferred<{ accepted: false; code: "email.test_host_not_found" }>(),
+      client = api();
+    vi.mocked(client.testEmailSettings).mockReturnValue(pending.promise);
+    const { el } = await mount(stored, client);
+    await credentials(el);
+    button(el, "test").click();
+    await el.updateComplete;
+    if (mode === "edit") await edit(el, "server", "new.example.test");
+    else await reattachAfterDetachedUpdate(el);
+    pending.resolve({ accepted: false, code: "email.test_host_not_found" });
+    await pending.promise;
+    await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+    await field(el, "server").updateComplete;
+    expect(
+      field(el, "server").shadowRoot!.querySelector("input")!.getAttribute("aria-invalid"),
+    ).toBe("false");
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(button(el, "test").disabled).toBe(false);
+  },
+);
+
+it("renders a certificate refusal in Spanish beside the native server field", async () => {
+  setLocale("es");
+  const client = api();
+  vi.mocked(client.testEmailSettings).mockResolvedValue({
+    accepted: false,
+    code: "email.test_certificate_untrusted",
+  });
+  const { el } = await mount(stored, client);
+  await credentials(el);
+  button(el, "test").click();
+  const server =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=server]")!;
+  await vi.waitFor(() =>
+    expect(server.error).toBe(
+      "El certificado de este servidor de correo no es de confianza, por lo que Waitron no le enviará tu contraseña.",
+    ),
+  );
+  await server.updateComplete;
+  expect(server.shadowRoot!.textContent).toContain(
+    "El certificado de este servidor de correo no es de confianza",
+  );
+  expect(server.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+    "Corrige los campos marcados para continuar.",
+  );
+});

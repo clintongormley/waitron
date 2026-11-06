@@ -74,13 +74,20 @@ describe("dashboard email settings wire contract", () => {
       expect(new Headers(request.init.headers).get("x-waitron-live")).toBeNull();
     },
   );
-  it.each(["email.test_refused", "email.test_timeout"])(
-    "keeps a %s result distinct from acceptance",
-    async (code) => {
-      const { api } = client({ accepted: false, code });
-      expect(await api.testEmailSettings(draft)).toEqual({ accepted: false, code });
-    },
-  );
+  it.each([
+    "email.test_host_not_found",
+    "email.test_connection_refused",
+    "email.test_starttls_refused",
+    "email.test_tls_refused",
+    "email.test_certificate_untrusted",
+    "email.test_login_refused",
+    "email.test_login_required",
+    "email.test_timeout",
+    "email.test_refused",
+  ])("keeps a %s result distinct from acceptance", async (code) => {
+    const { api } = client({ accepted: false, code });
+    expect(await api.testEmailSettings(draft)).toEqual({ accepted: false, code });
+  });
   it("carries a field refusal to the editor", async () => {
     const { api } = client(
       { error: { code: "email.settings_invalid", params: { field: "from" } } },

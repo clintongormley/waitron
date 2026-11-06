@@ -496,13 +496,41 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Too many attempts. Wait a minute and try again.",
     es: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
   },
+  "email.test_host_not_found": {
+    en: "No mail server has this name. Check the spelling.",
+    es: "No hay ningún servidor de correo con este nombre. Revisa cómo está escrito.",
+  },
+  "email.test_connection_refused": {
+    en: "Check the port: nothing at this mail server accepts connections on it.",
+    es: "Revisa el puerto: el servidor de correo no acepta conexiones en él.",
+  },
+  "email.test_starttls_refused": {
+    en: "This mail server would not start encryption on this port. Try TLS on port 465 or STARTTLS on port 587, or try again later.",
+    es: "El servidor de correo no ha iniciado el cifrado en este puerto. Prueba TLS en el puerto 465 o STARTTLS en el puerto 587, o inténtalo más tarde.",
+  },
+  "email.test_tls_refused": {
+    en: "This port does not start with TLS. Try STARTTLS on this port.",
+    es: "Este puerto no inicia la conexión con TLS. Prueba STARTTLS en este puerto.",
+  },
+  "email.test_certificate_untrusted": {
+    en: "This mail server's certificate is not trusted, so Waitron will not send it your password.",
+    es: "El certificado de este servidor de correo no es de confianza, por lo que Waitron no le enviará tu contraseña.",
+  },
+  "email.test_login_refused": {
+    en: "The mail server refused this user and password. Check both, then send the test again.",
+    es: "El servidor de correo ha rechazado este usuario y contraseña. Revisa ambos y vuelve a enviar la prueba.",
+  },
+  "email.test_login_required": {
+    en: "This mail server needs a user and password. Turn on Use authentication.",
+    es: "Este servidor de correo necesita un usuario y una contraseña. Activa Usar autenticación.",
+  },
+  "email.test_timeout": {
+    en: "The mail server did not answer in time. Check the port and the encryption.",
+    es: "El servidor de correo no ha respondido a tiempo. Revisa el puerto y el cifrado.",
+  },
   "email.test_refused": {
     en: "The mail server refused the test message. Check the settings and try again.",
     es: "El servidor de correo ha rechazado la prueba. Revisa la configuración y vuelve a intentarlo.",
-  },
-  "email.test_timeout": {
-    en: "The mail server did not answer in time. Check the settings and try again.",
-    es: "El servidor de correo no ha respondido a tiempo. Revisa la configuración y vuelve a intentarlo.",
   },
   "email.settings_invalid": {
     en: "Check the mail server settings and your account email address, then try again.",

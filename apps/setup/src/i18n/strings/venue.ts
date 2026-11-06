@@ -25,14 +25,29 @@ export const venueEn = {
   "email.from.hint": "invoices@example.com",
   "email.from.error": "Enter a valid sender email address.",
   "email.fix_fields": "Correct the highlighted fields to continue.",
-  "email.accepted": "The mail server accepted the test message.",
-  "email.refused": "The mail server refused the test message. Check your settings and try again.",
-  "email.timeout": "The mail server did not answer in time. Try again.",
+  "email.accepted": "The mail server accepted the test message. Check your inbox.",
+  "email.test_host_not_found": "No mail server has this name. Check the spelling.",
+  "email.test_connection_refused":
+    "Check the port: nothing at this mail server accepts connections on it.",
+  "email.test_starttls_refused":
+    "This mail server would not start encryption on this port. Try TLS on port 465 or STARTTLS on port 587, or try again later.",
+  "email.test_tls_refused": "This port does not start with TLS. Try STARTTLS on this port.",
+  "email.test_certificate_untrusted":
+    "This mail server's certificate is not trusted, so Waitron will not send it your password.",
+  "email.test_login_refused":
+    "The mail server refused this user and password. Check both, then send the test again.",
+  "email.test_login_required":
+    "This mail server needs a user and password. Enter both, then send the test again.",
+  "email.test_timeout":
+    "The mail server did not answer in time. Check the port and the encryption.",
+  "email.test_refused":
+    "The mail server refused the test message. Check the settings and try again.",
   "email.failed": "The test could not be completed. Try again.",
   "email.back": "Back",
   "email.next": "Continue",
   "email.test": "Send test message",
   "email.testing": "Sending test…",
+  "email.test_help": "Help with the test result",
 
   "venue.heading": "Your shop",
   "venue.intro": "Enter the business that issues your invoices and the address of this venue.",
@@ -262,15 +277,31 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "email.from.hint": "facturas@example.com",
   "email.from.error": "Introduce una dirección válida para el remitente.",
   "email.fix_fields": "Corrige los campos marcados para continuar.",
-  "email.accepted": "El servidor de correo ha aceptado el mensaje de prueba.",
-  "email.refused":
-    "El servidor de correo ha rechazado el mensaje de prueba. Comprueba los ajustes y vuelve a intentarlo.",
-  "email.timeout": "El servidor de correo no ha respondido a tiempo. Vuelve a intentarlo.",
+  "email.accepted": "El servidor de correo ha aceptado la prueba. Revisa tu bandeja.",
+  "email.test_host_not_found":
+    "No hay ningún servidor de correo con este nombre. Revisa cómo está escrito.",
+  "email.test_connection_refused":
+    "Revisa el puerto: el servidor de correo no acepta conexiones en él.",
+  "email.test_starttls_refused":
+    "El servidor de correo no ha iniciado el cifrado en este puerto. Prueba TLS en el puerto 465 o STARTTLS en el puerto 587, o inténtalo más tarde.",
+  "email.test_tls_refused":
+    "Este puerto no inicia la conexión con TLS. Prueba STARTTLS en este puerto.",
+  "email.test_certificate_untrusted":
+    "El certificado de este servidor de correo no es de confianza, por lo que Waitron no le enviará tu contraseña.",
+  "email.test_login_refused":
+    "El servidor de correo ha rechazado este usuario y contraseña. Revisa ambos y vuelve a enviar la prueba.",
+  "email.test_login_required":
+    "Este servidor de correo necesita un usuario y una contraseña. Introduce ambos y vuelve a enviar la prueba.",
+  "email.test_timeout":
+    "El servidor de correo no ha respondido a tiempo. Revisa el puerto y el cifrado.",
+  "email.test_refused":
+    "El servidor de correo ha rechazado la prueba. Revisa la configuración y vuelve a intentarlo.",
   "email.failed": "No se ha podido completar la prueba. Vuelve a intentarlo.",
   "email.back": "Atrás",
   "email.next": "Continuar",
   "email.test": "Enviar mensaje de prueba",
   "email.testing": "Enviando la prueba…",
+  "email.test_help": "Ayuda con el resultado de la prueba",
 
   "venue.heading": "Tu tienda",
   "venue.intro":

@@ -368,3 +368,13 @@ it.each(["en", "es"])(
     expect(html).not.toContain("undefined");
   },
 );
+
+it.each(["en", "es"])("serves the email test guide in %s", async (lang) => {
+  const app = new Hono();
+  mountGuidePages(app, {}, vi.fn());
+  const response = await app.request(`/help/${lang}/email`);
+  expect(response.status).toBe(200);
+  const html = await response.text();
+  expect(html).toContain('<section id="test-results"');
+  expect(html).toContain(`<html lang="${lang}">`);
+});

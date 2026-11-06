@@ -29,6 +29,10 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
     "invalid",
     "accepted",
     "refused",
+    "port",
+    "certificate",
+    "encryption",
+    "login",
     "saving",
     "read-failure",
   ] as const)(
@@ -46,13 +50,23 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
             ? vi.fn().mockRejectedValue({ code: "connection.failed" })
             : vi.fn().mockResolvedValue(view),
         saveEmailSettings: vi.fn(() => new Promise<never>(() => {})),
-        testEmailSettings: vi
-          .fn()
-          .mockResolvedValue(
-            state === "accepted"
-              ? { accepted: true }
-              : { accepted: false, code: "email.test_refused" },
-          ),
+        testEmailSettings: vi.fn().mockResolvedValue(
+          state === "accepted"
+            ? { accepted: true }
+            : {
+                accepted: false,
+                code:
+                  state === "port"
+                    ? "email.test_connection_refused"
+                    : state === "certificate"
+                      ? "email.test_certificate_untrusted"
+                      : state === "encryption"
+                        ? "email.test_starttls_refused"
+                        : state === "login"
+                          ? "email.test_login_refused"
+                          : "email.test_refused",
+              },
+        ),
       } as unknown as DashboardApi;
       const { el, host } = await mountWidget<
         HTMLElementTagNameMap["dashboard-email-settings-panel"]
@@ -64,12 +78,28 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
           ),
         ).not.toBeNull(),
       );
-      if (["initial", "invalid", "accepted", "refused", "saving"].includes(state)) {
+      if (
+        [
+          "initial",
+          "invalid",
+          "accepted",
+          "refused",
+          "port",
+          "certificate",
+          "encryption",
+          "login",
+          "saving",
+        ].includes(state)
+      ) {
         el.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
         await el.updateComplete;
         const form = el.shadowRoot!.querySelector("dashboard-email-settings-form")!;
         await form.updateComplete;
-        if (["accepted", "refused", "saving"].includes(state)) {
+        if (
+          ["accepted", "refused", "port", "certificate", "encryption", "login", "saving"].includes(
+            state,
+          )
+        ) {
           for (const [field, value] of [
             ["user", "invoice-user"],
             ["password", "fixture-secret"],
@@ -93,7 +123,7 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
             await vi.waitFor(() =>
               expect(form.shadowRoot!.querySelector("[role=status]")).not.toBeNull(),
             );
-          if (state === "refused" || state === "invalid")
+          if (["refused", "invalid", "port", "certificate", "encryption", "login"].includes(state))
             await vi.waitFor(() =>
               expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
             );

@@ -14,9 +14,15 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import type { DashboardApi, EmailSettingsDraft, EmailSettingsView } from "../api/client.js";
+import {
+  SMTP_TEST_CODES,
+  type DashboardApi,
+  type EmailSettingsDraft,
+  type EmailSettingsView,
+} from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
 type Field = keyof EmailSettingsDraft;
@@ -201,7 +207,16 @@ export class EmailSettingsForm extends LitElement {
         if (!this.isConnected || generation !== this.#generation || revision !== this.#revision)
           return;
         if (result.accepted) this.accepted = true;
-        else this.refusal = { code: result.code };
+        else {
+          const code = SMTP_TEST_CODES.includes(result.code) ? result.code : "email.test_refused";
+          const field =
+            code === "email.test_host_not_found" || code === "email.test_certificate_untrusted"
+              ? "server"
+              : code === "email.test_connection_refused"
+                ? "port"
+                : undefined;
+          this.refusal = { code, field };
+        }
       } else {
         await this.api.saveEmailSettings(this.#body());
         if (!this.isConnected || generation !== this.#generation) return;
@@ -249,12 +264,13 @@ export class EmailSettingsForm extends LitElement {
       label=${t(`email.settings.${field}`)}
       .value=${this.values[field]}
       type=${field === "password" ? (this.passwordVisible ? "text" : "password") : field === "from" ? "email" : "text"}
+      placeholder=${field === "port" ? (this.values.encryption === "tls" ? "465" : "587") : ""}
       inputmode=${field === "port" ? "numeric" : "text"}
       autocomplete="off"
       ?required=${["server", "port", "from"].includes(field) || (this.values.authenticate && ["user", "password"].includes(field))}
       ?disabled=${!!this.busy || (!this.values.authenticate && ["user", "password"].includes(field))}
       ?invalid=${invalid}
-      error=${invalid ? t(`email.settings.${field}_error`) : ""}
+      error=${this.refusal?.field === field && this.refusal.code !== "email.settings_invalid" ? codeMessage(this.refusal.code) : invalid ? t(`email.settings.${field}_error`) : ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
     >
@@ -333,6 +349,11 @@ export class EmailSettingsForm extends LitElement {
         ${this.#field("from", errors)}
       </div>
       ${this.accepted ? html`<p class="success" role="status">${t("email.settings.accepted")}</p>` : nothing}
+      <p>
+        <a href=${guideHref("email.test-results")} target="_blank" rel="noopener"
+          >${t("email.settings.test_help")}</a
+        >
+      </p>
       <wt-form-actions error=${error}>
         <wt-button
           slot="cancel"
