@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -107,7 +108,7 @@ async function layoutRevision(setId: string, zoneId: string): Promise<number> {
 
 /** Standard stands A at 0; Dinner stands it at 40. The first save, at `at`, records the due layout. */
 function twoSets(at: Date = LUNCH) {
-  return standardAndDinner(v, at, [{ key: "a", label: `A ${randomUUID().slice(0, 6)}` }], {
+  return standardAndDinner(v, at, [{ key: "a", label: `A ${floorLabelSuffix()}` }], {
     standard: { a: 0 },
     dinner: { a: 40 },
   });
@@ -277,7 +278,7 @@ describe("hasPlan says the department has a set", () => {
         })
       ).id;
     });
-    await v.table(`T ${randomUUID().slice(0, 6)}`, zoneId);
+    await v.table(`T ${floorLabelSuffix()}`, zoneId);
     await unlinkedPlanRow(zoneId);
 
     expect((await zoneAt(LUNCH, zoneId)).hasPlan).toBe(false);

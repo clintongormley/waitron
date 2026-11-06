@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -45,7 +46,7 @@ const PLACE = { x: 0, y: 0, width: 8, height: 8, shape: "rect" as const, rotatio
 type SaveEntry = ZonePlanSave["tables"][number];
 
 function fresh(label: string): string {
-  return `${label}-${randomUUID().slice(0, 6)}`;
+  return `${label}-${floorLabelSuffix()}`;
 }
 
 function entry(key: string, label: string, extra: Partial<SaveEntry> = {}): SaveEntry {

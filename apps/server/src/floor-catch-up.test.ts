@@ -1,7 +1,7 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -156,7 +156,7 @@ function zone(): Promise<string> {
 
 /** A label no other case uses: names are unique across the venue. */
 function fresh(label: string): string {
-  return `${label} ${randomUUID().slice(0, 6)}`;
+  return `${label} ${floorLabelSuffix()}`;
 }
 
 type Entry = ZonePlanSave["tables"][number];

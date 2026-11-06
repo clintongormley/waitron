@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { sql, and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -1308,7 +1309,7 @@ describe("the parts of joined tables in the till's copy", () => {
       ...tables,
       {
         key: "long",
-        label: `Long table ${randomUUID().slice(0, 6)}`,
+        label: `Long table ${floorLabelSuffix()}`,
         seats: 10,
         fixed: false,
         placement: placed(20),
@@ -1365,7 +1366,7 @@ describe("the parts of joined tables in the till's copy", () => {
       ...tables.map((entry) => ({ ...entry, placement: null })),
       {
         key: "long",
-        label: `Long table ${randomUUID().slice(0, 6)}`,
+        label: `Long table ${floorLabelSuffix()}`,
         seats: 10,
         fixed: false,
         placement: placed(20),
@@ -1402,7 +1403,7 @@ describe("the parts of joined tables in the till's copy", () => {
       ...tables.filter((entry) => entry.id !== master.t9),
       ...["Counter 3", "Counter 4", "Counter 5"].map((label, i) => ({
         key: `c${i + 3}`,
-        label: `${label} ${randomUUID().slice(0, 6)}`,
+        label: `${label} ${floorLabelSuffix()}`,
         seats: [2, 6, 4][i]!,
         fixed: false,
         placement: null,
@@ -2211,8 +2212,8 @@ describe("resets onto a set's layout", () => {
   /** Standard stands A at 0 and B at 20; Dinner stands A at 40 and leaves B off. */
   async function twoLayouts(now = NOW) {
     const d = await setsDepartment(v, PAINTED);
-    const a = `A ${randomUUID().slice(0, 6)}`;
-    const b = `B ${randomUUID().slice(0, 6)}`;
+    const a = `A ${floorLabelSuffix()}`;
+    const b = `B ${floorLabelSuffix()}`;
     const ids = await saveSet(
       d.standard,
       d.zoneId,
@@ -2292,7 +2293,7 @@ describe("resets onto a set's layout", () => {
     const ids = await saveSet(d.dinner, d.zoneId, () => [
       {
         key: "a",
-        label: `A ${randomUUID().slice(0, 6)}`,
+        label: `A ${floorLabelSuffix()}`,
         seats: 4,
         fixed: false,
         placement: at(0),
@@ -2345,7 +2346,7 @@ describe("resets onto a set's layout", () => {
         name: `Moved ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      const name = `A ${randomUUID().slice(0, 6)}`;
+      const name = `A ${floorLabelSuffix()}`;
       const { ids } = await saveLayout(
         tx,
         REMOVALS,
@@ -2454,7 +2455,7 @@ describe("resets onto a set's layout", () => {
           tables: [
             {
               key: "a",
-              label: `A ${randomUUID().slice(0, 6)}`,
+              label: `A ${floorLabelSuffix()}`,
               seats: 4,
               fixed: false,
               placement: at(30),

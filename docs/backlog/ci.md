@@ -3,22 +3,22 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## Floor-plan test labels can collide across zones
+## Shortened random table labels outside the floor suites
 
-Main CI [42164850258](https://github.com/clintongormley/waitron/actions/runs/42164850258),
-server shard 3, failed during the `floor-today-reset-table.test.ts` partial-reset case's fixture setup with
-`table.label_taken`. The retained blob report records `Counter 3 ea3a14`.
-`plannedZone` in `apps/server/src/testing/floor-today-venue.ts` keeps only six UUID characters
-in each label; the floor-plan save checks labels in the other zones too. That suite retains
-its database between cases.
+The 6 November 2026 floor-label review found shortened UUIDs in table labels in
+`device-levers.test.ts`, `till-api.expo-board.test.ts`, `till-api.profile-zones.test.ts`,
+`order-groups.test.ts` and `till-api.tables.test.ts`, under `apps/server/src`.
+These sites were inspected, not tested with forced collisions. Trace each fixture's database
+lifetime, reproduce repeated suffixes through its real table writer, and replace the label
+suffix where needed without changing the production uniqueness guard or existing assertions.
 
-A temporary two-case probe on 6 November 2026 gave distinct full UUIDs the same six-character
-prefix: the second zone was refused with that exact code and label. Different prefixes admitted
-both zones. The original 58-case floor-reset suite passed once locally; that is no repair.
-The probe demonstrates a collision mechanism, not the unseen rows from the failed CI database.
-Replace the fixture's truncated suffix with labels that cannot repeat within its database and
-add a controlled collision regression plus an accepting control. Do not relax the production
-label check or its existing assertions. No CI rerun was made for this occurrence.
+## Floor-plan short-name fixtures
+
+`apps/server/src/floor-plan.test.ts` retains two four-character UUID suffix sites for short
+names, separate from the full table labels. The 6 November 2026 review forced a repeated suffix
+and reported one failed case. Reproduce the failure and check the reported refusal before fixing
+these fixtures. Keep the five-character short-name limit, the case-insensitive comparisons and
+every existing refusal assertion. The limit does not require a random suffix.
 
 ## Three adjustment-portion refusal checks also pass with shortened ID lists
 

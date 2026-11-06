@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -112,7 +113,7 @@ async function zone(): Promise<string> {
 
 /** A name no other case uses: labels are unique across the venue. */
 function fresh(label: string): string {
-  return `${label}-${randomUUID().slice(0, 6)}`;
+  return `${label}-${floorLabelSuffix()}`;
 }
 
 /**

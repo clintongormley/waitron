@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -39,7 +40,7 @@ const PLACE = { x: 0, y: 0, width: 8, height: 8, shape: "rect" as const, rotatio
 type SaveEntry = ZonePlanSave["tables"][number];
 
 function fresh(label: string): string {
-  return `${label}-${randomUUID().slice(0, 6)}`;
+  return `${label}-${floorLabelSuffix()}`;
 }
 
 /** A department with zone Inside and sets Standard (its default) and Dinner, plus a zone elsewhere. */

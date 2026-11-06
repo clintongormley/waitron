@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -149,7 +150,7 @@ async function LONG_TABLE() {
   return zone;
 }
 
-const suffixed = (name: string) => `${name} ${randomUUID().slice(0, 6)}`;
+const suffixed = (name: string) => `${name} ${floorLabelSuffix()}`;
 
 async function post(path: string, body: unknown): Promise<void> {
   const answer = await app.request(path, {

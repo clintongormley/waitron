@@ -1,5 +1,5 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -203,7 +203,7 @@ async function apart(tableId: string): Promise<boolean> {
 }
 
 function fresh(label: string): string {
-  return `${label} ${randomUUID().slice(0, 6)}`;
+  return `${label} ${floorLabelSuffix()}`;
 }
 
 type Placed = { key: string; standard: number | null; dinner: number | null; partKeys?: string[] };

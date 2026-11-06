@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -272,7 +273,7 @@ describe("roomPrints", () => {
   it("a table's name changes the room's print; writing the same name again does not", async () => {
     const { zoneId, table } = await LONG_TABLE();
     const before = await printOf(zoneId);
-    const name = `Window seat ${randomUUID().slice(0, 6)}`;
+    const name = `Window seat ${floorLabelSuffix()}`;
     const nameBar = () =>
       inTx(v, (tx) =>
         tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, table.bar!)),

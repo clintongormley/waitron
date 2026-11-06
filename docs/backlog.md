@@ -6347,12 +6347,15 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **Floor-plan test labels can collide across zones.** Main CI 42164850258 failed the
-  partial-reset case during fixture setup with `table.label_taken`, label `Counter 3 ea3a14`.
-  A controlled probe reproduces the refusal; the cause in CI's unavailable database is inferred.
-  Replace the shared fixture's six-character UUID suffix with labels that cannot repeat,
-  preserving the refusal checks.
-  [Detail](backlog/ci.md#floor-plan-test-labels-can-collide-across-zones).
+- **Shortened random table labels remain outside the floor suites.** Inspect the non-floor
+  fixture sites and reproduce repeated suffixes before replacing them; preserve the existing
+  uniqueness and refusal checks.
+  [Detail](backlog/ci.md#shortened-random-table-labels-outside-the-floor-suites).
+
+- **Floor-plan short-name fixtures still draw only four random characters.** A review probe
+  forcing one repeated suffix failed a case. Reproduce it and replace the fixture suffix while
+  retaining the five-character limit and the original case-insensitive refusal checks.
+  [Detail](backlog/ci.md#floor-plan-short-name-fixtures).
 
 - **A change to the till alone does not run the handover's end-to-end test.** The test loads the
   till's router by path, and a till-only change selects no `@waitron/server` (`scripts/changed-scope.mjs`),

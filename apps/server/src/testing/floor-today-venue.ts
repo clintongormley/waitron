@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./floor-label.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { expect } from "vitest";
@@ -70,10 +71,6 @@ export async function tableServiceZone(v: PartyVenue): Promise<string> {
   return id;
 }
 
-/**
- * A fresh table-service zone, its live tables, and a first saved master holding `entries`, which
- * builds today's plan. Labels are made unique.
- */
 export async function plannedZone(
   v: PartyVenue,
   entries: PlannedEntry[],
@@ -88,7 +85,7 @@ export async function plannedZone(
   const table: Record<string, string> = {};
   const tables: ZonePlanSave["tables"] = [];
   for (const entry of entries) {
-    const label = `${entry.label ?? entry.key} ${randomUUID().slice(0, 6)}`;
+    const label = `${entry.label ?? entry.key} ${floorLabelSuffix()}`;
     const place = entry.place === undefined ? { x: 0, y: 0 } : entry.place;
     tables.push({
       key: entry.key,

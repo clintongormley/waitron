@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -81,7 +81,7 @@ async function LONG_TABLE(more: PlannedEntry[] = []) {
   return zone;
 }
 
-const suffixed = (name: string) => `${name} ${randomUUID().slice(0, 6)}`;
+const suffixed = (name: string) => `${name} ${floorLabelSuffix()}`;
 
 const rename = (tableId: string, name: string | null) =>
   inTx(v, (tx) => nameToday(tx, v.cfg, tableId, name));
@@ -360,9 +360,9 @@ describe("nameToday refuses a name in use, writing nothing", () => {
   });
 
   it("the same name in capitals with an accent, either way round", async () => {
-    const suffix = randomUUID().slice(0, 6);
+    const suffix = floorLabelSuffix();
     const lower = `García birthday ${suffix}`;
-    const upper = `GARCÍA BIRTHDAY ${suffix.toUpperCase()}`;
+    const upper = `GARCÍA BIRTHDAY ${suffix}`;
     for (const [taken, asked] of [
       [lower, upper],
       [upper, lower],

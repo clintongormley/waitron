@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -508,7 +509,7 @@ describe("Reset table refused, nothing written", () => {
       await merge(table.bar!, table.long!, "left");
       await seat(v, table.bar!);
       await ok(splitOff(table.bar!, [table.c5!], 10));
-      const suffix = randomUUID().slice(0, 6);
+      const suffix = floorLabelSuffix();
       await relabel(table[first]!, `Table 01 ${suffix}`);
       await relabel(table[second]!, `Table 1 ${suffix}`);
       expect(compareLabels(`Table 01 ${suffix}`, `Table 1 ${suffix}`)).toBe(0);
@@ -887,7 +888,7 @@ describe("Reset table's place check, more cases", () => {
       await moveTo(table.long!, 30, 30);
       await moveTo(table.bar!, 10, 20);
       await moveTo(table.stool!, 14, 20);
-      const suffix = randomUUID().slice(0, 6);
+      const suffix = floorLabelSuffix();
       await relabel(table[first]!, `Table 01 ${suffix}`);
       await relabel(table[second]!, `Table 1 ${suffix}`);
       expect(compareLabels(`Table 01 ${suffix}`, `Table 1 ${suffix}`)).toBe(0);
