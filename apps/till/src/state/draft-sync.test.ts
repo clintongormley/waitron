@@ -1112,6 +1112,76 @@ describe("DraftSync: reads and saves stop passing each other", () => {
     expect(await reading).toBe(false);
   });
 
+  describe("a limit on the wait for a save alone", () => {
+    const WAIT = LIMIT / 5;
+
+    it("answers false at that limit with no read sent, while a save has no answer", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      server.saveDraft.mockImplementationOnce(noAnswer);
+      await settle();
+      const reads = server.listDrafts.mock.calls.length;
+      let answered = false;
+
+      const reading = draft.load({ waitLimitMs: WAIT }).finally(() => (answered = true));
+      await vi.advanceTimersByTimeAsync(WAIT - 1);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(answered).toBe(true);
+      expect(await reading).toBe(false);
+      expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+    });
+
+    it("leaves a slow read a request's whole limit", async () => {
+      const draft = sync();
+      await draft.load();
+      const read = server.listDrafts.getMockImplementation()!;
+      server.listDrafts.mockImplementationOnce(async (...args) => {
+        await new Promise((resolve) => setTimeout(resolve, LIMIT - 1));
+        return read(...args);
+      });
+
+      const reading = draft.load({ waitLimitMs: WAIT });
+      await vi.advanceTimersByTimeAsync(LIMIT - 1);
+
+      expect(await reading).toBe(true);
+    });
+
+    it("still ends a read with no answer at a request's limit", async () => {
+      const draft = sync();
+      await draft.load();
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      let answered = false;
+
+      const reading = draft.load({ waitLimitMs: WAIT }).finally(() => (answered = true));
+      await vi.advanceTimersByTimeAsync(LIMIT - 1);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(await reading).toBe(false);
+    });
+
+    it("starts again for a save that starts during a slow read", async () => {
+      const draft = sync();
+      await draft.load();
+      const answerRead = holdRead();
+      const reading = draft.load({ waitLimitMs: WAIT });
+      await vi.advanceTimersByTimeAsync(0);
+      draft.store.addProduct(beer, "1");
+      const release = holdSaveAnswer();
+      await settle();
+
+      await vi.advanceTimersByTimeAsync(WAIT);
+      answerRead(await server.listDrafts("v1"));
+      await vi.advanceTimersByTimeAsync(WAIT - 1);
+      release();
+
+      expect(await reading).toBe(true);
+    });
+  });
+
   it("reads nothing once signed out during the wait, since it could go out under the next session", async () => {
     const draft = sync();
     await draft.load();

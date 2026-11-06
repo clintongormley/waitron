@@ -180,10 +180,12 @@ export interface DraftSyncOptions {
  */
 export const TABLE_REQUEST_LIMIT_MS = 150_000;
 
-/** A read shorter than a request's limit, which `stop` ends early. The limit covers the read's wait
- * for any save that is out as well as the read. */
 export interface DraftReadBounds {
-  limitMs: number;
+  /** Instead of a request's limit: the read and its waits for any save that is out, together. */
+  limitMs?: number;
+  /** Each wait for a save, alone: past it the read answers false with nothing sent. */
+  waitLimitMs?: number;
+  /** Ends the waits and the read early. */
   stop?: AbortSignal;
 }
 
@@ -531,7 +533,11 @@ export class DraftSync {
     const limitMs = bounds?.limitMs ?? this.#options.requestLimitMs;
     const limit = limited(limitMs, bounds?.stop);
     try {
-      const read = await this.#loadBetweenSaves(limitMs, limit.signal);
+      const read = await this.#loadBetweenSaves(
+        limitMs,
+        bounds?.waitLimitMs ?? limitMs,
+        limit.signal,
+      );
       if (
         !read &&
         this.#unsaved &&
@@ -547,11 +553,20 @@ export class DraftSync {
     }
   }
 
-  async #loadBetweenSaves(limitMs: number, stop: AbortSignal): Promise<boolean> {
+  async #loadBetweenSaves(
+    limitMs: number,
+    waitLimitMs: number,
+    stop: AbortSignal,
+  ): Promise<boolean> {
     for (;;) {
-      while (this.#saveAhead && !this.#readDeclined && !stop.aborted)
-        await Promise.race([this.#queue, pause(AbortSignal.any([stop, this.#readWake.signal]))]);
-      if (stop.aborted || this.#readDeclined) return false;
+      const wait = limited(waitLimitMs, stop);
+      while (this.#saveAhead && !this.#readDeclined && !wait.signal.aborted)
+        await Promise.race([
+          this.#queue,
+          pause(AbortSignal.any([wait.signal, this.#readWake.signal])),
+        ]);
+      wait.done();
+      if (stop.aborted || this.#saveAhead || this.#readDeclined) return false;
       const queue = this.#queue;
       const read = await this.#load({ limitMs, stop }, () => queue !== this.#queue);
       if (queue === this.#queue) return read;
