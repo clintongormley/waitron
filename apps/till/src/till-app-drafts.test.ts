@@ -5009,7 +5009,8 @@ describe("till-app: other people's drafts and taking one over", () => {
     const alex = savedBy(ALEX, "Alex", "offer-beer");
     window.dispatchEvent(new Event("focus"));
     await flush(el, 6);
-    await takeOver(el);
+    emit(shell(el), "take-over-draft", { draftId: alex.id, revision: alex.revision });
+    await flush(el, 6);
     expect(api.takeOverDraft).not.toHaveBeenCalled();
 
     emit(shell(el), "logout");
@@ -9636,7 +9637,7 @@ describe("A773 retained bill candidates in the app", () => {
     expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
   });
 
-  it("still signs the order's person out on this screen when the bill changed elsewhere while their refused save was out", async () => {
+  it("still signs the order's person out on this screen when their save is refused and the bill's other change has not reached this till", async () => {
     let reject!: (error: unknown) => void;
     const { el } = await mountApp({
       saveDraft: vi.fn(() => new Promise<never>((_resolve, fail) => (reject = fail))),
@@ -9644,7 +9645,6 @@ describe("A773 retained bill candidates in the app", () => {
     await openTable(el);
     await tap(el, "Beer");
     await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
-    const reads = api.listDrafts.mock.calls.length;
     server.personId = "p2";
     server.personName = "Luis";
     const sent = api.saveDraft.mock.calls[0]![1];
@@ -9654,9 +9654,6 @@ describe("A773 retained bill candidates in the app", () => {
       revision: 0,
       lines: [{ ...sent.lines[0], menuItemId: "offer-steak" }],
     });
-    window.dispatchEvent(new Event("focus"));
-    await vi.waitFor(() => expect(api.listDrafts.mock.calls.length).toBeGreaterThan(reads));
-    await flush(el, 6);
 
     reject({ code: "draft.person_not_signed_in", status: 409 });
     await flush(el, 6);

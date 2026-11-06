@@ -11986,7 +11986,7 @@ export class TillApp extends LitElement {
     const before = sync.edit;
     this.#billDraftReading = sync;
     try {
-      const loaded = await sync.load(this.#draftReadBounds());
+      const loaded = await sync.load(this.#draftReadBounds() ?? { limitMs: FLOOR_POLL_LIMIT_MS });
       if (
         !loaded ||
         sync !== this.#draftSync ||

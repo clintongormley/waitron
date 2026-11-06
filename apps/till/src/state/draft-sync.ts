@@ -180,10 +180,11 @@ export interface DraftSyncOptions {
  */
 export const TABLE_REQUEST_LIMIT_MS = 150_000;
 
-/** A read shorter than a request's limit, which `stop` ends early. */
+/** A read shorter than a request's limit, which `stop` ends early. The limit covers the read's wait
+ * for any save that is out as well as the read. */
 export interface DraftReadBounds {
   limitMs: number;
-  stop: AbortSignal;
+  stop?: AbortSignal;
 }
 
 /** A signal that aborts after `ms`, or with `also`; `done` clears the timer. */
@@ -310,12 +311,12 @@ export class DraftSync {
   /** An edit not yet sent in a save. */
   #unsaved = false;
   #queue: Promise<DraftSaveOutcome> = Promise.resolve("saved");
+  #savesQueued = 0;
   /** A save is out. */
   #saving = false;
   /** Signing out: no save starts after this. */
   #closed = false;
   #timer?: ReturnType<typeof setTimeout>;
-  /** Moved on by each read, so a save answering after it is not taken. */
   #reads = 0;
   #muted = false;
   #dropped = false;
@@ -519,13 +520,40 @@ export class DraftSync {
     return positions.map((position) => this.#lineIds[position]!);
   }
 
-  /** A read never turns a retained local candidate into saved work. */
+  /** A read never turns a retained local candidate into saved work. Its answer counts only if no
+   * save was queued while it was out: one answering after the server took a save but before that
+   * save's answer would look like someone else's change. */
   async load(bounds?: DraftReadBounds): Promise<boolean> {
-    if (this.#commanding || this.#correctingPlaces) return false;
-    return this.#load(bounds);
+    const limitMs = bounds?.limitMs ?? this.#options.requestLimitMs;
+    const limit = limited(limitMs, bounds?.stop);
+    try {
+      const read = await this.#loadBetweenSaves(limitMs, limit.signal);
+      if (
+        !read &&
+        this.#unsaved &&
+        !this.#commanding &&
+        !this.#recoveryRequired &&
+        !this.#correctingPlaces &&
+        !this.store.sending
+      )
+        this.#scheduleSave();
+      return read;
+    } finally {
+      limit.done();
+    }
   }
 
-  async #load(bounds?: DraftReadBounds): Promise<boolean> {
+  async #loadBetweenSaves(limitMs: number, stop: AbortSignal): Promise<boolean> {
+    for (;;) {
+      while (this.#savesQueued > 0 && !stop.aborted) await Promise.race([this.#queue, pause(stop)]);
+      if (stop.aborted || this.#ended || this.#commanding || this.#correctingPlaces) return false;
+      const queue = this.#queue;
+      const read = await this.#load({ limitMs, stop }, () => queue !== this.#queue);
+      if (queue === this.#queue) return read;
+    }
+  }
+
+  async #load(bounds?: DraftReadBounds, stale?: () => boolean): Promise<boolean> {
     const command = this.#commandsStarted;
     const read = ++this.#reads;
     this.#cancelTimer();
@@ -552,7 +580,8 @@ export class DraftSync {
       this.#dropped ||
       (this.#commanding && this.#closed) ||
       read !== this.#reads ||
-      command !== this.#commandsStarted
+      command !== this.#commandsStarted ||
+      stale?.() === true
     )
       return false;
     const edit = answer.billEdits.find((edit) => edit.billId === this.billId);
@@ -695,14 +724,14 @@ export class DraftSync {
       );
     } catch (error) {
       if (this.#ended) return "failed";
-      await this.#readAfterTakeOver();
+      await this.load();
       return this.#ended ? "failed" : (asRefusal(error) ?? "failed");
     } finally {
       limit.done();
     }
     if (this.#ended) return "failed";
     this.#recordTakeOver(taken, draftId);
-    const reloaded = await this.#readAfterTakeOver();
+    const reloaded = await this.load();
     return this.#ended ? "failed" : { taken: true, reloaded };
   }
 
@@ -713,12 +742,6 @@ export class DraftSync {
       ...this.partyDrafts.filter((row) => row.id !== draftId),
       ...(draft === null ? [] : [draft]),
     ];
-  }
-
-  /** A read overtaking a save's answer would take the till's own save for someone else's change. */
-  async #readAfterTakeOver(): Promise<boolean> {
-    await this.#queue;
-    return this.#ended ? false : this.load();
   }
 
   /** Source commands change stored bill rows and their draft together. No edit or save may use
@@ -848,9 +871,11 @@ export class DraftSync {
   }
 
   #save(signal?: AbortSignal): Promise<DraftSaveOutcome> {
+    this.#savesQueued++;
     this.#queue = this.#queue
       .then(() => this.#saveNow(signal))
-      .catch((): DraftSaveOutcome => "failed");
+      .catch((): DraftSaveOutcome => "failed")
+      .finally(() => this.#savesQueued--);
     return this.#queue;
   }
 
