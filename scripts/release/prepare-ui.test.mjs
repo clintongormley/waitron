@@ -4,7 +4,11 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, readdir, cp } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 
-vi.setConfig({ testTimeout: 180000 });
+const PREPARATION_TIMEOUT_MS = 1_580_000;
+const FIXTURE_TIMEOUT_MS = 1_680_000;
+
+// The parent covers the complete sequence of bounded commands, plus fixture setup and readback.
+vi.setConfig({ testTimeout: FIXTURE_TIMEOUT_MS });
 
 const script = resolve(import.meta.dirname, "prepare-ui.mjs");
 const gitEnv = Object.fromEntries(
@@ -69,7 +73,7 @@ async function fixture(fn) {
     return spawnSync(process.execPath, [script, checkout, output, ...[...flags].flat()], {
       env: gitEnv,
       encoding: "utf8",
-      timeout: 20000,
+      timeout: PREPARATION_TIMEOUT_MS,
       ...changes,
     });
   };
