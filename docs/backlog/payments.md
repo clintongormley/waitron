@@ -385,13 +385,6 @@ path reads the captured amount and calls the excess a tip. The only cause found 
 own tip screen was switched on outside Waitron; other causes were not checked. Next: compare the captured amount at capture time, as the bill payment loop does
 (`payment.bill_capture_mismatch`).
 
-## An offline card payment that forwarding moved to `settled` with no sale no longer holds its placed order
-
-Once no card payment of the order runs in this process, a collect is accepted
-(`ordersWithUnfiledPayment`, `apps/server/src/till-sale.ts`, counts no `settled` row). A526's
-review measured it with `FakePaymentProvider.forward`; of the adapters, only
-`StripeOnDeviceProvider`, which no app builds, settles forwarded rows.
-
 ## Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive
 
 SumUp's
@@ -518,16 +511,12 @@ and shows a clear message.
 
 ## Bundle: Tap to pay restore
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size M. Its text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Restore `stripe_on_device` (Tap-to-Pay) on the handheld** (left open by A796). It waits for
   the one-time native-app decision
   ([native app capabilities](../superpowers/specs/2026-08-30-native-app-capabilities.md), N1/N2;
   [A796 design §6](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md#6-tap-to-pay)).
-- **An offline card payment that forwarding moved to `settled` with no sale no longer holds its
-  placed order**: once no card payment of the order runs in this process, a collect is accepted.
-  Left open by A526.
-  [Detail](payments.md#an-offline-card-payment-that-forwarding-moved-to-settled-with-no-sale-no-longer-holds-its-placed-order)
 
 ## Bundle: No fiscal venue paid flow
 
@@ -620,9 +609,9 @@ and shows a clear message.
 
 - **A placed order takes one card payment at a time** (A526, 2026-10-12; defaults sent to the owner
   as an FYI the same day and built). While a card payment of a placed order is in flight — running
-  in this process, still `attempting` at its provider, or captured (or accepted offline) and not yet
-  on a sale — a cash or hand-keyed card collect of the order, a second card payment of it and an
-  unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
+  in this process, still `attempting` at its provider, or already charged and not yet
+  on a sale, including accepted or forwarded offline payments — a cash or hand-keyed card collect
+  of the order, a second card payment of it and an unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
   nothing. Pressing Pay again to file a card that was already charged is never refused, even from
   another till and even while that card's own payment has not yet filed it: it files that charge and
   asks no reader. A till on another payment provider is refused until the charge is filed, by the
