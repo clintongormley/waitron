@@ -1,6 +1,7 @@
 import type { MigrationSetSource } from "@waitron/migrations";
 import {
   BackupVerificationUnsupported,
+  combineBackupVerification,
   modulesWithSets,
   orderedMigrationSets,
   validateBackupVerificationContribution,
@@ -8,8 +9,14 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 
+/**
+ * One entry per migration set: the set's own module, the modules whose tables it holds (by name),
+ * and a verification covering all of them. Callers pass every module the binary carries, not only
+ * the enabled ones, so a switched-off module's tables stay covered.
+ */
 export function backupVerificationInventory(modules: readonly WaitronModule[]): readonly {
   readonly module: WaitronModule & { readonly migrations: MigrationSetSource };
+  readonly hosted: readonly WaitronModule[];
   readonly verification: BackupVerificationContribution;
 }[] {
   if (modules.length === 0) throw new BackupVerificationUnsupported("module_missing");
@@ -37,17 +44,25 @@ export function backupVerificationInventory(modules: readonly WaitronModule[]): 
     }
     throw error;
   }
-  // A module with no set of its own has no journal to check its tables against.
   const withSets = modulesWithSets(modules);
-  if (withSets.length !== modules.length) {
+  const hosts = new Set(withSets.map((module) => module.name));
+  const setless = modules.filter((module) => module.migrations === undefined);
+  if (setless.some((module) => module.tablesIn === undefined || !hosts.has(module.tablesIn))) {
     throw new BackupVerificationUnsupported("target_incompatible");
   }
   return Object.freeze(
-    withSets.map((module) =>
-      Object.freeze({
+    withSets.map((module) => {
+      const hosted = setless
+        .filter((m) => m.tablesIn === module.name)
+        .sort((a, b) => (a.name < b.name ? -1 : 1));
+      return Object.freeze({
         module,
-        verification: validateBackupVerificationContribution(module.backup?.verification),
-      }),
-    ),
+        hosted: Object.freeze(hosted),
+        verification: combineBackupVerification(
+          validateBackupVerificationContribution(module.backup?.verification),
+          hosted.map((m) => validateBackupVerificationContribution(m.backup?.verification)),
+        ),
+      });
+    }),
   );
 }

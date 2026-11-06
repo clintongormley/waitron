@@ -10,6 +10,7 @@ export type {
 export {
   BackupVerificationUnsupported,
   BackupCheckUnavailable,
+  combineBackupVerification,
   validateBackupVerificationContribution,
   validateBackupModuleResult,
 } from "./backup-verification.js";

@@ -767,3 +767,46 @@ describe("strict backup compatibility", () => {
     ).rejects.toBe(error);
   });
 });
+
+describe("a module whose tables live in another module's set", () => {
+  function staffing(): WaitronModule {
+    return { ...module("staffing", ["shifts"]), migrations: undefined, tablesIn: "extra" };
+  }
+
+  it("has its tables checked as part of its host's set", async () => {
+    modules.push(staffing());
+    bindTarget();
+    expect(target.modules.map((m) => m.name)).toEqual(["core", "extra"]);
+    await expect(run()).resolves.toBe("invalid");
+    execute("create table shifts (id text)");
+    await expect(run()).resolves.toBe("passed");
+  });
+
+  it("refuses its tables in a copy whose target does not know the module", async () => {
+    execute("create table shifts (id text)");
+    await expect(run()).resolves.toBe("unsupported");
+  });
+
+  it.each([true, false])("accepts a modules.json that sets it to %s", async (enabled) => {
+    modules.push(staffing());
+    bindTarget();
+    execute("create table shifts (id text)");
+    setEntry("secrets/modules.json", JSON.stringify({ modules: { staffing: enabled } }));
+    await expect(run()).resolves.toBe("passed");
+  });
+
+  it("still covers its tables when modules.json switches it off", async () => {
+    modules.push(staffing());
+    bindTarget();
+    setEntry("secrets/modules.json", JSON.stringify({ modules: { staffing: false } }));
+    await expect(run()).resolves.toBe("invalid");
+  });
+
+  it("still refuses an override naming a module nobody supplied", async () => {
+    modules.push(staffing());
+    bindTarget();
+    execute("create table shifts (id text)");
+    setEntry("secrets/modules.json", JSON.stringify({ modules: { ghost: true } }));
+    await expect(run()).resolves.toBe("unsupported");
+  });
+});

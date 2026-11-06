@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -404,5 +405,70 @@ describe("current binary backup target", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+it("gives today's real modules, none of them hosted in another's set, the target they had before sets could host modules", () => {
+  const actual = buildBackupVerificationTarget({
+    modules: ALL_MODULES,
+    migrationsRoot: null,
+    runtime,
+  });
+  expect(createHash("sha256").update(JSON.stringify(actual)).digest("hex")).toBe(
+    "fb6b620594af5d7f35cb7f1a63a98bf6ab5927f926fc8f19f9d6bc927bdc3825",
+  );
+});
+
+describe("a set holding another module's tables", () => {
+  function hosted(name: string, extra: Partial<WaitronModule> = {}): WaitronModule {
+    return {
+      ...module(name),
+      migrations: undefined,
+      tier: "toggleable",
+      tablesIn: "extra",
+      backup: {
+        verification: {
+          ...policy(),
+          data: { kind: "custom", tables: ["shifts"], immutableTables: [], checks: ["secret"] },
+          entries: [],
+          effects: [],
+          secrets: [],
+          verifyRestoredData: async () => ({
+            status: "passed",
+            checks: [{ code: "secret", status: "passed" }],
+          }),
+        },
+      },
+      ...extra,
+    };
+  }
+  const extra = () => ({ ...module("extra"), requires: { core: "^1.0.0" } });
+
+  it("keeps one entry per set, with the hosted module's policy in its host's", () => {
+    const alone = target([module(), extra()]);
+    const hosting = target([module(), extra(), hosted("staffing")]);
+    expect(hosting.modules.map((m) => m.name)).toEqual(["core", "extra"]);
+    const [before, after] = [alone, hosting].map((t) => t.modules.find((m) => m.name === "extra")!);
+    expect(after!.migrationTable).toBe(before!.migrationTable);
+    expect(after!.migrationDigest).toBe(before!.migrationDigest);
+    expect(after!.schema).toBe(before!.schema);
+    expect(after!.packageVersion).toBe(before!.packageVersion);
+    expect(after!.policyDigest).not.toBe(before!.policyDigest);
+  });
+
+  it("requires only modules that have an entry in the target, never the set itself", () => {
+    const actual = target([
+      module(),
+      extra(),
+      hosted("staffing", { requires: { core: "^1.0.0", modules: { extra: "*", other: "*" } } }),
+      hosted("other", { requires: { core: "^1.0.0" } }),
+    ]);
+    expect(actual.modules.find((m) => m.name === "extra")!.requires).toEqual({ core: "^1.0.0" });
+  });
+
+  it("refuses a hosted module whose core range differs from its host's", () => {
+    unsupported(() =>
+      target([module(), extra(), hosted("staffing", { requires: { core: "^1.0" } })]),
+    );
   });
 });
