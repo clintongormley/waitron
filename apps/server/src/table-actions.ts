@@ -32,6 +32,7 @@ import {
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
   copyHeldGroups,
+  copyWaitingGroups,
   groupArrivingDishes,
   moveGroupsToParty,
   printHoldTickets,
@@ -301,10 +302,12 @@ export interface SplitSelection {
  * its payments. A loose source must be an open bill of the party; its dishes move as
  * {@link moveCheckedDishes} moves them, and the new bill numbers last, at the new party, so the
  * staying table's numbers keep no gap. Held dishes not recalled into a draft move to one held copy
- * of each of their groups, however many of the bills share it ({@link copyHeldGroups}); the rest of
- * each bill's dishes group as that bill arrives ({@link groupArrivingDishes}). A staying party whose
- * family is left with no bill that is not abandoned is given a new empty one. The answer's `billIds`
- * are the new party's bills in number order, and `looseSourceIds` the bills that lost loose dishes.
+ * of each of their groups, however many of the bills share it ({@link copyHeldGroups}), and
+ * dishes `waitingDishesOnHoldPaper` keeps in a fired group to a fired copy of theirs
+ * ({@link copyWaitingGroups}); the rest of each bill's dishes group as that bill arrives
+ * ({@link groupArrivingDishes}). A staying party whose family is left with no bill that is not
+ * abandoned is given a new empty one. The answer's `billIds` are the new party's bills in number
+ * order, and `looseSourceIds` the bills that lost loose dishes.
  */
 export async function splitTable(
   tx: Transaction,
@@ -358,14 +361,16 @@ export async function splitTable(
   }
   const leaving: { billId: string; firers: ReadonlyMap<string, Firer> }[] = [];
   const heldLineIds: string[] = [];
+  const waitingLineIds: string[] = [];
   for (const billId of await inNumberOrder(tx, wholeBillIds)) {
-    const left = await leaveParty(tx, billId, "keep");
+    const left = await leaveParty(tx, billId, "keep", { keepWaiting: true });
     leaving.push({ billId, firers: left.firers });
     heldLineIds.push(...left.heldLineIds);
+    waitingLineIds.push(...left.waitingLineIds);
   }
 
-  // Read while held dishes are still in their groups and loose dishes still on their sources: what
-  // the kitchen is told at the end is measured against this.
+  // Read while held dishes, and dishes waiting on HOLD paper, are still in their groups and loose
+  // dishes still on their sources: what the kitchen is told at the end is measured against this.
   const sentWork = await readPartiesSentWork(tx, [partyId]);
   const wholeIds = new Set(wholeBillIds);
   const notWhole = new Map([...sentWork].filter(([billId]) => !wholeIds.has(billId)));
@@ -395,9 +400,10 @@ export async function splitTable(
       carved.push({ billId, splitFrom });
     }
     await assertBillInvariant(tx, looseSourceIds);
-    const left = await leaveParty(tx, newBill, "keep");
+    const left = await leaveParty(tx, newBill, "keep", { keepWaiting: true });
     arriving.push({ billId: newBill, firers: left.firers });
     heldLineIds.push(...left.heldLineIds);
+    waitingLineIds.push(...left.waitingLineIds);
   }
   await VENUE_SERVICE.splitPartyAllergies(
     tx,
@@ -436,6 +442,7 @@ export async function splitTable(
     );
     heldGroups.push(...groups);
   }
+  await copyWaitingGroups(tx, partyId, newParty, waitingLineIds, options.operatorId, activity);
   await copyHeldGroups(tx, partyId, newParty, heldLineIds, options.operatorId, activity);
   await printHoldTickets(tx, cfg, heldGroups);
   if (leaving.length > 0) await ensureFamilyBill(tx, cfg, partyId);

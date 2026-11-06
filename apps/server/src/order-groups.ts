@@ -761,6 +761,68 @@ export async function copyHeldGroups(
   operatorId: string,
   attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<Map<string, string>> {
+  return copyGroups(tx, "held", fromPartyId, toPartyId, lineIds, operatorId, attendance);
+}
+
+/**
+ * {@link copyHeldGroups} for fired groups, whose copies are fired as their source was: for the
+ * dishes {@link waitingDishesOnHoldPaper} keeps in their group, so each of the source's HOLD
+ * stations at which a moving dish waits is still recorded for the copy the pass releases them from.
+ */
+export async function copyWaitingGroups(
+  tx: Transaction,
+  fromPartyId: string,
+  toPartyId: string,
+  lineIds: readonly string[],
+  operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
+): Promise<Map<string, string>> {
+  return copyGroups(tx, "fired", fromPartyId, toPartyId, lineIds, operatorId, attendance);
+}
+
+/**
+ * Of `dishes`, those of a fired group that wait for the pass (a kitchen record of the dish or an
+ * extra asked for and not released), in a group where one such record is at a station recorded
+ * as having the group's HOLD paper.
+ */
+export async function waitingDishesOnHoldPaper(
+  tx: Transaction,
+  dishes: readonly { id: string; groupId: string }[],
+): Promise<string[]> {
+  if (dishes.length === 0) return [];
+  const recorded = await heldPaperStations(
+    tx,
+    dishes.map((dish) => dish.groupId),
+  );
+  const kitchen = await dishKitchenItems(
+    tx,
+    dishes.map((dish) => dish.id),
+  );
+  const waiting = (dishId: string) =>
+    (kitchen.get(dishId) ?? []).filter(
+      (item) => item.requestedAt !== null && item.firedAt === null,
+    );
+  const onPaper = new Set(
+    dishes
+      .filter((dish) =>
+        waiting(dish.id).some((item) => recorded.get(dish.groupId)?.has(item.stationId) === true),
+      )
+      .map((dish) => dish.groupId),
+  );
+  return dishes
+    .filter((dish) => onPaper.has(dish.groupId) && waiting(dish.id).length > 0)
+    .map((dish) => dish.id);
+}
+
+async function copyGroups(
+  tx: Transaction,
+  state: "held" | "fired",
+  fromPartyId: string,
+  toPartyId: string,
+  lineIds: readonly string[],
+  operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
+): Promise<Map<string, string>> {
   const copies = new Map<string, string>();
   if (lineIds.length === 0) return copies;
   const rows = await tx
@@ -771,6 +833,10 @@ export async function copyHeldGroups(
       submittedBy: orderGroups.submittedBy,
       holdPrintedAt: orderGroups.holdPrintedAt,
       createdAt: orderGroups.createdAt,
+      firedAt: orderGroups.firedAt,
+      firedBy: orderGroups.firedBy,
+      firedByDeviceId: orderGroups.firedByDeviceId,
+      requestKind: orderGroups.requestKind,
     })
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -780,7 +846,7 @@ export async function copyHeldGroups(
         inArray(workingOrderLines.id, [...new Set(lineIds)]),
         isNull(workingOrderLines.parentLineId),
         eq(orderGroups.partyId, fromPartyId),
-        eq(orderGroups.state, "held"),
+        eq(orderGroups.state, state),
         not(isRecalledDish(tx)),
       ),
     )
@@ -791,20 +857,11 @@ export async function copyHeldGroups(
       asc(workingOrders.orderNumber),
       asc(workingOrderLines.lineNo),
     );
-  const sources = new Map<
-    string,
-    { submittedBy: string; holdPrintedAt: string | null; createdAt: string; lineIds: string[] }
-  >();
-  for (const row of rows) {
+  const sources = new Map<string, Omit<(typeof rows)[number], "lineId"> & { lineIds: string[] }>();
+  for (const { lineId, ...row } of rows) {
     const source = sources.get(row.groupId);
-    if (source === undefined)
-      sources.set(row.groupId, {
-        submittedBy: row.submittedBy,
-        holdPrintedAt: row.holdPrintedAt,
-        createdAt: row.createdAt,
-        lineIds: [row.lineId],
-      });
-    else source.lineIds.push(row.lineId);
+    if (source === undefined) sources.set(row.groupId, { ...row, lineIds: [lineId] });
+    else source.lineIds.push(lineId);
   }
   if (sources.size === 0) return copies;
   const recorded = await heldPaperStations(tx, [...sources.keys()]);
@@ -822,12 +879,16 @@ export async function copyHeldGroups(
         position: ++position,
         displayNumber: displayNumber++,
         numberPartyId: toPartyId,
-        state: "held",
-        firedAt: null,
-        firedBy: null,
-        firedByDeviceId: null,
+        state,
+        ...(state === "held"
+          ? { firedAt: null, firedBy: null, firedByDeviceId: null, requestKind: "next_course" }
+          : {
+              firedAt: source.firedAt,
+              firedBy: source.firedBy,
+              firedByDeviceId: source.firedByDeviceId,
+              requestKind: source.requestKind,
+            }),
         submittedBy: source.submittedBy,
-        requestKind: "next_course",
         holdPrintedAt: source.holdPrintedAt,
         remindAt: null,
         createdAt: source.createdAt,
@@ -839,7 +900,11 @@ export async function copyHeldGroups(
     const stations = new Set<string>();
     for (const lineId of source.lineIds)
       for (const item of kitchen.get(lineId) ?? [])
-        if (item.firedAt === null && held?.has(item.stationId) === true)
+        if (
+          item.firedAt === null &&
+          (state === "held" || item.requestedAt !== null) &&
+          held?.has(item.stationId) === true
+        )
           stations.add(item.stationId);
     if (stations.size > 0) await recordHeldPaper(tx, copyId, stations);
     await tx
@@ -875,7 +940,8 @@ export async function copyHeldGroups(
     );
   }
   await pointDraftsAtCopies(tx, new Set(rows.map((row) => row.billId)), copies);
-  await removeEmptiedHeldGroups(tx, fromPartyId, [...sources.keys()], operatorId, attendance);
+  if (state === "held")
+    await removeEmptiedHeldGroups(tx, fromPartyId, [...sources.keys()], operatorId, attendance);
   return copies;
 }
 
