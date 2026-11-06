@@ -305,6 +305,81 @@ describe("a taken minute shows one countdown", () => {
     wait.show(undefined, WAITING);
     expect(drawn().querySelector("[data-test=minute-taken]")).toBeNull();
   });
+
+  it("a wait the person did not start says to press Make the series at zero", () => {
+    const { wait } = setup();
+    wait.show(undefined, WAITING);
+    const drawnWith = (carriesOn?: boolean) => {
+      const target = document.createElement("div");
+      render(wait.renderWait(words, carriesOn), target);
+      return text(target);
+    };
+    const unpressed = drawnWith(false);
+    expect(unpressed).toContain("When the time left reaches zero, press “Make the series”.");
+    expect(unpressed).toContain("Time left: 2:30");
+    expect(unpressed).not.toContain(words.nothingToDo);
+    expect(unpressed).not.toContain(words.continuesIn);
+    const pressed = drawnWith();
+    expect(pressed).toContain(words.nothingToDo);
+    expect(pressed).toContain("Continues in 2:30");
+    expect(pressed).not.toContain("When the time left reaches zero");
+    expect(pressed).not.toContain("Time left:");
+  });
+});
+
+it("a second-clock wait the person did not start says to press Check again", () => {
+  const drawnWith = (carriesOn?: boolean) => {
+    const target = document.createElement("div");
+    render(
+      renderClockProblem(
+        { kind: "second-clock" },
+        { ...words, secondClockEnds: "Carries on." },
+        undefined,
+        carriesOn,
+      ),
+      target,
+    );
+    return text(target);
+  };
+  const unpressed = drawnWith(false);
+  expect(unpressed).toContain("Once the box reaches the internet, press “Check again”.");
+  expect(unpressed).not.toContain("Carries on.");
+  const pressed = drawnWith(true);
+  expect(pressed).toContain("Carries on.");
+  expect(pressed).not.toContain("Once the box reaches the internet");
+  expect(drawnWith()).toBe(pressed);
+});
+
+it("says in Spanish what to press when the person did not start the wait", () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+  const host: ReactiveControllerHost = {
+    addController: () => undefined,
+    removeController: () => undefined,
+    requestUpdate: () => undefined,
+    updateComplete: Promise.resolve(true),
+  };
+  const es: ClockWords = {
+    ...clockWaitStrings.es,
+    secondClockDo: "",
+    secondClockEnds: "",
+    differDo: "",
+  };
+  try {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.show(undefined, { status: "waiting", targetMs: 1, remainingMs: 61_000 });
+    const target = document.createElement("div");
+    render(wait.renderWait(es, false), target);
+    expect(text(target)).toContain(
+      "Cuando el tiempo restante llegue a cero, pulsa «Crear las series».",
+    );
+    expect(text(target.querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Tiempo restante: 1:01",
+    );
+    render(renderClockProblem({ kind: "second-clock" }, es, undefined, false), target);
+    expect(text(target)).toContain("Cuando el equipo tenga internet, pulsa «Comprobar otra vez».");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it.each([

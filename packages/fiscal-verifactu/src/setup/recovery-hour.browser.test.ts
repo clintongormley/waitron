@@ -754,6 +754,33 @@ it("a recorded wait shown by Compare clocks ends at zero with no request and off
     vi.useRealTimers();
   }
 });
+it("Compare clocks with no second clock asks the person to press Check again", async () => {
+  const { state, prepare } = scripted();
+  state.decision = noSecondClock;
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+  expect(text(el)).toContain("Once the box reaches the internet, press “Check again”.");
+  expect(text(el)).not.toContain(RESTORE_ENDS);
+});
+it("a recorded wait shown by Compare clocks says to press Make the series at zero", async () => {
+  const { state, prepare } = scripted();
+  state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
+    expect(text(el)).toContain("When the time left reaches zero, press “Make the series”.");
+    expect(text(el)).toContain("Time left: 1:01");
+    expect(text(el)).not.toContain(NOTHING_TO_DO);
+    expect(text(el)).not.toContain("Continues in");
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("Compare clocks after Make the series starts over: the wait it shows ends with no request", async () => {
   const { state, prepare } = scripted([
     { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
