@@ -548,7 +548,7 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     }
   });
 
-  it("the screen's own answer after the app's is the revision sent", async () => {
+  it("the higher of two answers after the read is sent: the app's, then the screen's own higher one", async () => {
     const api = stubApi();
     api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 9 });
     const el = await mount(at7(), api);
@@ -558,6 +558,19 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
     await settle(el);
     expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 8);
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
+  });
+
+  it("the higher of two answers after the read is sent: the app's, then the screen's own lower one", async () => {
+    const api = stubApi();
+    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 8 });
+    const el = await mount(at7(), api);
+    el.tablesReadAt = nextFloorMoment();
+    el.carriedRevisions = answeredByTheApp(9);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
     await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
     expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
   });
@@ -583,9 +596,22 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     },
   );
 
-  it("the app's answer after the screen's own is the revision sent", async () => {
+  it("the higher of two answers after the read is sent: the screen's own, then the app's higher one", async () => {
     const { api, el } = await movedTo8();
     el.carriedRevisions = answeredByTheApp(9);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
+  });
+
+  it("the higher of two answers after the read is sent: the screen's own, then the app's lower one", async () => {
+    const api = stubApi();
+    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 9 });
+    const el = await mount(at7(), api);
+    el.tablesReadAt = nextFloorMoment();
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    el.carriedRevisions = answeredByTheApp(8);
     await el.updateComplete;
     await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
     expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
