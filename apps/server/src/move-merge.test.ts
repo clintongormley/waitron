@@ -30,12 +30,7 @@ import {
   createProduct,
   units,
 } from "@waitron/catalogue";
-import {
-  centsToDecimal,
-  decimalToCents,
-  nodeId as brandNodeId,
-  jobOrigin,
-} from "@waitron/shared";
+import { centsToDecimal, decimalToCents, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
