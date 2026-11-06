@@ -260,6 +260,12 @@ export class MenuPreviewPanel extends LitElement {
         text-decoration: underline;
         cursor: pointer;
       }
+      a[data-change-id],
+      a[data-edit-change],
+      a[data-hide-change],
+      button.undo {
+        white-space: nowrap;
+      }
       button.undo:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);

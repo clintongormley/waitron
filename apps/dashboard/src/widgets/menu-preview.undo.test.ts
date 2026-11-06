@@ -326,6 +326,29 @@ it("puts Undo after View and before Hide", async () => {
   ).toEqual(["view", "undo", "hide"]);
 });
 
+it("keeps each row action on one line in a narrow pane, wrapping the row between them", async () => {
+  setLocale("es-ES");
+  const el = await mountLive([ownRename, sharedPrice]);
+  el.style.display = "block";
+  el.style.inlineSize = "80px";
+  await el.updateComplete;
+  const actions = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>(
+      "a[data-change-id], a[data-edit-change], button.undo, a[data-hide-change]",
+    ),
+  ];
+  expect(actions.map((node) => node.tagName)).toEqual(["A", "BUTTON", "A", "A", "A", "A"]);
+  const lines = (node: HTMLElement) => new Set([...node.getClientRects()].map((r) => r.top)).size;
+  expect(actions.map((node) => [text(node), lines(node)])).toEqual(
+    actions.map((node) => [text(node), 1]),
+  );
+  const edit = editLink(el, "shared-price")!.getBoundingClientRect();
+  const hide = el
+    .shadowRoot!.querySelector(`a[data-hide-change="shared-price"]`)!
+    .getBoundingClientRect();
+  expect(hide.top).toBeGreaterThan(edit.top);
+});
+
 it("sends one wt-menu-undo on a click, stopping the click", async () => {
   const el = await mountLive([ownRename]);
   const heard = undoEvents(el);
