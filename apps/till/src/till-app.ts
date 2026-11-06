@@ -17966,21 +17966,23 @@ export class TillApp extends LitElement {
   }
 
   async #onSwitchBill(event: Event): Promise<void> {
-    await this.#switchToBill(
+    const shown = await this.#switchToBill(
       (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId,
     );
+    if (shown) await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
   }
 
   /** Saves the draft of the bill on screen, then shows the bill chosen last, unless the waiter left
-   * the table or the bill on screen changed while the save was out. */
-  async #switchToBill(workingOrderId: string): Promise<void> {
+   * the table or the bill on screen changed while the save was out. True when it showed a bill, whose
+   * lines and balance the caller reads. */
+  async #switchToBill(workingOrderId: string): Promise<boolean> {
     this.#switchTo = workingOrderId;
-    if (!(await this.#flushBeforeSwitch())) return;
+    if (!(await this.#flushBeforeSwitch())) return false;
     const chosen = this.#switchTo;
     this.#switchTo = undefined;
-    if (chosen === undefined) return;
+    if (chosen === undefined) return false;
     this.#showBill(chosen);
-    await this.#loadTabLines();
+    return true;
   }
 
   async #flushBeforeSwitch(): Promise<boolean> {
@@ -19692,7 +19694,8 @@ export class TillApp extends LitElement {
     const visit = this.#orderVisit;
     this.errorKey = undefined;
     this.#leavePaidScreen();
-    if (next !== undefined) await this.#switchToBill(next.workingOrderId);
+    if (next !== undefined && (await this.#switchToBill(next.workingOrderId)))
+      await this.#loadTabLines();
     if (this.activeTabId === undefined) await this.#loadPartyBills();
     else await this.#rereadAmounts(this.activeTabId, visit);
   }

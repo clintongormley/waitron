@@ -4027,6 +4027,23 @@ describe("the paid screen on a handheld", () => {
       expect(text(inOrder(tableOrder(el), "[data-bill-received]"))).toContain(money("20.00"));
     });
 
+    it("Back reads the next bill's balance once", async () => {
+      const partPaid = { ...billTwo, hasPayments: true, outstanding: "10.00" };
+      const getBillBalance = vi.fn(async (id: string) =>
+        balanceOf({ workingOrderId: id, total: "30.00", received: "20.00", outstanding: "10.00" }),
+      );
+      const { el } = await payBillOne([billThree, billOne, partPaid], undefined, {
+        getBillBalance,
+      });
+      await firstDrawn(el);
+
+      backButton(el).click();
+      await vi.waitFor(() => expect(tableOrder(el).orderId).toBe("wo-5"));
+      await flush(el);
+
+      expect(getBillBalance.mock.calls.filter(([id]) => id === "wo-5")).toHaveLength(1);
+    });
+
     it("Back reads only once the move is done, so a slow draft save cannot lose the next bill's balance", async () => {
       const partPaid = { ...billTwo, hasPayments: true, outstanding: "10.00" };
       const bills = [billThree, billOne, partPaid];
