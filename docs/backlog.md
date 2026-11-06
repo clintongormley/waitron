@@ -1346,7 +1346,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   Next: give the reconciler's reversal the same durable-attempt rule.
   [Detail](backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
-- **A1389. Refuse bad tips and compare the amount captured on the whole-order card path** (bundle of 3, 3 important, size S). [Detail](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
+- **A1389. Refuse bad tips and compare the amount captured on the whole-order card path** (1 remaining entry, important, size S). [Detail](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 
 
 - **A875. Check two writes the bill payments design says a pending card refund refuses.**
