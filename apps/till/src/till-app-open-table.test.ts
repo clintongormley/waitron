@@ -1434,6 +1434,78 @@ describe("A768 the left draft saves in the background", () => {
     expect(beersOwnedBy("p1")).toEqual(["offer-beer"]);
   });
 
+  it("after a restart with no sign-out, a left order's save refused for its person once the next person is in signs nobody out", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToTable7(el);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p2", "Bea");
+
+    release({ code: "draft.person_not_signed_in", status: 409 });
+    await flush(el, 6);
+
+    expect(lock(el)).toBeNull();
+    expect(shell(el)).not.toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+  });
+
+  it("after a restart with no sign-out, the on-screen order's save refused for its person while the next person's sign-in loads does not stop that sign-in", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    const release = holdNextSave();
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await restartWithoutSignOut(el);
+    const zones = holdNextZones();
+    await signIn(el, "p2", "Bea");
+
+    release({ code: "draft.person_not_signed_in", status: 409 });
+    await flush(el, 6);
+    zones();
+    await flush(el, 6);
+
+    expect(lock(el)).toBeNull();
+    expect(shell(el)).not.toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+  });
+
+  it("after a restart with no sign-out, a draft opened for one person while their sign-in loads stops reading once another person starts signing in", async () => {
+    const { mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openTable(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToTable7(el);
+    await back(el);
+    await reopen(el, "t4");
+    await restartWithoutSignOut(el);
+    holdNextZones();
+    await signIn(el, "p2", "Bea");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const settleTimers = async (ms: number) => {
+        await vi.advanceTimersByTimeAsync(ms);
+        for (let i = 0; i < 3; i++) {
+          await vi.advanceTimersByTimeAsync(0);
+          await el.updateComplete;
+        }
+      };
+      release(new TypeError("Failed to fetch"));
+      await settleTimers(0);
+      const reads = api.listDrafts!.mock.calls.length;
+      holdNextZones();
+      server.personId = "p1";
+      server.personName = "Ana";
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await settleTimers(15_000);
+      expect(api.listDrafts!.mock.calls.length).toBe(reads);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("a server switch lets go of a left draft whose background save got no answer", async () => {
     const { el, switchServer } = await mountWithRouter();
     await openTable(el);

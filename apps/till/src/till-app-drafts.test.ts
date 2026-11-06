@@ -1846,6 +1846,74 @@ describe("till-app: switching the device's profile with a table order open", () 
     expect(rows(el)).toEqual([]);
   });
 
+  describe("with another person holding the bill", () => {
+    /** Alex's draft on Table 4, saved straight into the server from another till. */
+    function alexHoldsTheBill(): void {
+      const [signedIn, name] = [server.personId, server.personName];
+      server.personId = "p-alex";
+      server.personName = "Alex";
+      server.save("v1", {
+        billId: "wo-4",
+        draftId: null,
+        revision: 0,
+        lines: [
+          {
+            slot: 0,
+            joinGroupId: null,
+            afterGroupId: null,
+            menuItemId: "offer-steak",
+            variantId: null,
+            menuVersionId: "v1",
+            options: [],
+            extras: [],
+            note: null,
+            quantity: "1",
+            courseId: null,
+            noMerge: false,
+          },
+        ],
+      });
+      server.personId = signedIn;
+      server.personName = name;
+    }
+
+    it("switches when the person is only viewing the other person's draft, having nothing of their own to lose", async () => {
+      const switchDeviceProfile = switchStub();
+      alexHoldsTheBill();
+      const { el } = await mountApp({ ...profiles, switchDeviceProfile });
+      await openTable(el);
+
+      await askToSwitch(el);
+
+      expect(profileDialog(el)?.notice ?? null).toBeNull();
+      expect(switchDeviceProfile).toHaveBeenCalledOnce();
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      expect(profileDialog(el)).toBeNull();
+    });
+
+    it("sends no switch, and says so, when the person has an edit of their own waiting and the same refusal comes back", async () => {
+      const switchDeviceProfile = switchStub();
+      const { el } = await mountApp({
+        ...profiles,
+        switchDeviceProfile,
+        saveDraft: vi.fn(server.saveDraft).mockRejectedValueOnce({
+          code: "draft.taken_over",
+          status: 409,
+          ownerName: "Alex",
+        }),
+      });
+      await openTable(el);
+      press(el, "Beer");
+
+      await askToSwitch(el);
+
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(switchDeviceProfile).not.toHaveBeenCalled();
+      expect(profileDialog(el)!.notice).toBe("draft_replaced");
+      expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    });
+  });
+
   it("refuses to switch while an order with no party holds lines, which are never saved", async () => {
     const switchDeviceProfile = switchStub();
     const unseated = table("t9", "9", null);
@@ -3168,6 +3236,82 @@ describe("till-app: signing out while a save is out", () => {
 
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(api.logout).toHaveBeenCalledOnce();
+  });
+
+  it("leaves the next person in when the save is refused for its person after sign-out", async () => {
+    let refuse!: () => void;
+    const { el } = await mountApp();
+    await openTable(el);
+    server.saveDraft.mockImplementationOnce(
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          refuse = () => reject({ code: "draft.person_not_signed_in", status: 409 });
+        }),
+    );
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+
+    refuse();
+    await flush(el, 6);
+
+    expect(lock(el)).toBeNull();
+    expect(shell(el)).not.toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+  });
+
+  describe("and the save gets no answer", () => {
+    afterEach(() => vi.useRealTimers());
+
+    async function settleTimers(el: TillApp, ms: number): Promise<void> {
+      await vi.advanceTimersByTimeAsync(ms);
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+      }
+    }
+
+    async function signOutWithSaveUnanswered(el: TillApp): Promise<void> {
+      await openTable(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      press(el, "Beer");
+      await settleTimers(el, DRAFT_SAVE_DELAY_MS);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      emit(tableOrder(el)!, "logout");
+      await settleTimers(el, 0);
+      expect(lock(el)).not.toBeNull();
+    }
+
+    it("locks at once and tells the server only when the save's 150-second limit has passed", async () => {
+      const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+      await signOutWithSaveUnanswered(el);
+
+      await settleTimers(el, 150_000 - DRAFT_SAVE_DELAY_MS - 1);
+      expect(api.logout).not.toHaveBeenCalled();
+      await settleTimers(el, DRAFT_SAVE_DELAY_MS + 1);
+
+      expect(api.logout).toHaveBeenCalledOnce();
+    });
+
+    it("lets the next person in at once, and never sends the old sign-out, which would sign them out", async () => {
+      const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+      await signOutWithSaveUnanswered(el);
+
+      await settleTimers(el, 1_000);
+      server.personId = "p2";
+      server.personName = "Sam";
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+      await settleTimers(el, 0);
+      expect(lock(el)).toBeNull();
+      expect(shell(el)).not.toBeNull();
+
+      await settleTimers(el, 150_000);
+
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(lock(el)).toBeNull();
+    });
   });
 });
 
