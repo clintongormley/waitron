@@ -1037,7 +1037,8 @@ listener and its passkey hostname keep their configuration.
 On 6 November a manual Chromium session used the public gateway to sign in to the test box
 with its ordinary password and normal certificate trust, then opened its overview. Installing
 an issued replacement changed new TLS connections without restarting the server. This was a Mac
-client on the home network using the public Internet path, not a physically outside-home browser.
+client on the home network using the public Internet path. A fresh Chromium session then
+repeated the password sign-in through the rented server's outside-home exit with normal trust.
 The bounded test app and peer were stopped afterwards. At the owner's request a separate
 managed demo then replaced them: the unprivileged app and its separate tunnel recovered from
 controlled process exits, and the public page returned 200. Both are enabled for startup; a
@@ -1049,7 +1050,7 @@ Remaining work, following the owner's certificate-first order:
 - Add the box certificate worker over the existing signed exchange, including renewal.
 - Add the managed outbound tunnel container, send box details over the existing signed connection,
   provide Settings on/off/status, and retire `@waitron/tunnel`.
-- Qualify a physically outside-home browser and the managed demo across a physical reboot.
+- Qualify the managed demo across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.
 - Once the browser path works, try Translate all and the existing address fields with a Cloud

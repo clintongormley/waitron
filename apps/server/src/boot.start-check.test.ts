@@ -61,6 +61,7 @@ const SPARE = { nodeId: "00000000-0000-4000-8000-0000000000cc", ...generateNodeK
 let server: StartedServer | undefined;
 let peer: Server | undefined;
 const scratch: string[] = [];
+const suite = useVenueDb({ migrations });
 
 afterEach(async () => {
   listener.configured = false;
@@ -207,10 +208,10 @@ async function boot(
     process.stdout.write = original;
   }
   // A configured listener may still be binding when the start returns.
-  const answer = await vi.waitFor(() =>
-    fetch(`http://127.0.0.1:${options.port ?? httpPort()}/api/node`),
-  );
-  const { acceptingSales } = (await answer.json()) as { acceptingSales: unknown };
+  const { acceptingSales } = await vi.waitFor(async () => {
+    const answer = await fetch(`http://127.0.0.1:${options.port ?? httpPort()}/api/node`);
+    return (await answer.json()) as { acceptingSales: unknown };
+  });
   return { nodeId, env, lines, acceptingSales };
 }
 
@@ -237,8 +238,6 @@ function spareChart(
 }
 
 describe("the start check on a real start", () => {
-  const suite = useVenueDb({ migrations });
-
   it("a seeded main box whose chart lists an adopted, unfinished spare starts selling", async () => {
     const booted = await boot(suite, { spareUrl: OWN_URL, joined: false });
     expect(booted.acceptingSales).toBe(true);
