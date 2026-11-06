@@ -1352,8 +1352,8 @@ request and `pnpm release tag` tag it, adds About Waitron to the dashboard, the 
 an ⓘ corner and the setup wizard, serves it at `/legal/declaration` before setup, on the
 plain-HTTP page and on the recovery page, attaches it to each GitHub Release, and gives the
 `@waitron/verifactu` library its own declaration. The owner answered all four questions on
-2026-10-21: he is the producer (his name, NIF and a publishable postal address are still to be
-supplied); e) = «S» for this version and f) = «N»; item d) is the draft sent to the asesor as
+2026-10-21: he is the producer (his name, NIF and publishable postal address were supplied by
+2026-11-04 and are public); e) = «S» for this version and f) = «N»; item d) is the draft sent to the asesor as
 Q53, pending their answer; production boxes run releases only. The owner approved the second revision on 2026-10-22 (about 02:45) and chose
 A993's offline behaviour (about 02:55); the third revision folds those answers in. Slice 1,
 built from its [plan](../superpowers/plans/2026-10-22-a940-1-software-identity.md), landed on
@@ -1365,10 +1365,16 @@ his name and NIF: meanwhile records still carry the taxpayer's name and NIF ther
 published build set to production refuses to trade (`sif.producer_unset`). Two test checks
 changed with it: the Spanish practice sales were re-recorded (only their software block moved),
 and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-identity.test.ts`
-changed (the owner accepted it on 2026-10-23). Still open: how the producer's name and tax number
-reach a box without entering anything public ([Task 8's proposal of 2026-11-04](../superpowers/plans/2026-10-22-a940-1-software-identity.md),
-with the owner), then slices 1b to 6, and A993's plan. Still needed from outside: the owner's publishable
-address, and the asesor's answer to Q53.
+changed (the owner accepted it on 2026-10-23). Still open: [Task 8](../superpowers/plans/2026-10-22-a940-1-software-identity.md),
+rewritten on 2026-11-06 for the owner's answers of 4 and 6 November and not built. The name, tax
+number and postal address are public; they are three settings named for the software's producer
+(`WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID`, `WAITRON_PRODUCER_ADDRESS`), carried by each
+official image from repository secrets of the same names and never committed, so a fork builds with
+its own. A production start with none refuses whether or not the build is stamped, and a production
+start whose open chain was made under another tax number refuses (`sif.producer_changed`) until A993
+can open the new installation. The owner or the watcher sets the three secrets before Task 8 lands.
+Then slices 1b to 6, and A993's plan. Still needed from outside: the asesor's answer to Q53. The
+owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 
 ## A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.
 
@@ -1397,7 +1403,11 @@ case the page the box shows instead of trading also accepts a phone's or a till'
 A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
 picture 6). A947's slice 4a landed as #1990 and A940's slice 1 as #2000; its plan comes
 after slice 1's, and it lands before the first production venue goes live. A move between fiscal modules stays a refused start
-until the first non-Veri\*Factu mode.
+until the first non-Veri\*Factu mode. Since 2026-11-06 the producer is a setting each image
+carries (A940 Task 8), so a start that opened a new installation on any producer difference would
+let a hand override do it with nobody present; Task 8 refuses instead, and A993's plan has to
+decide whether a start may ever make a producer change itself (recommended: only when the upgrade's
+own marker names that producer; an owner question).
 [Design](../superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
 
 ## Can a simplified invoice carry an operation date different from its issue date?

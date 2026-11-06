@@ -196,6 +196,11 @@ We offered reciprocity in the message. Send it.
 > **2026-10-23:** slice 1 is built — pull request #2000, parked for the owner. Until he supplies
 > his name and NIF, records keep the taxpayer's there and a published production build will not
 > trade.
+>
+> **2026-11-06:** slice 1 landed as #2000. The owner's name, tax number and postal address are
+> public; each official image carries them from repository secrets and they are never committed.
+> Building that is Task 8 of the plan, rewritten the same day; until it lands, records still name the
+> taxpayer there.
 
 Needed before anyone else uses the software; already overdue in principle, since the producer
 deadline passed on 29 July 2025.

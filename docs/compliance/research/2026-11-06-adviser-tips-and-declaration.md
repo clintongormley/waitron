@@ -729,6 +729,10 @@ If a hosted build were ever sold as a different product, it would need its own c
 
 ## Side finding: the tax number and publication
 
+> **2026-11-06, later the same day:** superseded. The owner withdrew the 2026-11-02 choice on 4 November:
+> the name, tax number and address are public, travel with each release from repository secrets and are
+> never committed (A940 plan, Task 8; `docs/compliance/2026-11-06-adviser-questions.md`, item 4).
+
 Art. 15.1 h) to j) put the producer's name, NIF and postal address in the declaration. Art. 13.2 of the
 Regulation requires it «de modo visible en el propio sistema informático» and «para el cliente y el
 comercializador en el momento de la adquisición del producto». The owner chose on 2026-11-02 to keep

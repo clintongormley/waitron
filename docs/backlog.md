@@ -246,8 +246,8 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
 - **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).**
-  Still open: how the producer's name and tax number reach a box (Task 8: public values, set on the official repository as a repository secret and never committed; owner, 2026-11-06), then slices 1b to 6, and A993's plan.
-  Still needed from outside: the owner's publishable address, and the asesor's answer to Q53.
+  Still open: Task 8, rewritten 2026-11-06 and not built — the producer's name, tax number and postal address as three public settings each official image carries from repository secrets, never committed; a production start refuses without them, and refuses when its chain was made under another producer. Then slices 1b to 6, and A993's plan.
+  Still needed from outside: the asesor's answer to Q53. The owner's publishable address is settled (supplied 2026-11-04; it travels with the other two).
   [Detail](backlog/fiscal.md#a940-waitrons-declaración-responsable--design-approved-2026-10-22-slice-1-landed-2026-10-23-2000).
 
 - **A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.**

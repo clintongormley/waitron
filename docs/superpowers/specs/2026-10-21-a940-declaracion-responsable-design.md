@@ -24,17 +24,21 @@
 answers of about 22:25, and a third time on 2026-10-22 for his answers of 02:45 to 03:12.
 **Status:** approved by the owner (2026-10-22, about 02:45); A993's offline behaviour chosen (way
 A plus a phone's or a till's clock, about 02:55). Nothing in it is built. Still needed: from the
-owner, his full name, NIF (Spanish tax number) and a postal address he is content to publish; from
-the asesor (tax adviser), the answer to Q53, which item d)'s wording waits for. Slice 1's build
+owner, his full name, NIF (Spanish tax number) and a postal address he is content to publish
+(supplied by 2026-11-04; see the 2026-11-06 note below); from the asesor (tax adviser), the answer to Q53, which item d)'s wording waits for. Slice 1's build
 plan: [`2026-10-22-a940-1-software-identity.md`](../plans/2026-10-22-a940-1-software-identity.md).
 **Items:** A940, and A993 for the automatic identity change (§5.6).
 
 **Mock-ups:** removed from the repository on 2026-11-02.
 
-> **2026-11-04, a pointer, not yet a decision:** the owner chose on 2026-11-02 to keep their tax number
-> out of everything public, which §5.2, §5.3, §5.4, §5.6's first table row, §7.1, §7.2 and §8 do not fit as written.
-> The proposal and the owner's open choice:
-> [the plan's "Task 8, proposal of 2026-11-04"](../plans/2026-10-22-a940-1-software-identity.md).
+> **2026-11-06, the producer's details (owner, 2026-11-04 and 2026-11-06):** the owner's name, tax
+> number and postal address are public. They are three settings named for the software's producer
+> (`WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID`, `WAITRON_PRODUCER_ADDRESS`), carried by each
+> official image from repository secrets and never committed, so a fork builds with its own. A new
+> value reaches a box when it is upgraded. §5.2, §5.3, §5.4 and §5.6's first table row are updated
+> for it; the build is [slice 1's plan, Task 8](../plans/2026-10-22-a940-1-software-identity.md). The
+> 2026-11-02 choice to keep the number out of everything public, and the 2026-11-04 proposal built on
+> it (a venue-database row, a build-origin stamp, a file on the owner's stick), are withdrawn.
 
 > **Third revision 2026-10-22 — the owner's answers of 02:45 to 03:12.** Both of the second
 > revision's questions are answered, and two further directions apply to every clock wait. What
@@ -425,7 +429,8 @@ example's item 2.c) (see the choices below). Items are labelled «1.a)» to «1.
 labels them.
 
 Values marked ‹…› are filled in later: the producer's facts by the owner (the owner personally,
-§11, Q1; his name, NIF and publishable address are still to be supplied), and the version, the
+§11, Q1; supplied 2026-11-02 and 2026-11-04, public, filled in at the image build from the release's
+producer settings, §5.3), and the version, the
 library version, the hosting phrases, the functions list and the date by the release step (§5).
 Where the producer is a person rather than a company, AEAT's example says to write «Nombre y
 apellidos de la persona productora» in h) and «persona productora» for «entidad productora» in
@@ -615,8 +620,10 @@ answered "Releases only").
 ### 5.2 One source for what the records say and what the declaration says
 
 A new file, `packages/fiscal-verifactu/src/software-identity.ts`, holds the product's own facts:
-the name, the two-character code, the usage flags and the producer's name and identifier.
-`buildSistemaInformatico` reads it, and so does the declaration renderer. The version comes from
+the name, the two-character code and the usage flags. The producer's name, identifier and postal
+address are not in the source: they are the release's three producer settings, read once by a
+generic reader outside the fiscal module and mapped by this file to the records' fields (2026-11-06;
+slice 1's plan, Task 8). `buildSistemaInformatico` reads it, and so does the declaration renderer. The version comes from
 the build (§5.4). So items a), b), c), e), f), h) and i) and their twin record fields are written
 from the same values. The producer's identifier and the code are also the running release's
 half of the identity §5.6 compares at every start.
@@ -635,6 +642,11 @@ English.
   the file is never edited again; git keeps every one, which meets the producer's duty to keep them
   all (RD art. 13.3). A guard (§8) fails if a file whose tag exists differs from the file at that
   tag. A file whose tag does not exist yet may still change.
+- **The producer's facts are slots in every committed text** (2026-11-06): ‹nombre y apellidos›,
+  ‹NIF› and ‹dirección› stay as slots in `template.md` and in each `v<version>.md`, never values,
+  so a fork inherits none. The image build fills them from the producer settings passed to that
+  build, so the official image carries the official values and a fork's image its own; a build
+  given none renders no declaration (its production start refuses anyway).
 - **The rendered copies** — HTML, PDF and plain text — are made once, in the image build, by a
   renderer in `fiscal-verifactu`, and land at a fixed path in the image, `/app/declaration/`,
   beside `/app/third-party/`. The box serves them as opaque files, so `apps/server` never imports
@@ -656,7 +668,9 @@ pnpm release prepare 1.0.0 --place "‹localidad›"
    file, the version, the bundled `@waitron/verifactu` version, the hosting phrases and the
    functions list from `declarations/functions.md`, and today's date in Europe/Madrid, in the
    Orden's order «día, mes y año».
-3. Prints the whole declaration and asks for a typed `yes`. This is the producer signing.
+3. Prints the whole declaration, the producer's slots filled from the three producer settings in
+   the environment of whoever runs it (refusing when they are unset), and asks for a typed `yes`.
+   This is the producer signing. The committed file keeps the slots (§5.3).
 4. On a branch `release/1.0.0`, commits it (`git commit -s`, "Release 1.0.0") and opens a pull
    request. It lands like any pull request, after its CI.
 
@@ -705,7 +719,7 @@ not a new system (developer FAQ §4, p. 9). So the identity a chain is opened un
 
 | Fact | Where it comes from at a start | Changes when |
 | --- | --- | --- |
-| The producer's NIF (or foreign identifier, its type and country) | The running release's `software-identity.ts` (§5.2) | The producer changes, e.g. the owner to a future Waitron company |
+| The producer's NIF (or foreign identifier, its type and country) | The running release's producer settings (§5.2) | The producer changes, e.g. the owner to a future Waitron company |
 | The two-character code | The same file | Waitron ships a different product |
 | The compliance mode («VERI\*FACTU» today, the only one) | The enabled fiscal module | A venue moves between fiscal policies — a new installation by **Waitron's own conservative choice** (the owner, Q2), not by a source: the developer FAQ's «cuando se produce un cambio de la implementación de la forma de facturar del SIF, realmente se ha cambiado de SIF» (§3, p. 9) is about a change of regulation (its example: RD 1007/2023 to the SII), and §3 also calls an adapted system one system «tanto actuando en la modalidad VERI\*FACTU como en la NO VERI\*FACTU» (p. 7; `docs/compliance/verifactu-faq-notes.md` §6). §12 keeps it for the asesor |
 | The taxpayer's NIF | The `tenants` row | Never, through the product (below) |
@@ -1032,6 +1046,13 @@ A fifth way was weighed and left out: reserve the name while the old release is 
 the box is online, when the release is fetched, and use it at the later upgrade with no clock. It
 removes A's delay, but adds a reservation and a rule that cancels it when a later name appears in
 between (a switch to the spare, say) — more fiscal code, to save a delay that costs no sale.
+
+> **2026-11-06, for A993's plan:** with the producer a setting the image carries, a start that
+> opened a new installation on any producer difference would let a stray value (a hand override)
+> do it with nobody present. Until A993 is built, a production start refuses instead
+> (`sif.producer_changed`, slice 1's plan, Task 8, which compares the record the chain head points
+> at). Recommended to A993, and put to the owner: a start opens a new installation for a producer
+> difference only when the upgrade's own marker names that producer; otherwise it keeps refusing.
 
 **Under A, what a start does.** Every start still compares the identities (above). After an
 upgrade through its step they match. They differ in two cases: the new release was started some

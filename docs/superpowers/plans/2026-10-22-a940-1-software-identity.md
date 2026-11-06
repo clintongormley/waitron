@@ -710,7 +710,8 @@ a value (`awk -F= '{print $1, length(substr($0, index($0,"=")+1))}'` over the fi
 **The catch: a value that differs from the chain's.** Design §5.6 counts the producer's tax number
 as part of a chain's identity: a different producer means a new installation, which closes the
 chain and restarts the series, and cannot be undone. A993, which makes that change by itself, is not
-built (`git grep -n 'identity_mismatch\|identity-change' -- packages apps` finds nothing). So today
+built (`git grep -n 'identity_mismatch\|identity-change' -- packages apps` finds only the
+dashboard's unrelated `venue-identity-changed` event). So today
 a box given a different value — a hand override, or a release whose secrets changed — would put the
 new producer on new records of the **same** chain, silently. With settings rather than a database row
 there is no stored copy to absorb a mistake. But one stored record already exists: every record keeps
@@ -781,8 +782,10 @@ Traced on `main` at `5558d26e89`; read, not run, except where a command is named
   summary reads installation codes, not producers (`packages/fiscal-verifactu/src/handover-summary.ts:44-50`).
   The drain (`drain.ts:1787-1815`), reconciliation (`reconcile.ts:429-447`) and the backup check
   (`backup-verification-chain.ts:107-110`, which compares the installation, not the producer, since
-  Task 4) each compare a record with **its own** stored block. A repository-wide grep for readers of
-  `SistemaInformatico`/`sistema_informatico` outside the files Task 8 changes found no other.
+  Task 4) each compare a record with **its own** stored block. A grep of non-test code under
+  `apps` and `packages` for reads of a stored block's `NIF` or `NombreRazon` finds only
+  `drain.ts:1794,1811-1812` and `reconcile.ts:443`, both per record. (`initial-paper-candidates.ts:66-76`
+  builds a fixed check block of its own and reads no producer.)
 - **Not about the producer, but met on the same path:** a controlled handover between two
   different releases is refused when their migrations differ — `handover.modules_differ` when the
   receiving image has migrations the copy lacks, `provisioning.database_ahead` the other way
