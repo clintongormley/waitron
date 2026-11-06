@@ -6685,8 +6685,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only).
 
 - **A974. Finish the remaining English names in general code.**
-  Remaining names include till boot and counter-payment fixtures; shared-fixture consumers in the
-  server split-bill suites; `registroCount` helper consumers in bill-editing, move-bill and
+  Remaining names include till boot and counter-payment fixtures; shared fixture names in the
+  server split-bill suites; `registroCount` consumers in split-table, bill-editing, move-bill and
   other order suites;
   the till's moved-dish suite; accented bindings in the portion-selection, counter-portion-rows
   and till-ticket-view tests; shared helper consumers and file names.
