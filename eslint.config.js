@@ -160,12 +160,10 @@ export default tseslint.config(
 
   {
     // packages/scheduler is a duty-NEUTRAL runner: duties are injected and typed structurally, so
-    // it must never import a duty's own package. Its package.json does NOT enforce that.
-    // `@waitron/payments` is a devDependency there only for the type-fit test and the AppError
-    // code augmentation — but there is no build step, `main` points at TS source, and pnpm links a
-    // workspace devDependency identically to a runtime one, so `import { reconcilePayments } from
-    // "@waitron/payments"` inside src/run.ts would typecheck, lint clean and pass every test. The
-    // manifest constrains nothing here; only this rule does.
+    // it must never import a duty's own package. Its package.json does NOT enforce that:
+    // `@waitron/payments` is a dependency there because `scheduled_runs` is declared in payments'
+    // schema, which is the one file of payments the runner may import (`except` below). Any other
+    // import of payments would typecheck and pass every test; only this rule refuses it.
     //
     // Test files are exempt: the fit test and the AppError-code augmentation both name
     // @waitron/payments deliberately, and neither ships in the runtime path.
@@ -191,6 +189,7 @@ export default tseslint.config(
                 "./packages/fiscal/**",
                 "./packages/fiscal-verifactu/**",
               ],
+              except: [import.meta.dirname + "/packages/payments/src/schema/scheduled-runs.*"],
               message:
                 "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
                 "package. Duties are injected and " +

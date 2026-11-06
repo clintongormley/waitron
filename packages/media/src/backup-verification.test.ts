@@ -8,6 +8,7 @@ import {
   mediaImageData,
   mediaImageBlobs,
   mediaImageEdits,
+  CORE_CLASSIFICATION,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -25,9 +26,14 @@ import {
   validateBackupVerificationContribution,
   validateBackupModuleResult,
 } from "@waitron/module";
-import { MEDIA_BACKUP_VERIFICATION as OWNER, MEDIA_MODULE, MEDIA_CLASSIFICATION } from "./index.js";
+import { MEDIA_BACKUP_VERIFICATION as OWNER, MEDIA_MODULE, MEDIA_TABLES } from "./index.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { sampleImage } from "./testing/sample-image.js";
+
+/** This module's share of core's classification, which holds its tables. */
+const MEDIA_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (MEDIA_TABLES as readonly string[]).includes(table),
+);
 const migrations = [
   CORE_MIGRATIONS,
   CATALOGUE_MIGRATIONS,

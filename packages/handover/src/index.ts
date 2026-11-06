@@ -25,7 +25,6 @@ export type {
   SchemaEntry,
 } from "./indicator.js";
 export { NODE_LOCAL_MANIFEST } from "./manifest.js";
-export { HANDOVER_MIGRATIONS } from "./migrations.js";
 export { handoverActivations, handoverScenario } from "@waitron/db";
 export type { NodeLocalItem, NodeLocalManifestRow, RetainedRevision } from "./manifest.js";
 export {

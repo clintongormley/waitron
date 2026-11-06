@@ -5,7 +5,7 @@ import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 import { DEFAULTS, type LedgerSnapshot } from "./derive.js";
 import { completeRun, readSnapshot, reclaimStale } from "./store.js";
 import { runDue, type SchedulerDeps } from "./run.js";
-import { scheduledRuns } from "./schema/scheduled-runs.js";
+import { scheduledRuns } from "@waitron/payments";
 import { FakeDuty } from "./testing/fake-duty.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 

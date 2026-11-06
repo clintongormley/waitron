@@ -1,11 +1,11 @@
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./index.js";
 import * as api from "./index.js";
 
 describe("@waitron/identity barrel", () => {
-  it("exports the migration descriptor with the identity journal table", () => {
-    expect(IDENTITY_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_identity");
+  it("exports no migration set of its own: its tables are in core's set", () => {
+    expect(Object.keys(api)).not.toContain("IDENTITY_MIGRATIONS");
+    expect(api.IDENTITY_TABLES).toContain("persons");
   });
 });
 

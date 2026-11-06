@@ -18,7 +18,6 @@ export default defineConfig({
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,
-        "drizzle.config.ts",
         "drizzle/**",
         // Test-only plumbing shared by this package's suites.
         "src/testing/**",

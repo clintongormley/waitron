@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
 import {
   captureError,
+  catalogues,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   departments,
@@ -16,15 +16,14 @@ import {
   withTransaction,
   locations,
   venueLocationId,
-} from "@waitron/db";
+} from "../../index.js";
 import { randomUUID } from "node:crypto";
-import type { Database } from "@waitron/db";
-import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import type { Database } from "../../index.js";
+import { useVenueDb } from "../../testing/venue-db.js";
+import { seedDevice, seedTenant, seedVenue } from "../../testing/seed.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 
@@ -454,6 +453,12 @@ describe("the venue-service migration set carries no tenant column", () => {
   });
 });
 
+/** A menu's own row: the foreign keys below need nothing else of it. */
+async function insertMenu(name: string): Promise<{ id: string }> {
+  const [menu] = await db.insert(catalogues).values({ name }).returning({ id: catalogues.id });
+  return menu!;
+}
+
 describe("the venue-service foreign keys refuse a missing target", () => {
   async function venue() {
     await seedTenant(db);
@@ -474,9 +479,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
         tradingName: "Bar",
       })
       .returning({ id: departments.id });
-    const menu = await db.transaction((tx) =>
-      createCatalogue(tx, { name: `Drinks ${locationId}` }),
-    );
+    const menu = await insertMenu(`Drinks ${locationId}`);
     return {
       locationId: locationId as string,
       zoneId: zone!.id,
@@ -902,7 +905,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   it("defaults period colour and removes staff menus when the period is deleted", async () => {
     const v = await venue();
     const periodId = randomUUID();
-    const staff = await db.transaction((tx) => createCatalogue(tx, { name: "Staff drinks" }));
+    const staff = await insertMenu("Staff drinks");
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
       values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
     await db.execute(sql`insert into menu_period_staff_menus (period_id, department_id, menu_id)

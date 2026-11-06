@@ -11,7 +11,7 @@ import {
   readSnapshot,
   reclaimStale,
 } from "./store.js";
-import { scheduledRuns } from "./schema/scheduled-runs.js";
+import { scheduledRuns } from "@waitron/payments";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const DUTY = "test.duty";

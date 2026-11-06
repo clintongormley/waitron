@@ -1,5 +1,4 @@
 // The CLI is NOT re-exported: it is an operator command, reached through the bin, not the vault.
-export { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 export { tenantCredentials } from "@waitron/db";
 
 export { PURPOSES, isPurpose, validatePayload } from "./purposes.js";

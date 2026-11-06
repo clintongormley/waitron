@@ -5,7 +5,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
-import { scheduledRuns } from "./schema/scheduled-runs.js";
+import { scheduledRuns } from "@waitron/payments";
 import { dayPeriod } from "./derive.js";
 import { claimGap, claimRow, completeRun, enqueueSuccessor, readSnapshot } from "./store.js";
 

@@ -21,10 +21,16 @@ import {
   staffingBlocks,
   staffingDays,
   staffRoles,
+  WORKFORCE_CLASSIFICATION,
 } from "@waitron/workforce";
 import { STAFFING_BACKUP_VERIFICATION as OWNER } from "./index.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
-import { STAFFING_CLASSIFICATION } from "./classification.js";
+import { STAFFING_TABLES } from "./classification.js";
+
+/** This module's share of workforce's classification, which holds its tables. */
+const STAFFING_CLASSIFICATION = WORKFORCE_CLASSIFICATION.filter(({ table }) =>
+  (STAFFING_TABLES as readonly string[]).includes(table),
+);
 const prerequisites = [
   CORE_MIGRATIONS,
   CATALOGUE_MIGRATIONS,

@@ -11,9 +11,14 @@ import { is, sql } from "drizzle-orm";
 import { getTableConfig, SQLiteTable, unique } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { id, label, table } from "../schema/columns.js";
+import { enumText, id, label, table } from "../schema/columns.js";
 import * as coreBarrel from "../schema/index.js";
-import { fromDatabase, fromDeclaration, stageSubjectTables } from "./schema-conformance.js";
+import {
+  closedVocabularyOn,
+  fromDatabase,
+  fromDeclaration,
+  stageSubjectTables,
+} from "./schema-conformance.js";
 import { useVenueDb } from "./venue-db.js";
 
 // Two databases with different starting points, which is the whole of the staging case below: one
@@ -94,5 +99,18 @@ describe("the schema-conformance suite factory", () => {
     expect([...onVirgin].sort()).toEqual(coreDeclaredTables);
 
     expect(await stageSubjectTables(alreadyCarryingCore.db, CORE_MIGRATIONS)).toEqual([]);
+  });
+
+  it("names a table's closed-vocabulary columns, and a table that is not declared at all", () => {
+    const plain = table("plain_probe", { id: id("id").primaryKey(), kind: label("kind") });
+    const closed = table("closed_probe", {
+      id: id("id").primaryKey(),
+      kind: enumText("kind", ["a", "b"]),
+    });
+    expect(closedVocabularyOn([plain, closed], "plain_probe")).toEqual([]);
+    expect(closedVocabularyOn([plain, closed], "closed_probe")).toEqual(["closed_probe.kind"]);
+    expect(() => closedVocabularyOn([plain, closed], "missing_probe")).toThrow(
+      "missing_probe is not among the declared tables",
+    );
   });
 });

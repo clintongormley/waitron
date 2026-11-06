@@ -8,8 +8,7 @@ describe("the public surface", () => {
       [
         "DEFAULTS",
         "SCHEDULER_BACKUP_VERIFICATION",
-        "SCHEDULER_CLASSIFICATION",
-        "SCHEDULER_MIGRATIONS",
+        "SCHEDULER_TABLES",
         "runDue",
         "scheduledRuns",
       ].sort(),

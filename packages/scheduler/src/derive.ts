@@ -1,5 +1,5 @@
 import type { RunPeriod } from "./duty.js";
-import type { RunState } from "./schema/scheduled-runs.js";
+import type { RunState } from "@waitron/payments/src/schema/scheduled-runs.js";
 
 /** A UTC day is a constant width — no DST. That constancy is why the cadence tiles UTC days. */
 export const DAY_MS = 24 * 60 * 60 * 1000;

@@ -18,7 +18,6 @@ export default defineConfig({
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,
-        "drizzle.config.ts",
         "drizzle/**",
         "src/testing/**",
         // Re-export barrels; index.test.ts and schema-ownership.test.ts assert their surface.

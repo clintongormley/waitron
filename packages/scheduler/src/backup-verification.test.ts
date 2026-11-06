@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
-import { scheduledRuns } from "./schema/scheduled-runs.js";
+import { scheduledRuns } from "@waitron/payments";
 import * as api from "./index.js";
 
 const original = useVenueDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });

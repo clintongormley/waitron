@@ -1,22 +1,11 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CREDENTIALS_CLASSIFICATION } from "./classification.js";
+import { CORE_CLASSIFICATION } from "@waitron/db";
+import { CREDENTIALS_TABLES } from "./tables.js";
 
-const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
-
-function tablesInDrizzle(): string[] {
-  const names: string[] = [];
-  for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {
-    const sql = readFileSync(join(DRIZZLE, file), "utf8");
-    // Backticks, double quotes or none, so the guard reads the generated SQL rather than one
-    // dialect's punctuation.
-    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?[`"]?([a-z0-9_]+)[`"]?/gi)) {
-      names.push(m[1]!);
-    }
-  }
-  return names;
-}
+/** This module's share of the classification of the set that holds its tables. */
+const CREDENTIALS_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (CREDENTIALS_TABLES as readonly string[]).includes(table),
+);
 
 describe("CREDENTIALS_CLASSIFICATION", () => {
   it("has a valid class and a non-empty reason for every entry", () => {
@@ -33,13 +22,9 @@ describe("CREDENTIALS_CLASSIFICATION", () => {
     const entry = CREDENTIALS_CLASSIFICATION.find((c) => c.table === "tenant_credentials");
     expect(entry?.class).toBe("local");
   });
-  it("classifies exactly the tables this module's migrations create", () => {
-    const classified = new Set(CREDENTIALS_CLASSIFICATION.map((c) => c.table));
-    const created = new Set(tablesInDrizzle());
-    // The control: the assertion below it — the one that catches a NEW table nobody classified —
-    // passes against an empty `created`, so it says nothing unless the scan found the migrations.
-    expect(created.size).toBeGreaterThan(0);
-    expect([...created].filter((t) => !classified.has(t)).sort()).toEqual([]);
-    expect([...classified].filter((t) => !created.has(t)).sort()).toEqual([]);
+  it("lists only tables the set holding them classifies", () => {
+    const classified = new Set(CORE_CLASSIFICATION.map((c) => c.table));
+    expect(CREDENTIALS_TABLES.length).toBeGreaterThan(0);
+    expect(CREDENTIALS_TABLES.filter((t) => !classified.has(t))).toEqual([]);
   });
 });

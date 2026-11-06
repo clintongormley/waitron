@@ -10,7 +10,7 @@ import { AppError } from "@waitron/shared";
 // `declare module "@waitron/shared"` augmentation.
 import "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
-import { scheduledRuns } from "./schema/scheduled-runs.js";
+import { scheduledRuns } from "@waitron/payments";
 import { DEFAULTS, dayPeriod } from "./derive.js";
 import { claimGap, readSnapshot, reclaimStale } from "./store.js";
 import * as store from "./store.js";

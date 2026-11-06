@@ -1,8 +1,8 @@
-import { fileURLToPath } from "node:url";
 import { getTableColumns, sql } from "drizzle-orm";
 import { getTableConfig, SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import {
+  CORE_CLASSIFICATION,
   CORE_MIGRATIONS,
   FOREIGN_KEY_VIOLATION,
   captureError,
@@ -11,23 +11,12 @@ import {
   nodes,
   triggerRaised,
   handoverActivations,
-} from "@waitron/db";
-import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { HANDOVER_CLASSIFICATION } from "./classification.js";
-import { HANDOVER_MIGRATIONS } from "./migrations.js";
-import * as barrel from "@waitron/db/schema/handover.js";
+} from "../../index.js";
+import { seedNode, seedVenue } from "../../testing/seed.js";
+import { migratedTableNames, useVenueDb } from "../../testing/venue-db.js";
+import * as barrel from "./index.js";
 
-describeSchemaConformance({
-  subjectName: "handover",
-  prerequisites: [CORE_MIGRATIONS],
-  subject: HANDOVER_MIGRATIONS,
-  declarations: barrel,
-  declaresClosedVocabularies: true,
-});
-
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, HANDOVER_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const OPERATION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const MISSING_NODE = "ffffffff-ffff-4fff-8fff-ffffffffffff";
@@ -93,16 +82,13 @@ describe("the handover migration set", () => {
     }
   });
 
-  it("runs from its own folder under its own journal, with its one append-only table", () => {
-    expect(HANDOVER_MIGRATIONS).toEqual({
-      migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),
-      migrationsTable: "__drizzle_migrations_handover",
-      appendOnlyTables: ["handover_activations"],
-    });
+  it("lives in core's set, which protects it as append-only", () => {
+    expect(CORE_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_db");
+    expect(CORE_MIGRATIONS.appendOnlyTables).toContain("handover_activations");
   });
 
   it("classifies the table as an append-only ledger", () => {
-    expect(HANDOVER_CLASSIFICATION).toEqual([
+    expect(CORE_CLASSIFICATION.filter(({ table }) => table === "handover_activations")).toEqual([
       {
         table: "handover_activations",
         class: "ledger",

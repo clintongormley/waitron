@@ -1,13 +1,18 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, type Database } from "@waitron/db";
+import { CORE_CLASSIFICATION, CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_BACKUP_VERIFICATION as OWNER } from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
+import { VENUE_SERVICE_TABLES } from "./classification.js";
+
+/** This module's share of core's classification, which holds its tables. */
+const VENUE_SERVICE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (VENUE_SERVICE_TABLES as readonly string[]).includes(table),
+);
 const migrations = [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });

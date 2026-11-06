@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { STAFFING_CHANGE_SOURCES, STAFFING_CLASSIFICATION } from "./classification.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
+import { WORKFORCE_CLASSIFICATION, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import { STAFFING_CHANGE_SOURCES, STAFFING_TABLES } from "./classification.js";
+
+/** This module's share of workforce's classification, which holds its tables. */
+const STAFFING_CLASSIFICATION = WORKFORCE_CLASSIFICATION.filter(({ table }) =>
+  (STAFFING_TABLES as readonly string[]).includes(table),
+);
 
 const TABLES = [
   "staff_roles",
@@ -19,7 +24,11 @@ describe("STAFFING_CLASSIFICATION", () => {
   });
 
   it("hands useVenueDb no append-only table", () => {
-    expect(STAFFING_MIGRATIONS.appendOnlyTables).toEqual([]);
+    expect(
+      WORKFORCE_MIGRATIONS.appendOnlyTables.filter((table) =>
+        (STAFFING_TABLES as readonly string[]).includes(table),
+      ),
+    ).toEqual([]);
   });
 
   it("feeds a change for each classified table, under the table's own name", () => {

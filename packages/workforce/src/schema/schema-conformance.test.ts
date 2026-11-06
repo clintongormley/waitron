@@ -3,15 +3,14 @@
 // nothing in this set.
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "../migrations.js";
 import * as barrel from "./index.js";
 
 describeSchemaConformance({
   subjectName: "workforce",
-  // The database the set's foreign keys resolve in (core's `locations`, `devices`, `nodes`;
-  // identity's `persons`), not a migration prerequisite.
-  prerequisites: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  // The database the set's foreign keys resolve in (core's `locations`, `devices`, `nodes` and
+  // `persons`), not a migration prerequisite.
+  prerequisites: [CORE_MIGRATIONS],
   subject: WORKFORCE_MIGRATIONS,
   declarations: barrel,
   declaresClosedVocabularies: true,

@@ -2,7 +2,7 @@ import { and, asc, eq, gt, gte, inArray, lt, lte, notInArray, or, sql } from "dr
 import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
 import { TERMINAL, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
-import { scheduledRuns, type RunState } from "./schema/scheduled-runs.js";
+import { scheduledRuns, type RunState } from "@waitron/payments/src/schema/scheduled-runs.js";
 
 /** A row this runner now owns. Returned only by a claim that actually won. `startedAt` is what
  * `completeRun`'s ownership fence keys on — carried here so the caller never has to re-read it. */

@@ -1158,16 +1158,16 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("refuses a trading boot whose enabled set drops a dependency (identity off, workforce on) BEFORE migrating (SP-1c)", async () => {
+  it("refuses a trading boot whose enabled set drops a dependency (workforce off, staffing on) BEFORE migrating (SP-1c)", async () => {
     // Boot must refuse an enabled set that is not dependency-complete before `applyMigrations`, not
-    // fail mid-migration. `workforce` requires `identity`, and both are toggleable. `...KEY_ENV` keeps
+    // fail mid-migration. `staffing` requires `workforce`, and both are toggleable. `...KEY_ENV` keeps
     // this in trading mode; setup mode migrates the full set and never filters.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-depmissing-state-"));
     try {
       await writeFile(
         join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { identity: false } }),
+        JSON.stringify({ modules: { workforce: false } }),
       );
       await expect(
         startServer({
@@ -1181,7 +1181,7 @@ describe("startServer, against a migrated venue directory", () => {
         }),
       ).rejects.toMatchObject({
         code: "module.dependency_missing",
-        params: { module: "workforce", requires: "identity" },
+        params: { module: "staffing", requires: "workforce" },
       });
     } finally {
       await rm(stateDir, { recursive: true, force: true });

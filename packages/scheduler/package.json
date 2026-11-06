@@ -9,13 +9,12 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "db:generate": "drizzle-kit generate",
-    "db:generate:custom": "drizzle-kit generate --custom"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@waitron/db": "workspace:*",
     "@waitron/module": "workspace:*",
+    "@waitron/payments": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
@@ -24,8 +23,6 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^4.1.12",
-    "@waitron/payments": "workspace:*",
-    "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"
   }

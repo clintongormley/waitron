@@ -23,16 +23,14 @@ import {
   products,
   engineErrorMessage,
   UNIQUE_VIOLATION,
-} from "@waitron/db";
-import type { Database } from "@waitron/db";
-import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
+} from "../../index.js";
+import type { Database } from "../../index.js";
+import { useVenueDb } from "../../testing/venue-db.js";
+import { seedTenant } from "../../testing/seed.js";
 
-// One SQLite file with the core set and this package's set applied, which is what the product
-// opens.
+// One SQLite file with the core set applied, which holds the catalogue's tables.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

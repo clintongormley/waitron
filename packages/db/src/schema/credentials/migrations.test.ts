@@ -2,18 +2,18 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
+  CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   captureError,
   engineErrorMessage,
   isRefusal,
   nowIso,
-} from "@waitron/db";
-import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+} from "../../index.js";
+import { useVenueDb } from "../../testing/venue-db.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CREDENTIALS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 /** A well-formed row body, so each test below varies exactly one thing. */

@@ -10,8 +10,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "mutation": "stryker run",
-    "db:generate": "drizzle-kit generate"
+    "mutation": "stryker run"
   },
   "dependencies": {
     "@waitron/db": "workspace:*",
@@ -27,7 +26,6 @@
     "@stryker-mutator/vitest-runner": "^10.1.1",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^4.1.12",
-    "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"
   }

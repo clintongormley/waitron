@@ -24,7 +24,6 @@ export * from "./record.js";
 export * from "./refund-links.js";
 export * from "./spread.js";
 export * from "./reports.js";
-export { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 export { ADJUSTMENTS_TABLES, ADJUSTMENTS_CHANGE_SOURCES } from "./classification.js";
 export { ADJUSTMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";

@@ -592,9 +592,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       playwright:
         specifier: ^1.64.1
         version: 1.64.1
@@ -708,9 +705,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       typescript:
         specifier: ^7.0.0
         version: 7.0.2
@@ -948,9 +942,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -1328,9 +1319,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       typescript:
         specifier: ^7.0.0
         version: 7.0.2
@@ -1374,9 +1362,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       typescript:
         specifier: ^7.0.0
         version: 7.0.2
@@ -1478,9 +1463,6 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       playwright:
         specifier: ^1.64.1
         version: 1.64.1
@@ -2031,6 +2013,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/payments':
+        specifier: workspace:*
+        version: link:../payments
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -2050,12 +2035,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      '@waitron/payments':
-        specifier: workspace:*
-        version: link:../payments
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       typescript:
         specifier: ^7.0.0
         version: 7.0.2
@@ -2169,9 +2148,6 @@ importers:
       '@waitron/catalogue':
         specifier: workspace:*
         version: link:../catalogue
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       playwright:
         specifier: ^1.64.1
         version: 1.64.1
@@ -2405,9 +2381,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
       playwright:
         specifier: ^1.64.1
         version: 1.64.1

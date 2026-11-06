@@ -8,15 +8,15 @@ import {
   engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
+  locations,
   triggerRaised,
   UNIQUE_VIOLATION,
   type Database,
-} from "@waitron/db";
-import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
-import { seedReason, seedWorkingOrder } from "../test/seed.js";
+} from "../../index.js";
+import { useVenueDb } from "../../testing/venue-db.js";
+import { seedVenue, seedWorkingOrder as seedOrder } from "../../testing/seed.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let db: Database;
 beforeAll(() => {
@@ -51,6 +51,37 @@ function insert(row: Row = {}) {
       ${row.applyRoles ?? '["supervisor","manager","admin"]'},
       ${row.approverRoles ?? '["manager","admin"]'}, 1, ${row.position ?? 0},
       ${new Date().toISOString()})`;
+}
+
+let reasonCount = 0;
+
+/** A Comp reason offering every comp action, under a name no other reason in the run has. */
+async function seedReason(db: Database): Promise<{ id: string }> {
+  reasonCount += 1;
+  const name = `Complaint ${reasonCount}`;
+  await db.execute(
+    insert({ name, actions: '["comp","discount_percent","discount_amount"]', maxAmount: 3000 }),
+  );
+  const rows = await db.execute<{ id: string }>(
+    sql`select id from adjustment_reasons where name = ${name}`,
+  );
+  return rows.rows[0]!;
+}
+
+let orderNumber = 0;
+
+/** An open working order at the venue (seeded on first use), opened from the dashboard. */
+async function seedWorkingOrder(db: Database): Promise<string> {
+  const [venue] = await db.select({ id: locations.id }).from(locations).limit(1);
+  if (venue === undefined)
+    await seedVenue(db, {
+      name: "Dining room",
+      invoiceLocales: ["es"],
+      operationDescription: "Hospitality",
+    });
+  orderNumber += 1;
+  const order = await seedOrder(db, { source: "dashboard", deviceId: null, orderNumber });
+  return order.id;
 }
 
 async function refusedBy(row: Row, constraint: string): Promise<void> {

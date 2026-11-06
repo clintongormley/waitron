@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ADJUSTMENTS_CHANGE_SOURCES, ADJUSTMENTS_CLASSIFICATION } from "./classification.js";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
+import { CORE_CLASSIFICATION, CORE_MIGRATIONS } from "@waitron/db";
+import { ADJUSTMENTS_CHANGE_SOURCES, ADJUSTMENTS_TABLES } from "./classification.js";
+
+/** This module's share of core's classification, which holds its tables. */
+const ADJUSTMENTS_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (ADJUSTMENTS_TABLES as readonly string[]).includes(table),
+);
 
 describe("ADJUSTMENTS_CLASSIFICATION", () => {
   it("classifies the reasons as replicated state and the adjustments as an append-only ledger", () => {
@@ -17,11 +22,11 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
   });
 
   it("carries the append-only table in the migration set a suite hands useVenueDb", () => {
-    expect(ADJUSTMENTS_MIGRATIONS.appendOnlyTables).toEqual([
-      "adjustments",
-      "adjustment_refunds",
-      "adjustment_lines",
-    ]);
+    expect(
+      CORE_MIGRATIONS.appendOnlyTables.filter((table) =>
+        (ADJUSTMENTS_TABLES as readonly string[]).includes(table),
+      ),
+    ).toEqual(["adjustments", "adjustment_refunds", "adjustment_lines"]);
   });
 
   it("feeds a change for each classified table, under the table's own name", () => {

@@ -9,6 +9,7 @@ import {
   menuPublications,
   menuVersionImages,
   menuVersions,
+  CORE_CLASSIFICATION,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
@@ -18,8 +19,13 @@ import {
 } from "@waitron/module";
 import { CATALOGUE_BACKUP_VERIFICATION as OWNER } from "./index.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { CATALOGUE_CLASSIFICATION } from "./classification.js";
+import { CATALOGUE_TABLES } from "./classification.js";
 import type { MenuDocument } from "@waitron/shared";
+
+/** This module's share of core's classification, which holds its tables. */
+const CATALOGUE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (CATALOGUE_TABLES as readonly string[]).includes(table),
+);
 const migrations = [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });

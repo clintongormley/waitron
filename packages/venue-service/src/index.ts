@@ -76,7 +76,6 @@ export { deletePeriod } from "./period-delete.js";
 export * from "./kitchen-notices.js";
 export * from "./profile-access.js";
 export * from "./kitchen-screens.js";
-export { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 export { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { VENUE_SERVICE_TABLES } from "./classification.js";
 export { VENUE_SERVICE } from "./service.js";

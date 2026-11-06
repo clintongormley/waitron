@@ -70,6 +70,12 @@ export interface SchemaConformanceOptions {
    */
   readonly declaresClosedVocabularies: boolean;
   /**
+   * Tables, by name, that declare no closed vocabulary although the set as a whole does: each gets
+   * a case of its own. For tables that came from a set which declared none, so that what the old
+   * set's `declaresClosedVocabularies: false` held of them is still held of them.
+   */
+  readonly tablesWithoutClosedVocabularies?: readonly string[];
+  /**
    * Re-imports that same module from INSIDE a test. Omitted, the cases read the `declarations` the
    * caller already passed, and nothing is re-imported.
    *
@@ -108,6 +114,20 @@ function vocabularyColumns(tables: SQLiteTable[]): { table: string; column: SQLi
       .filter((column) => column.enumValues !== undefined)
       .map((column) => ({ table: config.name, column: column as SQLiteColumn }));
   });
+}
+
+/**
+ * The closed-vocabulary columns of one declared table, as `table.column`. Throws for a name no
+ * declaration holds, so a case about a table that was renamed or dropped fails rather than passing
+ * on an empty list.
+ */
+export function closedVocabularyOn(declared: SQLiteTable[], tableName: string): string[] {
+  if (!declared.some((table) => getTableConfig(table).name === tableName)) {
+    throw new Error(`${tableName} is not among the declared tables`);
+  }
+  return vocabularyColumns(declared)
+    .filter(({ table }) => table === tableName)
+    .map(({ table, column }) => `${table}.${column.name}`);
 }
 
 async function reloadTables(
@@ -449,6 +469,13 @@ export function describeSchemaConformance(options: SchemaConformanceOptions): vo
     it("declares closed vocabularies exactly where the set says it does", () => {
       expect(declaredVocabulary.length > 0).toBe(options.declaresClosedVocabularies);
     });
+
+    it.each(options.tablesWithoutClosedVocabularies ?? [])(
+      "declares no closed vocabulary on %s",
+      (tableName) => {
+        expect(closedVocabularyOn(declared, tableName)).toEqual([]);
+      },
+    );
 
     it.each(
       declaredVocabulary.map(

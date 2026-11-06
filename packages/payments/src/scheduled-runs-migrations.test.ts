@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
+  CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   captureError,
   engineErrorMessage,
@@ -11,10 +12,10 @@ import {
   refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { SCHEDULER_MIGRATIONS } from "./migrations.js";
+import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  migrations: [SCHEDULER_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
 });
 
 /**

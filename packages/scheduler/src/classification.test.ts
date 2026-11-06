@@ -1,22 +1,11 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SCHEDULER_CLASSIFICATION } from "./classification.js";
+import { PAYMENTS_CLASSIFICATION } from "@waitron/payments";
+import { SCHEDULER_TABLES } from "./tables.js";
 
-const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
-
-function tablesInDrizzle(): string[] {
-  const names: string[] = [];
-  for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {
-    const sql = readFileSync(join(DRIZZLE, file), "utf8");
-    // Either quoting or none, so the guard reads the generated SQL rather than one dialect's
-    // punctuation.
-    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?[`"]?([a-z0-9_]+)[`"]?/gi)) {
-      names.push(m[1]!);
-    }
-  }
-  return names;
-}
+/** This module's share of the classification of the set that holds its tables. */
+const SCHEDULER_CLASSIFICATION = PAYMENTS_CLASSIFICATION.filter(({ table }) =>
+  (SCHEDULER_TABLES as readonly string[]).includes(table),
+);
 
 describe("SCHEDULER_CLASSIFICATION", () => {
   it("has a valid class and a non-empty reason for every entry", () => {
@@ -29,13 +18,9 @@ describe("SCHEDULER_CLASSIFICATION", () => {
     const names = SCHEDULER_CLASSIFICATION.map((c) => c.table);
     expect(new Set(names).size).toBe(names.length);
   });
-  it("classifies exactly the tables this module's migrations create", () => {
-    const classified = new Set(SCHEDULER_CLASSIFICATION.map((c) => c.table));
-    const created = new Set(tablesInDrizzle());
-    // The control: the next assertion passes against an empty `created`, so it says nothing
-    // unless the scan actually found the migrations.
-    expect(created.size).toBeGreaterThan(0);
-    expect([...created].filter((t) => !classified.has(t)).sort()).toEqual([]);
-    expect([...classified].filter((t) => !created.has(t)).sort()).toEqual([]);
+  it("lists only tables the set holding them classifies", () => {
+    const classified = new Set(PAYMENTS_CLASSIFICATION.map((c) => c.table));
+    expect(SCHEDULER_TABLES.length).toBeGreaterThan(0);
+    expect(SCHEDULER_TABLES.filter((t) => !classified.has(t))).toEqual([]);
   });
 });
