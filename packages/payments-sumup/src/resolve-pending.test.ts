@@ -6,6 +6,7 @@ import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
   getPaymentByRef,
+  failAttempting,
   insertAttempting,
   stampAttemptingRef,
 } from "@waitron/payments";
@@ -72,6 +73,45 @@ async function setup(incidentRecorded = true) {
 }
 
 describe("SumUpCloudProvider.resolvePending", () => {
+  it.each([true, false])(
+    "alerts a capture that lost to a contradictory failure and continues, incident recorded %s",
+    async (recorded) => {
+      const { fake, provider, attempting, state, raised } = await setup(recorded);
+      const checkout = await attempting("contradicting", { status: "SUCCESSFUL" });
+      await attempting("later", { status: "SUCCESSFUL" });
+      const find = fake.findTransaction.bind(fake);
+      let changed = false;
+      vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => {
+        const answer = await find(query);
+        if (!changed && "clientTransactionId" in query && query.clientTransactionId === checkout) {
+          changed = true;
+          await withTransaction(suite.db, (tx) =>
+            failAttempting(tx, { provider: "sumup", paymentRef: "contradicting" }),
+          );
+        }
+        return answer;
+      });
+
+      const result = await provider.resolvePending(T0, await ownsEveryPayment(suite.db));
+
+      expect(result).toEqual({
+        nextDueAt: null,
+        forwarded: 1,
+        declined: 0,
+        incidentsRaised: recorded ? 1 : 0,
+      });
+      expect((await state("contradicting")).state).toBe("failed");
+      expect((await state("later")).state).toBe("captured");
+      expect(raised).toHaveLength(1);
+      expect(raised[0]).toMatchObject({
+        error: {
+          code: "payment.pending_outcome_unactionable",
+          params: { paymentRef: "contradicting", status: "SUCCESSFUL" },
+        },
+      });
+    },
+  );
+
   it.each([
     { label: "ordinary error", failure: new Error("incident storage failed") },
     {

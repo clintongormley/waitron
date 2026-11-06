@@ -629,7 +629,8 @@ A pending bill payment is resolved from the provider's row, never from its age:
 **2026-11-06 update:** Stripe and SumUp's legacy reversal wrappers now share
 `packages/payments/src/reverse.ts` for the pre-check and result write. The provider call remains
 between those transactions. This extraction adds no persisted resend identity; the retry limit
-described below remains.
+described below remains. SumUp's legacy refund now uses the reader-refund refusal set: a response
+outside HTTP 2xx and that set raises an error without recording a refund.
 
 **The problem.** A card refund on `main` is one provider call followed by a separate transaction
 that records it, inside the provider packages: `reverseViaStripe`

@@ -738,3 +738,17 @@ describe("legacy refund HTTP bodies", () => {
     },
   );
 });
+
+describe("legacy refund uncertain HTTP status", () => {
+  it.each([301, 302, 307, 308, 401, 402, 408, 410, 429, 500, 503])(
+    "leaves HTTP %s uncertain without reading its body",
+    async (status) => {
+      const client = sumupClient({
+        apiKey: "test-key",
+        merchantCode: "MC",
+        fetch: () => Promise.resolve(new Response("<html>provider answer</html>", { status })),
+      });
+      await expect(client.refund({ transactionId: "txn_1" })).rejects.toThrow(`HTTP ${status}`);
+    },
+  );
+});
