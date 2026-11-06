@@ -291,6 +291,9 @@ guests left without paying.
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this
 may charge the card or record the cash payment.
+If the card was charged but the payment was not recorded, do not charge again. Choose **Card
+payments / sign in** and sign in there to check or record the provider’s confirmed outcome. Reopen
+the bill payment after it is recorded to see the result.
 
 ## Move dishes to another bill {#move-dishes}
 
