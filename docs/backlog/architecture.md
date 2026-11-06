@@ -411,8 +411,8 @@ until A977).
   bill-editing and other order fixtures; and shared helper consumers
   such as `made-here.test.ts`. Moved-dish names remain in the till's
   `till-table-order-screen.move-dishes.test.ts`.
-  Accented bindings remain in `portion-selection.test.ts`, `counter-portion-rows.test.ts`,
-  `till-ticket-view.test.ts`.
+  Remaining accented bindings include `portion-selection.test.ts`, `counter-portion-rows.test.ts`
+  and `till-ticket-view.test.ts`.
   Fixture strings remain separate from this naming work. The receipt-print and working-order
   suites retain Spanish display samples under A976. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
@@ -854,6 +854,16 @@ existing event, guest-count and payment assertion. These are observed assertion 
 reference substitutions from the naming review need triage before treating them as gaps:
 some changes can legitimately preserve the observation a case makes.
 
+The grouped-drink fixture in `made-here.routes.test.ts` needs quantity observations before and
+following a partial split. On 6 November 2026, driver probes in an installed disposable checkout
+changed the split case's source quantity from two to one: all 34 cases still passed. Forcing the
+partial-split ticket copy to lose `madeHere` failed the existing result assertion, but combining
+that fault with the one-drink fixture passed all 34 cases because the transfer takes the whole-line
+path. Pin the source quantity and check the quantities left on each bill while retaining the existing
+made-here assertion. The cancellation case's quantity-two branch also needs an observed count;
+the helper's constant status is not evidence of the write. These are test gaps, not demonstrated
+product failures.
+
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
@@ -863,7 +873,9 @@ some changes can legitimately preserve the observation a case makes.
   `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.split-bill.test.ts`, `till-api.groups.test.ts`,
   `till-api.fiscal-sale-paths.test.ts` and `portion-sale-projection.test.ts`; these belong to
-  A976 rather than the private-name work in A974. Fiscal-sale descriptions and the counter
+  A976 rather than the private-name work in A974. The `made-here.routes.test.ts` venue
+  samples and `receipt-document.test.ts` fixture descriptions and test titles also need
+  triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale descriptions and the counter
   and adjustment order-portion descriptions also retain Spanish words. The fiscal-sale
   suite’s string-selected SQL count alias stays with its fixture text. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route

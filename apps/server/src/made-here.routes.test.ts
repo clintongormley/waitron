@@ -108,11 +108,11 @@ useVenueDb({
         .select({ id: products.id })
         .from(products)
         .where(eq(products.name, "Caña"));
-      const [croquetas] = await tx
+      const [croquettes] = await tx
         .select({ id: products.id })
         .from(products)
         .where(eq(products.name, "Croquetas"));
-      garnishProductId = croquetas!.id;
+      garnishProductId = croquettes!.id;
       const garnish = await createExtraList(
         tx,
         {
