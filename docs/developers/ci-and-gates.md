@@ -2457,6 +2457,11 @@ reported first-call duration reaches two seconds, and lets it use the script's t
 All original phase/status assertions remain. The install and version stall controls shorten only
 the phase they deliberately stall. The production script and its limits are unchanged.
 
+The slow-Node control also gives its healthy reader the normal read allowance and injects a
+two-second reader delay whose reported duration is asserted. With a one-second read limit it
+fails at the original success assertion; with the default it installs on attempt 1 and retains
+the empty-`nodeArgs` assertion.
+
 The zero-delay ordinary-failure control, timed around real `gtimeout` and the stub in a disposable
 checkout of `46fde7944a`, took 0.12–0.23 seconds per version call during a concurrent root-guard
 run (one-minute host load 4.73). This is a local instrumented sample, not a worst-case bound.

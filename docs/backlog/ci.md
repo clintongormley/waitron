@@ -1626,27 +1626,3 @@ assertion runs. The retry-disabled controls still detect the missing retry; they
 that its count assertion always reports first. Reproduce the throttled-frame case before choosing
 a wall-clock-bounded observation; keep the retry schedule, request assertions and existing case
 deadline. The related `await failed` can also await a missing event until the case times out.
-
-## Give pnpm's healthy package-manager read control its normal allowance
-
-The pnpm diagnostic repair's Claude review found the same short-deadline shape in
-`ci-setup-pnpm.test.mjs`'s first case. It runs a healthy `sed` read under
-`PNPM_SETUP_READ_SECONDS: "1"` while checking that a slow Node executable is unused.
-A two-second reader stub makes it report read status 124 before the success assertion.
-The review's control without that override passes, and a Node reader is still caught by the
-original empty-`nodeArgs` assertion. No spontaneous failure of this case was established.
-Separate the healthy reader's allowance from the slow-Node input; preserve every original
-assertion and the deliberate read-timeout cases. This sibling fix was outside the assigned
-ordinary version-failure repair.
-
-## Capture pnpm fixture scheduling delays if they recur
-
-The first recorded ordinary version-failure diagnostic failure was in #2509's normal pre-push
-run on 6 November 2026: installation succeeded three times, the first version command exited 1
-and the next two timed out at 124. Its host load was not recorded. A controlled two-second
-version delay reproduces the mechanism, and the diagnostic repair gives ordinary failures the
-existing ten-second version allowance. It does not establish why those original commands waited.
-If this recurs, retain the last phase-start line, matching end line, child-process state and host
-load before attributing the wait to contention. Lane F retains the original log in
-`receipts/a974-split-table-names-20261106/` and the repair's controls in
-`receipts/pnpm-diagnostic-20261106/`. These are local campaign paths, not committed artifacts.

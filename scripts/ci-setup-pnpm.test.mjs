@@ -204,12 +204,14 @@ async function observeInstallStart() {
 
 describe("ci-setup-pnpm.sh", () => {
   it("installs without waiting for a slow Node executable to read packageManager", () => {
-    const result = run("ok", { STUB_NODE_MODE: "slow", PNPM_SETUP_READ_SECONDS: "1" });
+    const result = run("ok", { STUB_NODE_MODE: "slow", STUB_READ_MODE: "slow" });
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     expect(result.npmArgs).toContain(`pnpm@${VERSION}`);
     expect(result.stdout).toContain(`pnpm ${VERSION} installed on attempt 1 of 3`);
     expect(result.githubPath).toBe(`${join(result.runnerTemp, "pnpm-setup", "bin")}\n`);
+    const readEnd = /packageManager read: end status=0 elapsed=([0-9]+)s/.exec(result.stderr);
+    expect(Number(readEnd?.[1])).toBeGreaterThanOrEqual(2);
     expect(result.nodeArgs).toBe("");
   });
 
