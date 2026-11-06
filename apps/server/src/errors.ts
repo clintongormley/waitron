@@ -1655,6 +1655,11 @@ declare module "@waitron/shared" {
     /** The box's host service answered `not_saved` to a forget: the network named is not the one
      * the box has saved. */
     "box_network.not_saved": Record<string, never>;
+    /** The Wi-Fi password breaks the host protocol's rules for its key type, so nothing was sent
+     * to the host. */
+    "box_network.password_invalid": { field: "psk"; keyMgmt: "wpa-psk" | "sae" };
+    /** A Wi-Fi join was not sent over an encrypted connection from the box's own page. */
+    "box_network.join_connection_insecure": { reason: "unencrypted" | "other_origin" };
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */

@@ -1,4 +1,5 @@
-import type { Context, Hono } from "hono";
+import { TLSSocket } from "node:tls";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Database } from "@waitron/db";
@@ -11,6 +12,7 @@ import type {
   PersonActor,
   ProtocolRefusal,
   StartScreen,
+  WifiJoin,
 } from "./box-host-client.js";
 import "./errors.js";
 import type { Logger } from "./logger.js";
@@ -33,6 +35,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "box_network.busy": 409,
   "box_network.no_wifi": 409,
   "box_network.not_saved": 409,
+  "box_network.password_invalid": 400,
+  "box_network.join_connection_insecure": 403,
 };
 
 const BODY_MAX_BYTES = 4096;
@@ -106,9 +110,44 @@ async function bodyOf<Body extends object>(c: Context, checks: FieldChecks<Body>
 const ssidHex = (value: unknown): value is string => isSsidHex(value);
 const startScreen = (value: unknown): value is StartScreen =>
   typeof value === "string" && START_SCREENS.includes(value);
+const keyMgmt = (value: unknown): value is WifiJoin["keyMgmt"] =>
+  value === "wpa-psk" || value === "sae";
+const psk = (value: unknown): value is string => typeof value === "string";
+const hidden = (value: unknown): value is boolean => typeof value === "boolean";
 
-/** `GET /api/box/network`, `POST /api/box/network/scan`, `POST /api/box/network/forget`,
- * `GET /api/box/screen` and `POST /api/box/screen`, all `system.manage`. */
+function insecureJoin(c: Context): "unencrypted" | "other_origin" | null {
+  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+  if (!(socket instanceof TLSSocket) || !socket.encrypted) return "unencrypted";
+  const origin = c.req.header("Origin");
+  const site = c.req.header("Sec-Fetch-Site");
+  if (
+    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
+    (site !== undefined && site !== "same-origin" && site !== "none")
+  ) {
+    return "other_origin";
+  }
+  return null;
+}
+
+/** Answers before the body-size limit, which would otherwise read a body sent without a
+ * `Content-Length` before any route code runs. */
+function requireSecureJoin(log: Logger): MiddlewareHandler {
+  return async (c, next) => {
+    const reason = insecureJoin(c);
+    if (reason === null) return next();
+    const err = new AppError("box_network.join_connection_insecure", { reason });
+    log("warn", err.code, { ...err.params, requestId: c.get("requestId") });
+    return c.json({ error: { code: err.code, params: err.params } }, 403);
+  };
+}
+
+function isJson(c: Context): boolean {
+  return c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() === "application/json";
+}
+
+/** `GET /api/box/network`, `POST /api/box/network/scan`, `POST /api/box/network/join`,
+ * `POST /api/box/network/forget`, `GET /api/box/screen` and `POST /api/box/screen`, all
+ * `system.manage`. */
 export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "box-host-route.failed");
   const limit = bodyLimit({
@@ -116,6 +155,7 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
     onError: (c) =>
       c.json({ error: { code: "management.request_invalid", params: { field: "body" } } }, 400),
   });
+  app.use("/api/box/network/join", requireSecureJoin(log));
   app.use("/api/box/network/*", limit);
   app.use("/api/box/screen", limit);
   app.get("/api/box/network", (c) =>
@@ -138,6 +178,19 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
         no_wifi: "box_network.no_wifi",
       });
       return c.json(scanned, 200);
+    }),
+  );
+  app.post("/api/box/network/join", (c) =>
+    run(c, log, async () => {
+      const actor = personActor(await authorizeSystemManager(deps.db, c));
+      if (!isJson(c)) throw new AppError("management.request_invalid", { field: "body" });
+      const join = await bodyOf<WifiJoin>(c, { ssidHex, keyMgmt, psk, hidden });
+      await askHost(
+        () => deps.host.networkJoin(join, actor),
+        { busy: "box_network.busy", no_wifi: "box_network.no_wifi" },
+        () => new AppError("box_network.password_invalid", { field: "psk", keyMgmt: join.keyMgmt }),
+      );
+      return c.json({}, 200);
     }),
   );
   app.post("/api/box/network/forget", (c) =>
