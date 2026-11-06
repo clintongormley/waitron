@@ -4,7 +4,7 @@ import { chmod, mkdir, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
 import { type BundleFiles } from "./recovery-bundle.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 /**
@@ -77,7 +77,7 @@ export async function resolveSafeEntryPath(
 }
 
 /**
- * The inverse of `collectStateSecrets`: each file written atomically, 0600. The destination and every
+ * The inverse of `collectStateSecrets`: each file written durably, 0600. The destination and every
  * folder between it and an entry end 0700 whether or not they already existed (`mkdir`'s mode applies
  * only to a folder it creates). No existing folder above the destination is changed (missing ones
  * are created 0700), provided nothing else changes the folders during the unpack: a folder inside
@@ -104,6 +104,6 @@ export async function unpackBundleToDir(files: BundleFiles, destDir: string): Pr
     ) {
       await chmod(dir, 0o700);
     }
-    await writeFileAtomic(target, contents, 0o600);
+    await writeFileDurable(target, contents, 0o600);
   }
 }

@@ -23,7 +23,7 @@ import {
   isPermittedLeafIpv4,
   reissueServerLeaf,
 } from "./self-signed-cert.js";
-import { stageFile, stagedPath, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
+import { stageFileDurable, stagedPath, syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
 
@@ -96,8 +96,8 @@ export async function writeVenueAuthority(
 ): Promise<void> {
   const tlsDir = join(stateDir, "tls");
   await mkdir(tlsDir, { recursive: true, mode: 0o700 });
-  await writeFileAtomic(join(tlsDir, "venue-ca.crt"), authority.certPem, 0o600);
-  await writeFileAtomic(join(tlsDir, "venue-ca.key"), authority.keyPem, 0o600);
+  await writeFileDurable(join(tlsDir, "venue-ca.crt"), authority.certPem, 0o600);
+  await writeFileDurable(join(tlsDir, "venue-ca.key"), authority.keyPem, 0o600);
 }
 
 function leafIpv4s(listIpv4: () => string[]): string[] {
@@ -209,10 +209,10 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
       ipAddresses: leafIpv4s(listIpv4),
       now: deps.now(),
     });
-    await writeFileAtomic(files.caCertFile, m.caCertPem, 0o600);
-    await writeFileAtomic(files.caKeyFile, m.caKeyPem, 0o600);
-    await writeFileAtomic(files.certFile, m.serverCertPem, 0o600);
-    await writeFileAtomic(files.keyFile, m.serverKeyPem, 0o600);
+    await writeFileDurable(files.caCertFile, m.caCertPem, 0o600);
+    await writeFileDurable(files.caKeyFile, m.caKeyPem, 0o600);
+    await writeFileDurable(files.certFile, m.serverCertPem, 0o600);
+    await writeFileDurable(files.keyFile, m.serverKeyPem, 0o600);
   }
 
   const secretsFile = join(deps.stateDir, "secrets.env");
@@ -222,7 +222,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
       WAITRON_CREDENTIALS_KEY: ring.key,
       WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
     });
-    await writeFileAtomic(secretsFile, body, 0o600);
+    await writeFileDurable(secretsFile, body, 0o600);
   }
 
   return { certFile: files.certFile, keyFile: files.keyFile, caCertFile: files.caCertFile };
@@ -269,7 +269,7 @@ async function reissueBoxLeafLocked(deps: {
     for (const { path } of pair) await rm(stagedPath(path), { force: true }).catch(() => {});
   };
   try {
-    for (const { path, pem } of pair) await stageFile(path, pem, 0o600);
+    for (const { path, pem } of pair) await stageFileDurable(path, pem, 0o600);
   } catch (error) {
     await discardStaged();
     throw error;
@@ -293,6 +293,7 @@ async function reissueBoxLeafLocked(deps: {
     if (!putBackFailed) await rm(previousCert, { force: true }).catch(() => {});
     throw error;
   }
+  await syncFolderHolding(files.keyFile);
   await rm(previousCert, { force: true });
 }
 

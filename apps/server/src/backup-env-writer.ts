@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 /**
@@ -45,5 +45,5 @@ export async function writeRecoveryKey(
   };
   if (input.keyRotatedAt !== undefined) record.WAITRON_BACKUP_KEY_ROTATED_AT = input.keyRotatedAt;
   assertStorableRecord(record);
-  await writeFileAtomic(path, formatEnvFile(record), 0o600);
+  await writeFileDurable(path, formatEnvFile(record), 0o600);
 }

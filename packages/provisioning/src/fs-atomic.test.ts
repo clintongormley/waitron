@@ -3,7 +3,13 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { failedAtFolderSync, stageFile, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
+import {
+  failedAtFolderSync,
+  stageFile,
+  stageFileDurable,
+  writeFileAtomic,
+  writeFileDurable,
+} from "./fs-atomic.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
@@ -103,6 +109,19 @@ describe("writeFileDurable", () => {
     await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("syncs the real folder when the target's folder is a link to one", async () => {
+    const d = await fs.realpath(await newDir());
+    const real = join(d, "real-tls");
+    await fs.mkdir(real);
+    await fs.symlink(real, join(d, "tls"));
+    const target = join(d, "tls", "server.key");
+
+    const events = await syncsAndRenames(() => writeFileDurable(target, "key", 0o600));
+
+    expect(events.at(-1)).toBe(`sync ${real}`);
+    expect(await readFile(join(real, "server.key"), "utf8")).toBe("key");
+  });
+
   it("does not inherit a stale working copy's broader permissions", async () => {
     const d = await newDir();
     const target = join(d, "record.json");
@@ -154,6 +173,24 @@ describe("writeFileDurable", () => {
     );
     expect(beforeRename).toBeInstanceOf(Error);
     expect(failedAtFolderSync(beforeRename)).toBe(false);
+  });
+
+  it("marks a failure to resolve a linked folder after the rename as a folder-sync failure", async () => {
+    const d = await newDir();
+    await fs.mkdir(join(d, "real-tls"));
+    await fs.symlink(join(d, "real-tls"), join(d, "tls"));
+    const target = join(d, "tls", "record.json");
+    const resolveError = Object.assign(new Error("no"), { code: "EIO" });
+    vi.mocked(fs.realpath).mockRejectedValueOnce(resolveError);
+    let thrown: unknown;
+    try {
+      await writeFileDurable(target, "{}", 0o600).catch((error: unknown) => (thrown = error));
+    } finally {
+      vi.mocked(fs.realpath).mockReset();
+    }
+    expect(thrown).toBe(resolveError);
+    expect(failedAtFolderSync(thrown)).toBe(true);
+    expect(await readFile(target, "utf8")).toBe("{}");
   });
 
   it("removes the working copy when its sync fails and throws the sync's error", async () => {
@@ -228,5 +265,81 @@ describe("writeFileDurable", () => {
     }
     expect(thrown).toBe(closeError);
     await expect(stat(target)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("stageFileDurable", () => {
+  it("syncs a working copy beside the target at the given mode, leaving the target alone", async () => {
+    const d = await newDir();
+    const target = join(d, "server.key");
+    await writeFile(target, "old");
+    let staged = "";
+
+    const events = await syncsAndRenames(async () => {
+      staged = await stageFileDurable(target, "new", 0o600);
+    });
+
+    expect(staged).toBe(`${target}.tmp`);
+    expect(events).toEqual([`sync ${target}.tmp`]);
+    expect(await readFile(staged, "utf8")).toBe("new");
+    expect((await stat(staged)).mode & 0o777).toBe(0o600);
+    expect(await readFile(target, "utf8")).toBe("old");
+  });
+
+  it("does not inherit a stale working copy's broader permissions", async () => {
+    const d = await newDir();
+    const target = join(d, "server.key");
+    await writeFile(`${target}.tmp`, "stale", { mode: 0o644 });
+    const staged = await stageFileDurable(target, "fresh-secret", 0o600);
+    expect(await readFile(staged, "utf8")).toBe("fresh-secret");
+    expect((await stat(staged)).mode & 0o777).toBe(0o600);
+  });
+
+  it("removes the working copy and throws the sync's error when the sync fails", async () => {
+    const d = await newDir();
+    const target = join(d, "server.key");
+    await writeFile(target, "old");
+    const syncError = Object.assign(new Error("sync"), { code: "EIO" });
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      const handle = await real.open(...args);
+      handle.sync = async () => {
+        throw syncError;
+      };
+      return handle;
+    });
+    let thrown: unknown;
+    try {
+      await stageFileDurable(target, "new", 0o600).catch((error: unknown) => (thrown = error));
+    } finally {
+      vi.mocked(fs.open).mockReset();
+    }
+    expect(thrown).toBe(syncError);
+    await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(target, "utf8")).toBe("old");
+  });
+
+  it("removes the working copy and throws the close's error when only the close fails", async () => {
+    const d = await newDir();
+    const target = join(d, "server.key");
+    const closeError = Object.assign(new Error("close"), { code: "EIO" });
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      const handle = await real.open(...args);
+      const realClose = handle.close.bind(handle);
+      handle.close = async () => {
+        await realClose();
+        throw closeError;
+      };
+      return handle;
+    });
+    let thrown: unknown;
+    try {
+      await stageFileDurable(target, "new", 0o600).catch((error: unknown) => (thrown = error));
+    } finally {
+      vi.mocked(fs.open).mockReset();
+    }
+    expect(thrown).toBe(closeError);
+    await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

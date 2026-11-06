@@ -1,5 +1,5 @@
 import "./errors.js";
-import { open, writeFile, rename, rm } from "node:fs/promises";
+import { open, realpath, writeFile, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { syncFolder } from "./folder-sync.js";
 
@@ -40,18 +40,31 @@ export async function writeFileAtomic(
 
 const folderSyncFailures = new WeakSet<object>();
 
+/** Sync the folder holding `path`, following it when it is a link: a box's `tls` folder may be one,
+ * and syncing a folder writes nothing to it. */
+export async function syncFolderHolding(path: string): Promise<void> {
+  const folder = dirname(path);
+  try {
+    await syncFolder(folder);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOTDIR" && code !== "ELOOP") throw error;
+    await syncFolder(await realpath(folder));
+  }
+}
+
 /** Whether `error` came from {@link writeFileDurable}'s folder sync, after the file was in place. */
 export function failedAtFolderSync(error: unknown): boolean {
   return typeof error === "object" && error !== null && folderSyncFailures.has(error);
 }
 
-/** {@link writeFileAtomic}, also syncing the working copy before the rename and the folder after
- * it. A failed sync is thrown; a failure before the rename removes the working copy. */
-export async function writeFileDurable(
+/** {@link stageFile}, also syncing the working copy to disk before returning its path. A failure
+ * at any step removes the working copy and is thrown. */
+export async function stageFileDurable(
   path: string,
   data: string | Uint8Array,
   mode: number,
-): Promise<void> {
+): Promise<string> {
   const tmp = stagedPath(path);
   try {
     await rm(tmp, { force: true });
@@ -68,13 +81,29 @@ export async function writeFileDurable(
         if (!failed) throw error;
       });
     }
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    throw error;
+  }
+  return tmp;
+}
+
+/** {@link stageFileDurable}, then rename the working copy onto `path` and sync the folder. A failed
+ * sync is thrown; a failure before the rename removes the working copy. */
+export async function writeFileDurable(
+  path: string,
+  data: string | Uint8Array,
+  mode: number,
+): Promise<void> {
+  const tmp = await stageFileDurable(path, data, mode);
+  try {
     await rename(tmp, path);
   } catch (error) {
     await rm(tmp, { force: true }).catch(() => undefined);
     throw error;
   }
   try {
-    await syncFolder(dirname(path));
+    await syncFolderHolding(path);
   } catch (error) {
     if (typeof error === "object" && error !== null) folderSyncFailures.add(error);
     throw error;

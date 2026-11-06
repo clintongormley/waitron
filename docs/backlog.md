@@ -101,7 +101,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
 
-- A1329: write the box's key files so a power cut cannot lose them.
 - A1236 and A1361: "Table 3 paid" while two bills are unpaid.
 - A1218: a counter with two zones cannot get back to its menu.
 - [A1378. Fix kitchen paper: Spanish time, whole quantities, then the owner's slip questions](backlog/kitchen.md#bundle-a1378-fix-kitchen-paper-spanish-time-whole-quantities-then-the-owners-slip-questions)
@@ -1726,13 +1725,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Detail](backlog/back-office.md#recipes-are-removed-under-a1308-owner-2026-11-04)
 
 ### The box: backups, upgrades and recovery
-
-- **A1329. Write the box's key files so a power cut cannot lose them — OPEN, small, ready to queue (owner, 2026-11-04).**
-  `secrets.env`, `backup.env` and the certificate files go through `writeFileAtomic`, which does not
-  flush to disk (`packages/provisioning/src/fs-atomic.ts`; `apps/server/src/box-secrets.ts`,
-  `backup-env-writer.ts`). Losing `secrets.env` makes every stored credential and backup unreadable.
-  `writeFileDurable` already exists; use it for these. Comes ahead of A1308's one write helper. Not
-  yet tested with a real power cut.
 
 - **A1323. One master key for the venue (owner, 2026-11-04; wanted, not designed).**
   The owner keeps one key, printed in the recovery pack, in place of the backup key and the server key; the box keeps only a check value and numbered backup keys calculated from it.

@@ -13,6 +13,7 @@ import {
   reissueBoxLeaf,
   tightenTlsDir,
   writeCredentialsRing,
+  writeVenueAuthority,
 } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
@@ -63,7 +64,51 @@ const deps = (stateDir: string) => ({
   listIpv4: () => ["192.168.1.50"],
 });
 
+/** Each sync of an opened file or folder and each rename, in order, while `run` runs. */
+async function syncsAndRenames(run: () => Promise<unknown>): Promise<string[]> {
+  const events: string[] = [];
+  const openThrough = openMock.getMockImplementation()!;
+  const renameThrough = renameMock.getMockImplementation()!;
+  openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+    const handle = (await (openThrough as (...a: unknown[]) => unknown)(p, ...rest)) as FileHandle;
+    const realSync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      events.push(`sync ${String(p)}`);
+      return realSync();
+    };
+    return handle;
+  });
+  renameMock.mockImplementation(async (from: string, to: string) => {
+    events.push(`rename ${from} ${to}`);
+    return renameThrough(from, to);
+  });
+  try {
+    await run();
+  } finally {
+    openMock.mockImplementation(openThrough);
+    renameMock.mockImplementation(renameThrough);
+  }
+  return events;
+}
+
+/** Whether `file`'s working copy was synced before it was renamed into place, and its folder after. */
+function writtenDurably(events: string[], file: string, folder: string): boolean {
+  const synced = events.indexOf(`sync ${file}.tmp`);
+  const renamed = events.indexOf(`rename ${file}.tmp ${file}`);
+  return synced !== -1 && renamed > synced && events.indexOf(`sync ${folder}`, renamed) > renamed;
+}
+
 describe("ensureBoxSecrets", () => {
+  it("syncs every new file before it is renamed into place, and its folder after", async () => {
+    const d = await newDir();
+    const tls = join(d, "tls");
+    const events = await syncsAndRenames(() => ensureBoxSecrets(deps(d)));
+    for (const name of ["ca.crt", "ca.key", "server.crt", "server.key"]) {
+      expect(writtenDurably(events, join(tls, name), tls), name).toBe(true);
+    }
+    expect(writtenDurably(events, join(d, "secrets.env"), d), "secrets.env").toBe(true);
+  });
+
   it("materialises the cert + secrets on first call and returns the TLS paths", async () => {
     const d = await newDir();
     const tls = await ensureBoxSecrets(deps(d));
@@ -273,6 +318,20 @@ describe("ensureBoxSecrets", () => {
   });
 });
 
+describe("writeVenueAuthority", () => {
+  it("syncs both files before they are renamed into place, and the folder after", async () => {
+    const d = await newDir();
+    const tls = join(d, "tls");
+    const events = await syncsAndRenames(() =>
+      writeVenueAuthority(d, { certPem: "cert", keyPem: "key" }),
+    );
+    expect(writtenDurably(events, join(tls, "venue-ca.crt"), tls)).toBe(true);
+    expect(writtenDurably(events, join(tls, "venue-ca.key"), tls)).toBe(true);
+    expect(await readFile(join(tls, "venue-ca.key"), "utf8")).toBe("key");
+    expect((await stat(join(tls, "venue-ca.key"))).mode & 0o777).toBe(0o600);
+  });
+});
+
 describe("reissueBoxLeaf", () => {
   const reissue = (stateDir: string) =>
     reissueBoxLeaf({
@@ -284,6 +343,22 @@ describe("reissueBoxLeaf", () => {
   const pairOf = async (stateDir: string) => ({
     cert: await readFile(join(stateDir, "tls", "server.crt"), "utf8"),
     key: await readFile(join(stateDir, "tls", "server.key"), "utf8"),
+  });
+
+  it("syncs both new files before renaming them into place, and the folder after both", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    const tls = join(d, "tls");
+    const events = await syncsAndRenames(() => reissue(d));
+    expect(writtenDurably(events, join(tls, "server.crt"), tls)).toBe(true);
+    expect(writtenDurably(events, join(tls, "server.key"), tls)).toBe(true);
+    const keyRenamed = events.indexOf(
+      `rename ${join(tls, "server.key.tmp")} ${join(tls, "server.key")}`,
+    );
+    expect(events.indexOf(`sync ${join(tls, "server.key.tmp")}`)).toBeLessThan(
+      events.indexOf(`rename ${join(tls, "server.crt.tmp")} ${join(tls, "server.crt")}`),
+    );
+    expect(events.lastIndexOf(`sync ${tls}`)).toBeGreaterThan(keyRenamed);
   });
 
   it("replaces the pair and leaves no working file behind", async () => {
