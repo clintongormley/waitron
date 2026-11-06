@@ -1937,6 +1937,82 @@ describe("previewMenu", () => {
     });
   });
 
+  describe("says what each variant this menu prices would charge without its own price", () => {
+    const ownVariantChanges = async (menuId: string) =>
+      changeBodies((await app((tx) => previewMenu(tx, menuId))).changes)
+        .filter((change) => change.kind === "product_changed")
+        .filter((change) => change.source === "this_menu");
+    const priceLarge = (f: MenusFixture, menuId: string, price: string) =>
+      app(async (tx) =>
+        setMenuVariants(
+          tx,
+          await offerOf(tx, menuId, f.lemonade),
+          [{ variantId: f.large, price }],
+          menuId,
+        ),
+      );
+
+    it("names Drinks' Large price while Lunch sets its own", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.lunch);
+      await priceLarge(f, f.lunch, "4.00");
+      expect(await ownVariantChanges(f.lunch)).toEqual([
+        {
+          kind: "product_changed",
+          productId: f.lemonade,
+          name: "Lemonade",
+          fields: ["variants"],
+          source: "this_menu",
+          inheritedVariantPrices: { [f.large]: "3.50" },
+        },
+      ]);
+      await priceLarge(f, f.drinksMenu, "4.10");
+      expect((await ownVariantChanges(f.lunch)).map((c) => c.inheritedVariantPrices)).toEqual([
+        { [f.large]: "4.10" },
+      ]);
+    });
+
+    it("says null when the places Lunch would inherit Large's price from disagree", async () => {
+      const f = await menusFixture(fx.db);
+      await publish(f.lunch);
+      await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
+      await priceLarge(f, f.drinksMenu, "3.90");
+      await priceLarge(f, f.lunch, "4.00");
+      expect((await ownVariantChanges(f.lunch)).map((c) => c.inheritedVariantPrices)).toEqual([
+        { [f.large]: null },
+      ]);
+    });
+
+    it("leaves it out when Lunch sets no variant price", async () => {
+      const f = await menusFixture(fx.db);
+      await app((tx) =>
+        setProductVariants(
+          tx,
+          f.lemonade,
+          [
+            {
+              id: f.large,
+              name: "Large",
+              customerName: { en: "A big glass" },
+              kitchenName: "LRG",
+              image: "large.jpg",
+              unitPrice: null,
+              available: true,
+            },
+          ],
+          "en",
+        ),
+      );
+      await publish(f.lunch);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: "3.30" }),
+      );
+      const [change] = await ownVariantChanges(f.lunch);
+      expect(change).toMatchObject({ fields: ["variants"] });
+      expect(change).not.toHaveProperty("inheritedVariantPrices");
+    });
+  });
+
   it("names sulphites on Lemonade and on its extra as shared product changes (Review Focus 1)", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);

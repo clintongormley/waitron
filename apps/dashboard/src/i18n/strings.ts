@@ -3086,8 +3086,6 @@ export const en = {
   "menu_preview.undo_menu_gone": "This menu has been deleted, so there is nothing to put back.",
   "menu_preview.undo_item_gone":
     "{name} is no longer on this menu, so its price here cannot be put back. Add it to the menu again first, or hide this change.",
-  "menu_preview.undo_variant_gone":
-    "{variant} is no longer active, so its price here cannot be put back. Its change leaves this list when the menu is read again.",
   "menu_preview.undo_section_gone": "Section {name} has been deleted, so it cannot be put back.",
   "menu_preview.undo_section_invalid":
     "{name}'s published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
@@ -6910,8 +6908,6 @@ export const es: Record<StringKey, string> = {
   "menu_preview.undo_menu_gone": "Esta carta se ha eliminado, así que no hay nada que deshacer.",
   "menu_preview.undo_item_gone":
     "{name} ya no está en esta carta, así que no se puede recuperar su precio aquí. Vuelve a añadirlo a la carta o oculta este cambio.",
-  "menu_preview.undo_variant_gone":
-    "{variant} ya no está activa, así que no se puede recuperar su precio aquí. Su cambio saldrá de esta lista al volver a leer la carta.",
   "menu_preview.undo_section_gone":
     "La sección {name} se ha eliminado, así que no se puede recuperar.",
   "menu_preview.undo_section_invalid":

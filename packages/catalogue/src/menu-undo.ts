@@ -45,7 +45,6 @@ export type MenuUndoCommand =
       variantId: string;
       price: string | null;
       name: string;
-      variantName: string;
     }
   | { method: "updateSection"; sectionId: string; patch: Partial<SectionInput>; name: string }
   | {
@@ -149,7 +148,8 @@ function dishPriceUndo(
 
 /** One variant's own menu price put back. Not while the dish's own menu price moved and another
  * variant's price moved with no setting of its own changing (the same bullet lists it, and this
- * write leaves it), nor when the variant would go back to following a dish price that moved. */
+ * write leaves it), nor when the variant had no price here live and what it would charge without
+ * one has moved since. */
 function variantPriceUndo(
   live: MenuDocument,
   now: MenuDocument,
@@ -169,7 +169,8 @@ function variantPriceUndo(
   }
   if (differing.length !== 1) return NONE;
   const { old, variant } = differing[0]!;
-  if (dishMoved && old.menuPrice === null) return NONE;
+  if (old.menuPrice === null && change.inheritedVariantPrices?.[variant.id] !== old.unitPrice)
+    return NONE;
   return undo({
     method: "setMenuVariantPrice",
     menuId: now.menuId,
@@ -177,7 +178,6 @@ function variantPriceUndo(
     variantId: variant.id,
     price: old.menuPrice,
     name: change.name,
-    variantName: variant.name,
   });
 }
 

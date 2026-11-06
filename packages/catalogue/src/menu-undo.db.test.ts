@@ -533,7 +533,6 @@ describe("variant price Undo", () => {
       variantId: f.large,
       price: live,
       name: "Lemonade",
-      variantName: "Large",
     });
     expect(await storedPrices(f.lunch, f.lemonade)).toEqual(stored);
   });
@@ -603,6 +602,82 @@ describe("variant price Undo", () => {
     expect(action).toEqual({ kind: "none" });
   });
 
+  it.each<{
+    probe: string;
+    setUp?: (f: MenusFixture) => Promise<unknown>;
+    move: (f: MenusFixture) => Promise<unknown>;
+  }>([
+    {
+      probe: "the product's own Large price",
+      move: (f) => app((tx) => setProductVariants(tx, f.lemonade, [large(f, "3.75")], "en")),
+    },
+    {
+      probe: "the product price Large follows through a dish Lunch sets no price for",
+      setUp: async (f) => {
+        await app((tx) => setProductVariants(tx, f.lemonade, [large(f, null)], "en"));
+        await setDishPrice(f.lunch, f.lemonade, null);
+      },
+      move: (f) => app((tx) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" })),
+    },
+    {
+      probe: "Drinks' own price for Large",
+      setUp: (f) => setVariantPrice(f.drinksMenu, f.lemonade, f.large, "3.90"),
+      move: (f) => setVariantPrice(f.drinksMenu, f.lemonade, f.large, "4.10"),
+    },
+  ])(
+    "offers nothing for a variant that had no price here when $probe moved too",
+    async ({ setUp, move }) => {
+      const f = await menusFixture(fx.db);
+      await setUp?.(f);
+      await publish(f.lunch);
+      await setVariantPrice(f.lunch, f.lemonade, f.large, "4.00");
+      await move(f);
+
+      const { action } = await changeAndAction(
+        await readPreview(f.lunch),
+        isOwnVariantsOf(f.lemonade),
+      );
+
+      expect(action).toEqual({ kind: "none" });
+    },
+  );
+
+  it("puts back a variant that follows Lunch's own dish price while the product's price moved", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => setProductVariants(tx, f.lemonade, [large(f, null)], "en"));
+    await publish(f.lunch);
+    const stored = await storedPrices(f.lunch, f.lemonade);
+    await setVariantPrice(f.lunch, f.lemonade, f.large, "4.00");
+    await app((tx) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" }));
+    await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Renamed" }));
+
+    const command = await undoAndCheck(f.lunch, f.dinner, isOwnVariantsOf(f.lemonade));
+
+    expect(command).toMatchObject({
+      method: "setMenuVariantPrice",
+      variantId: f.large,
+      price: null,
+    });
+    expect(await storedPrices(f.lunch, f.lemonade)).toEqual(stored);
+  });
+
+  it("puts back a variant with its own product price while the dish's price moved", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    const stored = await storedPrices(f.lunch, f.lemonade);
+    await setDishPrice(f.lunch, f.lemonade, "3.30");
+    await setVariantPrice(f.lunch, f.lemonade, f.large, "4.00");
+
+    const command = await undoAndCheck(f.lunch, f.dinner, isOwnVariantsOf(f.lemonade));
+
+    expect(command).toMatchObject({
+      method: "setMenuVariantPrice",
+      variantId: f.large,
+      price: null,
+    });
+    expect(await storedPrices(f.lunch, f.lemonade)).toEqual({ ...stored, grossPrice: 330 });
+  });
+
   it("is refused for a variant made Inactive since the preview was read", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
@@ -618,7 +693,8 @@ describe("variant price Undo", () => {
         setProductVariants(tx, f.lemonade, [{ ...large(f, "3.50"), active: false }], "en"),
       ),
     ).rejects.toMatchObject({ code: "product.on_live_menu" });
-    // ... so this stands in for it with the same two effects: Inactive, and its menu rows gone.
+    // ... so these direct writes reach a state the product cannot reach without a race: Large
+    // Inactive, and its menu rows gone.
     await fx.db.update(products).set({ active: false }).where(eq(products.id, f.large));
     await fx.db
       .delete(menuItemVariantOverrides)

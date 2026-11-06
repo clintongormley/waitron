@@ -55,8 +55,6 @@ function refusalSentence(
     case "setMenuVariantPrice":
       if (code === "menu_item.not_found")
         return { key: "menu_preview.undo_item_gone", values: { name: command.name } };
-      if (code === "product.variant_not_found" && command.method === "setMenuVariantPrice")
-        return { key: "menu_preview.undo_variant_gone", values: { variant: command.variantName } };
       return null;
     case "updateSection": {
       const key = SECTION_REFUSALS[code];

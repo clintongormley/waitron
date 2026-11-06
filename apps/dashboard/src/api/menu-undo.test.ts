@@ -36,7 +36,6 @@ const variantPrice: MenuUndoCommand = {
   variantId: "v1",
   price: "0.00",
   name: "Lemonade",
-  variantName: "Large",
 };
 const section: MenuUndoCommand = {
   method: "updateSection",
@@ -109,11 +108,6 @@ describe("undoRefusalText", () => {
       "Lemonade is no longer on this menu, so its price here cannot be put back. Add it to the menu again first, or hide this change.",
     ],
     [
-      "product.variant_not_found",
-      variantPrice,
-      "Large is no longer active, so its price here cannot be put back. Its change leaves this list when the menu is read again.",
-    ],
-    [
       "menu_section.not_found",
       section,
       "Section Mains has been deleted, so it cannot be put back.",
@@ -155,6 +149,12 @@ describe("undoRefusalText", () => {
   it("falls back to the code's own message for a code no sentence names", () => {
     expect(undoRefusalText(refused("management.request_invalid"), rename)).toBe(
       codeMessage("management.request_invalid"),
+    );
+  });
+
+  it("falls back to the code's own message for a variant no longer active", () => {
+    expect(undoRefusalText(refused("product.variant_not_found"), variantPrice)).toBe(
+      codeMessage("product.variant_not_found"),
     );
   });
 

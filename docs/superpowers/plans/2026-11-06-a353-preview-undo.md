@@ -172,7 +172,7 @@ published** (`preview.live === null`): there is no live value to put back.
 | --- | --- | --- | --- |
 | `menu_renamed` | M | Undo: `renameCatalogue(menuId, live.menuName)` → route `:1010-1028` → `updateMenuDetails` with only `name` (`operations.ts:849-887`, checks the name is free at `:879`). Always. | 1 |
 | `price_changed` | M, P, I | Undo: `updateMenuItem(menuId, <current menu-item id>, { grossPrice: live.grossPrice })` → `:1207-1233` → `updateMenuItem` (`operations.ts:408-417`). The current item id is the key of the preview document's offer for that product. **Only when Decision 5 holds**; otherwise no Undo. Task 1.1 first makes every change of this menu's own price credited to M. | 1 |
-| `product_changed` | M (always `["variants"]`), P, I | Undo: `setMenuVariantPrice(menuId, itemId, variantId, live.menuPrice)` → `:1257-1276` → `variants.ts:433-460` — **only when exactly one Active variant's own menu price differs, no variant moved only because the dish's own menu price moved** (`menu-document.ts:840-850`; those go with the price change's Undo), **and either the dish's own menu price is unchanged or the live variant had a price of its own** (otherwise the variant, inheriting again, still differs and `menu-document.ts:844-848` lists it again). Two or more differing variants: **no Undo**. | 1 |
+| `product_changed` | M (always `["variants"]`), P, I | Undo: `setMenuVariantPrice(menuId, itemId, variantId, live.menuPrice)` → `:1257-1276` → `variants.ts:433-460` — **only when exactly one Active variant's own menu price differs, no variant moved only because the dish's own menu price moved** (`menu-document.ts:840-850`; those go with the price change's Undo), **and either the live variant had a price of its own on this menu, or what it would charge now without one equals its live price** (otherwise the variant, inheriting again, still differs and is listed again). That price comes from the change's `inheritedVariantPrices` (review fix, below Task 1.2). Two or more differing variants: **no Undo**. | 1 |
 | `section_changed` on this menu's own section (no `includedMenu` on the node) | M, I | Undo: `updateSection(sectionId, patch)` → `:614-620` → `sections.ts:181-198`, the patch holding only the change's fields from the live node: `names` → `internalName` and `names`; `image`; `color`. For `names`, **only when every content language switched off now has the same name live and now**: the merge refuses a switched-off language unless the stored text matches exactly (`optional-translations.ts:36-43`; the review ran both refusing cases), so the planner is given the enabled languages. Otherwise **no Undo**. | 1 |
 | `home_display_changed` | M | Undo: `setHomeDisplay(menuId, device, <only the fields where live and current differ>)` → `:741-755` → `menu-home.ts:115-133`. A live value the device no longer takes is refused `menu.home_display_invalid`. Not while a Home save is out. | 1 |
 | `section_changed` on an include of another menu (what this menu's include fixes, or folder/direct) | M (fields from the parent's path, `menu-document.ts:716-733`), I (what the included menu changed) | Undo: `setIncludeFolder(listId, memberId, { showAsFolder: !live.direct, overrides })` → `:703-712` → `include-folder.ts:78-106`. `overrides` is the live node's `fixed` (or `{}`) when live showed a folder; when live showed it directly, `overrides` is left out so the stored ones stay hidden (`include-folder.ts:94-102` keeps them). Offered only when the included menu appears exactly once in this menu's own lists, live and now (`menu-document.ts:930-968` merges every copy into one change), and, for fixed names, under the same switched-off-language rule as an own section (the same merge runs at `include-folder.ts:66`). | 2 |
@@ -195,7 +195,8 @@ published** (`preview.live === null`): there is no live value to put back.
 3. A dish whose change lists two or more variants' own menu prices — needs one write per variant,
    or the bulk route that also clears variants the change does not name.
 4. A variant price that moved only because the dish's own menu price moved — undone by the dish's
-   price change instead; and a variant whose Undo would leave it inheriting a dish price that moved.
+   price change instead; and a variant with no price here live whose Undo would leave it inheriting
+   a price that moved since (the dish's, the product's own variant price, or an included menu's).
 5. A section or include name change where a language switched off since has a different name —
    the save refuses a switched-off language it would change.
 6. An include whose change covers two or more copies of the same included menu — one write per copy.
@@ -210,6 +211,13 @@ published** (`preview.live === null`): there is no live value to put back.
 12. An order change that needs more than one move, and a shortcut change that needs more than one
     write or touches a slot that was empty when published.
 13. Every shared-product and included-menu change, by the owner's scope (they get links instead).
+14. A Home display setting whose published value is outside the range allowed today is offered an
+    Undo that is then refused with `menu.home_display_invalid` (its sentence says so). This happens
+    only if a later release narrows the allowed range; no code change for it in PR 1.
+
+**For PR 1's text.** An Undo changes the preview of any menu that INCLUDES this one, exactly as an
+ordinary save of the same field does. The real-database tests check that an Undo leaves alone a
+menu that does not include this one; none compares against an including menu.
 
 ---
 
@@ -243,7 +251,6 @@ sentences below; a code none of them names falls back to its existing `codeMessa
 | `menu_preview.undo_name_taken` | `menu.name_taken`, menu name | Another menu is now called {name}. Rename that menu, then undo this again. | Otra carta se llama ahora {name}. Cambia el nombre de esa carta y vuelve a deshacer esto. |
 | `menu_preview.undo_menu_gone` | `catalogue.not_found`, menu name and Home display | This menu has been deleted, so there is nothing to put back. | Esta carta se ha eliminado, así que no hay nada que deshacer. |
 | `menu_preview.undo_item_gone` | `menu_item.not_found`, a dish's or a variant's price | {name} is no longer on this menu, so its price here cannot be put back. Add it to the menu again first, or hide this change. | {name} ya no está en esta carta, así que no se puede recuperar su precio aquí. Vuelve a añadirlo a la carta o oculta este cambio. |
-| `menu_preview.undo_variant_gone` | `product.variant_not_found`, a variant's price | {variant} is no longer active, so its price here cannot be put back. Its change leaves this list when the menu is read again. | {variant} ya no está activa, así que no se puede recuperar su precio aquí. Su cambio saldrá de esta lista al volver a leer la carta. |
 | `menu_preview.undo_section_gone` | `menu_section.not_found`, a section | Section {name} has been deleted, so it cannot be put back. | La sección {name} se ha eliminado, así que no se puede recuperar. |
 | `menu_preview.undo_section_invalid` | `menu_section.invalid`, a section | {name}'s published photo or colour can no longer be used. Change it on the Structure tab, or hide this change. | La foto o el color publicados de {name} ya no se pueden usar. Cámbialos en la pestaña Estructura u oculta este cambio. |
 | `menu_preview.undo_language_off` | `content.translation_invalid`, a section | A language {name} was published in has been switched off since, so its name cannot be put back. Change it on the Structure tab, or hide this change. | Desde la publicación se ha desactivado un idioma del nombre de {name}, así que no se puede recuperar. Cámbialo en la pestaña Estructura u oculta este cambio. |
@@ -394,6 +401,17 @@ price: what it would charge with none; null when the places it would inherit fro
 - [ ] Existing `toEqual` assertions on this-menu price changes gain the field and nothing else.
 - [ ] Same command as Task 1.1.
 
+**Review fix (variants).** A this-menu `product_changed` carries `inheritedVariantPrices?:
+Record<string, string | null>`: by variant id, for each variant this menu sets a price for, the
+`otherwise` of its combined price (its value when decided, else null); left out when this menu
+sets no variant price. The planner offers a variant Undo whose live variant had no price here only
+when this value equals the live price. Pinned by "says what each variant this menu prices would
+charge without its own price" in `menu-publication.test.ts`, and in `menu-undo.db.test.ts` by
+three cases offering nothing (the product's own Large price, the product price Large follows
+through a dish Lunch sets no price for, and Drinks' own Large price, each moved after Lunch set
+Large) and two offered ones (Large follows Lunch's own dish price while the product's price
+moved; Large has its own product price while Lunch's dish price moved).
+
 #### Task 1.3 — the planner's routing, and the purity guard
 
 Files: create `packages/catalogue/src/menu-undo.ts`, `packages/catalogue/src/menu-undo.test.ts`;
@@ -463,9 +481,11 @@ test where a case needs two. Run the price cases on **both** Burger/Dinner and L
 - [ ] One variant's menu price changed → `setMenuVariantPrice` with the live value; the other
   variant's price row is untouched. Two variants changed → `none`. The dish's menu price changed
   while a variant inherits it → the variant's M change is `none`, and undoing the dish's price
-  removes both. A variant whose live price was none, changed while the dish's menu price also moved
-  → `none`.
-- [ ] A variant made Inactive after the preview: the write throws `product.variant_not_found`, and
+  removes both. A variant that follows the dish, whose live price here was none, changed while the
+  dish's menu price also moved → `none`; one with its own product price → offered (review fix).
+- [ ] A variant made Inactive after the preview (reachable only through a race: the product editor
+  refuses it with `product.on_live_menu`, so the test writes the rows directly; the dashboard words
+  the refusal with the code's own message): the write throws `product.variant_not_found`, and
   the preview read after no longer lists the variant's M change but lists a P `variants` change
   (making it Inactive deleted its menu rows, `variants.ts:376-378`).
 - [ ] `pnpm --filter @waitron/catalogue exec vitest run src/menu-undo.db.test.ts src/menu-undo.test.ts`
@@ -555,6 +575,9 @@ The change list is rebuilt for every new preview object — `#renderChanges` wra
 Files: `apps/dashboard/src/screens/menus-screen.ts`; create
 `apps/dashboard/src/screens/menus-screen.preview-undo.test.ts` (the existing
 `menus-screen.test.ts` is 12,883 lines).
+
+Undoing a dish's own price also removes the bullet of a variant that follows that price, so the
+success line names the change that was undone and must not suggest that nothing else moved.
 
 `#undo(changeId, change)`: return unless `menuId`, `preview` and no `previewError`; return when
 `busy`, `undoing !== null`, `homePending !== null` (`:752,2030`) or this menu is publishing. Take

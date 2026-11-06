@@ -1051,14 +1051,23 @@ export function diffEntries(
         fields: shared,
         source: "shared_product",
       });
-    if (menu.length > 0)
+    if (menu.length > 0) {
+      const inherited = (combined.get(productId)?.variants ?? []).flatMap(({ variantId, price }) =>
+        price.state === "decided" && price.source.kind === "own"
+          ? [[variantId, price.otherwise?.state === "decided" ? price.otherwise.value : null]]
+          : [],
+      );
       push({
         kind: "product_changed",
         productId,
         name: offer.name,
         fields: menu,
         source: "this_menu",
+        ...(inherited.length === 0
+          ? {}
+          : { inheritedVariantPrices: Object.fromEntries(inherited) }),
       });
+    }
   }
   for (const [productId, offer] of next.offers) {
     if (prev.offers.has(productId)) continue;
