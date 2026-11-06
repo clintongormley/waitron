@@ -407,8 +407,8 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
-  shared-fixture consumers in the server split-bill and move-bill suites;
-  other bill-editing and order fixtures; and shared helper consumers
+  the server split-bill suites; `registroCount` helper consumers in bill-editing, move-bill and
+  other order suites; and shared helper consumers
   such as `made-here.test.ts`. Moved-dish names remain in the till's
   `till-table-order-screen.move-dishes.test.ts`.
   Remaining accented bindings include `portion-selection.test.ts`, `counter-portion-rows.test.ts`
@@ -806,18 +806,17 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
-  counter-payment fixtures; shared-fixture consumers in the server split-bill and move-bill suites,
-  other bill-editing and order fixtures, the till's moved-dish suite, accented bindings in
+  counter-payment fixtures; the server split-bill suites; `registroCount` helper consumers in
+  bill-editing, move-bill and other order suites; the till's moved-dish suite; accented bindings in
   `portion-selection.test.ts`, `counter-portion-rows.test.ts` and `till-ticket-view.test.ts`,
   shared helper consumers and file names.
-  The table-action suite now uses English beer/cake bindings; the split-bill route suite aliases
-  its coffee binding. The shared fixture property names remain open.
+  Shared fixture property names such as `cafeId` remain open.
   Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
   display samples under A976.
   Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
-  payment/queue widget display text,
+  payment/queue widget display text, the table-action suite's beer/cake display names,
   variant media fixtures and device/printer deletion fixture text.
   [Detail](architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 

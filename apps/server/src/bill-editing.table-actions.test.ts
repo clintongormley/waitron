@@ -958,7 +958,7 @@ describe("A803 race replay: Split a table against another command, from one read
     it(`A803 race replay: a split and a Move dishes of the same dish: one commits (${order[0]} asked first)`, async () => {
       const ana = await seatedWith(venue, "Tarta", "Caña");
       const table = await joinFree(ana.partyId);
-      const beerLine = lineNamed(ana.tabId, "Caña").id;
+      const beerLineId = lineNamed(ana.tabId, "Caña").id;
       const moving = {
         partyId: ana.partyId,
         operatorId: venue.operatorId,
@@ -968,10 +968,10 @@ describe("A803 race replay: Split a table against another command, from one read
       const commands = {
         split: await splitOf(ana.partyId, table, {
           wholeBillIds: [],
-          loose: [{ billId: ana.tabId, lineIds: [beerLine] }],
+          loose: [{ billId: ana.tabId, lineIds: [beerLineId] }],
         }),
         move: () =>
-          inTx(venue, (tx) => moveDishes(tx, venue.cfg, ana.tabId, null, [beerLine], moving)),
+          inTx(venue, (tx) => moveDishes(tx, venue.cfg, ana.tabId, null, [beerLineId], moving)),
       };
 
       const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });

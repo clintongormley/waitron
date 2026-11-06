@@ -6337,9 +6337,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **Floor-plan test labels can collide across zones.** Main CI 42164850258 refused the
-  partial-reset case with `table.label_taken`, label `Counter 3 ea3a14`. Replace the shared
-  fixture's six-character UUID suffix with collision-free labels, preserving the refusal checks.
+- **Floor-plan test labels can collide across zones.** Main CI 42164850258 failed the
+  partial-reset case during fixture setup with `table.label_taken`, label `Counter 3 ea3a14`.
+  A controlled probe reproduces the refusal; the cause in CI's unavailable database is inferred.
+  Replace the shared fixture's six-character UUID suffix with labels that cannot repeat,
+  preserving the refusal checks.
   [Detail](backlog/ci.md#floor-plan-test-labels-can-collide-across-zones).
 
 - **A change to the till alone does not run the handover's end-to-end test.** The test loads the
@@ -6943,7 +6945,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot and counter-payment fixtures; shared-fixture consumers in the
-  server split-bill and move-bill suites; other bill-editing and order fixtures;
+  server split-bill suites; `registroCount` helper consumers in bill-editing, move-bill and
+  other order suites;
   the till's moved-dish suite; accented bindings in the portion-selection, counter-portion-rows
   and till-ticket-view tests; shared helper consumers and file names.
   Keep accented search fixtures unchanged.
