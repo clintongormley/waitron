@@ -356,6 +356,11 @@ W41s-10a): a record of ours whose stored copy differs from AEAT's. It becomes ki
   `sales_invoice_number_ck` (`sales.ts:148`).
 - **Rows:** 3, plus 3 per restore.
 
+> **Superseded, 6 November 2026.** The owner approved
+> [closing a drawer](../2026-11-06-a1325-close-a-drawer-design.md): this table and its chain are replaced by an
+> append-only record of drawer entries, and the `daily_closes` half of the business-day lock goes. The text
+> below is what was decided before that.
+
 **`daily_closes`** — the frozen end-of-day cash close, one row per node and business day. `ledger`,
 append-only, hash-chained per node. It stays (owner, 2026-11-04), with `recordDailyClose`,
 `computeDailyClose` and the chain columns. No route calls `recordDailyClose` yet: only

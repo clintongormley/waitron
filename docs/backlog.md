@@ -94,8 +94,7 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 - [One session with real phones and password managers](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
 - [One owner session with a real certificate against AEAT](backlog/fiscal.md#bundle-one-owner-session-with-a-real-certificate-against-aeat)
 - [Restore paths run](backlog/setup.md#bundle-restore-paths-run)
-- Design with the owner: close the day (A1325), the one go-live feature with no design; whether to do
-  A798 slice 9c, since a clock running ahead dates sales in a way that cannot be repaired; and the
+- Design with the owner: whether to do A798 slice 9c, since a clock running ahead dates sales in a way that cannot be repaired; and the
   A1323 master key, because A1187 parts 2 and 3 change the same restore steps.
 
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
@@ -1203,7 +1202,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   usable in Demo, and reproduce the owner's report first.
   [Detail](backlog/till.md#each-browser-tab-as-its-own-device-in-demo-too-a271-owner-2026-10-04--open-after-a268)
 
-- **Close the day: count the cash, record cash in and out, waiter floats** (bundle of 3, 2 go-live, 1 important, size L, waits for A760). Holds A1325. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
+- **Close the day: count the cash, record cash in and out, waiter floats** (bundle of 3, 2 go-live, 1 important, size L, design approved 2026-11-06, waits for A760 and A1308's payment and refund slices). Holds A1325. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
 
 - **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
   styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another

@@ -941,45 +941,15 @@ secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report fi
 
 ## A1325. Close the day: count the cash and save the day's close
 
-**Owner, 2026-11-04:** a restaurant needs this, so everything it takes is listed here, to be queued
-soon. The north star names it: "selling, printing, paying and closing". A1308's table design keeps
-`daily_closes`.
-
-**What exists.** The dashboard's Sales screen shows one day's figures, worked out live
-(`computeDailyClose`). `recordDailyClose` freezes a day with each till's cash count and tests cover
-it. Its sale-write integration scenario is in
-`apps/server/src/reporting-write-workflows.test.ts`. No production caller records the close yet.
-
-**What is missing:**
-
-1. **Counting the cash:** a screen where staff count each till's drawer, and a route that saves the
-   close. No screen collects a count yet.
-2. **One close across all tills, run by the primary.**
-3. **Recorded cash in and out (A239):** its entries replace the typed opening float and payouts.
-4. **Waiter floats (A240):** the close lists any float still open.
-5. **Past closes:** a way to see them, and a printed close. No daily-close print exists, and the
-   category report (#738) was meant to print with it.
-6. **Cash handed back for a voided sale:** it shows as a drawer shortfall at cash-up; see that entry.
-7. **The guide,** in English and Spanish.
-
-**For the design to answer:**
-
-- Who may close a day, and who may see the cash difference.
-- What happens when a day is never closed, and whether a close can be redone. Today a day has one
-  close, which can never be changed.
-- What a late payment or refund does to a day already closed. Voids count on the day they are made
-  (owner, 2026-09-24).
-- The first close will start refusing changes to the business-day start
-  (`venue.business_day_locked`), which has never fired on a real box. Check that this is still wanted.
-- **The tamper-evident chain.** The owner doubts it is needed (2026-11-04), and it stays for now. It
-  costs little, but nothing runs `verifyDailyCloseChain` except the demo script, and it is a plain
-  hash with no secret, so whoever can rewrite the rows can rewrite the hashes. The close is an
-  internal cash document in our own wording to the asesor, and that question left the batch unsent.
-  So the design either makes something run the check or takes the chain out.
+**Design approved by the owner, 2026-11-06:** [closing a drawer](../superpowers/specs/2026-11-06-a1325-close-a-drawer-design.md).
+A close is a counted withdrawal from one drawer, at any time, covering everything since that drawer's
+last close. It takes in A239, so the two are built together, and A240 can land after them. It replaces
+`daily_closes`, and no plan exists yet.
 
 ## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
-Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
+Now part of [closing a drawer](../superpowers/specs/2026-11-06-a1325-close-a-drawer-design.md) (owner,
+2026-11-06). Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
 recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
 in float cash). The entries replace the two typed totals the daily close takes today (opening float
 and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (landed as #1164).
@@ -992,7 +962,7 @@ Piece 3 of
 A238. Its screen belongs with clocking in and out, under Team (owner, 2026-10-03, A261 §10). Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
 open float may take cash on any handheld, and it adds to their float; the waiter settles the float
 at a till before leaving, entering what they hold, the difference is recorded against them and the
-cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
+cash goes into that till's drawer as an A239 entry; the daily summary email lists any float still open.
 Cash taken on a handheld whose profile allows cash, with no float, is counted against the
 handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
 A238 (landed as #1164) and A239.
@@ -2270,16 +2240,12 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 
 3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A1325. Close the day: count the cash and save the day's close — OPEN, needs a design with the
-  owner, then queue it soon (owner, 2026-11-04).** The north star's "closing". The dashboard shows a
-  day's figures live, and the code that saves a frozen close is built and tested, but no screen or
-  route lets a venue count its cash or close a day. Design it together with A239 and A240.
+- **A1325. Close the day: count the cash and save the day's close — OPEN, design approved
+  2026-11-06, no plan yet.** The north star's "closing". A close is a counted withdrawal from one
+  drawer, built together with A239, and A240 can land after it.
   [Detail](till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
-- **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
-  2026-10-03); part of A1325's design, to queue soon (owner, 2026-11-04).** Each top-up or removal of cash from a till device's drawer is a recorded entry:
-  who, how much, why, when (topping up change, paying a supplier, a waiter handing in float cash).
-  The entries replace the two typed totals the daily close takes today (opening float and payouts,
-  `packages/reporting/src/record-daily-close.ts`).
+- **Recorded cash in and out of a till's drawer (A239) — OPEN, covered by A1325's approved design.**
+  Each top-up or removal of cash from a drawer is a recorded entry: who, how much, why, when.
   [Detail](till.md#recorded-cash-in-and-out-of-a-tills-drawer-a239--open-needs-a-spec-before-queueing-owner-2026-10-03)
 - **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
   A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs A238

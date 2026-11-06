@@ -1,7 +1,6 @@
 # Closing a drawer (A1325, with A239)
 
-Status: waiting for the owner's approval. Designed with the owner on 6 November 2026, then read by a
-fresh reviewer. It replaces the
+Status: approved by the owner on 6 November 2026, after a fresh reviewer read it. Nothing is built. It replaces the
 "close the day" framing in [A1325](../../backlog/till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
 and absorbs [A239](../../backlog/till.md#recorded-cash-in-and-out-of-a-tills-drawer-a239--open-needs-a-spec-before-queueing-owner-2026-10-03).
 
@@ -139,7 +138,9 @@ the first close shows that amount as a difference, which is harmless.
 A waiter settles their float into a drawer before leaving, as already decided. That settlement is cash in
 on the drawer's balance. So A240 needs nothing else from a close, and it can land after it. Until it does,
 cash taken on a device with no drawer belongs to no drawer's balance, and the Sales screen is the only
-place it shows. A240's open point, where a float's opening cash comes from, stays open.
+place it shows. A240's open point, where a float's opening cash comes from, stays open. The owner's rule
+that a close lists any float still open moves to the daily summary email, because a float belongs to a
+waiter and not to any drawer.
 
 ### Tips
 
@@ -230,6 +231,7 @@ These are the designer's choices and the owner may overrule them.
 - Deleting a printer that holds a balance offers a close first, and does not refuse.
 - No separate alert for a large difference, because the summary email shows it each day.
 - The email is sent to the venue's owner account, and goes to no one if email is not set up.
+- Open waiters' floats are listed in the daily email and not on a drawer's close.
 
 ## Left to the builder
 
