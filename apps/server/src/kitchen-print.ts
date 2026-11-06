@@ -8,6 +8,7 @@ import {
   kitchenPrintJobLines,
   kitchenPrintJobs,
   kitchenStations,
+  orderGroupHoldStations,
   orderGroups,
   orderTableLabels,
   printJobs,
@@ -1481,8 +1482,9 @@ export async function readSentWork(tx: Transaction, orderId: string): Promise<Se
 }
 
 /**
- * The ticket items that went to the kitchen for each of `orderIds`, keyed by order: its fired ones
- * and its held ones whose group's HOLD ticket was queued. An order with none is left out.
+ * The ticket items that went to the kitchen for each of `orderIds`, keyed by order: its fired ones,
+ * its held ones whose group's HOLD ticket was queued, and those waiting for the pass on HOLD paper
+ * ({@link readWaitingOnHoldPaper}), which count as held. An order with none is left out.
  */
 async function readSentItems(
   tx: Transaction,
@@ -1492,7 +1494,10 @@ async function readSentItems(
     .select({ id: ticketItems.id, workingOrderId: ticketItems.workingOrderId })
     .from(ticketItems)
     .where(and(inArray(ticketItems.workingOrderId, [...orderIds]), isNotNull(ticketItems.firedAt)));
-  const held = await readOnHoldTickets(tx, orderIds);
+  const held = [
+    ...(await readOnHoldTickets(tx, orderIds)),
+    ...(await readWaitingOnHoldPaper(tx, orderIds)),
+  ];
   const sent = new Map<string, { ticketItemIds: Set<string>; heldItemIds: Set<string> }>();
   const entry = (orderId: string) => {
     const known = sent.get(orderId) ?? { ticketItemIds: new Set(), heldItemIds: new Set() };
@@ -1561,6 +1566,31 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
         isNull(ticketItems.firedAt),
         eq(orderGroups.state, "held"),
         isNotNull(orderGroups.holdPrintedAt),
+      ),
+    );
+}
+
+/**
+ * The ticket items of `orderIds` the pass has been asked for and has not released, at a station
+ * recorded as having their line's group's HOLD paper ({@link heldPaperStations}).
+ */
+async function readWaitingOnHoldPaper(tx: Transaction, orderIds: readonly string[]) {
+  return tx
+    .select({ id: ticketItems.id, workingOrderId: ticketItems.workingOrderId })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(
+      orderGroupHoldStations,
+      and(
+        eq(orderGroupHoldStations.groupId, workingOrderLines.groupId),
+        eq(orderGroupHoldStations.stationId, ticketItems.stationId),
+      ),
+    )
+    .where(
+      and(
+        inArray(ticketItems.workingOrderId, [...orderIds]),
+        isNotNull(ticketItems.requestedAt),
+        isNull(ticketItems.firedAt),
       ),
     );
 }
