@@ -77,7 +77,7 @@ import type {
 } from "../api/client.js";
 import { MenuReadController } from "../api/menu-read-controller.js";
 import { sendMenuUndo, undoRefusalText } from "../api/menu-undo.js";
-import { menuChangeActions } from "@waitron/catalogue/src/menu-undo.js";
+import { menuChangeAction } from "@waitron/catalogue/src/menu-undo.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import {
   HOME_COLUMN_RANGE,
@@ -89,6 +89,7 @@ import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { homeDeviceLabel } from "../i18n/domain.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
 type Tab = (typeof TABS)[number];
@@ -1462,11 +1463,11 @@ export class MenusScreen extends LitElement {
     const preview = this.preview;
     if (menuId === null || preview === null || this.previewError) return;
     if (this.#undoBlocked(menuId)) return;
-    const action = menuChangeActions({
-      preview,
-      languages: currentContentLanguages().languages,
-    }).get(changeId);
-    if (action?.kind !== "undo") return;
+    const action = menuChangeAction(
+      { preview, languages: currentContentLanguages().languages },
+      changeId,
+    );
+    if (action.kind !== "undo") return;
     const command = action.command;
     const sentFrom = this.#menuName();
     this.busy = true;
@@ -3214,7 +3215,7 @@ export class MenusScreen extends LitElement {
                     this.homeDevice = each;
                     this.homeFieldErrors = {};
                   }}
-                />${t(each === "handheld" ? "home.device_handheld" : "home.device_till")}</label
+                />${homeDeviceLabel(each)}</label
               >`,
           )}
         </div>

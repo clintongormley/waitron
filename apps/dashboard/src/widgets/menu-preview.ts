@@ -23,6 +23,7 @@ import type {
 } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
+import { homeDeviceLabel } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";
 import {
   openProduct,
@@ -441,20 +442,18 @@ export class MenuPreviewPanel extends LitElement {
       this.#shownRefusals = this.undoRefusals;
     }
     const languages = currentContentLanguages().languages;
-    if (!changed.has("preview") && this.#actionsLanguages !== languages.join(" ")) {
-      this.#actionsLanguages = languages.join(" ");
-      if (this.preview !== null)
-        this.#actions = menuChangeActions({ preview: this.preview, languages });
+    const languagesKey = languages.join(" ");
+    if (changed.has("preview") || languagesKey !== this.#actionsLanguages) {
+      this.#actionsLanguages = languagesKey;
+      this.#actions =
+        this.preview === null ? new Map() : menuChangeActions({ preview: this.preview, languages });
     }
     if (changed.has("preview")) {
       this.confirmingPreview = null;
       this.navigationUnavailable = false;
       this.#navigation++;
-      this.#actions = new Map();
       this.#positions = new Map();
-      this.#actionsLanguages = languages.join(" ");
       if (this.preview === null) return;
-      this.#actions = menuChangeActions({ preview: this.preview, languages });
       this.#positions = new Map(this.preview.changes.map((change, index) => [change, index]));
       const listed = new Set(this.preview.changes.map((change) => change.id));
       for (const id of this.#finishedUndos) if (!listed.has(id)) this.#finishedUndos.delete(id);
@@ -673,7 +672,7 @@ export class MenuPreviewPanel extends LitElement {
         return t("menu_preview.home_shortcuts_changed");
       case "home_display_changed":
         return fill("menu_preview.home_display_changed", {
-          device: t(change.device === "handheld" ? "home.device_handheld" : "home.device_till"),
+          device: homeDeviceLabel(change.device),
         });
       case "menu_renamed":
         return fill("menu_preview.menu_renamed", { from: change.from, to: change.to });

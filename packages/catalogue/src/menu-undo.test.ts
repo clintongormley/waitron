@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
 import type {
+  DocumentMember,
+  FrozenOffer,
   MenuChange,
   MenuChangeBody,
   MenuDocument,
   MenuPreview,
 } from "./menu-document-types.js";
-import { menuChangeActions } from "./menu-undo.js";
+import { menuChangeAction, menuChangeActions, type MenuUndoInput } from "./menu-undo.js";
 
 function document(menuName: string): MenuDocument {
   return {
@@ -304,5 +306,80 @@ describe("menuChangeActions", () => {
     const notBuilt = thisMenuChanges.filter(({ kind }) => !built.has(kind));
     const actions = actionsFor(notBuilt);
     for (const { id } of notBuilt) expect(actions.get(id), id).toEqual({ kind: "none" });
+  });
+});
+
+/** Only the fields the planner reads. */
+function burgerOffer(grossPrice: string, largePrice: string): FrozenOffer {
+  const variant = (id: string, price: string) => ({ id, unitPrice: price, menuPrice: price });
+  return {
+    productId: "burger",
+    grossPrice,
+    unitPrice: grossPrice,
+    variants: [variant("small", "11.00"), variant("large", largePrice)],
+  } as unknown as FrozenOffer;
+}
+
+function mainsInFood(name: string, color: string): DocumentMember[] {
+  const section = (sectionId: string, members: DocumentMember[]): DocumentMember => ({
+    kind: "section",
+    sectionId,
+    internalName: sectionId,
+    names: { en: sectionId === "mains" ? name : "Food" },
+    image: null,
+    color: sectionId === "mains" ? color : null,
+    members,
+  });
+  return [section("food", [section("mains", [])])];
+}
+
+describe("menuChangeAction", () => {
+  const published = preview([
+    ...thisMenuChanges,
+    change("p-price", {
+      kind: "price_changed",
+      productId: "burger",
+      name: "Burger",
+      from: "12.00",
+      to: "12.50",
+      source: "shared_product",
+    }),
+    change("i-order", {
+      kind: "order_changed",
+      listSectionId: "drinks-root",
+      list: ["Cola"],
+      source: "included_menu",
+      includedMenu: drinks,
+    }),
+  ]);
+  const live = published.live!.document;
+  live.offers = { "item-burger": burgerOffer("12.00", "14.00") };
+  live.root.members = mainsInFood("Mains", "#aa0000");
+  const now = published.document;
+  now.offers = { "item-burger": burgerOffer("13.50", "15.00") };
+  now.root.members = mainsInFood("Main courses", "#00aa00");
+  now.home.handheld.columns = live.home.handheld.columns + 1;
+  const input: MenuUndoInput = { preview: published, languages: ["en"] };
+
+  it("answers each change as menuChangeActions does", () => {
+    const actions = menuChangeActions(input);
+    const methods = new Set(
+      [...actions.values()].flatMap((action) =>
+        action.kind === "undo" ? [action.command.method] : [],
+      ),
+    );
+    expect([...methods].sort()).toEqual([
+      "renameCatalogue",
+      "setHomeDisplay",
+      "setMenuVariantPrice",
+      "updateMenuItem",
+      "updateSection",
+    ]);
+    for (const { id } of published.changes)
+      expect(menuChangeAction(input, id), id).toEqual(actions.get(id));
+  });
+
+  it("answers none for a change the preview does not list", () => {
+    expect(menuChangeAction(input, "not-listed")).toEqual({ kind: "none" });
   });
 });

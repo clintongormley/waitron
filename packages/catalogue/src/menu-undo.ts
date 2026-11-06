@@ -63,37 +63,98 @@ export type MenuChangeAction =
 
 /** Every change's action, by change id, worked out once. */
 export function menuChangeActions(input: MenuUndoInput): ReadonlyMap<string, MenuChangeAction> {
-  return new Map(input.preview.changes.map((change) => [change.id, actionFor(input, change)]));
+  const plan = new Plan(input);
+  return new Map(input.preview.changes.map((change) => [change.id, actionFor(plan, change)]));
+}
+
+/** One change's action, as `menuChangeActions` would answer it; "none" for an id not listed. */
+export function menuChangeAction(input: MenuUndoInput, changeId: string): MenuChangeAction {
+  const change = input.preview.changes.find(({ id }) => id === changeId);
+  return change === undefined ? NONE : actionFor(new Plan(input), change);
 }
 
 const NONE: MenuChangeAction = { kind: "none" };
 
-function actionFor(input: MenuUndoInput, change: MenuChange): MenuChangeAction {
+type SectionNode = Extract<DocumentMember, { kind: "section" }>;
+type PlacedOffer = { menuItemId: string; offer: FrozenOffer };
+
+/** A document's offers by product and sections by id, each built on first use. */
+class DocumentLookups {
+  #offers: Map<string, PlacedOffer> | undefined;
+  #sections: Map<string, SectionNode> | undefined;
+
+  constructor(readonly document: MenuDocument) {}
+
+  /** The first offer of the product, in the document's order. */
+  offer(productId: string): PlacedOffer | null {
+    if (this.#offers === undefined) {
+      this.#offers = new Map();
+      for (const [menuItemId, offer] of Object.entries(this.document.offers))
+        if (!this.#offers.has(offer.productId))
+          this.#offers.set(offer.productId, { menuItemId, offer });
+    }
+    return this.#offers.get(productId) ?? null;
+  }
+
+  /** The first section with the id, depth first in the document's order. */
+  section(sectionId: string): SectionNode | null {
+    if (this.#sections === undefined) {
+      const sections = new Map<string, SectionNode>();
+      const visit = (members: readonly DocumentMember[]) => {
+        for (const member of members) {
+          if (member.kind !== "section") continue;
+          if (!sections.has(member.sectionId)) sections.set(member.sectionId, member);
+          visit(member.members);
+        }
+      };
+      visit(this.document.root.members);
+      this.#sections = sections;
+    }
+    return this.#sections.get(sectionId) ?? null;
+  }
+}
+
+/** The lookups every change of one preview shares, each document's built on first use. */
+class Plan {
+  #live: DocumentLookups | undefined;
+  #now: DocumentLookups | undefined;
+
+  constructor(readonly input: MenuUndoInput) {}
+
+  /** Read only for a menu that has been published. */
+  get live(): DocumentLookups {
+    return (this.#live ??= new DocumentLookups(this.input.preview.live!.document));
+  }
+
+  get now(): DocumentLookups {
+    return (this.#now ??= new DocumentLookups(this.input.preview.document));
+  }
+}
+
+function actionFor(plan: Plan, change: MenuChange): MenuChangeAction {
   switch (change.source) {
     case "shared_product":
       return sharedProductAction(change);
     case "included_menu":
       return includedMenuAction(change);
     case "this_menu":
-      return input.preview.live === null ? NONE : thisMenuAction(input, input.preview.live, change);
+      return plan.input.preview.live === null ? NONE : thisMenuAction(plan, change);
   }
 }
 
-type Live = NonNullable<MenuPreview["live"]>;
-
-function thisMenuAction(input: MenuUndoInput, live: Live, change: MenuChange): MenuChangeAction {
-  const now = input.preview.document;
+function thisMenuAction(plan: Plan, change: MenuChange): MenuChangeAction {
+  const now = plan.input.preview.document;
   switch (change.kind) {
     case "menu_renamed":
       return undo({ method: "renameCatalogue", menuId: now.menuId, name: change.from });
     case "home_display_changed":
-      return homeDisplayUndo(live.document, now, change.device);
+      return homeDisplayUndo(plan.live.document, now, change.device);
     case "section_changed":
-      return ownSectionUndo(input.languages, live.document, now, change);
+      return ownSectionUndo(plan.input.languages, plan.live, plan.now, change);
     case "price_changed":
-      return dishPriceUndo(live.document, now, change);
+      return dishPriceUndo(plan.live, plan.now, change);
     case "product_changed":
-      return variantPriceUndo(live.document, now, change);
+      return variantPriceUndo(plan.live, plan.now, change);
     default:
       return NONE;
   }
@@ -117,29 +178,20 @@ function homeDisplayUndo(
   return undo({ method: "setHomeDisplay", menuId: now.menuId, device, patch });
 }
 
-function offerOf(
-  document: MenuDocument,
-  productId: string,
-): { menuItemId: string; offer: FrozenOffer } | null {
-  for (const [menuItemId, offer] of Object.entries(document.offers))
-    if (offer.productId === productId) return { menuItemId, offer };
-  return null;
-}
-
 /** Writing back this menu's own price puts back the whole live price only when the live version
  * set one (an own price always wins) or what it would inherit now is the live price. */
 function dishPriceUndo(
-  live: MenuDocument,
-  now: MenuDocument,
+  live: DocumentLookups,
+  now: DocumentLookups,
   change: Extract<MenuChange, { kind: "price_changed" }>,
 ): MenuChangeAction {
-  const was = offerOf(live, change.productId)?.offer;
-  const is = offerOf(now, change.productId);
+  const was = live.offer(change.productId)?.offer;
+  const is = now.offer(change.productId);
   if (was === undefined || is === null) return NONE;
   if (was.grossPrice === null && change.inheritedPrice !== was.unitPrice) return NONE;
   return undo({
     method: "updateMenuItem",
-    menuId: now.menuId,
+    menuId: now.document.menuId,
     menuItemId: is.menuItemId,
     input: { grossPrice: was.grossPrice },
     name: change.name,
@@ -151,12 +203,12 @@ function dishPriceUndo(
  * write leaves it), nor when the variant had no price here live and what it would charge without
  * one has moved since. */
 function variantPriceUndo(
-  live: MenuDocument,
-  now: MenuDocument,
+  live: DocumentLookups,
+  now: DocumentLookups,
   change: Extract<MenuChange, { kind: "product_changed" }>,
 ): MenuChangeAction {
-  const was = offerOf(live, change.productId)?.offer;
-  const is = offerOf(now, change.productId);
+  const was = live.offer(change.productId)?.offer;
+  const is = now.offer(change.productId);
   if (was === undefined || is === null) return NONE;
   const dishMoved = was.grossPrice !== is.offer.grossPrice;
   const before = new Map(was.variants.map((variant) => [variant.id, variant]));
@@ -173,7 +225,7 @@ function variantPriceUndo(
     return NONE;
   return undo({
     method: "setMenuVariantPrice",
-    menuId: now.menuId,
+    menuId: now.document.menuId,
     menuItemId: is.menuItemId,
     variantId: variant.id,
     price: old.menuPrice,
@@ -181,29 +233,17 @@ function variantPriceUndo(
   });
 }
 
-type SectionNode = Extract<DocumentMember, { kind: "section" }>;
-
-function findSection(members: readonly DocumentMember[], sectionId: string): SectionNode | null {
-  for (const member of members) {
-    if (member.kind !== "section") continue;
-    if (member.sectionId === sectionId) return member;
-    const found = findSection(member.members, sectionId);
-    if (found !== null) return found;
-  }
-  return null;
-}
-
 /** Puts back an own section's names, photo and colour. A switched-off language whose name differs
  * live and now gets no Undo: the save refuses a switched-off language unless it is unchanged
  * (`mergeOptionalTranslations`). */
 function ownSectionUndo(
   languages: readonly string[],
-  live: MenuDocument,
-  now: MenuDocument,
+  live: DocumentLookups,
+  now: DocumentLookups,
   change: Extract<MenuChange, { kind: "section_changed" }>,
 ): MenuChangeAction {
-  const was = findSection(live.root.members, change.sectionId);
-  const is = findSection(now.root.members, change.sectionId);
+  const was = live.section(change.sectionId);
+  const is = now.section(change.sectionId);
   // Whether a section is an include never changes.
   if (was === null || is === null || was.includedMenu !== undefined) return NONE;
   const patch: Partial<SectionInput> = {};

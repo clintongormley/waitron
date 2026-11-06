@@ -1,6 +1,7 @@
 import type { MenuUndoCommand } from "@waitron/catalogue/src/menu-undo.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { fill, t } from "../i18n/t.js";
+import { homeDeviceLabel } from "../i18n/domain.js";
+import { fill } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { fieldOf } from "../widgets/section-writes.js";
 import type { DashboardApi } from "./client.js";
@@ -71,9 +72,7 @@ function refusalSentence(
       if (code === "menu.home_display_invalid")
         return {
           key: "menu_preview.undo_display_invalid",
-          values: {
-            device: t(command.device === "handheld" ? "home.device_handheld" : "home.device_till"),
-          },
+          values: { device: homeDeviceLabel(command.device) },
         };
       return null;
   }
