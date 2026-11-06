@@ -3082,18 +3082,15 @@ export const en = {
   "menu_preview.undo_refused": "Not undone. {reason}",
   "menu_preview.undo_refused_change": "Not undone on {menu}: {change}. {reason}",
   "menu_preview.edit_menu": "Edit {menu}",
-  "menu_preview.undo_name_taken":
-    "Another menu is now called {name}. Rename that menu, then undo this again.",
-  "menu_preview.undo_menu_gone": "This menu has been deleted, so there is nothing to put back.",
-  "menu_preview.undo_item_gone":
-    "{name} is no longer on this menu, so its price here cannot be put back. Add it to the menu again first, or hide this change.",
-  "menu_preview.undo_section_gone": "Section {name} has been deleted, so it cannot be put back.",
-  "menu_preview.undo_section_invalid":
-    "{name}'s published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+  "menu_preview.undo_name_taken": "Another menu called {name} already exists.",
+  "menu_preview.undo_menu_gone": "This menu has been deleted, so there is nothing to undo.",
+  "menu_preview.undo_item_gone": "{name} is no longer on this menu.",
+  "menu_preview.undo_section_gone": "Section {name} has been deleted, so it cannot be restored.",
+  "menu_preview.undo_section_invalid": "{name}'s published photo or colour can no longer be used.",
   "menu_preview.undo_language_off":
-    "A language {name} was published in has been switched off since, so its name cannot be put back. Change it on the Structure tab, or hide this change.",
+    "A language {name} was published in has been disabled since, so its name cannot be restored.",
   "menu_preview.undo_display_invalid":
-    "The published {device} display setting is no longer offered. Choose one on the Home page tab, or hide this change.",
+    "The published {device} display setting is no longer offered.",
   "menu_preview.show_all_changes": "Show all changes",
   "menu_preview.hidden_count_one": "{count} hidden",
   "menu_preview.hidden_count": "{count} hidden",
@@ -6905,19 +6902,17 @@ export const es: Record<StringKey, string> = {
   "menu_preview.undo_refused": "No se ha deshecho. {reason}",
   "menu_preview.undo_refused_change": "No se ha deshecho en {menu}: {change}. {reason}",
   "menu_preview.edit_menu": "Editar {menu}",
-  "menu_preview.undo_name_taken":
-    "Otra carta se llama ahora {name}. Cambia el nombre de esa carta y vuelve a deshacer esto.",
+  "menu_preview.undo_name_taken": "Ya existe otra carta llamada {name}.",
   "menu_preview.undo_menu_gone": "Esta carta se ha eliminado, así que no hay nada que deshacer.",
-  "menu_preview.undo_item_gone":
-    "{name} ya no está en esta carta, así que no se puede recuperar su precio aquí. Vuelve a añadirlo a la carta o oculta este cambio.",
+  "menu_preview.undo_item_gone": "{name} ya no está en esta carta.",
   "menu_preview.undo_section_gone":
-    "La sección {name} se ha eliminado, así que no se puede recuperar.",
+    "La sección {name} se ha eliminado, así que no se puede restaurar.",
   "menu_preview.undo_section_invalid":
-    "La foto o el color publicados de {name} ya no se pueden usar. Cámbialos en la pestaña Estructura u oculta este cambio.",
+    "La foto o el color publicados de {name} ya no se pueden usar.",
   "menu_preview.undo_language_off":
-    "Desde la publicación se ha desactivado un idioma del nombre de {name}, así que no se puede recuperar. Cámbialo en la pestaña Estructura u oculta este cambio.",
+    "Se ha desactivado un idioma en el que se publicó {name}, así que no se puede restaurar su nombre.",
   "menu_preview.undo_display_invalid":
-    "El ajuste de pantalla publicado para {device} ya no se ofrece. Elige otro en la pestaña Página de inicio u oculta este cambio.",
+    "El ajuste de pantalla publicado para {device} ya no se ofrece.",
   "menu_preview.show_all_changes": "Mostrar todos los cambios",
   "menu_preview.hidden_count_one": "{count} oculto",
   "menu_preview.hidden_count": "{count} ocultos",

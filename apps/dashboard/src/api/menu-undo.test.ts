@@ -87,52 +87,36 @@ describe("undoRefusalText", () => {
   const tillDisplay: MenuUndoCommand = { ...display, device: "till" } as MenuUndoCommand;
 
   it.each([
-    [
-      "menu.name_taken",
-      rename,
-      "Another menu is now called Dinner. Rename that menu, then undo this again.",
-    ],
-    ["catalogue.not_found", rename, "This menu has been deleted, so there is nothing to put back."],
-    [
-      "catalogue.not_found",
-      display,
-      "This menu has been deleted, so there is nothing to put back.",
-    ],
-    [
-      "menu_item.not_found",
-      dishPrice,
-      "Burger is no longer on this menu, so its price here cannot be put back. Add it to the menu again first, or hide this change.",
-    ],
-    [
-      "menu_item.not_found",
-      variantPrice,
-      "Lemonade is no longer on this menu, so its price here cannot be put back. Add it to the menu again first, or hide this change.",
-    ],
+    ["menu.name_taken", rename, "Another menu called Dinner already exists."],
+    ["catalogue.not_found", rename, "This menu has been deleted, so there is nothing to undo."],
+    ["catalogue.not_found", display, "This menu has been deleted, so there is nothing to undo."],
+    ["menu_item.not_found", dishPrice, "Burger is no longer on this menu."],
+    ["menu_item.not_found", variantPrice, "Lemonade is no longer on this menu."],
     [
       "menu_section.not_found",
       section,
-      "Section Mains has been deleted, so it cannot be put back.",
+      "Section Mains has been deleted, so it cannot be restored.",
     ],
     [
       "menu_section.invalid",
       section,
-      "Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+      "Mains's published photo or colour can no longer be used.",
       { field: "color" },
     ],
     [
       "content.translation_invalid",
       section,
-      "A language Mains was published in has been switched off since, so its name cannot be put back. Change it on the Structure tab, or hide this change.",
+      "A language Mains was published in has been disabled since, so its name cannot be restored.",
     ],
     [
       "menu.home_display_invalid",
       display,
-      "The published Handheld display setting is no longer offered. Choose one on the Home page tab, or hide this change.",
+      "The published Handheld display setting is no longer offered.",
     ],
     [
       "menu.home_display_invalid",
       tillDisplay,
-      "The published Till display setting is no longer offered. Choose one on the Home page tab, or hide this change.",
+      "The published Till display setting is no longer offered.",
     ],
   ] as const)("words %s from %o", (code, command, expected, params?: Record<string, unknown>) => {
     expect(undoRefusalText(refused(code, params), command)).toBe(expected);
@@ -141,10 +125,10 @@ describe("undoRefusalText", () => {
   it("words a refusal in Spanish when the screen is in Spanish", () => {
     setLocale("es");
     expect(undoRefusalText(refused("menu.home_display_invalid"), tillDisplay)).toBe(
-      "El ajuste de pantalla publicado para Caja registradora ya no se ofrece. Elige otro en la pestaña Página de inicio u oculta este cambio.",
+      "El ajuste de pantalla publicado para Caja registradora ya no se ofrece.",
     );
     expect(undoRefusalText(refused("menu.name_taken"), rename)).toBe(
-      "Otra carta se llama ahora Dinner. Cambia el nombre de esa carta y vuelve a deshacer esto.",
+      "Ya existe otra carta llamada Dinner.",
     );
   });
 
@@ -152,7 +136,7 @@ describe("undoRefusalText", () => {
     "words a section refusal naming its %s field as the published photo or colour",
     (field) => {
       expect(undoRefusalText({ code: "menu_section.invalid", params: { field } }, section)).toBe(
-        "Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+        "Mains's published photo or colour can no longer be used.",
       );
     },
   );
@@ -163,7 +147,7 @@ describe("undoRefusalText", () => {
       patch: { color: null, image: null },
     } as MenuUndoCommand;
     expect(undoRefusalText(refused("menu_section.invalid"), presentation)).toBe(
-      "Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+      "Mains's published photo or colour can no longer be used.",
     );
   });
 

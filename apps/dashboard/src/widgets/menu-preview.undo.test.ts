@@ -443,21 +443,21 @@ it("holds Publish back while an Undo is out", async () => {
 
 it("shows a refusal inside the bullet, announced once, and described from the Undo", async () => {
   const el = await mountLive([ownRename], {
-    undoRefusals: { "own-rename": "Another menu is now called Lunch." },
+    undoRefusals: { "own-rename": "Another menu called Lunch already exists." },
   });
   const row = () => el.shadowRoot!.querySelector(`[data-change-row="own-rename"]`)!;
   const refusal = () => row().querySelector<HTMLElement>("[data-undo-refusal]")!;
   expect(refusal().tagName).toBe("P");
-  expect(text(refusal())).toBe("Not undone. Another menu is now called Lunch.");
+  expect(text(refusal())).toBe("Not undone. Another menu called Lunch already exists.");
   expect(refusal().getAttribute("role")).toBe("alert");
   const described = undoButton(el, "own-rename")!.getAttribute("aria-describedby")!.split(" ");
   expect(described).toContain(refusal().id);
   el.preview = livePreview([ownRename]);
   await el.updateComplete;
-  expect(text(refusal())).toBe("Not undone. Another menu is now called Lunch.");
+  expect(text(refusal())).toBe("Not undone. Another menu called Lunch already exists.");
   expect(refusal().hasAttribute("role")).toBe(false);
   el.undoRefusals = {
-    "own-rename": "This menu has been deleted, so there is nothing to put back.",
+    "own-rename": "This menu has been deleted, so there is nothing to undo.",
   };
   await el.updateComplete;
   expect(refusal().getAttribute("role")).toBe("alert");
@@ -469,7 +469,7 @@ it.each([
 ])(
   "announces the same refusal again once a fresh attempt at that change finishes, with the refusal %s",
   async (_, setAgain) => {
-    const reason = "Another menu is now called Lunch.";
+    const reason = "Another menu called Lunch already exists.";
     const el = await mountLive([ownRename], { undoRefusals: { "own-rename": reason } });
     const refusal = () =>
       el.shadowRoot!.querySelector<HTMLElement>(
@@ -491,7 +491,7 @@ it.each([
 it("keeps focus on a change's Undo across a new preview after a refusal", async () => {
   const el = await mountLive([ownRename, sharedPrice]);
   undoButton(el, "own-rename")!.focus();
-  el.undoRefusals = { "own-rename": "Another menu is now called Lunch." };
+  el.undoRefusals = { "own-rename": "Another menu called Lunch already exists." };
   el.preview = livePreview([ownRename, sharedPrice]);
   await el.updateComplete;
   expect(el.shadowRoot!.activeElement).toBe(undoButton(el, "own-rename"));

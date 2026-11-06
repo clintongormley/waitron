@@ -250,16 +250,17 @@ one of the sentences below; a code none of them names falls back to its existing
 text.
 
 **Refusal sentences, one per foreseeable refusal (PR 1)** — each fills `{reason}` above.
+Owner approved 2026-11-06 via the watcher; reason sentences are the owner's own.
 
 | Key | Code it answers, and from which Undo | English | Spanish |
 | --- | --- | --- | --- |
-| `menu_preview.undo_name_taken` | `menu.name_taken`, menu name | Another menu is now called {name}. Rename that menu, then undo this again. | Otra carta se llama ahora {name}. Cambia el nombre de esa carta y vuelve a deshacer esto. |
-| `menu_preview.undo_menu_gone` | `catalogue.not_found`, menu name and Home display | This menu has been deleted, so there is nothing to put back. | Esta carta se ha eliminado, así que no hay nada que deshacer. |
-| `menu_preview.undo_item_gone` | `menu_item.not_found`, a dish's or a variant's price | {name} is no longer on this menu, so its price here cannot be put back. Add it to the menu again first, or hide this change. | {name} ya no está en esta carta, así que no se puede recuperar su precio aquí. Vuelve a añadirlo a la carta o oculta este cambio. |
-| `menu_preview.undo_section_gone` | `menu_section.not_found`, a section | Section {name} has been deleted, so it cannot be put back. | La sección {name} se ha eliminado, así que no se puede recuperar. |
-| `menu_preview.undo_section_invalid` | `menu_section.invalid`, a section, when the refusal names the `color` or `image` field, or names none and the Undo sent only those (otherwise the code's own message) | {name}'s published photo or colour can no longer be used. Change it on the Structure tab, or hide this change. | La foto o el color publicados de {name} ya no se pueden usar. Cámbialos en la pestaña Estructura u oculta este cambio. |
-| `menu_preview.undo_language_off` | `content.translation_invalid`, a section | A language {name} was published in has been switched off since, so its name cannot be put back. Change it on the Structure tab, or hide this change. | Desde la publicación se ha desactivado un idioma del nombre de {name}, así que no se puede recuperar. Cámbialo en la pestaña Estructura u oculta este cambio. |
-| `menu_preview.undo_display_invalid` | `menu.home_display_invalid`, Home display | The published {device} display setting is no longer offered. Choose one on the Home page tab, or hide this change. | El ajuste de pantalla publicado para {device} ya no se ofrece. Elige otro en la pestaña Página de inicio u oculta este cambio. |
+| `menu_preview.undo_name_taken` | `menu.name_taken`, menu name | Another menu called {name} already exists. | Ya existe otra carta llamada {name}. |
+| `menu_preview.undo_menu_gone` | `catalogue.not_found`, menu name and Home display | This menu has been deleted, so there is nothing to undo. | Esta carta se ha eliminado, así que no hay nada que deshacer. |
+| `menu_preview.undo_item_gone` | `menu_item.not_found`, a dish's or a variant's price | {name} is no longer on this menu. | {name} ya no está en esta carta. |
+| `menu_preview.undo_section_gone` | `menu_section.not_found`, a section | Section {name} has been deleted, so it cannot be restored. | La sección {name} se ha eliminado, así que no se puede restaurar. |
+| `menu_preview.undo_section_invalid` | `menu_section.invalid`, a section, when the refusal names the `color` or `image` field, or names none and the Undo sent only those (otherwise the code's own message) | {name}'s published photo or colour can no longer be used. | La foto o el color publicados de {name} ya no se pueden usar. |
+| `menu_preview.undo_language_off` | `content.translation_invalid`, a section | A language {name} was published in has been disabled since, so its name cannot be restored. | Se ha desactivado un idioma en el que se publicó {name}, así que no se puede restaurar su nombre. |
+| `menu_preview.undo_display_invalid` | `menu.home_display_invalid`, Home display | The published {device} display setting is no longer offered. | El ajuste de pantalla publicado para {device} ya no se ofrece. |
 
 `{device}` is the existing `home.device_handheld` / `home.device_till` ("Handheld" / "Terminal de
 mano", "Till" / "Caja registradora"). An Undo refused once its change is no longer drawn (the

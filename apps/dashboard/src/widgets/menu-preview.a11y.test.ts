@@ -133,7 +133,7 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
   "undo blocked": { preview: undoable, undoBlocked: true },
   "undo refused": {
     preview: undoable,
-    undoRefusals: { [undoId]: "Another menu is now called Lunch." },
+    undoRefusals: { [undoId]: "Another menu called Lunch already exists." },
     undoResult: "Burger price changed from €12.00 to €13.00",
   },
   "undone, failed to read again": {

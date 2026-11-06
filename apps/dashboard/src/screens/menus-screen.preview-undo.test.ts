@@ -214,7 +214,7 @@ it("keeps a refused change listed with its sentence beside it, and says nothing 
   await userEvent.click(undoButton(panel(), "mains-colour")!);
   await vi.waitFor(() =>
     expect(text(panel().shadowRoot!.querySelector("[data-undo-refusal]"))).toBe(
-      "Not undone. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+      "Not undone. Mains's published photo or colour can no longer be used.",
     ),
   );
   expect(updateSection.mock.calls).toEqual([["s-mains", { color: null }]]);
@@ -277,7 +277,7 @@ it("names a refused Undo beside the list as not undone once the person has left 
   write.refuse({ code: "menu_section.invalid", params: { field: "color" } });
   await vi.waitFor(() =>
     expect(memberError(el)).toBe(
-      `Not undone on Lunch Menu: ${bullet}. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
+      `Not undone on Lunch Menu: ${bullet}. Mains's published photo or colour can no longer be used.`,
     ),
   );
   expect(memberError(el)).not.toContain("not saved");
@@ -617,7 +617,7 @@ it("names an Undo refused after another menu was opened beside the list", async 
   write.refuse({ code: "menu_section.invalid", params: { field: "color" } });
   await vi.waitFor(() =>
     expect(memberError(el)).toBe(
-      `Not undone on Lunch Menu: ${bullet}. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
+      `Not undone on Lunch Menu: ${bullet}. Mains's published photo or colour can no longer be used.`,
     ),
   );
   expect(refusalIn(panel(), "mains-colour")).toBeNull();
@@ -738,7 +738,7 @@ it("names a refused Undo beside the list when a fresh preview stopped listing it
   write.refuse({ code: "menu_section.not_found" });
   await vi.waitFor(() =>
     expect(memberError(el)).toBe(
-      `Not undone on Lunch Menu: ${bullet}. Section Mains has been deleted, so it cannot be put back.`,
+      `Not undone on Lunch Menu: ${bullet}. Section Mains has been deleted, so it cannot be restored.`,
     ),
   );
   expect(tabsOf(el).value).toBe("preview");
@@ -760,7 +760,7 @@ it("names the menu the refused Undo was sent from by its name now, or by the nam
   } as unknown as Partial<DashboardApi>);
   const { el, panel } = await mount(fake.api);
   const bullet = words(panel(), "mains-colour");
-  const reason = "Section Mains has been deleted, so it cannot be put back.";
+  const reason = "Section Mains has been deleted, so it cannot be restored.";
   await userEvent.click(undoButton(panel(), "mains-colour")!);
   await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
   visit(`/manage/menus/menu/${DINNER}/view/preview`);
