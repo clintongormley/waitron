@@ -43,11 +43,16 @@ interface Person {
 let manager: Person;
 let supervisor: Person;
 
-async function seedPerson(role: PersonRoleValue, name: string): Promise<Person> {
+async function seedPerson(role: PersonRoleValue, name: string, id?: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await tx
       .insert(persons)
-      .values({ displayName: name, pinHash: hashPin("1234"), role })
+      .values({
+        ...(id === undefined ? {} : { id }),
+        displayName: name,
+        pinHash: hashPin("1234"),
+        role,
+      })
       .returning({ id: persons.id });
     const session = await startManagementSession(tx, { personId: p!.id });
     return { id: p!.id, token: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
@@ -190,6 +195,16 @@ describe("a join that succeeds", () => {
     expect(response.status).toBe(200);
     expect(host.networkJoin).toHaveBeenCalledTimes(1);
   });
+
+  it("is taken from a page the person opened themselves", async () => {
+    const host = fakeHost();
+    const response = await join(mount(host), {
+      cookie: manager.cookie,
+      headers: { origin: URL_BASE, "sec-fetch-site": "none" },
+    });
+    expect(response.status).toBe(200);
+    expect(host.networkJoin).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("the connection, checked before the session", () => {
@@ -200,10 +215,15 @@ describe("the connection, checked before the session", () => {
     ["a cross-site fetch", { headers: { "sec-fetch-site": "cross-site" } }, "other_origin"],
   ] as const)("%s is refused", async (_label, options, reason) => {
     const host = fakeHost();
-    const response = await join(mount(host), options);
+    const log = vi.fn<Logger>();
+    const response = await join(mount(host, log), options);
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
       error: { code: "box_network.join_connection_insecure", params: { reason } },
+    });
+    expect(log).toHaveBeenCalledWith("warn", "box_network.join_connection_insecure", {
+      reason,
+      requestId: expect.any(String),
     });
     expect(host.networkJoin).toHaveBeenCalledTimes(0);
   });
@@ -376,6 +396,18 @@ describe("a password the protocol refuses", () => {
     const response = await join(app, { cookie: manager.cookie });
     expect(response.status).toBe(200);
     expect(fake.lines).toHaveLength(1);
+  });
+});
+
+describe("a person id the protocol would refuse", () => {
+  it("is a fault in Waitron, and the host is never sent a line", async () => {
+    const odd = await seedPerson("manager", "Olga", "person_1");
+    const fake = await fakeBoxHost(answer('{"ok":true}\n'));
+    const app = mount(boxHostRequests({ socketPath: fake.path }));
+    const response = await join(app, { cookie: odd.cookie });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+    expect(fake.lines).toEqual([]);
   });
 });
 
@@ -557,7 +589,7 @@ describe("the password never leaves the body", () => {
         "http.request",
         expect.objectContaining({ status }),
       );
-      for (const secret of [CANARY, SHORT]) {
+      for (const secret of [CANARY, CANARY.slice(0, 6), CANARY.slice(-8), SHORT]) {
         expect(logged).not.toContain(secret);
         expect(text).not.toContain(secret);
       }

@@ -36,7 +36,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "box_network.no_wifi": 409,
   "box_network.not_saved": 409,
   "box_network.password_invalid": 400,
-  "box_network.join_connection_insecure": 403,
 };
 
 const BODY_MAX_BYTES = 4096;
