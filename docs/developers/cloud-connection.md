@@ -255,7 +255,9 @@ read. Existing installation authentication, leases, test restrictions and limits
 Send `{ "version": 1, "requestId": null }` for discovery. The reply has `version: 1`, the
 `installationId`, the currently assigned staff `hostname`, the current configuration `revision`
 and `request`. With no exchange row, `request` is null. Otherwise it contains the stored
-`requestId`, `hostname`, `revision` and `csrDigest`. Return that metadata even when the stored
+`requestId`, `hostname`, `revision`, `csrDigest` and `certificateIssued`. The boolean is true exactly
+when that row's `certificate_request_id` equals its `request_id` and its certificate is non-null.
+Return that metadata even when the stored
 hostname or revision is stale, so a replacement can name the exact predecessor. Discovery
 returns no CSR, certificate or private key. A request naming a UUID and every submit retain their
 existing bodies and replies; the ordinary status returns a chain only for a current matching request.
@@ -269,7 +271,10 @@ must produce the same CSR bytes.
 Refuse discovery unless its installation and configured hostname match and `request` is null
 or fully well formed. A row matches when its CSR digest and stored revision match this CSR
 and the reply's current revision. Poll a matching row. Install a ready chain only when it is
-outside the renewal window and not expired; otherwise submit one replacement naming that row.
+outside the renewal window and not expired. A matching pending row with `certificateIssued: false`
+is still being issued; keep polling it. With `certificateIssued: true`, a pending answer means
+Cloud already issued the current request and is withholding its chain for renewal. Replace that
+row once, as for a due or expired ready chain.
 Also replace a nonmatching row, or submit with a null predecessor when no row exists. Use a new
 UUID and the discovery reply's current revision for every replacement.
 
