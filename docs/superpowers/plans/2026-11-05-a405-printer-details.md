@@ -450,7 +450,8 @@ Guide, appended to the Printer details section — English: "**Used by** lists t
 that print to it and for what, the prep stations that send it tickets, and the departments those
 profiles belong to." Spanish: "**Se usa en** muestra los perfiles
 de dispositivo que imprimen en ella y para qué, las estaciones de preparación que le envían
-comandas y los departamentos de esos perfiles."
+comandas y los departamentos de esos perfiles." The owner cut this guide sentence on 2026-11-06:
+no Used by sentence goes into the guide.
 
 ### PR 3 — dashboard
 
