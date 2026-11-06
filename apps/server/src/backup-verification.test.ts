@@ -954,7 +954,7 @@ describe("a venue with workforce, with staffing on and off", () => {
     ["off", off, staffingOff],
     ["on", on, staffingOn],
   ] as const)("the full verifier accepts the backup with staffing %s", async (_, venue, set) => {
-    expect(set.some((m) => m.name === "workforce")).toBe(true);
+    expect(set.some((m) => m.name === "staffing")).toBe(set === staffingOn);
     const f = await fixture({ db: venue.db, node: venue.node, modules: set });
     await seal(f);
     const result = await verify(f);
