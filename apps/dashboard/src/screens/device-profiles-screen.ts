@@ -12,6 +12,8 @@ import {
   draftScopeFor,
   saveActionState,
   UrlStateController,
+  encodePathSegment,
+  navigationGuardFor,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -1516,6 +1518,18 @@ export class DeviceProfilesScreen extends LitElement {
     this.#loaded = saved;
     this.#loadedKitchenScreens = structuredClone(submitted.kitchenScreens);
     this.#loadedEquipment = equipmentOf(submitted.printerLists);
+    this.#nameKeptProfile(saved.id);
+  }
+
+  /** A guarded write would ask the leave question about the newer input the editor stays open for. */
+  #nameKeptProfile(id: string): void {
+    if (this.#url.read("dashboard") !== "device-profiles" || this.#url.read("profile") === id)
+      return;
+    const guard = navigationGuardFor(window);
+    if (guard === undefined) return void this.#url.write({ profile: id }, true);
+    const url = new URL(guard.href);
+    url.pathname = `${dashboardPath.basePath}/device-profiles/profile/${encodePathSegment(id)}`;
+    guard.rewrite(url);
   }
 
   /**
