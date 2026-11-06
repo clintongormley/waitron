@@ -168,7 +168,7 @@ async function setupVenue(): Promise<{
     await offerMenuThroughZone(tx, cfg, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     // Through the table definition: `routingCells.id`
-    // (`packages/venue-service/src/schema/routing.ts`) is a `$defaultFn` generator, which a raw
+    // (`packages/db/src/schema/venue-service/routing.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.
     await tx.insert(routingCells).values({
       locationId: cfg.locationId,

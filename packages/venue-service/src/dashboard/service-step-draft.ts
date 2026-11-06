@@ -1,4 +1,4 @@
-import type { ServiceStepStart } from "../schema/service-steps.js";
+import type { ServiceStepStart } from "@waitron/db";
 import type { ServiceStep, ServiceStepInput } from "../service-steps.js";
 
 /** `minutes` is text so a blank or a fraction can be shown and refused; `key` is the saved id, or

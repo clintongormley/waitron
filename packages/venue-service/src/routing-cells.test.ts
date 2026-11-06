@@ -11,6 +11,7 @@ import {
   captureError,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
+  departments,
   engineErrorMessage,
   floorZones,
   isRefusal,
@@ -29,7 +30,6 @@ import { configureZone, createDepartment } from "./operations.js";
 import type { RouteTarget } from "./routing.js";
 import type { CellAddress } from "./routing-types.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
-import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

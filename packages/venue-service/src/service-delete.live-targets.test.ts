@@ -5,10 +5,13 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  departments,
   floorZones,
+  menuPeriods,
   withTransaction,
   type Transaction,
   venueLocationId,
+  zoneServicePolicies,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -18,8 +21,6 @@ import { readDepartmentLogoRasters } from "./department-receipts.js";
 import { saveSpecialDay } from "./special-days.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
-import { menuPeriods } from "./schema/menus.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, service.VENUE_SERVICE_MIGRATIONS],

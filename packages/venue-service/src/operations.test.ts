@@ -27,6 +27,8 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
+  departments,
+  menuPeriods,
   tableInService,
   CORE_MIGRATIONS,
   captureError,
@@ -44,8 +46,10 @@ import {
   sales,
   venueLocationId,
   withTransaction,
+  workingLineContexts,
   workingOrderLines,
   workingOrders,
+  zoneSalePolicies,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
@@ -56,8 +60,6 @@ import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
-import { departments, workingLineContexts, zoneSalePolicies } from "./schema/service.js";
-import { menuPeriods } from "./schema/menus.js";
 import { STARTER_PERIOD_NAMES } from "./starter-content.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";

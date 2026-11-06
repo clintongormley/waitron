@@ -1,26 +1,26 @@
-import type { AllergenMap } from "@waitron/db";
+import type { AllergenMap } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { menuItems, menuVersions } from "@waitron/catalogue";
+import { menuItems } from "../catalogue/menu.js";
+import { menuVersions } from "../catalogue/publication.js";
 import {
   count,
-  deviceProfiles,
   enumCheck,
   enumType,
   flag,
-  floorZones,
   id,
   json,
   label,
-  locations,
   newId,
   nowIso,
-  sales,
   table,
   tsString,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+} from "../columns.js";
+import { deviceProfiles } from "../device-profiles.js";
+import { floorZones } from "../floor-zones.js";
+import { workingOrderLines, workingOrders } from "../orders.js";
+import { sales } from "../sales.js";
+import { locations } from "../tenants.js";
 
 export const departments = table(
   "departments",

@@ -14,6 +14,7 @@ import {
   locationBusinessDaySettings,
   locationDayCutoverChanges,
   locations,
+  specialDayDates,
   tenants,
   withTransaction,
   type Transaction,
@@ -32,7 +33,6 @@ import {
   readSeasonDays,
 } from "./opening-hours-calendar.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { specialDayDates } from "./schema/seasons.js";
 import { ensureDefaultSeasons, readSeasons } from "./seasons.js";
 import { missingHolidaysIn, saveSpecialDay } from "./special-days.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";

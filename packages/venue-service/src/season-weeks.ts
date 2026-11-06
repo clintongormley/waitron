@@ -1,5 +1,13 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { readVenueClock, type Transaction } from "@waitron/db";
+import {
+  departmentDayRanges,
+  departmentDays,
+  readVenueClock,
+  seasons,
+  zoneDayRanges,
+  zoneDays,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -9,13 +17,6 @@ import {
 import { readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { storedTime, wireTime } from "./operations.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  seasons,
-  zoneDayRanges,
-  zoneDays,
-} from "./schema/seasons.js";
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
@@ -101,7 +102,8 @@ export async function writeDepartmentSeasonWeeks(
   week: readonly (readonly ServiceRange[])[],
 ): Promise<void> {
   assertWeek(week);
-  // A null period is Closed, which only a special-day date may hold (schema/seasons.ts).
+  // A null period is Closed, which only a special-day date may hold
+  // (`packages/db/src/schema/venue-service/seasons.ts`).
   if (week.some((day) => day.some((range) => typeof range.periodId !== "string")))
     throw new Error("a season week takes periods only");
   if (seasonIds.length === 0) return;
@@ -150,7 +152,8 @@ export async function writeZoneSeasonWeeks(
       seasonIds.flatMap((seasonId) => WEEKDAYS.map((weekday) => ({ zoneId, seasonId, weekday }))),
     )
     .returning({ id: zoneDays.id, weekday: zoneDays.weekday });
-  // Always "closed": an "open" range belongs on a special-day date only (schema/seasons.ts).
+  // Always "closed": an "open" range belongs on a special-day date only
+  // (`packages/db/src/schema/venue-service/seasons.ts`).
   const ranges = days.flatMap((day) =>
     week[day.weekday!]!.map((range) => ({
       dayId: day.id,

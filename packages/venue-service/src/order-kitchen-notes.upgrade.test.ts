@@ -7,6 +7,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   installChangeFeed,
+  kitchenNotices,
   kitchenStations,
   locations,
   workingOrderLines,
@@ -18,7 +19,6 @@ import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
-import { kitchenNotices } from "./schema/kitchen-notices.js";
 import { readKitchenNotes, writeKitchenNote } from "./order-kitchen-notes.js";
 
 /** Removes `entries`' SQL from `folder`; answers the append-only tables less those it created. */

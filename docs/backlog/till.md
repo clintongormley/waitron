@@ -3078,7 +3078,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   2).** Each new seating starts at Bill 1. A number is never given twice on one seated party, so a
   bill that merges away leaves a gap, and a bill that arrives from another table takes the party's
   next number. The numbers given are kept in `bill_number_allocations`
-  (`packages/venue-service/src/schema/bill-identities.ts`). Plan:
+  (`packages/db/src/schema/venue-service/bill-identities.ts`). Plan:
   [A803 slice 2](../superpowers/plans/2026-10-30-a803-2-named-bills.md).
 
 - **A bill's name never prints on a kitchen ticket (owner, 2026-10-30; A803 slice 2, answer 1).**

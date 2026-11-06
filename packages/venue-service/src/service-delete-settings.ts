@@ -1,30 +1,35 @@
 import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
-import { deviceProfiles, devices, floorZones, type Transaction } from "@waitron/db";
-import { createLabelComparator, type DeleteImpactItem, type DeleteTarget } from "@waitron/shared";
 import {
+  departmentDayRanges,
+  departmentDays,
+  departmentFloorPlanSets,
   departments,
   departmentSalePolicies,
-  zoneServicePolicies,
-  zoneSalePolicies,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
-} from "./schema/service.js";
-import { routingCells, routingCellPeriods } from "./schema/routing.js";
-import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
-import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
-import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
-import { zoneExtensions } from "./schema/zone-extensions.js";
-import { departmentDayRanges, departmentDays, zoneDayRanges, zoneDays } from "./schema/seasons.js";
-import {
   departmentTransferDesks,
   departmentTransferDestinations,
-} from "./schema/department-transfers.js";
-import {
+  deviceKitchenScreenRemovals,
   deviceKitchenScreenZones,
   deviceProfileKitchenScreenZones,
-  deviceKitchenScreenRemovals,
-} from "./schema/kitchen-screens.js";
-import { serviceSteps } from "./schema/service-steps.js";
+  deviceProfiles,
+  deviceProfileServiceAccess,
+  deviceProfileZones,
+  devices,
+  deviceZoneSelections,
+  deviceZoneSelectionZones,
+  floorZones,
+  menuPeriods,
+  menuPeriodStaffMenus,
+  routingCellPeriods,
+  routingCells,
+  serviceSteps,
+  zoneDayRanges,
+  zoneDays,
+  zoneExtensions,
+  zoneSalePolicies,
+  zoneServicePolicies,
+  type Transaction,
+} from "@waitron/db";
+import { createLabelComparator, type DeleteImpactItem, type DeleteTarget } from "@waitron/shared";
 
 async function settings(
   tx: Transaction,

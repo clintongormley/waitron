@@ -1,15 +1,18 @@
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { starterName } from "@waitron/country-packs";
-import { deviceProfiles, floorZones, readVenue, venueLocationId } from "@waitron/db";
-import type { ModuleProvisioning } from "@waitron/module";
-import { setProfileServiceScope } from "./profile-access.js";
 import {
-  departmentSalePolicies,
   departments,
+  departmentSalePolicies,
+  deviceProfiles,
   deviceProfileServiceAccess,
+  floorZones,
+  readVenue,
+  venueLocationId,
   zoneSalePolicies,
   zoneServicePolicies,
-} from "./schema/service.js";
+} from "@waitron/db";
+import type { ModuleProvisioning } from "@waitron/module";
+import { setProfileServiceScope } from "./profile-access.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";

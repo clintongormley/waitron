@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { day, flag, id, kitchenStations, newId, table } from "@waitron/db";
+import { day, flag, id, newId, table } from "../columns.js";
+import { kitchenStations } from "../kitchen-stations.js";
 
 export const stationDayStates = table(
   "station_day_states",

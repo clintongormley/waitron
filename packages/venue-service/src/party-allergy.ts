@@ -1,10 +1,13 @@
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
+  allergyLineTicks,
   newId,
   nowIso,
   parties,
   orderDraftLines,
   orderDrafts,
+  partyAllergy,
+  partyAllergyGuests,
   workingOrderLines,
   workingOrders,
   type Transaction,
@@ -12,7 +15,6 @@ import {
 import { validateAllergens } from "@waitron/catalogue";
 import type { PartyAllergySnapshot } from "@waitron/module";
 import { AppError, isUuid } from "@waitron/shared";
-import { allergyLineTicks, partyAllergy, partyAllergyGuests } from "./schema/party-allergy.js";
 import "./errors.js";
 
 function invalid(field: string): never {

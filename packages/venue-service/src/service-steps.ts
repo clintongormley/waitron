@@ -1,10 +1,14 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
-import { kitchenCourses, type Transaction } from "@waitron/db";
+import {
+  departments,
+  kitchenCourses,
+  serviceSteps,
+  type ServiceStepStart,
+  type Transaction,
+} from "@waitron/db";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { departments } from "./schema/service.js";
-import { serviceSteps, type ServiceStepStart } from "./schema/service-steps.js";
 import { STARTER_STEP_NAMES } from "./starter-content.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
 

@@ -8,11 +8,11 @@ import {
   flag,
   id,
   label,
-  locations,
   newId,
   table,
   timeOfDay,
-} from "@waitron/db";
+} from "../columns.js";
+import { locations } from "../tenants.js";
 import type { CalendarColour } from "@waitron/shared";
 import { menuPeriods } from "./menus.js";
 import { departments, zoneServicePolicies } from "./service.js";

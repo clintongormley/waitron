@@ -1,5 +1,8 @@
 import { foreignKey, primaryKey } from "drizzle-orm/sqlite-core";
-import { deviceProfiles, devices, floorZones, id, table } from "@waitron/db";
+import { id, table } from "../columns.js";
+import { deviceProfiles } from "../device-profiles.js";
+import { devices } from "../devices.js";
+import { floorZones } from "../floor-zones.js";
 
 export const deviceZoneSelections = table(
   "device_zone_selections",

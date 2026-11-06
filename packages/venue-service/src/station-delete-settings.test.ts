@@ -5,10 +5,20 @@ import { CATALOGUE_MIGRATIONS, createProduct } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  departments,
+  deviceKitchenScreenRemovals,
+  deviceKitchenScreens,
+  deviceKitchenScreenStations,
+  deviceKitchenScreenZones,
+  deviceProfileKitchenScreens,
   deviceProfiles,
   devices,
   floorZones,
   kitchenStations,
+  menuPeriods,
+  routingCellPeriods,
+  routingCells,
+  stationDayStates,
   withTransaction,
   type Database,
   type Transaction,
@@ -18,17 +28,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import * as module from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { routingCellPeriods, routingCells } from "./schema/routing.js";
-import { stationDayStates } from "./schema/station-times.js";
-import { menuPeriods } from "./schema/menus.js";
-import { departments } from "./schema/service.js";
-import {
-  deviceKitchenScreenRemovals,
-  deviceKitchenScreenStations,
-  deviceKitchenScreenZones,
-  deviceKitchenScreens,
-  deviceProfileKitchenScreens,
-} from "./schema/kitchen-screens.js";
 import {
   readDeviceKitchenScreens,
   readProfileKitchenScreens,

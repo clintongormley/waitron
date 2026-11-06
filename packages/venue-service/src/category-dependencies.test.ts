@@ -15,6 +15,7 @@ import {
   CORE_MIGRATIONS,
   kitchenStations,
   products,
+  routingCells,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -23,7 +24,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
-import { routingCells } from "./schema/routing.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

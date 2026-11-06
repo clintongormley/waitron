@@ -4,7 +4,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
-import * as declarations from "./index.js";
+import * as declarations from "@waitron/db/schema/venue-service.js";
 
 describeSchemaConformance({
   subjectName: "venue-service",

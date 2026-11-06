@@ -1,16 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  count,
-  id,
-  label,
-  newId,
-  nowIso,
-  parties,
-  table,
-  tsString,
-  workingOrders,
-} from "@waitron/db";
+import { count, id, label, newId, nowIso, table, tsString } from "../columns.js";
+import { workingOrders } from "../orders.js";
+import { parties } from "../parties.js";
 
 /**
  * A bill's number within the seated party that shows it, and the name a waiter gave it. A row with

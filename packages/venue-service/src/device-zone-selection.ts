@@ -1,11 +1,16 @@
 import { createHash } from "node:crypto";
 import { and, count, eq, isNull } from "drizzle-orm";
-import { deviceProfiles, devices, type Transaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  deviceZoneSelections,
+  deviceZoneSelectionZones,
+  type Transaction,
+} from "@waitron/db";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/module";
 import { AppError, isUuid } from "@waitron/shared";
 import { listServiceZones } from "./operations.js";
 import { readProfileServiceScopes, readProfileZones } from "./profile-access.js";
-import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
 import "./errors.js";
 
 type Field = "profileId" | "snapshot" | "selectedZoneIds" | "startingZoneId";

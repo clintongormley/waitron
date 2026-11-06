@@ -10,6 +10,8 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import {
+  departments,
+  departmentSalePolicies,
   floorTodayTables,
   CORE_MIGRATIONS,
   diningTables,
@@ -17,7 +19,10 @@ import {
   kitchenCourses,
   kitchenStations,
   locations,
+  serviceSteps,
   withTransaction,
+  zoneSalePolicies,
+  zoneServicePolicies,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -32,13 +37,6 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import {
-  departmentSalePolicies,
-  departments,
-  zoneSalePolicies,
-  zoneServicePolicies,
-} from "./schema/service.js";
-import { serviceSteps } from "./schema/service-steps.js";
 import { configureZone, createDepartment, listServiceZones } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setRoutingCell } from "./routing-store.js";

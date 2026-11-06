@@ -5,6 +5,8 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
+  specialDayDates,
+  specialDays,
   tenants,
   withTransaction,
   type Database,
@@ -15,7 +17,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { listVenueReadiness } from "./operations.js";
-import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
 /** Calls to the invented calendar's `read`, so a test can count the holiday-list reads. */

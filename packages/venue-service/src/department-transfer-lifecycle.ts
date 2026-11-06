@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { departmentTransferRequests } from "./schema/department-transfers.js";
+import { departmentTransferRequests } from "@waitron/db";
 
 export async function withdrawPendingDepartmentTransfers(
   tx: Transaction,

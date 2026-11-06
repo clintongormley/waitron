@@ -1,5 +1,5 @@
 import { foreignKey } from "drizzle-orm/sqlite-core";
-import { id, json, nowIso, table, tsString } from "@waitron/db";
+import { id, json, nowIso, table, tsString } from "../columns.js";
 import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
 import { departments } from "./service.js";
 

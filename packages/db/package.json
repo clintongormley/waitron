@@ -12,6 +12,7 @@
     "./schema/identity.js": "./src/schema/identity/index.ts",
     "./schema/catalogue.js": "./src/schema/catalogue/index.ts",
     "./schema/adjustments.js": "./src/schema/adjustments/index.ts",
+    "./schema/venue-service.js": "./src/schema/venue-service/index.ts",
     "./testing/schema-conformance.js": "./src/testing/schema-conformance.ts",
     "./testing/seed.js": "./src/testing/seed.ts",
     "./testing/venue-db.js": "./src/testing/venue-db.ts"

@@ -1,20 +1,10 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  count,
-  enumCheck,
-  enumType,
-  id,
-  json,
-  label,
-  newId,
-  parties,
-  orderDraftLines,
-  workingOrderLines,
-  table,
-  tsString,
-  type AllergenMap,
-} from "@waitron/db";
+import { count, enumCheck, enumType, id, json, label, newId, table, tsString } from "../columns.js";
+import { orderDraftLines } from "../order-drafts.js";
+import { workingOrderLines } from "../orders.js";
+import { parties } from "../parties.js";
+import type { AllergenMap } from "@waitron/shared";
 
 const allergyAnswer = enumType(["none", "allergies"]);
 export const partyAllergy = table(

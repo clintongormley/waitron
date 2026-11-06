@@ -279,8 +279,8 @@ older build before using the new published document. Status and remaining work:
   preview before extending these operations during service.
 - **A future rebuild of `categories` can empty its routing rules.** `routing_cells_category_fk`
   uses `ON DELETE CASCADE`
-  (`packages/venue-service/src/schema/routing.ts`); follow CLAUDE.md §3's rebuild rule and add a
-  populated-upgrade check before another categories rebuild.
+  (`packages/db/src/schema/venue-service/routing.ts`); follow CLAUDE.md §3's rebuild rule and add
+  a populated-upgrade check before another categories rebuild.
 - **The Spanish menu preview's selected Preview tab showed clipped at 390 px** after programmatic
   selection, in a render on 2026-10-01; clicking it scrolled it into view. A base-build render was
   not run, so when it began is not established (geometry and screenshot:

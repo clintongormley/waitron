@@ -4,6 +4,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departments,
+  deviceProfileKitchenScreens,
+  deviceProfileKitchenScreenStations,
   floorZones,
   withTransaction,
   catalogues,
@@ -30,11 +33,6 @@ import {
   STARTER_STEP_NAMES,
   STARTER_ZONE_NAMES,
 } from "./starter-content.js";
-import { departments } from "./schema/service.js";
-import {
-  deviceProfileKitchenScreenStations,
-  deviceProfileKitchenScreens,
-} from "./schema/kitchen-screens.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

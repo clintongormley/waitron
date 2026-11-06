@@ -11,8 +11,15 @@ import {
 import {
   CORE_MIGRATIONS,
   categories,
+  departmentDayRanges,
+  departmentDays,
   kitchenStations,
   locations,
+  menuPeriods,
+  routingCellPeriods,
+  routingCells,
+  seasons as seasonsTable,
+  specialDayDates,
   withTransaction,
   type Database,
   type Transaction,
@@ -29,14 +36,6 @@ import type { MenuSlot } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
-import { menuPeriods } from "./schema/menus.js";
-import { routingCellPeriods, routingCells } from "./schema/routing.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  seasons as seasonsTable,
-  specialDayDates,
-} from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { saveSpecialDay } from "./special-days.js";
 import { starterSeasonName, type StarterSeason } from "./testing/starter-seasons.js";

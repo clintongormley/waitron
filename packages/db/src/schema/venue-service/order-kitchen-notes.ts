@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, id, label, newId, parties, table, workingOrders } from "@waitron/db";
+import { count, id, label, newId, table } from "../columns.js";
+import { workingOrders } from "../orders.js";
+import { parties } from "../parties.js";
 
 export const orderKitchenNotes = table(
   "order_kitchen_notes",

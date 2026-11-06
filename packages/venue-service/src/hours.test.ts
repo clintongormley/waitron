@@ -7,8 +7,11 @@ import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  departments,
   kitchenStations,
   locations,
+  specialDayDates,
+  specialDays,
   tenants,
   withTransaction,
   type Database,
@@ -23,8 +26,6 @@ import { stationStates } from "./routing-store.js";
 import { readCalendarDays as packageReadCalendarDays } from "./index.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { departments } from "./schema/service.js";
-import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { occursOn } from "./repeat-rules.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";

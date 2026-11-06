@@ -5,13 +5,12 @@ import { AppError } from "@waitron/shared";
 import { departmentDay } from "./menu-timetable.js";
 import { readServiceDayPlan } from "./day-resolver.js";
 import { resolveZoneContext, storedTime } from "./operations.js";
-import { floorZones } from "@waitron/db";
+import { floorZones, zoneExtensions } from "@waitron/db";
 import {
   zoneClosureDay,
   withoutZoneExtension,
   zoneExtensionForRange,
 } from "./zone-closed-times.js";
-import { zoneExtensions } from "./schema/zone-extensions.js";
 import {
   clockTimeSkippedInDay,
   minuteOfServiceDay,

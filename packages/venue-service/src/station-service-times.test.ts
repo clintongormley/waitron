@@ -318,7 +318,7 @@ it.each([
     if (kind === "inactive zone")
       await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.terrace));
     if (kind === "inactive department") {
-      const { departments } = await import("./schema/service.js");
+      const { departments } = await import("@waitron/db");
       await db.update(departments).set({ active: false }).where(eq(departments.id, f.department));
     }
     if (kind === "inactive product")

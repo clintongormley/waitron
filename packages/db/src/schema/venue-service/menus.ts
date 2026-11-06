@@ -1,16 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  catalogues,
-  count,
-  enumCheck,
-  enumType,
-  floorPlanSets,
-  id,
-  label,
-  newId,
-  table,
-} from "@waitron/db";
+import { catalogues } from "../catalogue.js";
+import { count, enumCheck, enumType, id, label, newId, table } from "../columns.js";
+import { floorPlanSets } from "../floor-plans.js";
 import { CALENDAR_COLOURS } from "@waitron/shared";
 import { departments } from "./service.js";
 

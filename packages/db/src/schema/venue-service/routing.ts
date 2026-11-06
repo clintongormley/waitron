@@ -1,16 +1,10 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  categories,
-  flag,
-  floorZones,
-  id,
-  kitchenStations,
-  locations,
-  newId,
-  products,
-  table,
-} from "@waitron/db";
+import { categories, products } from "../catalogue.js";
+import { flag, id, newId, table } from "../columns.js";
+import { floorZones } from "../floor-zones.js";
+import { kitchenStations } from "../kitchen-stations.js";
+import { locations } from "../tenants.js";
 import { menuPeriods } from "./menus.js";
 
 /** A missing row is an unset cell; All categories × Every zone is the default station, never a row. */

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { flag, floorPlanSets, id, label, table } from "@waitron/db";
+import { flag, id, label, table } from "../columns.js";
+import { floorPlanSets } from "../floor-plans.js";
 import { departments } from "./service.js";
 
 /** Which department a core floor plan set belongs to, its name there, and whether it is the default. */

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { day, id, newId, table, timeOfDay } from "@waitron/db";
+import { day, id, newId, table, timeOfDay } from "../columns.js";
 import { zoneServicePolicies } from "./service.js";
 
 export const zoneExtensions = table(

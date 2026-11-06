@@ -3,10 +3,13 @@ import { beforeAll, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departments,
   kitchenCourses,
+  serviceSteps,
   venueLocationId,
   withTransaction,
   type Database,
+  type ServiceStepStart,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,8 +20,6 @@ import {
   readCourseDeleteSettings as read,
 } from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { departments } from "./schema/service.js";
-import { serviceSteps, type ServiceStepStart } from "./schema/service-steps.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

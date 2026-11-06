@@ -4,7 +4,7 @@ import { compareBackupTables } from "@waitron/db";
 import type { BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
 import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/db/schema/venue-service.js";
 
 const tables = VENUE_SERVICE_CLASSIFICATION.map((c) => c.table);
 const immutableTables = ["sale_receipt_headers", "bill_number_allocations"];

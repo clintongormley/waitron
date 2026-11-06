@@ -7,15 +7,15 @@ import {
   flag,
   id,
   json,
-  kitchenStations,
   label,
   newId,
   nowIso,
   quantity,
   table,
   tsString,
-  workingOrders,
-} from "@waitron/db";
+} from "../columns.js";
+import { kitchenStations } from "../kitchen-stations.js";
+import { workingOrders } from "../orders.js";
 import { kitchenAllergyBlockCheck } from "./kitchen-allergy.js";
 
 export const kitchenNoticeKind = enumType([

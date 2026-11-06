@@ -2,14 +2,19 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  specialDayDates,
+  specialDays,
+  venueLocationId,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { readCalendarDays } from "./hours.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSpecialDaysModel } from "./named-days.js";
-import { specialDayDates, specialDays } from "./schema/seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

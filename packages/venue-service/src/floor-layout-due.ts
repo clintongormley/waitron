@@ -1,12 +1,16 @@
 import { and, eq, inArray, or } from "drizzle-orm";
-import { readVenueClock, type Transaction } from "@waitron/db";
+import {
+  departmentFloorPlanSets,
+  departments,
+  menuPeriods,
+  readVenueClock,
+  zoneServicePolicies,
+  type Transaction,
+} from "@waitron/db";
 import type { DueFloorLayout, PreparedServiceDay, ZoneFloorLayout } from "@waitron/module";
 import type { BusinessDayClock } from "@waitron/shared";
 import { momentAt, resolveDepartmentsDays, serviceDayOf, type DayPlan } from "./day-resolver.js";
 import { serviceRuns } from "./menu-timetable.js";
-import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
-import { menuPeriods } from "./schema/menus.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
 import { rangeSpanInDay, type ServiceMoment, type ServiceRange } from "./service-day.js";
 import { serviceDayContext, type ServiceDayContext } from "./service-day-context.js";
 

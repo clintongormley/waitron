@@ -5,9 +5,12 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   locations,
+  seasons,
   withTransaction,
   type Transaction,
   venueLocationId,
+  zoneDayRanges,
+  zoneDays,
 } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -15,7 +18,6 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
-import { seasons, zoneDayRanges, zoneDays } from "./schema/seasons.js";
 import * as closures from "./zone-closed-times.js";
 import { listZoneOffers, menuState } from "./operations.js";
 import { VENUE_SERVICE } from "./service.js";

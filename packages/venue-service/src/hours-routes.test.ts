@@ -12,8 +12,11 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  departments,
   kitchenStations,
   locations,
+  specialDayDates,
+  specialDays,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -38,8 +41,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { specialDayDates, specialDays } from "./schema/seasons.js";
-import { departments } from "./schema/service.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setStationToday } from "./station-times.js";
 

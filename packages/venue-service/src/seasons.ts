@@ -1,6 +1,14 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
-import { readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
+import {
+  departmentDayRanges,
+  departmentDays,
+  departments,
+  readVenueClock,
+  seasons,
+  venueLocationId,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -21,8 +29,6 @@ import {
   writeDepartmentSeasonWeeks,
   writeZoneSeasonWeeks,
 } from "./season-weeks.js";
-import { departmentDayRanges, departmentDays, seasons } from "./schema/seasons.js";
-import { departments } from "./schema/service.js";
 import { STARTER_SEASON_NAMES } from "./starter-content.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
 import "./errors.js";

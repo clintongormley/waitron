@@ -1,8 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { DeleteImpactItem } from "@waitron/shared";
-import { departments } from "./schema/service.js";
-import { serviceSteps } from "./schema/service-steps.js";
+import { departments, serviceSteps } from "@waitron/db";
 
 export type CourseDeleteSettings = { readonly named: string[]; readonly seated: string[] };
 

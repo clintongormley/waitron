@@ -2,11 +2,16 @@ import { serviceDayContext } from "./service-day-context.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   categories,
+  departments,
   floorZones,
   kitchenStations,
   products,
   readVenueClock,
+  routingCellPeriods,
+  routingCells,
+  stationDayStates,
   venueLocationId,
+  zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -39,7 +44,6 @@ import {
   type RoutingMoment,
 } from "./routing.js";
 import { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
-import { stationDayStates } from "./schema/station-times.js";
 import type {
   CellAddress,
   PeriodLine,
@@ -55,8 +59,6 @@ import {
   readRoutingPeriods,
 } from "./routing-periods.js";
 import { resolveDepartmentService } from "./menu-timetable.js";
-import { routingCellPeriods, routingCells } from "./schema/routing.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
 import type {
   ExtraMakerOutcome,

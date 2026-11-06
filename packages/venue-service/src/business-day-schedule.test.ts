@@ -17,28 +17,28 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  departmentDayRanges,
+  departmentDays,
+  departments,
   floorZones,
   locations,
   locationBusinessDaySettings,
   locationDayCutoverChanges,
+  menuPeriods,
+  seasons,
+  specialDayDates,
+  specialDays,
   withTransaction,
+  zoneDayRanges,
+  zoneDays,
+  zoneExtensions,
+  zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { type BusinessDayClock } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
-import { menuPeriods } from "./schema/menus.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  seasons,
-  specialDayDates,
-  specialDays,
-  zoneDayRanges,
-  zoneDays,
-} from "./schema/seasons.js";
 import {
   businessDayClockConflicts,
   assertBusinessDayClockChange,
@@ -46,7 +46,6 @@ import {
   keptOpenConflicts,
 } from "./business-day-schedule.js";
 import { inForceClock, settledClock } from "./service-day-context.js";
-import { zoneExtensions } from "./schema/zone-extensions.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

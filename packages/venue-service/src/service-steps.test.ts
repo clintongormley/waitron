@@ -5,9 +5,12 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   captureError,
+  departments,
   kitchenCourses,
   locations,
   parties,
+  serviceStepCompletions,
+  serviceSteps,
   withTransaction,
   type Database,
   type Transaction,
@@ -17,8 +20,6 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
-import { departments } from "./schema/service.js";
-import { serviceStepCompletions, serviceSteps } from "./schema/service-steps.js";
 import { clearServiceDeleteSettings } from "./service-delete-settings.js";
 import {
   listServiceSteps,

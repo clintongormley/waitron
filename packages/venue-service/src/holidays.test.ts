@@ -5,7 +5,10 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
+  holidayGeographies,
   locations,
+  specialDayDates,
+  specialDays,
   tenants,
   withTransaction,
   type Database,
@@ -23,8 +26,6 @@ import {
 import { saveSpecialDay } from "./special-days.js";
 import * as packageIndex from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { holidayGeographies } from "./schema/holidays.js";
-import { specialDayDates, specialDays } from "./schema/seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

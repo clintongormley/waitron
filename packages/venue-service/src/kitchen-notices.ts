@@ -1,5 +1,8 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
+  KITCHEN_NOTICE_DIRECTIONS,
+  kitchenNoticeKind,
+  kitchenNotices,
   kitchenStations,
   nowIso,
   readVenueClock,
@@ -17,11 +20,6 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { readLinesSoldInEach } from "./operations.js";
-import {
-  KITCHEN_NOTICE_DIRECTIONS,
-  kitchenNoticeKind,
-  kitchenNotices,
-} from "./schema/kitchen-notices.js";
 import "./errors.js";
 
 export type KitchenNoticeKind = (typeof kitchenNoticeKind.enumValues)[number];

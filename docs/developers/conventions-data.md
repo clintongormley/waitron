@@ -716,7 +716,7 @@ not check: the season-week, closed-week and special-day routes pass the check to
 **2026-10-12, A506-1.** `seasons` holds the venue's seasons, each a name and an `MM-DD` start;
 `department_days` and `department_day_ranges` hold each department's week per season, and
 `zone_days` and `zone_day_ranges` each zone's closed times per season
-(`packages/venue-service/src/schema/seasons.ts`). A venue gets four seasons from
+(`packages/db/src/schema/venue-service/seasons.ts`). A venue gets four seasons from
 `ensureDefaultSeasons` (`packages/venue-service/src/seasons.ts`), called by venue-service
 provisioning and, for a venue with none, by `targetSeasons` before a week write
 (`packages/venue-service/src/season-weeks.ts`).
@@ -769,7 +769,7 @@ hold, so a swap of two names or two starts never meets the unique indexes; ids a
 season's weeks stay with it. A new season copies the weeks of the season that held its start
 before the call, read before any delete. It answers the venue's seasons by start.
 
-`seasons.colour` (`packages/venue-service/src/schema/seasons.ts`) is a plain text column,
+`seasons.colour` (`packages/db/src/schema/venue-service/seasons.ts`) is a plain text column,
 `$type<CalendarColour>()`, defaulting to `grey`, with no CHECK. A CHECK makes drizzle-kit rebuild
 `seasons`, and that rebuild's `DROP TABLE` empties `department_days`, `zone_days` and
 `staffing_days`, whose season keys cascade (A721 plan, Decision 1, from a plan reviewer's probe in
@@ -867,8 +867,8 @@ transfer" in `apps/server/src/configuration-transfer.test.ts`.
 A506-10 `POST …/menu-periods/:periodId/delete` deletes a period in use; see "Special days" above.
 
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
-(`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"
-and its menu), `menu_day_timetables` (one department's timetable for one special date),
+(`packages/db/src/schema/venue-service/menus.ts`): `menu_periods` (a named period such as
+"Mañanas" and its menu), `menu_day_timetables` (one department's timetable for one special date),
 `menu_slots` (a named period placed on that day, wall-clock times) and `zone_period_menus` (a
 zone's own menu for one named period). They are not opening-hours rows: a menu period has its own
 boundaries and a menu, and opening hours never stop a sale. What they share with Hours is the

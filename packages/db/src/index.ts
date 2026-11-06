@@ -433,3 +433,59 @@ export {
 } from "./schema/hosted.js";
 export { DEFAULT_BILL_APPROVER_ROLES } from "./schema/adjustments/settings.js";
 export type { AdjustmentSplit, AdjustmentStage } from "./schema/adjustments/adjustments.js";
+export {
+  allergyLineTicks,
+  billIdentities,
+  billNumberAllocations,
+  departmentDayRanges,
+  departmentDays,
+  departmentFloorPlanSets,
+  departmentReceipts,
+  departments,
+  departmentSalePolicies,
+  departmentTransferDesks,
+  departmentTransferDestinations,
+  departmentTransferRequests,
+  deviceKitchenScreenRemovals,
+  deviceKitchenScreens,
+  deviceKitchenScreenStations,
+  deviceKitchenScreenZones,
+  deviceProfileKitchenScreens,
+  deviceProfileKitchenScreenStations,
+  deviceProfileKitchenScreenZones,
+  deviceProfileServiceAccess,
+  deviceProfileZones,
+  deviceZoneSelections,
+  deviceZoneSelectionZones,
+  holidayGeographies,
+  kitchenNoticeKind,
+  kitchenNotices,
+  menuPeriods,
+  menuPeriodStaffMenus,
+  orderKitchenNotes,
+  orderServiceContexts,
+  partyAllergy,
+  partyAllergyGuests,
+  routingCellPeriods,
+  routingCells,
+  saleReceiptHeaders,
+  seasons,
+  serviceStepCompletions,
+  serviceSteps,
+  specialDayDates,
+  specialDays,
+  stationDayStates,
+  ticketItemAllergies,
+  workingLineContexts,
+  zoneDayRanges,
+  zoneDays,
+  zoneExtensions,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "./schema/hosted.js";
+export { kitchenAllergyBlockCheck } from "./schema/venue-service/kitchen-allergy.js";
+export { KITCHEN_NOTICE_DIRECTIONS } from "./schema/venue-service/kitchen-notices.js";
+export { KITCHEN_SCREEN_KINDS } from "./schema/venue-service/kitchen-screens.js";
+export { ZONE_PAINT_KINDS } from "./schema/venue-service/seasons.js";
+export { SERVICE_STEP_STARTS } from "./schema/venue-service/service-steps.js";
+export type { ServiceStepStart } from "./schema/venue-service/service-steps.js";

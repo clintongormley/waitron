@@ -6,6 +6,11 @@ import type {
 export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
+  departments,
+  departmentTransferDesks,
+  departmentTransferDestinations,
+  departmentTransferRequests,
+  orderServiceContexts,
   orderTableLabels,
   joinedOutOfService,
   tableInService,
@@ -26,12 +31,6 @@ import {
 } from "./operations.js";
 import { assertZoneTakesNewOrders } from "./zone-closed-times.js";
 import { readProfileZones } from "./profile-access.js";
-import { departments, orderServiceContexts } from "./schema/service.js";
-import {
-  departmentTransferDesks,
-  departmentTransferDestinations,
-  departmentTransferRequests,
-} from "./schema/department-transfers.js";
 import "./errors.js";
 
 export interface DepartmentTransferSettings {

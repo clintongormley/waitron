@@ -1,6 +1,7 @@
 import { sql, type AnyColumn } from "drizzle-orm";
 import { check, foreignKey } from "drizzle-orm/sqlite-core";
-import { id, json, table, ticketItems } from "@waitron/db";
+import { id, json, table } from "../columns.js";
+import { ticketItems } from "../ticket-items.js";
 import type { KitchenAllergyBlock } from "@waitron/shared";
 
 export function kitchenAllergyBlockCheck(column: AnyColumn) {

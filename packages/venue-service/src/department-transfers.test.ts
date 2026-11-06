@@ -9,6 +9,8 @@ import {
   units,
 } from "@waitron/catalogue";
 import {
+  departments,
+  departmentTransferRequests,
   floorTodayTables,
   floorTodaySplitParts,
   CORE_MIGRATIONS,
@@ -17,8 +19,10 @@ import {
   diningTables,
   floorResetTableParts,
   floorResetTables,
+  orderServiceContexts,
   parties,
   kitchenStations,
+  workingLineContexts,
   workingOrderLines,
   deviceProfiles,
   floorZones,
@@ -40,8 +44,6 @@ import {
 } from "./operations.js";
 import { setProfileServiceScope } from "./profile-access.js";
 import * as service from "./index.js";
-import { departments, orderServiceContexts, workingLineContexts } from "./schema/service.js";
-import { departmentTransferRequests } from "./schema/department-transfers.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],

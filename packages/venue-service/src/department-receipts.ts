@@ -1,5 +1,13 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
-import { nowIso, type Transaction } from "@waitron/db";
+import {
+  departmentReceipts,
+  departments,
+  departmentSalePolicies,
+  nowIso,
+  orderServiceContexts,
+  saleReceiptHeaders,
+  type Transaction,
+} from "@waitron/db";
 import { isValidEmail } from "@waitron/identity";
 import { LOGO_MAX_HEIGHT_DOTS, safeWidthDots } from "@waitron/printing";
 import {
@@ -15,13 +23,6 @@ import {
   type ReceiptPaperWidth,
 } from "@waitron/shared";
 import type { PrintedDepartmentReceipt } from "@waitron/module";
-import { departmentReceipts } from "./schema/department-receipts.js";
-import {
-  departments,
-  departmentSalePolicies,
-  orderServiceContexts,
-  saleReceiptHeaders,
-} from "./schema/service.js";
 import { setDepartmentSalePolicyField } from "./operations.js";
 import "./errors.js";
 

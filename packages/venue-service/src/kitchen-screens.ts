@@ -1,5 +1,18 @@
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { deviceProfiles, devices, floorZones, kitchenStations } from "@waitron/db";
+import {
+  deviceKitchenScreenRemovals,
+  deviceKitchenScreens,
+  deviceKitchenScreenStations,
+  deviceKitchenScreenZones,
+  deviceProfileKitchenScreens,
+  deviceProfileKitchenScreenStations,
+  deviceProfileKitchenScreenZones,
+  deviceProfiles,
+  devices,
+  floorZones,
+  KITCHEN_SCREEN_KINDS,
+  kitchenStations,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type {
   DeviceKitchenScreen,
@@ -12,16 +25,6 @@ import type {
   ScreenSlot,
 } from "@waitron/module";
 import { AppError, compareStationNames, type ErrorParams } from "@waitron/shared";
-import {
-  deviceKitchenScreenRemovals,
-  deviceKitchenScreens,
-  deviceKitchenScreenStations,
-  deviceKitchenScreenZones,
-  deviceProfileKitchenScreens,
-  deviceProfileKitchenScreenStations,
-  deviceProfileKitchenScreenZones,
-  KITCHEN_SCREEN_KINDS,
-} from "./schema/kitchen-screens.js";
 import "./errors.js";
 
 type Field = ErrorParams["device_profile.access_invalid"]["field"];

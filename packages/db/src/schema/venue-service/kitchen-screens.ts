@@ -1,19 +1,10 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey } from "drizzle-orm/sqlite-core";
-import {
-  deviceProfiles,
-  devices,
-  enumCheck,
-  enumType,
-  flag,
-  floorZones,
-  id,
-  kitchenStations,
-  newId,
-  nowIso,
-  table,
-  tsString,
-} from "@waitron/db";
+import { enumCheck, enumType, flag, id, newId, nowIso, table, tsString } from "../columns.js";
+import { deviceProfiles } from "../device-profiles.js";
+import { devices } from "../devices.js";
+import { floorZones } from "../floor-zones.js";
+import { kitchenStations } from "../kitchen-stations.js";
 
 export const KITCHEN_SCREEN_KINDS = ["station", "pass", "pass_monitor"] as const;
 const kitchenScreenKind = enumType(KITCHEN_SCREEN_KINDS);

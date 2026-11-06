@@ -288,7 +288,7 @@ code, not run again here.
 
 Each sale stores one
 department, which cannot be changed afterwards (`sale_receipt_headers`,
-`packages/venue-service/src/schema/service.ts`), but a sold line stores none (`sale_lines`,
+`packages/db/src/schema/venue-service/service.ts`), but a sold line stores none (`sale_lines`,
 `packages/db/src/schema/sales.ts`), and no report groups sales by department
 (`packages/reporting/src`). Decide whether a bill that mixes departments needs a department on
 each sold line, then add a department breakdown to the sales screen, showing sales with no

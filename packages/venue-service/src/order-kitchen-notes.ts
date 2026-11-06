@@ -2,7 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { KitchenNote, KitchenNoteScope } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { orderKitchenNotes } from "./schema/order-kitchen-notes.js";
+import { orderKitchenNotes } from "@waitron/db";
 import "./errors.js";
 
 export function normaliseKitchenNote(value: unknown): string | null {

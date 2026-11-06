@@ -1,17 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import {
-  count,
-  enumCheck,
-  enumType,
-  id,
-  kitchenCourses,
-  label,
-  newId,
-  parties,
-  table,
-  tsString,
-} from "@waitron/db";
+import { count, enumCheck, enumType, id, label, newId, table, tsString } from "../columns.js";
+import { kitchenCourses } from "../kitchen-courses.js";
+import { parties } from "../parties.js";
 import { departments } from "./service.js";
 
 export const SERVICE_STEP_STARTS = [

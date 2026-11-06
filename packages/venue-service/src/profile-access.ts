@@ -1,13 +1,14 @@
 import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
-import { deviceProfiles, floorZones } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
-import { AppError, type ErrorParams } from "@waitron/shared";
 import {
   departments,
+  deviceProfiles,
   deviceProfileServiceAccess,
   deviceProfileZones,
+  floorZones,
   zoneServicePolicies,
-} from "./schema/service.js";
+} from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { AppError, type ErrorParams } from "@waitron/shared";
 import "./errors.js";
 
 /**

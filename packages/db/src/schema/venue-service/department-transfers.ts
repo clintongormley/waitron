@@ -2,18 +2,18 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
-  deviceProfiles,
   enumCheck,
   enumType,
-  floorZones,
   id,
   label,
   newId,
   nowIso,
   table,
   tsString,
-  workingOrders,
-} from "@waitron/db";
+} from "../columns.js";
+import { deviceProfiles } from "../device-profiles.js";
+import { floorZones } from "../floor-zones.js";
+import { workingOrders } from "../orders.js";
 import { departments } from "./service.js";
 
 export const departmentTransferDesks = table(

@@ -7,3 +7,4 @@ export * from "./handover/index.js";
 export * from "./identity/index.js";
 export * from "./catalogue/index.js";
 export * from "./adjustments/index.js";
+export * from "./venue-service/index.js";

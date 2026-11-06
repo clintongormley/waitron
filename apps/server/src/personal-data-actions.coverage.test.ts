@@ -17,6 +17,7 @@ import * as credentialsSchema from "@waitron/db/schema/credentials.js";
 import * as handoverSchema from "@waitron/db/schema/handover.js";
 import * as identitySchema from "@waitron/db/schema/identity.js";
 import * as mediaSchema from "@waitron/db/schema/media.js";
+import * as venueServiceSchema from "@waitron/db/schema/venue-service.js";
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
@@ -175,6 +176,7 @@ const MODULE_SCHEMAS = [
   handoverSchema,
   identitySchema,
   mediaSchema,
+  venueServiceSchema,
 ];
 const moduleTables = new Set<unknown>(MODULE_SCHEMAS.flatMap((schema) => Object.values(schema)));
 

@@ -6,6 +6,8 @@ import { getCountryPack } from "@waitron/country-packs";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  holidayGeographies,
+  specialDays,
   tenants,
   withTransaction,
   type Database,
@@ -29,8 +31,6 @@ import { readHolidays } from "./holidays.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { holidayGeographies } from "./schema/holidays.js";
-import { specialDays } from "./schema/seasons.js";
 import { saveSpecialDay } from "./special-days.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);

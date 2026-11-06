@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  departments,
   diningTables,
   floorZones,
   kitchenStations,
@@ -15,7 +16,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
-import { departments } from "./schema/service.js";
 import { listNeedsClearingDepartmentIds, readTablesNeedingClearing } from "./table-clearing.js";
 
 const suite = useVenueDb({
