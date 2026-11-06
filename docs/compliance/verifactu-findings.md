@@ -1219,7 +1219,7 @@ the receipt instead" flow is opt-in only. Today this is moot — grep receipt: t
 receipt path in `apps/server/src` or `packages/printing/src`; every receipt is ESC/POS on paper.
 
 **Source update, 2026-10-06:** A261 step 8 removes the unused location receipt column.
-The current receipt policy is declared in `packages/venue-service/src/schema/service.ts` and read
+The current receipt policy is declared in `packages/db/src/schema/venue-service/service.ts` and read
 by `packages/venue-service/src/operations.ts`; [the retirement plan](../superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
 records the release. Q22 remains unanswered; the earlier source references below describe the
 implementation when this question was written.

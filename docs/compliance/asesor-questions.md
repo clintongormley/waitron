@@ -2290,7 +2290,7 @@ so there is nothing on the document that says who each *duplicado* belongs to.
 ### Q22. Printing the ticket only on request, or never (added 2026-09-23)
 
 **Source update, 2026-10-06:** A261 step 8 removes the unused location receipt column.
-The current receipt policy is declared in `packages/venue-service/src/schema/service.ts` and read
+The current receipt policy is declared in `packages/db/src/schema/venue-service/service.ts` and read
 by `packages/venue-service/src/operations.ts`; [the retirement plan](../superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
 records the release. Q22 remains unanswered; the earlier source references below describe the
 implementation when this question was written.

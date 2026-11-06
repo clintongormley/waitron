@@ -186,7 +186,7 @@ the provisioned station breaks that lookup; finding it by `is_default` (as `dev-
 | `apps/till/src/screens/till-ticket-view.ts:110, 141`, `widgets/counter-waiting.ts:16`, `table-targets.ts:66, 75`, `station-queue.ts:485`, `tender-pay.ts:47, 79` | «Descuento 12,5%», «fecha de expedición», «Mesa 4», «Entrantes», «(datáfono)» | English |
 | `packages/core/src/record-substitution.ts:43–67` | «factura de canje», «siempre debe llevar el destinatario» — quotes with no source named | Cite or drop |
 | `packages/db/src/schema/purchase-invoices.ts:18–51`, `purchasing/src/types.ts:5` | «factura recibida», «régimen general», «recargo de equivalencia» | English, or a cited term |
-| `packages/db/src/schema/floor-zones.ts:7`, `dining-tables.ts:19`, `db/src/schema/venue-service/menus.ts:19`, `venue-service/src/dashboard/hours-view.ts:66`, `catalogue/src/pricing.ts:142` | «Comedor», «Terraza 3», «Mañanas», a Spanish date example, «céntimo» | English |
+| `packages/db/src/schema/floor-zones.ts:7`, `dining-tables.ts:19`, `venue-service/src/dashboard/hours-view.ts:66`, `catalogue/src/pricing.ts:142` | «Comedor», «Terraza 3», a Spanish date example, «céntimo» | English |
 | demo scripts and seed | `caja1`, `AGUA`, `JAMON`, `MENU_DEL_DIA`, `cocina`, `diaId`, `clase`, `casilla`, key `período`, comments «cierre Z», «descuadre», «rectificativa»; 45 photos named after Spanish dishes (`demo-seed/media/jamon-iberico.png`…) | English names |
 
 ## Bucket F — other

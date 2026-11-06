@@ -13,7 +13,7 @@ describeSchemaConformance({
   subject: VENUE_SERVICE_MIGRATIONS,
   declarations,
   // `kitchen_notices.kind` carries the `enumText`/`enumCheck` pair, through `enumType`. The
-  // value-set columns in `service.ts` are plain `label()`s beside a hand-written check, and that
-  // file keeps their checked vocabulary's SQL spelling.
+  // value-set columns in `packages/db/src/schema/venue-service/service.ts` are plain `label()`s
+  // beside a hand-written check, and that file keeps their checked vocabulary's SQL spelling.
   declaresClosedVocabularies: true,
 });
