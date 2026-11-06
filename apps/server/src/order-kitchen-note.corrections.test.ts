@@ -1,6 +1,8 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   kitchenStations,
@@ -42,6 +44,7 @@ import {
   inTx,
   OPERATOR,
   order,
+  nameParty,
   pay,
   revisionOf,
   seatWithNoAllergies as seat,
@@ -53,6 +56,134 @@ import {
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let v: PartyVenue;
 let stationId: string;
+
+it("A1378 prints and acknowledges one party note change across two bills", async () => {
+  const output = await printer();
+  const p = await sent();
+  await order(v, p.tabId, "Burger");
+  const second = await split(v, p.partyId, p.tabId, [2]);
+  await nameParty(v, p.partyId, "Ana");
+  const numbers = (
+    await v.db
+      .select({ number: workingOrders.orderNumber })
+      .from(workingOrders)
+      .where(inArray(workingOrders.id, [p.tabId, second]))
+  )
+    .map((row) => row.number)
+    .sort((a, b) => a - b);
+  const before = new Set((await v.db.select().from(printJobs)).map((job) => job.id));
+  await set({ partyId: p.partyId }, "New time");
+  const papers = (
+    await v.db.select().from(printJobs).where(eq(printJobs.printerId, output))
+  ).filter((job) => !before.has(job.id));
+  expect(papers).toHaveLength(1);
+  expect(printedLines(papers[0]!.payload)[3]).toBe(`Pedidos ${numbers.join(", ")} · Ana`);
+  const notes = (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
+    (notice) => notice.orderNoteChange !== undefined,
+  );
+  expect(notes).toHaveLength(1);
+  expect(notes[0]!.orderLabel).toBe(numbers.map((number) => `#${number}`).join(", "));
+  expect(notes[0]!.orderNoteChange).toEqual({
+    before: "Old time",
+    after: "New time",
+    partyId: p.partyId,
+  });
+  expect(notes[0]!.dishes).toEqual([
+    expect.objectContaining({ lineName: "BURG", quantity: "2.000" }),
+  ]);
+  const rows = (await v.db.select().from(kitchenNotices)).filter(
+    (row) => row.orderNoteChange !== null,
+  );
+  expect(rows.map((row) => row.workingOrderId).sort()).toEqual([p.tabId, second].sort());
+  await inTx(v, (tx) => VENUE_SERVICE.acknowledgeKitchenNotice(tx, notes[0]!.id));
+  expect(
+    (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
+      (notice) => notice.orderNoteChange !== undefined,
+    ),
+  ).toEqual([]);
+  expect(
+    (await v.db.select().from(kitchenNotices))
+      .filter((row) => rows.some((old) => old.id === row.id))
+      .every((row) => row.acknowledgedAt !== null),
+  ).toBe(true);
+});
+
+it("A1378 keeps same-name parties and independent counter note changes apart", async () => {
+  await printer();
+  const first = await sent();
+  const second = await seat(v, await v.table("Table 2"));
+  await nameParty(v, first.partyId, "Ana");
+  await nameParty(v, second.partyId, "Ana");
+  await order(v, second.tabId, "Burger");
+  const counters = [await counterOrder(v, "Burger"), await counterOrder(v, "Burger")];
+  for (const id of counters)
+    await placeOrder(
+      { db: v.db, backend: v.backend, clock: v.clock, admission: testTradingAdmission() },
+      v.cfg,
+      id,
+      OPERATOR,
+    );
+  const ids = [first.tabId, second.tabId, ...counters];
+  const before = new Set((await v.db.select().from(printJobs)).map((job) => job.id));
+  await inTx(v, (tx) =>
+    enqueueOrderKitchenNoteChange(tx, v.cfg, ids, { before: null, after: "Together" }),
+  );
+  expect((await v.db.select().from(printJobs)).filter((job) => !before.has(job.id))).toHaveLength(
+    4,
+  );
+  const notes = (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
+    (notice) => notice.orderNoteChange !== undefined,
+  );
+  expect(notes).toHaveLength(4);
+  expect(notes.map((notice) => notice.workingOrderId).sort()).toEqual(ids.sort());
+});
+
+it("A1378 lists only each printer's affected bills on a party note change", async () => {
+  const shared = await printer();
+  const bar = await inTx(v, async (tx) => {
+    const station = await createStation(tx, { name: "Bar" });
+    await routeProductTo(tx, v.productId("Paella"), station.id);
+    const own = await createPrinter(tx, {
+      name: "Bar only",
+      transport: "cloud_poll",
+      pollId: randomUUID(),
+    });
+    await attachPrinterToStation(tx, { stationId: station.id, printerId: shared });
+    await attachPrinterToStation(tx, { stationId: station.id, printerId: own.id });
+    return { id: station.id, printerId: own.id };
+  });
+  const p = await seat(v, await v.table("Table 3"));
+  await order(v, p.tabId, "Burger", "Paella");
+  const second = await split(v, p.partyId, p.tabId, [2]);
+  const rows = await v.db
+    .select({ id: workingOrders.id, number: workingOrders.orderNumber })
+    .from(workingOrders)
+    .where(inArray(workingOrders.id, [p.tabId, second]));
+  const numbers = new Map(rows.map((row) => [row.id, String(row.number)]));
+  const before = new Set((await v.db.select().from(printJobs)).map((job) => job.id));
+  await set({ partyId: p.partyId }, "Together");
+  const jobs = (await v.db.select().from(printJobs)).filter((job) => !before.has(job.id));
+  expect(jobs).toHaveLength(2);
+  expect(printedLines(jobs.find((job) => job.printerId === shared)!.payload)[3]).toBe(
+    `Pedidos ${rows
+      .map((row) => row.number)
+      .sort((a, b) => a - b)
+      .join(", ")}`,
+  );
+  expect(printedLines(jobs.find((job) => job.printerId === bar.printerId)!.payload)[3]).toBe(
+    numbers.get(second),
+  );
+  expect(
+    (await inTx(v, (tx) => listStationNotices(tx, stationId)))
+      .filter((notice) => notice.orderNoteChange !== undefined)
+      .map((notice) => notice.orderLabel),
+  ).toEqual([`#${numbers.get(p.tabId)}`]);
+  expect(
+    (await inTx(v, (tx) => listStationNotices(tx, bar.id)))
+      .filter((notice) => notice.orderNoteChange !== undefined)
+      .map((notice) => notice.orderLabel),
+  ).toEqual([`#${numbers.get(second)}`]);
+});
 
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);

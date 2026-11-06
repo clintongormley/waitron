@@ -9,6 +9,7 @@ export interface KitchenAllergyBlock {
 }
 
 export interface KitchenNoteChange {
+  partyId?: string;
   before: string | null;
   after: string | null;
 }

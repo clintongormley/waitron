@@ -19,6 +19,7 @@ import {
   ticketState,
   parties,
   partyTables,
+  partySurvivors,
   workingOrderLines,
   venueLocationId,
   readVenueClock,
@@ -927,7 +928,6 @@ type CorrectionChange =
   | { kind: "VOID" | "RECALLED" }
   | { kind: "TO STATION"; toStation: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string }
-  | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange }
   | { kind: "ALLERGY"; blocks: ReadonlyMap<string, KitchenAllergyBlock | null> }
   | HoldCorrection;
 
@@ -979,14 +979,157 @@ export async function enqueueOrderKitchenNoteChange(
     });
     byOrder.set(orderId, items);
   }
+  if (byOrder.size === 0) return;
+  const headers = await readOrderHeaders(tx, [...byOrder.keys()]);
+  const survivors = await partySurvivors(tx, [
+    ...new Set([...headers.values()].flatMap((header) => header.partyId ?? [])),
+  ]);
+  const groups = new Map<
+    string,
+    { partyId: string | null; orders: Map<string, CorrectionItem[]> }
+  >();
   for (const [orderId, items] of byOrder) {
-    await VENUE_SERVICE.recordKitchenNotices(tx, orderId, items.map(toNoticeItem), "changed", {
-      orderNoteChange: change,
+    const storedPartyId = headers.get(orderId)!.partyId;
+    const partyId = storedPartyId === null ? null : (survivors.get(storedPartyId) ?? storedPartyId);
+    const key = partyId === null ? `order:${orderId}` : `party:${partyId}`;
+    const group = groups.get(key) ?? { partyId, orders: new Map<string, CorrectionItem[]>() };
+    group.orders.set(orderId, items);
+    groups.set(key, group);
+  }
+  const at = new Date().toISOString();
+  for (const { partyId, orders } of groups.values()) {
+    const grouped = partyId !== null && orders.size > 1;
+    const changed: KitchenNoteChange = {
+      before: change.before,
+      after: change.after,
+      ...(grouped ? { partyId } : {}),
+    };
+    const numbers = new Map<string, Set<number>>();
+    for (const [id, items] of orders)
+      for (const item of items) {
+        const set = numbers.get(item.stationId) ?? new Set<number>();
+        set.add(Number(headers.get(id)!.orderNumber));
+        numbers.set(item.stationId, set);
+      }
+    const noteEvent = grouped
+      ? {
+          createdAt: at,
+          labels: new Map(
+            [...numbers].map(([id, values]) => [
+              id,
+              [...values]
+                .sort((a, b) => a - b)
+                .map((value) => `#${value}`)
+                .join(", "),
+            ]),
+          ),
+        }
+      : undefined;
+    for (const [orderId, items] of orders) {
+      await VENUE_SERVICE.recordKitchenNotices(tx, orderId, items.map(toNoticeItem), "changed", {
+        orderNoteChange: changed,
+        noteEvent,
+      });
+    }
+    await printKitchenNoteChanges(tx, cfg, orders, change, headers, at);
+  }
+}
+
+async function printKitchenNoteChanges(
+  tx: Transaction,
+  cfg: TradingContext,
+  orders: ReadonlyMap<string, readonly CorrectionItem[]>,
+  change: KitchenNoteChange,
+  headers: ReadonlyMap<string, OrderHeader>,
+  at: string,
+): Promise<void> {
+  const all = [...orders].flatMap(([orderId, items]) =>
+    items.map((item) => ({ ...item, orderId })),
+  );
+  const held = [...new Set(all.flatMap((item) => item.holdGroupId ?? []))];
+  const recorded =
+    held.length === 0 ? new Map<string, ReadonlySet<string>>() : await heldPaperStations(tx, held);
+  const items = all.filter(
+    (item) =>
+      item.holdGroupId === undefined ||
+      recorded.get(item.holdGroupId)?.has(item.stationId) === true,
+  );
+  const stationIds = [...new Set(items.map((item) => item.stationId))];
+  if (stationIds.length === 0) return;
+  const mappings = await printerMappings(tx, stationIds);
+  if (mappings.length === 0) return;
+  const language = await readKitchenLanguage(tx);
+  const { timeZone } = await readVenueClock(tx);
+  const lineIds = [...new Set(items.map((item) => item.workingOrderLineId))];
+  const built = await buildTicketItems(tx, cfg, lineIds, language);
+  const stations = await readStations(tx, stationIds);
+  const names = await readPartyNames(tx, [...orders.keys()]);
+  const byStation = new Map<
+    string,
+    { orderId: string; lineNo: number; position: number | null; item: KitchenTicketItem }[]
+  >();
+  for (const target of items) {
+    const entry = built.get(target.workingOrderLineId)!;
+    const item = atFiredQuantity(entry.item, target);
+    const bucket = byStation.get(target.stationId) ?? [];
+    bucket.push({
+      orderId: target.orderId,
+      lineNo: entry.lineNo,
+      position: entry.position,
+      item:
+        target.group === undefined
+          ? item
+          : {
+              ...item,
+              group: target.group,
+              groupLabel:
+                target.numberPartyLabel ??
+                (target.group === entry.group ? item.groupLabel : undefined),
+            },
     });
-    await printCorrectionSlips(tx, cfg, orderId, items, {
-      kind: "ORDER NOTE CHANGED",
-      orderNoteChange: change,
-    });
+    byStation.set(target.stationId, bucket);
+  }
+  const sorted = [...stationIds].sort((a, b) =>
+    compareStationNames(stations.get(a)!.name, stations.get(b)!.name),
+  );
+  const venue = venueOnce(tx);
+  for (const route of routeKitchenTickets(sorted, mappingsByStation(mappings))) {
+    const visible = [
+      ...new Set(route.stationIds.flatMap((id) => byStation.get(id)!.map((item) => item.orderId))),
+    ].sort((a, b) => Number(headers.get(a)!.orderNumber) - Number(headers.get(b)!.orderNumber));
+    const first = headers.get(visible[0]!)!;
+    const partyName = names.get(visible[0]!)!;
+    const label =
+      visible.length === 1
+        ? first.tableLabel
+        : [...new Set(visible.flatMap((id) => headers.get(id)!.tableLabel ?? []))].join(" · ") ||
+          null;
+    const bytes = formatKitchenNoteChangeSlip(
+      {
+        locale: language,
+        stations: route.stationIds.map((id) => ({
+          stationName: stations.get(id)!.name,
+          items: arrangeTicketItems(
+            byStation
+              .get(id)!
+              .sort(byGroupThenLine)
+              .map((entry) => entry.item),
+            stations.get(id)!.ticketGrouping,
+          ),
+        })),
+        tableLabel: label,
+        orderNumber: first.orderNumber,
+        orderNumbers:
+          visible.length === 1 ? undefined : visible.map((id) => headers.get(id)!.orderNumber),
+        party: partyName === null ? undefined : { name: partyName, locale: language },
+        at,
+        orderNoteChange: change,
+      },
+      route.printers[0]!,
+      timeZone,
+    );
+    for (const printer of route.printers)
+      await enqueuePrintJob(tx, printer.printerId, bytes, "document", { venueId: await venue() });
   }
 }
 
@@ -1341,66 +1484,6 @@ async function printCorrectionSlips(
 
   const at = new Date().toISOString();
   const venue = venueOnce(tx);
-
-  if (change.kind === "ORDER NOTE CHANGED") {
-    // One slip per printer, routed and grouped as a kitchen ticket is.
-    const byStation = new Map<
-      string,
-      { lineNo: number; position: number | null; item: KitchenTicketItem }[]
-    >();
-    for (const target of items) {
-      const entry = itemsByLine.get(target.workingOrderLineId)!;
-      const item = atFiredQuantity(entry.item, target);
-      const bucket = byStation.get(target.stationId) ?? [];
-      bucket.push({
-        lineNo: entry.lineNo,
-        position: entry.position,
-        item:
-          target.group === undefined
-            ? item
-            : {
-                ...item,
-                group: target.group,
-                groupLabel:
-                  target.numberPartyLabel ??
-                  (target.group === entry.group ? item.groupLabel : undefined),
-              },
-      });
-      byStation.set(target.stationId, bucket);
-    }
-    const sorted = [...stationIds].sort((a, b) =>
-      compareStationNames(stationNames.get(a)!.name, stationNames.get(b)!.name),
-    );
-    for (const route of routeKitchenTickets(sorted, mappingsByStation(mappingRows))) {
-      const bytes = formatKitchenNoteChangeSlip(
-        {
-          locale: language,
-          stations: route.stationIds.map((id) => ({
-            stationName: stationNames.get(id)!.name,
-            items: arrangeTicketItems(
-              byStation
-                .get(id)!
-                .sort(byGroupThenLine)
-                .map((entry) => entry.item),
-              stationNames.get(id)!.ticketGrouping,
-            ),
-          })),
-          tableLabel: header.tableLabel,
-          orderNumber: header.orderNumber,
-          at,
-          orderNoteChange: change.orderNoteChange,
-        },
-        route.printers[0]!,
-        timeZone,
-      );
-      for (const printer of route.printers) {
-        await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
-          venueId: await venue(),
-        });
-      }
-    }
-    return;
-  }
 
   // Identical whole portions at a station with the same correction share one slip, whatever the
   // station's grouping, as one line of their summed quantity would.

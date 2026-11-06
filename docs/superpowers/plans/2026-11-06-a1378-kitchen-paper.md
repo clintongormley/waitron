@@ -27,50 +27,50 @@ Native inline implementation is already selected by RUNNER; owner approved all s
 - A name change must exclude served, made-here and never-printed held work; test positive/negative.
 - Identical dishes in different groups or measured portions must not combine on MOVED.
 
-## 1. Initial paper fixes (already implemented)
+### Task 1: Initial paper fixes (already implemented)
 
 - [x] Observe old UTC/whole-number/boundary failures; require explicit venue zone on four formats.
 - [x] Fix measured extras, host-zone fixture expectations, wrapping and change-slip test gaps from
   the first 837-second Claude review. All 39 affected files pass 1,869 tests with `TZ=UTC`.
 - [x] Six new one-time mutation controls fail assertions; restored 122 cases pass.
-- [ ] Correct the redundant escaped space reported by the first normal push hook's lint step.
+- [x] Correct the redundant escaped space reported by the first normal push hook's lint step.
 
-## 2. FIRE scope, named corrections and MOVED grouping
+### Task 2: FIRE scope, named corrections and MOVED grouping
 
 Files: `kitchen-ticket.ts`, `kitchen-print.ts`, `kitchen-ticket.paper.test.ts`,
 `kitchen-print.shared-printers.test.ts`, `move-merge.test.ts` and existing correction suites.
 
-- [ ] Add failing shared-printer cases: recorded Grill, unrecorded Bar, both station orders. Keep
+- [x] Add failing shared-printer cases: recorded Grill, unrecorded Bar, both station orders. Keep
   the original whole-ticket HOLD check and a single-station FIRE check. Observe assertion failure.
-- [ ] Add `mark?: "FIRE"` to `KitchenTicketStation`; multi-station producer sets that mark per
+- [x] Add `mark?: "FIRE"` to `KitchenTicketStation`; multi-station producer sets that mark per
   recorded station and renderer prints the existing banner within that section. Keep single/global
   HOLD behavior. Run the focused cases to green.
-- [ ] Add a failing correction whose surviving party is Ana: `Order 17 · Ana` / `Pedido 17 · Ana`.
+- [x] Add a failing correction whose surviving party is Ana: `Order 17 · Ana` / `Pedido 17 · Ana`.
   Add optional `party` context to `CorrectionSlip`, resolve names once, and render like a ticket.
   Retain unnamed headers. Run the correction cases.
-- [ ] Add failing MOVED cases for two identical whole portions (one `2 x`), separate (two `1 x`),
+- [x] Add failing MOVED cases for two identical whole portions (one `2 x`), separate (two `1 x`),
   measured/sold-as-recorded entries and distinct groups. Arrange all fired items and each held
   group's items together, rather than arranging individual lines. Keep all link/state assertions.
-- [ ] Run focused suites and commit with `git commit -s`.
+- [x] Run focused suites and commit with `git commit -s`.
 
-## 3. One party kitchen-note event
+### Task 3: One party kitchen-note event
 
 Files: `kitchen-print.ts`, `kitchen-ticket.ts`, shared `KitchenNoteChange` type,
 `packages/venue-service/src/kitchen-notices.ts`, their tests and note-change integration suites.
 
-- [ ] Add failing two-bill party cases: one output listing both order numbers; one displayed notice
+- [x] Add failing two-bill party cases: one output listing both order numbers; one displayed notice
   per station; acknowledgment covers every underlying bill row. Add same-name other-party and
   separate counter-order controls. Observe the expected duplicate-paper/notice failures.
-- [ ] Gather affected bills by surviving party identity (counter by order), retaining original rows.
+- [x] Gather affected bills by surviving party identity (counter by order), retaining original rows.
   Move the ORDER NOTE CHANGED renderer branch into a batch helper, resolving all line items once.
   `KitchenNoteChangeSlip` gains optional party context and an order-number list for grouped output.
-- [ ] Add optional `partyId` context to `KitchenNoteChange` and a note-event option for shared time
+- [x] Add optional `partyId` context to `KitchenNoteChange` and a note-event option for shared time
   and combined order label. Fold party events by typed context identity/time/before/after in the
   existing read and acknowledgment key. No SQL schema change. Per-output order numbers reflect
   only the bills whose dishes it prints. Run positive/negative and acknowledgment cases to green.
-- [ ] Run single-bill note, lifecycle, measured and visibility tests; commit signed off.
+- [x] Run single-bill note, lifecycle, measured and visibility tests; commit signed off.
 
-## 4. Name-change paper
+### Task 4: Name-change paper
 
 Files: `parties.ts`, `till-api.ts`, `kitchen-print.ts`, `kitchen-ticket.ts`,
 `i18n/kitchen-ticket.ts`, direct callers and party/name integration tests.
@@ -85,7 +85,7 @@ Files: `parties.ts`, `till-api.ts`, `kitchen-print.ts`, `kitchen-ticket.ts`,
   transaction. Update all direct consumers and preserve rollback/revision assertions. Run to green.
 - [ ] Commit signed off; update EN/ES kitchen guides and affected historical/decision prose.
 
-## 5. Finish the whole bundle
+### Task 5: Finish the whole bundle
 
 - [ ] Refresh EN/ES 58/80mm raster previews for all new paper; inspect them and send samples and
   exact wording to the watcher. Keep images/probes outside Git. Wait for wording approval to land.

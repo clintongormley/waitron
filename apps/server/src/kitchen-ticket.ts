@@ -615,6 +615,8 @@ export interface KitchenNoteChangeSlip {
   stations: KitchenTicketStation[];
   tableLabel: string | null;
   orderNumber: string;
+  orderNumbers?: readonly string[];
+  party?: { name: string; locale: string };
   at: string;
   orderNoteChange: KitchenNoteChange;
 }
@@ -642,7 +644,17 @@ export function formatKitchenNoteChangeSlip(
   text(`*** ${kitchenNoteChangeHeading(slip.orderNoteChange, slip.locale)} ***`);
   text(slip.stations.map((station) => station.stationName).join(" · "));
   if (slip.tableLabel !== null) text(slip.tableLabel);
-  text(slip.orderNumber);
+  const numbers = slip.orderNumbers ?? [slip.orderNumber];
+  if (slip.party === undefined && numbers.length === 1) text(slip.orderNumber);
+  else {
+    const words = kitchenTicketWords(slip.locale);
+    emitOrderLine(
+      b,
+      `${numbers.length === 1 ? words.order : words.orders} ${numbers.join(", ")}`,
+      slip.party?.name,
+      columns,
+    );
+  }
   b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNoteChange(b, slip.orderNoteChange, slip.locale, columns);
   if (onlyGroup !== undefined) emitGroup(b, onlyGroup, allItems, columns, slip.locale);

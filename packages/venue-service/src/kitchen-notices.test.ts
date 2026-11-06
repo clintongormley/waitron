@@ -1784,3 +1784,71 @@ describe("A807 one notice per kitchen-note change", () => {
     for (const notice of notices) expect(notice).not.toHaveProperty("dishes");
   });
 });
+
+it("A1378 folds a party note across bills and acknowledges only that station and party", async () => {
+  const v = await venue();
+  const a = await seedOrder(17, null);
+  const b = await seedOrder(18, null);
+  const c = await seedOrder(19, null);
+  const createdAt = new Date().toISOString();
+  const event = { createdAt, labels: new Map([[v.grill, "#17, #18"]]) };
+  const item = (lineId: string, stationId = v.grill) => ({
+    workingOrderLineId: lineId,
+    stationId,
+    quantity: ONE,
+    wasStarted: false,
+  });
+  await inTx(async (tx) => {
+    await recordKitchenNotices(
+      tx,
+      a.orderId,
+      [item(a.burgerLineId), item(a.lemonadeLineId, v.bar)],
+      "changed",
+      {
+        orderNoteChange: { before: null, after: "Together", partyId: "party-one" },
+        noteEvent: event,
+      },
+    );
+    await recordKitchenNotices(tx, b.orderId, [item(b.burgerLineId)], "changed", {
+      orderNoteChange: { before: null, after: "Together", partyId: "party-one" },
+      noteEvent: event,
+    });
+    await recordKitchenNotices(tx, c.orderId, [item(c.burgerLineId)], "changed", {
+      orderNoteChange: { before: null, after: "Together", partyId: "party-two" },
+      noteEvent: { createdAt, labels: new Map() },
+    });
+  });
+  const notes = await inTx((tx) => listStationNotices(tx, v.grill));
+  expect(notes).toHaveLength(2);
+  expect(notes.map((notice) => notice.orderLabel)).toEqual(["#17, #18", "#19"]);
+  expect(notes[0]!.dishes).toEqual([expect.objectContaining({ lineName: "BRGR", quantity: TWO })]);
+  const rows = await db.select().from(kitchenNotices);
+  expect(rows.map((row) => row.workingOrderId).sort()).toEqual(
+    [a.orderId, a.orderId, b.orderId, c.orderId].sort(),
+  );
+  expect(rows.map((row) => row.createdAt)).toEqual([createdAt, createdAt, createdAt, createdAt]);
+  await inTx((tx) => acknowledgeKitchenNotice(tx, notes[0]!.id, { stationId: v.grill }));
+  expect(
+    (await inTx((tx) => listStationNotices(tx, v.grill))).map((notice) => notice.orderLabel),
+  ).toEqual(["#19"]);
+  expect(
+    (await inTx((tx) => listStationNotices(tx, v.bar))).map((notice) => notice.orderLabel),
+  ).toEqual(["#17"]);
+});
+
+it("A1378 records a large notice event within the engine's bound-value limit", async () => {
+  const v = await venue();
+  const order = await seedOrder(21, null);
+  const items = Array.from({ length: 2001 }, () => ({
+    workingOrderLineId: order.burgerLineId,
+    stationId: v.grill,
+    quantity: ONE,
+    wasStarted: false,
+  }));
+  await inTx((tx) => recordKitchenNotices(tx, order.orderId, items, "void"));
+  const rows = await db
+    .select({ quantity: kitchenNotices.quantity, orderId: kitchenNotices.workingOrderId })
+    .from(kitchenNotices);
+  expect(rows).toHaveLength(2001);
+  expect(rows.every((row) => row.quantity === 1000 && row.orderId === order.orderId)).toBe(true);
+});
