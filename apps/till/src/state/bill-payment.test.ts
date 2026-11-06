@@ -166,18 +166,20 @@ describe("the submission id of a confirmation", () => {
   };
   const noAnswer = new TypeError("Failed to fetch");
 
-  it.each([{ code: "server.internal", status: 502 }, { status: 500 }, {}])(
-    "holds a first uncertain server answer %j before another identical payment",
-    (error) => {
-      const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
-      const unanswered = unansweredAfter(first, error);
+  it.each([
+    { code: "server.internal", status: 502 },
+    { code: "server.internal" },
+    { status: 500 },
+    {},
+  ])("holds a first uncertain server answer %j before another identical payment", (error) => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+    const unanswered = unansweredAfter(first, error);
 
-      expect(submissionFor("wo-1", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(
-        "sub-1",
-      );
-      expect(unanswered?.unconfirmed).toBe(true);
-    },
-  );
+    expect(submissionFor("wo-1", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(
+      "sub-1",
+    );
+    expect(unanswered?.unconfirmed).toBe(true);
+  });
 
   it("keeps an ordinary coded refusal editable without treating a refund's server error as a bill hold", () => {
     const sent = submissionFor("wo-1", tenEuros, null, ids("sub-1"));

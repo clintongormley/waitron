@@ -6161,32 +6161,54 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     expect(pay).toHaveBeenCalledOnce();
   });
 
-  it("on the bill path, a fresh Take payment refused reader.not_held after every send of an earlier card was answered says nothing was charged", async () => {
-    const takeBillPayment = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "reader.provider_disconnected", status: 503 })
-      .mockRejectedValue(notHeld());
-    const { el, getDeviceEquipment } = await billOnConfirmation({ takeBillPayment });
-    await press(el, "[data-pay-confirm]");
-    await settled(el);
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
-    await settled(el);
-    expect(bottom(el)).toBe(t("bill_pay.not_checked"));
-    await press(el, 'input[name="method"][value="card"]');
-    await press(el, "[data-pay-continue]");
-    getDeviceEquipment.mockResolvedValue(takenByMarc);
+  it.each([
+    {
+      code: "reader.provider_disconnected",
+      status: 503,
+      held: true,
+      refusal: "bill_pay.reader_not_held_unknown",
+    },
+    {
+      code: "reader.not_found",
+      status: 404,
+      held: false,
+      refusal: "bill_pay.reader_not_held",
+    },
+  ] as const)(
+    "on the bill path, a reader refusal after an earlier $status answer preserves what is known of the charge",
+    async ({ code, status, held, refusal }) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce({ code, status })
+        .mockRejectedValue(notHeld());
+      const { el, getDeviceEquipment } = await billOnConfirmation({ takeBillPayment });
+      await press(el, "[data-pay-confirm]");
+      await settled(el);
+      if (held) {
+        expect(dialog(el)!.confirmationLocked).toBe(true);
+        expect(bottom(el)).toBe(t("bill_pay.unconfirmed"));
+      } else {
+        expect(dialog(el)!.confirmationLocked).toBe(false);
+        await press(el, "[data-pay-continue]");
+      }
+      await press(el, "[data-pay-confirm]");
+      await settled(el);
+      expect(bottom(el)).toBe(t("bill_pay.not_checked"));
+      await press(el, 'input[name="method"][value="card"]');
+      await press(el, "[data-pay-continue]");
+      getDeviceEquipment.mockResolvedValue(takenByMarc);
 
-    await press(el, "[data-pay-confirm]");
-    const shown = await settled(el);
+      await press(el, "[data-pay-confirm]");
+      const shown = await settled(el);
 
-    const ids = sent().map((request) => request.submissionId);
-    expect(ids).toHaveLength(3);
-    expect(ids[1]).toBe(ids[0]);
-    expect(ids[2]).not.toBe(ids[0]);
-    expect(shown.open).toBe(true);
-    expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
-  });
+      const ids = sent().map((request) => request.submissionId);
+      expect(ids).toHaveLength(3);
+      expect(ids[1]).toBe(ids[0]);
+      expect(ids[2]).not.toBe(ids[0]);
+      expect(shown.open).toBe(true);
+      expect(field(el, "cardReaderId").error).toBe(t(refusal));
+    },
+  );
 
   describe("a printer that would print nothing", () => {
     const off = (selection: "item" | "default"): RoleEquipment =>
