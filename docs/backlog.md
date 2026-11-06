@@ -100,7 +100,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
 
-- A1236 and A1361: "Table 3 paid" while two bills are unpaid.
 - A1218: a counter with two zones cannot get back to its menu.
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
@@ -870,10 +869,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the Demo banner (seen in A803 slice 4c's LOOK).** On every screen after sign-in. The words are
   main's (`apps/till/src/i18n/codes.ts`); why it shows was not looked into.
 
-- **A1361. A presented bill's balance answered nothing outstanding (seen in A803 slice 4c's LOOK, on
-  the demo venue).** `getBillBalance` answered `total 9.10, received 0.00, outstanding 0.00`.
-  Whether that is meant was not looked into.
-
 - **The pay window, after A739** (bundle of 4, 2 go-live, 2 important, size M, waits for another entry). Holds A1191, A1266, A1300, A1291. [Detail](backlog/till.md#bundle-the-pay-window-after-a739)
 
 - **A1218. A counter device showing two counter zones cannot get back to its menu after a
@@ -881,10 +876,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a1218-a-counter-device-showing-two-counter-zones-cannot-get-back-to-its-menu-after-a-retrieve)
 
 - **One answer to "where is this order"** (bundle of 3, size S, needs the owner). Holds A1235, A1032, A678. [Detail](backlog/till.md#bundle-one-answer-to-where-is-this-order)
-
-- **A1236. After paying one bill of three, the table screen says "Table 3 paid" and offers Finish
-  table first (seen in A803 slice 2's LOOK).** Two bills were still unpaid. In files slice 2 did
-  not change; believed to predate it, not run on main.
 
 - **A1237. The English till's "dishes not served" window showed the reason «No servido» (seen in
   A803 slice 2's LOOK, on the demo venue).** Not traced: it may be the demo venue's own reason
