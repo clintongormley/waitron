@@ -77,7 +77,7 @@ export interface ThrowawayAllocation {
   prepare(request: {
     /** Every environment the venue is known by; all must be preproduction. */
     readonly environments: readonly ("production" | "preproduction")[];
-    readonly taxpayerNif: string;
+    readonly taxId: string;
     readonly bases: readonly { readonly code: string; readonly purpose: string }[];
     readonly nodeId: string;
     readonly administratorId: string;
