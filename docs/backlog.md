@@ -822,7 +822,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Small till test renames** (bundle of 5, size S). Holds A1053, A1054, A1128. [Detail](backlog/till.md#bundle-small-till-test-renames)
 
-- **A1386. Blank or misleading Floor pages** (bundle of 4, 3 important, size M). Holds A1055, A1056, A1093, A1057. [Detail](backlog/till.md#bundle-a1386-blank-or-misleading-floor-pages)
+- **A1386. Blank or misleading Floor pages** (bundle of 5, 3 important, size M). Holds A1055, A1056, A1093, A1057, A1409. [Detail](backlog/till.md#bundle-a1386-blank-or-misleading-floor-pages)
 
 - **The till top bar fits at phone width, 1024 and 1280** (bundle of 9, 1 important, size M). Holds A1082, A921, A1219. [Detail](backlog/till.md#bundle-the-till-top-bar-fits-at-phone-width-1024-and-1280)
 
