@@ -10,7 +10,6 @@ it("projects a positively complete empty history without inventing a floor", () 
   ).toEqual({
     scope,
     greatestSpentMinute: null,
-    recordedTimeFloorMs: null,
     usedMinutes: [],
     references: ["venue"],
     contradictions: [],
@@ -48,12 +47,11 @@ it.each(["series", "activation", "reservation", "intent", "retirement", "backup"
       }),
     ]);
     expect(history.greatestSpentMinute).toBe(415440);
-    expect(history.recordedTimeFloorMs).toBe(1792152000000);
     expect(history.references).toEqual(["venue", "row/current", "row/retired-other"]);
     expect(history.contradictions).toEqual([]);
   },
 );
-it("merges backup evidence without lowering a surviving host floor", () => {
+it("merges backup evidence", () => {
   const result = projectHourHistory({
     scope,
     sources: [
@@ -66,7 +64,6 @@ it("merges backup evidence without lowering a surviving host floor", () => {
     ],
   });
   expect(result.greatestSpentMinute).toBe(415440);
-  expect(result.recordedTimeFloorMs).toBe(1792150800000);
 });
 it.each([{ taxpayerNif: "89890002M" }, { environment: "production" }])(
   "keeps unrelated scope independent: %j",
@@ -77,12 +74,6 @@ it.each([{ taxpayerNif: "89890002M" }, { environment: "production" }])(
         row({ reference: "foreign", identity: "ZZZZZ", recordedAtMs: 5540000000000, ...change }),
       ]).greatestSpentMinute,
     ).toBe(415420);
-    expect(
-      project([
-        row(),
-        row({ reference: "foreign", identity: "ZZZZZ", recordedAtMs: 5540000000000, ...change }),
-      ]).recordedTimeFloorMs,
-    ).toBe(1792150800000);
   },
 );
 it("lists every minute a readable in-scope record names, once each, in order", () => {
@@ -249,19 +240,6 @@ it("refuses a four-symbol code as an invalid record", () => {
   expect(project([row({ identity: "06XV" })]).contradictions).toContain(
     "row/current:invalid_record",
   );
-});
-it("folds a source's own time floor into the recorded floor, the highest winning", () => {
-  const result = projectHourHistory({
-    scope,
-    sources: [
-      { reference: "venue", complete: true, records: [row()], timeFloorMs: 1792700100000 },
-      { reference: "backup-created", complete: true, records: [], timeFloorMs: 1792310400000 },
-    ],
-  });
-  expect(result.recordedTimeFloorMs).toBe(1792700100000);
-  expect(result.greatestSpentMinute).toBe(415420);
-  expect(result.contradictions).toEqual([]);
-  expect(project([], { timeFloorMs: 1792310400000 }).recordedTimeFloorMs).toBe(1792310400000);
 });
 it.each([NaN, Infinity, 1.5, "2026-10-23T08:00:00Z", null])(
   "reports a source time floor %j as an invalid source",

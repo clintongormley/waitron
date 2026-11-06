@@ -10,7 +10,7 @@ import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
-import { projectHourHistory } from "./hour-history.js";
+import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 import { VerifactuBackend } from "./backend.js";
@@ -33,6 +33,21 @@ const bases = [
 const read = (operation = binding, target = node) =>
   FISCAL_OPERATIONS.readRecoveryState!(suite.db, target, operation);
 afterEach(() => vi.useRealTimers());
+function latestRecordedAt(sources: readonly unknown[]): number | null {
+  const times = sources.flatMap((source) =>
+    (source as HourHistorySource).records.flatMap((row) => {
+      const { taxpayerNif, environment, recordedAtMs } = row as {
+        taxpayerNif: string;
+        environment: string;
+        recordedAtMs: number | null;
+      };
+      return taxpayerNif === "89890001K" && environment === "preproduction" && recordedAtMs !== null
+        ? [recordedAtMs]
+        : [];
+    }),
+  );
+  return times.length === 0 ? null : Math.max(...times);
+}
 
 async function seed(configuration = bases, seedParents = seedVenueNodes) {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -162,9 +177,9 @@ it("includes higher retired names on another node under another software identif
     }),
   ).toMatchObject({
     greatestSpentMinute: 415510,
-    recordedTimeFloorMs: Date.parse("2026-10-16T13:20:00Z"),
     contradictions: [],
   });
+  expect(latestRecordedAt(facts.history)).toBe(Date.parse("2026-10-16T13:20:00Z"));
   expect(facts.bases).toHaveLength(3);
 });
 

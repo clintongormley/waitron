@@ -9,7 +9,6 @@ export interface HourScope {
 export interface HourHistory {
   readonly scope: HourScope;
   readonly greatestSpentMinute: number | null;
-  readonly recordedTimeFloorMs: number | null;
   readonly usedMinutes: readonly number[];
   readonly references: readonly string[];
   readonly contradictions: readonly string[];
@@ -18,6 +17,7 @@ export interface HourHistorySource {
   readonly reference: string;
   readonly complete: boolean;
   readonly records: readonly unknown[];
+  /** Older backups' hour records may carry it; validated, never used. */
   readonly timeFloorMs?: number;
 }
 
@@ -53,7 +53,6 @@ export function projectHourHistory(evidence: unknown): HourHistory {
   };
   const sources: unknown[] = evidence.sources;
   let greatestSpentMinute: number | null = null;
-  let recordedTimeFloorMs: number | null = null;
   const usedMinutes = new Set<number>();
   const references = new Set<string>();
   const contradictions = new Set<string>();
@@ -71,8 +70,6 @@ export function projectHourHistory(evidence: unknown): HourHistory {
     }
     references.add(source.reference);
     if (source.complete !== true) contradictions.add(`${source.reference}:incomplete`);
-    if (typeof source.timeFloorMs === "number")
-      recordedTimeFloorMs = Math.max(recordedTimeFloorMs ?? source.timeFloorMs, source.timeFloorMs);
     for (const row of source.records) {
       const reference = record(row) && text(row.reference) ? row.reference : source.reference;
       if (
@@ -110,17 +107,11 @@ export function projectHourHistory(evidence: unknown): HourHistory {
       const hour = decodeMinuteIdentity(row.identity);
       greatestSpentMinute = Math.max(greatestSpentMinute ?? hour, hour);
       usedMinutes.add(hour);
-      if (row.recordedAtMs !== null)
-        recordedTimeFloorMs = Math.max(
-          recordedTimeFloorMs ?? (row.recordedAtMs as number),
-          row.recordedAtMs as number,
-        );
     }
   }
   return Object.freeze({
     scope: Object.freeze({ ...scope }),
     greatestSpentMinute,
-    recordedTimeFloorMs,
     usedMinutes: Object.freeze([...usedMinutes].sort((a, b) => a - b)),
     references: Object.freeze([...references]),
     contradictions: Object.freeze([...contradictions]),
