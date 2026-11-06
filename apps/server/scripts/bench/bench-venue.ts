@@ -167,7 +167,9 @@ export async function openBenchVenue(
       db,
       MODULES.flatMap((module) => module.changes ?? []),
     );
-    await withTransaction(db, (tx) => beginAttendanceDiscovery(tx, { generation: randomUUID() }));
+    // A reopened folder carries on its saved scan: starting again rescans the whole history.
+    if (!seeded)
+      await withTransaction(db, (tx) => beginAttendanceDiscovery(tx, { generation: randomUUID() }));
     const nodeId = brandNodeId(
       db.all<{ id: string }>(sql`select id from nodes order by rowid limit 1`)[0]!.id,
     );

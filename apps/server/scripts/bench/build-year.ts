@@ -67,8 +67,6 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
     session === undefined ? new Date(dayBounds(dateOf(1)).startAt) : new Date(session.clockAt),
   );
   try {
-    // Opened once for the whole build: each open starts attendance discovery again from the first
-    // row of history, which makes every later day slower.
     const venue = await openBenchVenue(working, {
       seed,
       ...(session === undefined ? {} : { deviceCookies: session.deviceCookies }),

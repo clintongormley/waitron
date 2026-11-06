@@ -181,6 +181,31 @@ describe("tradeDay", () => {
   );
 
   it(
+    "carries on a reopened folder's attendance scan rather than starting it again",
+    async () => {
+      const venue = await freshVenue("2025-11-03T08:00:00Z");
+      await tradeDay(venue, "2025-11-03", 2);
+      const scans = (from: BenchVenue) =>
+        rows(
+          from,
+          sql`select source, key, generation, cursor, endpoint, completed
+              from attendance_source_state where record_kind = 'scan' order by source, key`,
+        );
+      const before = scans(venue);
+      expect(before.some((scan) => (scan.cursor as number) > 0)).toBe(true);
+      const cookies = venue.deviceCookies();
+      const { dir } = opened.pop()!;
+      await venue.close();
+
+      const reopened = await openBenchVenue(dir, { seed: 1, deviceCookies: cookies });
+      opened.push({ venue: reopened, dir });
+
+      expect(scans(reopened)).toEqual(before);
+    },
+    CASE_TIMEOUT_MS,
+  );
+
+  it(
     "leaves no dish of a finished day on any station's list or the pass",
     async () => {
       const venue = await freshVenue("2025-11-03T08:00:00Z");
