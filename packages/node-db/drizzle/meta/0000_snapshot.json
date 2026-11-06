@@ -1,9 +1,249 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5e214ac6-3004-4eae-9165-89802ded4e41",
+  "id": "ed780c23-80a6-4869-8da8-e608cc3738ea",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
+    "node_handover_events": {
+      "name": "node_handover_events",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "envelope": {
+          "name": "envelope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "node_handover_operations": {
+      "name": "node_handover_operations",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scenario": {
+          "name": "scenario",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_node_id": {
+          "name": "source_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "destination_node_id": {
+          "name": "destination_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "binding": {
+          "name": "binding",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "waiting_reason": {
+          "name": "waiting_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "node_handover_one_open_uq": {
+          "name": "node_handover_one_open_uq",
+          "columns": [
+            "node_id"
+          ],
+          "isUnique": true,
+          "where": "\"node_handover_operations\".\"state\" not in ('return_complete', 'return_abandoned', 'replaced', 'abandoned')"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "node_handover_operations_pk": {
+          "columns": [
+            "node_id",
+            "operation_id"
+          ],
+          "name": "node_handover_operations_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "node_handover_operations_role_ck": {
+          "name": "node_handover_operations_role_ck",
+          "value": "\"node_handover_operations\".\"role\" in ('source', 'destination')"
+        },
+        "node_handover_operations_scenario_ck": {
+          "name": "node_handover_operations_scenario_ck",
+          "value": "\"node_handover_operations\".\"scenario\" in ('controlled', 'emergency')"
+        },
+        "node_handover_operations_state_ck": {
+          "name": "node_handover_operations_state_ck",
+          "value": "\"node_handover_operations\".\"state\" in ('prepared', 'source_stepped_down', 'filing_relinquished', 'source_superseded', 'copy_accepted', 'filing_assumed', 'emergency_declared', 'activated', 'return_pending', 'return_complete', 'return_abandoned', 'replaced', 'abandoned')"
+        }
+      }
+    },
+    "node_handover_restriction": {
+      "name": "node_handover_restriction",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "successor_node_id": {
+          "name": "successor_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "membership_term": {
+          "name": "membership_term",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "node_handover_restriction_kind_ck": {
+          "name": "node_handover_restriction_kind_ck",
+          "value": "\"node_handover_restriction\".\"kind\" in ('handed-over', 'superseded')"
+        }
+      }
+    },
     "node_mirror_link": {
       "name": "node_mirror_link",
       "columns": {

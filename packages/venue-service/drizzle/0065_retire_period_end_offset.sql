@@ -1,1 +1,0 @@
-ALTER TABLE `menu_periods` DROP COLUMN `end_offset_minutes`;

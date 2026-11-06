@@ -1,1 +1,0 @@
-ALTER TABLE `service_settings` ADD `clearing_workflow` integer DEFAULT false NOT NULL;

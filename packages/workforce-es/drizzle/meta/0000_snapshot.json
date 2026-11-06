@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7ea3f754-b6f4-477a-a826-91867f8555bd",
+  "id": "9b9e427c-4e4d-461b-870e-7504a3a12980",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "convenio_config": {

@@ -1,1 +1,0 @@
-CREATE INDEX `envios_confirmado_idx` ON `envios` (`confirmado_en`);

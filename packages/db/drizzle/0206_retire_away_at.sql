@@ -1,1 +1,0 @@
-ALTER TABLE `ticket_items` DROP COLUMN `away_at`;

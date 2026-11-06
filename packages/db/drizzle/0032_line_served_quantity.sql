@@ -1,1 +1,0 @@
-ALTER TABLE `working_order_lines` ADD `served_quantity` integer DEFAULT 0 NOT NULL;

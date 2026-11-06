@@ -1,1 +1,0 @@
-ALTER TABLE `ticket_items` ADD `station_chosen_at` text;

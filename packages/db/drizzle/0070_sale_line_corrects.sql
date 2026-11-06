@@ -1,1 +1,0 @@
-ALTER TABLE `sale_lines` ADD `corrects_line_id` text REFERENCES sale_lines(id);

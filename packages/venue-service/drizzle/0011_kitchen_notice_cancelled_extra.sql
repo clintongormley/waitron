@@ -1,1 +1,0 @@
-ALTER TABLE `kitchen_notices` ADD `cancelled_extra` text;
