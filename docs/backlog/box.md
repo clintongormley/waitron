@@ -1649,6 +1649,7 @@ once released. Belongs with A1016.
 
 ## Decisions and deliberate limits
 
+- **A restart may forget that AEAT disagreed with the clock (owner, 2026-11-06).** The disagreement is kept in memory only, and this stays. It matters only if the box's own correction fails, the server restarts, AEAT is out of reach and a device matches the wrong clock, and misdated sales have a remedy (A1407).
 **A798-B clock, disk and printer decisions.**
 
 The owner's four answers: no reserved
@@ -2300,7 +2301,7 @@ AEAT agreeing with the box restarts payments even if two
   verifies, or that moves the clock by more than a second, empties the stored readings,
   `apps/server/src/clock-correction.ts`). Since slice 9b the box sets its clock from
   AEAT's disagreeing time itself, and an administrator's set is refused `witnessed`. The disagreement is kept in memory,
-  so restarting the server forgets it. Slice 8's own ways out remain: the clock put right, or real
+  so restarting the server forgets it (kept that way: owner, 2026-11-06, under Decisions). Slice 8's own ways out remain: the clock put right, or real
   time passing the record. The owner may prefer it to lapse at a step (owner FYI 6). Left open by A798-B slice 9 (#2025).
 
 ## `clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the go-live migration squash (A760).
