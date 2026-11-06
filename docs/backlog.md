@@ -6939,7 +6939,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot and counter-payment fixtures; shared-fixture consumers in the
   server split-bill and move-bill suites; bill-editing and other order fixtures;
-  the till's moved-dish suite; shared helper consumers and file names.
+  the till's moved-dish suite; accented bindings in the portion-selection, counter-portion-rows
+  and till-ticket-view tests; shared helper consumers and file names.
   Keep accented search fixtures unchanged.
   Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
@@ -6959,6 +6960,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Add observations that distinguish those identities without changing the existing checks.
   [Detail](backlog/architecture.md#a974-review-assertion-gaps).
 
+- **Pin the grouped-drink fixture quantity before testing partial splits.** The made-here
+  route suite can still pass with a whole-line transfer that bypasses the partial-split copy.
+  Keep the existing made-here assertions and check the source and remaining quantities.
+  [Detail](backlog/architecture.md#a974-review-assertion-gaps).
+
 - **Setup's receipt-language selection still reads inherited object properties.** Its
   `venue-screen.ts` lookup needs qualification with a country-pack code such as `constructor`;
   the review screen now keeps such an unknown code visible.
@@ -6968,7 +6974,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Receipt-print, working-order, party bill-action, bill-move, arriving-dish, receipt-guest, till-API bill-move/split/groups/fiscal-sale, reprint, transfer,
   portion-sale projection and order-portion counter/filing/adjustment suites still use Spanish
   display samples; fiscal-sale and counter/adjustment order-portion test descriptions, other
-  helpers and screen expectations remain. Low priority.
+  helpers and screen expectations remain. Triage made-here route and receipt-document fixture
+  text there while preserving Spanish receipt output and locale checks. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two

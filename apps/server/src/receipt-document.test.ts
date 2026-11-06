@@ -801,7 +801,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     ]);
   });
 
-  const jamon = (comped: boolean) => {
+  const hamRows = (comped: boolean) => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
     input.result.lines = [
       {
@@ -837,14 +837,14 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
   };
 
   it("prints the jamón under a kilo at its price, with its own discount (owner, Q9)", () => {
-    expect(jamon(false)).toMatchObject([
+    expect(hamRows(false)).toMatchObject([
       { units: "0.123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
       { item: "Descuento 10%", amount: "-0,27" },
     ]);
   });
 
   it("prints a comped jamón's value and Descuento 100%", () => {
-    expect(jamon(true)).toMatchObject([
+    expect(hamRows(true)).toMatchObject([
       { units: "0.123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
       { item: "Descuento 100%", amount: "-2,68" },
     ]);
@@ -1295,8 +1295,8 @@ it.each(["58mm", "80mm"] as const)(
 );
 
 describe("identical dishes on the receipt (A803)", () => {
-  const caña = { descriptions: { "es-ES": "Caña" }, quantity: "1", gross: "1.50" };
-  const bravas = { descriptions: { "es-ES": "Bravas" }, quantity: "1", gross: "6.00" };
+  const draftBeer = { descriptions: { "es-ES": "Caña" }, quantity: "1", gross: "1.50" };
+  const spicyPotatoes = { descriptions: { "es-ES": "Bravas" }, quantity: "1", gross: "6.00" };
   const oneRate = [{ rate: "10.00", base: "8.18", tax: "0.82" }];
   const simplified = (lines: ReceiptDocumentInput["result"]["lines"], vatBreakdown = oneRate) => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
@@ -1315,7 +1315,7 @@ describe("identical dishes on the receipt (A803)", () => {
   };
 
   it("A803 portion grouping: two filed rows of Caña at 1.50 print Caña 2 3,00", () => {
-    const rows = simplified([caña, bravas, caña]);
+    const rows = simplified([draftBeer, spicyPotatoes, draftBeer]);
     expect(rows.slice(2, 4)).toEqual([
       ["2  Caña", "3,00"],
       ["1  Bravas", "6,00"],
@@ -1324,11 +1324,11 @@ describe("identical dishes on the receipt (A803)", () => {
 
   it("A803 portion grouping: a different price, VAT rate, list price or adjustment entry keeps rows apart", () => {
     const rows = simplified([
-      caña,
-      { ...caña, gross: "1.60" },
-      { ...caña, listGross: "2.00" },
+      draftBeer,
+      { ...draftBeer, gross: "1.60" },
+      { ...draftBeer, listGross: "2.00" },
       {
-        ...caña,
+        ...draftBeer,
         adjustments: [{ kind: "comp", amount: "1.50" }],
         gross: "0.00",
         listGross: "1.50",
@@ -1345,7 +1345,7 @@ describe("identical dishes on the receipt (A803)", () => {
       { rate: "10.00", base: "1.36", tax: "0.14" },
       { rate: "21.00", base: "1.24", tax: "0.26" },
     ];
-    expect(simplified([caña, caña], twoRates).slice(2, 4)).toEqual([
+    expect(simplified([draftBeer, draftBeer], twoRates).slice(2, 4)).toEqual([
       ["1  Caña", "1,50"],
       ["1  Caña", "1,50"],
     ]);
@@ -1380,7 +1380,7 @@ describe("identical dishes on the receipt (A803)", () => {
   });
 
   it("A803 portion grouping: printed totals equal the filed total and breakdown", () => {
-    const rows = simplified([caña, bravas, caña]);
+    const rows = simplified([draftBeer, spicyPotatoes, draftBeer]);
     const goods = rows.slice(
       2,
       rows.findIndex(([caption]) => caption === "TOTAL"),
@@ -1396,11 +1396,11 @@ describe("identical dishes on the receipt (A803)", () => {
 
   it("A803 portion grouping: the full invoice lists every filed row", () => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
-    const filedCaña = {
-      ...caña,
+    const filedDraftBeer = {
+      ...draftBeer,
       net: { unitPrice: "1.36", priceQuantity: "1.000", base: "1.36", tax: "0.14", rate: "10" },
     };
-    input.result.lines = [filedCaña, filedCaña];
+    input.result.lines = [filedDraftBeer, filedDraftBeer];
     input.result.total = "3.00";
     input.result.vatBreakdown = [{ rate: "10", base: "2.72", tax: "0.28" }];
     const rows = buildReceiptDocument(input).elements.flatMap((e) =>
