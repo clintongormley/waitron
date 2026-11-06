@@ -290,25 +290,6 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
   machine's addresses after an archive restore too.
 
-## Loose ends left by A680 (#1718).
-
-- The setup wizard has no text for `sif.throwaway_allocation_refused`. A box started with
-  `WAITRON_ENV=production` still offers Demo and Preparation
-  (`apps/setup/src/screens/mode-screen.ts` shows only a production warning), and either one is
-  refused with that code, so the operator sees the wizard's generic failure (its plan's D6).
-- Demo and Preparation can be set up by anyone who reaches the setup wizard first, as before
-  #1700. Neither needs a supplied allocation since A680, so on a shared network a stranger can
-  set up an unconfigured box in either mode before its owner does. Only a preproduction venue can
-  come of it (its plan's unsure point 2).
-- The throwaway-allocation seat names a Spanish term in a country-neutral contract:
-  `ModuleProvisioning.throwawayAllocation.prepare` takes `taxpayerNif`
-  (`packages/module/src/provisioning.ts`); finish-branch's convention review asked for `taxId`.
-  Left as is because the English-only guard allows "NIF" and lane E's A679 was given this exact
-  shape, so a rename changes both. Owner's call.
-- Whether a throwaway venue can get an offline recovery pack is untested. #1717's recovery pack
-  checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably
-  be refused one, which fits a practice-only venue, but nothing ran it.
-
 ## Loose ends left by #334.
 
 - The certificate export help has never been followed on a real machine. Nobody exported a
@@ -330,51 +311,22 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   the redirect.
   [Detail](#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
 
-## A box on an older configuration format blames the export when it is the box that is out of date
-
-Given a newer export, it shows "This export is not compatible with this Waitron version. Export it
-again from a box running the current version, …" (`apps/setup/src/i18n/strings/shell.ts:139-140`),
-but the file already came from a current box, and it is the receiving box that needs updating. The
-same sentence answers module version mismatches in both directions (`describeConfigurationRefusal`,
-`apps/setup/src/setup-app.ts`), so the fix is to word the too-new case on its own. Found by A980
-S1a2's plan review.
-
 ## The repair page's Continue sits tight against the password field at phone width
 
 On the setup app's repair page, on main since 4e318802f (#1752), Continue sits tight against the
 password field at phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
 
-## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
+## The recovery page's operator texts send the person to whoever installed the box
 
-- **Other full-disk words still send the person elsewhere or end with the short reinstall
-  sentence** — the till's other full-disk refusals («Tell a manager»), the recovery page's
-  Start-again form, and the managers' full-disk email («ask whoever installed the box»). For the
-  owner. Left open by A1127.
-  [Detail](setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence)
-
-The owner's 2026-10-28 answers covered the till strip («Tell a manager», a stated exception, Q4) and
-"both pages" (the repair page and the full-disk page, the longer reinstall sentence). Three more
-full-disk texts are outside them, for the owner:
-
-- the till's other full-disk refusals also say «Tell a manager» (`apps/till/src/i18n/codes.ts`,
-  `storage.disk_full`; `apps/till/src/i18n/strings.ts`), which Q4's answer, naming the strip, does
-  not cover;
-- the recovery page's Start-again form's `diskFull` words (`apps/server/src/recovery-start-again.ts`,
-  English and Spanish) still end with the short reinstall sentence ("everything on it is lost, these
-  files included");
-- the managers' full-disk email (`apps/server/src/i18n/box-emails.ts`) says "ask whoever installed
-  the box", the never-send-the-person-elsewhere class.
-
-Not a full-disk text, but the same class, found by A760 part 3's review:
-
-- the recovery page's operator texts (`apps/server/src/i18n/recovery-page.ts`: about 15 codes,
-  among them `provisioning.database_ahead`, `provisioning.schema_mismatch` and the generic
-  fallback, plus the `forInstaller` heading "For whoever installed this box") end "ask whoever
-  installed this box for help" or a sentence like it. `apps/server/src/recovery-surface.test.ts`
-  requires that sentence beside any restore action ("The reader has no terminal and often no
-  backup, so a restore action must name who can help", #310, 2026-09-11), which conflicts with
-  CLAUDE.md §3's first rule. The owner decides which wins. After A760 a box moved to the new image
-  without a reset shows `provisioning.database_ahead`'s page.
+Found by A760 part 3's review; A1384 (which held it) was built before it was filed and does not
+change it. The recovery page's operator texts (`apps/server/src/i18n/recovery-page.ts`: about 15
+codes, among them `provisioning.database_ahead`, `provisioning.schema_mismatch` and the generic
+fallback, plus the `forInstaller` heading "For whoever installed this box") end "ask whoever
+installed this box for help" or a sentence like it. `apps/server/src/recovery-surface.test.ts`
+requires that sentence beside any restore action ("The reader has no terminal and often no backup,
+so a restore action must name who can help", #310, 2026-09-11), which conflicts with CLAUDE.md §3's
+first rule. The owner decides which wins. After A760 a box moved to the new image without a reset
+shows `provisioning.database_ahead`'s page.
 
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
@@ -531,20 +483,6 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   completion invitation without building A250. **Build remains open**; Cloud's qualified
   trial journey is prerequisite G1 in the plan.
 
-## The Start again summary's `setup.not_ready` carries no cause.
-
-- **The Start again summary's `setup.not_ready` carries no cause.** Since A1131bc slice 2 the page
-  draws "This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect
-  keeps everything as it is." for it, and only the box's log line names the reason. Wanted: words for
-  each cause a person could act on. Left open by A1206.
-
-## Start again over plain HTTP says only that deleting is not safe
-
-- **Start again over plain HTTP says only that deleting is not safe.** The box answers
-  `setup.owner_required` over HTTP, and since A1131bc slice 2 the page draws "This box cannot
-  confirm that deleting this setup is safe…" for it beside the "Set up secure connection" link.
-  Wanted: words saying a secure connection is needed. Left open by A1131bc slice 2 (plan, D13, N5).
-
 ## No Recover from backup when the setup's own record cannot be read
 
 - **No Recover from backup when the setup's own record cannot be read.** Since A1131bc slice 3,
@@ -640,34 +578,6 @@ that operation's reader. Do not remove exact-content checks to make a large file
   reinstall. Left open by A1131bc slice 3.
   [Detail](setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read)
 
-## Bundle A1384: Words on setup's refusals
-
-6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The Start again summary's `setup.not_ready` carries no cause.** The page says only that
-  deleting is not safe. Wanted: words for each cause a person could act on. Left open by A1206.
-  [Detail](setup.md#the-start-again-summarys-setupnot_ready-carries-no-cause).
-- **A box on an older configuration format blames the export when it is the box that is out of
-  date.** Word the too-new case on its own. Found by A980 S1a2's plan review.
-  [Detail](setup.md#a-box-on-an-older-configuration-format-blames-the-export-when-it-is-the-box-that-is-out-of-date)
-- **Other full-disk words still send the person elsewhere or end with the short reinstall sentence**
-  So do the recovery page's operator texts, which a test requires. For the owner. Left open by A1127.
-  [Detail](setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence).
-- **Start again over plain HTTP says only that deleting is not safe.** Wanted: words saying a
-  secure connection is needed. Left open by A1131bc slice 2.
-  [Detail](setup.md#start-again-over-plain-http-says-only-that-deleting-is-not-safe)
-- **Setup's refusal text for the operation description asks for an edit nobody can make** — left
-  open by A1315 PR 5 (#2441). Setup no longer sends the value; the server fills the filing module's
-  default (`apps/server/src/setup-api.ts` `parseVenue`). So `server_fields.operation_description`
-  (`apps/setup/src/i18n/strings/start.ts`, EN and ES), which says to shorten the text or remove
-  hidden characters, can now be reached only by a filing module with no default or a faulty one —
-  a fault in Waitron, which a refusal should name as such
-  ([conventions-ui.md](../developers/conventions-ui.md#refusals-name-a-self-service-next-step)). The
-  mapping stays because `scripts/setup-wizard-fiscal-fields.test.ts` requires setup to word every
-  venue field the Veri*Factu module can refuse. Wanted: reword it as a fault in Waitron.
-- **Loose ends left by A680 (#1718).**
-  [Detail](setup.md#loose-ends-left-by-a680-1718)
-
 ## Bundle A1385: The A1207 leftovers in choosing a series name
 
 4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -751,6 +661,10 @@ that operation's reader. Do not remove exact-content checks to make a large file
   stay English under Spanish staff-facing dish names (the plan's known limit).
 
 ## Decisions and deliberate limits
+
+- **Demo and Preparation need no proof of who owns the box.** Whoever reaches an unconfigured box's
+  setup page first can set up either; the owner accepted this when dropping the setup code
+  (2026-10-26, B3 design §12.5). A production box offers neither (§12.1; A1384).
 
 - **A reload between the deletion and Reconnect forgets which button was pressed (A1131bc slice 3,
   plan OQ2's default).** The page keeps the choice in memory only, so after a reload it opens its
