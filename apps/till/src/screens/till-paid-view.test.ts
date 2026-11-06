@@ -217,6 +217,37 @@ describe("till-paid-view", () => {
     expect(back.variant).toBe("secondary");
   });
 
+  it("with other bills to pay, lists them under the summary and has no Finish table, Back being primary", async () => {
+    const el = await mount({ tableName: "Mesa 4 · Cuenta 1", billsLeft: ["Cuenta 2", "Cuenta 3"] });
+    expect(text(el, "[data-paid-title]")).toBe("Mesa 4 · Cuenta 1 pagada");
+    expect(text(el, "[data-paid-left]")).toBe("Queda por pagar: Cuenta 2, Cuenta 3");
+    expect(
+      el.shadowRoot!.querySelector("[data-paid-summary] ~ [data-paid-left]"),
+      "the list follows the summary",
+    ).not.toBeNull();
+    expect(button(el, "finish-table")).toBeNull();
+    const back = button(el, "back-to-table") as HTMLElement & { variant: string };
+    expect(back.variant).toBe("primary");
+  });
+
+  it("with no other bill to pay, shows no list and keeps Finish table first", async () => {
+    const el = await mount({ billsLeft: [] });
+    expect(el.shadowRoot!.querySelector("[data-paid-left]")).toBeNull();
+    const actions = [...el.shadowRoot!.querySelectorAll(".actions wt-button")];
+    expect(actions[0]).toBe(button(el, "finish-table"));
+  });
+
+  it("writes a bill's typed name as typed, even one holding a replacement pattern", async () => {
+    const el = await mount({ billsLeft: ["Cuenta 2 · A$&B", "Cuenta 3 · $'"] });
+    expect(text(el, "[data-paid-left]")).toBe("Queda por pagar: Cuenta 2 · A$&B, Cuenta 3 · $'");
+  });
+
+  it("speaks English in the list", async () => {
+    setLocale("en-GB");
+    const el = await mount({ billsLeft: ["Bill 2", "Bill 3"] });
+    expect(text(el, "[data-paid-left]")).toBe("Still to pay: Bill 2, Bill 3");
+  });
+
   it("busy disables the ticket's actions, never Finish table or Back to the table", async () => {
     const disabled = async (el: TillPaidView, test: string) => {
       const host = button(el, test) as HTMLElement & { updateComplete: Promise<unknown> };

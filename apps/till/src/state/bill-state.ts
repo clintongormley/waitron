@@ -1,9 +1,22 @@
+import { compareDecimal, decimal } from "@waitron/shared";
 import type { PartyBill } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 
 /** A bill still to pay: open, or placed and not yet collected. */
 export function owing(bill: Pick<PartyBill, "status">): boolean {
   return bill.status === "open" || bill.status === "placed";
+}
+
+/**
+ * A bill the table cannot finish without paying, as near the server's `billOwes` as the wire allows:
+ * the bills read sends no line count, so an open bill whose lines total zero reads as not owing, and
+ * the server's refusal of Finish table handles it.
+ */
+export function stillToPay(bill: Pick<PartyBill, "status" | "outstanding">): boolean {
+  return (
+    bill.status === "placed" ||
+    (bill.status === "open" && compareDecimal(decimal(bill.outstanding), decimal("0")) !== 0)
+  );
 }
 
 /**

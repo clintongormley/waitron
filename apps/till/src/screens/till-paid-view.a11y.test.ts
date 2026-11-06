@@ -39,6 +39,10 @@ const cases: [string, Partial<TillPaidView>][] = [
   ["busy", { busy: true, receipt: { status: "queued", jobId: "j", canRetry: false } }],
   ["presented bill, no list, no printing", { payments: [], canPrint: false }],
   ["presented bill paid in cash, change to give", { payments: [], change: "30.00" }],
+  [
+    "other bills still to pay",
+    { tableName: "Mesa 4 · Cuenta 1", billsLeft: ["Cuenta 2", "Cuenta 3"] },
+  ],
 ];
 
 function mount(theme: "light" | "dark", props: Partial<TillPaidView>) {

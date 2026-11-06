@@ -8,8 +8,9 @@ import { PAYMENT_STATES } from "../state/bill-payment.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import "@waitron/ui/src/components/wt-button.js";
 
-/** The bill paid in full: what was paid, whether a ticket went out, and the Finish table button
- * (`table.finish`). It only shows and asks; the app owns every request. */
+/** The bill paid in full: what was paid, whether a ticket went out, and either the Finish table
+ * button (`table.finish`) or, while other bills are still to pay, the list of them. It only shows
+ * and asks; the app owns every request. */
 @customElement("till-paid-view")
 export class TillPaidView extends LitElement {
   constructor() {
@@ -120,6 +121,8 @@ export class TillPaidView extends LitElement {
   ];
 
   @property() tableName = "";
+  /** The labels of the table's other bills still to pay. */
+  @property({ attribute: false }) billsLeft: string[] = [];
   @property() total = "0";
   @property({ attribute: false }) payments: BillPaymentView[] = [];
   /** A presented bill's cash change; a bill paid in parts shows each payment's change in its list. */
@@ -207,6 +210,7 @@ export class TillPaidView extends LitElement {
 
   override render() {
     const count = this.payments.length;
+    const billsLeft = this.billsLeft.length > 0;
     const summary = (count > 1 ? t("paid.summary") : t("paid.summary_one"))
       .replace("{amount}", () => this.#money(this.total))
       .replace("{n}", String(count));
@@ -217,6 +221,13 @@ export class TillPaidView extends LitElement {
           <span data-paid-title>${t("paid.title").replace("{table}", () => this.tableName)}</span>
         </h2>
         <p data-paid-summary>${summary}</p>
+        ${
+          billsLeft
+            ? html`<p data-paid-left>
+                ${t("paid.bills_left").replace("{bills}", () => this.billsLeft.join(", "))}
+              </p>`
+            : nothing
+        }
         ${
           this.#nonZero(this.change)
             ? html`<p class="change" data-paid-change>
@@ -256,15 +267,19 @@ export class TillPaidView extends LitElement {
         ${this.#ticketAction()}
       </section>
       <div class="actions">
+        ${
+          billsLeft
+            ? nothing
+            : html`<wt-button
+                variant="primary"
+                size="lg"
+                data-test="finish-table"
+                @click=${() => this.#emit("finish-table")}
+                >${t("table.finish")}</wt-button
+              >`
+        }
         <wt-button
-          variant="primary"
-          size="lg"
-          data-test="finish-table"
-          @click=${() => this.#emit("finish-table")}
-          >${t("table.finish")}</wt-button
-        >
-        <wt-button
-          variant="secondary"
+          variant=${billsLeft ? "primary" : "secondary"}
           size="lg"
           data-test="back-to-table"
           @click=${() => this.#emit("back-to-table")}

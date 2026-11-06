@@ -269,8 +269,9 @@ of the table's bills, then the ways to pay this bill: **Cash** and **Card**, **P
 than one receipt language, the language its receipt will print in. Once part of the bill is paid,
 **Part of this bill is already paid: take the rest as a bill payment** takes the place of **Cash**
 and **Card**. On a handheld, one **Pay** button takes the place of **Cash**, **Card** and the
-ways to pay, except on a presented bill that is already partly paid. The foot has no **Park**: a
-table's bill already waits at its table.
+ways to pay, except on a presented bill that is already partly paid. On a handheld, when a bill is
+paid and others are not, the screen lists the bills still to pay and **Back to the table** opens the
+next one. The foot has no **Park**: a table's bill already waits at its table.
 
 Waitron takes no payment for a bill with dishes not yet sent. While the bill on screen has dishes in
 your **Unsent order**, or another person's unsent dishes for it are shown with their **Take over

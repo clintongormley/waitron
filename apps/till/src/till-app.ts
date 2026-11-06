@@ -328,6 +328,7 @@ import {
   owing,
   paidInPart,
   shownBills,
+  stillToPay,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import { billRequestOf } from "./state/table-signals.js";
@@ -17964,10 +17965,16 @@ export class TillApp extends LitElement {
     return bill === undefined ? undefined : billName(this.orderParty?.displayName ?? "", bill);
   }
 
+  async #onSwitchBill(event: Event): Promise<void> {
+    await this.#switchToBill(
+      (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId,
+    );
+  }
+
   /** Saves the draft of the bill on screen, then shows the bill chosen last, unless the waiter left
    * the table or the bill on screen changed while the save was out. */
-  async #onSwitchBill(event: Event): Promise<void> {
-    this.#switchTo = (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId;
+  async #switchToBill(workingOrderId: string): Promise<void> {
+    this.#switchTo = workingOrderId;
     if (!(await this.#flushBeforeSwitch())) return;
     const chosen = this.#switchTo;
     this.#switchTo = undefined;
@@ -19628,7 +19635,9 @@ export class TillApp extends LitElement {
 
   /**
    * `settled` is the bill's payments when this payment settled it: on a handheld a simplified
-   * invoice then shows the paid screen, whose Finish table (`table.finish`) frees the table.
+   * invoice then shows the paid screen, which offers Finish table (`table.finish`) unless other
+   * bills are still to pay. The bills held predate this payment, so the screen draws from them
+   * without the paid bill, and the read here corrects a payment taken on another till.
    */
   #showTicket(
     workingOrderId: string,
@@ -19653,14 +19662,39 @@ export class TillApp extends LitElement {
     this.paidPayments = paid ? settled : [];
     this.#pushDrill({ kind: paid ? "paid" : "ticket" });
     void this.#refreshReceiptPrint();
+    if (paid && this.#paidBill() !== undefined) void this.#loadPartyBills(undefined, true, true);
   }
 
-  /** A handheld's order screen is a tab (`builtInScreensFor`), which the paid screen covers. */
-  #onBackToTable(): void {
+  /** The bill on the paid screen, among the party's bills. None for a counter order, which Find bill
+   * can open on a handheld with the last table's party still held. */
+  #paidBill(): PartyBill | undefined {
+    return this.partyBills.find((bill) => bill.workingOrderId === this.ticketWorkingOrderId);
+  }
+
+  #paidOtherBills(): PartyBill[] {
+    const paid = this.#paidBill();
+    if (paid === undefined) return [];
+    return shownBills(this.partyBills).filter((bill) => bill !== paid && stillToPay(bill));
+  }
+
+  #paidTitle(): string {
+    const table = this.#activeTableTitle();
+    const paid = this.#paidBill();
+    return paid !== undefined && this.#paidOtherBills().length > 0 ? billName(table, paid) : table;
+  }
+
+  /** A handheld's order screen is a tab (`builtInScreensFor`), which the paid screen covers. With
+   * other bills to pay it moves to the first of them, and only then reads: a bills read loads the
+   * balance of whichever bill is on screen when it answers. */
+  async #onBackToTable(): Promise<void> {
     if (this.drill?.kind !== "paid") return;
+    const next = this.#paidOtherBills()[0];
+    const visit = this.#orderVisit;
     this.errorKey = undefined;
     this.#leavePaidScreen();
-    void this.#loadPartyBills();
+    if (next !== undefined) await this.#switchToBill(next.workingOrderId);
+    if (this.activeTabId === undefined) await this.#loadPartyBills();
+    else await this.#rereadAmounts(this.activeTabId, visit);
   }
 
   /** A refused Finish table (`table.finish`) is acted on from the order screen beneath. */
@@ -20211,7 +20245,8 @@ export class TillApp extends LitElement {
       case "paid":
         return html`<till-paid-view
           slot="drill"
-          .tableName=${this.#activeTableTitle()}
+          .tableName=${this.#paidTitle()}
+          .billsLeft=${this.#paidOtherBills().map(billLabel)}
           .total=${this.result!.total}
           .payments=${this.paidPayments}
           .change=${this.paidPayments.length === 0 && this.result!.tender.method === "cash" ? this.result!.tender.change : null}
@@ -20221,7 +20256,7 @@ export class TillApp extends LitElement {
           .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .busy=${this.originalReceiptBusy}
-          @back-to-table=${() => this.#onBackToTable()}
+          @back-to-table=${() => void this.#onBackToTable()}
         ></till-paid-view>`;
       case "hours":
         return html`<till-hours-screen
