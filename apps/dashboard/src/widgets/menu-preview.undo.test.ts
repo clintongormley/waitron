@@ -374,6 +374,26 @@ it("draws a blocked Undo muted and sends nothing", async () => {
   expect(heard).not.toHaveBeenCalled();
 });
 
+it("draws every other change's Undo muted while one Undo is out, and sends nothing from it", async () => {
+  const drinksColour: MenuChange = {
+    id: "drinks-colour",
+    targets: { before: [], after: [] },
+    kind: "section_changed",
+    sectionId: "s-drinks",
+    name: "Drinks",
+    fields: ["color"],
+    source: "this_menu",
+  };
+  const el = await mountLive([ownRename, drinksColour], { undoing: "own-rename" });
+  const heard = undoEvents(el);
+  const other = undoButton(el, "drinks-colour")!;
+  expect(text(other)).toBe("Undo");
+  expect(other.getAttribute("aria-disabled")).toBe("true");
+  expect(getComputedStyle(other).color).toBe(tokenColour(el, "--wt-color-text-muted"));
+  await userEvent.click(other, { force: true });
+  expect(heard).not.toHaveBeenCalled();
+});
+
 it("draws an unblocked Undo in the link colour", async () => {
   const el = await mountLive([ownRename]);
   const button = undoButton(el, "own-rename")!;
@@ -419,6 +439,31 @@ it("shows a refusal inside the bullet, announced once, and described from the Un
   await el.updateComplete;
   expect(refusal().getAttribute("role")).toBe("alert");
 });
+
+it.each([
+  ["set again", true],
+  ["left in place", false],
+])(
+  "announces the same refusal again once a fresh attempt at that change finishes, with the refusal %s",
+  async (_, setAgain) => {
+    const reason = "Another menu is now called Lunch.";
+    const el = await mountLive([ownRename], { undoRefusals: { "own-rename": reason } });
+    const refusal = () =>
+      el.shadowRoot!.querySelector<HTMLElement>(
+        `[data-change-row="own-rename"] [data-undo-refusal]`,
+      );
+    const first = refusal()!;
+    expect(first.getAttribute("role")).toBe("alert");
+    el.undoing = "own-rename";
+    await el.updateComplete;
+    el.undoing = null;
+    if (setAgain) el.undoRefusals = { "own-rename": reason };
+    await el.updateComplete;
+    expect(refusal()).not.toBe(first);
+    expect(text(refusal())).toBe(`Not undone. ${reason}`);
+    expect(refusal()!.getAttribute("role")).toBe("alert");
+  },
+);
 
 it("keeps focus on a change's Undo across a new preview after a refusal", async () => {
   const el = await mountLive([ownRename, sharedPrice]);
@@ -489,37 +534,64 @@ it("says nothing was undone when there is no result", async () => {
   expect(el.shadowRoot!.querySelector('[data-test="undo-result"]')).toBeNull();
 });
 
+const mainsSection = (es: string): DocumentMember => {
+  const node = documentSection("s-mains", "Mains", []);
+  return node.kind === "section" ? { ...node, names: { en: "Mains", es } } : node;
+};
+const mainsRenamed: MenuChange = {
+  id: "mains-renamed",
+  targets: { before: [], after: [] },
+  kind: "section_changed",
+  sectionId: "s-mains",
+  name: "Mains",
+  fields: ["names"],
+  source: "this_menu",
+};
+
+/** A Spanish-only rename of an own section, which has an Undo only while Spanish is switched on. */
+async function mountMainsRenamed(props: Partial<MenuPreviewPanel> = {}) {
+  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
+    menuName: "Lunch Menu",
+    status,
+    preview: {
+      ...preview([mainsRenamed]),
+      document: menuDocument([mainsSection("Segundos")], {}),
+      live: { versionId: "v-2", document: menuDocument([mainsSection("Principales")], {}) },
+    },
+    ...props,
+  });
+  return el;
+}
+
 it("works the actions out again when the switched-on content languages change", async () => {
   const before = currentContentLanguages();
-  const section = (es: string): DocumentMember => {
-    const node = documentSection("s-mains", "Mains", []);
-    return node.kind === "section" ? { ...node, names: { en: "Mains", es } } : node;
-  };
-  const liveDocument = menuDocument([section("Principales")], {});
-  const rename: MenuChange = {
-    id: "mains-renamed",
-    targets: { before: [], after: [] },
-    kind: "section_changed",
-    sectionId: "s-mains",
-    name: "Mains",
-    fields: ["names"],
-    source: "this_menu",
-  };
   try {
     setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
-    const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
-      menuName: "Lunch Menu",
-      status,
-      preview: {
-        ...preview([rename]),
-        document: menuDocument([section("Segundos")], {}),
-        live: { versionId: "v-2", document: liveDocument },
-      },
-    });
+    const el = await mountMainsRenamed();
     expect(undoButton(el, "mains-renamed")).not.toBeNull();
     setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
     await el.updateComplete;
     expect(undoButton(el, "mains-renamed")).toBeNull();
+  } finally {
+    setContentLanguages(before);
+  }
+});
+
+it("takes a change's refusal away once the change no longer offers Undo", async () => {
+  const before = currentContentLanguages();
+  try {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+    const el = await mountMainsRenamed({
+      undoRefusals: { "mains-renamed": "Another section is now called Mains." },
+    });
+    const row = () => el.shadowRoot!.querySelector(`[data-change-row="mains-renamed"]`)!;
+    expect(text(row().querySelector("[data-undo-refusal]"))).toBe(
+      "Not undone. Another section is now called Mains.",
+    );
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    await el.updateComplete;
+    expect(row()).not.toBeNull();
+    expect(row().querySelector("[data-undo-refusal]")).toBeNull();
   } finally {
     setContentLanguages(before);
   }

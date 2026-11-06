@@ -305,10 +305,17 @@ export class MenuPreviewPanel extends LitElement {
   @state() private hiddenChangeIds = new Set<string>();
   #menuId: string | null = null;
   #actions: ReadonlyMap<string, MenuChangeAction> = new Map();
+  #positions: ReadonlyMap<MenuChange, number> = new Map();
   #actionsLanguages = "";
   #shownRefusals: Record<string, string> = {};
   /** Refusals drawn for the first time in this list, the only ones announced. */
   #freshRefusals = new Set<string>();
+  /** Changes whose Undo finished since their refusal was last drawn: a refusal after one is news
+   * even in the same words. */
+  #finishedUndos = new Set<string>();
+  /** Bumped per change at each announcement, so the refusal is drawn as a new element: an alert
+   * whose words did not change is not read out again. */
+  #refusalTurns = new Map<string, number>();
   #focusedUndo: string | null = null;
   #navigation = 0;
   @state() private navigationUnavailable = false;
@@ -412,11 +419,18 @@ export class MenuPreviewPanel extends LitElement {
       focused instanceof HTMLButtonElement && focused.classList.contains("undo")
         ? focused.dataset.undoChange!
         : null;
-    if (changed.has("undoRefusals")) {
+    const finished = changed.has("undoing") ? changed.get("undoing") : null;
+    if (typeof finished === "string" && this.undoing === null) this.#finishedUndos.add(finished);
+    if (changed.has("undoRefusals") || typeof finished === "string") {
       const shown = this.#shownRefusals;
       this.#freshRefusals = new Set(
-        Object.keys(this.undoRefusals).filter((id) => shown[id] !== this.undoRefusals[id]),
+        Object.keys(this.undoRefusals).filter(
+          (id) => shown[id] !== this.undoRefusals[id] || this.#finishedUndos.has(id),
+        ),
       );
+      for (const id of Object.keys(this.undoRefusals)) this.#finishedUndos.delete(id);
+      for (const id of this.#freshRefusals)
+        this.#refusalTurns.set(id, (this.#refusalTurns.get(id) ?? 0) + 1);
       this.#shownRefusals = this.undoRefusals;
     } else if (changed.has("preview")) this.#freshRefusals = new Set();
     const languages = currentContentLanguages().languages;
@@ -430,16 +444,21 @@ export class MenuPreviewPanel extends LitElement {
       this.navigationUnavailable = false;
       this.#navigation++;
       this.#actions = new Map();
+      this.#positions = new Map();
       this.#actionsLanguages = languages.join(" ");
       if (this.preview === null) return;
       this.#actions = menuChangeActions({ preview: this.preview, languages });
+      this.#positions = new Map(this.preview.changes.map((change, index) => [change, index]));
+      const listed = new Set(this.preview.changes.map((change) => change.id));
+      for (const id of this.#finishedUndos) if (!listed.has(id)) this.#finishedUndos.delete(id);
+      for (const id of this.#refusalTurns.keys())
+        if (!listed.has(id)) this.#refusalTurns.delete(id);
       const menuId = this.preview.document.menuId;
       if (this.#menuId !== menuId) {
         this.selectedView = null;
         this.hiddenChangeIds = new Set();
       } else {
-        const ids = new Set(this.preview?.changes.map((change) => change.id));
-        this.hiddenChangeIds = new Set([...this.hiddenChangeIds].filter((id) => ids.has(id)));
+        this.hiddenChangeIds = new Set([...this.hiddenChangeIds].filter((id) => listed.has(id)));
       }
       this.#menuId = menuId;
     }
@@ -495,14 +514,17 @@ export class MenuPreviewPanel extends LitElement {
   #renderRefusal(change: MenuChange, index: number) {
     const reason = this.undoRefusals[change.id];
     if (reason === undefined || this.#actions.get(change.id)?.kind !== "undo") return nothing;
-    return html`<p
-      class="error"
-      id=${`change-refusal-${index}`}
-      data-undo-refusal
-      role=${this.#freshRefusals.has(change.id) ? "alert" : nothing}
-    >
-      ${fill("menu_preview.undo_refused", { reason })}
-    </p>`;
+    return keyed(
+      this.#refusalTurns.get(change.id) ?? 0,
+      html`<p
+        class="error"
+        id=${`change-refusal-${index}`}
+        data-undo-refusal
+        role=${this.#freshRefusals.has(change.id) ? "alert" : nothing}
+      >
+        ${fill("menu_preview.undo_refused", { reason })}
+      </p>`,
+    );
   }
 
   /** One place inside a sentence. */
@@ -749,7 +771,7 @@ export class MenuPreviewPanel extends LitElement {
                   ${rows.map((change) => {
                     const target = this.#target(change);
                     const words = this.#words(change);
-                    const index = preview.changes.indexOf(change);
+                    const index = this.#positions.get(change)!;
                     return html`<li data-change-row=${change.id}>
                       <span id=${`change-words-${index}`}>${words}</span>
                       ${change.source === "this_menu" ? nothing : html`<span class="source">— ${this.#source(change)}</span>`}
