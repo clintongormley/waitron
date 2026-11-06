@@ -487,7 +487,7 @@ describe("boxHostRequests(): the other six requests", () => {
     ["a forget of upper-case hex", (c) => c.networkForget({ ssidHex: "FF" }, PERSON)],
     ["an unknown start screen", (c) => c.screenSet({ start: "Panel" as never }, PERSON)],
     ["an empty name tag", (c) => c.tagWrite({ name: "", live: true })],
-    ["a decomposed name tag", (c) => c.tagWrite({ name: "Café", live: true })],
+    ["a decomposed name tag", (c) => c.tagWrite({ name: "Cafe\u0301", live: true })],
     [
       "a name tag carrying an extra key",
       (c) => c.tagWrite({ name: "Bar", live: true, extra: 1 } as never),
