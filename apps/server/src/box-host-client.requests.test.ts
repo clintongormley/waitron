@@ -3,7 +3,14 @@ import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
-import { boxHostRequests, DEFAULT_HOST_READ_MS, type HostActor } from "./box-host-client.js";
+import {
+  type BoxHostRequests,
+  boxHostRequests,
+  DEFAULT_HOST_CHANGE_MS,
+  DEFAULT_HOST_READ_MS,
+  type HostActor,
+  type WifiJoin,
+} from "./box-host-client.js";
 import { answer, closeFakeBoxHosts, fakeBoxHost, noBoxHostPath } from "./testing/fake-box-host.js";
 
 const PERSON = { source: "person", person: "0b9c4a1e-6f1d-4c55-9a83-2f7d1e5c0a11" } as const;
@@ -234,4 +241,295 @@ describe("boxHostRequests().networkRead", () => {
       reason: "missing",
     });
   });
+});
+
+const PERSON_JSON = '{"source":"person","person":"0b9c4a1e-6f1d-4c55-9a83-2f7d1e5c0a11"}';
+const OK_EMPTY = '{"ok":true}\n';
+const refusedLine = (word: string) => `{"ok":false,"reason":"${word}"}\n`;
+
+type Call = (client: BoxHostRequests) => Promise<unknown>;
+const JOIN: WifiJoin = {
+  ssidHex: "4361666550657065",
+  keyMgmt: "wpa-psk",
+  psk: "abcdefgh",
+  hidden: false,
+};
+const SIX: Array<[string, Call]> = [
+  ["networkScan", (client) => client.networkScan(PERSON)],
+  ["networkJoin", (client) => client.networkJoin(JOIN, PERSON)],
+  ["networkForget", (client) => client.networkForget({ ssidHex: "4361666550657065" }, PERSON)],
+  ["screenRead", (client) => client.screenRead(SERVER)],
+  ["screenSet", (client) => client.screenSet({ start: "till" }, PERSON)],
+  ["tagWrite", (client) => client.tagWrite(null)],
+];
+const CHANGING = SIX.filter(([name]) => name !== "screenRead");
+
+describe("boxHostRequests(): the other six requests", () => {
+  const LINES: Array<[string, Call, string]> = [
+    ["networkScan", (c) => c.networkScan(PERSON), `network.scan {"actor":${PERSON_JSON}}`],
+    [
+      "networkJoin with wpa-psk",
+      (c) => c.networkJoin(JOIN, PERSON),
+      `network.join {"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":false,"actor":${PERSON_JSON}}`,
+    ],
+    [
+      "networkJoin with sae to a hidden network",
+      (c) => c.networkJoin({ ...JOIN, keyMgmt: "sae", hidden: true }, PERSON),
+      `network.join {"ssidHex":"4361666550657065","keyMgmt":"sae","psk":"abcdefgh","hidden":true,"actor":${PERSON_JSON}}`,
+    ],
+    [
+      "networkForget",
+      (c) => c.networkForget({ ssidHex: "4361666550657065" }, PERSON),
+      `network.forget {"ssidHex":"4361666550657065","actor":${PERSON_JSON}}`,
+    ],
+    ["screenRead", (c) => c.screenRead(SERVER), 'screen.read {"actor":{"source":"server"}}'],
+    [
+      "screenSet",
+      (c) => c.screenSet({ start: "till" }, PERSON),
+      `screen.set {"start":"till","actor":${PERSON_JSON}}`,
+    ],
+    [
+      "tagWrite with no tag",
+      (c) => c.tagWrite(null),
+      'tag.write {"tag":null,"actor":{"source":"server"}}',
+    ],
+    [
+      "tagWrite with a name",
+      (c) => c.tagWrite({ name: "Café Pepe", live: true }),
+      'tag.write {"tag":{"name":"Caf\\u00e9 Pepe","live":true},"actor":{"source":"server"}}',
+    ],
+  ];
+  for (const [name, call, line] of LINES) {
+    it(`sends exactly the protocol's line for ${name}`, async () => {
+      const host = await fakeBoxHost(answer(refusedLine("host_failed")));
+      await call(boxHostRequests({ socketPath: host.path }));
+      expect(host.lines).toEqual([line]);
+      expect(host.connections()).toBe(1);
+    });
+  }
+
+  it("answers the networks a scan found", async () => {
+    const host = await fakeBoxHost(
+      answer(
+        '{"ok":true,"networks":[{"ssidHex":"4361666550657065","signal":71,"security":"wpa-psk"},{"ssidHex":"ff","signal":0,"security":"other"}]}\n',
+      ),
+    );
+    expect(await boxHostRequests({ socketPath: host.path }).networkScan(PERSON)).toEqual({
+      available: true,
+      networks: [
+        { ssidHex: "4361666550657065", signal: 71, security: "wpa-psk" },
+        { ssidHex: "ff", signal: 0, security: "other" },
+      ],
+    });
+  });
+
+  it("answers a scan that found nothing", async () => {
+    const host = await fakeBoxHost(answer('{"ok":true,"networks":[]}\n'));
+    expect(await boxHostRequests({ socketPath: host.path }).networkScan(PERSON)).toEqual({
+      available: true,
+      networks: [],
+    });
+  });
+
+  it("answers exactly available for a started join and forget", async () => {
+    const host = await fakeBoxHost(answer(OK_EMPTY));
+    const client = boxHostRequests({ socketPath: host.path });
+    expect(await client.networkJoin(JOIN, PERSON)).toStrictEqual({ available: true });
+    expect(await client.networkForget({ ssidHex: "4361666550657065" }, PERSON)).toStrictEqual({
+      available: true,
+    });
+  });
+
+  it("answers the start screen the host read and set", async () => {
+    const host = await fakeBoxHost(answer('{"ok":true,"start":"till"}\n'));
+    const client = boxHostRequests({ socketPath: host.path });
+    expect(await client.screenRead(PERSON)).toEqual({ available: true, start: "till" });
+    expect(await client.screenSet({ start: "till" }, PERSON)).toEqual({
+      available: true,
+      start: "till",
+    });
+  });
+
+  for (const outcome of ["written", "removed", "unchanged"]) {
+    it(`answers the name tag ${outcome}`, async () => {
+      const host = await fakeBoxHost(answer(`{"ok":true,"tag":"${outcome}"}\n`));
+      expect(
+        await boxHostRequests({ socketPath: host.path }).tagWrite({ name: "Bar", live: false }),
+      ).toEqual({ available: true, tag: outcome });
+    });
+  }
+
+  const OWN_REFUSALS: Array<[string, Call, string]> = [
+    ["networkScan", SIX[0]![1], "busy"],
+    ["networkScan", SIX[0]![1], "no_wifi"],
+    ["networkJoin", SIX[1]![1], "busy"],
+    ["networkJoin", SIX[1]![1], "no_wifi"],
+    ["networkForget", SIX[2]![1], "busy"],
+    ["networkForget", SIX[2]![1], "not_saved"],
+    ["tagWrite", SIX[5]![1], "busy"],
+    ["tagWrite", SIX[5]![1], "no_free_token"],
+    ["tagWrite", SIX[5]![1], "header_unreadable"],
+    ["tagWrite", SIX[5]![1], "no_space"],
+  ];
+  const PROTOCOL_REFUSALS = SIX.flatMap(([name, call]) =>
+    ["request_invalid", "actor_invalid", "fields_invalid", "host_failed"].map(
+      (word): [string, Call, string] => [name, call, word],
+    ),
+  );
+  for (const [name, call, word] of [...OWN_REFUSALS, ...PROTOCOL_REFUSALS]) {
+    it(`answers refused for ${name}'s ${word}`, async () => {
+      const host = await fakeBoxHost(answer(refusedLine(word)));
+      expect(await call(boxHostRequests({ socketPath: host.path }))).toEqual({
+        available: false,
+        reason: "refused",
+        refusal: word,
+      });
+    });
+  }
+
+  const OTHERS_REFUSALS: Array<[string, Call, string]> = [
+    ["networkJoin", SIX[1]![1], "not_saved"],
+    ["networkForget", SIX[2]![1], "no_wifi"],
+    ["screenSet", SIX[4]![1], "busy"],
+  ];
+  for (const [name, call, word] of OTHERS_REFUSALS) {
+    it(`answers malformed for ${word}, which ${name} may not answer`, async () => {
+      const host = await fakeBoxHost(answer(refusedLine(word)));
+      expect(await call(boxHostRequests({ socketPath: host.path }))).toEqual({
+        available: false,
+        reason: "malformed",
+      });
+    });
+  }
+
+  it("reads unknown_request as unsupported for that request only", async () => {
+    const host = await fakeBoxHost((line, socket) =>
+      socket.end(
+        line.startsWith("network.scan ") ? refusedLine("unknown_request") : SNAPSHOT_REPLY,
+      ),
+    );
+    const client = boxHostRequests({ socketPath: host.path });
+    const unsupported = { available: false, reason: "unsupported", detail: "unknown_request" };
+    expect(await client.networkScan(PERSON)).toEqual(unsupported);
+    expect(await client.networkRead(PERSON)).toEqual(SNAPSHOT);
+    expect(await client.networkScan(PERSON)).toEqual(unsupported);
+    expect(host.connections()).toBe(3);
+  });
+
+  const UNSENDABLE_CALLS: Array<[string, Call]> = [
+    ["a join with wpa-eap", (c) => c.networkJoin({ ...JOIN, keyMgmt: "wpa-eap" as never }, PERSON)],
+    [
+      "a join with a 7-character password",
+      (c) => c.networkJoin({ ...JOIN, psk: "abcdefg" }, PERSON),
+    ],
+    [
+      "a join carrying an extra key",
+      (c) => c.networkJoin({ ...JOIN, note: "x" } as WifiJoin, PERSON),
+    ],
+    ["a forget of upper-case hex", (c) => c.networkForget({ ssidHex: "FF" }, PERSON)],
+    ["an unknown start screen", (c) => c.screenSet({ start: "Panel" as never }, PERSON)],
+    ["an empty name tag", (c) => c.tagWrite({ name: "", live: true })],
+    ["a decomposed name tag", (c) => c.tagWrite({ name: "Café", live: true })],
+    [
+      "a name tag carrying an extra key",
+      (c) => c.tagWrite({ name: "Bar", live: true, extra: 1 } as never),
+    ],
+    ["a scan asked by the server", (c) => c.networkScan(SERVER as never)],
+  ];
+  for (const [name, call] of UNSENDABLE_CALLS) {
+    it(`answers invalid, and sends nothing, for ${name}`, async () => {
+      const host = await fakeBoxHost(answer(OK_EMPTY));
+      expect(await call(boxHostRequests({ socketPath: host.path }))).toEqual({
+        available: false,
+        reason: "invalid",
+      });
+      expect(host.connections()).toBe(0);
+    });
+  }
+
+  for (const [name, call] of CHANGING) {
+    it(`${name} waits changeMs before answering timeout`, async () => {
+      const host = await fakeBoxHost(() => {});
+      const started = performance.now();
+      expect(await call(boxHostRequests({ socketPath: host.path, changeMs: 200 }))).toEqual({
+        available: false,
+        reason: "timeout",
+      });
+      const elapsed = performance.now() - started;
+      expect(elapsed).toBeGreaterThanOrEqual(190);
+      expect(elapsed).toBeLessThan(1000);
+    });
+  }
+
+  it("screenRead waits readMs, not changeMs", async () => {
+    const host = await fakeBoxHost(() => {});
+    const started = performance.now();
+    expect(
+      await boxHostRequests({ socketPath: host.path, readMs: 200, changeMs: 5000 }).screenRead(
+        SERVER,
+      ),
+    ).toEqual({ available: false, reason: "timeout" });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it("networkScan waits changeMs, not readMs", async () => {
+    const host = await fakeBoxHost(() => {});
+    const started = performance.now();
+    expect(
+      await boxHostRequests({ socketPath: host.path, readMs: 200, changeMs: 600 }).networkScan(
+        PERSON,
+      ),
+    ).toEqual({ available: false, reason: "timeout" });
+    expect(performance.now() - started).toBeGreaterThanOrEqual(590);
+  });
+
+  it("waits twenty seconds by default for a change, past the host's own fifteen", () => {
+    expect(DEFAULT_HOST_CHANGE_MS).toBe(20_000);
+    expect(DEFAULT_HOST_CHANGE_MS).toBeGreaterThan(15_000);
+  });
+});
+
+describe("boxHostRequests().networkJoin keeps the password in the request line", () => {
+  const CANARY = "Canary-psk-7f3a91";
+  const CANARY_JOIN: WifiJoin = { ...JOIN, psk: CANARY };
+  const INVALID = { available: false, reason: "invalid" };
+  const RUNS: Array<[string, (line: string, socket: Socket) => void, WifiJoin, object]> = [
+    ["a started join", answer(OK_EMPTY), CANARY_JOIN, { available: true }],
+    [
+      "a busy refusal",
+      answer(refusedLine("busy")),
+      CANARY_JOIN,
+      { available: false, reason: "refused", refusal: "busy" },
+    ],
+    [
+      "a reply that names the password",
+      answer('{"ok":true,"psk":"Canary-psk-7f3a91"}\n'),
+      CANARY_JOIN,
+      { available: false, reason: "malformed" },
+    ],
+    [
+      "a refusal worded as the password",
+      answer('{"ok":false,"reason":"Canary-psk-7f3a91"}\n'),
+      CANARY_JOIN,
+      { available: false, reason: "malformed" },
+    ],
+    ["no reply", answer(""), CANARY_JOIN, { available: false, reason: "lost" }],
+    [
+      "a join the protocol refuses to write",
+      answer(OK_EMPTY),
+      { ...CANARY_JOIN, keyMgmt: "wpa-eap" as never },
+      INVALID,
+    ],
+  ];
+  for (const [name, reply, join, expected] of RUNS) {
+    it(`keeps it out of the answer for ${name}`, async () => {
+      const host = await fakeBoxHost(reply);
+      const result = await boxHostRequests({ socketPath: host.path }).networkJoin(join, PERSON);
+      expect(JSON.stringify(result)).not.toContain(CANARY);
+      expect(result).toStrictEqual(expected);
+      expect(host.lines.map((line) => line.split(CANARY).length)).toEqual(
+        expected === INVALID ? [] : [2],
+      );
+    });
+  }
 });

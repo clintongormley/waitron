@@ -238,11 +238,52 @@ export interface NetworkSnapshot {
     failure: WifiCopyFailure | null;
   };
 }
+export type StartScreen = "dashboard" | "till";
+export type ScanSecurity = "wpa-psk" | "sae" | "other";
+export interface ScannedNetwork {
+  ssidHex: string;
+  signal: number;
+  security: ScanSecurity;
+}
+export type WifiJoin = {
+  ssidHex: string;
+  keyMgmt: "wpa-psk" | "sae";
+  psk: string;
+  hidden: boolean;
+};
+export type NameTag = { name: string; live: boolean } | null;
+export type TagOutcome = "written" | "removed" | "unchanged";
+export type NetworkScanRefusal = ProtocolRefusal | "busy" | "no_wifi";
+export type NetworkJoinRefusal = ProtocolRefusal | "busy" | "no_wifi";
+export type NetworkForgetRefusal = ProtocolRefusal | "busy" | "not_saved";
+export type TagWriteRefusal =
+  ProtocolRefusal | "busy" | "no_free_token" | "header_unreadable" | "no_space";
+
 export interface BoxHostRequests {
   networkRead(actor: HostActor): Promise<HostAnswer<NetworkSnapshot, ProtocolRefusal>>;
+  networkScan(
+    actor: PersonActor,
+  ): Promise<HostAnswer<{ networks: readonly ScannedNetwork[] }, NetworkScanRefusal>>;
+  networkJoin(
+    join: WifiJoin,
+    actor: PersonActor,
+  ): Promise<HostAnswer<Record<never, never>, NetworkJoinRefusal>>;
+  networkForget(
+    forget: { ssidHex: string },
+    actor: PersonActor,
+  ): Promise<HostAnswer<Record<never, never>, NetworkForgetRefusal>>;
+  screenRead(actor: HostActor): Promise<HostAnswer<{ start: StartScreen }, ProtocolRefusal>>;
+  screenSet(
+    set: { start: StartScreen },
+    actor: PersonActor,
+  ): Promise<HostAnswer<{ start: StartScreen }, ProtocolRefusal>>;
+  /** Always sent as the server: the only actor `tag.write` accepts. */
+  tagWrite(tag: NameTag): Promise<HostAnswer<{ tag: TagOutcome }, TagWriteRefusal>>;
 }
 
 export const DEFAULT_HOST_READ_MS = 5_000;
+/** Longer than the host unit's `RuntimeMaxSec=15`, so the host ends a stuck change first. */
+export const DEFAULT_HOST_CHANGE_MS = 20_000;
 
 async function request<Value extends object, Refusal extends string>(
   socketPath: string,
@@ -280,7 +321,15 @@ export function boxHostRequests(
 ): BoxHostRequests {
   const socketPath = deps.socketPath ?? DEFAULT_SOCKET_PATH;
   const readMs = deps.readMs ?? DEFAULT_HOST_READ_MS;
+  const changeMs = deps.changeMs ?? DEFAULT_HOST_CHANGE_MS;
   return {
     networkRead: (actor) => request(socketPath, "network.read", {}, actor, readMs),
+    networkScan: (actor) => request(socketPath, "network.scan", {}, actor, changeMs),
+    networkJoin: (join, actor) => request(socketPath, "network.join", join, actor, changeMs),
+    networkForget: (forget, actor) =>
+      request(socketPath, "network.forget", forget, actor, changeMs),
+    screenRead: (actor) => request(socketPath, "screen.read", {}, actor, readMs),
+    screenSet: (set, actor) => request(socketPath, "screen.set", set, actor, changeMs),
+    tagWrite: (tag) => request(socketPath, "tag.write", { tag }, { source: "server" }, changeMs),
   };
 }
