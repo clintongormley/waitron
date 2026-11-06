@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { BillPaymentView, OriginalReceiptPrint } from "../api/client.js";
@@ -58,6 +59,13 @@ const text = (el: TillPaidView, selector: string) =>
   el.shadowRoot!.querySelector(selector)?.textContent?.replace(/\s+/g, " ").trim();
 const button = (el: TillPaidView, test: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`);
+const billsLeftLine = (bills: string) => t("paid.bills_left").replace("{bills}", () => bills);
+/** Where the element's text ends: a block's own box stays its parent's width while its text overflows. */
+function textRight(el: TillPaidView, selector: string): number {
+  const range = document.createRange();
+  range.selectNodeContents(el.shadowRoot!.querySelector(selector)!);
+  return range.getBoundingClientRect().right;
+}
 
 beforeEach(() => setLocale("es-ES"));
 afterEach(() => {
@@ -220,7 +228,7 @@ describe("till-paid-view", () => {
   it("with other bills to pay, lists them under the summary and has no Finish table, Back being primary", async () => {
     const el = await mount({ tableName: "Mesa 4 · Cuenta 1", billsLeft: ["Cuenta 2", "Cuenta 3"] });
     expect(text(el, "[data-paid-title]")).toBe("Mesa 4 · Cuenta 1 pagada");
-    expect(text(el, "[data-paid-left]")).toBe("Queda por pagar: Cuenta 2, Cuenta 3");
+    expect(text(el, "[data-paid-left]")).toBe(billsLeftLine("Cuenta 2, Cuenta 3"));
     expect(
       el.shadowRoot!.querySelector("[data-paid-summary] ~ [data-paid-left]"),
       "the list follows the summary",
@@ -239,7 +247,24 @@ describe("till-paid-view", () => {
 
   it("writes a bill's typed name as typed, even one holding a replacement pattern", async () => {
     const el = await mount({ billsLeft: ["Cuenta 2 · A$&B", "Cuenta 3 · $'"] });
-    expect(text(el, "[data-paid-left]")).toBe("Queda por pagar: Cuenta 2 · A$&B, Cuenta 3 · $'");
+    expect(text(el, "[data-paid-left]")).toBe(billsLeftLine("Cuenta 2 · A$&B, Cuenta 3 · $'"));
+  });
+
+  it("breaks a long unbroken bill name inside the banner on a phone, leaving nothing to scroll to", async () => {
+    const oldWidth = window.innerWidth;
+    const oldHeight = window.innerHeight;
+    await page.viewport(390, 844);
+    try {
+      const name = "M".repeat(60);
+      const el = await mount({ tableName: name, billsLeft: [name] });
+      const banner = el.shadowRoot!.querySelector(".banner")!.getBoundingClientRect();
+      for (const selector of ["[data-paid-title]", "[data-paid-left]"]) {
+        expect(textRight(el, selector), selector).toBeLessThanOrEqual(banner.right);
+      }
+      expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+    } finally {
+      await page.viewport(oldWidth, oldHeight);
+    }
   });
 
   it("speaks English in the list", async () => {

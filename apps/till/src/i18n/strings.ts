@@ -3557,7 +3557,7 @@ export const es: Record<StringKey, string> = {
   "paid.title": "{table} pagada",
   "paid.summary": "{amount} en {n} pagos · factura simplificada emitida",
   "paid.summary_one": "{amount} en un pago · factura simplificada emitida",
-  "paid.bills_left": "Queda por pagar: {bills}",
+  "paid.bills_left": "Por pagar: {bills}",
   "paid.ticket_sent": "Ticket enviado",
   "paid.ticket_failed": "No se ha podido imprimir",
   "paid.ticket_not_printed": "No se ha impreso ticket",

@@ -44,6 +44,10 @@ export class TillPaidView extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-xl);
       }
+      h2,
+      [data-paid-left] {
+        overflow-wrap: anywhere;
+      }
       .tick {
         color: var(--wt-color-success);
       }
