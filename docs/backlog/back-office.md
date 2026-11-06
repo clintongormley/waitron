@@ -21,23 +21,6 @@ lists everything that goes. These backlog lines go stale with that slice, not be
 - `docs/developers/products.md:563`, `:784-785`, `:891`, `docs/developers/design-system.md:2863`, `:2882`,
   `:2980`, `docs/developers/ci-and-gates.md:278`, `:319`, `docs/developers/conventions-data.md:1352`.
 
-## Comments and test titles left open by #615
-
-Read, not run:
-
-- `alert.not_found` was documented as never revealing which case applied, but
-  `apps/server/src/alerts-api.ts` answers `authorization.not_permitted` for an incident the session
-  cannot see and `alert.not_found` for a missing id, so a caller can tell a real incident exists.
-- `mirror.bundle_fetch_failed` was documented as logging its cause; nothing logs it
-  (`mirror-bundle-fetch.ts` discards the caught error). Whether it should is open.
-- `packages/server-kit/src/request-screens.ts` says its screens are the only refusal and an
-  unparseable value is stored; a foreign-key column refuses it.
-- Test titles: "not an opaque 500" and "non-uuid" titles in `management-api-passkey.test.ts`,
-  `catalogue-api.test.ts` and `recipe-api.test.ts`, "option groups, gates, by-id FKs" in
-  `catalogue-api.full-manifest.test.ts` (option groups no longer exist), "(Task 7)" in
-  `management-api.accounts-and-receipt-config.test.ts`, "(Task 4)" in
-  `management-api.device-profiles.test.ts`, and "KDS-1" and "KDS-2" in `management-api.test.ts`.
-
 ## A supplier credit note cannot be entered through the dashboard
 
 **OPEN, unqueued.** A negative gross total on the purchase-invoice routes is a supplier credit
@@ -48,14 +31,17 @@ dashboard form's
 the ruling calls legitimate. Nobody has decided whether the form should be relaxed or the credit
 note should become its own document type.
 
-## Loose ends left by service Task 12 (#923, adjustment reports)
+## Bundle: One design for supplier invoices and credit notes
 
-- A weighed item cancelled in part can differ by a cent between the cancel's list value and what
-  stays on the line, so a rate can be a cent's share off. **Next action:** none unless someone
-  sees it matter.
-- With no day picked, a screen left open past the day's cutover moves to the new, empty day; the
-  date inputs show it, nothing announces it. **Next action:** decide whether it should keep the
-  day it opened on.
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1326. Design what supplier invoices should be — OPEN, needs a design (owner, 2026-11-04).** A
+  basic version is built: the dashboard's Purchases screen adds, edits and deletes them, and they feed
+  the deductible VAT in the modelo 303. The owner treats this as future work. Until the design, a
+  deleted or changed invoice leaves no trace, though it may have fed a VAT return. A1308 leaves the
+  tables as they are and logs nothing.
+- **A supplier credit note cannot be entered through the dashboard** — OPEN, unqueued.
+  [Detail](back-office.md#a-supplier-credit-note-cannot-be-entered-through-the-dashboard)
 
 ## Decisions and deliberate limits
 

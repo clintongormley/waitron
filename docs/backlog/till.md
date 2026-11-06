@@ -18,17 +18,6 @@ their full text.
   writer makes two live tables follow one master table today); the delivery-release trigger
   accepts an empty label.
 
-## Loose ends left by A366 slice 5 Part A (#1479).
-
-- Duplicating a till or handheld profile whose station list holds only switched-off stations is
-  refused with the general `device_profile.access_invalid` message. The copy drops switched-off
-  stations and the server refuses the emptied list; keeping them would need the create route to
-  know it is making a copy.
-- Two device choices can lose a switched-off entry. A returning device accepted in Pair starts
-  without its switched-off stations and zones; and in Devices → edit a kitchen screen kind the
-  profile no longer shows is dropped from the draft, so it is lost if the choice is changed and
-  saved.
-
 ## Split-off checks may reach the same path as a held-order edit that changes sent lines
 
 - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
@@ -350,16 +339,6 @@ the floor-wide reset counts as waiting (`refusedByAModule` in `apps/server/src/f
 Raised in A579 part 4b's finish review and its fix report; neither changed. Next: reproduce each in a
 test, then decide whether Reset table waits as the floor-wide reset does.
 
-## A604. A split-off table the till's read leaves out could make Reset table refuse as out of date
-
-**A604 (2026-10-13).** The till builds Reset table's list from the split-off tables its floor read
-holds (`resetTableOf`, `apps/till/src/state/floor-today.ts`), and the read keeps only tables in
-service; the server counts every split-off table (`resetTable`,
-`apps/server/src/floor-today-reset-table.ts`). A split-off table missing from the read would make the
-till send too few and be refused `joined_table.out_of_date` every time. Join again had the same line.
-A579 part 4b's review found it by reading; whether a split-off table can be out of service was not
-checked. Next: find whether that state can be reached, and if so make the two lists agree.
-
 ## A598. A table held by guests when its joined table went live is neither joined nor split off
 
 **A598 (2026-10-13).** Split tables… on a joined table leaves a table that a party held when the
@@ -403,35 +382,6 @@ food sent yet does not count, so the reset can put the joined table back whole o
 fix worker in #1604's finish run and not changed. Next: decide whether an open order counts as busy
 here, and check what the reset does with that order's table.
 
-## A567. An edit to the recorded layout of a waiting joined table can shift where its tables land
-
-**A567 (2026-10-13).** A split joined table waits for the reset while one of its tables is busy.
-An edit to the recorded set's layout of the zone that changes its tables meanwhile can shift where later tables land when
-it is split or joined again. #1604 accepted it for now; #1608's plan notes that Join again lays
-out from the same slots, and Reset table, which replaced Join again in A579, does too (`slotStart`, `apps/server/src/joined-split-layout.ts`). Left open by A503
-(#1604, #1608). Next: decide whether such an edit waits for the reset, or the layout keeps the
-tables it split from.
-
-## A568. A part placed on today's map while its joined table waited keeps its place
-
-**A568 (2026-10-13).** A table placed on today's map while its joined table waited for the
-reset, and free when the joined table went live, keeps its place on today's map until the next
-reset; the till hides it (`outOfServiceJoined`, `apps/till/src/state/floor-today.ts`). Left open by
-A503 part 2 (#1601). Next: decide whether putting the joined table back also takes the table off
-today's map.
-
-## A569. The floor plan editor's Made of picker and two wraps
-
-**A569 (2026-10-13).** The Add joined table window's Made of is a dropdown (`wt-combobox
-multiple`, `apps/dashboard/src/screens/floor-plan-add-joined-table.ts`), not mockup 5's inline
-list, because no inline multi-pick primitive exists. #1601's look also saw, at 1280 px, the tables
-list's Made of column wrap to two lines, and in Spanish the two Add buttons stack. Left open by
-A503 part 2 (#1601). Next: an inline multi-pick primitive, and the owner's call on the two wraps.
-
-2026-10-16: A671 replaces the Add button placement and column arrangement. Their current contract
-is in [design-system.md](../developers/design-system.md#departments-and-zones). The remaining open
-work here is the inline Made of picker and how its parts wrap.
-
 ## A turned floor plan table narrower than its unturned box stops short of the plan's left or top edge
 
 **Left open by A672 (2026-10-16).** A table's saved x and y are its corner before it is turned, and
@@ -444,37 +394,6 @@ growth then the same shrink need not put the table back
 Owner question asked 2026-10-16: (a) keep it so, which is what A672 built; or (b) let a saved
 position go below 0 so the turned outline can touch the edge, a separate job in which the database
 and the server accept a wider range. Pictures were removed from the repository on 2026-11-02. Next: the owner's answer.
-
-## A570. A table split off a joined table whose removal was refused cannot be moved
-
-**A570 (2026-10-13).** When a joined table's removal is refused, its split rows stay
-(`deleteWithItsSplit`, `apps/server/src/table-removal.ts`), so a table split off it is refused
-Back and Take off (`table.split_off`), and Reset table (Join again before A579) has no joined table on
-today's plan to put back.
-Review M1 of #1608's tasks 1a–4 found it reached only through a party record left by an older
-version. Left open by A503 part 4 (#1608). Next: decide whether a refused removal also ends the
-split for the tables split off it.
-
-## A571. A joined table that came apart cannot reach Reset table when its free tables are off the map
-
-**A571 (2026-10-13).** A joined table that has come apart is hidden from the till's map
-(`outOfServiceJoined`), and a split-off table that is taken off or has no place is offered no
-action (`sheetActions`; both in `apps/till/src/state/floor-today.ts`). When those are its only
-free split-off tables, Reset table (Join again before A579) is offered nowhere; the reset still puts it back. #1608's plan
-found this state made by Back or Take off on a split-off table, which #1608 now refuses (design gap
-7). Left open by A503 part 4 (#1608). Next: decide whether the zone menu offers Reset table.
-
-## A572. Reset table puts back a joined table with its full seats while a table its layout adds still has guests
-
-**A572 (2026-10-13).** A room's reset while guests sit at a table the recorded layout adds to a
-joined table leaves the joined table's whole group waiting (the case "leaves Long table's whole group
-waiting: Long table cannot be put on the map", `apps/server/src/floor-today-reset-table.test.ts`).
-Reset table on that joined table, once it has come apart, puts it back as the recorded layout has
-it, with its full seats, and asks for none, while the added table still has guests: the case "brings
-Long table back at its saved place, not where staff moved it" in the same file expects Long table's
-10 seats while Counter 3's guests stay. #1608's first Codex review found the earlier form of this
-(design gap 8). Left open by A503 part 4 (#1608). Next: decide whether that table counts as staying
-apart.
 
 ## A575. Reset table's window: two things seen in #1608's look
 
@@ -563,16 +482,6 @@ To decide before building:
 - Paying when ordering or on delivery, and when the fiscal record is made.
 - How staff see an order go out and come back, and how the customer is told it is on its way.
 
-## A phone's Chrome drew a white page for the box (watch, not a job yet)
-
-- **A phone's Chrome drew a white page for the box (owner's phone, 2026-10-08; watch, not a job
-  yet).** The phone's Chrome showed a white page for every box address (`/`, `/dashboard`, the
-  box's IP) while the laptop drew it. Read over USB debugging, the page had loaded without errors
-  and the join screen's element measured 679 px tall, while the owner still saw white; quitting
-  and reopening Chrome fixed it. A browser fault or something of ours covering the page — not told
-  apart. If it recurs, attach over USB before restarting Chrome: take a screenshot through the
-  debugger and ask `elementFromPoint` what is on top. Seen while reporting A414.
-
 ## A436 — a kitchen display with someone signed in, logged out only after a long idle time
 
 - **Owner, 2026-10-08, answering decisions 4 and 5 of the
@@ -603,95 +512,6 @@ To decide before building:
 the remaining preparation actions and planned pass release rather than extend those former marks.
 
 **2026-11-04, A773-2 PR D:** the marks' table was dropped (core 0205).
-
-## Task 7 (#789, each person's draft kept on the server)
-
-**2026-10-19, A773-1:** the [per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
-supersedes the per-person draft model in this historical list. Reassess the history and validation
-observations against that design; the original observations below are not fresh verification.
-
-- **Task 7 (#789, each person's draft kept on the server).** Left open:
-  - A draft that moves to the other party in a merge, because its owner had none there, records
-    no history event: the event kinds have no "moved".
-  - The server's own `unavailable` flag (`apps/server/src/order-drafts.ts`) does not flag a line
-    whose options list is unanswered (refused at submission `options.label_required`), a
-    fractional quantity of a dish sold whole (`quantity.invalid`), or a menu version no longer
-    live (`menu.version_changed`).
-    For the first two, since Task 8 the till marks such a line `unit_changed` once the table's
-    offers are read (`lineBlock`, `apps/till/src/state/menu-refresh.ts`); it moves a line saved
-    against an older version to the live one.
-  - Only the draft routes fold the ids in the path to lower case (`requireDraftPartyParam`,
-    `apps/server/src/till-api.ts`, and `submitDraft`'s `joinGroupId`); the other party routes
-    only check that the id is an id, and the group submission passes `joinGroupId` on as sent.
-  - A save must carry `draftId` and `revision` even for a new draft. A chosen option whose label
-    id is not a UUID is refused `options.invalid` at save, where pricing answers
-    `options.label_required`. An options or extras refusal at save names only the field, not the
-    line, and the till shows one message for the whole draft (`asRefusal`,
-    `apps/till/src/state/draft-sync.ts`), so it names no line.
-  - Ruling made on the branch for the owner to confirm: a line whose quantity is not a
-    whole number never adds into another line. The takeover and finish-with-drafts rulings are
-    superseded by the [per-bill ownership decision](#one-editor-per-bill-owner-2026-10-17-a773).
-
-## Task 8 (#806, the till works from the server's drafts)
-
-Left open:
-
-- Saving and sending:
-  - If someone else signs in while a sign-out is still waiting for its save, the till skips
-    signing the first person out on the server, so that session lasts until it expires.
-  - A send cut off by the 150-second limit is not sent again, and after a reply that never
-    came the draft can stay locked for up to two limits: the send, then the re-read.
-  - When a send is refused because the menu changed, the re-read of the table's menu runs
-    outside that limit.
-  - While the till follows a party onto its next bill, the screen can show no draft for a
-    moment; and when a merge or move coincides with a refused save, the save's message can
-    replace "another device changed this table".
-- Other people's drafts:
-  - At phone width nothing on the menu view says other people have drafts on the table; the
-    button reads "Review (0)". The floor's mark does say so.
-  - The Spanish "has taken over this order" wording has no test.
-- The table screen:
-  - Seating a table whose answer arrives while a newer table is still opening shows the seated
-    table briefly before the newer one replaces it.
-  - A refused seat leaves the till pointing at the refused table.
-  - If the screen widens while Back on the Review view has focus, focus goes to the page.
-  - A dish no longer on the menu shows an empty name on its tick button in the person's own
-    draft, and in the spoken names of its course picker and Split quantity button (read in
-    the code, not run).
-  - The last-added bar is empty for a draft first read back from the server until the next tap.
-  - While a weight is being entered, the weight entry covers the bottom of the menu and the
-    bar.
-  - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and
-    calls them "items", so the two can differ for one draft.
-  - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on
-    Review; its unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
-  - The counter's basket also tracks its last-added line, which it does not use.
-- Menu changes:
-  - The server's "cannot be sold" mark is dropped once the till's newer menu read passes the
-    line. That the two checks agree was read, not run; if they differ, one Send is refused
-    `product.unavailable` and the line is marked again, which a test covers.
-  - Every line priced under an older menu version is asked about whenever the server's draft
-    replaces the till's lines (a reload, a re-read, a take-over), so the question comes more
-    often than it would for a person who watched the menu change.
-  - A line naming a version the till does not hold costs one more read of the table's menu.
-  - The "The menu has changed" dialog shows a focus ring round the whole dialog box.
-- Tests: the accessibility test "has no violations with the round grid, the per-line course
-  picker and the open tab drawer" no longer scans the menu grid (a phone test does), but kept
-  its name. `repriceRebuilt`'s `menuItemId ?? ""` fallback
-  (`apps/till/src/state/menu-refresh.ts`) is not covered. Whether a real till's browser ever
-  paints the narrow layout for one frame before going side by side was not measured.
-- Rulings made on the branch for the owner to confirm:
-  - after a reload the old price of a line is not known, so the till asks about every line on
-    an older menu version, showing the new price alone, instead of storing prices on the
-    server;
-  - the two layouts are chosen by the screen's width against 720 px, not by the kind of
-    device, so a tablet held upright shows the menu and the draft side by side;
-  - −1 on the last-added bar at one takes the line out;
-  - anyone may take a draft over, including the person it was taken from;
-  - a line counts as unsellable when the till's check or the server's says so, and the
-    server's mark gives way to a newer menu read on the till;
-  - Cancel on the menu-change question holds until the next publish, re-read or Send, not
-    the next poll.
 
 ## Task 11 (#916, cancellations, comps and discounts; B11a–B11g)
 
@@ -955,19 +775,6 @@ which resizes the outer page and leaves the components' own iframe alone
   inside the card; in the menus Task 9 screenshots opened at 390 and 1280 px no name or price
   crossed a border. Looked at, not measured: close once someone measures it.
 
-## Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was being re-read is still hidden when the till follows the party onto its next tab
-
-**2026-10-19, A773-1:** the explanation below predates the
-[per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
-Keep the floor-read race as an unchecked observation; its old explanation does not establish how
-the bill-specific draft handles that race.
-
-- **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
-  being re-read is still hidden when the till follows the party onto its next tab** (the second
-  finding of the retroactive Codex review of #719). The review's probe tested code since rewritten
-  — the draft now lives on the party, on the server and in `DraftSync`, so nothing is carried
-  between tabs — and was not re-run against the new code.
-
 ## Till route-to-profile checks and printer identity
 
 Keep a maintained route-to-profile-action table with a guard that walks the routes. Printer
@@ -1206,58 +1013,6 @@ A238 (landed as #1164) and A239.
   (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
   empty and shows a refusal as a `role="alert"` paragraph.
 
-## Three till loading lines may not be announced
-
-- **Three till loading lines may not be announced** (found 2026-10-03 in review of lane C's W23).
-  The schedule screen (`apps/till/src/screens/till-schedule-screen.ts`, #1103), the lock screen and
-  the device chooser each insert a `role="status"` element already holding the loading text and
-  remove it when loading ends. W3C's technique ARIA22
-  (https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22) tests: _"Check that the container destined
-  to hold the status message has a role attribute with a value of status before the status message
-  occurs."_ The review's run-it seat watched the lock screen's and device chooser's DOM in Chromium:
-  each status element was inserted already holding its text and removed when loading ended. The
-  schedule screen's was read, not run, and no real screen reader was tried. **Next action:** decide
-  whether to keep an empty status region on the page and fill it later, and test that sequence.
-
-## Unresolved observation from W101 verification
-
-Left open by W101 (#1351).
-
-**Unresolved observation from W101 verification:** two full local `@waitron/till test:coverage`
-runs logged an unhandled rejection in `#holdIdentity` while `#switchProfile` was reading identity:
-`Cannot read properties of null (reading 'approvedProfiles')`. Both completed with every test
-passing; the second met coverage. Receipts: `~/waitron-campaign-d/receipts/w101/till-full-coverage.log`
-and `till-full-coverage2.log`. The triggering test and cause are unverified; isolate the profile-switch
-case and its identity response before choosing a fix. Transfer-focused runs did not log this rejection.
-
-2026-10-09: A366-3A's A11 `pnpm --filter @waitron/till exec vitest run` also logged this
-rejection from `#switchProfile` and reported 5,897 passing tests. That run does not establish its
-cause; retain the investigation above. Local receipt: Lane E's `receipts/a366-3a/a11-till.log`.
-
-2026-10-09: A366-3A's A13 affected-file run (`pnpm --filter @waitron/till exec vitest run`,
-with the seven files named in `~/waitron-campaign-e/receipts/a366-3a/a13-final-family.log`)
-reported 1,406 passing tests and logged the same rejection from `#switchProfile`. The cause
-remains unverified.
-
-2026-10-09: A366-3B's affected-file run reported 1,373 passing tests and logged the same
-`#holdIdentity` rejection. Receipt: Lane D `receipts/a366-3b/b4-consumers.log`; no profile-switch
-fix or new cause is claimed.
-
-2026-10-16: A739a's `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts`
-reported 961 passing tests and logged the same `#holdIdentity` null-identity rejection. The
-triggering case and cause remain unverified. Local receipt: Lane F's
-`receipts/a739a-outcome/controller-all.log`. No profile-switch change was made.
-
-
-2026-10-18: A682 isolated `till-app.test.ts`'s "does not leave the dialog busy when a step after
-the switch throws" with `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t
-'does not leave the dialog busy when a step after the switch throws'`. That run passed one case,
-skipped the other 1,012 and logged the same null-identity rejection. The case deliberately returns
-null after switching and asserts one captured rejection. This reproduces one test source of the
-message; it does not attribute every historical run or establish whether a real device response
-can be null. Receipt: Lane F `receipts/resume-a682-extra-pairs/profile-rejection-probe.log`.
-
-
 ## A card payment stuck `attempting` holds its device's profile switch
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:
@@ -1286,17 +1041,6 @@ Left open by W97 (#1311), found in its review and not fixed on the branch:
   last today. Edit and Duplicate fail with a read error when the departments and zones read
   fails, and its lists do not update while the editor is open.
 
-## Table states and signals (A267)
-
-- **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
-  states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
-  booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
-  which customers can trigger (asking for the bill or calling a waiter from a QR code), whether
-  marking a table reserved by hand becomes a built-in action, and whether the hand-set labels on
-  Venue settings › Tables are still needed after that — the owner expects they may not be, and if
-  they stay, they sit beside a table's state as labels rather than being states. From A261 §10.
-  **2026-10-19:** A757 slice 2 retired the hand-set labels and the Tables tab.
-
 ## The till's menu reads (Task 7, #719)
 
 Every `/api/menu-state` poll waits its turn in the
@@ -1310,15 +1054,6 @@ later refinement. The basket comparison does not notice a publish that adds a re
 list to a dish in the basket, or lowers a list's picks limit, so the till takes the new version
 silently and the server then refuses `options.label_required` (or `extras.limit_exceeded`): staff
 see a refusal where the dialog should have asked.
-
-## Every remembered round is marked again against the open table's menu
-
-- **Every remembered round is marked again against the open table's menu**, so opening a table in
-  another service zone can mark another table's round wrongly or clear its mark. Read, not run:
-  `#markedRounds` in `apps/till/src/till-app.ts` holds every store refused sold out or after a menu
-  change, drafts included, and `#markRounds` marks each against the open table's offers; whether a
-  store from an earlier table is ever shown again was not checked. Remember each round's zone, or
-  keep rounds on the app, one per order.
 
 ## The till's home page (Task 9, #729)
 
@@ -1581,14 +1316,6 @@ empty-zones page with Settings and Retry, but a handheld's home is always the Fl
 not run). Fix: give a handheld the same explanation and Retry.
 
 
-## A1364. Split's different-people question ends the press with nothing said when the bill or party changes (seen in A803 slice 4c's review).
-
-With the question open, a bill switch or a new party
-makes Confirm send nothing and say nothing (`#askDifferentPeople`, `apps/till/src/till-app.ts`).
-Sending nothing is the plan's D20; whether it should say why is open. Reached only by events sent
-behind the question, or by a made-up floor answer.
-
-
 ## A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).
 
 "12 ×
@@ -1758,18 +1485,6 @@ placeholder beside a hint (`packages/adjustments/src/dashboard/reasons-screen.ts
 hint may only reach screen readers. Nobody has looked at the screen to confirm; look, then pick one.
 
 
-## Review follow-up: nutrition for extras in Sent.
-
-The Current orders wire's extra summaries
-carry no nutrition. The Sent dish window can recover an extra's nutrition from matching bill
-lines; `till-table-order-screen.served-details.test.ts` checks that fallback and its removal when
-the line identities no longer match. Reproduce a dish and a differently declared extra with and
-without those bill-line details, then decide whether the service read and Sent rows should carry
-the extra's nutrition too. The visual comparison remains unverified; A668-5's dish-name scope
-does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`) and
-`apps/till/src/screens/till-table-order-screen.ts` (`#sentDetails` and `#sentLineDialog`).
-
-
 ## A785. A kitchen screen in device mode keeps the theme it started with until reload (left open by A768, 2026-10-17).
 
 Nobody signs in on it, so it runs no menu-state poll and never sees the
@@ -1894,15 +1609,6 @@ a course is fired, and a pass layout saved before B4b. That look also found a he
 border faint in the dark theme.
 
 
-## Later, after A773: a station waits for another station's part of a group (owner, 2026-10-16).
-
-For example, the bar pours the dessert wine when the kitchen marks the tarta ready,
-rather than when the waiter fires the group. A773 starts both parts together and marks the bar's
-part with the "Goes with {stations}" cue, naming the tarta's station. Try it once a venue has run
-with that.
-[Spec §5](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#5-firing-and-the-pass)
-
-
 ## A559. The till's full-invoice dialog changes width when an error appears.
 
 It takes the width
@@ -1928,14 +1634,6 @@ uncertainty message, telling you how to retry without implying a payment was tak
 - Retire the till's unused `GET /api/tables` route: the app reads `/api/tables/state`;
   `apps/till/src/api/client.ts` has no method for the older list route. Check other callers
   before removing the route (slice 5, decision 15).
-
-
-## A545. Deleting a zone: two of its deletes are not what any test checks (2026-10-12).
-
-`clear` in `apps/server/src/floor-delete.ts` deletes today's merges, but `removeLiveTables`
-(`apps/server/src/table-removal.ts:93`) has already removed them through `leaveMerges`; with
-those two deletes taken out, `floor-delete.test.ts` still passed 7 of 7 (A503 part 1, Task 2b).
-Next: delete them, or add a case that reaches them.
 
 
 ## A857. A booking can take a table the evening's layout puts away (2026-10-18).
@@ -2024,16 +1722,6 @@ visible part of the sheet and only the list shows (`c2-refused-390-light-en.png`
 in the list leaves the form scrolled the same way (`a0-select-as-lands-390-light-en.png`).
 
 
-## A1104. Should the till's Ready bar break ties by the short name it shows?
-
-Seen, 2026-10-25 (the
-A797 slice 1 look, `e-bar-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): the
-bar then listed parties in the floor read's order, which in the look ran by full name, so
-"Window 1", shown as W1, came last: "2 · 1", "T1+T2 · 1", "W1 · 1". Since A797 slice 7 it puts
-warning tables first, then the rest, each longest-waiting first; the floor read's order decides only ties and tables whose ready food
-has no time (`readyBar`, `apps/till/src/state/table-signals.ts`). Ask the owner.
-
-
 ## A1105. At 390 px in English the till's Ready bar hides its last entry under "Open ›".
 
 Seen,
@@ -2115,20 +1803,6 @@ slice 8b its kitchen card reads "Counter #13 Terrace 4" where the original reads
 open by slice 8b (its plan's D3): copy the delivery table on a split.
 
 
-## Loose ends left by W100 (#1332).
-
-- Its owner questions were answered 2026-10-07: every default kept (staff cannot switch a
-  device's printing off; disconnected equipment is not shown).
-  [Decision](till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07)
-- If the till's last 15-second check said a reader was busy and that payment has since finished,
-  picking it skips "Take it?" and the server refuses it as held, so staff pick again. Found by
-  reading, not run.
-- If a profile switch succeeds but its reply is lost, a check sent before the switch can briefly
-  show the old profile's reader until the next check. Found by reading, not run.
-- The till's equipment poll and menu poll are near copies and could share one class (left out of
-  #1332 as too large).
-
-
 ## On a cash register's bar, the keyboard focus ring of the first strip control is cut off on its left, top and bottom (found by A841 slice 14's look check, #2209).
 
 Seen on a busy English bar
@@ -2148,14 +1822,6 @@ found and fixed the same shape on a cash register's bar, where a case reproduced
 queued before the counter leaves the page does not observe it again" in
 `till-shell.counter-logo.test.ts`); `#observe()` and the lines in `disconnectedCallback()` that clear its observer are unchanged since
 before slice 14.
-
-
-## The Look card's "How it prints" can stay on an undone framing (A841 slice 9b's review, #2119).
-
-If someone reframes the logo in the image library and undoes it while the picture is
-still being drawn, the picture can keep the undone framing until the next change. Closing it
-would loosen the check that stops the picture asking the server again and again; the theme
-design's slice 9b rulings name the gap. Decide whether to close it or accept it.
 
 
 ## A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review, 2026-10-21).
@@ -2187,15 +1853,6 @@ table's ring is covered the same way. `isolation: isolate` on each table button 
 mark, but a scratch probe showed it then lets a table later in the page cover an earlier one's
 mark where it overhangs; decide which gives way. The design system's floor-map paragraph states
 the gap.
-
-
-## `wt-slider`'s step marks run from the left in a right-to-left page.
-
-Each mark is placed with
-a physical `left` (`packages/ui/src/components/wt-slider.ts`), so right to left the mark for
-`min` sits at the left end while the thumb at `min` sits at the right. Measured on cd506f69c
-(A1180): the thumb at min sat at x 286–297 of a 300px range, and min's mark centre at x 47. No
-app sets right to left yet.
 
 
 ## A841 slice 6 wording to confirm (2026-10-23).
@@ -2265,17 +1922,6 @@ warnings with fixes. The measurement is in slice 6's pull request. In slice 6's 
 (the link button's padding) rather than flush with the line above.
 
 
-## Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks them against (A841 slice 4).
-
-The till's card-waiting spinner on `--wt-color-surface-sunken`
-(Waitron's light blue is 3.28:1 there by the WCAG formula, `#1f6feb` on `#d6d9e0`,
-`packages/ui-core/src/tokens/colors.css:10,14`; a venue theme could go under 3:1), and the data
-table's column-chooser eye icon while its row is dragged, on `--wt-color-surface-lifted`
-(`packages/ui/src/components/wt-data-table.ts:684-688`; read, not measured). The spinner is marked
-decorative beside text saying what is happening, so WCAG 1.4.11 may not ask for 3:1 at all. Decide
-whether the theme's contrast rules should cover either fill.
-
-
 ## WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).
 
 The dashboard's and the
@@ -2285,46 +1931,6 @@ it: install WebKit in those shards under a bounded, retried apt step (CLAUDE.md 
 Playwright cache a key per engine so Chromium-only jobs do not save a cache without WebKit, and set
 the variable for those suites. Whether WebKit's Linux libraries are missing from `ubuntu-latest`
 is an assumption to check first.
-
-
-## A dashboard that signs in takes a fresh theme from its live stream alone (A841 slice 3, #1940).
-
-Since #1940 the sign-in read reuses the start-up answer from `/api/theme` instead of asking again;
-the live stream's opening read is what picks up anything newer. If that stream neither opens nor
-errors, the start-up answer stays until the query's own refresh, which reading the code puts at
-60 seconds (not measured). Decide whether that is acceptable, or whether sign-in should ask again
-when the start-up answer is older than some bound.
-
-
-## A841 slice 13 tidy-ups its review left (#1959's finish-branch, 2026-10-22).
-
-Optional, no
-behaviour change: the switch dialog (`apps/dashboard/src/widgets/theme-switch-dialog.ts`) could be
-built inside the Themes card (`apps/dashboard/src/screens/themes-card.ts`) rather than beside it,
-keeping its guard against a double press; the choice of whether a saved or switched theme repaints
-the page is made in more than one place (`themes-card.ts`, `look-card.ts`) and could be made in
-one; `apps/dashboard/src/widgets/theme-delete.ts` could take a clearer name. The review named three
-smaller tidy-ups the finish-branch report did not list; they were not recorded.
-
-
-## A841 slice 3 tidy-ups its review left (#1940's finish-branch, 2026-10-21).
-
-Optional: about
-twenty dashboard test files repeat the same stub setup and could share a helper (the stubs predate
-#1940); the till still checks that the theme hash is a string although its type says so (removing
-it means changing test fixtures); the till's poll skips its theme check while an earlier zone read
-is still out, which only means fewer retries; two result fields of the start-up probe are never
-read; and nothing checks that each app registers the start-up probe.
-
-
-## A841 slice 1 tidy-ups its review left (#1927's finish-branch, 2026-10-21).
-
-Optional, no
-behaviour change: `checkRules` (`packages/ui-core/src/theme/contrast-rules.ts`) and `failing`
-(`derive.ts`) both evaluate contrast rules and could share one evaluator; the black-or-white text
-choice could be shared with `packages/ui`; `deriveAt` could be tidied and the hues kept in one
-list; `packages/ui-core/src/tokens/colors.test.ts` still keeps its own station lists rather than
-reading `STATIONS`.
 
 
 ## Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.
@@ -2364,36 +1970,6 @@ remote access (A951). While the box cannot be reached no booking is taken: Waitr
 proposal keeps no booking queue of its own. Backlog only, not queued to a lane.
 
 
-## Sent does not show an extra's separate kitchen progress
-
-(P6). The service read attaches
-extras under each dish without their own station or kitchen-state fields (`CurrentOrderExtra`
-and `readCurrentOrders`, `apps/server/src/order-groups.ts`). The dish's Ready projection
-already waits for its kitchen components, including a split-off extra, as checked by
-`apps/server/src/current-orders.test.ts`. The open work is showing each extra's own progress;
-`apps/till/src/widgets/sent-orders.ts` currently draws its name and quantity.
-
-
-## Check leading-zero tip drafts on the counter payment screen.
-
-The draft comparator in
-`apps/till/src/widgets/tender-pay.ts` calls the strict decimal reader on raw text and falls back
-to text equality when that refuses it. A599's review probe observed `shared.invalid_decimal`
-for `"00"` and `"05.50"`; the effect on the form's unsaved-change prompt is unverified.
-Next: reproduce through the form whether equivalent tip spellings ask to discard a change.
-
-
-## Loose ends left by A491 (#1569).
-
-- A till's automatic reload after a box update clears a notice its lock screen was showing, such
-  as "Moved to another server. Enter your PIN." (`server.switched`, held only in the page's
-  memory; read, not run).
-- A pressed Reload and the till's "which station?" question, two edges found by reading, not
-  run: a hold that is refused and asks for a station again still reloads if Reload is pressed in
-  that moment (nothing was saved yet), and a place waiting on that question holds a pressed
-  Reload until someone touches the till.
-
-
 ## Loose ends left by A526 (#1579).
 
 - With the service closed, a wide till's menu area shows nothing, and the "Service area" picker
@@ -2425,6 +2001,1017 @@ until the map is pinched (the map's `text-overflow: ellipsis`,
 read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png` in
 `~/waitron-campaign-c/a797-3-shots/`).
 
+
+## Bundle: The owner's yes-or-no read: built defaults that wait only for a nod
+
+39 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A case the content-language decisions leave open, built with the plan's default unless the owner
+  says otherwise**: receipts outside Catalonia stay free, Spanish by default.
+  [Detail](catalogue.md#a-case-the-content-language-decisions-leave-open-built-with-the-plans-default-unless-the-owner-says-otherwise)
+- **The owner has not yet confirmed the Seasons window's plan defaults** (A721, sent as an FYI,
+  2026-10-17): Decisions 2, 12, 13, 14, 15 and 17 of the
+  [A721 plan](../superpowers/plans/2026-10-17-a721-seasons-window.md), each in
+  [Decisions and deliberate limits](service-periods.md#decisions-and-deliberate-limits).
+- **A723's plan defaults sent to the owner as an FYI**
+  [Decisions](service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
+- **A762's plan defaults sent to the owner as an FYI**
+  [Decisions](service-periods.md#a762s-plan-defaults-sent-to-the-owner-as-an-fyi)
+- **A1059. Add station and the station editor draw the late flags differently.** Add draws four
+  full-width fields; the editor draws its four two to a row under "Late flags (minutes)"
+  (`prep-stations-screen.ts` `#dialog`, `station-editor.ts`). Ask whether Add should match. Left
+  open by A756 PR 5.
+- **A1060. Ask whether A773's picture 10 replaces the station's three late-flag fields** with its
+  one "Late after · 5 · 10 · 15 min" dropdown; A756 PR 5 kept A725's three (owner, 2026-10-15).
+- **A1063. Picture 10 lists Identical dishes and Held courses above MOVED slips; the station editor
+  puts them after it.** Owner FYI from A756 PR 6; say if the editor should follow the picture.
+- **A1067. Owner FYI: the station editor's "Done on the screen" words.** "One item at a time" and
+  "Whole ticket at once" (pictures 04 and 10; the old Kitchen tab said "Bump mode", "Per item",
+  "Whole ticket"); Spanish «Marcado en la pantalla», «Un plato cada vez», «Toda la comanda a la
+  vez», and the kitchen screen's «Toda la comanda». Say if other words read better (A756 PR 7).
+- **A1068. Owner FYI: the station editor's "Changes after sending" words.** "Not allowed", "While
+  held" and "While held or waiting"; picture 10's "(printer only)" was dropped because the middle
+  value suits a printer-only station too. Spanish «Cambios tras el envío», «No permitidos», «Solo
+  en espera», «En espera o sin empezar». Say if other words read better (A756 PR 8).
+- **A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.**
+  [Detail](kitchen.md#a1080-owner-question-which-refusal-wins-when-one-save-holds-a-started-dish-and-a-dish-at-a-not-allowed-station)
+- **A1081. Owner FYI: the till's words for `ticket.already_fired`.** Since #2044 they no longer
+  blame the station, because the server sends that code in other cases too: "This item has already
+  gone to the kitchen and cannot be changed. You can cancel it" («Este plato ya ha ido a cocina y no
+  se puede cambiar. Puedes cancelarlo»). Say if other words read better.
+- **A1250. The pass marks a late card in the brand colour where the station board marks it amber
+  (question for the owner).** Should the pass use amber too?
+  [Detail](till.md#a1250-the-pass-marks-a-late-card-in-the-brand-colour-where-the-station-board-marks-it-amber)
+- **A1253. A help badge on a button in the brand colour reads as part of the button (question for
+  the owner, A582 slice 5's look check).** One answer: a thin ring of page colour round every badge
+  in `wt-help-tooltip`, which changes every badge.
+  [Detail](till.md#a1253-a-help-badge-on-a-button-in-the-brand-colour-reads-as-part-of-the-button)
+- **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
+  Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
+  settle the two suggestions in the detail. A757 is built (slice 8, 2026-10-22); ready to show the
+  owner.
+  [Detail](till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
+- **A936. Waiting's minutes on the map (left open by A757 slice 5).** The map's cue for a waiting
+  table says "Waiting", not the minutes picture 07 draws, because the floor read carries only the
+  timing band; showing minutes needs the oldest fired dish's age in the read.
+  [Detail](till.md#a936-waitings-minutes-on-the-map)
+- **A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).**
+  Not put to the owner (plan's question 3): a department created later in the dashboard gets the
+  starter steps.
+  [Detail](till.md#a900-a757-slice-7s-open-questions-built-with-defaults-left-open-by-slice-7-2026-10-19)
+- **A923. The voids and comps list is a plain table (left open by A758-2).** It has no column
+  chooser, Filters or remembered view, and its own CSS keeps the row menu on a phone's screen,
+  because the shared reorder helper (`ReorderController`) cannot reach `wt-data-table`'s rows.
+  [Detail](till.md#a923-the-voids-and-comps-list-is-a-plain-table-left-open-by-a758-2)
+- **A1011. The owner looks at the till's Comp words as built (left open by A758-5).** Each works as
+  built; the owner may want it different.
+  [Detail](till.md#a1011-the-owner-looks-at-the-tills-comp-words-as-built-left-open-by-a758-5)
+- **A1020. The owner looks at A758-6's words and choices (left open by A758-6).** Each works as
+  built; the owner may want it different: among them no Table finished on the pass, Not served
+  found by its English name, the PIN carried from the cancel to its refund, and a finished table
+  checked against all its bills' zones.
+  [Detail](till.md#a1020-the-owner-looks-at-a758-6s-words-and-choices).
+- **A1031. The owner looks at A758-7's choices (left open by A758-7).** Each works as built; the
+  owner may want it different.
+  [Detail](till.md#a1031-the-owner-looks-at-a758-7s-choices-left-open-by-a758-7)
+- **A924. Void and Comp lozenges are neutral, not red and green as picture 01 draws (left open by
+  A758-2).** `wt-lozenge` takes only a hex colour and a screen may not write one, so the word
+  carries the meaning. Owner to confirm, or `wt-lozenge` gains token colours.
+- **A925. Words on the voids and comps page that no picture drew (left open by A758-2).** The
+  Delete question's sentences, the hint shown while searching («Borra la búsqueda para cambiar el
+  orden.»), the Spanish intro and the limits («{percent}% por artículo», «{amount} por cuenta»), in
+  `packages/adjustments/src/dashboard/strings.ts`. Owner to read them.
+- **A952. The report's totals are headed "By action", not "By kind" (left open by A758-3).** Its
+  rows are Voids and Comps («Por acción»), D10's names for both kinds and actions; design §3.6
+  says "By kind" («Por tipo»). Owner to choose; the other way changes eight heading checks.
+- **A953. By reason's column says "Requested by", not "Asked by" (left open by A758-3).** The
+  entries list beside it already says "Requested by" («Solicitado por») for the same person; design
+  §3.7 writes "Asked by". Owner to choose one word for both places.
+- **A954. How the report's Reason filter behaves (left open by A758-3).** It keeps its choice when
+  another person's list opens or the days change, and goes back to All reasons when the list
+  closes. A deleted reason re-added under the same name shows twice in the field, because the
+  report groups by the reason's id. Owner to confirm.
+- **A956. The report's new words, for the owner to read (left open by A758-3).** Voids / Comps («Cancelaciones» /
+  «Descuentos»), Void («Cancelado»), "Comp {amount}" («Descuento {amount}»), All reasons («Todos
+  los motivos») and the reworded intro, in `packages/adjustments/src/dashboard/strings.ts`. The
+  PR's pictures show them; owner to read them.
+- **A957. The Spanish report still says «anulado» beside «Cancelaciones» (left open by A758-3).**
+  The column «Valor de carta anulado» and the summary figure «Valor de carta de lo anulado»
+  (`packages/adjustments/src/dashboard/strings.ts`).
+  [Detail](till.md#a957-the-spanish-report-still-says-anulado-beside-cancelaciones-left-open-by-a758-3)
+- **A958. Choosing a reason narrows the list, not the totals below it (left open by A758-3).** With
+  Staff meal chosen, By action, By stage and By reason still count every reason for the person (or
+  everyone) shown. Owner to confirm, or the breakdowns follow the chosen reason too.
+- **A959. By reason's layout (left open by A758-3).** Owner to look at the pictures and say whether
+  either wants changing.
+  [Detail](till.md#a959-by-reasons-layout-left-open-by-a758-3)
+- **A909. A recalled draft's Discard asks for a refund PIN for a dish that may not have been started
+  (left open by A758-1).** Cancel item… asks "Has preparation started?" and removes a dish not
+  started with no PIN (`apps/server/src/line-cancel.ts`).
+  [Detail](till.md#a909-a-recalled-drafts-discard-asks-for-a-refund-pin-for-a-dish-that-may-not-have-been-started-left-open-by-a758-1)
+- **A Ready card on the pass turns red, counts as overdue and says Forgotten, aged from when it was
+  sent (question for the owner, seen in A773-2 B4a's look).** The old pass did the same. Should a
+  card stop ageing once it is Ready? Relates to A1250's colour question.
+  [Detail](till.md#a-ready-card-on-the-pass-turns-red-aged-from-when-it-was-sent)
+- **An unpaid table bill showed two "Full invoice" buttons**: the payment panel's own
+  (`till-tender-pay`) and the bill's smaller one (`#billChoices`,
+  `apps/till/src/screens/till-table-order-screen.ts`), both drawn since A231 (#1256). **Next
+  action:** owner to pick between drawing only the bill's own Full invoice button (as built) and the
+  payment panel's.
+  [Detail](till.md#an-unpaid-table-bill-showed-two-full-invoice-buttons)
+- **A292's look is the owner's to judge** (#1310's "Looks for the owner to judge"; screenshots in
+  lane C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter
+  than a sold-out one, and in the light theme a pale stripe shows mostly through the dark line
+  beside it.
+- **A575. Reset table's window: two things seen in #1608's look (2026-10-13).** A Spanish wrap,
+  and where the stays-apart lines sit.
+  [Detail](till.md#a575-reset-tables-window-two-things-seen-in-1608s-look)
+- **A856. A table that needs moving looks like one that needs clearing on the till's map
+  (2026-10-18).** It takes the `clearing` fill; its words are on the list card, the Mark moved
+  question and its accessible name. A marker of its own needs a new token pair or badge in
+  `@waitron/ui`, an owner design decision. Left open by A504.
+- **A859. Floor plans and the till's layout banner: looks left to the owner (2026-10-18).** A504's
+  look passes kept five things as built, as judgement calls.
+  Left open by A504.
+  [Detail](till.md#a859-floor-plans-and-the-tills-layout-banner-looks-left-to-the-owner)
+- **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
+  to judge.
+  [Detail](till.md#a841-slice-5-differences-from-the-pictures-and-tidy-ups-2026-10-21)
+- **A841 slice 6 wording to confirm (2026-10-23).** For the owner: Advanced's heading and opening
+  line now carry text, as the design words them (slice 11b: "Advanced: set colours and text by
+  hand", and a sentence that a text size set there grows and shrinks with Text size).
+  [Detail](till.md#a841-slice-6-wording-to-confirm-2026-10-23)
+- **A841 slice 11: Waitron's own headings are one step lighter (2026-10-27).** The rule stands
+  unless the owner says otherwise.
+  [Detail](till.md#a841-slice-11-waitrons-own-headings-are-one-step-lighter-2026-10-27)
+
+## Bundle A1380: Saves, reads and sign-outs that can lose a dish or act as the wrong person
+
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1357. The till's draft saves and reads can still pass each other (seen in A803 slice 4c's
+  review; two of the three are the same on main).** A failed read leaves a waiting edit unsent until
+  the next read or edit, a plain read can overtake a save's answer, and a save starting while a
+  take-over waits can race the read after it (`apps/till/src/state/draft-sync.ts`).
+  [Detail](till.md#a1357-the-tills-draft-saves-and-reads-can-still-pass-each-other)
+- **A1263. Switching profile after only viewing another person's draft would say "draft replaced"
+  (left open by A803 slice 3, #2360).** `#switchProfile` in `apps/till/src/till-app.ts` reads a
+  taken-over answer as a lost change even when this till had nothing of its own to save.
+  [Detail](till.md#a1263-switching-profile-after-only-viewing-another-persons-draft-would-say-draft-replaced)
+- **A take-over or a recall into the order acts as whoever the session is (left open by A791 #1943,
+  2026-10-21).** Whether the lock screen always stops such a command first is not traced.
+  [Detail](till.md#a-take-over-or-a-recall-into-the-order-acts-as-whoever-the-session-is-left-open-by-a791-1943-2026-10-21)
+- **A sign-out while an order save is waiting may keep the wrong lines (left open by A791 #1943,
+  2026-10-21).** Reproduce it with a test before changing anything; #1943 fixed the same mix-up for
+  its own refusal only.
+  [Detail](till.md#a-sign-out-while-an-order-save-is-waiting-may-keep-the-wrong-lines-left-open-by-a791-1943-2026-10-21)
+- **A792. Two smaller points A768's last review left (2026-10-17).** Read, not run: confirm each,
+  then test or narrow it.
+  [Detail](till.md#a792-two-smaller-points-a768s-last-review-left-2026-10-17)
+
+## Bundle A1382: Till refusals that say the wrong thing or nothing useful
+
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1286. `bill.payments_received`'s words still say items cannot be transferred between a bill
+  with payments and another bill, which Move dishes… now allows (left open by A803 slice 4a).** New
+  English and approved Spanish are needed.
+  [Detail](till.md#a1286-billpayments_receiveds-words-still-say-items-cannot-be-transferred-between-a-bill-with-payments-and-another-bill-which-move-dishes-now-allows)
+- **A1298. Move dishes… says only "Could not update the table, try again" when a picked dish has
+  left the bill or the bill was merged away (left open by A803 slice 4a).** Needs English and
+  Spanish words.
+  [Detail](till.md#a1298-move-dishes-says-only-could-not-update-the-table-try-again-when-a-picked-dish-has-left-the-bill-or-the-bill-was-merged-away)
+- **A1200. Raising a dish the kitchen has started, from the counter, says only "Could not park the
+  order, try again".** The server answers `ticket.already_started`, which the till has words for,
+  but the counter's park shows only the codes on `ACTIONABLE_REFUSALS` (`apps/till/src/till-app.ts`).
+  Seen in A803 slice 1's LOOK; by reading, it predates slice 1 (not run before it).
+- **A1029. The till has no words of its own for `station.no_default` (found by A758-7).** No key for
+  it in `CODE_MESSAGES` (`apps/till/src/i18n/codes.ts`), so `codeMessage` falls back to the generic
+  "Something went wrong, try again", and a waiter whose station has no default printer is told to
+  retry a request that cannot succeed.
+  [Detail](till.md#a1029-the-till-has-no-words-of-its-own-for-stationno_default-found-by-a758-7)
+- **Two refusal sentences the pass shows after Fire or Ready do not fit it (left open by A773-2 B4a,
+  decision D87).** `device.forbidden_action` sends the person to a manager; `service_zone.not_allowed`
+  says to choose an area. Both predate A773-2 (#1311).
+  [Detail](till.md#two-refusal-sentences-the-pass-shows-after-fire-or-ready-do-not-fit-it)
+- **A lost counter Send reply still tells you to check whether a sale went through.**
+  `#onPlaceOrder` uses `sale.unconfirmed`; its English and Spanish strings refer to a sale.
+  [Detail](till.md#a-lost-counter-send-reply-still-tells-you-to-check-whether-a-sale-went-through)
+- **`apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown at six call sites;
+  a helper would collapse it.** Cosmetic, and cheapest alongside A848 (the empty-order message) that
+  touches `#onPayTab` (under _Payments and card readers_). Raised by the A1 review wave (A1d).
+
+## Bundle A1386: Blank or misleading Floor pages
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1055. At phone width, a Floor that opens on a later zone leaves its tab scrolled out of
+  sight.** Fix: scroll the selected tab into view when the Floor opens on it.
+  [Detail](till.md#a1055-at-phone-width-a-floor-that-opens-on-a-later-zone-leaves-its-tab-scrolled-out-of-sight)
+- **A1056. A zone with no tables shows the till's Floor as a blank page with no message.** Seen,
+  2026-10-24 (A797 slice 4's look): the demo's Upstairs bar, a counter zone with no tables, draws
+  nothing on a handheld's Floor whether it is tapped or opened first. Since that slice a handheld
+  can open there. Fix: say the zone has no tables.
+- **A1093. Handheld 1 sometimes shows its zone tabs with no floor map until a zone tab is
+  tapped**, after sign-in and after a send. Seen, 2026-10-25 (A789 slice 4's look, `x-hl-after.png`,
+  `10`, `11`, `49` and `50` in `~/waitron-campaign-c/a789-4-shots/`), also before any period had
+  ended. Origin not checked.
+- **A1057. A handheld whose profile allows no zones shows a blank Floor.** Fix: give a handheld the
+  same explanation and Retry.
+  [Detail](till.md#a1057-a-handheld-whose-profile-allows-no-zones-shows-a-blank-floor)
+
+## Bundle A1392: Discard and Cancel fail on a table bill reached from the counter
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A922. Discard on a table's bill from Parked orders fails.** The till sends no bill editor's
+  expectation, and the server refuses a party bill's discard without one (400
+  `management.request_invalid`), leaving the bill open. Found while planning A582 slice 4; not fixed
+  there. [Detail](till.md#a922-discard-on-a-tables-bill-from-parked-orders-fails)
+- **A1199. On the counter, Cancel and Comp of one extra on a retrieved table bill are refused.**
+  The counter sends no bill editor's expectation and the server refuses `management.request_invalid`
+  on `expectedEdit`; staff see "Check the form and try again". Same cause as A922.
+  [Detail](till.md#a1199-on-the-counter-cancel-and-comp-of-one-extra-on-a-retrieved-table-bill-are-refused)
+
+## Bundle A1393: A table of every till route's device check, with a guard
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Maintain a route-to-profile-action table and qualify printer identity.** A guard that walks
+  every route's profile action and the enrolment design's printer-identity work remain separate.
+  [Detail](till.md#till-route-to-profile-checks-and-printer-identity).
+- **Audit session-only writes without a profile-action gate.** Receipt handover, table clearing
+  and zone extension reach their own lookup or permission refusal without a device cookie.
+  Check the device-settings, clock-confirmation and schedule routes too; A941 did not qualify them.
+  [Detail](till.md#session-only-writes-without-a-profile-action-gate).
+
+## Bundle: The pay window, after A739
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** Once A739
+  releases them, group the rows with a count that sends the members' line numbers.
+  [Detail](till.md#a1191-pay-items-lists-one-row-per-portion-left-open-by-a803-slice-1-d15)
+- **A1266. A payment window stays on a bill another till moved or merged away, and an unanswered
+  card payment's view leaves this till's screen (left open by A803 slice 3, #2360).** Decide whether
+  the window closes or follows the screen, and keep an unanswered card payment's view reachable.
+  [Detail](till.md#a1266-a-payment-window-stays-on-a-bill-another-till-moved-or-merged-away-and-an-unanswered-card-payments-view-leaves-this-tills-screen)
+- **A1300. "Pay the whole" sends the amount the pay dialog read, so a bill that grew meanwhile is
+  left owing (found by A803 slice 4a's review of moving dishes onto a part-paid bill).** Decide
+  whether a whole payment carries what it read and is refused when the bill has grown.
+  [Detail](till.md#a1300-pay-the-whole-sends-the-amount-the-pay-dialog-read-so-a-bill-that-grew-meanwhile-is-left-owing)
+- **A1291. Another till's open Pay items list is not refreshed when dishes leave its bill (seen in
+  A803 slice 4a's LOOK).** After a move, the dialog's totals updated but its list still showed the
+  dishes that left; paying one gave "Something went wrong, try again", and reopening the dialog put
+  it right.
+  [Detail](till.md#a1291-another-tills-open-pay-items-list-is-not-refreshed-when-dishes-leave-its-bill)
+
+## Bundle: Close the day: count the cash, record cash in and out, waiter floats
+
+3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1325. Close the day: count the cash and save the day's close — OPEN, needs a design with the
+  owner, then queue it soon (owner, 2026-11-04).** The north star's "closing". The dashboard shows a
+  day's figures live, and the code that saves a frozen close is built and tested, but no screen or
+  route lets a venue count its cash or close a day. Design it together with A239 and A240.
+  [Detail](till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
+- **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
+  2026-10-03); part of A1325's design, to queue soon (owner, 2026-11-04).** Each top-up or removal of cash from a till device's drawer is a recorded entry:
+  who, how much, why, when (topping up change, paying a supplier, a waiter handing in float cash).
+  The entries replace the two typed totals the daily close takes today (opening float and payouts,
+  `packages/reporting/src/record-daily-close.ts`).
+  [Detail](till.md#recorded-cash-in-and-out-of-a-tills-drawer-a239--open-needs-a-spec-before-queueing-owner-2026-10-03)
+- **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
+  A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs A238
+  (landed as #1164) and A239. Part of A1325's design, to queue soon (owner, 2026-11-04).
+  [Detail](till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
+
+## Bundle: Joined-table writers keep their rows right
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A591. A split down to one loses a table that had guests when its joined table went live
+  (2026-10-13).** It is off the map once they leave. Reset table still reaches it; a room's reset
+  no longer does. Found by A579 part 3a's review.
+  [Detail](till.md#a591-a-split-down-to-one-loses-a-table-that-had-guests-when-its-joined-table-went-live)
+- **A592. A party that joins a group's table names the group's other tables in random order
+  (2026-10-13).** Group members are written in table-id order; number order remains open. A618
+  makes same-time reads follow writing order. Seen in A579 part 3a's tests.
+  [Detail](till.md#a592-a-party-that-joins-a-groups-table-names-the-groups-other-tables-in-random-order)
+- **A594. Moving a bill to a free table in a group seats only that table (2026-10-13).** The party
+  holds part of the group, and can lose the group's today's name with no MOVED slip. Found by A579
+  part 3b's review.
+  [Detail](till.md#a594-moving-a-bill-to-a-free-table-in-a-group-seats-only-that-table)
+- **A598. A table held by guests when its joined table went live is neither joined nor split off
+  (2026-10-13).** So the till cannot see that the rest will not rejoin; it asks Seats only after the
+  server refuses. Reset table still reaches it. Found by A579 part 3c's review.
+  [Detail](till.md#a598-a-table-held-by-guests-when-its-joined-table-went-live-is-neither-joined-nor-split-off)
+
+## Bundle: One rule for what holds a table back at a reset
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a
+  module refuses to remove (2026-10-13).** The floor-wide reset waits for the second. Found reading,
+  not run, in A579 part 4b's reviews.
+  [Detail](till.md#a603-reset-table-does-not-wait-for-food-on-its-way-to-a-groups-other-tables-nor-for-a-table-a-module-refuses-to-remove)
+- **A565. A reset does not wait for food on its way to an ordinary table (2026-10-13).** Dates
+  from floor plans slice 1; #1604 made only split groups wait.
+  [Detail](till.md#a565-a-reset-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
+- **A566. An open order with nothing sent yet does not hold a split group back at a reset
+  (2026-10-13).** Left open by #1604.
+  [Detail](till.md#a566-an-open-order-with-nothing-sent-yet-does-not-hold-a-split-group-back-at-a-reset)
+- **A860. A floor-check rule copied four times (2026-10-18).** Whether a table's new place is
+  taken is decided in four places, in TypeScript and in SQL, each excluding a slightly different set
+  of tables. Next: share one verdict, or pin the copies as matching. Left open by A504.
+  [Detail](till.md#a860-a-floor-check-rule-copied-four-times)
+
+## Bundle: Show a table's short name where the full name does not fit
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A561. A 2 × 2 table's name is cut short on the till map (2026-10-13).** It shows "Cou…".
+  [Detail](till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
+- **A562. A 2 × 2 table shows no name in the floor plan editor (2026-10-13).** Its name waits on
+  A561's decision; seen more since tables come back at their kept size (#1604).
+  [Detail](till.md#a562-a-2--2-table-shows-no-name-in-the-floor-plan-editor)
+- **A1101. Short names on the floor map where a full name does not fit, and on printed kitchen
+  tickets.** A797's design proposes both (§3.7, §9) as later choices for the owner; A797 builds
+  neither.
+  [Detail](till.md#a1101-short-names-on-the-floor-map-where-a-full-name-does-not-fit-and-on-printed-kitchen-tickets)
+- **On a 390 px phone the floor map cuts table names short at every text size.** Left open by A841
+  slice 10b.
+  [Detail](till.md#on-a-390-px-phone-the-floor-map-cuts-table-names-short-at-every-text-size)
+
+## Bundle: One measuring pass over the till at 390 and 1024
+
+8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Two small phone-width points A414 left (#1495).** On the Order screen at 390 px the Review
+  button stops short of the right edge; the Schedule screen draws its own copy of
+  the card's border and padding.
+  [Detail](till.md#two-small-phone-width-points-a414-left-1495)
+- **Five measured till layout defects and one seen in a screenshot, all of them older than the
+  extras-and-options work.** Found while looking at the real screens for B1 Task 12.
+  [Detail](till.md#five-measured-till-layout-defects-and-one-seen-in-a-screenshot-all-of-them-older-than-the-extras-and-options-work)
+- **Screen faults seen during menus Task 9's look on 2026-09-27.** **Next action:** check each
+  against `main`, then fix or file it on its own.
+  [Detail](till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
+- **Synthetic phone captures also showed a clipped Counter total and padded-looking Spanish
+  quantities** — left open by W69 (#1325). Cause and real-venue reproduction remain unverified.
+  Inspect the real till before attributing them to W69 or changing quantity/money handling.
+- **A retained-course phone fixture clips the Back button's outline at the right edge.**
+  A435 step 5's 390 px captures show it with the real till app and icons. Reproduce it through
+  a normal till boot before changing layout; the fixture's cause and the base version are
+  unverified. The retained course label and active-only picker are visible in the same captures.
+- **Loose ends left by A526 (#1579).** Recheck the observation on fixed Counter
+  (`apps/till/src/screens/till-counter-screen.ts`); its controls and menu are separate now.
+  [Detail](till.md#loose-ends-left-by-a526-1579)
+- **A table order's draft arrangement draws its line names without the content language's
+  `lang`**, so they do not hyphenate (A841 slice 10, D14). Give its `lead-<n>` names the same
+  `lang`, `hyphens: auto` and `hyphenate-limit-chars: 8 auto auto` as the bill's `.product-name`
+  (`apps/till/src/widgets/basket.ts`). Left open by A841 slice 10b.
+- **A wider till gives the bill line's name less room.** Left open by A841 slice 10b.
+  [Detail](till.md#a-wider-till-gives-the-bill-lines-name-less-room)
+
+## Bundle: Service steps after a bill moves or tables combine
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1330. A step started by a serving comes back after its bill moves (seen in A803 slice 4b's
+  re-read; the same with the service-step code before that slice's fix).** A repeating step counts
+  afresh from the arrival instead.
+  [Detail](till.md#a1330-a-step-started-by-a-serving-comes-back-after-its-bill-moves-seen-in-a803-slice-4bs-re-read-the-same-with-the-service-step-code-before-that-slices-fix)
+- **A1331. A party seated later that takes in an older party keeps "Take order" (seen in A803 slice
+  4b's re-read; the same with the service-step code before that slice's fix).** The first order it
+  inherits is earlier than its own seating, and a first order clears only steps that started before
+  it, so the step stays although the table has ordered.
+- **A1333. A table with no dishes left can still show "Another order?" (left open by A803 slice
+  4b).** A table that sent its own order keeps those order times after every bill has left, so the
+  step stays.
+  [Detail](till.md#a1333-a-table-with-no-dishes-left-can-still-show-another-order-left-open-by-a803-slice-4b)
+- **A1005. A till a few seconds ahead cannot clear an every-N-minutes repeat that follows a Done
+  (left open by A757 slice 8).** Its Done answers `{ cleared: [] }` until the server's clock
+  reaches that repeat. A Done now carries the `dueAt` the till showed, so the server could accept a
+  shown repeat a few seconds ahead (the plan's Decision 5: "A live step not yet due is accepted").
+
+## Bundle: The till top bar fits at phone width, 1024 and 1280
+
+9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1082. At 390 px the counter till's top bar is cut off.** Seen, 2026-10-24 (A789 slice 2's look,
+  `11-counter-sale-390-light.png` in `~/waitron-campaign-c/a789-2-shots/`): the first tab, Counter
+  with its zone, reads "Counter: Do", and the buttons after it (Floor, Parked, Waiting) are out of
+  sight; the bar scrolls inside itself, while the page itself does not scroll sideways.
+  [Detail](till.md#a1082-at-390-px-the-counter-tills-top-bar-is-cut-off)
+- **A921. On a narrow till, should the person's name give room to the tab strip? (question for the
+  owner, left open by A582 slice 4a).** Since 4a the till's bar has the Help switch before the
+  person's menu, and nothing else left the bar for it, so at phone width the tab strip, which
+  already scrolls sideways, is 52 px narrower: with a long name at 320 px it is 8 px wide, so its
+  tabs are reached only by scrolling a sliver. One answer: two tap widths for the name instead of
+  three at phone width, which would give back 44 px. That changes A738's look, so it is the owner's
+  call. [Detail](till.md#a921-on-a-narrow-till-should-the-persons-name-give-room-to-the-tab-strip)
+- **A1219. At 390 px the till header clips «Pedidos aparcados» and hides its count** (Spanish; with
+  one counter zone the Floor tab shows as "F" behind the "?" button). Seen in A1208's LOOK.
+- **On a short phone the till's More menu is taller than the room it gets (found by A681's look,
+  2026-10-17).** Decide whether More should show that it scrolls, or hold fewer items on a short
+  screen.
+  [Detail](till.md#on-a-short-phone-the-tills-more-menu-is-taller-than-the-room-it-gets-found-by-a681s-look-2026-10-17)
+- **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
+  2026-10-17).** With a counter-zone menu, `test-till (1)` of run 39069802267 measured the tab
+  strip's content at 196 px in a 182 px box; locally the same check measured 178 px in 184 px.
+  [Detail](till.md#at-320-px-in-cis-fonts-the-tills-two-spanish-tabs-do-not-fit-their-strip-found-by-a681s-ci-2026-10-17)
+- **Loose ends left by A395 (#1435) and A425, the till's one-row top bar.**
+  Open, decided as built: a change in the pending-transfer count alone never brings items back
+  onto the bar, so when the count shrinks or goes away, items can stay in More although they
+  would now fit, until the next resize or other change refits the bar.
+  [Detail](till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
+- **On a cash register's bar, the keyboard focus ring of the first strip control is cut off on its
+  left, top and bottom (found by A841 slice 14's look check, #2209).** Seen on a busy English bar at
+  1280 × 800 with no venue logo: the Counter zone control ("Counter: Barra" in the look check; the
+  shared `BUSY_COUNTER` fixture now names the zone "Bar") with focus shows its ring only down its
+  right side.
+  [Detail](till.md#on-a-cash-registers-bar-the-keyboard-focus-ring-of-the-first-strip-control-is-cut-off-on-its-left-top-and-bottom-found-by-a841-slice-14s-look-check-2209)
+- **A handheld's bar may start watching its size again after it has left the page (found by A841
+  slice 14's review, #2209).** Read, not tested: `updated()` in
+  `apps/till/src/widgets/till-shell.ts` calls `#observe()` for a handheld, and
+  `disconnectedCallback()` clears its observer, so a render queued just before the shell is removed
+  would make a new observer on the detached shell.
+  [Detail](till.md#a-handhelds-bar-may-start-watching-its-size-again-after-it-has-left-the-page-found-by-a841-slice-14s-review-2209)
+- **The counter till's top bar and bill window at 130% (measured 2026-10-27, A841 slice 11b's look
+  check).** The bar's middle strip scrolls sideways (`.till-strip`,
+  `apps/till/src/widgets/till-shell.ts`) and More repeats its actions, so nothing is lost, but
+  buttons are scrolled out of view.
+  [Detail](till.md#the-counter-tills-top-bar-and-bill-window-at-130-measured-2026-10-27-a841-slice-11bs-look-check)
+
+## Bundle: The Look card's small faults, including a lost colour
+
+6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Look card's "How it prints" draws the 80 mm picture only (A841 slice 9, D5 of
+  [the plan](../superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).** A logo that prints blank at
+  80 mm but not at 58 mm, or the other way round, was not measured; the card says nothing about
+  58 mm paper.
+- **The dark Main buttons code box sits at the window's bottom edge after Pick a different colour
+  for dark screens (A841 slice 12's look check, [the
+  plan](../superpowers/plans/2026-10-27-a841-12-advanced-sections.md)).** In a 900 px tall window the
+  link opens Advanced's Buttons section and the code box scrolls only just into view at the bottom.
+  [Detail](till.md#the-dark-main-buttons-code-box-sits-at-the-windows-bottom-edge-after-pick-a-different-colour-for-dark-screens-a841-slice-12s-look-check-the-plan)
+- **Pick a different colour for dark screens, pressed while Advanced is still closing, ends with a
+  jump (A841 slice 12's finish-branch review).** With motion on and `reveal` called 450 ms after
+  closing Advanced, Advanced's opening aimed at 531 px and jumped to 873 px at its end: its body was
+  still drawn, so Buttons grew inside it. `reveal`, `apps/dashboard/src/widgets/theme-advanced.ts`.
+- **An error under a field in Advanced moves what sits beside it (measured 2026-10-27, A841 slice
+  11b).** With a code-box error, a colour row's picker sits about 10 px off the box's centre and its
+  "Set by hand" tag drops to its own line, even at 1280 px (`colourValueField`,
+  `apps/dashboard/src/widgets/color-field.ts`); the Text rows' typeface and weight dropdowns widen
+  to their error's width (a weight box from 74 to 190 px), moving the tag right.
+  [Detail](till.md#an-error-under-a-field-in-advanced-moves-what-sits-beside-it-measured-2026-10-27-a841-slice-11b)
+- **A colour picked in Advanced within one animation frame of leaving the editor is lost, and
+  nothing asks (A841 slice 6's review, 2026-10-23).** A picker drag sends at most one change per
+  frame (`dashboard-theme-advanced`'s `flush`); the Look card's own buttons, Save and Cancel send a
+  waiting colour first, but the leave question reads the draft (`current: () => this.draft!` in
+  `look-card.ts`) without sending it.
+  [Detail](till.md#a-colour-picked-in-advanced-within-one-animation-frame-of-leaving-the-editor-is-lost-and-nothing-asks-a841-slice-6s-review-2026-10-23)
+- **The Look card's Fix all button breaks onto two lines ("Fix / all") on a phone (A841 slice 5).**
+  It sits in the `.warning` line (`apps/dashboard/src/widgets/fix-line-styles.ts`), where nothing
+  stops it shrinking beside the sentence (read, not tried); picture 15 keeps it on one line.
+  [Detail](till.md#the-look-cards-fix-all-button-breaks-onto-two-lines-fix--all-on-a-phone-a841-slice-5)
+
+## Bundle: Reopening a held order keeps its lines right
+
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A retrieved line's options answers are re-sent by matching their WORDING**
+  (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
+  withdrawn label matches nothing, and the till surfaces `held.options_changed`.
+- **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
+  the variant, and says it saved.** Needs a decision first about whether a basket edit may change a
+  variant AT ALL: if no, stop offering the variant control on a reopened line; if yes,
+  `setLineModifiers` has to carry the product.
+  [Detail](till.md#reopening-the-picker-on-a-line-whose-dish-has-variants-_and_-at-least-one-offered-list-loses-the-variant-and-says-it-saved)
+- **Reopening a held order still removes a sold-out extra on the first edit.** The till now keeps
+  such a line marked "Not offered now", and the first edit of the order removes such an extra.
+  [Detail](till.md#reopening-a-held-order-still-removes-a-sold-out-extra-on-the-first-edit)
+- **A held order brought back to the till shows a variant line with its PARENT's VAT class,
+  category and allergens**, read from the offer snapshot in `working_line_contexts`. Filing is
+  unaffected. **Next action:** save or read the chosen variant's values for a retrieved line.
+- **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
+  parked in** (`#onRetrieveOrder`, `apps/till/src/till-app.ts`; `HeldOrder` carries no zone), so it
+  can mark lines "Not offered now" when their own zone still offers them. Traced, not run. **Next
+  action:** send the order's zone with the retrieved order and read that zone's offer.
+
+## Bundle: One count of items everywhere
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1293. The Sent summary counts weighed quantities as dishes (seen in A803 slice 4a's LOOK).** It
+  read "0 ready · 6.64 firing" for 3 beers, 2 calamari, a paella and 0.64 kg of ham. I believe this
+  predates slice 4a; not checked. Picture `s3-refusal-3s3` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
+- **A995. The floor's ready and held chips count a gram or millilitre dish by its quantity (left
+  open by A757 slice 6).** 150 g of a dish reads 150 on the floor's chips and 1 item on the order
+  lists, and the order screen's draft count adds 330 for a 330 ml dish; the fix is to use the
+  server's whole-portion rule in all three.
+  [Detail](till.md#a995-the-floors-ready-and-held-chips-count-a-gram-or-millilitre-dish-by-its-quantity)
+- **A996. Find a bill still counts lines (left open by A757 slice 6).** Its Items column counts a
+  bill's lines (`apps/server/src/find-bill-bills.ts:44`), so for one bill it can disagree with the
+  Parked orders row, which counts items.
+- **A997. An open order's item counts change when its dish's unit is changed (left open by A757
+  slice 6).** The fix freezes that choice on the line, which takes a migration.
+  [Detail](till.md#a997-an-open-orders-item-counts-change-when-its-dishs-unit-is-changed-left-open-by-a757-slice-6)
+
+## Bundle: One rule for a booking when the evening's layout changes
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A474 — today's floor changes on the till: follow-ups (2026-10-11).** A booking seated from
+  the dashboard skips the taken-off check, the map's drag works out its target the slow way, and
+  smaller gaps. Left open by A429 slice 4 (#1526).
+  [Detail](till.md#a474--todays-floor-changes-on-the-till-follow-ups)
+- **A550. Making a booked table part of a joined table is not refused (2026-10-12).** The floor
+  plan editor's save refuses deleting a booked table (`table.booked`) but not making one a part.
+  Next: decide whether the save refuses it, as a delete is refused, or only warns.
+  [Detail](till.md#a550-making-a-booked-table-part-of-a-joined-table-is-not-refused)
+- **A857. A booking can take a table the evening's layout puts away (2026-10-18).** Nothing compares
+  the table with the layout due at the booking's time.
+  [Detail](till.md#a857-a-booking-can-take-a-table-the-evenings-layout-puts-away-2026-10-18)
+- **A879. After Leave it here, bookings and the dashboard's table list still follow the last
+  reset's copy, not today's map (2026-10-18).** Where the new layout joins 4 and 5, the dashboard
+  list leaves out 4 and 5 and lists the off-map 4+5, and a booking today at 4 is refused
+  `table.in_joined_table`, until the next reset. It was already so while they needed moving.
+  Left open by A878.
+  [Detail](till.md#a879-after-leave-it-here-bookings-and-the-dashboards-table-list-still-follow-the-last-resets-copy)
+
+## Bundle: A bill another till moved, merged or part-paid
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1264. A bill another till merged or moved away is noticed only on the 15-second timer (left
+  open by A803 slice 3, #2360).** Re-read the bills there too (`apps/till/src/till-app.ts`).
+  [Detail](till.md#a1264-a-bill-another-till-merged-or-moved-away-is-noticed-only-on-the-15-second-timer)
+- **A1267. A dish typed on a bill another till merged or moved away is kept nowhere a waiter can see
+  when no bill is left to show (left open by A803 slice 3, #2360).** Decide where those lines go.
+  [Detail](till.md#a1267-a-dish-typed-on-a-bill-another-till-merged-or-moved-away-is-kept-nowhere-a-waiter-can-see-when-no-bill-is-left-to-show)
+- **A1288. Move dishes… shows a dish paid on another till as tickable until the till next reads the
+  bill (seen in A803 slice 4a's LOOK).** Move in that gap is refused (`bill.line_paid`) and nothing
+  moves, but the waiter sees a choice the till then refuses. Decide whether the panel re-reads the
+  bill on opening and the foot after a money refusal.
+  [Detail](till.md#a1288-move-dishes-shows-a-dish-paid-on-another-till-as-tickable-until-the-till-next-reads-the-bill)
+
+## Bundle: What an open till picks up from a setup change
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A785. A kitchen screen in device mode keeps the theme it started with until reload (left open by
+  A768, 2026-10-17).** Nobody signs in on it, so it runs no menu-state poll and never sees the setup
+  revision move when the theme in use changes.
+  [Detail](till.md#a785-a-kitchen-screen-in-device-mode-keeps-the-theme-it-started-with-until-reload-left-open-by-a768-2026-10-17)
+- **A787. Profile values on an open till refresh only at a profile switch or a change of zones (left
+  open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and whether
+  clocking is offered change the till's layout, so they are applied only where the till already lays
+  itself out again (A768's default; the owner has not decided).
+  [Detail](till.md#a787-profile-values-on-an-open-till-refresh-only-at-a-profile-switch-or-a-change-of-zones-left-open-by-a768-2026-10-17)
+- **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's
+  review, 2026-10-21).** The venue logo follows the same path, so such a till keeps an old logo too
+  (A841 slice 8b).
+  [Detail](till.md#a-cash-register-on-the-floor-plan-with-no-counter-zone-misses-a-theme-change-a841-slice-5s-review-2026-10-21)
+
+## Bundle: How a unit and its quantity read
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).** A unit with no
+  enabled text has an empty label; the tile and basket-refresh price templates still append a slash.
+  Render those empty-label cases before choosing their display.
+  [Detail](till.md#remaining-till-unit-and-tab-edges-open-unqueued-a379a385-run-it-review)
+- **A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English
+  abbreviation** (observed during A333, 2026-10-08). On the real Spanish-seeded till, the salad
+  picker reads `1.00 rac`; its queued receipt reads `1.000 rac`, and its queued kitchen ticket
+  reads `1.000 srv`.
+  [Detail](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitchen-unit-can-use-the-english-abbreviation)
+
+## Bundle: Small till and floor wording fixes
+
+11 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`.** Delete
+  both, in English and Spanish.
+  [Detail](till.md#a1259-two-till-strings-have-no-user-tablepending_title-and-tablenone_pending)
+- **A934. The till's Spanish for parking an order before hiding a zone says «Retén».**
+  `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
+  reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
+  (`held.title` «Pedidos aparcados»). Proposed: «Aparca, envía o cancela…».
+- **A1238. A party named like a placeholder, such as "{tables}", can come out wrong in two till
+  sentences (seen in A803 slice 2's review).** Use `fill` (`apps/till/src/i18n/t.ts`), as the slice
+  did for bill names.
+  [Detail](till.md#a1238-a-party-named-like-a-placeholder-such-as-tables-can-come-out-wrong-in-two-till-sentences-seen-in-a803-slice-2s-review)
+- **A920. The till's approval prompt: the Spanish no longer matches the English (left open by
+  A758-1).** `override.pick_supervisor` became "Choose who approves" but stays «Elige a un
+  responsable» (`apps/till/src/i18n/strings.ts`). Not wrong; reword the Spanish to match.
+- **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
+  A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
+  in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
+- **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
+  unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
+  [Detail](till.md#a470--the-tills-floor-map-follow-ups)
+- **A563. The till says "part of a joined table" for a joined table that has come apart
+  (2026-10-13).** `table.in_joined_table` covers both cases since #1604.
+  [Detail](till.md#a563-the-till-says-part-of-a-joined-table-for-a-joined-table-that-has-come-apart)
+- **A883. Back to its saved place's `table.place_taken` refusal does not name the tables
+  (2026-10-18).** A sentence naming both tables needs new words in English and Spanish from the
+  owner. Left open by A878.
+  [Detail](till.md#a883-back-to-its-saved-places-tableplace_taken-refusal-does-not-name-the-tables-2026-10-18)
+- **A1106. The till's List cards say "1 items".** Seen, 2026-10-25 (the A797 slice 1 look,
+  `h-list-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): Window 1's card reads
+  "€6.50, 1 items". Fix: a singular wording for a count of 1.
+- **A1107. Spanish calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its
+  List card.** Seen, 2026-10-25 (the A797 slice 1 look, `g-details-window1-390-light-es.png` and
+  `h-list-dining-390-light-es.png` in `~/waitron-campaign-c/a797-1-shots/`), for the same table.
+- **A1108. The till order screen's Sent panel reads "Sent !" and "Held ·".** Seen, 2026-10-25 (the
+  A797 slice 1 look, `f-header-window1-1024-light-en.png` and `f-header-window1-1024-dark-es.png` in
+  `~/waitron-campaign-c/a797-1-shots/`): a space before the "!" ("Sent !", «Enviado !»), and the
+  Held line ends in a separator with nothing after it, where the Served line above reads "Served · 0
+  · €0.00".
+  [Detail](till.md#a1108-the-till-order-screens-sent-panel-reads-sent--and-held-)
+
+## Bundle: What happens after a split, and keeping the newest revision
+
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1347. Join tables and Move guests from the order screen drop the room's new revision (left
+  open by A803 slice 4c).** `#onJoinTables` and `#onMoveGuests` (`apps/till/src/till-app.ts`) ignore
+  the `zoneRevisions` their answer carries, which Split a table now hands to the floor through
+  `carryRevisions`. Read, not run: a floor change sent before the next floor read would be refused once.
+- **A1348. A split whose answer is lost leaves the floor on the room's old revision (left open by
+  A803 slice 4c).** When the split's reply never arrives and the till's reads show it went through,
+  `#followSplit` runs with no `zoneRevisions` to carry, so A590's window, closed for an answered
+  split, stays open on that path until the next floor read.
+- **A1352. Split a table's own reads have no time limit outside a refusal (left open by A803 slice
+  4c).** A first rows read that hangs leaves the panel blank, Split quiet and no words; a hung
+  first-bill reload leaves that panel without the party's drafts. Back and the same table read again.
+  Only the reads after a refused press stop at 25 seconds.
+- **A1362. After a split, both bills reads failing leaves the till on the bill that left paid
+  (left open by A803 slice 4c).** The list is empty and the timed read does not move it; the bill
+  switcher still works. Found in 4c's fix round 12 and not run again at the head, where
+  `#followSplit` (`apps/till/src/till-app.ts`) still reads the bills only once.
+- **A1365. No case covers the follow-up after a split when the bill's draft arrives during it (left
+  open by A803 slice 4c).** Since fix I1, `#followSplit` carries on in that state, where before it
+  stopped. The till suites stay green, but nothing pins what it does there.
+- **A880. Two tables pressed on the till's floor list at once: the second can be refused as out of
+  date (2026-10-18).** Left open by A878.
+  [Detail](till.md#a880-two-tables-pressed-on-the-tills-floor-list-at-once-the-second-can-be-refused-as-out-of-date-2026-10-18)
+- **A1129. A late allergy re-read or course-places repair can step the order back a revision.**
+  Read only: after their waits both set `orderParty` from their own read without checking a newer
+  one (`till-app.ts`), until the next command's `party.out_of_date` reloads; check the revision as
+  `#rememberOrderParty` does. Believed to predate A797 slice 3 (ba517141a, c9ad7a634).
+
+## Bundle: Status words on the pass and beside it
+
+6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The pass's "screen has been refreshed" line after a Fire appears above the columns, out of view
+  after a Fire low on the screen (seen in A773-2 B4a's look).** The old pass screen put its line in
+  the same place.
+  [Detail](till.md#the-passs-refreshed-line-after-a-fire-is-out-of-view)
+- **The pass's header does not say what the pass covers (left open by A773-2 B4a).** A797 §3.5 asks
+  for a line naming the stations and zones a pass covers; it needs new words.
+- **Department transfers call a held dish "Waiting" (left open by A773-2 B4b, its plan's D81).**
+  Since B4b a dish waiting for the pass says "Waiting for the pass"; a held dish still says
+  "Waiting", though nothing is cooking it (`apps/till/src/widgets/department-transfers.ts`).
+- **A card holding both held dishes and dishes asked for says "Held, not released", and the
+  asked-for dish carries no mark (left open by A773-2 B4b, its plan's D78).** It can happen once a
+  station waits for the pass (PR C), when a waiter fires one held dish of a held group.
+- **The table screen's sent list puts "at the pass" under a "Fired" heading (seen in A773-2 B4b's
+  review; the owner's call).** «en el pase» rows sit under «Marchado», and "at the pass" is lower
+  case beside capitalised status words.
+  [Detail](till.md#the-table-screens-sent-list-puts-at-the-pass-under-a-fired-heading-seen-in-a773-2-b4bs-review-the-owners-call)
+- **Look at what A773-2 B4b's look at the running app did not reach.** The table screen's «en el
+  pase», department transfers' "Waiting for the pass", the closed-station alert on the dashboard's
+  alerts page, a pass card whose dishes Hide has all taken off, the pair dialog's accept form, the
+  pass monitor's and All stations' own layouts, a board switching between columns and tabs live when
+  a course is fired, and a pass layout saved before B4b.
+  [Detail](till.md#look-at-what-a773-2-b4bs-look-at-the-running-app-did-not-reach)
+
+## Bundle: Small till test renames
+
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1053. Two till shell cases leave the screen language as Spanish.** Read, not run: in
+  `apps/till/src/widgets/till-shell.test.ts`, "shows the language's full name at 1280 wide…" never
+  restores it and "updates the chooser's active language…" restores es-ES, not what it found
+  (`fec3797f5`, `5c1a1c2df`). CLAUDE.md §4: such a test restores the language.
+- **A1054. A Lit "change-in-update" warning in "live device zones > recovers a floor-only device
+  without needing a counter poll"** (`apps/till/src/till-app-device-zones.test.ts`). The case
+  passes; the build's ledger saw the warning on `dc7ac4b50`, and it prints on A797 slice 4's tip.
+  What sets a property inside the update is not traced.
+- **Two till fixtures still pass the dropped `awayAt` field (left open by A773-2 PR D).** Nothing
+  reads it: `apps/till/src/screens/till-table-order-screen.test.ts:2406` and
+  `apps/till/src/screens/till-table-order-screen.current-orders.test-helpers.ts:69`.
+- **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
+  bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
+  can make.
+  [Detail](till.md#a1128-till-tests-that-press-a-handhelds-retired-order-tab)
+- **Rename the `seedTill` test fixtures** — deferred in the PR of A238 (a till is a device, #1164).
+
+## Bundle: The "Goes with" line
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Should a counter order say "Goes with {stations}"? (question for the owner, left open by
+  A773-2 PR D, its plan's D120).** A counter order has no groups, so a Bar drink on a counter order
+  whose Grill burger waits for the pass prints no "Goes with Grill", and its station card shows
+  none. The cue is worked out per group; a counter order would need its own rule.
+- **On 80 mm paper a wrapped "Goes with {stations}" line can leave one station name alone on the
+  next line (left open by A773-2 PR D's look).** On a shared printer's reprint that line can look
+  like an empty station section.
+- **On a printer shared by two stations the "Goes with {stations}" line prints once under the
+  group heading, above the waiting station's own section too (left open by A773-2 PR D's look).**
+  Grill's dishes then sit under "Goes with Grill".
+- **An English "Goes with" list of three stations gets a serial comma (left open by A773-2 PR D's
+  look).** "Grill, Fryer, and Pastry"; Spanish has none («Grill, Fryer y Pastry»).
+
+## Bundle: Floor map drag, hidden map, allergy mark
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A drag that grows the till's plan in proportion refits nothing** — left open by A766 (#1824).
+  When no move of a drag changes the plan's ratio, say 12 × 8 squares straight to 15 × 10 in one
+  move, nothing resizes or refits the map, during the drag or at release, and the held table can
+  be drawn past the map's edge.
+- **After the till's map rescales mid-drag, the drawn table lags the finger** — left open by A766
+  (#1824); seen on the demo stack (`~/waitron-campaign-b/a766-shots`). A refit during a drag moves
+  the drawn table out from under a still finger.
+- **A pan or zoom on a hidden till map is believed to divide by zero** — raised by A766's review
+  (#1824), not run. A hidden map refits to a scale of 0, and `#moveView`
+  (`packages/ui/src/components/wt-floor-map.ts`) divides by the view's scale; `git blame` puts that
+  code before A766. A766 guarded only a drag's move at scale 0.
+- **The floor map draws a neighbouring table's allergy mark over a held table's rings.** The design
+  system's floor-map paragraph states the gap.
+  [Detail](till.md#the-floor-map-draws-a-neighbouring-tables-allergy-mark-over-a-held-tables-rings)
+
+## Bundle: Guest-facing QR, online ordering, delivery, online booking
+
+4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A508. A table's QR code: order, call a waiter, ask for the bill or pay (owner, 2026-10-11).**
+  When a tab is opened for seated guests, a QR code is printed for them; on their own phone it
+  opens the menu to order from, a button to call a waiter, and one to ask for the bill or pay
+  online. Backlog only, not queued to a lane.
+  [Detail](till.md#a508-a-tables-qr-code-order-call-a-waiter-ask-for-the-bill-or-pay)
+- **A509. Online ordering for collection at the counter (owner, 2026-10-11).** A customer orders
+  from the venue's online menu and collects at the counter. Needs the internet, as A508 does.
+  Backlog only, not queued to a lane.
+  [Detail](till.md#a509-online-ordering-for-collection-at-the-counter)
+- **A1012. Delivery for online orders (owner, 2026-10-22).** An A509 online order taken to the
+  customer's address instead of collected. Needs the internet, as A509 does, and comes after it.
+  Backlog only, not queued to a lane.
+  [Detail](till.md#a1012-delivery-for-online-orders)
+- **A1013. Online booking for customers (owner, 2026-10-22).** Needs remote access (A951). Backlog
+  only, not queued to a lane.
+  [Detail](till.md#a1013-online-booking-for-customers-owner-2026-10-22)
+
+## Bundle: Remove till code nothing reaches
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Remove the Filter's unused session-storage write.** Filter selections live in the active
+  operator's app state and reset on sign-out. `till-app.ts` writes `waitron.dietFilter` but never
+  reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
+  adding cross-login restoration. Found during A738 review; retain the filter-lifetime tests.
+- **A1007. The till's adjustment window keeps a give-away and a line discount nothing opens (left
+  open by A758-5).** Retire the two modes, make `kind: "comp"` mean the Comp window, and move the
+  table's comp tests in `till-app-adjustments.test.ts` onto it.
+  [Detail](till.md#a1007-the-tills-adjustment-window-keeps-a-give-away-and-a-line-discount-nothing-opens)
+- **The till's idle-timer check may be unreachable — OPEN (found by W24's review, 2026-10-03, by
+  reading, not run).** `session-activity.ts`'s `#shouldRunIdleTimer` keeps the `this.#active &&` check
+  that `#shouldHoldWakeLock` lost, and its callers look the same. **Next action:** remove the check
+  with a receipt, as W24 did for `#shouldHoldWakeLock`, or keep it by decision.
+
+## Bundle: Table screen panels that do not fit
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1359. At 1280 by 800, Split a table's panel opens low (seen in A803 slice 4c's LOOK).** Its
+  heading sits at 579 of 800 px with about three rows showing, because the side panel sits below the
+  order; Move dishes sits in the same place but is short enough to fit.
+- **A1265. The table screen's ⋮ list is taller than the room below it, so Finish table starts below
+  the fold (seen in A803 slice 3's LOOK, finding F8).** Nothing is lost, but the whole-table actions
+  are easy to miss. Decide whether the list gets shorter (fewer items, or tighter rows) or the table
+  section comes first.
+  [Detail](till.md#a1265-the-table-screens--list-is-taller-than-the-room-below-it-so-finish-table-starts-below-the-fold)
+- **A1290. The table screen's action panel can put Back and its action half below the window, and "+
+  New bill" touches Back (seen in A803 slice 4a's LOOK).** Both are the shared action panel's layout
+  (`aside.action-panel` in `apps/till/src/screens/till-table-order-screen.ts`).
+  [Detail](till.md#a1290-the-table-screens-action-panel-can-put-back-and-its-action-half-below-the-window-and--new-bill-touches-back)
+
+## Bundle: One answer to "where is this order"
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1235. Parked orders, Waiting and department transfers can still name a table bill by an old
+  table (left open by A803 slice 2).** Parked orders now shows a table bill's stored number and
+  name, but builds it on `orderLabel` (`apps/till/src/widgets/held-orders.ts`), which joins the
+  table with the bill's own label.
+  [Detail](till.md#a1235-parked-orders-waiting-and-department-transfers-can-still-name-a-table-bill-by-an-old-table-left-open-by-a803-slice-2)
+- **A1032. Nothing on the pass says an order waits at the counter (left open by A758-7).** A paid
+  order a finished table sent to the counter is named on the pass and in Waiting orders by its
+  number and the table it was paid at ("#12 Mesa 4"), as Move this bill → The counter names one
+  today; only the MOVED slip and the station notice say "counter".
+- **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
+  (used by MOVED slips) reads a counter order whose delivery table was released as the counter,
+  while `orderTableLabels` (used by tickets and correction slips) names it by its kept
+  `delivery_table_label`. Once the edge is decided, one reader in
+  `packages/db`. Left open by A650 Part 1.
+  [Detail](till.md#a678-two-readers-answer-where-is-this-order)
+
+## Bundle: What a row action takes on a grouped row
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
+  row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
+  portions, and Fire now fires only the row's first portion. Since slice 4a, Move dishes… picks a
+  row's first portions too; comp, void and Fire now are unchanged.
+  [Detail](till.md#a1193-choosing-which-portions-of-a-grouped-row-an-action-takes-and-fire-now-on-a-grouped-row)
+- **A1194. Finish table cancels a grouped row one portion at a time (left open by A803 slice 1).**
+  Three identical unserved burgers give three keep-charge cancels of one and three "1 x" slips,
+  where one line of three gives one cancel and one "3 x" slip. Pinned as it is by the "Finish
+  table" case in `apps/server/src/order-portions.adjustments.test.ts`.
+- **A1198. Owner question: should a portion moved to another bill and back rejoin its row? (left
+  open by A803 slice 1, D9).** On portions it rejoins its first row and files with it; on one line
+  per dish count the part carved off comes back as a row of its own.
+
+## Bundle: Pass board code and missing test pins
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The pass board and the station board still carry copies of each other's code (left open by
+  A773-2 B4a's finish review).** Two copies remain: the width watcher that switches between columns
+  and one list, with the age colours (`apps/till/src/widgets/pass-board.ts` and `station-queue.ts`);
+  and the styles of the dish lines both now draw through `kitchen-board-parts.ts`.
+  [Detail](till.md#the-pass-board-and-the-station-board-still-carry-copies-of-each-others-code-left-open-by-a773-2-b4as-finish-review)
+- **Pin a pass-board rule no test holds (left open by A773-2 B3's reviews; predates it).** No suite
+  fails if a pass screen's zone that is listed but switched off is still read (`passScopeOf`,
+  `apps/server/src/pass-board.ts`). Add a case.
+- **Pin the pass board's live-dish filter (left open by A773-2 B4a's reviews).** No case fails if
+  the board's card reader stops leaving out a dish made at the till, or a bill collected or
+  abandoned on a two-bill group card, and none has a ticket that survives with nothing left to make.
+  [Detail](till.md#pin-the-pass-boards-live-dish-filter)
+
+## Bundle: Bookings loose ends
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Seating a booking at a table in a zone that is not a table-tab zone has no bookings test** —
+  found by #574 while pruning comments (`packages/bookings`). The server accepts an empty contact
+  name; only the dashboard form refuses one.
+  [Detail](till.md#seating-a-booking-at-a-table-in-a-zone-that-is-not-a-table-tab-zone-has-no-bookings-test)
+- **The bookings seat picker keeps a table it no longer offers** — OPEN (found 2026-09-23, writing
+  bookings' coverage tests, PR #503). **Next action:** decide what the picker does when its tables
+  change under it (re-pick the first, or close) and fix it test-first.
+  [Detail](till.md#the-bookings-seat-picker-keeps-a-table-it-no-longer-offers)
+- **A booking or a seated party can count more than 999 guests, which a simplified receipt
+  recorded since A663 Part 3b never prints** (found by Part 3b). Bookings refuse only a party size
+  below 1, and seating one passes it on unchecked; the guests count stored for such a receipt is
+  bounded 1 to 999, so such a party's simplified receipt prints no guests line. [Detail](till.md#a-booking-or-a-seated-party-can-count-more-than-999-guests)
+
+## Bundle: Floor plan editor at phone width
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **At 390 px the Floor plans screen cuts period names in its "Used by" column.** Seen on the demo
+  venue on 2026-10-18 by A783's look: a set's period chips are cut off by the column, both themes,
+  English and Spanish (`floor-plans-{light,dark}-390[-es].png` in `~/waitron-campaign-b/a783-shots/`;
+  `packages/venue-service/src/dashboard/floor-plans-screen.ts`). Left open by A783.
+- **A1103. At 390 px the floor plan editor leaves a refused Name field half under the panel's
+  heading.** Slice 1 changed which sentence the editor shows, not where it scrolls.
+  [Detail](till.md#a1103-at-390-px-the-floor-plan-editor-leaves-a-refused-name-field-half-under-the-panels-heading)
+- **A1109. The floor plan editor opens Terrace as an empty grid, and its phone Tables panel has a
+  large blank gap.** Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-1280-light-en.png` and
+  `r-tables-panel-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): at 1280 the demo's
+  Terrace tables lie beyond the visible canvas, so none shows without scrolling; at 390 the Tables
+  panel leaves a large blank space between Add tables / Add joined table and the list.
+  [Detail](till.md#a1109-the-floor-plan-editor-opens-terrace-as-an-empty-grid-and-its-phone-tables-panel-has-a-large-blank-gap)
+
+## Bundle: Take over offered where it is needed
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1349. Take-over rows exist only in Split a table (left open by A803 slice 4c).** The rows that
+  let a waiter take over someone else's unsent dishes on a bill not on screen (A773 §6) are drawn by
+  `widgets/split-picker.ts` alone; Join tables and the moves still read no `conflicts` from
+  `draft.taken_over`.
+- **A1289. Moving dishes onto a bill with someone else's unsent dish says "This order belongs to
+  someone else. Reload the table to see it" (seen in A803 slice 4a's LOOK).** Decide the words, and
+  whether the refusal offers Take over in place.
+  [Detail](till.md#a1289-moving-dishes-onto-a-bill-with-someone-elses-unsent-dish-says-this-order-belongs-to-someone-else-reload-the-table-to-see-it)
+
+## Bundle: Remove the old split and transfer routes
+
+2 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1196. Retire the partial-quantity server paths (left open by A803 slice 1, D12).** Retire the
+  paths with the server's split and transfer routes.
+  [Detail](till.md#a1196-retire-the-partial-quantity-server-paths)
+- **A1197. `addTabRound` still writes grouped table lines (left open by A803 slice 1, D26).** Only
+  test helpers call it (`apps/server/src/testing/party-venue.ts`,
+  `testing/order-writer-fixture.ts`), as a writer of the old shape. Expand it or retire it with
+  A1196.
+
+## Bundle: Reason form limits
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1021. Cap Void and Comp reason names at the reasons route (left open by A758-6).** The reasons
+  page and its route (`packages/adjustments/src/routes.ts`) take a name of any length, while a
+  receipt's refund refuses a reason over 500 characters (`tender-refund-reservation.ts`), which the
+  till marks `bill_refund.reason_long`.
+- **A919. Three reason-form limits show "No limit" as a placeholder and also carry a hint (left open
+  by A758-1).** The voids-and-comps form's limit fields use `adjustments.no_limit` as the
+  placeholder beside a hint (`packages/adjustments/src/dashboard/reasons-screen.ts`).
+  [Detail](till.md#a919-three-reason-form-limits-show-no-limit-as-a-placeholder-and-also-carry-a-hint-left-open-by-a758-1)
+
+## Bundle: Do not offer a closed area as a destination
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Move this bill still offers a closed counter area (2026-10-15; open, A697 review).**
+  The table picker always offers The counter (`#tablePicker`,
+  `apps/till/src/screens/till-table-order-screen.ts`). Give the screen the counter area's identity
+  and apply that rule, preserving same-area moves and presented bills.
+  [Detail](till.md#move-this-bill-still-offers-a-closed-counter-area)
+- **Held-order closed-area destinations need the order's source area (2026-10-15; open,
+  A697 follow-up).** Neither `HeldOrderSummary` nor `HeldOrder` includes the saved source area
+  (`apps/till/src/api/client.ts`). Include that context in the read contract, then filter closed
+  destinations while preserving same-area moves.
+  [Detail](till.md#held-order-closed-area-destinations-need-the-orders-source-area)
+
+## Bundle: Failed refreshes with nowhere to go
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Investigate a null device identity during profile switching.** A432's full till coverage run
+  on 2026-10-08 logged an unhandled rejection through `#readIdentity` / `#enterSwitchedProfile`.
+  Reproduce which profile-switch test answers null. Cause unverified.
+  [Detail](till.md#investigate-a-null-device-identity-during-profile-switching)
+- **Three till handlers still leave a failed list refresh unhandled** — OPEN (found 2026-09-25,
+  review of PR #641). `#onAdvanceTicketItem` and `#onRetrieveOrder` (`apps/till/src/till-app.ts`)
+  await their list refresh after their `try`/`catch`, outside it, and `#onMarkCollected` awaits
+  `#refreshStationQueue()` after a failed collect in a `try`/`finally` with no `catch`. **Next
+  action:** decide what each shows when that refresh fails.
+  [Detail](till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen)
+
+## Bundle: Two forms not yet on the Forms contract
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The booking form draws its bottom alert and Save slot without the shared actions primitive
+  (2026-10-14, A551 review).** `packages/bookings/src/dashboard/booking-form.ts` keeps a
+  `p.error[role=alert]` and its footer button where the Forms contract in
+  `docs/developers/design-system.md` names `wt-form-actions`.
+  [Detail](till.md#the-booking-form-draws-its-bottom-alert-and-save-slot-without-the-shared-actions-primitive)
+- **The till's schedule screen does not follow the forms rule yet** — left open by C47
+  (#838/#839/#840/#841). Other till surfaces were not checked against the rule either, and whether a
+  number pad or a choice picker counts as a form under it is open.
+  [Detail](till.md#the-tills-schedule-screen-does-not-follow-the-forms-rule-yet)
+
+## Bundle: Reads and saves with no time limit
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030), B32
+  (#1055) and B34 (#1077).**
+  [Detail](fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
+  - **The approver list is fetched with no time limit.** The unpaid-departure and refund dialogs
+    fetch theirs the same way and predate B32; a time limit belongs on all three together.
+  - **No till test covers a payment refusal that arrives after the approver's PIN** (since A845,
+    #1895, the PIN prompt comes first).
+- **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
+  - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
+    the cookie names a disabled device, so the response time hints that an id is a disabled device;
+    asks are rate-limited and, outside dev mode, accepted only while Add a device is open.
+    [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
+  - W106 (the battery on the Devices list, #1240): (a) the relative-time words (W106a, #1272,
+    `wt-relative-time`) show the exact time in the BROWSER's time zone: the relative-time widget
+    receives no venue time zone.
+    [Detail](till.md#what-w106-left-open-the-battery-on-the-devices-list-1240)
+  - W105 (#1235): review suggestions #1235 did not take.
+    [Detail](till.md#what-w105-left-open-1235)
+  - W104 (#1225), not acted on: (1) a Pair save that never answers locks both dialogs, because a
+    save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only).
+    [Detail](till.md#what-w104-left-open-1225)
+
+## Bundle: Nothing covers the order screen's bar
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1211. The Served toast covers the Order screen's Fire / Send all buttons.** Measured 2026-10-29
+  in A1125's review (the probe was not kept); left open by A1125, #2238.
+  [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
+- **A1212. The Order screen's bar height may be read before the bar's buttons are drawn.** Run it
+  first (add the first dish of an empty order at 1024×768 and 390 px and check the line is wholly
+  above the bar); fix only if it reproduces.
+  [Detail](till.md#a1212-the-order-screens-bar-height-may-be-read-before-the-bars-buttons-are-drawn)
 
 ## Decisions and deliberate limits
 
@@ -3606,37 +4193,6 @@ Reproduce which profile-switch test answers null and determine whether the fixtu
 public identity response needs correction; keep the existing profile and login assertions.
 Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
 
-## Loose ends left by A466 (A429 slice 2) / A502 part 3
-
-- **`wt-input` has no visible description.** The Add tables names preview is a polite live region
-  after Prefix, so it is not heard when the field takes focus; the fix is a visible description in
-  the shared `wt-input`. Left open by A466 (A429 slice 2) / A502 part 3.
-- **On computers whose scrollbars take space, a size reading just after a floor plan drop may
-  shift the plan by the extra room.** Seen only with a stand-in scrollbar; headless Chromium's
-  scrollbars take none, so it is not measurable there. Left open by A466 (A429 slice 2) / A502 part 3.
-- **Resizing a floor plan table needs a pointer or a keyboard.** The side dots and corners are
-  hidden from assistive technology and Shift+arrow needs a keyboard, so a screen-reader user on a touch screen
-  cannot resize a table (accepted by the A502 coordinator, not yet by the owner). Left open by A466 (A429 slice 2) / A502 part 3.
-- **Small floor plan canvas details:** `reveal` does not count the side dots or the corners. Left open by A466 (A429 slice 2) / A502 part 3.
-
-## Loose ends left by A672
-
-- **No key moves a floor plan table's top or left side or a corner.** Shift with the arrow keys
-  moves only its right and bottom sides. Left open by A672.
-- **Turning a floor plan table by key walks it away from the plan's top-left edge.** Each press
-  steps a table that would poke past the edge back in from where the last press left it, and
-  turning back never steps it out again: one full turn by key takes an 8 × 8 from (0, 0) to (2, 2).
-  Part of the owner question in "A turned floor plan table narrower than its unturned box stops
-  short of the plan's left or top edge". Left open by A672.
-- **Two floor plan keyboard tests do not see the far-edge protection.** An arrow key or Shift+arrow
-  change while the canvas is scrolled to its far right or bottom keeps the other tables still on
-  screen; with that protection switched off, the zoom-out test and the half-zoom Shift+ArrowLeft
-  case in the canvas suite still pass. Make each fail without it. Found by the A672 review. Left
-  open by A672.
-- **Possibly: zooming out during a keyboard change grows the blank margin above and left of the
-  plan.** Not established: the one probe looked the same with and without A672's change, so it
-  proves nothing either way. Reproduce first. Left open by A672.
-
 ## Loose ends left by A718
 
 - **`wt-floor-plan-preview` has no product user.** It remains in `packages/ui/demo/main.ts`, with
@@ -3674,26 +4230,6 @@ button stops short of the right edge (seen in a screenshot, not compared with be
 the Schedule and Allergens screens now draw their own copy of the card's border and padding
 (`apps/till/src/widgets/screen-card-styles.ts`), so a later change to the card's look will not
 reach them.
-
-## Task 3 (#733, order groups)
-
-- Left open from the PR: a cross-party merge can leave a settled check's lines naming a group now on
-  the target party; the deleted `moveTabLines` ignored groups, and whether the paths that move lines
-  now do the same is not checked; a whole-order save replacing a held dish with another variant
-  moves it to a new held group at the end; the counter's whole-order save does not answer the
-  party's revision.
-  Left open by service Task 3 (#733, order groups).
-
-## Task 10 (#908, the service dashboard's attention signals)
-
-- **Decided by A757 (owner, 2026-10-17): Reserved takes the map's reserved colour (built by A757
-  slice 4); Take order becomes a service step (built by A757 slice 8).** They looked alike (Q20).
-  "Bill requested" no longer looks like "N en camino": it has been filled purple since A472.
-  [A757's design](../superpowers/specs/2026-10-17-a757-table-states-design.md).
-- The till drops the bill request's late answer, a refusal included, once the waiter has signed out
-  or left the party (`#onRequestBill`, `apps/till/src/till-app.ts`), stricter than most of C81's
-  table actions. **Next action:** decide whether a late refusal should be said. Left open by service
-  Task 10 (#908). For the owner.
 
 ## Refresh the floor without a staff action in a zone's list view — OPEN (3d, W16)
 
@@ -3749,13 +4285,6 @@ whether the list shows a table's bill at all, and what the person sees when Disc
 Out of A582's scope; the slice 4 plan's Parked orders help text (slice 4b) says nothing about a
 table's bill for this reason. Done when the till either sends the bill's expectation or does not
 offer Discard on a table's bill, with a test through the till.
-
-## A1217. Two separate adds of the same dish with extras stay two counter rows
-
-Seen in A803 slice 1's LOOK (2026-10-29): adding the same dish with the same extras twice at the
-counter kept two lines of one, where a table's draft merges them into one line of two. Counter
-orders store each dish as its own portion since A1208, so a retrieved order shows the two as one
-row; whether the basket merges them before it is saved was not re-checked.
 
 ## A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped row
 
@@ -3915,23 +4444,6 @@ can, in Split a table and in Move dishes, which share the picker (`widgets/porti
 So a waiter can read Paid on a dish whose card is then declined. The row's words came with slice 4a
 (`9a7efbb6b0`). The picker's floor itself still counts the reserved money, which is what keeps that
 money with its bill.
-
-## A1353. On a desktop, the till's own stop at Split writes its sentence after the waiter has left
-
-**A1353. On a desktop, the till's own stop at Split writes its sentence after the waiter has left
-(left open by A803 slice 4c).** Found by 4c's review of fix round G, by running it: the committed
-"till's own stop at Send" case, on a desktop. The till is taken off the page with the drafts read
-hung, then put back. After the put-back the order is closed (`tableOrder` null) and the banner is
-empty, but `splitRefusal` holds `{ tableId: "t5", …, message: "Bill 2 changed while you were
-choosing. Check its row, then choose Split again." }`. The server-refusal path in the same state
-leaves `splitRefusal` null.
-
-Cause, read: the server-refusal path compares the visit taken at the press (`here()`), while the
-till's own stop runs `#onSplitBillChanged` (`apps/till/src/till-app.ts`), which takes
-`this.#orderVisit` when it starts; on a desktop the put-back has already moved the visit by then.
-Nothing visible was found: opening the table again clears it. Suggested fix, not tried: give the own
-stop's `live` the press's visit, `() => live() && visit === this.#orderVisit`, and add this as a
-desktop twin of the committed case.
 
 ## A1357. The till's draft saves and reads can still pass each other
 
@@ -4100,15 +4612,6 @@ A803 slice 4a's LOOK).** After a move, the dialog's totals updated but its list 
 dishes that left; paying one gave "Something went wrong, try again", and reopening the dialog put
 it right. I believe this predates slice 4a (Transfer items would leave it the same); not checked
 on `main`. It sits in A739's payment window files. Pictures `x-h-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
-
-## A1294. An extra whose dish is on another bill would be drawn as a dish in Move dishes…
-
-**A1294. An extra whose dish is on another bill would be drawn as a dish in Move dishes… (left
-open by A803 slice 4a).** The picker takes a line with no parent as a dish
-(`apps/till/src/state/portion-selection.ts`), and the database's parent key
-(`working_order_lines_parent_fk`, `packages/db/src/schema/orders.ts`) does not require the parent
-to be on the same bill. Believed impossible, since every move takes extras with their dish; by
-reading, not tested. Decide whether the key should say so.
 
 ## A1298. Move dishes… says only "Could not update the table, try again" when a picked dish has left the bill or the bill was merged away
 

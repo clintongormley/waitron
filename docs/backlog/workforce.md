@@ -57,12 +57,6 @@ slots it produces. Opening hours' special-day painter draws from the first date'
 says so when the dates' changeovers differ. Needs a
 decision on how one grid with one time ruler shows dates with different changeovers.
 
-## A710. Readable initials in short staffing blocks
-
-A later zoom/readability design remains open for short blocks. Keep the whole-day overview without
-vertical scrolling. Read a short block's full name through its tooltip or block menu, as the owner
-decided on 2026-10-16. No new zoom or scrolling design is agreed.
-
 ## A711. Shared staffing painter code
 
 - `staffing-season-painter.ts` and `staffing-special-day-painter.ts` (under
@@ -91,19 +85,6 @@ Before adding cadence editing, decide how the first partial period follows a clo
 Keep saved periods and snapshots intact. The
 [owner's cadence rule](#pay-period-cadence-after-closure-owner-2026-10-15) applies to that editor.
 
-## Frozen-summary name collection
-
-The current closure writer derives
-summary subjects from frozen entries (`pay-period-close.ts:144`); no valid summary-only fixture
-was established in the review. Keep the defensive collection and qualify a supported snapshot
-shape before adding a case for it. This is a test gap, not an observed incorrect exported name.
-
-## PDF boolean and empty values
-
-The PDF currently prints scalar values as `null`, `true` and `false`, including in Spanish. The
-reviewed serializer contract and its tests retain these spellings. Decide readable localized PDF
-wording separately, keeping CSV's scalar spellings stable; no legal-field or writer change is implied.
-
 ## The Spanish working-time record prints English words and internal codes
 
 Seen in A980 S2b's look at the PDF and CSV the working-time export builds: the Spanish files print
@@ -126,13 +107,6 @@ the offset-aware query. This is a test gap, not an observed wrong answer from th
 
 The browser-entry guard accepts runtime re-exports such as `export { readFileSync } from "node:fs"`.
 A direct Node import fails the source guard. Extend the guard to runtime re-exports and test that negative control. This follow-up concerns what the text guard would fail to catch in a later edit.
-
-## Staffing paint in calendar delete confirmations
-
-The A585 design left the count of staffing paint out of the season and special-day date deletion
-confirmations (open point 7); the Seasons window's delete note, which replaced the season
-confirmation in A721, leaves it out too. Decide whether to add a shared deletion-impact seam, so
-venue-service can ask contributing modules for that count, or deliberately keep both without it.
 
 ## A763 point 9. The Staffing month's Monday "Rota for this week" link goes
 
@@ -344,6 +318,66 @@ For no body, `{` and `null`, `POST …/rota/shifts` answered 400 with `field: "w
 mornings, Monday to Thursday" (owner, 2026-10-22). A preference warns as a broken rule does, in
 words that say it is the person's preference, not their contract. The `availability` table
 exists unused. Shown in A585's picker and warnings. After A586.
+
+## Bundle: Staffing reads the day start in force on each date
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A851. Staffing reads the venue's first business-day start, not the one in force (found by A788's
+  design).**
+  [Detail](workforce.md#a851-staffing-reads-the-venues-first-business-day-start-not-the-one-in-force-found-by-a788s-design).
+- **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** Decide whether
+  a block may run to the day's real end.
+  [Detail](workforce.md#a644-staffing-slots-stop-at-minute-1440-on-a-business-day-longer-than-a-day).
+- **A708. The special-day staffing painter draws every date on the venue's baseline changeover,
+  while each date's opening hours and staffing slots use that date's own.** Needs a decision on
+  how one grid shows dates with different changeovers.
+  [Detail](workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover).
+
+## Bundle: Give the built close step a caller, then its cadence rule
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Nothing in the product closes a pay period** (found by A793's design, read). A793's slice 6
+  (tips frozen with the pay period) waits for one. Decide with the owner who closes a period and when.
+  [Detail](workforce.md#nothing-in-the-product-closes-a-pay-period).
+- **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
+  the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it
+  in the backlog until then.
+  [Receipt and next step](workforce.md#pay-period-changes-after-closure).
+
+## Bundle: Staffing month day box
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A763 point 9. The Staffing month's Monday "Rota for this week" link goes, and the Rota tab
+  opens the week last picked (owner, 2026-10-16).** Waits for the second part of A724.
+  [Detail](workforce.md#a763-point-9-the-staffing-months-monday-rota-for-this-week-link-goes).
+- **Staffing's day box: each area's staff roles and times.**
+  [Detail](workforce.md#staffings-day-box-each-areas-staff-roles-and-times)
+
+## Bundle: Staffing painter shared parts
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
+  formatting.**
+  [Detail](workforce.md#a699-the-staffing-month-keeps-its-own-copy-of-month-stepping-and-staffing-its-own-date-formatting)
+- **A711. The two staffing painters copy each other's lifecycle, and venue-service's painters'
+  parts.** A shared base or controller, and more exports from `@waitron/venue-service/painter`,
+  would remove the copies. Left open by A585-4.
+  [Detail](workforce.md#a711-shared-staffing-painter-code)
+
+## Bundle: Colour chooser placement
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **At 390 px the staff role dialog's open colour panel covers its own Colour field.** Left open
+  by A783.
+  [Detail](workforce.md#at-390-px-the-staff-role-dialogs-open-colour-panel-covers-its-own-colour-field).
+- **A colour chooser left open while its window narrows may hide the chosen colour.** Read by
+  A783, not measured. Try it, and if it shows, keep the focused tile in view after the columns change.
+  [Detail](workforce.md#a-colour-chooser-left-open-while-its-window-narrows-may-hide-the-chosen-colour).
 
 ## Decisions and deliberate limits
 

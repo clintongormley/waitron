@@ -251,20 +251,6 @@ controls remain open; no provider work is authorised.
   "since Task 7" and "this tenant's devices" in `device-api.test.ts`; "(R1 behaviour preserved)"
   in `membership-mint.test.ts`.
 
-## The tunnel's stand-in relay pairs with sockets that have already gone
-
-`packages/tunnel/src/testing/relay.ts` is test-only:
-nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
-box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
-box and its bytes go nowhere. When a waiting client closes,
-it stays in `waiters` until its wait window (`waitForBoxMs`) runs out, so a box registering inside
-that window is sent `go` and paired with the dead client. Three tests in `relay.test.ts` pass anyway
-because they check only the next `ack`: the two reset cases say so, and the older "drops an idle box
-that sends garbage after registering, and keeps serving" claims more than it checks. **Next
-action:** only if `@waitron/tunnel` outlives its planned retirement (see _Waitron retains_ below) —
-drop the entry on close, test-first (a live client after the reset is paired with a live box), and
-narrow or extend that older test.
-
 ## Fiscal-certificate distribution
 
 Rebuild on the asynchronous adopt (see the residuals). Open
@@ -309,11 +295,6 @@ settled.** The proof to run then: on-prem primary → adopt → mirror → human
 to the promoted cloud → the venue sells and files. Local maintenance requirements remain in
 [Box maintenance and remote support](../superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md);
 its cloud support-service proposal is tracked in Cloud and is not approved by this move.
-
-## SQLite + Litestream replaces PostgreSQL
-
-Next: slice 3, seats and promotion. See
-[Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ## Validate every supported object store
 
@@ -740,14 +721,6 @@ in the offer. Left open by A1018 Slice 5 (Ruling R35).
 open by A1018 Slice 4 (Slice 4's Ruling R5).
 
 
-## A real account's refused sign-in can take a fraction of a millisecond longer than an unknown one's.
-
-Measured at 0.03 to 0.24 ms at one attempt; it follows the one dummy hash all refusals
-share (`checkManagerPassword`, `packages/identity/src/manager-login.ts`) and vanished with one
-account and one unknown address. The login rule is absolute, so it needs a ruling. `git log -S`
-finds that hash from 2026-08-30, before A1018.
-
-
 ## A hung integrity check on a copy has no time limit.
 
 Only an answer, an exit or a stop ends the
@@ -756,6 +729,230 @@ it (read, not run). A stop asks the thread to end and answers when it has, or af
 possibly still open: a running `integrity_check` does not stop for it. Left open by
 A1018 Slice 5 (Ruling R53).
 
+
+## Bundle A1401: Find out why the failover bench reports a corrupt database
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by the SQLite failover-loop prototype gate.** Validate every supported object
+  store. A promoted node's generation and Cloud's recovery orchestration remain; settle the
+  Waitron ↔ Waitron Cloud contract before assigning them.
+  [Detail](replication-cloud.md#loose-ends-left-by-the-sqlite-failover-loop-prototype-gate)
+- **The bench's S3 sometimes throws `database disk image is malformed`.** Seen 2026-11-03 on one
+  Mac in 5 of 14 whole-table `bench/sqlite-failover` runs, including 1 of 7 with S2's file from
+  before A1018 Slice 3, so it also throws with main's bench code; S3 run alone passed 2 of 2. Cause not
+  investigated.
+
+## Bundle: Series and module-preparation gaps at handover
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A dormant setup held from an earlier event can drop a series the old box added; settle before
+  Slice 13 or 3b-F.** The switch-on then activates on the old series and says nothing (run, A1018
+  Slice 5's Ruling R39). Beside it: a second live standard series made a sale answer a plain
+  `server.internal` 500 in a test fixture, cause not traced.
+- **The first hand-back is refused after the giving box has stopped filing; settle before Slice 13
+  or 3b-F.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first request,
+  because M1's registration stays active (run on a promoted database standing in for the copy).
+  Left open by A1018 Slice 5 (Ruling R40).
+- **The module preparation file grows with every write, and a handover cannot promise room in it.**
+  Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
+  for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
+  (Rulings R29, R30).
+  [Detail](replication-cloud.md#the-module-preparation-file-grows-with-every-write-and-a-handover-cannot-promise-room-in-it)
+
+## Bundle: Check everything at the offer, while the old box still sells
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A spare learns it has no room to place the copy only after the old box has stopped selling.**
+  Left open by A1018 Slice 5 (Ruling R35).
+  [Detail](replication-cloud.md#a-spare-learns-it-has-no-room-to-place-the-copy-only-after-the-old-box-has-stopped-selling)
+- **A spare needs the main box's backup settings, and nothing carries them yet.** The owner's answer
+  (2026-11-04): joining gives `backup.env`, later changes follow, and a spare that was off catches
+  up. Until then a venue with a recovery key is refused `handover.backup_settings_differ` at the
+  offer, the main box still selling. Goes in A947 3b's plan, with A1273. Ruling O3.
+- **A different key under the same version passes the handover's comparison.** It compares ring
+  versions only, so M2 places a copy whose sealed rows it cannot open, and filing then refuses (both
+  run in a test). A real join copies the ring (`apps/server/src/adopt.ts`), so no real box reaches
+  it today. Left open by A1018 Slice 5 (Ruling R49).
+
+## Bundle: The spare's wait loop: back-off, reasons, stop signals
+
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A new main box's chart post says too little in its log.** `chart_not_accepted` cannot tell a
+  refusal from a chart the old box already holds, because the route answers one boolean, and a
+  switched-off old box logs only `AggregateError`, with no ids. A fix to the route's answer needs a
+  ruling. Left open by A1018 Slice 5 (Ruling R53).
+- **A waiting spare repeats work and log lines with no back-off.** A copy with a dangling row was
+  fetched whole 4 times in 17 s with the old box stopped, and other waits log every 5 s. On this
+  branch nothing gets the old box out of that; a person's way out is Slice 7's emergency declaration,
+  and a check for such a row on the old box before it stops selling is not built. Left open by A1018
+  Slice 5 (Rulings R53, R56).
+  [Detail](replication-cloud.md#a-waiting-spare-repeats-work-and-log-lines-with-no-back-off)
+- **The spare's digest of a copy takes no stop signal.** A stop during it waits for the read to end;
+  the cost on a large file was not measured. Left open by A1018 Slice 5 (Ruling R53).
+- **A hung integrity check on a copy has no time limit.** Left open by A1018 Slice 5 (Ruling R53).
+  [Detail](replication-cloud.md#a-hung-integrity-check-on-a-copy-has-no-time-limit)
+- **A throw while checking a copy leaves no reason a person can read.** It reaches only the log, with
+  the old box stopped (run with a journal with no `hash` column). Left open by A1018 Slice 5 (Ruling
+  R53).
+- **The spare's folder clean-up reads any `readdir` failure as an empty folder.** A refusal to read
+  ends either sweep with no log line and leaves a closed operation's venue copy
+  (`destinationOperationFolders`, `apps/server/src/handover-store.ts`, read, not run). Left open by A1018 Slice 5 (Ruling
+  R53).
+- **A box can refuse its start while its `venue.db` already holds the accepted copy.** Killed just
+  after the swap with `accepted.db` then lost, two faults, entry's open has changed the digest, so
+  the start refuses `handover.accepted_copy_missing` (run). Left open by A1018 Slice 5 (Ruling R53).
+
+## Bundle: Re-read old failover lists after 3b, delete what it retired
+
+6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A completed provision or adopt operation replayed on a later request still answers 200 without
+  restarting and keeps the setup lock set.**
+  [Detail](replication-cloud.md#a-completed-provision-or-adopt-operation-replayed-on-a-later-request-still-answers-200-without-restarting-and-keeps-the-setup-lock-set)
+- **`docs/developers/conventions-data.md`'s `busy_timeout` receipt … should carry the date and Node
+  version the deleted comment had.**
+  [Detail](replication-cloud.md#docsdevelopersconventions-datamds-busy_timeout-receipt--should-carry-the-date-and-node-version-the-deleted-comment-had)
+- **The boot-time fetch is given only the URL … and boot never reads the `superseded` that
+  `reconcileMembershipOnBoot` returns.**
+  [Detail](replication-cloud.md#the-boot-time-fetch-is-given-only-the-url--and-boot-never-reads-the-superseded-that-reconcilemembershiponboot-returns)
+- **Replication, membership & failover — residuals.** Until slice 3 a venue has ONE node and no
+  failover at all. Read the residuals as requirements for what failover is rebuilt INTO, not as
+  descriptions of code that exists today.
+  [Detail](replication-cloud.md#replication-membership--failover--residuals-afterwards)
+- **Task 1a** — Deny's delete is the one join-request node filter no test fails without. Holders
+  torn by a concurrent promotion, credential sealing and scheduler takeover remain unverified.
+  [Detail](replication-cloud.md#task-1a--node-filters-and-unverified-concurrency-claims)
+- **Loose ends left by SQLite slice 2 Task 9a.** A node row holding no endorsement still signs
+  `endorsements: []`, and no first-start case asserts it. Restore fencing, membership trust and
+  signature checks, curated refusals and promotion with a pending first start remain open.
+  [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
+
+## Bundle: Everything needing a third box or a Cloud peer
+
+8 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1205: more than one spare box at a venue, after go-live (owner, 2026-10-29).** The owner's
+  idea: a till box (A1203) is similar hardware, so it could also be a spare. Needs a design: how a
+  second spare receives the stream, which spare takes over, and how alerts and the update order
+  (A950) work with two.
+  [Detail](replication-cloud.md#a1205-more-than-one-spare-box-at-a-venue-after-go-live-owner-2026-10-29)
+- **The membership route ignores a different chart at the term this box holds.** Left open by A1018
+  Slice 3.
+  [Detail](replication-cloud.md#the-membership-route-ignores-a-different-chart-at-the-term-this-box-holds)
+- **The start check may still stop for a chart whose signer was evicted while it asked.** Read, not
+  run. Left open by A1018 Slice 3.
+  [Detail](replication-cloud.md#the-start-check-may-still-stop-for-a-chart-whose-signer-was-evicted-while-it-asked)
+- **A new box has no way out while a third box is main.** At `copy_accepted` or `filing_assumed` it
+  waits on `handover.source_no_longer_main`, and the emergency path refuses from those states (read,
+  not run); at `filing_assumed` neither the old box nor the new one files. Slice 6 has to show it.
+  Left open by A1018 Slice 5 (Ruling R43).
+- **A healthy third box makes a new main box wait, with nothing wrong.** The chart it minted carries
+  only its own endorsement and `peerKeyOf` does not read `nodes`, so the third box's answer is
+  `not_verified` (`apps/server/src/boot-peer-check.ts`, run). A neighbour of A1276, a different
+  symptom. Predates A1018 Slice 5 (Ruling R44).
+- **A placed copy can lose a newer chart.** Placing replaces the old file's chart, so a newer chart
+  still naming the old box is lost and M2 can mint below a term another box holds; placing's check
+  ignores the term; R41's way back loses the chart that cleared the wait. Nothing real mints such a
+  chart today. [Detail](replication-cloud.md#a-placed-copy-can-lose-a-newer-chart)
+- **A1275: a Cloud peer's chart is refused on the checked paths** (promotion, retiring, adding a
+  spare). [Detail](replication-cloud.md#a1275-a-cloud-peers-chart-is-refused-on-the-checked-paths)
+- **A1276: after two promotions, a box can refuse the main box's chart**, in a venue of three or
+  more boxes, when no key it trusts vouched for that main box; the refusal names no next step.
+  Measured at the helper, not end to end.
+  [Detail](replication-cloud.md#a1276-after-two-promotions-a-box-can-refuse-the-main-boxs-chart)
+
+## Bundle: Which state files a handover carries; summary checks
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A handover's manifest has no row for the box's other state-folder files.** Left open by A1018
+  Slice 4 (Slice 4's Ruling R5).
+  [Detail](replication-cloud.md#a-handovers-manifest-has-no-row-for-the-boxs-other-state-folder-files)
+- **The handover summaries' and checks' minor follow-ups.** Untested choices and hand-kept lists in
+  the module seat, the Veri*Factu summary and copy check, the payments summary and the manifest
+  guard. Left open by A1018 Slice 4.
+  [Detail](replication-cloud.md#the-handover-summaries-and-checks-minor-follow-ups)
+
+## Bundle: Recheck that a spare gets later charts
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A mirror keeps a renamed server's old chart (A917).** After a rename its copy would name the
+  old address until it is paired again. No reader routing by a mirror's copy was found (not exhaustive).
+  [Detail](replication-cloud.md#a-mirror-keeps-a-renamed-servers-old-chart-a917)
+- **A promoting standby may list itself with an empty `contactUrl`, so no till is told to dial it.**
+  `nextStandings` appends it with an empty `contactUrl`, and `routableServers` then drops it.
+  Found by reading, not run.
+  [Detail](replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
+
+## Bundle: The waiting start's stuck and stale cases
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The waiting start's loose ends.** A refused stepdown leaves it waiting until its process
+  restarts, and a stepdown request still in flight after the wait ended restarts the box but closes
+  nothing. Left open by A1018 Slice 3.
+  [Detail](replication-cloud.md#the-waiting-starts-loose-ends)
+- **The waiting page does not change when the wait ends.** A person already looking at it keeps
+  seeing "This box is waiting for…" until they reload (`apps/server/src/waiting-page.ts`). Left
+  open by A1018 Slice 3.
+- **The carry-on page's unexpected-failure sentence does not call itself a fault in Waitron**
+  (`failed` in `apps/server/src/i18n/waiting-page.ts`). A refused disk write lands there too, so
+  the wording is a judgement call. Left open by A1018 Slice 3.
+
+## Bundle: Decide what the old promote route still does
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **After a plain promote nobody sweeps the old box's open card payments.** That route writes no
+  activation row, and a fenced box no longer sweeps, so a payment stays `attempting` until a person
+  resolves it on the new box. A text search found no screen calling the route. Left open by A1018
+  Slice 5 (Rulings R47, R48).
+- **A failed promotion leaves `trading.env` behind.** `apps/server/src/promote.ts` writes it inside
+  the transaction's body, so a failed activation leaves it written (run: false, then true). On main
+  since at least #1587 (`git log -S`). A start with that leftover and no retry was not run.
+- **A1279: a local secondary promotes only over a chart it signed itself.** No production caller.
+  [Detail](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself)
+
+## Bundle: Size and attempt limits on box-to-box and handover routes
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The peer-status route's minor follow-ups.** A bad signature from a known box answers 403, the
+  operation id is not checked as a UUID, and a body of any size is read before the signature check,
+  here, on the two handover source routes (Slice 4), on the offer and on the acceptance (Slice 5).
+  Left open by A1018 Slice 3. [Detail](replication-cloud.md#the-peer-status-routes-minor-follow-ups)
+- **Nothing limits sign-in attempts on a box's operation routes.** Handover preparation, activation
+  and promote have no throttle, and one belongs on all of them. 32 attempts on an administrator's
+  email held their sign-in about 0.8 s and 64 about 2.5 s, with no refusal; nothing larger was run.
+  Left open by A1018 Slice 5 (Ruling R38).
+
+## Bundle: Address search provider, province names, guide lines
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1171: the address forms need a provider from the Cloud address-lookup bridge.** Nothing hands
+  `wt-address-lookup` a provider yet. Left open by A1171.
+  [Detail](replication-cloud.md#a1171-the-address-forms-need-a-provider-from-the-cloud-address-lookup-bridge)
+- **A1171: the dashboard's Venue card knows a province only by its code and main name.** The server's
+  `provinces` list carries no other names, so a chosen address naming "Alicante" for
+  "Alicante/Alacant" is not recognised there and is left to the server's postcode check at Save.
+  Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
+
+## Bundle: One signed request helper; strict reply readers
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Four Cloud reply and state readers accept a one-item list where they want text.** Each turns
+  the field into text before checking it, so `["ready"]` passes as `"ready"`.
+  [Detail](replication-cloud.md#four-cloud-reply-and-state-readers-accept-a-one-item-list-where-they-want-text)
+- **The signing and size-capped reading of a request to Cloud is repeated across the
+  `apps/server/src/cloud-*.ts` files.** One shared helper would serve them all; left out of #1729
+  as a refactor larger than that PR (its simplify review, 2026-10-15).
 
 ## Decisions and deliberate limits
 
@@ -1026,15 +1223,6 @@ trust sets built by hand), on the slice's branch; not run end to end. That repli
 S2's chart to D, or to a returned M, is not proven. Go-live is two boxes, where this cannot arise.
 Fix idea: at join, also pin the main box's own trusted keys.
 
-## A1277: a malformed chart signed by a trusted key is copied into the next chart
-
-Left open by A947 slice 3a. The readability check (`assertHeldDocumentReadable`,
-`apps/server/src/membership-trust.ts`) checks only the fields a chart declares, so a held chart
-signed by a key this box trusts whose `nodes` entry carries an extra key passes it and the trust
-check, and retiring and the spare-adding route copy that extra key into the chart they sign.
-Measured on the slice's branch at those two paths; promotion was not measured, and on main it was
-not run. Waitron never writes such a chart.
-
 ## A1278: the spare-adding route spends a reservation on a held chart it then refuses
 
 Predates A947 slice 3a. On main (01945cbce, in a throwaway worktree), the case "refuses 409
@@ -1102,15 +1290,6 @@ attempt's `node_signing_key`, `node_mode` and `node_mirror_link` rows for an id 
 (a probe case added to `apps/server/src/adopt.test.ts` in the slice's Task 10 review, then
 removed). Nothing reads a row by any id but its own, and a rotation re-seals the key, but it is a
 private key for an identity the main box endorsed. Wanted: remove them when a new attempt starts.
-
-## A1281: the venue command reads a missing or unmigrated node.db as version 0
-
-Left open by A947 slice 3a. `waitron-provision venue` refuses an unmigrated `venue.db`
-(`provisioning.database_unmigrated`, `packages/provisioning/src/cli.ts`), but does not check
-`node.db`: the node set's version reads as 0 when its table is missing (`appliedSchemaVersion`,
-`packages/migrations/src/schema-version.ts`). A real box's folder is migrated, both files, before the
-command runs (`applyMigrations`), so this needs a folder put together by hand. Wanted: the same
-refusal for `node.db`.
 
 ## A1282: the Servers screen's main-box fingerprint is stale after a connection repair
 

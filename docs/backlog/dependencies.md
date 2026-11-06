@@ -62,17 +62,6 @@ exact pin stayed exact), so it did not restore #432's one-range shape where that
 `@aws-sdk/client-s3` is exact in `apps/server` and a caret range in `packages/stream` and
 `bench/sqlite-failover`. The answer goes in `versioning-strategy` in `.github/dependabot.yml`.
 
-## Only the request side of that adapter was compared between the two versions
-
-Left open by #444. `apps/server` and
-`apps/print-agent` moved from `@hono/node-server` 1.19.15 to 2.1.1.
-
-Version 2 also
-changed response code — `Response` fast paths, null-body handling, a close handler for
-`Blob`/`ReadableStream` responses, and `Response.json()`/`Response.redirect()` — and nothing
-compared a response BODY or its headers across the two.
-Re-running the comparison needs a scratch install of 1.19.15.
-
 ## The default browser floor rose, and no BROWSER floor is stated anywhere in the repo
 
 Left open by #450.
@@ -143,38 +132,25 @@ those callers. A maintained dependency patch is a separate owner decision.
 | [Minimatch changelog, v11.0.3](https://github.com/isaacs/minimatch/blob/v11.0.3/changelog.md) | “Remove `makeRe()`” | Version 11 removes an API the installed plugin imports. |
 | [Import plugin issue #569](https://github.com/un-ts/eslint-plugin-import-x/issues/569) | “needs a refactor” | Upstream has a report of this dependency incompatibility; it does not establish when a fix will ship. |
 
-## Dependabot's Zod security run reported an older latest resolvable version
-
-Dependabot's
-[failed security run](https://github.com/clintongormley/waitron/actions/runs/40007419026)
-reported 4.4.3 as the latest resolvable version with no conflicting dependencies, even though
-its update command exited successfully. This local refresh does not establish why its updater
-failed to recognise the new resolution.
-
-The local refresh landed in [#2026](https://github.com/clintongormley/waitron/pull/2026).
-Next, diagnose why the updater failed to recognise the new resolution.
-
-## Whether the vulnerability the upgrade fixes is reachable in this product is open
-
-Left open by #453. `@simplewebauthn/server` and
-`@simplewebauthn/browser` moved to 14.
-
-14.0.2's
-release note describes it as "Revamped certificate revocation logic to only cryptographically
-verify and process CRLs from certificates that chained back to an RP-chosen trust anchor"
-(GHSA-2g3p-m8c9-hhwh; the release note is the only source). We ask for `attestation: "none"` and
-never call `MetadataService`, but the attestation FORMAT is chosen by the RESPONSE: the verifier
-dispatches on the `fmt` inside the client-supplied attestation object, and the `apple` and
-`android-key` formats carry the library's own built-in trust anchors, which is what makes
-`validateCertificatePath` — the only caller of `isCertRevoked` — do work. The cheap evidence leans
-towards reachable rather than away.
-
 ## One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it
 
 `drizzle-kit`'s own range holds it at 0.25.12; since A107 a root `pnpm.overrides` entry moves
 `@esbuild-kit/core-utils`' copy onto the
 same 0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit`
 packages are deprecated. Left behind by the esbuild upgrade (#439, 2026-09-19).
+
+## Bundle: What package manifests declare: floors, the root engines line, vite
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Whether a declared floor follows the installed version is undecided — one decision for every
+  manifest.**
+  [Detail](dependencies.md#whether-a-declared-floor-follows-the-installed-version-is-undecided--one-decision-for-every-manifest)
+- **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.**
+  [Detail](dependencies.md#the-supported-node-version)
+- **The browser-mode packages that declare no vite follow the others' by deduplication, not by
+  a declaration.**
+  [Detail](dependencies.md#the-browser-mode-packages-that-declare-no-vite-follow-the-others-by-deduplication-not-by-a-declaration)
 
 ## Decisions and deliberate limits
 
@@ -250,6 +226,9 @@ tried and reverted: it decodes 35 named entities XML does not define and turns `
 into U+00A0 where 4.5.7 gave U+0020. Exact XML semantics would need version 5's `entityDecoder`
 hook, which is bespoke code on a fiscal path and a decision rather than a bump.
 
+- **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it.**
+  [Detail](dependencies.md#one-esbuild-copy-older-than-ours-stays-in-the-tree-drizzle-kits-own-range-holds-it)
+
 ## Npm notices and module-type-only manifests
 
 Stripe's CJS and ESM subdirectory manifests contain only the module type.
@@ -269,17 +248,3 @@ the actual build. Which other installed packages are affected remains unverified
 - **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One
   line either way; it needs an owner call on whether Node 24 is still supported.
   Left behind by the Node types upgrade (#441, 2026-09-19).
-
-## The TLS options type guarantee is untested
-
-- **`apps/server/src/tls.ts`'s type guarantee is still untested.** It derives its options type
-  from the installed package (`Parameters<typeof serve>[0]`) so that an incompatible reshape
-  fails `tsc`; the Hono Node adapter upgrade (#444) did not exercise that, because the type was
-  otherwise identical across the two versions.
-
-## Readable QR snapshot differences
-
-- **There is no snapshot file anywhere in the repository**, so the till's byte pin is a SHA-256
-  of the output. A file snapshot would fail with a readable diff; whether this repo wants
-  snapshot files at all is an owner decision. Left behind by the till QR library upgrade
-  (qrcode-generator 1 -> 2, 2026-09-20).

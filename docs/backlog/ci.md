@@ -85,12 +85,6 @@ cache export #1427 removed. Whether the builds still need it (for example for `l
 print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no
 action queued.
 
-## A new branch pushed while the refresh fails still has its range start at the local `origin/main`'s merge base
-
-Left open by the pre-push hook's sign-off fixes, A392 (#1421) and
-A411 (#1445), after which the hook refreshes `origin/main` from the remote first; no action
-queued.
-
 ## `bundle-smoke` builds only the credentials and server bundles
 
 A change to
@@ -98,32 +92,12 @@ A change to
 through `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`) but builds neither of their bundles
 in CI.
 
-## Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id
-
-The column
-is `text NOT NULL` with no foreign key or CHECK, and `recordWorkingLineContexts`
-(`packages/venue-service/src/operations.ts`) writes it unchecked. Refuse `""` there, with a case,
-or record why a sale can never carry one. Left open by A810 (#1886).
-
-## The hint's cover stops at the migration run, and provisioning runs after it
-
-A module's
-provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
-succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
-curated line. Nobody has hit this. Left open by #343.
-
 ## `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe
 
 The
 fixture closes the handles first, which removes the sidecars. The wipe's sidecar removal is
 pinned by `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars
 on disk. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
-
-## Loose ends left by W92 (#1250)
-
-- Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
-  during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
-  its final head.
 
 ## The server holds two separate 100-character limits for text a request sends
 
@@ -179,14 +153,6 @@ Vitest 4.1.11 reads it.
   `expected 'answered' to be 'unanswered'`. W30 makes `pause()` await the stopped state before its
   caller starts that control. The original one-off race has not been reproduced locally. If the control
   fails again, retain that run's log and inspect the child state before naming another cause.
-
-## What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open
-
-`scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
-container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
-`scripts/scratch-dir.mjs` measures 83% of branches, because the line for a missing `/dev/shm` runs
-only on macOS; the root project's thresholds still pass. Neither is queued. Receipt:
-[ci-and-gates.md](../developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 
 ## What the landing-port fix (A80, PR #740) left open
 
@@ -329,14 +295,6 @@ the current scanner functions over the current nightly workflow accepted an in-m
 whose first download retry gained `continue-on-error: ${{ true }}`. The same copy with literal
 `true` was refused; the intact workflow passed. That experiment changed no workflow on disk.
 It demonstrates a gap in the scanner, not a failing download in the current workflow.
-
-## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
-
-- A case that waits several times can still outlast a bound that
-  passes this check. Only reading catches that shape; if it recurs, the answer is probably a runtime
-  check rather than a text reader. (Its `packages/` and `apps/` half went with the real-PostgreSQL
-  harness; re-extending the scan is worth doing only if suites under those roots start declaring
-  long waits again — `CLAUDE.md` §4.)
 
 ## What the per-push CI concurrency groups (#384) left open
 
@@ -539,6 +497,270 @@ fixture must abort and await that call during teardown. Those runs did not estab
 sends any further requests after the fake printer closes or retains a live resource; do not
 infer either from the missing outcome alone.
 
+## Bundle A1397: Replace short random table labels
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Shortened random table labels remain outside the floor suites.** Inspect the non-floor
+  fixture sites and reproduce repeated suffixes before replacing them; preserve the existing
+  uniqueness and refusal checks.
+  [Detail](ci.md#shortened-random-table-labels-outside-the-floor-suites).
+- **Floor-plan short-name fixtures still draw only four random characters.** A review probe
+  forcing one repeated suffix failed a case. Reproduce it and replace the fixture suffix while
+  retaining the five-character limit and the original case-insensitive refusal checks.
+  [Detail](ci.md#floor-plan-short-name-fixtures).
+
+## Bundle A1398: Pack the other packages' test shards by measured time, and check the packing on every run
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The server's duration table needs a staleness warning.** Flag missing files and
+  shards over four minutes from CI measurements; refreshing the table remains manual.
+  [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+- **The other sharded packages still use Vitest's file-count split.**
+  [Detail](ci.md#the-other-sharded-packages-still-use-vitests-file-count-split)
+- **Nothing checks, on every CI run, that each server test file ran in exactly one shard.**
+  [Detail](ci.md#nothing-checks-on-every-ci-run-that-each-server-test-file-ran-in-exactly-one-shard)
+
+## Bundle A1402: Build the front-end and the other Node bundles in CI, and open one
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **`bundle-smoke` builds only the credentials and server bundles**
+  [Detail](ci.md#bundle-smoke-builds-only-the-credentials-and-server-bundles).
+- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI**
+  [Detail](ci.md#a-pull-request-that-changes-only-front-end-code-gets-no-spa-bundle-built-anywhere-in-ci).
+
+## Bundle: Get ready for A760's history rewrite (A1306 and CI's concurrency groups)
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1306. Rewrite git history to drop the development artifacts** (owner, 2026-11-02: "there is
+  no point in keeping these development artifacts as history"). Rewrite `main` with them removed,
+  at a moment when the lanes are paused, such as beside A760's squash.
+  [Detail](ci.md#a1306-rewrite-git-history-to-drop-the-development-artifacts).
+- **What the per-push CI concurrency groups (#384) left open:** two states stop publishing until a
+  person intervenes; the repair is to delete or retag `:main` by hand. Nothing alerts on it. [Detail](ci.md#what-the-per-push-ci-concurrency-groups-384-left-open)
+
+## Bundle: One repeated-run rig, then each named test
+
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A local four-file till browser run ended without a completed-file report.**
+  Capture per-case and file progress plus a process snapshot on recurrence; a serial pass does
+  not qualify the concurrent path. The standalone parties suite also reaches its local
+  deadline; the cause is unknown. [Detail](ci.md#local-multi-file-till-browser-interruption).
+- **Investigate two full-run till browser failures seen during A669 validation.**
+  [Detail](ci.md#investigate-two-full-run-till-browser-failures-seen-during-a669-validation).
+- **The payments test "refreshes only active reader statuses" failed once locally beside another
+  coverage run**, then passed five times alone and in CI; not investigated. Left open by W100
+  (#1332).
+- **Two browser tests failed once each during A454's work (search everywhere), and neither was reproduced or checked on `main`**
+  [Detail](ci.md#two-browser-tests-failed-once-each-during-a454s-work).
+- **The relocated independent department preview needs a load investigation.**
+  [Detail](ci.md#the-relocated-independent-department-preview-needs-a-load-investigation).
+- **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**
+  [Detail](ci.md#a-printers-screen-test-failed-once-during-a435-step-2s-review-fixes).
+- **A till late-send PIN test failed once and then passed, twice in two days, in local combined
+  runs (A1126)**: "shows a wrong PIN on the app's line when the dialog was closed while it was
+  sent, and asks afresh next time". **Next action:** reproduce it under load, keep the failure
+  output, and fix at the root. [Detail](ci.md#a-till-late-send-pin-test-failed-once-twice-in-two-days-a1126)
+
+## Bundle: Replace 15 "if it happens again" entries with one table in `docs/backlog/ci
+
+15 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Store bound-value test timeout** (left open by A1332, #2458). One CI run timed out while checking
+  the reader and writer limits; the slow phase remains unknown. Keep the assertions and deadline.
+  [Detail](ci.md#store-bound-value-test-timeout).
+- **Find why GitHub created no workflows for A987's main merge (A1022).** The runs API
+  returned no runs for `e7ce92a7c`; the cause remains unverified. Recovery and the successful-CI
+  baseline do not explain the missing trigger. Retain the after-merge run check.
+  [Recovery procedure](../developers/ci-and-gates.md#recover-a-main-commit-whose-ci-run-was-never-created).
+- **A891: retain input and timer timing if the missing product-information window recurs.**
+  [Detail](ci.md#a891-retain-input-and-timer-timing-if-the-missing-product-information-window-recurs).
+- **A999 residual: retain the other allergy-move failure if it recurs.**
+  [Detail](ci.md#a999-residual-retain-the-other-allergy-move-failure-if-it-recurs).
+- **Explain the two older silent pnpm setup stalls.**
+  Both lacked command progress reports; replacing the initial Node read does not establish their cause.
+  [Detail](ci.md#explain-the-two-older-silent-pnpm-setup-stalls).
+- **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed one.**
+  [Detail](ci.md#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one).
+- **A1230 residual: dashboard shard 1's blocked operation is unknown.**
+  Retain the next failing log's selected-file case/hook events and Playwright API log;
+  use them to locate the pending operation before changing test or product behavior.
+  A1305 owns the later shard-4 deadline with `device-profiles-screen.clock.test.ts` unfinished;
+  its cause is also unconfirmed and its complete log is retained.
+  [Detail](ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
+- **A1305 residual: the dashboard page blocked during a click, and what blocked it is unknown.**
+  On `device-profiles-screen.clock.test.ts`, a switch click never completed and the log shows no
+  later call naming an element that file clicks, which fits a blocked main thread. At the next
+  stall of a file silent for 60 seconds past its time limits, read the reporter's `[file-progress] stack:` lines before changing test or product behaviour.
+  [Detail](ci.md#a1305-the-dashboard-page-blocked-during-a-click-and-what-blocked-it-is-unknown).
+- **A1027 residual: the till shard's blocked operation is unknown.**
+  [Detail](ci.md#the-till-shards-blocked-operation-is-unknown-a1027).
+- **Venue-service browser startup remains unexplained (#1557).**
+  [Detail](ci.md#venue-service-browser-startup-remains-unexplained-1557).
+- **A419 dashboard CI stall remains unexplained (#1474).**
+  [Detail](ci.md#a419-dashboard-ci-stall-remains-unexplained-1474).
+- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254 attempt 1, job 111163230954, 2026-10-03; passed on re-run).**
+  The original one-off race has not been reproduced locally.
+  [Detail](ci.md#the-stream-pause-tests-frozen-bucket-control-failed-once-in-ci).
+- **Three unexplained incidents, each seen once or twice; on recurrence retain the log before retrying**
+  [Detail](ci.md#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying).
+- **The unexplained dashboard heading-order failure remains open** after #350. The
+  `dashboard-app.a11y.test.ts` heading-order sighting is a different rule with no colour evidence,
+  so nothing here explains it — treat it as still unexplained.
+- **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.**
+  [Detail](ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414).
+
+## Bundle: Finish the time limits on CI's network steps
+
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **`scripts/ci-diff-paths.sh` never looks for `gnutimeout` for its `-k` bound** (left open by
+  A1310, #2400). On ubuntu-26.04 runners it gets uutils' `timeout`, whose forced kill reaches only
+  `gh` itself ([receipt](../developers/ci-and-gates.md#every-pnpm-setup-is-bounded)); whether `gh api`
+  starts a child is not checked. A fix also needs a `gnutimeout` stub in `ci-main-recovery.test.mjs`.
+- **A1251: reject conditional error tolerance in artifact-download guards.**
+  The scanner accepts a retry with `continue-on-error: ${{ true }}` while rejecting literal
+  `true`. Add refusal cases and retain legitimate absent/false controls. [Detail](ci.md#a1251-reject-conditional-error-tolerance-in-artifact-download-guards).
+- **Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935).**
+  Artifact uploads (A1100) and Node setup (A1254) now have bounded retries; the remaining sites are cache, Docker and CodeQL.
+  [Detail](ci.md#other-uses-steps-that-fetch-over-the-network-have-no-step-time-limit-and-the-runners-own-action-download-at-job-set-up-is-bounded-only-by-long-limits-of-its-own-left-open-by-a935).
+- **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).**
+  [Detail](ci.md#codeqls-timeout-minutes-50-rests-on-the-default-setups-durations-a488).
+- **Both image jobs still run `docker/setup-buildx-action`**. No action queued.
+  [Detail](ci.md#both-image-jobs-still-run-dockersetup-buildx-action).
+
+## Bundle: One small pull request for rule lines
+
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Decide whether browser tests stop replacing modules (A943 follow-up).**
+  [Detail](ci.md#decide-whether-browser-tests-stop-replacing-modules-a943-follow-up).
+- **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL.
+  [Detail](ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never).
+- **The test-shape half of #339's lesson is unwritten.**
+  [Detail](ci.md#the-test-shape-half-of-339s-lesson-is-unwritten).
+- **A two-transaction concurrency test that starts both sides in sequence is racing itself.**
+  Nothing guards the shape; look for it in any new racing test.
+- **A trap not yet in `CLAUDE.md`: `pnpm --filter <pkg> test <file> -t "name"` silently drops the
+  `-t` and runs the whole file**; only a bare `--` before it passes it through. **Next action:** add
+  it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
+
+## Bundle: Add a control to each check that cannot fail
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Three adjustment-portion refusal checks also pass with shortened ID lists.** Qualify the
+  intended mixed-row, note and course refusals with accepting controls, without weakening the
+  existing error-code and unchanged-row assertions.
+  [Detail](ci.md#three-adjustment-portion-refusal-checks-also-pass-with-shortened-id-lists).
+- **Spanish separately installed certificate guidance is checked only against its translation.**
+  Add an independent check for address checking, stopping on a certificate warning and the page's
+  replacement limit. The earlier Spanish installer referral passes the whole current page suite.
+  [Observed control](ci.md#spanish-separately-installed-certificate-test-checks-mapping-only).
+- **Two setup-app checks for an absent error message cannot fail** (left open by A1176).
+  Read the form errors too, as `shown()` in `setup-app-held-refusals.test.ts` does, and
+  prove each check by injecting the message.
+  [Detail](ci.md#two-setup-app-checks-for-an-absent-error-message-cannot-fail-left-open-by-a1176).
+- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
+  [Detail](ci.md#appsserversrcbootmirrortesttss-adoption-pending-case-no-longer-has-a-negative-control).
+
+## Bundle: The nightly mutation run: downloads, shard layout and repeated jobs
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The mutation report downloads still use `actions/download-artifact`** (left open by
+  A1216; shared added by A1272). Measure the mutation downloads before replacing their bounded
+  action retries.
+  [Detail](ci.md#the-mutation-report-downloads-still-use-actionsdownload-artifact).
+- **The shard layout was measured against an engine that is gone** — OPEN.
+  [Detail](ci.md#the-shard-layout-was-measured-against-an-engine-that-is-gone).
+- **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN.
+  [Detail](ci.md#mutationyml-repeats-one-shard-and-merge-job-pair-three-times).
+
+## Bundle: apps/server's test speed: restart tests, measured speed-ups, fixed PINs
+
+3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
+  `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
+  [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+- **The server's test suite has more measured speed-ups left.** A1297 took the three largest; four
+  more were measured or named but not built. Plus two small guard gaps from the same PR.
+  [Detail](ci.md#server-test-time-levers-left-after-a1297).
+- **Other server test files still hash fixed PINs and passwords on every test.**
+  [Detail](ci.md#other-server-test-files-still-hash-fixed-pins-and-passwords-on-every-test).
+
+## Bundle: Vitest settings: what the guide says, what A490 left, the cold-cache check
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A902. Say in the testing guide that Vite also prints browser console output under an AI agent.**
+  [Detail](ci.md#a902-say-in-the-testing-guide-that-vite-also-prints-browser-console-output-under-an-ai-agent).
+- **Loose ends left by SQLite slice 1 (#490 and the preparation tasks).**
+  [Detail](ci.md#loose-ends-left-by-sqlite-slice-1-490-and-the-preparation-tasks).
+- **The dependency-optimizer fix still needs a cold-cache check on Vite 8.**
+  [Detail](dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
+
+## Bundle: The logo retry checks' deadline and counting
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The logo retry check can outwait its test deadline** (left open by A1332, #2458). Its 300-frame
+  request wait can exceed the unchanged 15-second case deadline when Chromium throttles frames.
+  [Detail](ci.md#the-logo-retry-check-can-outwait-its-test-deadline).
+- **The shared logo primitive's retry checks still count a bounded timing list** (left open by
+  A1332, #2458). Apply the till check's scoped observation after reproducing the same failure there.
+  [Detail](ci.md#shared-logo-retry-checks-use-the-retained-timing-list).
+
+## Bundle: One throwaway branch that interrupts an upload and re-runs a shard
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1251: qualify artifact-upload retries after a step timeout.**
+  Check the first attempt's recorded outcome and whether its retry runs; the existing collision
+  probe does not cover a timeout or an interrupted upload. [Detail](ci.md#a1251-qualify-artifact-upload-retries-after-a-step-timeout).
+- **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
+  A1125's CI (#2238, 2026-10-29), while the merge still used the download action.
+  [Detail](ci.md#a1213-does-a-re-run-till-shards-report-reach-test-till-merge).
+
+## Bundle: One shared "am I the main script?" helper
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The deadline command can exit successfully without running its child through a directory symlink.**
+  Qualify its entrypoint check with symlink and physical-path controls, then make both run the
+  child. [Observed reproduction](ci.md#deadline-command-through-a-directory-symlink).
+- **The bundle CLI can return success without creating output through a symlink-spelled path.**
+  A994's temporary `/var/folders` invocation skipped its entry block; the canonical path worked.
+  Check supported entry paths before changing the production predicate.
+  [Detail](ci.md#the-bundle-clis-entry-predicate-can-skip-a-symlink-spelled-path).
+
+## Bundle: What the mutation score counts: db static mutants, the pointer test helper
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **`packages/db`'s static mutants are not in its mutation score** — OPEN. Owner's call.
+  [Detail](ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
+- **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
+  the `packages/ui` mutation score (#466, 2026-09-20). Adding a third exclusion is the consistent
+  move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+  Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
+
+## Bundle: Tests that close a dialog and check too soon, and pressEscape
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Tests that close a dialog and then check after a single `flush` were not searched**
+  [Detail](ci.md#tests-that-close-a-dialog-and-then-check-after-a-single-flush-a452-1487).
+- **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after each
+  Escape.** **Next action:** decide whether "closes on a real Escape press" should wait for its
+  `wt-close` instead, keeping the timer for the stays-open tests. Left open by service Task 11
+  (#916). [Detail](till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
+
 ## Decisions and deliberate limits
 
 - **Investigate CI failures before retrying (owner, 2026-10-31, A1243).** Follow the
@@ -720,19 +942,6 @@ output.
   provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
   spec §6 step 5).
 
-## Chromium's ResizeObserver loop message in other dashboard suites (after W72h)
-
-W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered
-notifications" from the Products tree's category name box. A261-3 (2026-10-05) and A349
-(2026-10-08) then saw the message in other dashboard suites, on their own candidates and on the
-commits before them; that comparison does not establish which observer causes it or its effect on
-the rendered screen. A407 (#1432) later recorded: "The original-main catalogue-only command passed
-270 cases without the warning; its historical occurrence was not reproduced and is not attributed
-to currency fields."
-
-The runs behind this are in
-[the catalogue names section](catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open).
-
 ## Tests that close a dialog and then check after a single `flush` (A452, #1487)
 
 A452 made browser tests wait for a dialog's `wt-close` before checking what a screen does on close,
@@ -848,15 +1057,6 @@ and `plain-bundle-mode-green2.log` (15 passed). The copied source bytes were unc
 fixture command path changed between those probes.
 
 
-## The UI showcase overflows a phone and inherits black text in its dark panel
-
-At a
-390 px viewport, the panels in `packages/ui/index.html` measured 572 px wide before and after
-A974's wording cleanup; unstyled dark-panel text resolved to black on `rgb(16, 18, 22)`.
-Give the showcase a responsive layout and a foreground colour on each theme root, then open
-both themes at 390 px and 1280 px. Keep the price-format examples and demo interactions.
-
-
 ## Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)
 
 In which phase they stalled is unknown: the action passes no `--progress`, so its log is
@@ -924,13 +1124,6 @@ module mocks in browser tests; #1934 did not add one, because one failure with n
 cause is thin ground for a house rule. The owner decides.
 
 
-## Check the older capture suites' viewport cleanup (A669-5 review)
-
-`apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
-incoming dimensions. Effects on later cases are unverified. Probe those cases before changing
-their cleanup; preserve their current behavioral assertions.
-
-
 ## A902. Say in the testing guide that Vite also prints browser console output under an AI agent
 
 Its section "Vitest hides a passing test's console output under an AI agent" names only
@@ -991,14 +1184,6 @@ refusal. Capture the exact case and output on any further recurrence before attr
 to the same mechanism. [Receipt](../developers/conventions-ui.md#a-parent-render-must-not-restore-a-corrected-request-refusal).
 
 
-## `scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or `scripts/migration-upgrade.test.ts`
-
-Its `budgets()` returns `unreadable: true` for both, on
-`main` (`b81f1481c`) as on A751's branch, so a wait in either that outgrows its bound passes it.
-Measured by calling `budgets()` on each file's text; which construct it cannot resolve was not
-traced.
-
-
 ## Loose ends left by the comment-pruning pull requests (#559 to #624)
 
 - Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
@@ -1037,13 +1222,6 @@ Left open by A841 slice 1, #1927.
 shard job and `-aggregate` job; one reusable workflow would hold them. The root mutation guards
 also repeat the list of sharded packages. Do it on its own branch.
 [Detail](#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
-
-
-## `scripts/changed-packages.mjs runnable` runs before the tests in many packages' jobs, fed from a pipe, so the selection guard does not count it and a change to it alone runs none of those jobs
-
-Listing it against every member those jobs test would send every change to it through all of them
-— the owner's call. Left open by SQLite slice 2 Task 10 (#652, the loop test against a real
-S3-compatible server).
 
 
 ## Loose ends left by SQLite slice 1 (#490 and the preparation tasks)
@@ -1097,10 +1275,6 @@ On recurrence, retain the failed step log and use its file list, any
 `[file-progress] stack:` lines and the process state to identify the blocked
 operation. Keep the venue-service startup investigation and A419's dashboard stall
 separate; no shared cause is established.
-
-## A1089 merge read-back: server coverage upload timed out
-
-Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.
 
 ## Local multi-file till browser interruption
 
@@ -1416,17 +1590,6 @@ Measure the mutation downloads before replacing their bounded action retries.
 existing one in #2395, and two of its new cases sit apart from the cases they extend. Fold the
 new setup into the existing helper and move the two cases beside their neighbours; no assertion
 changes.
-
-## Check that the nightly `mutation-db` shards now finish well inside 25 minutes
-
-A1309 (#2401) packs db's mutation shards by a committed per-file cost table
-(`packages/db/mutation-costs.json`, about 720 s of estimated work each) instead of by file size,
-and removed the test helper's reset checks whose mutants changed nothing and ran to Stryker's
-timeout. Pull-request CI never runs the nightly packing, so the first nightly `mutation.yml` run
-after 2026-11-02 is the proof: read each `mutation-db (N)` job's duration. A shard above about
-20 minutes means the table needs refreshing with `scripts/mutation-costs.mjs` from that run's
-reports (receipt in `docs/developers/ci-and-gates.md`, "db's mutation shards are packed by
-estimated cost").
 
 ## Store bound-value test timeout
 

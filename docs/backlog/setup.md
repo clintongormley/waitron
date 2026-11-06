@@ -47,15 +47,6 @@ What constrains the next change to the wizard:
   fiscal module's default description when the department has none; the venue's own description is
   not their fallback.
 
-## Open owner call — setup always stores a language on the account
-
-If the browser sends no
-language, or one Waitron does not ship, the account gets the venue's language saved as though
-chosen — so the stored value cannot tell "chose Spanish" from "said nothing", and it does not
-follow a later change to the venue default. Keep this, or store a language only when the browser
-asked for one? Since C42 a language picked in the wizard is sent as the provision's
-`Accept-Language`, so a choice made there is stored like any other browser answer.
-
 ## The configuration preview names what it will copy by database table
 
 **Left open by C42 (#837):**
@@ -113,15 +104,6 @@ Unknown setup addresses go
   and watching a test fail, and no separate probe confirmed the trading app is untouched by the
   redirect.
 
-## A fiscal test or a provision that answers after the wizard has been removed from the page leaves it stuck when it is put back
-
-**Found while bringing `apps/setup` to the coverage bar (2026-09-23), left unfixed** — each was
-seen in a throwaway test, since deleted, and none has a test pinning it:
-
-The Run button stays on "Running test…", or the screen stays on
-  "Provisioning…", with no retry. The connection check releases itself in the same case. The app
-  mounts the wizard once and never removes it, so this may be unreachable in use.
-
 ## In Demo, a server refusal of a field Demo hides can only be retried unchanged
 
 **Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
@@ -173,14 +155,6 @@ its editor validates named zones and refuses numeric offsets. Importing configur
 existing venue retains its saved zone (`applyPreparedVenue`,
 `packages/provisioning/src/configuration-transfer.ts`); importing venue details is a creation concern,
 not an edit through that applicator.
-
-## No test covers the setup review screen's value cell's own centring
-
-Left open: no test covers the value cell's own centring (`align-self: center` on the value in
-`review-screen.ts`) — removing it alone leaves all 31 review-screen tests green, because it changes
-nothing until a label is taller than its value (a label wrapping onto two lines). The test that
-used to cover it was deleted on the owner's answer to the W33 question; the certificate-row test
-covers only the label's centring.
 
 ## The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN
 
@@ -356,15 +330,6 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   the redirect.
   [Detail](#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
 
-## Loose ends left by C47s (#840): Demo gaps on the setup wizard's venue screen, left unfixed.
-
-- In Demo, a server refusal of a field Demo hides can only be retried unchanged. Whether the
-  server ever refuses Demo's fixed series codes is not established.
-  [Detail](#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
-- In Demo, a local check that fails only on a field Demo hides. All of this was read in the code,
-  not run; whether a real draft can reach that state has not been tested.
-  [Detail](#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
-
 ## A box on an older configuration format blames the export when it is the box that is out of date
 
 Given a newer export, it shows "This export is not compatible with this Waitron version. Export it
@@ -427,13 +392,6 @@ under the tick box; with A1127's longer full-disk words that is about half a pho
 stored error, and a plain 500 also shows twice (look check of 2026-10-28, run on the branch, not on
 `main`).
 
-## Two spare-file releases at once log the same bytes twice
-
-Two processes releasing `<state>/spare-space` at the same moment (`releaseSpare`,
-`apps/server/src/spare-space.ts`) can each log `storage.spare_released` with the file's size, though
-only one deleted it. The file is removed correctly; only the log overstates. Found by #2175's first
-Codex review (run, not only read), not changed there.
-
 ## A boot test's disk assertion reads the checkout's path
 
 `apps/server/src/first-setup-resolution.boot.test.ts`'s two supervised cases assert the page does
@@ -463,22 +421,6 @@ other code is not one of the start's refusals, so that start carries on past it 
 (`refusedAtStart`, `apps/server/src/first-setup-entry.ts`; read, not run). Option B, offering Keep alone
 for these boxes, is still open to the owner.
 
-## A1143: files a Move set aside have no way back in the app
-
-Left open by A1098. A Move puts the found files under `<state>/first-setup-set-aside/<stem>/` (or
-the venue folder's own `first-setup-set-aside/` when the two folders are on different
-filesystems). If they were a venue worth keeping, the app offers no way to put them back: **Recover from backup** takes only a backup file, a bucket copy or
-a Waitron Cloud copy (`apps/server/src/guide/en/backup-recovery.md`, "Choose your copy").
-
-Whatever puts a folder back must open its sealed rows with the key ring stored beside it,
-`<state>/first-setup-set-aside/<stem>/secrets.env` (`keepRingCopy`,
-`packages/provisioning/src/first-setup-start-again-set-aside.ts`, since A947 slice 3a), not the
-box's current `secrets.env`: joining as a spare replaces that whole (`apps/server/src/adopt.ts`),
-and a plain `waitron.sh reset` deletes it. On two filesystems that copy is in the state root's stem
-folder, which the repair page's moved-folder message does not name: it names
-`state/…/<stem>/state` and `venue/…/<stem>` (`movedFolder`, `apps/server/src/recovery-start-again.ts`;
-the message predates the slice).
-
 ## A1285: should the staged reset of a stopped join delete `secrets.env`?
 
 Left open by A947 slice 3a. A staged reset of a stopped join keeps `secrets.env` (its list in
@@ -503,37 +445,6 @@ signing key failed `credentials.decrypt_failed`. No production box sets the key 
 today (`deploy/` names none); a cloud profile can (`box-env.ts`). Decide whether the Move should
 record the key in use or refuse to copy, and whether a join should refuse before any write when
 the environment's key would hide the ring it receives.
-
-## A1144: after Keep, the box stays on its page even if the files are later removed by hand
-
-Left open by A1098. A recorded Keep refuses every later start with `setup.start_again_kept`
-before A1042's finisher runs (`assertStartAgainNotKept`,
-`packages/provisioning/src/first-setup-start-again-choice.ts`, called from `refusedAtStart` in
-`apps/server/src/first-setup-entry.ts`), so removing the found files by hand does not let the box
-finish Start again. The page says it stays until Waitron is reinstalled. Wanted: a way out that
-does not need a reinstall, decided with the owner.
-
-## A1146: a found piece on another mount below a root fails after the choice is recorded
-
-Left open by A1098 (plan decision D4). Before recording a Move, the box tests a rename from each
-of the state and venue folders into the set-aside folder. A found piece below one of them that
-sits on yet another mount is found only when its own rename fails (`EXDEV`), after the record is
-written. The choice then answers 409 with the `setup.start_again_move_unfinished` page, which says
-some files may already be in the set-aside folder (run with a failed second rename in
-`packages/provisioning/src/first-setup-start-again-choose.test.ts` and the 409 case in
-`apps/server/src/recovery-surface.test.ts`). Every later start tries the Move again, fails the same
-way, and shows that page until the mount is changed (`refusedAtStart`,
-`apps/server/src/first-setup-entry.ts`; read, not run with `EXDEV`).
-
-## A1147: Start again's finisher removes an empty folder the box did not create
-
-Predates A1098: from A1042 (#2101, `e2a957138`, `git blame`). An empty folder made after the
-marker where the attempt's own folder of that name would be (for example
-`first-fiscal-documents/`) is no finding, because an empty unlisted folder holds nothing to list,
-and the finisher lists it for removal and removes it by `rmdir`
-(`packages/provisioning/src/first-setup-start-again-deletion.ts:290-291`, removal at
-`deleteMarkedAttempt`). Run by the A1098 plan's probe ("Current behaviour", `12a`). Nothing in it
-is lost, but it is a removal of something the box did not create.
 
 ## A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw after a recorded choice answers a bare 500
 
@@ -679,20 +590,6 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   archive. Decide whether those tests should
   place archives through `runStagedRestore` instead, then delete it. Left open by A1131bc slice 4.
 
-## Start again's own disk check answers a different code for the old recovery folder
-
-- **Start again's own disk check answers a different code for the old recovery folder.** Since
-  A1131bc slice 4, `assertNoLegacyFirstSetupWorkspace`
-  (`packages/provisioning/src/first-setup-workspace.ts`) refuses a box holding
-  `first-setup-resolutions/backup-recovery` with `setup.workspace_unsupported`, but Start again's
-  own check (`assertStartAgainAllowedOnDisk`, the `LEGACY` list in
-  `packages/provisioning/src/first-setup-start-again-deletion.ts`) does not name it, so it refuses
-  the same folder `setup.not_ready` (a records folder whose entry is not a uuid). The server is not
-  affected: the start and the boot run the first check before Start again can be reached (read, and
-  run by #2461's first Codex review). Making them agree means adding the name to `LEGACY` and moving
-  the marker cases titled "beside an A731 journal" to expect `setup.workspace_unsupported`. Left open
-  by A1131bc slice 4 (#2461's convention review).
-
 ## Recovery operations still buffer whole database files
 
 A1334 separates ordinary first-setup admission from exact recovery snapshots. The remaining
@@ -730,6 +627,149 @@ see [the developer convention](../developers/conventions-data.md#local-backup-an
 This inventory comes from following source reads, not large-file runtime qualification of these
 remaining paths. Next: exercise each operation above its current buffer budget before replacing
 that operation's reader. Do not remove exact-content checks to make a large file fit.
+
+## Bundle: Restore paths run
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** Left
+  open by A1131bc slice 3.
+  [Detail](setup.md#the-bucket-and-waitron-cloud-restores-have-not-been-run-after-start-agains-deletion)
+- **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
+  wizard).**
+  [Detail](setup.md#loose-ends-left-by-sqlite-slice-2-task-9c-646-restore-from-my-bucket-in-the-setup-wizard)
+
+## Bundle A1379: A failed setup always offers Start again
+
+6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1322. A failed setup always offers Start again; remove "Continue with your setup password" (owner, 2026-11-04).**
+  Today, once a setup has saved the settings the box sells with, Start again is refused and Continue is the only choice, so a lost password means reinstalling.
+  Remove Continue and its password step, and let Start again delete such a setup, still refusing when the database holds an invoice or another record Waitron never deletes.
+  This replaces the owner's 16 October order (Continue first). Not yet checked: what else depends on Continue, including its repair of a damaged setup record.
+- **The first-setup record store still accepts the `retire` and `select-workspace` actions and
+  `nextWorkspace`, which nothing writes since A1042.**
+  [Detail](setup.md#the-first-setup-record-store-still-accepts-the-retire-and-select-workspace-actions-and-nextworkspace-which-nothing-writes-since-a1042)
+- **The repair page's Start again oddities from #1752** — a stale heading after Start again, two
+  "Start again" buttons, and Continue tight against the password field at phone width.
+  [Detail](setup.md#the-repair-pages-start-again-oddities-from-1752)
+- **The repair page draws a Start-again error twice**, under the password and under the tick box.
+  [Detail](setup.md#the-repair-page-draws-a-start-again-error-twice)
+- **On a full disk, Start again's summary may need room for a copy of the setup database.** The box
+  keeps its spare beside a held setup database, so Start again answers that the disk is full. Left open by A1131 and A1131bc slice 2.
+  [Detail](setup.md#on-a-full-disk-start-agains-summary-may-need-room-for-a-copy-of-the-setup-database)
+- **No Recover from backup when the setup's own record cannot be read or needs repair.** The only
+  way out is a reinstall, unless the setup had saved nothing yet. Left open by A1131bc slice 3.
+  [Detail](setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read-or-needs-repair)
+
+## Bundle A1384: Words on setup's refusals
+
+6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Start again summary's `setup.not_ready` carries no cause.** The page says only that
+  deleting is not safe. Wanted: words for each cause a person could act on. Left open by A1206.
+  [Detail](setup.md#the-start-again-summarys-setupnot_ready-carries-no-cause).
+- **A box on an older configuration format blames the export when it is the box that is out of
+  date.** Word the too-new case on its own. Found by A980 S1a2's plan review.
+  [Detail](setup.md#a-box-on-an-older-configuration-format-blames-the-export-when-it-is-the-box-that-is-out-of-date)
+- **Other full-disk words still send the person elsewhere or end with the short reinstall sentence**
+  For the owner. Left open by A1127.
+  [Detail](setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence).
+- **Start again over plain HTTP says only that deleting is not safe.** Wanted: words saying a
+  secure connection is needed. Left open by A1131bc slice 2.
+  [Detail](setup.md#start-again-over-plain-http-says-only-that-deleting-is-not-safe)
+- **Setup's refusal text for the operation description asks for an edit nobody can make** — left
+  open by A1315 PR 5 (#2441). Setup no longer sends the value; the server fills the filing module's
+  default (`apps/server/src/setup-api.ts` `parseVenue`). So `server_fields.operation_description`
+  (`apps/setup/src/i18n/strings/start.ts`, EN and ES), which says to shorten the text or remove
+  hidden characters, can now be reached only by a filing module with no default or a faulty one —
+  a fault in Waitron, which a refusal should name as such (root `CLAUDE.md` §3, refusals). The
+  mapping stays because `scripts/setup-wizard-fiscal-fields.test.ts` requires setup to word every
+  venue field the Veri*Factu module can refuse. Wanted: reword it as a fault in Waitron.
+- **Loose ends left by A680 (#1718).**
+  [Detail](setup.md#loose-ends-left-by-a680-1718)
+
+## Bundle A1385: The A1207 leftovers in choosing a series name
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1223. A stored series pick that turns out taken** (from A1207): an attempt whose chosen name
+  is found taken before it finishes is refused (`minute_in_use`), and the person is not offered a
+  way on. Start a new attempt by itself, and word the refusal where it shows at activation.
+  [Detail](setup.md#a1223-a-stored-series-pick-that-turns-out-taken)
+- **A1224. Delete the time floors the series choice no longer reads** (from A1207): they are still
+  worked out but nothing in the choice reads them.
+  [Detail](setup.md#a1224-delete-the-time-floors-the-series-choice-no-longer-reads)
+- **A1226. Compare clocks on the restore page can choose a series name by itself** (from the A1207
+  finish-branch review): once a second clock answers, the page's 15-second second-clock check sends
+  a real `select` although Make the series was never pressed. Make those re-checks read-only.
+  [Detail](setup.md#a1226-compare-clocks-on-the-restore-page-can-choose-a-series-name-by-itself)
+- **A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series
+  name.** Measured only on the old recovery from backup, now deleted; the fresh-box Cloud restore
+  has not been measured the same way. Left open by A1042.
+  [Detail](setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
+
+## Bundle: The key ring after a join
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1285: should the staged reset of a stopped join delete `secrets.env`?** Left open by A947
+  slice 3a.
+  [Detail](setup.md#a1285-should-the-staged-reset-of-a-stopped-join-delete-secretsenv)
+- **A1284: where the environment sets the vault key, a Move or a join leaves a ring that is not the
+  one in use.** A joined spare then cannot open its own signing key after a restart. Left open by
+  A947 slice 3a.
+  [Detail](setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-or-a-join-leaves-a-ring-that-is-not-the-one-in-use)
+
+## Bundle: The recovery page's restart
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw
+  after a recorded choice answers a bare 500.** Both recovery-page routes. Left open by A1098.
+  [Detail](setup.md#a1149-a-failed-restart-after-retry-or-a-move-exits-the-process-and-a-page-that-fails-to-draw-after-a-recorded-choice-answers-a-bare-500)
+- **A1153: the recovery page's Retry restarts nothing if the browser disconnects before the answer
+  arrives.** Give it the once-only restart the Move got in #2131. Read, not run. Left open by A1098.
+  [Detail](setup.md#a1153-the-recovery-pages-retry-restarts-nothing-if-the-browser-disconnects-before-the-answer-arrives)
+
+## Bundle: Setup wizard tidy
+
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
+  Several small wizard leftovers remain.
+  [Detail](setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
+- **The Cloud restore screen shows capture and expiry times as the server's raw ISO text** in both
+  languages. Left open by C42 (#837).
+- **The setup route `GET /setup-api/venue-defaults` has no production reader** — left open by
+  A1315 PR 5, which took setup's only call to it away (`apps/server/src/setup-api.ts`). Retiring it
+  means removing the route's two direct cases in `apps/server/src/setup-api.test.ts`.
+- **The setup role screen shows its choices as cards with buttons, not `wt-choice-row` rows**
+  (`apps/setup/src/screens/role-screen.ts`, reached from Join or recover). Split out of A237.
+- **The certificate help page the setup wizard opens writes the browser's warning as “not secure”
+  in quotes** (`/setup/trust`, `apps/server/src/trust-page.ts`), where the wizard's first screen
+  (#1107) writes Not secure without them. Split out of A237.
+
+## Bundle: File input sweep
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A missing configuration export on the setup wizard's live-source screen gets no red ring.** The
+  backup restore screen's file input draws one (A523); `live-source-screen.ts` marks its file input
+  `aria-invalid` but has no style for it.
+- **File pickers the browser still draws show "Choose File / No file chosen" in the browser's
+  language**, not the chooser's. Left: the setup app's certificate, restore, bucket restore and
+  live source screens, the dashboard's node recovery panel, and the fiscal first-setup, recovery
+  key and offline custodian pages. `wt-file-input` hides that control and draws its own words.
+
+## Bundle: Demo seed language
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The demo venue's departments' internal names still follow the seed language.** Left open by
+  W108 (#1276, the demo venue's names and tax ID come from the country pack).
+- **Still open from W109-5's Barcelona look (2026-10-07):** product groups and prep stations
+  stay English under Spanish staff-facing dish names (the plan's known limit).
 
 ## Decisions and deliberate limits
 
@@ -921,3 +961,7 @@ English default, `en`, `ca` and `es` enabled, every customer name in all three, 
 translations; the per-task review's earlier run found `ca` and `es` text written and no missing
 translations. The finish review also removed the Catalan text from the
 set: the Catalan texts were listed as missing translations, and the seed still completed.
+
+- What A2's rework left as constraints on the next change to the wizard is under [Setup wizard — the
+  constraints A2's rework left
+  behind](setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2).

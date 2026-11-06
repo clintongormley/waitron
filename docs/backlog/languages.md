@@ -91,21 +91,48 @@ the data download's README (`apps/server/src/i18n/personal-data-readme.ts`) and 
 dashboard's bill-payment strings (`payments.bill.*` in `apps/dashboard/src/i18n/strings.ts`,
 among them «PIN de gerente») say «gerente». Pick one word and use it everywhere.
 
-## Decisions and deliberate limits
+## Bundle: Ui wording sweep
 
-- **Restaurant menus are “carta” in the Spanish dashboard, module, setup and till wording** (owner
-  decision 2026-09-29; C55 #858, C56 #901). Account and row-action menus keep “menú”.
-  `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says
-  “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
-  `apps/till/src/i18n/allergen-names.ts`) are not scanned. `apps/dashboard/src/i18n/t.test.ts`
-  fails if a Spanish string in the dashboard's `strings.ts` says “menú”, except `nav.account_menu`
-  and `appearance.colour.surface-raised`, and checks one code message (`product.on_live_menu`), not
-  the rest of `codes.ts`, `alert-messages.ts` or `domain.ts`;
-  `packages/venue-service/src/dashboard/strings.test.ts` fails if a Spanish string in venue-service's
-  dashboard catalogue does; its starter content (`packages/venue-service/src/starter-content.ts`) is
-  not scanned. Other modules' catalogues are not scanned.
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **An overdue order is «Con retraso» on every Spanish screen, never «atrasado»** (owner decision
-  2026-10-28, A1138). The dashboard overview, the till's pass count, the station fields and the
-  till's signal all use it. «Atrasado» stays only where a clock or a backup is behind. Nothing
-  scans the catalogues for it.
+- **Not covered: empty sentences outside a `wt-data-table` (floor, kitchen, devices and others)
+  still use "Aún no hay" and other shapes.** Left open by A177 (one fixed "nothing matches"
+  sentence; a specific "nothing yet" sentence per screen, #1037).
+- **Two texts still use the old words.** A hint says "Create" (the Products screen's empty prompt,
+  "Create a menu on the Menus screen…"), and the purchase dialog's edit heading reads "Edit
+  purchase invoice" while its create heading is now "Add invoice". Left open by A450 (#1484).
+- **Opening hours' create texts say "New …" and "+ …"**
+  [Detail](dashboard.md#opening-hours-create-texts-say-new--and--)
+- **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
+  [Detail](languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
+- **The image library calls an archived variant an "Archived product".**
+  [Detail](languages.md#the-image-library-calls-an-archived-variant-an-archived-product)
+- **The adjustment-reason and venue delete windows still use older settings, work and loading
+  wording.**
+  [Detail](languages.md#the-adjustment-reason-and-venue-delete-windows-still-use-older-wording)
+- **Future-tense lines outside the delete windows were left alone.**
+  [Detail](languages.md#future-tense-lines-outside-the-delete-windows)
+
+## Bundle: Native speaker review
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The demo’s Catalan and Galician text needs a speaker’s check** (W109-3, #1321,
+  owner decision 4, 2026-10-06). A speaker of each should read it.
+  [Detail](setup.md#the-demo-data-carries-catalan-and-galician-text-w109-3-1321-task-3-of-the-same-plan--done-the-text-is-unchecked-by-a-speaker-owner-decision-4-2026-10-06--open)
+- **The recovery page's Spanish has not been read by a native speaker.**
+- **The translations need a native or official check.**
+  [Detail](languages.md#the-translations-need-a-native-or-official-check)
+
+## Bundle: Regional languages
+
+3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all
+  four (C125) — PARKED by the owner.**
+  [Detail](languages.md#catalan-valencian-galician-and-basque--the-receipts-words-checked-and-the-whole-app-in-all-four-c125-owner-2026-10-02--parked)
+- The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way,
+  while its words are Galician or Basque.
+  [Detail](languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)
+- The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and on 58 mm
+  paper it drops to its own line wherever it prints in words.

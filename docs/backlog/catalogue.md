@@ -68,28 +68,6 @@ uncovered while the other columns scroll sideways" in
 `apps/dashboard/src/screens/menus-screen.test.ts` requires that overflow. The contrast of
 that link on a highlighted row is fixed (A306, #1336).
 
-## A menu's Structure tab is one tree (W88, #1209): not checked
-
-Not checked: a drag with a touch pointer or on a
-real touch screen; a drag does not scroll the page near its edge (nor does Products'); in Spanish at
-390 px the Type column scrolls partly under the pinned Actions column, which is the table's own
-sideways scroll; the heading's height with "Checking…" or "Could not be checked" was not measured
-against the other states.
-(2026-10-08, A334: Products now scrolls at a held drag's edge, with native touch checked at
-390 px in both themes and languages. Menu Structure gained the same helper in A334b after the Preview bundle.)
-
-## A menu's prices are one editable Price overrides field per row (W89, #1239): left open
-
-Not checked:
-the tab on the running dev stack — the product page opening from a Status link, a real save and
-the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
-only). (2026-10-08, A348: the Status link is gone; a row's ⋮ Edit product opens the product instead.)
-W95's implementation now uses Price override / Precio propio for Preview clashes.
-Left open, raised in #1239's review and not taken: a size with its own price decides whether
-its clash comes from its product by matching the two clashes, which can be misread in a
-rare setup where they match exactly — telling them apart needs the prices read to say which level
-a clash came from.
-
 ## A product has one colour everywhere (W92, #1250): left open
 
 Left open:
@@ -374,26 +352,6 @@ the 2026-09-30 folders design; what remains:
   a Missing one (`takeOffMenus`, `packages/catalogue/src/menu-removal.ts`); how the Home page tab's
   preview draws a shortcut to a product switched off any other way was not checked.
 
-## Content languages and the image library (#339, #344) — what is left open
-
-[Operator guide](../../apps/server/src/guide/en/content-and-images.md).
-
-- **A new picture consumer has to add a real database reference, not just store a filename.**
-  Products point at the image table through a foreign key on the picture's filename
-  (`products_media_image_fk`, `ON DELETE RESTRICT`), which is what makes "you cannot delete a
-  picture something is using" true. Any future screen that shows a
-  library picture has to add the same kind of reference and a sentence naming the use, or that
-  check will not see it.
-- **The online language selector has nothing to select for yet.** The setting and the rule for
-  choosing a language are built and tested; the customer-facing online ordering surface they were
-  built for does not exist (A508 and A509, [till.md](till.md#a509-online-ordering-for-collection-at-the-counter)).
-- **Left by A157's review:** the upgrade test `packages/media/src/schema/name-only-upgrade.test.ts`
-  makes its scratch folder with `tmpdir()` rather than `scratchParent()` (`scripts/scratch-dir.mjs`),
-  unmeasured either way; the list of hand-written migrations in
-  `docs/developers/conventions-data.md` leaves out core `0036` and `0047`, catalogue `0013` and
-  media `0004`, and A157's media `0005`. **Next action:** fill the list when next touching that
-  file; the other needs a decision whether it is worth a change at all.
-
 ## Extras and Options — deliberate limits, and what is left open
 
 [integration contract](../developers/modifiers.md).
@@ -432,16 +390,6 @@ the 2026-09-30 folders design; what remains:
   order a snapshot mixing pre- and post-edit wording; not measured. **Next action:** trace those
   reads — if every one goes through `withTransaction` (the write lock), the entry closes on that
   alone; if any does not, decide deliberately.
-
-## Image library (#547's review, `packages/media/src/dashboard/image-library.ts` and `image-picker.ts`)
-
-- **Image library (#547's review, `packages/media/src/dashboard/image-library.ts` and
-  `image-picker.ts`).** (1) When the picker is handed a new live-data source, the library keeps
-  listening to the first one until its next load. (2) The delete confirmation's Close button has no
-  in-flight check of its own and relies on being drawn disabled; two clicks dispatched by script in
-  one task, confirm then Close, close it while the delete runs. **Next action:** decide whether (1)
-  re-subscribes as soon as the source is replaced, and whether (2) gets a `busy` check like the
-  modal's `wt-close` listener.
 
 ## A name stored under a regional code such as `en-GB` is read by the forms as the plain code first, then its regional ones
 
@@ -561,12 +509,6 @@ names; folding them into the one helper was not part of W77a.
   remains for the Price column at phone width. (2026-10-04: W75 added a Portion column and widened
   the table; not re-measured.)
 
-## Catalogue course window late-close guard
-
-The catalogue-screen test "ignores the closed window's late close…" catches its guard's
-removal only through an unhandled error, because the late close throws before it changes
-anything a state assertion could see. Left open by A212 (#1087).
-
 ## Allergens and dietary preferences are edited in place (A213): what #1079 left open
 
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
@@ -592,15 +534,6 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   the owner's call; and the rule that hides screen-reader text is copied into each widget that
   needs it (`grep -rln "clip: rect(0, 0, 0, 0)"`), where a shared one in
   `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
-
-## The product list
-
-From **Variants as products (#511–#556) — what is left open.** How the model works is in
-[products.md](../developers/products.md), under _Variants_.
-
-- **The product list.** A variant's name may sit a few pixels low in its row at 390px, not yet looked at;
-  `listedVariantsOfProducts` (`packages/catalogue/src/operations.ts`) repeats the grouping
-  `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does — share one helper.
 
 ## The venue's menu list is read by no sale
 
@@ -853,15 +786,6 @@ page, not the table's scroll box, and gave its root label `position: relative`; 
 label has no such rule. **Next action:** measure at phone width with a long name before changing
 anything.
 
-## On a phone, sections nested more than four deep read flat in the Structure tab
-
-**On a phone, sections nested more than four deep read flat in the Structure tab** — left open
-by A453. At narrow width `wt-data-table` stops indenting after four levels
-(`min(var(--tree-depth, 0), 4)`, `packages/ui/src/components/wt-data-table.ts`), and the menu's
-root row now takes one of them. A453's look at 390px wide: level 4, level 5 and a product in
-level 5 all start at the same x. **Next action:** the owner decides whether the phone indent
-should go deeper (a shared table rule, so the Products tree changes too).
-
 ## Menu-root enabled-language fallback when content languages are unset (A420 review)
 
 `updateMenuDetails` checks map keys using English as its fallback; section and include-folder
@@ -886,15 +810,6 @@ It is greyed only while a shortcut is added or removed: `#moveShortcut`
 keyboard user's focus stays on the grip, and display saves use their own flag. A815 asked for the
 button "greyed while a save is out"; decide whether a remove during a reorder save should wait,
 be refused, or is fine as it is. Not tried in a browser. Left open by A815 (#1880).
-
-## A switched-off menu's Home page tab would give every hidden shortcut the wrong reason
-
-**A switched-off menu's Home page tab would give every hidden shortcut the wrong reason**: each
-section reads "Not shown: nothing to order in this section" and each product "Not shown: not on
-sale on this menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`),
-measured by finish-branch's worker in a test. Nothing outside tests switches a menu off today
-(`deactivateCatalogue` has no other caller); revisit when something does. Left open by A816
-(#1880).
 
 ## The Structure tab's "Edit section" form may stay open when another menu is opened
 
@@ -934,14 +849,6 @@ whether it should change.
 (`packages/catalogue/src/categories.ts`, above `listCategories`). **Next action:** measure it
 before anyone widens category authoring to more concurrent editors. Left open by product
 categories (#340, [API and integration guide](../developers/product-categories.md)).
-
-## At phone width in a right-to-left layout, a long name in the Products list can run under the pinned Actions column
-
-**At phone width in a right-to-left layout, a long name in the Products list can run under the
-pinned Actions column** (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`, measures the
-room from the left). Found by A330's Codex review and reproduced by it on `main` before #1354. Not
-fixed; next: a browser test at 390 px with `dir="rtl"` and a long unbroken name. Left open by
-A330 (variant rows show their photo, #1354).
 
 ## Loose ends left by A347 (#1392)
 
@@ -1031,6 +938,268 @@ failing test first.
   design (`pinned: "end"`); in Spanish Disponible now sits wholly behind it until the tree is
   scrolled. Letting long names wrap at narrow widths may free the room; not tried.
   [Detail](catalogue.md#on-the-structure-tab-at-390px-the-trees-own-box-scrolls-sideways-under-the-pinned-)
+
+## Bundle: Dishes sold by measure and their extras
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by A663 Part 2d (#1779).** The dashboard lets a manager attach an extras list to
+  a product sold in a unit with decimals, on a scale or with the measure switch on, and the till
+  then offers no extras for it, with no word to the manager.
+  [Detail](catalogue.md#loose-ends-left-by-a663-part-2d-1779)
+- **A dish in a measure unit is still rung up one unit per tap** (A821f). A 250 ml line is 1 ml per
+  tap, splits into 250 lines and counts as 250 items. Whether a measure should ask its quantity as
+  a decimal unit does is the owner's call.
+  [Detail](catalogue.md#a-dish-in-a-measure-unit-is-still-rung-up-one-unit-per-tap)
+- **The Units list does not show which units are measures** (A821f), and switching one on gives no
+  warning that the dishes in that unit lose their extras lists at the next publish.
+- **Customer order drafts never look at a dish's unit** (A821f): `unavailable`
+  (`apps/server/src/order-drafts.ts:970`) checks an extras pick against the offer's lists only, so
+  an extra on a dish sold in a measure is flagged only when the draft is priced — as for a dish
+  with decimals or on a scale today. Read, not run.
+
+## Bundle: One language fallback rule
+
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Menu-root enabled-language fallback when content languages are unset (A420 review).**
+  [Detail](catalogue.md#menu-root-enabled-language-fallback-when-content-languages-are-unset-a420-review)
+- **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
+  (found 2026-10-02 by A172, not measured).**
+  [Detail](catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
+- **Language resolution follow-ons** — there is still no single shared rule: the receipt's
+  `lineName` (`apps/server/src/receipt-document.ts`) and the kitchen ticket's `ticketName`
+  (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
+  [Detail](catalogue.md#language-resolution-follow-ons)
+- **A name stored under a regional code such as `en-GB` is read by the forms as the plain code
+  first, then its regional ones**
+  [Detail](catalogue.md#a-name-stored-under-a-regional-code-such-as-en-gb-is-read-by-the-forms-as-the-plain-code-first-then-its-regional-ones)
+- **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
+  dish name above modifier text resolved in the device's own locale. A joined customer-facing line
+  can mix languages when a locale exists on one half only.
+  [Detail](catalogue.md#smaller-things-379-surfaced-and-did-not-take)
+
+## Bundle: Menus screen stale selection
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Structure tab's "Edit section" form may stay open when another menu is opened.** Not tried: whether the form stays open, and whether saving it then writes the first menu's section.
+  [Detail](catalogue.md#the-structure-tabs-edit-section-form-may-stay-open-when-another-menu-is-opened)
+- **"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).**
+  [Detail](catalogue.md#open-menu-in-an-included-menus--can-be-followed-while-the-tree-is-busy--open-w88)
+- **Open test gap from A201b** (#1091): the suite does not establish whether `#closeLostList()` in
+  `#includeMenu` catches a list disappearing between the last read and selection. Check that race
+  with a focused test, or remove the guard if the path cannot occur; its reachability remains
+  unverified. [Detail](catalogue.md#open-test-gap-from-a201b-1091)
+
+## Bundle: wt-data-table: heading wrap, long names, odds and ends
+
+11 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
+  [Detail](catalogue.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
+- **Loose ends left by W87 (#1191).**
+  [Detail](catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
+- **Loose ends left by W92 (#1250).** In the Structure tree, closing the section form opened from a
+  section's swatch puts focus on the row's ⋮ menu rather than back on the swatch that opened it. No
+  test pins it.
+  [Detail](catalogue.md#a-product-has-one-colour-everywhere-w92-1250-left-open)
+- **Products at phone width: what W85e left for the owner**
+  [Detail](catalogue.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
+- **Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and Edit
+  product, #1408).** At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides
+  tab.
+  [Detail](catalogue.md#loose-ends-left-by-a346--a348-a-price-this-menu-sets-stands-out-an-available-column-and-edit-product-1408)
+- **A1318. `wt-data-table` has no per-column heading wrap, and the Prep stations table scrolls
+  sideways at 390 px.** With two stations that have printers and screens it scrolls 343 px in
+  English and 342 px in Spanish; the "Waits for the pass" heading alone takes about 130 px and does
+  not wrap. `wrap-to-fit` narrows every column and still scrolled at 320 px. Left open by A773-2 PR C.
+- **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
+  house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
+  slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
+  `packages/ui/src/components/wt-data-table.ts`). Left open by A499.
+- **Loose ends left by W83's review (#1193), not started.**
+  [Detail](dashboard.md#loose-ends-left-by-w83s-review-1193-not-started)
+- **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
+  [Detail](dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
+- **A543. During a flat tree search without `collapseDescendants`, `wt-data-table`'s `isExpanded()`
+  answers false for a row the table draws open** (`aria-expanded="true"`) — OPEN, found by A539's
+  mutation tests, not fixed. Outside a search it answers true for the same row
+  (`packages/ui/src/components/wt-data-table.ts`).
+- **A890. A tree `wt-data-table` draws a row's activator in its first column even when that column
+  sets `activatesRow: false`**
+  [Detail](dashboard.md#a890-a-tree-wt-data-table-draws-a-rows-activator-in-its-first-column-even-when-that-column-sets-activatesrow-false)
+
+## Bundle: Translate all followups
+
+9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
+  notice.**
+  [Detail](catalogue.md#translate-all-an-edit-translations-dialog-left-open-anywhere-clears-the-translations-ready-notice)
+- **Cloud services shows Translate all only from the second status check after connecting.** The
+  first Refresh status is a lease renewal, and only a configuration request asks for services
+  version 2 (`apps/server/src/cloud-installation.ts`). Seen in the Santet run (A689-21).
+- **Translate all: a job that ends before any item is accounted for does not count its items as
+  lost.**
+  [Detail](catalogue.md#translate-all-a-job-that-ends-before-any-item-is-accounted-for-does-not-count-its-items-as-lost)
+- **Loose ends left by A689's fifth PR.**
+  - Alert wording writes numbers without a thousands separator (`formatParam`,
+    `packages/dashboard-kit/src/alert-messages.ts`); the Translate all notice reads "1050
+    suggestions".
+- **Translate all: a venue with more than Cloud's 20 content languages gets a job Cloud refuses.**
+  The box saves up to 200 languages and sends them all as `languages.enabled`; Cloud refuses every
+  job past 20 with 400, which reaches the dialog as `cloud.request_invalid` (ruling W1b, A689's
+  second PR). A box-side refusal before any job is built would say what is wrong.
+- **Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud
+  can still hold it.**
+  [Detail](catalogue.md#translate-all-a-job-the-box-ends-itself-is-marked-released-without-a-call-to-cloud-and-cloud-can-still-hold-it)
+- **Translate all: open points from the review of A689's second PR.**
+  [Detail](catalogue.md#translate-all-open-points-from-the-review-of-a689s-second-pr)
+- **Translate all: the notice's count can be higher than what the dialog shows.** `waiting`
+  (`readSuggestionRun`, `packages/catalogue/src/content-suggestion-jobs.ts`) counts every stored
+  suggestion with text, including out-of-date ones, ones for deleted items or switched-off languages,
+  and ones left from an earlier run. Opening the dialog clears the notice, which limits the effect.
+- **Translate all: three limits the translations dialog accepts for now (A689's fourth PR,
+  2026-10-15).**
+  [Detail](catalogue.md#translate-all-three-limits-the-translations-dialog-accepts-for-now-a689s-fourth-pr-2026-10-15)
+
+## Bundle: The menu patch window: split the file first
+
+9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The menu patch window's Reload re-reads the live menu but not the venue's content languages
+  (left open by A1151).**
+- **The menu patch window's "no longer fit" count is a running total since the window opened (left
+  open by A1151).** A change the live version already holds is removed without being counted.
+- **A field typed equal to the live value can be redrawn in the live value's spelling (left open
+  by A1151).** After a content-language change, or a Reload onto the version already shown, the
+  menu patch window redraws a typed "3" as "3.00". Found by reading the code, not run.
+- **Owner question: the menu patch window's locked section name says why on a line under the field
+  (left open by A1151).** "The included folder sets this name." is a muted line under a disabled
+  field (`apps/dashboard/src/widgets/form-fields.ts`, `optionalTextFields`). The house rule makes a
+  field's hint its placeholder, never a line under it, and puts an explanation for a filled field
+  in a help-mode `wt-help-tooltip`, which would hide the reason while help is off. No rule names a
+  disabled field's reason; decide whether this line is the pattern or the tooltip is.
+- **Split the menu patch window's file before adding to it (left open by A1151).**
+  `apps/dashboard/src/widgets/menu-patch-dialog.ts` is large; split it before more is added to it.
+- **After Remove image, or a pick from the image library, focus drops to the page instead of
+  returning to "Choose image" (found in the menu patch window, A1151).** `dashboard-image-upload`
+  (`apps/dashboard/src/widgets/image-upload.ts`, `#setOpen`) returns focus when the picker closes
+  only in its logo modes; the plain chooser every product form uses has no such step. The logo
+  step came from main (A841 slice 8a, #2035); A1151 did not change it.
+- **While the content-languages read is slow, a refused send in the menu patch window can show
+  "Enter text for each translation." under a Spanish name field that has text (left open by
+  A1151).** Seen with a forced 4-second delay on that read; in normal use it would flash for about
+  a tenth of a second at most.
+- **A server refusal under a name language that a newer version's folder then sets stays under the
+  disabled field until the next send (left open by A1151).** The window's own check is let go in
+  that case (524413e12); a refusal the server sent is not. It never disables Review.
+- **A dish's variant link, when its name wraps, puts its price and VAT class 8 px left of the
+  name's text (left open by A1151).** The link button has its own inside padding; seen only with a
+  name lengthened in the open page, since the demo's variant names are short.
+
+## Bundle: Extras list forms
+
+6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Extras and Options — deliberate limits, and what is left open.**
+  [integration contract](../developers/modifiers.md).
+  [Detail](catalogue.md#extras-and-options--deliberate-limits-and-what-is-left-open)
+- **The Price heading reads "Price per portion" also over a row sold by the unit.** Still open from
+  its review: neither screen counts a stored unit seeded as `each` as Each, which `isEachUnit`
+  (`packages/catalogue/src/units.ts`) does; no code outside tests seeds one. Left open by W75 (the
+  Extras editor shows Portion beside Price, #1194).
+- **Each list still reads "Extra bread · Extras", and under its heading the " · Extras" is now
+  said twice** — left open by A218 (#1082).
+- **With three lists the dropdown already scrolls, so "+ Add options list…" sits at or just below
+  its bottom edge when it opens** — left open by A218 (#1082).
+- **In the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px** — left open
+  by W70 (#1222): (978px of content in a 974px box), with or without the size attribute.
+- **At 390px the items table is wider than its scrolling box with or without the mark**
+  [Detail](catalogue.md#at-390px-the-items-table-is-wider-than-its-scrolling-box-with-or-without-the-mark)
+
+## Bundle: Menu home tab
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
+  the menu shares the screen with the order**
+  [Detail](catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
+- **A Home page tab product shortcut reached only through a disabled included menu reads "Not
+  shown: not on sale on this menu"**, where a section shortcut in that place reads "Not shown: in a
+  disabled included menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`).
+  Left open by A816 (#1880).
+- **A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is
+  being saved.**
+  [Detail](catalogue.md#a-home-page-shortcuts-bin-button-stays-live-while-a-shortcut-reorder-or-a-display-setting-is-being-saved)
+- **The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) is a
+  hand copy of the till's menu browser**
+  [Detail](catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
+
+## Bundle: After A760 moves the bundle format: An import checks rows as a save does
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by A380 (#1385).** A configuration import stores a fixed folder name as given,
+  spaces included, where a save through the dialog or the route trims it.
+  [Detail](catalogue.md#loose-ends-left-by-a380-1385)
+- **Loose ends left by A347 (#1392).** An imported bundle may carry priced menu rows for a product
+  no menu reaches, and adding the product back to a menu revives those prices (found in A347's
+  review, believed to predate it).
+  [Detail](catalogue.md#loose-ends-left-by-a347-1392)
+- **A configuration import copies `products` rows as they are** — left open by A209 (#1090):
+  (`select *` in `apps/server/src/configuration-transfer.ts`, from `CORE_CONFIGURATION_TRANSFER`
+  in `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
+  category that the effective category and the editor's read then ignore.
+- **A1074. A configuration import does not range-check a department's reminder minutes**, so a
+  file could store 0, a negative number or 999; only the department save refuses them. Left open
+  by A756 PR 4's review (#2020).
+
+## Bundle: Tabs selected visible
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts**. The owner
+  has not ruled on Modifiers; reproduce with the Linux fonts before choosing a change.
+  [Detail](catalogue.md#modifiers-spanish-opciones-tab-was-cut-at-a-310-px-screen-on-cis-linux-fonts)
+- **A selected tab that grows while its strip keeps its width is not scrolled back into view** — left open by A487a (#1540).
+  [Detail](kitchen.md#a-selected-tab-that-grows-while-its-strip-keeps-its-width-is-not-scrolled-back-into-view)
+
+## Bundle: Icon button
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The data table's columns button has no tooltip**
+  [Detail](catalogue.md#the-data-tables-columns-button-has-no-tooltip)
+- **Loose ends left by W83 (#1193).**
+  [Detail](catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
+
+## Bundle: Tree drag shared
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Two copies of the tree pointer drag — OPEN (W88).** Each widget still has its own copy of the
+  drag itself. A shared helper, told how to map a row to a target, would serve both.
+  [Detail](catalogue.md#two-copies-of-the-tree-pointer-drag--open-w88)
+- **The Menus Structure tree notices silent branch closure by watching its table redraw — OPEN (W88).**
+  An event from the table for "these branches changed" would be cleaner; it means a change in
+  `packages/ui`.
+  [Detail](catalogue.md#the-menus-structure-tree-notices-silent-branch-closure-by-watching-its-table-redraw--open-w88)
+
+## Bundle: Each unit literal
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
+  synthetic `EACH_UNIT` id is a literal in both `packages/catalogue/src/unit-validation.ts` and the
+  till's `product-name.ts` with nothing pinning them equal.
+  [Detail](catalogue.md#createproduct-and-updateproduct-duplicate-the-legacy-pricingunit-fallback)
+- **`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general code (left open by
+  A918 slice 4, #2141).** `packages/catalogue/src/units.ts:28-36` is never written into a venue, but the
+  receipt reads its abbreviations to decide whether a line prints a unit
+  (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text: its
+  own pull request waits for the owner.
 
 ## Decisions and deliberate limits
 
@@ -1376,3 +1545,8 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
   (owner, 2026-10-17). One handed to it while it is already open leaves Save as it was, and it
   stays active for the whole time that window is open, even once the refused field is edited back.
   (A410, #1434.)
+
+- **Past sales of a variant that had a category of its own now show under its product's
+  category** — left open by A209 (#1090): in the category sales report's "Current categories"
+  mode (`current`, `packages/reporting/src/category-sales.ts`), which classifies each line by the
+  catalogue as it is today; "Categories at time of sale" still reads what each line recorded.

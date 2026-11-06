@@ -3,18 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Alerts, logging and diagnostics". This file holds
 their full text.
 
-## `redact-secrets.ts` was written against the PostgreSQL connection-string parser
-
-- Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
-  `redact-secrets.ts` was written against the PostgreSQL connection-string parser, and `pg` is now
-  installed only for `bench/pglite-throughput`; whether a credential-bearing URL can still reach
-  the log is unchecked. `apps/server/vitest.config.ts`'s `coverage.exclude` lists `scripts/**`,
-  which its `src/**/*.ts` include already leaves out (read only). The adoption-pending entry below
-  still gives PostgreSQL's SQLSTATE 23503 on `nodes_location_id_locations_id_fk` as evidence; this
-  engine reports `FOREIGN KEY constraint failed` and names no constraint. Test titles #620 could
-  not touch: "(design §3b(2))" in `set-table-status.test.ts`, "(owner decision 2026-08-02)" in
-  `workforce-api.test.ts`, "(guard by deletion)" in `seed-sales.test.ts`.
-
 ## The alert registry's per-source savepoint has no test that fails without it
 
 Found by A798-B slice 4 (#1958). `readOpenAlerts` (`apps/server/src/alerts.ts`) asks
@@ -121,3 +109,30 @@ by version to catch a bad release (design section 10).
   (`wt-toast`) takes a plain string, so keeping times whole there needs `wt-toast` to take more than
   a string, or no-break characters in the text. The page's 'Updated' line does not use `wholeTimes`
   either (`apps/dashboard/src/screens/box-status-screen.ts`). Left open by A798-B slice 9 (#2025).
+
+## Bundle: Alerts text display
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Alerts table makes long station warnings hard to read on a phone.** — left open by the
+  product folders work. Give the alert text more room at phone width while keeping its handling
+  action reachable.
+  [Detail](alerts.md#the-alerts-table-makes-long-station-warnings-hard-to-read-on-a-phone)
+- **The alert pop-up can split a written time across two lines.** Left open by A798-B slice 9
+  (#2025). [Detail](alerts.md#the-alert-pop-up-can-split-a-written-time-across-two-lines)
+
+## Bundle: Alert registry tests
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The alert registry's per-source savepoint has no test that fails without it.** Removing the savepoint in
+  `readOpenAlerts` (`apps/server/src/alerts.ts`) left every test that reaches it passing, and it reads each
+  source's answer after the savepoint closes. Found by A798-B slice 4 (#1958).
+  [Detail](alerts.md#the-alert-registrys-per-source-savepoint-has-no-test-that-fails-without-it)
+- **No test fails if `boot.ts` stops registering the dark pass screen alert** — left open by A451
+  (#1486). `passScreenAlertSource` is tested on its own (`apps/server/src/station-outputs-down.test.ts`),
+  but its registration in `apps/server/src/boot.ts` is checked by nothing that review found; the
+  other sources registered beside it were not looked at.
+- **The alert check that every money slot is marked looks only at slots named `amount`, `captured`
+  and `expected`, so a new money slot under another name is unseen.** Left open by C43 (money in
+  the dashboard shows its currency sign, #830).

@@ -3,16 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Payments and card readers". This file holds
 their full text.
 
-## The Stripe webhook endpoint still has to be repointed by hand, at Stripe
-
-#378 shortened the
-address from `/webhooks/stripe/<an id>` to `/webhooks/stripe`; the endpoint registered in the
-Stripe dashboard is outside this repository and will keep sending to the old one until somebody
-changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
-taken through a Stripe webhook.
-
-<a id="the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time"></a>
-
 ## The reconciler's card reversal records only after the provider call, with a fresh key each time
 
 `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()`
@@ -250,16 +240,6 @@ working. Prices and receipts:
 This is now the payment part of [A508](till.md#a508-a-tables-qr-code-order-call-a-waiter-ask-for-the-bill-or-pay);
 the ordering surface is A508 and [A509](till.md#a509-online-ordering-for-collection-at-the-counter).
 
-## Routing by BILL SIZE is allowed but is the smallest lever
-
-(owner idea 2026-09-18, arithmetic in
-the research note). The card mix moves the crossover further than the bill size does, and the deli's
-own mix is a query once it trades, not a research question. Two things to know before building it:
-the provider is chosen when the payment page is minted, so the AMOUNT can be routed on and the CARD
-CLASS cannot; and a refund must return through whichever provider took the payment. So **method
-first**; the variant that earns its keep is card-present, spending SumUp's Tarifa Plana €2 500
-monthly allowance first, which needs no second merchant account.
-
 ## Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing built
 
 **A949, 2026-10-21:** the Cloud API documents a `WAITING_FOR_SIGNATURE` reader state, but no
@@ -463,14 +443,6 @@ hides `sale.empty_basket`. On the till, try paying, sending and moving an empty 
 clear message shows, add one in English and Spanish. Done when each of the three has been tried
 and shows a clear message.
 
-## Task 4 (#832, every paper names all of a party's tables)
-
-Not yet checked: the payment API's
-`/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
-`/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
-the same column.
-[Detail](till.md#tables-parties-and-bills--the-tills-table-actions)
-
 ## Loose ends left by A633
 
 - `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
@@ -485,6 +457,129 @@ the same column.
 - [Check equipment labels on a physical venue printer](#check-equipment-labels-on-a-physical-venue-printer).
 
 <a id="slice-2--the-handheld-nfcqr-link"></a>
+
+## Bundle A1381: A manager's stuck-payment actions cover placed orders and only this box's own payments
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A manager's stuck-payment resolution must act only on the collection owner's payments before a
+  second box sells.** Both dashboard stuck lists read every box's payments, so a manager could
+  cancel a payment another box is still taking. Left open by A764 (A1018 Slice 4b, #2422).
+  [Detail](payments.md#a-managers-stuck-payment-resolution-must-act-only-on-the-collection-owners-payments-before-a-second-box-sells)
+- **A placed order with an unknown Stripe payment has no manager fallback.** Automatic checks
+  retry it, but the stuck-payment manager route still takes only open orders
+  (`apps/server/src/payments-api.ts`). The route restriction is read, not run here. Left open by A526.
+
+## Bundle A1389: Refuse bad tips and compare the amount captured on the whole-order card path
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991).**
+  Next: a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept.
+  A stale card-attempt mark after a free sale also remains unchecked (read, not run).
+  [Detail](payments.md#loose-ends-left-by-b28s-review-1005-not-acted-on-under-service-task-17-991)
+- **A whole-order card payment does not refuse a negative tip** (found by A793's design, read,
+  not run). A tip with more than two decimals is not checked either. Next: a route case sending
+  `tip: "-5.00"`, then refuse it before the reader is asked. A793's slice 1. Full review (money).
+  [Detail](payments.md#a-whole-order-card-payment-does-not-refuse-a-negative-tip)
+- **A whole-order payment records the amount it expected, not the amount captured** (found by
+  A793's design, read). Next: compare the captured amount at capture time, as the bill payment
+  loop does (`payment.bill_capture_mismatch`).
+  [Detail](payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
+
+## Bundle A1394: SumUp's sweep and refund call stop throwing
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Two concurrent passes of the SumUp provider's `resolvePending` over `listAttempting`
+  (`packages/payments/src/store.ts`) do not both succeed**: the second pass throws partway instead
+  of skipping the rows the first resolved.
+  [Detail](payments.md#two-concurrent-passes-of-the-sumup-providers-resolvepending-over-listattempting-packagespaymentssrcstorets-do-not-both-succeed)
+- **Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.**
+  Left open by A632.
+  [Detail](payments.md#lift-reverseviastripe-and-reverseviasumup-into-one-neutral-reversal-primitive)
+
+## Bundle A1395: Cancelling or settling a placed order respects stored card payments
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A placed order with no invoice is not checked against stored card payments when it is
+  cancelled.** Left open by C126.
+  [Detail](payments.md#a-placed-order-with-no-invoice-is-not-checked-against-stored-card-payments-when-it-is-cancelled)
+- **`finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled**,
+  while the card's charge stays on no sale. Measured before A526 through an unpaid departure
+  that A526 now refuses; no other way to reach it is known. Left open by A526.
+  [Detail](payments.md#finalizecaptures-duplicate-fallback-can-show-a-receipt-for-an-order-that-is-not-settled)
+
+## Bundle A1399: What happens when a bill payment is sent again under one id
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The next identical bill payment can be answered with one that got a server error** (narrowed
+  by A796). What is left: a first send answered with a 5xx or an error with no code keeps its
+  submission without holding the bill, so the second guest's identical payment may be replayed.
+  [Detail](payments.md#the-next-identical-bill-payment-can-be-answered-with-one-that-got-a-server-error)
+- **If the till never receives a bill reader payment's `device.profile_changed` answer**, its
+  automatic resend under the same id gets the failed payment back and tells staff the card was
+  declined: no card was charged, but the reason shown is wrong; the next tap starts a fresh
+  payment (read, not run). Left open by W97 (#1311).
+
+## Bundle: Stripe adapter upkeep
+
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by A633.**
+  [Detail](payments.md#loose-ends-left-by-a633)
+- **Turn off Stripe's on-reader tip screen, or read the tip back.** Backlog only; SumUp is the
+  go-live provider (owner, 2026-10-21). Next: pass `process_config[skip_tipping]=true` from
+  `processPaymentIntent`, tested against Stripe's sandbox. Left open by A846.
+  [Detail](payments.md#turn-off-stripes-on-reader-tip-screen-or-read-the-tip-back)
+- **The payments check ignores the currency Stripe reports.** `stripeReportClient` never reads
+  `bt.currency`. Left open by A846.
+  [Detail](payments.md#the-payments-check-ignores-the-currency-stripe-reports)
+- **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
+  auth. Gated on the deli having a Stripe account, which it does not.
+- **Check how real Stripe answers a malformed reader id, and one from another Stripe account** —
+  left open by A519 (#1566). Whether test-mode Stripe answers those two cases the same way is
+  unchecked; a sandbox case beside `checkout.sandbox.test.ts` would settle it.
+  [Detail](payments.md#check-how-real-stripe-answers-a-malformed-reader-id-and-one-from-another-stripe-account)
+
+## Bundle: Tap to pay restore
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Restore `stripe_on_device` (Tap-to-Pay) on the handheld** (left open by A796). It waits for
+  the one-time native-app decision
+  ([native app capabilities](../superpowers/specs/2026-08-30-native-app-capabilities.md), N1/N2;
+  [A796 design §6](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md#6-tap-to-pay)).
+- **An offline card payment that forwarding moved to `settled` with no sale no longer holds its
+  placed order**: once no card payment of the order runs in this process, a collect is accepted.
+  Left open by A526.
+  [Detail](payments.md#an-offline-card-payment-that-forwarding-moved-to-settled-with-no-sale-no-longer-holds-its-placed-order)
+
+## Bundle: No fiscal venue paid flow
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Check first: on a venue with no fiscal module, replaying a settled bill may throw** (read, not
+  run; found by A796's Task 23 review). First run a replay on such a venue to see whether it is reached.
+  [Detail](payments.md#check-first-on-a-venue-with-no-fiscal-module-replaying-a-settled-bill-may-throw)
+- **On a venue with no fiscal module, a handheld shows the ticket view after a presented bill is
+  paid, not the paid screen** (known limit of A796; read, not run).
+  [Detail](payments.md#on-a-venue-with-no-fiscal-module-a-handheld-shows-the-ticket-view-after-a-presented-bill-is-paid-not-the-paid-screen)
+
+## Bundle: Reader status time limits
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A provider that keeps sending data slowly, or a connection that is slow to open, can take
+  longer** — a reader's status and the provider's available readers wait up to 250 seconds. Left
+  open by A255 (#1145, lane A's W18c).
+  [Detail](payments.md#a-provider-that-keeps-sending-data-slowly-or-a-connection-that-is-slow-to-open-can-take-longer)
+- **The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit.**
+  Left open by A260 (several card readers' status reads at once can use up the browser's
+  connections to the box; W18c #1145 and W48 #1162).
+  [Detail](payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
 ## Decisions and deliberate limits
 

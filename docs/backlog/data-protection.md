@@ -238,6 +238,19 @@ by the answers):
     B's questions file; one worth a look: the ending after an email's last dot is kept whole, so a
     mistyped `jordi@puig.ferrer` logs as `j***i@p***g.ferrer`.
 
+## Bundle: Third party licence notices
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
+  source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to
+  confirm it (`docs/compliance/action-plan.md`, 2026-09-23).
+  [Detail](data-protection.md#libvips-is-lgpl-30-or-later)
+- **cairo, built into that libvips, is listed under the Mozilla Public License, and `/app/third-party/`
+  carries neither its licence text nor a source offer for it**.
+  **Next action:** add the licence text and source notice the answer calls for.
+  [Detail](data-protection.md#cairo-built-into-that-libvips-is-listed-under-the-mozilla-public-license-and-appthird-party-carries-neither-its-licence-text-nor-a-source-offer-for-it)
+
 ## Decisions and deliberate limits
 
 - **A980 S2c, decision 3:** no product path records a whole-sale void yet, so the voids list is

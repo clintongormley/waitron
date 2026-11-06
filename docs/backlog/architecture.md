@@ -145,12 +145,6 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   `transfer-lines.test.ts`, "(the TS-4 shape)" in `move-merge.test.ts`, "TS-4's move guards" and
   "TS-2 status" in `split-bill.test.ts`.
 
-## `apps/server` test titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns now
-
-- The same family: the remaining "not a 500" titles across the `apps/server` route suites,
-  which name no engine and were left unprobed by C127 (#1036, #1042), after which no comment or
-  test title names a PostgreSQL SQLSTATE as today's behaviour.
-
 ## Pointers outside `docs/` that #597 made stale
 
 - `apps/server/README.md:82`
@@ -285,18 +279,6 @@ the legal working-time record), `payment_resolutions` (payments, `toggleable`), 
 module's tables that exist; its cost is a box that refuses to start after a release marks an
 existing table of a switched-off module `appendOnly()`, because no migration of that module would
 run to install the new trigger. Owner question Q5 of A483.
-
-## `apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree
-
-#460 declared `@waitron/print-agent-app` as a test-only dependency of `apps/server` (for
-  `apps/server/src/print-agent-e2e.test.ts`) and exported `./tcp-probe.js`. Moving `tcp-probe.ts`
-  alone into `packages/print-agent` was consciously not taken: it belongs to a cohort of six
-  device-discovery modules in the app (`ipp-probe.ts`, `bluetooth.ts`, `usb.ts`,
-  `linux-devices.ts`, `network.ts`, `sweep.ts`), and moving one would leave its siblings importing
-  back across the boundary. Moving the WHOLE cohort would settle it, and that is a print agent
-  layering decision. Until then no guard stops a second app-to-app edge:
-  `scripts/workspace-cycles.test.ts` looks only for loops, and `eslint.config.js`'s
-  `no-restricted-paths` zones name `packages/*` as targets, never `apps/*`.
 
 ## These index and key names still read `tenant`, and the columns they name are gone
 
@@ -1219,6 +1201,405 @@ product failures.
   which the in-flight A1089 reply-evidence branch changes. Recheck live branch paths before
   the next slice.
 
+## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
+
+15 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64
+  hex characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
+  the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
+  comments-only change.
+- **A negative catalogue price can still be stored by a direct call** — OPEN (left by #487).
+  [Detail](catalogue.md#a-negative-catalogue-price-can-still-be-stored-by-a-direct-call)
+- **Loose ends left by A322 (#1372, an included menu can show its sections directly).** A folder's
+  fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
+  [Detail](catalogue.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
+- **Loose ends left by A263 (#1151)** — OPEN, unqueued.
+  [Detail](catalogue.md#what-1151-left-open-2026-10-03)
+- **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
+  and only the editor's parser refuses a blank; `option_lists.name`, `option_labels.name` and
+  `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
+  action:** decide whether the columns want a check constraint and the write paths a domain refusal.
+- **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** At the counter the dish
+  leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
+  record: a schema change, held by A1308 until A760 lands. Whether a cook may be left with two
+  tickets here is the owner's to judge.
+  [Detail](kitchen.md#a1368-a-dish-waiting-for-the-pass-whose-hold-ticket-printed-moved-to-the-counter-still-gets-no-moved-line-and-no-fire-mark)
+- **A1351. `kitchen_notices` has no index on `working_order_id` (left open by A803 slice 4c).** Split
+  a table's MOVED-slip read scans it once per split: 9.29 ms at 200,000 rows and 48 ms at 1,000,000,
+  measured on a Mac with a warm cache (the 4c plan's R15). Add the index once the A1308 hold on table
+  changes ends.
+- **A1366. Two dishes alike on one bill share a MOVED notice, so Split a table can miss a slip
+  (left open by A803 slice 4c).** `readNamesOnPaper` (`apps/server/src/kitchen-print.ts`) matches a
+  dish's last MOVED notice by bill, station and dish name, so a notice written for one Burger also
+  counts for another Burger on that bill, and a split can print no slip for a dish whose ticket still
+  names the table that left. Ran twice: the 4c plan's D6 (`Mesa 431` leaving: no notice, no slip),
+  and the finish-branch review (two Burgers sent at Mesa 940, one moved to another bill, Mesa 941
+  joined, that Burger moved back, Mesa 940 split away: no slip; with a Flan as the second dish the
+  slip printed). `kitchen_notices` names no ticket item, so telling the two apart needs a column,
+  which waits for the A1308 hold.
+- **`envio_flujo`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`envios`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`invoice_series`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
+- **`payments`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`registro_sif`: decide the remaining DELETE restriction (A805 follow-up).**
+- Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
+  burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
+- **Passkey name column after A760:** A403 keeps the column under the schema hold; new registrations
+  use the detected password manager. Decide whether to remove it after the hold.
+  [Detail](dashboard.md#passkey-name-column-after-a760)
+
+## What A1308 retires
+
+These entries stay open until the A1308 or A760 slice that removes the need for them lands (backlog review, 2026-11-06). The slice that does so deletes them here. If a slice changes course, its entry goes back to the index.
+
+- **Repeated allergen kinds from direct callers.** The allergen validator accepts, for example,
+  `{ gluten: { kinds: ["wheat", "wheat"] } }`; the dashboard picker and published derivation remove
+  repeats. A668-1's Claude probe recorded that result. A1308's one allergen column normalises them
+  on write. Decide whether direct declarations should be refused instead, then check product requests
+  with repeated kinds.
+- **Catalogue names (W72): there is no unique index, and no backfill.**
+  [Detail](catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
+- **The venue's menu list is read by no sale.** **Next action:** owner to decide whether to retire
+  `location_catalogues` and the management routes `/management-api/venue/catalogues…`.
+  [Detail](catalogue.md#the-venues-menu-list-is-read-by-no-sale)
+- **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
+  the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`.
+  **Next action:** keep it in step with the unit or drop it.
+  [Detail](catalogue.md#two-signals-say-whether-a-dish-is-sold-by-weight-and-they-can-disagree-in-storage)
+- **The catalogue picker was deleted and nothing replaced it.** `selectedCatalogueId`
+  (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
+  product is created in; with two, the second becomes unreachable from the dashboard. **Next
+  action:** decide whether more than one catalogue is a case Waitron supports.
+- **Who authorised today's station or zone change**
+  [Detail](service-periods.md#who-authorised-todays-station-or-zone-change)
+- **Backup settings the environment owns are not compared at a handover.** With `backup.env` absent
+  on both boxes both digests are `null`, whatever the two environments hold. Left open by A1018
+  Slice 5 (Ruling P15).
+- **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand
+  edit puts one there (the writers read, not run). Two such boxes pass and can differ in a retention
+  count or a hidden recovery key. Left open by A1018 Slice 5 (Ruling R21).
+- **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain
+  crosses the two files: SQLite refuses a trigger body that writes another attached database. A947
+  slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.
+  [Detail](replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
+- **The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
+  [Detail](architecture.md#the-authorized_by-comment-on-drawer_opens-says-only-a-manual-open-sets-it)
+- **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`content_languages`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
+- **`location_catalogues`: decide the remaining UPDATE restriction (A805 follow-up).**
+- **`locations`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`media_image_data`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
+- **`payment_policy`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`payment_refunds`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`station_printers`: decide the remaining UPDATE restriction (A805 follow-up).**
+- **`tenant_receipts`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`working_order_counters`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
+  by the tenant-column removal (#378, 2026-09-16).
+  [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
+- **Half of an older receipt test can no longer fail.**
+  Owner's call: delete the old test, or keep only its corrupt-picture half.
+  [Detail](printers.md#half-of-an-older-receipt-test-can-no-longer-fail)
+- **A department's receipt logo save re-checks only the image's revision, not its id** — found in
+  A841 slice 7's review, read, not run.
+  [Detail](printers.md#a-departments-receipt-logo-save-re-checks-only-the-images-revision-not-its-id)
+- **A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split
+  its two readers** — believed from A841 slice 7's review, not run through a receipt.
+  [Detail](printers.md#a-copied-department-receipt-that-names-logo-twice-or-once-more-as-logou0000-may-split-its-two-readers)
+- **Left open by #1261's review (W111):** database enforcement of logo retention remains open.
+  A theme's logo (A841 slice 7) is a second image whose deletion only the app refuses; this entry
+  covers it too.
+  [Detail](printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05)
+- **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
+  folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
+  until the venue reset that permits the rebuild.
+- **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the
+  go-live migration squash (A760).**
+  [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-in-the-go-live-migration-squash-a760)
+- **A person row written from outside `packages/identity` still folds its key ASCII-only** — OPEN.
+  [Detail](dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
+- **Task 1b** (#554, session cookies stored only as hashes).
+  [Detail](dashboard.md#task-1b-554-session-cookies-stored-only-as-hashes)
+- `service_commands` rows are never pruned. Left open by service Task 2 (#715, a record per seated
+  party).
+- **The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).**
+  [Detail](ci.md#the-upgrade-walks-historical-runtime-variation-remains-unexplained-after-reducing-setup-work-a736-1788).
+- **Task 2's review found no test that fails when `device_profile_admission_roles` or `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`** (read, not run).
+  [Detail](ci.md#task-2s-review-found-no-test-that-fails-when-device_profile_admission_roles-or-device_profile_admission_persons-is-left-out-of-appsserversrctestingclear-provision-fixturets).
+
+## Bundle: Query plans and indexes, measured on a year of data
+
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
+  (left open by A773-2 PR C's review).** This needs a migration.
+  [Detail](till.md#index-the-dishes-not-yet-fired-so-the-passs-reads-stop-scanning-every-ticket-item-ever-kept-left-open-by-a773-2-pr-cs-review)
+- **Index the uncollected, non-abandoned bill lookup in A1308's orders slice (A1370 follow-up).** The station
+  queue now reads tickets by uncollected, non-abandoned bill, but finding those bills still scans
+  `working_orders`. Add the partial index once the table-change hold ends.
+- **Measure the remaining top-level-dish reads (A1370 follow-up).** Check `parent_line_id is null`
+  reads across the server and venue-service, including `listOrderGroups`, `working-order`,
+  `move-bill`, `finish-party-service` and `party-allergy`. Measure their plans with history.
+- **Decide when a box refreshes SQLite's planner statistics (A1370 follow-up).** Running
+  `ANALYZE` or `PRAGMA optimize` is a separate lifecycle decision; no automatic run is
+  scheduled. Measure it on representative venue data before choosing its timing.
+- **Decide how kitchen queues order bills tied on time (A1370 follow-up).** The queue sorts by
+  ticket `queued_at` and line number; different query plans can reorder bills tied on both.
+  Check whether a product path produces those ties before choosing a stable tie-breaker.
+
+## Bundle: Read every insert that grows with an order
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1299. Moving, splitting or transferring a very large bill binds one value per line further
+  along (left open by A803 slice 4a).** Slice 4a passes Move dishes…' line ids as one bound value,
+  but `moveOrderLines` and `stampSentOrderNumber` in `apps/server/src/working-order.ts` and
+  `copyHeldGroups` in `apps/server/src/order-groups.ts` still bind one or more per line, so a bill past the store's bound-value limit would fail there. By reading, not run.
+- **No sweep has read every insert whose rows grow with an order.** A1208's sweep missed four,
+  which PR #2265's review and the tests after it found; others may remain.
+  [Detail](architecture.md#no-sweep-has-read-every-insert-whose-rows-grow-with-an-order)
+- **A table round of more than about 1,100 dishes is refused "too many SQL variables"**
+  `insertTabRound` writes a round's lines in one statement; 1,089 waters passed and 1,188 were
+  refused. [Detail](architecture.md#a-table-round-of-more-than-about-1100-dishes-is-refused-too-many-sql-variables)
+
+## Bundle: Full-invoice recipient: comma refusal and country code names
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Full-invoice locality/province commas.** Align the till's structured address checks and
+  the server's Spanish completeness rule, and put a refusal under the field that needs changing.
+  A locality or province containing a comma currently passes the till check and is refused as a
+  street-address error. [Detail](architecture.md#a913s-fix-items-general-code-english-only)
+- **Name special invoice-document issuing codes.** Both recipient dialogs currently show
+  `QU`, `XB`, `XG`, `XN` and `XU` as bare codes. Add sourced English/Spanish labels without
+  treating them as postal countries. [Detail](architecture.md#a913s-fix-items-general-code-english-only)
+
+## Bundle: Correct every sentence known to be false, then finish comment pruning
+
+26 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
+  now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/catalogue/src/extras.ts`)
+  and `writeLabels` (`src/options.ts`); duplicate and foreign ids are refused earlier and one write
+  runs at a time.
+- **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
+  engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
+  [Detail](catalogue.md#max_modifier_integer-and-the-extras-contracts-whole-bound-have-no-stated-reason-on-this-engine)
+- **`assertRefsExist` still reads lists in sorted key order** — OPEN (found by #603). Read only, not
+  run: that order (`packages/catalogue/src/product-modifiers.ts`) served PostgreSQL's lock ordering
+  only.
+- **Three configuration-transfer cases pin an insert order the importer's `pragma defer_foreign_keys`
+  may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
+  `packages/catalogue`'s `options.test.ts`, `product-modifiers.test.ts` and `extras.test.ts`;
+  whether to keep pinning it is the owner's call.
+- **Test titles in `packages/catalogue` a comments-only change cannot touch** — OPEN (found by
+  #603). Four titles, in `dietary.test.ts`, `product-modifiers.test.ts` and `migrations.test.ts`.
+  [Detail](catalogue.md#test-titles-in-packagescatalogue-a-comments-only-change-cannot-touch)
+- **A test comment still names the old savepoint error.**
+  `packages/fiscal-verifactu/src/correction-path.e2e.test.ts:308` says its control "fails with
+  `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword
+  the comment (a comment in a fiscal test, not the fiscal core).
+- **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
+- **`apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say** — found by
+  #656 while pruning comments. No production caller sets `skipSecrets` any more, so whether the
+  option should go is open.
+  [Detail](box.md#appsserversrcerrorsts-still-cites-claudemd-5-for-things-5-does-not-say)
+- **`apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp
+  can round a value "past" a bound, which it cannot** — found by #653 while pruning comments.
+  [Detail](box.md#appsserverreadmemd-near-line-230-the-waitron_skip_retry_ms-row-says-the-sleep-clamp-can-round-a-value-past-a-bound-which-it-cannot)
+- **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there**
+  [Detail](box.md#the-empty-venue-directory-reason-561-deleted-from-packagesprovisioning--is-false-there)
+- **`packages/provisioning/README.md` also says only `ES-common` is implemented** — found by #561
+  while pruning comments.
+  [Detail](box.md#packagesprovisioningreadmemd-also-says-only-es-common-is-implemented)
+- **`packages/provisioning` code found by #561 and not changed.** The coverage config leaves
+  `src/bin.ts` out with no reason stated any more, which may hide code a test could reach.
+  [Detail](box.md#packagesprovisioning-code-found-by-561-and-not-changed)
+- **Loose ends left by the comment-pruning pull requests (#559 to #624).**
+  [Detail](ci.md#loose-ends-left-by-the-comment-pruning-pull-requests-559-to-624).
+- **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN.
+  [Detail](dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-and-0453-0454-is-installed)
+- **Remove the stale till description beside the device-delete preview fixture.**
+  `apps/dashboard/src/screens/devices-screen.test.ts:6005` calls the fixture a till, while
+  its `d1` row is a kitchen display (`kind: "kds_station"`). Remove that comment in the next
+  comment-cleanup pass.
+- **The order-line schema's variant-name comment mistakes missing customer text for a null map.**
+  `packages/db/src/schema/orders.ts` says `variantDescriptions` is null when the variant has no
+  customer name. The existing working-order case "names a variant line with no customer or kitchen
+  name" instead reads its frozen staff-name map. Left open by A612; remove the misleading comment.
+- **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
+  [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
+- **`apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
+  condition by construction"**
+  [Detail](architecture.md#appsserverreadmemd-near-line-496-still-says-an-error-line-and-a-503-are-the-same-condition-by-construction)
+- **`working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course
+  definition; `fireCourse` calls `requireCourse`**
+  [Detail](architecture.md#working-orderts-near-requirelivecourse-says-the-fire-verbs-use-the-same-live-course-definition-firecourse-calls-requirecourse)
+- **Pointers outside `docs/` that #597 made stale**
+  [Detail](architecture.md#pointers-outside-docs-that-597-made-stale)
+- **"Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too
+  wide** — found by #567 while pruning comments. The same claim stands in
+  `packages/fiscal-verifactu/src/venue-fields.ts`.
+  [Detail](architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
+- **Nothing now checks at run time that a read returns something other than a Node `Buffer`**
+  [Detail](architecture.md#nothing-now-checks-at-run-time-that-a-read-returns-something-other-than-a-node-buffer)
+- **The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert**
+  [Detail](architecture.md#the-nested-txtransaction-in-enqueuesuccessor-wraps-one-insert)
+- **`decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no
+  digit bound**
+  [Detail](architecture.md#decimaltocents-refuses-an-amount-over-the-bound-583-but-centstodecimal-itself-has-no-digit-bound)
+- **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26).
+  **Next action:** fold into the comment-pruning sweeps: re-point each to
+  the pull request that built the work, or drop the tag.
+  [Detail](architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
+- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.**
+  [Detail](architecture.md#comments-still-describe-a-drizzlequeryerror-wrapper-that-this-engine-does-not-produce)
+
+## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
+
+21 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The products' made-at read has no screen since A655**
+  [Detail](catalogue.md#the-products-made-at-read-has-no-screen-since-a655)
+- **A variant image usage's `productId` has no reader in the dashboard**
+  (`packages/media/src/dashboard/client.ts`). **Next action:** drop the field, or say what it is
+  kept for.
+- **Retire the product editor's required-translation refusal mapping.**
+  [Detail](catalogue.md#retire-the-product-editors-required-translation-refusal-mapping)
+- **Nine `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
+  while doing A755 (#1809); none had one before it either: `departments_zones`,
+  `language_copies`, `language_receipts`, `language_save_error`, `not_printed`, `preview_for`,
+  `preview_paper`, `trim_save_error` and `venue_defaults`.
+- **`opening.follow_week` and `menu.normal_week` have no reader** — found during A723 (#1849); it
+  predates A723. Both strings, English and Spanish, are in
+  `packages/venue-service/src/dashboard/strings.ts` and nothing reads them; delete them or use them.
+- **`GET …/named-days` (`readSpecialDaysModel`, `named-days.ts`) has no dashboard caller**; server
+  suites still pin it. Remove it, or keep it with a stated reason — left open by A506-9, #1651.
+- **`range-dialog.ts` (`<range-dialog>`) has no caller**; only its own tests load it — left open by
+  A506-9, #1651.
+- **`PUT …/departments/:departmentId/menu-week` and `PUT …/zones/:zoneId/closed-week` (`routes.ts`)
+  are called by no client** now that the painter saves through `PUT …/seasons/:seasonId/weeks`.
+  Remove them, or keep them with a stated reason — left open by A506-8, #1634.
+- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller**
+  [Detail](kitchen.md#get-management-apistationsoutputs-down-and-the-dashboards-listoutputsdown-have-no-caller)
+- **`POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller**
+  since A797 slice 8, whose heading and whole-ticket taps send each dish's own advance in turn (the
+  plan's slice 8, D8). [Detail](kitchen.md#post-apiordersidstationssidadvance-appsserversrctill-apits-has-no-till-caller)
+- **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
+  moved a station's printers into the station save; `parseStationPrinterIds`
+  (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
+- **Four dashboard text keys have no reader.** `venue_settings.help`, `venue_settings.help_label`,
+  `venue_settings.save_error` and `venue_settings.load_error` (`apps/dashboard/src/i18n/strings.ts`,
+  English and Spanish) are used by no screen; A1301 S1 renamed them from `location_settings.*`
+  without removing them, and `apps/dashboard/src/i18n/t.test.ts` pins the load error's wording.
+  Delete them, and that case, unless a screen should show them.
+- **`fiscal-none` left-behinds:** remove the inert `resolveClient`/`skipRetryMs`; regime-agnostic
+  provisioning tests.
+- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23;
+  narrowed by A92 and #1039).** Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps
+  its `.sqlite.` infix because the approved slice 3d plan ran it by that name. The
+  `provisioning.invalid_identifier` error registry entry remains. [Detail](architecture.md#small-renames-and-dead-exports-the-sweep-found-and-could-not-make)
+- **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
+  [Detail](architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16).
+- An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
+  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
+  constant (the theme colour is literal in three places).
+- **`void cfg` lines remain in `apps/server/src`** (`git grep -n 'void cfg;' apps/server/src`): test
+  helpers, and production functions (`apps/server/src/working-order.ts` holds several) that take
+  `cfg` and discard it. Left open by SQLite slice 1 (#490 and the preparation tasks).
+- `resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) **is now
+  called only by its own tests; delete it with its cases**: nothing else calls it, because the built
+  Task 6 works out the default itself, and only the demo-data plan's Task 6 sketch still names it.
+  Left by #1320 (W109-6, content languages per region), OPEN, unqueued.
+- `partyFamilies`, the reverse lookup of `partySurvivors`, stayed in `apps/server/src/parties.ts`,
+  while `partySurvivors` is in `packages/db/src/party-table-labels.ts`. Left open by the table
+  actions plan's Task 8 (#869, move guests, join and split tables) and C77/C86.
+- The device-management routes build their `devices ⨝ device_profiles` read inline
+  (`apps/server/src/device-api.ts`) where a `listDevices` store verb belongs.
+- **No route raises `menu_item.variant_not_allowed`**: `addProductToMenu` is its only thrower and
+  the demo seed its only caller outside tests. The code and its 400 in
+  `apps/server/src/catalogue-api.ts` are left for whoever next prunes unraised codes.
+
+## Bundle: Tighten the checks the A974 review probed
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Strengthen the server group and fiscal-sale fixture checks.** The named no-kitchen
+  setup and several fixture/reference substitutions survived the A974 review’s probes.
+  [Detail](architecture.md#a974-review-assertion-gaps).
+- **Keep variant-routing fixture destinations distinct.** Routing both categories to the same
+  station leaves all working-order cases passing and removes the distinction that checks the
+  parent's category takes precedence. Preserve the routing assertions and check the competing setup.
+  [Detail](architecture.md#a974-review-assertion-gaps).
+- **Strengthen arriving-dish event and receipt-guest split checks.** Checking one held
+  group twice, choosing the other split table or paying one bill twice can leave the two
+  complete suites passing.
+  Add observations that distinguish those identities without changing the existing checks.
+  [Detail](architecture.md#a974-review-assertion-gaps).
+- **Pin the grouped-drink fixture quantity before testing partial splits.** The made-here
+  route suite can still pass with a whole-line transfer that bypasses the partial-split copy.
+  Keep the existing made-here assertions and check the source and remaining quantities.
+  [Detail](architecture.md#a974-review-assertion-gaps).
+
+## Bundle: Recovery wording into `i18n`, with table names to match
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Start again choice's words move into `apps/server/src/i18n/`.** `START_AGAIN_PAGE_TEXT`
+  (`apps/server/src/recovery-start-again.ts`) is the last recovery-page wording outside `i18n/`.
+  It stays a table of its own, apart from `OPERATOR_TEXT`, and must load without the database.
+- **The recovery page's tables keep their old names.** `OPERATOR_TEXT`, `GENERIC_TEXT` and
+  `OperatorText` in `apps/server/src/i18n/recovery-page.ts` do not end in `_WORDS` like the
+  folder's other tables, and `recovery-surface.ts` passes them on so A968 (#2419) left every test
+  unedited. Renaming them means changing the importing tests too.
+
+## Bundle: Printer, reader and device delete wording and tidying
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by A435's printer, reader and device delete (steps 2 to 4).**
+  [Detail](architecture.md#loose-ends-left-by-a435s-printer-reader-and-device-delete-steps-2-to-4).
+- **Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519).**
+  [Detail](architecture.md#loose-ends-left-by-a435-steps-3-3b-and-4-1520-1524-1519)
+
+## Bundle: The two `stripSql` scanners and their copied patterns
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Copies of the patterns A105 and C27 replaced — OPEN.**
+  [Detail](architecture.md#copies-of-the-patterns-a105-and-c27-replaced)
+- **The two SQL scanners named `stripSql` blank block comments before `--` comments — OPEN (split from A95).**
+  Read, not run; whether any file they scan has a `/*` inside a `--` comment or a string is not measured.
+  [Detail](architecture.md#the-two-sql-scanners-named-stripsql-blank-block-comments-before----comments)
+
+## Bundle: One identifier validator, one error walker
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Three copies of one SQL identifier validator and two cause-chain walkers** — OPEN.
+  **Next action:** export one validator from `@waitron/shared`; `packages/store` depends only on
+  `@waitron/shared`, which depends on nothing, so that edge closes no loop.
+  [Detail](architecture.md#three-copies-of-one-sql-identifier-validator-and-two-cause-chain-walkers)
+- **Two leftovers of the restrict/trigger refusal split (#731).** `isRefusal` with
+  `RESTRICT_VIOLATION` or `TRIGGER_ABORT` still reads the number alone and both stay exported (the
+  `CLAUDE.md` §3 rule, unguarded, is what stands against a new caller); and the four near-identical
+  word-matching checks in `packages/db/src/constraint-target.ts` could share one private helper.
+
+## Bundle: Raw engine imports and hand-spelled file names
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Raw engine imports in `apps/server/src/recovery-lock.ts` and
+  `apps/server/scripts/cloud-backup-fixture.ts`** — left open by W45 (#1155). **Next action:**
+  review each remaining raw connection separately before deciding whether a shared store API fits.
+  [Detail](architecture.md#raw-engine-imports-in-appsserversrcrecovery-lockts-and-appsserverscriptscloud-backup-fixturets)
+- **Files that still spell the store's file names themselves**
+  [Detail](architecture.md#files-that-still-spell-the-stores-file-names-themselves)
+
 ## Decisions and deliberate limits
 
 - **Official holiday names and English display names (A971, owner 2026-10-23).** Keep the published official name as the annual-rule key; choose the display name by the screen language. The country calendar supplies English names for holidays and area choices. A stored name absent from the supplied English-name inventory stays as recorded. This changes no stored holiday rule or database schema.
@@ -1320,3 +1701,5 @@ pragma issued from OUTSIDE a running body has to be put on the writer deliberate
 that does not exist. Also left by #493's review: the case pinning the adapter half of the window fix
 lives in `packages/store/src/index.test.ts`, not beside the file it reverts
 (`packages/store/src/node-sqlite-adapter.ts`).
+
+- **One rule for the old table permission questions (owner, 2026-11-06).** The A805 audit left one "decide this table's restriction" question per table. For non-tax tables, no new database refusal is added unless someone shows how a wrong delete or update could really happen. That closed the questions for: `bookings`, `card_readers`, `catalogues`, `change_log`, `convenio_config`, `departments`, `devices`, `employments`, `floor_zones`, `incidents`, `join_requests`, `kitchen_stations`, `management_sessions`, `menu_items`, `node_membership`, `persons`, `print_agents`, `print_jobs`, `printers`, `products`, `scheduled_runs`, `sessions`, `ticket_items`. The tax and card tables' refusals go into A1308.

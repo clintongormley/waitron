@@ -184,15 +184,6 @@ chosen destination.
   duration because the two clocks can differ. An agent on another machine whose clock is out by
   minutes scans for the wrong span; one on the box shares its clock.
 
-## `runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree
-
-- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree** (C70, #866). A
-  refused report still rolls back its job claim when the caller's transaction rolls back,
-  so that job can print again (measured 2026-09-29 with a scratch probe). A process that holds the
-  venue database and runs the agent itself, and wants to confine a refused report, should call
-  `claimPrintJobs` and then `reportPrintJob` per job, each report in its own transaction, as
-  `apps/server/src/print-api.ts` already does, rather than one `runAgentOnce` in one transaction.
-
 ## Measure one-job print pulls on the box
 
 A517 uses one job per pull to eliminate unsent leased tails. Every job now repeats the agent's
@@ -306,17 +297,6 @@ without Show all devices, and look for `bluetooth info failed` lines in
 A404 (2026-11-05) found that each plain report from the agent dropped the printer mark an earlier
 scan had set, which hid a paired printer between scans; that may also explain this entry (not
 checked on the box).
-
-## Adding a language to the venue also means adding its printer captions, and a language written outside the Latin letters means widening the font table
-
-The width ruler's captions are
-exhaustive over the locale list (`CAPTIONS` in `apps/server/src/test-page.ts`), so a new locale
-fails to compile until its captions exist. Printed letters come from a table holding
-U+0020–U+007E, U+00A0–U+017F and the rest of Windows-1252's letters and signs
-(`packages/printing/scripts/build-glyph-table.mjs`); anything else prints as `?` unless dropping
-its accent leaves a letter the table holds (`prepareText`, `packages/printing/src/text.ts`). A
-language needing Cyrillic or Greek needs the table regenerated with a wider range, if the font has
-those letters (not checked).
 
 ## Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)
 
@@ -501,12 +481,6 @@ actually happened.
   covered")**, as a USB printer no agent sees does. If no agent currently reports that printer
   as visible, its jobs remain waiting.
 
-## The paired-printer listing reuse window
-
-The ten-second paired-listing reuse in `resolve()` (`PAIRED_REUSE_MS`,
-`apps/print-agent/src/linux-devices.ts`) is a chosen window, not a measured one. A printer
-unpaired outside the agent can resolve as attached for up to ten seconds.
-
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
 A268 discards a waiting device's request when the last Add dialog closes. An agent told
@@ -538,27 +512,6 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 Since A841 slice 7, a theme's logo (`theme_logo` in `listImageUsages`) is a second logo use that
 only the app keeps from deletion; no trigger protects it either.
 
-## A change is refused while an open order holds a line
-
-- **A change is refused while an open order holds a line**
-  (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
-  `0064_line_locale_triggers_text_only`). The order-line language triggers now check a line's
-  names only when an update changes them or moves the line, so the till can still split such a
-  line, which copies its old-language names into a new line, or move it to another bill, and the
-  database refuses both once the language differs. Measured by the till's own routes
-  (`apps/server/src/venue-settings-api.orders-open.test.ts`): placed orders, paid bills whose
-  party is still seated, a paid order with a dish no station took, and an open bill with no line
-  no longer block. After the change, the tests serve a seated party's paid dish, take back a
-  serve on one, send a paid sale's unsent dish and collect a placed order. If a language is
-  changed underneath an open bill by direct SQL, the bill's next split answers an unmapped 500
-  `server.internal`; the same test file pins it.
-
-## Seen while looking at every modal at 1024px, not changed
-
-- **Seen while looking at every modal at 1024px, not changed:** the till's option picker, 1024px
-  wide on a 1280px screen, puts each price far from its name (which adds to the "prices are not a
-  column" item in the till layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
-
 ## A drawer kick for a USB printer that is not connected waits with no expiry
 
 - **A drawer kick for a USB printer that is not connected waits with no expiry**, and is claimed when
@@ -572,13 +525,6 @@ only the app keeps from deletion; no trigger protects it either.
   text.
 - Deferred (ruling H): decide whether to warn when no legal QR dot size exists. Re-check the
   valid-link range with `apps/server/src/qr-link-range.test.ts` before changing the fallback.
-
-## Loose ends left by A662 (#1803)
-
-- Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes.
-  With Veri\*Factu always offering a default description, the Departments readiness list is empty
-  either way, so `apps/server/src/boot.departments-readiness.test.ts` no longer sees that flag;
-  only `packages/venue-service/src/routes.test.ts` covers "required, no default".
 
 ## Loose ends left by A663 Part 3b (#1827)
 
@@ -670,6 +616,245 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   `fake` there and `real` in JavaScript), and `validateReceiptFields` (`packages/venue-service/src/configuration-transfer.ts`) does
   not look at the logo. A copied theme with a repeated key is refused
   (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
+
+## Bundle: One session at the real box: printers, paper, tax QR, the drawer
+
+23 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The spare file's size is measured on HFS+ and Linux tmpfs only** — not ext4, copy-on-write
+  filesystems, or a `logs` volume on another disk. Left open by A1127.
+  [Detail](setup.md#the-spare-files-size-is-measured-on-hfs-and-linux-tmpfs-only)
+- **Measure the backup room note's `venue.db` identity on the box's filesystem** (likely ext4, inside Docker),
+  including whether the birth time is reported. Left open by A1167.
+- **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
+  headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's
+  Move earlier/later actions remain available. Browser gesture checks do not settle this choice.
+  [Spec §11](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
+- **A773 physical-till trial: serving part of a line.** Try marking part of a line served through
+  the dish window during service. Decide whether it is practical before changing that workflow.
+  [Spec §11](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
+- **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the log do. [Detail](printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
+- **Loose ends left by C107 (#974).**
+  [Detail](printers.md#loose-ends-left-by-c107-974)
+- **Loose ends left by #367.**
+  [Detail](printers.md#loose-ends-left-by-367)
+- **Shared office-printer queues need physical qualification after A576.** From the shipped
+  print-agent container, discover two queues on one computer, add both and print distinguishable
+  pages to each. [Detail](printers.md#shared-office-printer-queues)
+- **Office-printer detection is proven on one office printer only.** The owner's HP Color LaserJet
+  MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
+  network. It has not run from the box's container, and no receipt printer that answers IPP has
+  been captured, so "A4 or letter means office printer" is a heuristic with one data point.
+- **A552. Invoices on the owner's office printer are unchecked with the committed code.** Check
+  the HP Color LaserJet MFP M181fw with a long PDF invoice, measuring and scanning its QR, and
+  check what Waitron reports with an empty tray and when power is lost mid-job. Left open by A231q.
+  [Detail](printers.md#a552-invoices-on-the-owners-office-printer-are-unchecked-with-the-committed-code)
+- **A553. How long the box takes to draw one A4 raster page, and its peak memory, at 300 and
+  600 dpi, are not measured.** The server draws each page (`renderInvoicePage`,
+  `apps/server/src/page-print-api.ts`); it has not been timed on the box, in the built image. Left
+  open by A231q.
+- **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
+  `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from
+  the box's container, where the lookup may fail outright; either way the printer stays addable.
+- **Photographs and timings of pictures on paper.**
+  [Detail](printers.md#photographs-and-timings-of-pictures-on-paper)
+- **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
+  reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
+  discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
+  have never produced paper either.
+- **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
+  whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
+  QR size is meant to count the code's blank border or only its dark squares.
+- **Repeat the 58mm physical receipt after the print-area fix.** The corrected paper output has not
+  yet been printed.
+  [Detail](printers.md#repeat-the-58mm-physical-receipt-after-the-print-area-fix)
+- **Nobody has yet typed a real printer's address into Check a known address.** The first things to
+  try on the box: add the Epson at `192.168.10.81:9100` (the sweep should also list it) and print to
+  it; then type the HP's `192.168.20.56:9100`, which should come back as an office printer.
+  [Detail](printers.md#nobody-has-yet-typed-a-real-printers-address-into-check-a-known-address)
+- **The setup-page link is unproven on the box.**
+  [Detail](printers.md#the-setup-page-link-is-unproven-on-the-box)
+- **Bluetooth at the box.** A first real pairing, and an Unpair, through the dashboard and the
+  agent, under the shipped AppArmor profile with bluetoothd's `autopair` plugin off — nobody has yet
+  paired or unpaired a real printer through the dashboard.
+  [Detail](printers.md#bluetooth-at-the-box)
+- **Printing over RFCOMM from INSIDE the print-agent container (A140).**
+  [Detail](printers.md#printing-over-rfcomm-from-inside-the-print-agent-container-a140)
+- **The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the
+  box is not confirmed.** It needs the fixed image on the box first.
+  [Detail](printers.md#the-owners-bluetooth-printer-was-listed-only-under-show-all-devices-a137--the-cause-on-the-box-is-not-confirmed)
+- **timesyncd's clock file after a backward set has not been watched across a reboot.**
+  [Detail](box.md#timesyncds-clock-file-after-a-backward-set-has-not-been-watched-across-a-reboot)
+- **The clock watch's suspend-aware clock has not been run across a real suspend on Linux.** It
+  reads `/proc/uptime` so that a box waking from sleep is not taken for a clock jumping forward.
+  Slice 9b's measurement M3 set the wall clock on a Linux runner and `/proc/uptime` did not move
+  with it; nobody has suspended a Linux box and watched it (`docs/developers/conventions-data.md`,
+  "A jump"). Left open by A798-B slice 9 (#2025).
+
+## Bundle: Printing does not wait for discovery
+
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A sweep in flight keeps connecting after the discovery window closes.** Pass the deadline
+  through `Host.scan`. The office-printer check and the check of addresses typed into the dashboard
+  still run inside the poll, so the job pull waits for them (C117, #955).
+  [Detail](printers.md#a-sweep-in-flight-keeps-connecting-after-the-discovery-window-closes)
+- **An agent compares the server's discovery deadline with its own clock** — found in C102, read, not run. An agent on another machine whose clock is out by minutes scans for the wrong span; one on the box shares its clock. [Detail](printers.md#an-agent-compares-the-servers-discovery-deadline-with-its-own-clock)
+- **Measure one-job print pulls on the box** — A517 repeats the agent's inventory cycle per job.
+  A1372 covers delivered-history claim cost in a local database; physical throughput,
+  authentication and large retained queues remain unmeasured, including exhausted failures
+  and uncertain drawer claims. [Detail](printers.md#measure-one-job-print-pulls-on-the-box)
+- **A typed address receives one HTTP request on port 631** after its connection check succeeds.
+  The 2026-09-12 address-check design allowed any unicast address (public, loopback, link-local)
+  because the check sent nothing; that reasoning no longer covers the follow-up query.
+- **While a discovery window is open, a device not reported within 45 seconds drops off the list**
+  until its next report; 45 seconds does not cover every scan pass (C102, #953).
+
+## Bundle: A drawer or print job always ends, and says why it waits
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A drawer kick for a USB printer that is not connected waits with no expiry**, and is claimed when
+  the printer reappears, so the drawer can open long after the sale (`packages/printing/src/runtime.ts`).
+  [Detail](printers.md#a-drawer-kick-for-a-usb-printer-that-is-not-connected-waits-with-no-expiry)
+- **Make an unreported drawer outcome explicit without repeating its pulse** — a lost claim or
+  done report remains “printing”, with no resend or automatic expiry.
+  [Detail](printers.md#make-an-unreported-drawer-outcome-explicit-without-repeating-its-pulse)
+- **A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not
+  covered")**, as a USB printer no agent sees does. No agent currently reporting the printer as
+  visible leaves its jobs waiting.
+  [Detail](printers.md#a-bluetooth-printer-no-agent-reports-paired-still-waits-with-no-reason-on-the-job-a139s-not-covered)
+
+## Bundle: Bluetooth pairing commands
+
+6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Unpair can come back for a short while after a successful unpairing** — found in C103's review, read, not run. Clearing `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end it; the owner was asked (questions.md, C103). [Detail](printers.md#unpair-can-come-back-for-a-short-while-after-a-successful-unpairing)
+- **A command queued behind a slow pair can run out of time.** A second command waiting behind that
+  pair can therefore expire on the server before it runs; its outcome is then ignored and the screen
+  says "No answer from the print agent — try again" whatever actually happened.
+  [Detail](printers.md#a-command-queued-behind-a-slow-pair-can-run-out-of-time)
+- **A failed Pair or Unpair shows the agent's reason as the agent wrote it, in English on both
+  languages' screens** (a wrong PIN would read "No se pudo emparejar: wrong PIN").
+  [Detail](printers.md#a-failed-pair-or-unpair-shows-the-agents-reason-as-the-agent-wrote-it-in-english-on-both-languages-screens)
+- **Left open by C109 (#960):** the printer details' Active switch can still switch a paired
+  Bluetooth printer off without unpairing it. [Detail](printers.md#left-open-by-c109-960)
+- **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
+  (120 seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`); the owner can
+  switch it off with Disable, which the row then shows.
+  [Detail](printers.md#an-unpair-outcome-that-reaches-the-server-after-it-dropped-the-command-leaves-the-printer-on)
+- **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
+  port is on another channel fails each job with the connection error.
+
+## Bundle: Printers screen leftovers, inside A405's remaining pull requests
+
+6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Printer lists that still read as empty while loading or after a failed read** — left open by
+  A428. [Detail](printers.md#printer-lists-that-still-read-as-empty-while-loading-or-after-a-failed-read)
+- Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
+  migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
+  presence light.
+- **Calibration's step 2 and step 3 buttons span the whole dialog; step 1's ends with its fields**
+  (found by A404's look, 2026-11-05). "Print sample receipt" and "Test open drawer" could end at
+  `--wt-field-max-width`, right-aligned, as "Print width test" does
+  (`apps/dashboard/src/screens/printers-screen.ts`, `#renderEditPrinter`).
+- **At phone width a Bluetooth address breaks mid-group** ("00:11:22:33:44:5" then "5"), because
+  of the width limit on the device details added on 2026-09-11.
+- **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
+  #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
+  so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
+  category warns about exactly what will go, #1196).
+- **Loose ends left by A331 batch 3b (#1415).**
+  [Detail](printers.md#loose-ends-left-by-a331-batch-3b-1415)
+
+## Bundle: Receipt layout pass
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768).**
+  [Detail](printers.md#loose-ends-left-by-a663-parts-1a-1b-and-2-1748-1756-1768)
+- **A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full
+  comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).**
+  [Detail](printers.md#a960-on-an-80-mm-roll-in-basque-a-full-invoice-with-more-than-one-vat-rate-prints-a-full-comps-deskontua-100-with-100-on-its-own-line-under-the-figures-left-open-by-a758-4)
+- **A961. On a full invoice, a dish's discount row that no single comp names prints «Descuento
+  100%» whenever every line at its rate was filed at zero (left open by A758-4).**
+  [Detail](printers.md#a961-on-a-full-invoice-a-dishs-discount-row-that-no-single-comp-names-prints-descuento-100-whenever-every-line-at-its-rate-was-filed-at-zero-left-open-by-a758-4)
+- **A1201. Owner question: a receipt's extra prints no count beside a grouped dish (seen in A803
+  slice 1's LOOK).** Two Pollo asado with Padrón peppers print "2 Pollo asado con patatas 19.00"
+  then "Pimientos de Padrón 4.00", at 58 and 80 mm. What a line of two printed before slice 1 was not
+  checked. Decide whether the extra's row shows its count.
+
+## Bundle: Receipt language loose ends
+
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- The refusal's count of blocking orders is not shown on Venue settings' Defaults card: `codeMessage` fills
+  in no values.
+- The provisioning command (`waitron-provision`) can still store two languages, or one no pack
+  offers; the first entry is the default receipt language. It does not hold Catalonia to Catalan:
+  only the Receipts route and setup do.
+- `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
+  grep) and can be retired.
+- The till reads its fallback receipt language only when it
+  starts (again after a server switch or an enrolment), so a change reaches those after a
+  reload. The on-screen ticket follows each sale's own language.
+- The dev and demo seed's English mode stores `en-GB`; Venue settings' Defaults card shows it as
+  the saved language although it is not offered.
+
+## Bundle: A print agent somewhere other than the box
+
+4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1203: install a box as a till, with its own print agent (owner, 2026-10-29).** A venue
+  that needs a till with a USB or Bluetooth printer or a cash drawer beyond the main box and the
+  spare uses a small Linux box; the print agent already runs on Linux and only dials out, and the
+  2026-08-26 printing decision puts agents "on local servers and tills". What is missing is a way
+  to install a box as a till only (believed not offered by the USB installer, B3; check first). A
+  till whose printer is on the network needs no agent of its own: the main box's agent reaches it.
+- **A1204: tills on Windows, macOS and iOS (owner, 2026-10-29).** "Later we may need also to use a
+  windows or osx or iOS machine as a till." The till runs in a browser, so the till itself is
+  expected to work; a printer or drawer attached to such a machine needs a print agent for that
+  platform (a packaged agent, or an app as A1175 is for Android). Not started; network printers
+  need none.
+- **A1175: an Android app that runs the local print server when the venue runs from Waitron
+  Cloud**, and possibly more (owner, 2026-10-28). Brainstorm started 2026-10-29; it waits for a
+  device test on 3 November: can one Android device reach the printers over the venue's Wi-Fi and
+  Cloud over mobile data at once? [Detail](printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
+- **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
+  [Detail](printers.md#a-print-agent-cannot-be-discarded-when-the-join-window-shuts-a269-owner-2026-10-04--open)
+
+## Bundle: The printer's stuck alert counts what the table counts
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
+  throwaway cases and not pinned.
+  [Detail](printers.md#still-counted-by-the-printers-printerjobs_waiting-alert-after-a167-975)
+- _2026-10-01 (3c-3): a dish moved to another station leaves its ticket at the old station's
+  printer counted by that printer's stuck alert in the same way, because nothing reprints there._
+- **A printer that prints some documents and fails others loses its till notice.** The notice goes
+  once any later document on the printer prints (slice 10 decision 18), while the bell keeps
+  naming the printer until the failed ticket is reprinted or resent. Left open by A798-B slice 10.
+
+## Bundle: Department receipt preview
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A department's Receipts preview shows the theme's logo, for a readable department whose draft names
+  no logo, with no words saying it is the venue's** (A841 slice 9, D7 of
+  [the plan](../superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).
+- **A department's Receipts preview does not redraw when the theme in use changes while it is open**
+  (A841 slice 9, [the plan](../superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).
+
+## Bundle: Guest count
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Find a bill's pay offers no guests field** (left open by A663 Part 3b). Not decided.
+  [Detail](printers.md#find-a-bills-pay-offers-no-guests-field)
+- **Loose ends left by A663 Part 3b (#1827).**
+  [Detail](printers.md#loose-ends-left-by-a663-part-3b-1827)
 
 ## Decisions and deliberate limits
 

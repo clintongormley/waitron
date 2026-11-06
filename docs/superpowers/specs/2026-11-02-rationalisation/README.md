@@ -639,3 +639,28 @@ Chosen on the recommendation and accepted by the owner, 4 November 2026.
 - Where a measurement fails, the fallback each appendix names (keep the pointer, keep the side
   table, keep the column).
 - The wording of new error codes, following CLAUDE.md §3.
+
+## Additions of 6 November 2026
+
+The owner's backlog review of 6 November 2026 added these to the design. Each costs a line or two in
+a new table and a table rebuild afterwards, so they go in before A760 part 3 replaces the table
+history. The evidence for each is in the backlog entry named, in the
+[bundle](../../../backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables).
+Names are today's; the appendices give each table's new name.
+
+| Today's table                                    | Addition                                                                 | Backlog entry                 |
+| ------------------------------------------------ | ------------------------------------------------------------------------ | ----------------------------- |
+| `products`                                       | A CHECK refusing a negative price                                        | A negative catalogue price    |
+| `products`, `option_lists`, `option_labels`, `extra_lists` | A CHECK refusing a blank name, and a domain refusal on the write paths | A product's name can be blank |
+| `media_images`                                   | A file-name CHECK that a name with an embedded NUL cannot pass           | The filename CHECK            |
+| `products`, sections                             | An index, so that deleting an unused photo stops scanning both tables    | Loose ends of A322            |
+| Extras lists                                     | A CHECK refusing a maximum of 0                                          | Loose ends of A263            |
+| `kitchen_notices`                                | An index on `working_order_id`                                           | A1351                         |
+| `kitchen_notices`                                | The ticket item a MOVED notice was written for                           | A1366                         |
+| HOLD paper records                               | One record per dish, not per group; the owner judges whether a cook may be left with two tickets | A1368 |
+| `print_jobs`                                     | A next-attempt column, so a flapping printer cannot fail a ticket        | Retry spacing                 |
+| The passkey table                                | Remove the passkey name column                                           | Passkey name column           |
+| `envio_flujo`, `envios`, `invoice_series`, `registro_sif`, `payments` | Settle the remaining delete or update refusal in their fiscal and payments slices, which the owner lands | The five A805 follow-ups |
+
+A760's plan also gains a retag step: rewriting history (A1306) otherwise stops image publishing until
+someone fixes it by hand.

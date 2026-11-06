@@ -100,25 +100,12 @@ nor the dashboard shows it, so staff see only the attempt's earlier outcome. Lef
 A wording decision left open by A231q, in the till and the dashboard, in English and Spanish
 (`apps/till/src/i18n/codes.ts`, `apps/dashboard/src/i18n/codes.ts`).
 
-## `FiscalBackend.pendingCount` leaves out set-aside (`retenido`) records
-
-It also leaves out held (`detenido`) records, so neither counts as unconfirmed there. It has no
-production caller yet (see
-[the `pendingCount` note](#two-sql-comments-inside-a-sql-string-in-packagesfiscalsrctestingfake-backendts-are-code-not-comments));
-decide what "unconfirmed" includes before anything reads it. Left open by #1596.
-
 ## The reconcile sweep may raise a second "accepted with errors" warning
 
 This can happen when it corrects a record the drain is still sending
 (`packages/fiscal-verifactu/src/reconcile.ts`);
 only one case opens, as cases are one per record. Found by reading in #1596's review, not run;
 nothing runs the sweep yet, so check it when the sweep is scheduled.
-
-## The test "does not send a successor past a cancellation held for its original"
-
-In `packages/fiscal-verifactu/src/drain.test.ts`, the title still reads like the old hold. It is
-true for the first pass it checks, but since #1596 a cancellation of a refused original is set
-aside and holds nothing: retitle it on the next touch.
 
 ## Should `packages/fiscal-verifactu` have a mutation floor?
 
@@ -199,21 +186,6 @@ No stored fiscal row is to be rewritten.
   out"; a reviewer, reading only, thinks the one-close-per-day unique constraint refuses it — not
   checked. `packages/core/src/errors.ts` names `scripts/errors-reachable.test.ts` without the hedge
   #601 gave reporting's (the guard matches text).
-
-## Test titles still carry claims the comments no longer make (#598)
-
-- Found by #598 (`packages/core`), not fixable in a comments-only change. Test titles still
-  carry claims the comments no longer make: `incidents.test.ts:463` says orphan raises de-dup
-  "via NULLS NOT DISTINCT" (PostgreSQL wording); `record-void.test.ts:340` and
-  `record-correction.test.ts:443` say an ordering "never leaks an authz error", which #598's
-  review did not bear out (Codex ran both orders: with the lookup first, an unauthorised caller
-  tells a missing sale from an existing one by the error); and `record-sale.test.ts:888`, `:964`
-  and `:1029` carry history ("legacy path unchanged", "additive, no behaviour change"). No test
-  reaches `settleSale`'s catch that turns a `sale_settlements` unique-key refusal into
-  `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
-  stopping both concurrent-settlement tests first. Outside core,
-  `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
-  record hashes" (#598 found the hash covers the totals, not the breakdown).
 
 ## Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts` are code, not comments
 
@@ -906,13 +878,6 @@ yet, so the screen should add an open-only filter or paging when it calls them.
     not resolved, nor one captured and not yet filed; the cancel had no payment check at all
     before C126.
 
-## "the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and it reproduces itself.
-
-Two compliance-track documents carry the same shape about tips
-(`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`); their tip
-claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
-compliance track widens those two sentences.
-
 ## Uncertain receipt delivery
 
 Automatic receipt transport retries and manual retries of exhausted original jobs retain their
@@ -1065,6 +1030,83 @@ was not checked (A231q's review, read, not run). Nothing issues an F3 today: no 
 was found in the inspected main/product trees. The [A739 owner-flow revision](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md#the-fiscal-dependency-is-visible-not-solved-by-moving-fields)
 records the missing recipient/address, request recovery, bill/delivery and no-charge integration
 here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is created.
+
+## Bundle: One owner session with a real certificate against AEAT
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1270. Verify the fake AEAT's invoice-date comparison at midnight.**
+  The readiness fixture uses a controlled clock. The library's `1112` check compares invoice dates
+  at UTC midnight; AEAT validations §3.1.3.1 and the error wording do not name the comparison zone.
+  Establish it from an authoritative definition or controlled preproduction probe, then correct and
+  release `@waitron/verifactu` if needed. Keep this separate from A696's venue-zone implementation.
+  Audit server fixtures found by `rg 'createFakeAeat.*serverNow: new Date' apps/server`;
+  their exposure to the same date boundary has not been reproduced.
+  [Reproduction and sources](../developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
+- **A888. After A795 lands: the owner's checks with real certificates** (left open by A795). The
+  owner approved landing A795 on 2026-10-19 before these ran.
+  If any answers differently from the design, that part is redesigned in a follow-up.
+  [Detail](fiscal.md#a888-after-a795-lands-the-owners-checks-with-real-certificates)
+- **A679's internet time reading came back unavailable against pre-production in each of four runs
+  on 2026-10-23.** Found while planning A798-B slice 9.
+  [Detail](fiscal.md#a679s-internet-time-reading-came-back-unavailable-against-pre-production-in-each-of-four-runs-on-2026-10-23)
+
+## Bundle A1383: Tests for four guards a review deleted with nothing failing
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
+  bypassing that internal stale-reading check survived the hour suites. Add both the refusal
+  and its legitimate-order positive without changing clock policy.
+  [Detail](fiscal.md#pin-the-clocks-future-finished-sample-refusal).
+- **A679 follow-up: pin committed hour preparation's action boundary.** A serial review fault
+  removing its restore-only check survived the owning suites. Test that internal
+  boundary separately from the real public promotion retry, which already preserves its result.
+  [Detail](fiscal.md#pin-committed-hour-preparations-action-boundary).
+- **A679 follow-up: pin the early recovery-source refusal.** The later selected-source guard
+  catches the review fault; the earlier refusal at `recovery-preparation.ts:271` lacks its own
+  distinguishing case. Preserve both guards while adding that qualification.
+  [Detail](fiscal.md#pin-the-early-recovery-source-refusal).
+- **Pin key rotation between the live recovery preparation reads.** Keep the existing commit-time
+  check and add a case that specifically fails when an earlier preparation recheck is deleted.
+  [Detail](fiscal.md#pin-key-rotation-between-recovery-preparation-reads).
+
+## Bundle: Settle the hold and the brake once
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
+  that applies to every later record (one about the taxpayer's identity, say) opens one case per
+  record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
+  [Detail](fiscal.md#still-open-after-w41s-3-1289-one-reply-can-open-up-to-1000-filing-cases)
+- **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the asesor; owner 2026-10-06).
+  The decision is put to the asesor as [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12) (S19 in the short list),
+  covering this hold and the three-refusal brake.
+  [Detail](fiscal.md#re-examine-the-hold-behind-an-unknown-outcome-once-the-asesor-answers)
+
+## Bundle: Show a late success, decide the address, fix those strings
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A554. Should any screen show the address an invoice email went to?** An owner question, open.
+  [Detail](fiscal.md#a554-should-any-screen-show-the-address-an-invoice-email-went-to).
+- **A557. A success reported after an attempt had ended is not shown.**
+  [Detail](fiscal.md#a557-a-success-reported-after-an-attempt-had-ended-is-not-shown).
+- **A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop.**
+  [Detail](fiscal.md#a558-the-invoice_delivery-refusals-other-than-active-end-without-a-full-stop).
+
+## Bundle: One authorised edit of a protected test, plus its neighbours
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **`packages/fiscal-verifactu` code** — found by #562 while pruning comments. **Open:** the inner
+  try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead; removing
+  `appendToChain`'s nested `tx.transaction` makes no test fail; and `write-path.e2e.test.ts` points
+  at fixture lines that have moved. [Detail](fiscal.md#packagesfiscal-verifactu-code)
+- **Reconcile the protected fiscal write-path test's old policy quotation.** Its header still says
+  no fiscal condition blocks a sale; the approved local conflict stop is an exception. Keep its
+  behavioral assertions and protected-file scope intact.
+  [Detail](fiscal.md#protected-write-path-test-policy-quotation).
 
 ## Decisions and deliberate limits
 
@@ -1259,6 +1301,10 @@ refusal allowed by spec §9.4, not a completed join journey. The open backlog en
 remaining copy and authentication work. A primary reservation remains consumed/reserved even if
 its empty spare cannot finish adoption.
 
+- **`packages/fiscal-verifactu` restates rules the validator owns** — Exporting the patterns from the library instead was DEFERRED on purpose (owner, 2026-09-12).
+  Revisit when something else needs those patterns.
+  [Detail](fiscal.md#packagesfiscal-verifactu-restates-rules-the-validator-owns)
+
 ## W41s-6 pack-download checkpoint (2026-10-14)
 
 Follow the [offline restore procedure](../developers/offline-fiscal-restore.md) for the outside
@@ -1362,14 +1408,6 @@ simplified receipt, in captioned rows, whenever the receipt's data
 carries one (`apps/server/src/receipt-document.ts`, A754), but no sale has one: the only writer of
 a sale's operation date writes none without a customer tax identity
 (`packages/core/src/record-sale.ts:284-286`). Check, then record the date on such a sale if needed.
-
-## The three alta builders repeat their record assembly
-
-`recordSale`/`recordCorrection`/
-`recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`; the VAT lines already share
-`toDetalleDesglose`. Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">`;
-needs a huella-invariance re-run across all three.
-Fiscal: each behind its own review, owner sign-off at land.
 
 ## Retire the historical allocation formats from `fiscal-verifactu`
 

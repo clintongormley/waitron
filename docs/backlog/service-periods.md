@@ -38,13 +38,6 @@ first named is gone; a zone's keep-open is the remaining change of this kind.) D
 retain that identity before adding a history view; this is separate from checking the manager's
 permission and PIN before a write.
 
-## Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly implemented through A261
-
-Tabs without tables and the remaining department-name survey stay open. Re-check the advisor
-questions in [the earlier spec](../superpowers/specs/2026-10-03-departments-service-styles-hours-design.md)
-and the compliance question list before carrying them forward. A366 supersedes its service-style
-and hours proposals; the historical spec keeps its dated pointers.
-
 ## Smaller notes from the Hours reviews
 
 Nothing pins which of two repeated midnights a clock change picks. The separate Hours client's
@@ -181,16 +174,6 @@ day whose dates have different changeovers (dates either side of a scheduled cha
 business day's start, `cutoverForBusinessDay`), the two can disagree: the server refuses, and the
 editor shows its reason. Read in the code, not run.
 
-## The season-week and closed-week routes do not lower-case a zone or season id, as the special-day route does
-
-The season-week route (`PUT …/seasons/:seasonId/weeks`) and the closed-week route
-(`PUT …/zones/:zoneId/closed-week`) take a zone or season id as sent (`requireUuidParam`,
-`requireBodyUuid`, `requireWeekList`, `routes.ts`), so an upper-case id finds no row and is
-answered as not found (404); the special-day route lower-cases a zone or department id before
-storing it (`special-days.ts`). Measured during A723 with a temporary test: an upper-case zone id,
-and then an upper-case season id, sent to each of the two routes was answered 404
-(`service_zone.not_found`, `season.not_found`). It predates A723. Decide whether the two routes lower-case ids too.
-
 ## A cut-away zone stroke hides another day's refusal marker until the next Save
 
 In both opening-hours painters, a change to a zone's day whose Closed paint is cut away entirely
@@ -311,24 +294,6 @@ department, which cannot be changed afterwards (`sale_receipt_headers`,
 each sold line, then add a department breakdown to the sales screen, showing sales with no
 department as "Unallocated" rather than guessing a split.
 
-## Cosmetic points from A722 Part 3's look, #1834:
-
-The Spanish phone Month breaks "Sin
-pedidos" mid-word (`.no-orders` in `opening-hours-month.ts` still allows a break anywhere; a
-day's name breaks only between its words since A784); at 320 px a 45-letter station name scrolls
-Show's open list sideways (the page does not widen); a station's Month has no key naming which
-bar is which department (hover shows it; the All departments Month has none either).
-
-## Loose ends left by A577 (#1702).
-
-- The Opening hours Year page does not show the warning that two special days share a date; only
-  the Departments screen's readiness list does.
-- Between two special-day dates that both stand on their own terms, the earlier STORED date
-  wins: a yearly "Feria" saved on 26 March 2026 beats a one-off "Cena de empresa" on 26 March
-  2027, though a person may expect the one-off to win (`standingInYear`,
-  `packages/venue-service/src/repeat-rules.ts`). Saving refuses such a pair, so it arises only
-  from rows written another way.
-
 ## Loose ends left by A720.
 
 - Look at a picked, focused today in the Month. `--wt-focus-offset` and
@@ -444,6 +409,176 @@ now could not be routed apart; the resolver is asked for extras made at their ow
 `fireLines` and by `heldNoRouteLines`, and held dishes are routed again when released
 (`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
 its id. Left open by A789 slice 3, #2051 (plan D33).
+
+## Bundle A1388: Till late-send dialogs that stick or say nothing
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave
+  the zone's Keep open dialog stuck.**
+  Read in the code, not run. Left open by A789 slice 4.
+  [Detail](service-periods.md#a1090-the-zone-keep-opens-managers-pin-dialog-closed-while-its-pin-is-checked-can-leave-the-zones-keep-open-dialog-stuck)
+- **A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table
+  without signing out**
+  [Detail](service-periods.md#a1091-the-late-send-window-and-its-managers-pin-dialog-stay-open-when-the-waiter-changes-table-without-signing-out)
+- **A1095. The till's refusal "A dish's period has ended." names no next step**
+  [Detail](service-periods.md#a1095-the-tills-refusal-a-dishs-period-has-ended-names-no-next-step)
+
+## Bundle: After A760: A877's one helper first
+
+4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **Loose ends left by A788 (the business-day start changes at the next changeover).**
+  [Detail](service-periods.md#loose-ends-left-by-a788)
+- **Loose ends left by A506-3 (#1591).**
+  [Detail](service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
+- **Loose ends left by A506-4 (#1597).**
+  [Detail](service-periods.md#loose-ends-left-by-a506-4-1597)
+- **The start-time part of the business-day check's `transition_strip` reason never decides it**
+  (`inStrip(minutes(startsAt))`, `business-day-schedule.ts`): `endpoint_day` wins first.
+  Delete it or give it a case that needs it — left open by A789 slice 1, #1948.
+
+## Bundle: One rule for two managers editing at once
+
+6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1073. Saving one field in the department dialog can undo another manager's change to a
+  different field.** [Detail](service-periods.md#a1073-saving-one-field-in-the-department-dialog-can-undo-another-managers-change-to-a-different-field)
+- **The special-day painter does not say a deleted period's replacement is still missing after a
+  failed re-read.** When a period is deleted in the Periods window over the painter and the
+  painter's re-read of the day fails, nothing tells the manager until Save shows "could not save"
+  (finish-branch's account of its own fix on #1838; not re-run since). Left open by A719.
+- **A date another manager removed stays in the special-day draft**
+  [Detail](service-periods.md#a-date-another-manager-removed-stays-in-the-special-day-draft)
+- **A special-day draft whose only edits were dropped keeps its old clock revision**
+  (`willUpdate`, then `dropUnpaintable`, `special-day-painter.ts`), so a new public-holiday day
+  could be refused with `hours.clock_changed`. Found by reading, not run — left open by A506-9,
+  #1651.
+- **A live update that arrives during a special day's save that is then refused may never be
+  taken in** (`save`, `special-day-painter.ts`), so a retry could send an old copy of a date; A637
+  closed the same gap in the season painter. Found by reading, not run — left open by A506-9, #1651.
+- **A season painter save writes each edited week whole**
+  [Detail](service-periods.md#a-season-painter-save-writes-each-edited-week-whole)
+
+## Bundle: Department dialog
+
+6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1070. The department dialog's Transfers panel heading is an `h2`, the dialog title's level,
+  beside Service's `h3` sections** — an existing accessibility check selects `h2` (left open by
+  #1852, A756).
+- **A1071. Offer "At once" (0 minutes) in each department's reminder**, as A773 §3.4 decided
+  (owner, 2026-10-17); the list offers Off and 5–30 minutes and the save refuses 0
+  (`requireReleaseReminderMinutes`, `packages/venue-service/src/routes.ts`). Left open by A756 PR 4.
+- **A1072. A chosen "Off" in the department reminder looks unset.** Off is the empty value, which
+  `wt-combobox` draws as a placeholder, grey and italic, without `show-empty-option`
+  (`packages/ui/src/components/wt-combobox.ts:508`, `:159-162`, `:1047`). Left open by A756 PR 4.
+- **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
+  A504 (#1857) removed the zones' Floor plan link and #1858 the departments' Receipt link, so the
+  column draws blank cells. Owner to decide whether it goes
+  (`packages/venue-service/src/dashboard/departments-list.ts`).
+- **A receipt refusal that names no field, arriving while another tab of the department dialog
+  shows, brings nothing back** (left by #1858): it appears only in the receipt editor's own error
+  line on the hidden Receipts tab. A refusal naming a field already brings Receipts back and focuses
+  the field.
+- **A per-field department policy repair changes the trading-name default.**
+  [Detail](service-periods.md#a-per-field-department-policy-repair-changes-the-trading-name-default)
+
+## Bundle: Holidays yearly
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The readiness line for a repeating holiday date names the official holiday**
+  [Detail](service-periods.md#the-readiness-line-for-a-repeating-holiday-date-names-the-official-holiday)
+- **Two holidays with one name in one year's list**
+  [Detail](service-periods.md#two-holidays-with-one-name-in-one-years-list)
+- **2027 data** — left open by A261 step 6 (Public holidays, #1305). Not shipped; the BOE daily
+  summaries to 2026-10-06 held no 2027 national list. Follow the yearly update once it is published
+  ([public-holidays.md](../developers/public-holidays.md)). Andalucía's own 2027 calendar (BOJA,
+  Decreto 84/2026) is not national coverage and is not shipped.
+- **Smaller notes from the public holidays reviews**
+  Left open by A261 step 6 (Public holidays, #1305).
+  [Detail](service-periods.md#smaller-notes-from-the-public-holidays-reviews)
+
+## Bundle: One rule for zone closures and department hours, after A760's opening_hours
+
+8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A server write that changes a department's hours leaves its zones' closures outside them**
+  [Detail](service-periods.md#a-server-write-that-changes-a-departments-hours-leaves-its-zones-closures-outside-them)
+- **The zone-closure hours check runs at the routes, not inside the writers**
+  [Detail](service-periods.md#the-zone-closure-hours-check-runs-at-the-routes-not-inside-the-writers)
+- **Unticking a special date's "Closed all day" brings back its zone paint unchecked**
+  [Detail](service-periods.md#unticking-a-special-dates-closed-all-day-brings-back-its-zone-paint-unchecked)
+- **A change to a department's season week can leave a special date's zone closure outside its
+  new hours**
+  [Detail](service-periods.md#a-change-to-a-departments-season-week-can-leave-a-special-dates-zone-closure-outside-its-new-hours)
+- **A yearly special day's zone paint is checked against its stored date only**
+  [Detail](service-periods.md#a-yearly-special-days-zone-paint-is-checked-against-its-stored-date-only)
+- **A special day whose dates have different changeovers is cut on the first date's changeover**
+  [Detail](service-periods.md#a-special-day-whose-dates-have-different-changeovers-is-cut-on-the-first-dates-changeover)
+- **A cut-away zone stroke hides another day's refusal marker until the next Save**
+  [Detail](service-periods.md#a-cut-away-zone-stroke-hides-another-days-refusal-marker-until-the-next-save)
+- **A season closure on a special date is not cut or checked against that date's shorter hours**
+  [Detail](service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
+
+## Bundle: Seasons window
+
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A Save refused because a season the person binned was deleted elsewhere says nothing**: the
+  window drops the bin's note and the delete, and Save offers the rest of the draft again with no
+  message (`save`, `seasons-window.ts`). Whether it should say so is the owner's call. Left open by A721.
+- **The Seasons window names each row's fields by their field label alone** — "Name", "Day", "Month"
+  and "Colour", the last three followed by the chosen value — never by the row's season. Consider
+  naming each by its row ("Day: Winter"), as `variant-table.ts` names a row's buttons
+  ("Edit: {variant}"). Left open by A721.
+- **A season reads two shades of its colour**
+  [Detail](service-periods.md#a-season-reads-two-shades-of-its-colour)
+- **At phone width the Seasons window cuts longer colour names**
+  [Detail](service-periods.md#at-phone-width-the-seasons-window-cuts-longer-colour-names)
+- **At 390 px the Seasons window's month picker runs off the right edge.**
+  [Detail](service-periods.md#at-390-px-the-seasons-windows-month-picker-runs-off-the-right-edge)
+
+## Bundle: Period dialogs
+
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Periods window: two looks from A719's LOOK (#1838).** At 390 px a period's swatch beside a
+  name that wraps shrinks to 14.4 px wide (the others are 16 px); at 1280 px the window is full
+  height with about 300 px blank above Close, because it is the unsized `wt-modal`. Both measured
+  on the demo venue (`~/waitron-campaign/a719-look-report.md`, C2 and C4). Left open by A719.
+- **A painter opened from a Painted in chip in the Periods window does not return to the window
+  when it closes**, so a manager loses their place — left open by A506-11, #1694.
+- **The period delete dialog can keep Delete greyed out** after a refusal for a changed business-day
+  start, when the Periods window's list is taken out of the document during its re-read and comes back
+  (`period-delete-dialog.ts`; found by reading, not tried) — left open by A506-11, #1694.
+- **The period delete dialog can skip a re-read and show slightly old counts** in a rare order of
+  updates; the server still refuses a delete sent with an old clock revision — left open by
+  A506-11, #1694.
+
+## Bundle: Service moment cost
+
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A855. The till's zones read builds date formatters on every call (2026-10-18).**
+  [Detail](service-periods.md#a855-the-tills-zones-read-builds-date-formatters-on-every-call)
+- **Once a stored holiday date's year has passed, each order's service-state read
+  (`readServiceDayPlan`) also reads the tenant, the venue and the holiday area** to find that year's
+  holiday: about 100 µs of roughly 860 µs per call, measured over 2000 calls on a Madrid test venue.
+  A cache that outlives the transaction is one way to remove it — left open by A506-5, #1603.
+- **The "Add to" offer reads every special day with every date** (`GET …/special-days`) to show a
+  name and a latest date — left open by A506-5, #1603.
+
+## Bundle: Calendar marks
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A purple season looks like a special day**
+  [Detail](service-periods.md#a-purple-season-looks-like-a-special-day)
+- **The Opening hours Month marks a special day only by its name** — left open by A762, #1850 (its plan's
+  Decision 11): the Staffing month draws a purple run over a special day's dates, the Opening hours
+  Month does not. The owner's "even on the month view the special day is not shown" may mean it too.
 
 ## Decisions and deliberate limits
 
@@ -799,6 +934,11 @@ makes"):
 - Decision 10: the special-day editor's Delete comes after Cancel with the danger look, and Save
   stands apart. This extends the owner's 2026-10-16 rule for a form's bottom row
   (`[Cancel] [Delete] … [Save]`, design-system.md → Forms) to a painter's top bar.
+
+- **A failed re-read of the prep-station list keeps the stations already shown** in the
+  Calendar's Show picker; only a list that never loaded leaves Show with departments only. Kept
+  so a brief network drop does not lose a manager's chosen station — left open by A722 Part 3's
+  Codex review, #1834.
 
 ## A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave the zone's Keep open dialog stuck
 

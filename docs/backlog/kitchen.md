@@ -78,14 +78,6 @@ Left open:
   designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
   may set it. A773 assigns requests to cook held work to the waiter.
 
-## Two follow-ups 3c-1 left
-
-- Units added to a discounted pay-first dish held in a group get a
-  held kitchen record of their own while the dish has none — observed on `main`, its history not
-  checked, and whether it is wanted remains open; and a device's made-here stations do not travel
-  in configuration export, because devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
-  from an export sets them again on the Devices screen.
-
 ## A following extra has different names on paper and on screen
 
 Its `+` line prints the frozen
@@ -120,17 +112,6 @@ group's HOLD stamp straight to the row, without recording any station in
 `order_group_hold_stations`. They pass in CI; nobody has checked whether what they assert still
 depends on HOLD paper reaching a station. `line-service-projections.test.ts` failed for this reason
 and now records its stations. Left open by A756 PR 6's review.
-
-## A long word in a routing-grid row name still splits at 390 px
-
-- Since A507 part 2 a name
-  breaks between words where each word fits ("AGAVE", "Café con / leche" stay whole), but a word
-  wider than what is left of the capped first column beside the indent and the arrow still breaks
-  inside itself ("BOCAD/ILLOS", "CLAN/DESTI/NA" one level down). The column is held at 96 px by the
-  phone-width case "at phone width the row label column is capped and the zones take most of the width"
-  (`packages/venue-service/src/dashboard/routing-grid.test.ts`). Options: widen the cap, shrink the
-  arrow at phone width, or hyphenate (`hyphens: auto` needs a `lang` on the grid or above it; the
-  dashboard sets none — `apps/dashboard/index.html`'s `<html>` has none).
 
 ## Routing reads do work only one screen uses
 
@@ -317,6 +298,118 @@ By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `
 guide's language and a kitchen's can differ. 4b's own new text names no marker, so the question stayed
 open for these older lines only. A803 slice 4b does not change them. Their Spanish words need the
 owner's answer first.
+
+## Bundle A1378: Fix kitchen paper: Spanish time, whole quantities, then the owner's slip questions
+
+9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1065. A printer shared by a station recorded for a held group and one not recorded prints one
+  FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:703-707`);
+  ask the owner whether FIRE should mark only the recorded station's part. Left open by A756 PR 6.
+- **Kitchen paper prints its times in the server process's time zone (left open by A808, 2026-10-27).**
+  The time line and the reprint heading go through `hhmm`, which reads `Date#getHours` and
+  `getMinutes` (`apps/server/src/kitchen-ticket.ts`). `deploy/Dockerfile` and `deploy/compose.yml`
+  set no `TZ` (`rg -n '\bTZ\b|localtime|zoneinfo' deploy` finds nothing), and a local probe of the
+  base image printed `UTC` (`docs/developers/testing-guide.md`); an operator's appliance was not
+  measured. The venue's own zone is `locations.time_zone`. A696 covers invoices and receipts only.
+  Decide with the owner whether kitchen paper moves to the venue's zone.
+- **A reprint covering several sends prints the earliest send time (left open by A808,
+  2026-10-27).** `planKitchenTickets` (`apps/server/src/kitchen-print.ts`) prints the earliest send
+  on each reprinted ticket. Ask the owner whether it should be the latest, or one time per send.
+- **A kitchen-note change gives a slip and a notice per bill, not per party (left open by A807,
+  2026-10-27).** A party with two bills gets two slips per printer and two notices per station
+  ([decision](kitchen.md#decisions-and-deliberate-limits)). Ask the owner whether a party
+  should get one.
+- **A1086. On a kitchen ticket nothing marks where a run of dishes sent after their period ends.**
+  The late-send mark prints only above the run (`emitGrouped`, `apps/server/src/kitchen-ticket.ts`),
+  so an unmarked dish printed straight after it — a caña after the marked tortilla and entrecot —
+  looks part of the marked group. Seen, 2026-10-25 (A789 slice 3's look).
+- **A1087. Kitchen tickets print a whole quantity with three decimals**, such as `2.000 x CROQ
+  JAMON`, and tests pin it; decide with the owner whether it prints `2 x`.
+  [Detail](kitchen.md#a1087-kitchen-tickets-print-a-whole-quantity-with-three-decimals)
+- **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
+  [Detail](kitchen.md#a694--correction-slips-do-not-print-the-partys-name-2026-10-15-open-owner-decision)
+- **A695 — Naming or renaming a party after its food was sent prints nothing (2026-10-15; open,
+  owner decision).**
+  [Detail](kitchen.md#a695--naming-or-renaming-a-party-after-its-food-was-sent-prints-nothing)
+- **A1192. MOVED slips print each portion on its own line (left open by A803 slice 1, D16).**
+  Moving three identical croquetas prints three "1.000 x CROQ JAMON" lines, where the other kitchen
+  slips print one line for identical portions: `printMovedSlips` (`apps/server/src/kitchen-print.ts`)
+  lays out each line alone. Decide whether MOVED slips should group them too.
+
+## Bundle: What happens to the kitchen when guests leave unpaid
+
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19).**
+  Owner, 2026-11-06: decide it together with A1367. Worked example with the owner.
+  [Detail](kitchen.md#a908-kitchen-cancellation-on-record-unpaid-departure-left-open-by-a758s-q43-revision-2026-10-19)
+- **A1367. A table closed by Record unpaid departure keeps its dishes on the kitchen screens (left open by A1344, #2499).**
+  Departure is not Finish, so it clears nothing from the station screens or the overdue report.
+  Owner, 2026-11-06: decide it together with A908. Worked example with the owner.
+  [Detail](kitchen.md#a1367-a-table-closed-by-record-unpaid-departure-keeps-its-dishes-on-the-kitchen-screens-left-open-by-a1344)
+
+## Bundle: What a kitchen card draws
+
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The kitchen screens and the pass still show allergens as text chips.** A668 brings icons to the
+  editor, the till's buttons and its order list, not to these screens.
+- **A1220. The kitchen screen names an extra by its Spanish name in English mode** («Pimientos de
+  Padrón» beside the kitchen name "CHICKEN + CHIPS", where the paper ticket says "+ Peppers"). Seen
+  in A1208's LOOK on the demo venue; check which of the extra's three names the screen reads.
+- **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references.**
+  [Detail](kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
+- **A following extra has different names on paper and on screen.** — left open by the product
+  folders work.
+  [Detail](kitchen.md#a-following-extra-has-different-names-on-paper-and-on-screen)
+- **A1202. The kitchen screen draws no amount for a measured extra (left open by A803 slice 1).**
+  Kitchen paper prints "+ Jamón 150.000 g"; the station queue and the pass draw "+ Jamón". The
+  queue sends the amount (`QueueModifier.amount`, `apps/server/src/working-order.ts`) and two
+  portions with different amounts already show as separate rows, but each row reads the same. Draw
+  the amount in its unit, as paper does.
+
+## Bundle: Held paper followups
+
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1066. Four server test files mark a HOLD ticket printed without recording a station.**
+  [Detail](kitchen.md#a1066-four-server-test-files-mark-a-hold-ticket-printed-without-recording-a-station)
+- **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
+  [Detail](kitchen.md#task-6-761-hold-tickets-in-advance)
+- **A1369. A reprint of a bill's kitchen tickets leaves out a dish waiting for the pass whose HOLD ticket printed (seen in A1327's review, #2502; predates it).**
+  The dish is one whose HOLD ticket printed, then fired at a station that waits for the pass and not
+  yet released. Reprinting its bill prints only the bill's other dishes: `readReprintParts`
+  (`apps/server/src/kitchen-print.ts`) reads held work through `readOnHoldTickets` only. Decide
+  whether a reprint lists it, and how it is marked.
+
+## Bundle: Routing model reads
+
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
+  dashboard**, while `readOpeningHoursModel` still works both out on every read. See also "Routing
+  reads do work only one screen uses" — left open by A506-11, #1694.
+- **The server accepts a routing period line naming the cell's own plain station**; it routes
+  nothing differently (`validatePeriodLines`, `packages/venue-service/src/routing-store.ts`). Left
+  open by A366 slice 4 Part A.
+- **The period delete warning orders its rows on the server** (`routingRowPlaces`,
+  `packages/venue-service/src/menu-timetable.ts`) **with a copy of the Routes tab's row order**
+  (`visibleRoutingRows`); a change to one can leave the other behind. Move the order into
+  `packages/venue-service/src/routing.ts` and use it from both. Left open by A366 slice 4 Part A.
+- **Routing reads do work only one screen uses** — left open by A366 slice 4 Part A's review.
+  [Detail](kitchen.md#routing-reads-do-work-only-one-screen-uses)
+
+## Bundle: Supervisor station read
+
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+
+- **A1079. Owner question: should a supervisor see each station's "Changes after sending"?** The
+  Kitchen tab let a supervisor read it (owner, 2026-10-04); since #2044 it lives only in the station
+  editor, which needs `venue_service.manage`. Decide whether a supervisor gets a read-only view
+  ([decision note](dashboard.md)). Left open by A756 PR 8.
+- **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12).
+  [Detail](kitchen.md#supervisors-have-no-dashboard-path-to-a-prep-stations-times)
 
 ## Decisions and deliberate limits
 
