@@ -208,6 +208,25 @@ describe("state-secrets", () => {
     expect(events.indexOf(`sync ${join(above, "a")}`, created)).toBeGreaterThan(created);
   });
 
+  it("issues no sync at all when asked for a non-durable unpack", async () => {
+    const files = await collectStateSecrets(await seedStateDir());
+    const above = mkdtempSync(join(tmpdir(), "state-secrets-not-durable-"));
+    const dest = join(above, "a", "state");
+    const events = await syncsAndRenames(() => unpackBundleToDir(files, dest, { durable: false }));
+    expect(events).toContain(`mkdir ${dest}`);
+    expect(events).toContain(`mkdir ${join(dest, "tls")}`);
+    expect(events).toContain(
+      `rename ${join(dest, "trading.env")}.tmp ${join(dest, "trading.env")}`,
+    );
+    expect(events.filter((event) => event.startsWith("sync "))).toEqual([]);
+    for (const rel of RECOVERY_FILES) {
+      expect(await readFile(join(dest, rel), "utf8")).toBe(files[rel]);
+      expect((await stat(join(dest, rel))).mode & 0o777).toBe(0o600);
+    }
+    expect((await stat(dest)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(dest, "tls"))).mode & 0o777).toBe(0o700);
+  });
+
   it("unpacks into a tls that is a link to a folder inside the destination", async () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-linked-"));
     await mkdir(join(dest, "real-tls"));

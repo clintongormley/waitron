@@ -4,7 +4,7 @@ import { chmod, lstat, mkdir, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
 import { type BundleFiles } from "./recovery-bundle.js";
-import { mkdirDurable, syncNewFolders, writeFileDurable } from "./fs-atomic.js";
+import { mkdirDurable, syncNewFolders, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 /**
@@ -94,18 +94,26 @@ async function entryExists(path: string): Promise<boolean> {
 }
 
 /**
- * The inverse of `collectStateSecrets`: each file written durably, 0600. The destination and every
- * folder between it and an entry end 0700 whether or not they already existed (`mkdir`'s mode applies
- * only to a folder it creates). No existing folder above the destination is changed (missing ones
- * are created 0700), provided nothing else changes the folders during the unpack: a folder inside
- * the destination replaced by a symlink mid-run is followed, wherever it points.
+ * The inverse of `collectStateSecrets`: each file written 0600, durably unless `durable` is
+ * `false`. The destination and every folder between it and an entry end 0700 whether or not they
+ * already existed (`mkdir`'s mode applies only to a folder it creates). No existing folder above
+ * the destination is changed (missing ones are created 0700), provided nothing else changes the folders
+ * during the unpack: a folder inside the destination replaced by a symlink mid-run is followed,
+ * wherever it points.
  */
-export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
+export async function unpackBundleToDir(
+  files: BundleFiles,
+  destDir: string,
+  // `false` for a copy that is thrown away: the backup verifier's runs under Node's permission
+  // mode, which refuses every fsync.
+  { durable = true }: { durable?: boolean } = {},
+): Promise<void> {
   if (Object.keys(files).some((name) => isFirstSetupHostPath(posix.normalize(name)))) {
     throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
   }
   // Created before the guard's `realpath`, which fails on a missing path.
-  await mkdirDurable(destDir, 0o700);
+  if (durable) await mkdirDurable(destDir, 0o700);
+  else await mkdir(destDir, { recursive: true, mode: 0o700 });
   const realDestRoot = await realpath(resolve(destDir));
   await chmod(realDestRoot, 0o700);
   for (const [rel, contents] of Object.entries(files)) {
@@ -116,7 +124,7 @@ export async function unpackBundleToDir(files: BundleFiles, destDir: string): Pr
       () => {
         throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
       },
-      { durable: true },
+      { durable },
     );
     // Stops at the destination. Goes by path, like the write below: a folder swapped for a symlink
     // after `realpath` is followed.
@@ -127,6 +135,7 @@ export async function unpackBundleToDir(files: BundleFiles, destDir: string): Pr
     ) {
       await chmod(dir, 0o700);
     }
-    await writeFileDurable(target, contents, 0o600);
+    if (durable) await writeFileDurable(target, contents, 0o600);
+    else await writeFileAtomic(target, contents, 0o600);
   }
 }

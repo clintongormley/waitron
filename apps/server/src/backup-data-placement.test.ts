@@ -1,5 +1,6 @@
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -18,6 +19,30 @@ import { validateBackupArtifactFile } from "./backup-verification-archive.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { placeBackupData, placeBackupDatabase } from "./backup-data-placement.js";
 import * as backupConfig from "./backup-config.js";
+import { restoreSecrets } from "./restore.js";
+
+vi.mock("node:fs/promises", { spy: true });
+
+/** The path of each opened file or folder synced while `run` runs. */
+async function syncs(run: () => Promise<unknown>): Promise<string[]> {
+  const synced: string[] = [];
+  const real = await vi.importActual<typeof fs>("node:fs/promises");
+  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+    const handle = await real.open(...args);
+    const realSync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      synced.push(String(args[0]));
+      return realSync();
+    };
+    return handle;
+  });
+  try {
+    await run();
+  } finally {
+    vi.mocked(fs.open).mockReset();
+  }
+  return synced;
+}
 
 const modules = ALL_MODULES.filter((m) => ["core", "catalogue"].includes(m.name));
 const options = migrationOptionsFor(orderedMigrationSets(modules), null);
@@ -320,6 +345,23 @@ it.each([
   await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readdir(f.stagingDir)).toEqual([]);
   expect(f.hook).not.toHaveBeenCalled();
+});
+
+it("places the throwaway copy without a single sync, where a real restore of it syncs", async () => {
+  const f = await fixture();
+  await seal(f);
+  const validated = await validateBackupArtifactFile(f);
+  try {
+    expect(await syncs(() => placeBackupData(validated, f))).toEqual([]);
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(node);
+    const restored = join(f.root, "restored-state");
+    const synced = await syncs(() =>
+      restoreSecrets({ entries: validated.secretEntries, stateDir: restored, log: f.log }),
+    );
+    expect(synced).toContain(join(restored, "trading.env.tmp"));
+  } finally {
+    await validated.discard();
+  }
 });
 
 it("places a joined spare's venue authority beside the box's own", async () => {
