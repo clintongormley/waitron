@@ -157,9 +157,9 @@ function total(bills: { outstanding: string }[]): string {
 describe("seating", () => {
   it("opens a party, one membership and a tab on the party", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
+    const table4 = await venue.table("Mesa 4");
 
-    const seated = await seat(venue, mesa4, 3);
+    const seated = await seat(venue, table4, 3);
 
     expect(seated.revision).toBe(0);
     expect(await partyRow(suite, seated.partyId)).toMatchObject({
@@ -170,12 +170,12 @@ describe("seating", () => {
     });
     const memberships = await membershipsOf(seated.partyId);
     expect(memberships).toHaveLength(1);
-    expect(memberships[0]).toMatchObject({ tableId: mesa4, leftAt: null });
+    expect(memberships[0]).toMatchObject({ tableId: table4, leftAt: null });
     const [tab] = await inTx(suite, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, seated.tabId)),
     );
     expect(tab).toMatchObject({ status: "open", partyId: seated.partyId });
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toEqual({
+    expect(await inTx(suite, (tx) => partyForTable(tx, table4))).toEqual({
       partyId: seated.partyId,
       revision: 0,
     });
@@ -189,12 +189,12 @@ describe("seating", () => {
 
   it("refuses seating an occupied table with the occupied-table code, and opens no second party", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    await seat(venue, mesa4, 3);
+    const table4 = await venue.table("Mesa 4");
+    await seat(venue, table4, 3);
 
-    const error = await captureError(() => seat(venue, mesa4, 2));
+    const error = await captureError(() => seat(venue, table4, 2));
 
-    expect(error).toMatchObject({ code: "tab.already_open", params: { tableId: mesa4 } });
+    expect(error).toMatchObject({ code: "tab.already_open", params: { tableId: table4 } });
     expect(await inTx(suite, (tx) => tx.select().from(parties))).toHaveLength(1);
   });
 
@@ -202,8 +202,8 @@ describe("seating", () => {
     const venue = await setupPartyVenue(suite.db);
     expect(await inTx(suite, (tx) => partyForTable(tx, randomUUID()))).toBeNull();
     expect(await inTx(suite, (tx) => partyForTable(tx, "not-an-id"))).toBeNull();
-    const mesa4 = await venue.table("Mesa 4");
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toBeNull();
+    const table4 = await venue.table("Mesa 4");
+    expect(await inTx(suite, (tx) => partyForTable(tx, table4))).toBeNull();
   });
 });
 
@@ -240,8 +240,8 @@ describe("related bills", () => {
 
   it("lists the tab and a check split from it, with what each still owes", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId, tabId } = await seat(venue, mesa4, 2);
+    const table4 = await venue.table("Mesa 4");
+    const { partyId, tabId } = await seat(venue, table4, 2);
     await order(venue, tabId, "Burger", "Vino", "Agua");
     const checkId = await split(venue, partyId, tabId, [2]);
 
@@ -281,7 +281,7 @@ describe("related bills", () => {
       },
     ]);
     expect(total(before)).toBe("44.00");
-    expect((await floorRow(venue, mesa4)).party).toMatchObject({
+    expect((await floorRow(venue, table4)).party).toMatchObject({
       id: partyId,
       outstanding: "44.00",
       billCount: 2,
@@ -298,8 +298,8 @@ describe("related bills", () => {
     });
     expect(total(after)).toBe("30.00");
     expect((await partyRow(suite, partyId)).state).toBe("open");
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toMatchObject({ partyId });
-    const floor = await floorRow(venue, mesa4);
+    expect(await inTx(suite, (tx) => partyForTable(tx, table4))).toMatchObject({ partyId });
+    const floor = await floorRow(venue, table4);
     expect(floor.state).toBe("open-tab");
     expect(floor.party).toMatchObject({ id: partyId, state: "open", outstanding: "30.00" });
   });
@@ -327,8 +327,8 @@ describe("related bills", () => {
 describe("finish table", () => {
   it("is refused while a check is unpaid, and changes nothing", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId, tabId } = await seat(venue, mesa4, 2);
+    const table4 = await venue.table("Mesa 4");
+    const { partyId, tabId } = await seat(venue, table4, 2);
     await order(venue, tabId, "Burger", "Vino", "Agua");
     const checkId = await split(venue, partyId, tabId, [2]);
     await pay(venue, tabId, "14.00");
@@ -351,8 +351,8 @@ describe("finish table", () => {
 
   it("closes the party and its membership, frees the table once everything is paid", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId, tabId } = await seat(venue, mesa4, 2);
+    const table4 = await venue.table("Mesa 4");
+    const { partyId, tabId } = await seat(venue, table4, 2);
     await order(venue, tabId, "Burger", "Vino", "Agua");
     const checkId = await split(venue, partyId, tabId, [2]);
     await pay(venue, tabId, "14.00");
@@ -368,13 +368,13 @@ describe("finish table", () => {
     expect(closed.closedAt).not.toBeNull();
     expect(await membershipsOf(partyId)).toEqual([]);
     expect(closed.tableNames).toEqual(["Mesa 4"]);
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toBeNull();
+    expect(await inTx(suite, (tx) => partyForTable(tx, table4))).toBeNull();
   });
 
   it("abandons an empty open tab rather than counting it as owed", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId, tabId } = await seat(venue, mesa4);
+    const table4 = await venue.table("Mesa 4");
+    const { partyId, tabId } = await seat(venue, table4);
 
     expect(
       await inTx(suite, (tx) =>
@@ -443,8 +443,8 @@ describe("finish table", () => {
 
   it("closes a party that no longer holds any table", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId } = await seat(venue, mesa4);
+    const table4 = await venue.table("Mesa 4");
+    const { partyId } = await seat(venue, table4);
     await inTx(suite, (tx) =>
       tx
         .update(partyTables)
@@ -461,16 +461,16 @@ describe("finish table", () => {
 
   it("frees every table of a joined party", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const mesa5 = await venue.table("Mesa 5");
-    const { partyId } = await seat(venue, mesa4);
-    await join(venue.cfg, partyId, mesa5);
+    const table4 = await venue.table("Mesa 4");
+    const table5 = await venue.table("Mesa 5");
+    const { partyId } = await seat(venue, table4);
+    await join(venue.cfg, partyId, table5);
 
     await inTx(suite, (tx) =>
       finishTable(tx, { partyId, expectedPartyRevision: 1, operatorId: OPERATOR }),
     );
 
-    for (const table of [mesa4, mesa5]) {
+    for (const table of [table4, table5]) {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
     }
     expect(await membershipsOf(partyId)).toEqual([]);
@@ -500,16 +500,16 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
 
   it("closes the party at Finish and leaves each of its tables needing clearing, with no party on them", async () => {
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
-    const mesa4 = await v.table("Mesa 4c");
-    const mesa5 = await v.table("Mesa 5c");
-    const { partyId } = await seat(v, mesa4);
-    await join(v.cfg, partyId, mesa5);
+    const table4 = await v.table("Mesa 4c");
+    const table5 = await v.table("Mesa 5c");
+    const { partyId } = await seat(v, table4);
+    await join(v.cfg, partyId, table5);
 
     expect(await finish(partyId)).toEqual({ state: "closed" });
 
     expect(await partyRow(v, partyId)).toMatchObject({ state: "closed", closedBy: OPERATOR });
     expect(await activeTablesOf(v, partyId)).toEqual([]);
-    for (const table of [mesa4, mesa5]) {
+    for (const table of [table4, table5]) {
       expect((await tableRow(v, table)).needsClearingSince).not.toBeNull();
       expect(await condition(table)).toBe("needs_clearing");
       expect((await floorRow(v, table)).party).toBeNull();
@@ -518,62 +518,62 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
 
   it("refuses seating a table that needs clearing until it is cleared, one table at a time", async () => {
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
-    const mesa6 = await v.table("Mesa 6c");
-    const mesa7 = await v.table("Mesa 7c");
-    const { partyId } = await seat(v, mesa6);
-    await join(v.cfg, partyId, mesa7);
+    const table6 = await v.table("Mesa 6c");
+    const table7 = await v.table("Mesa 7c");
+    const { partyId } = await seat(v, table6);
+    await join(v.cfg, partyId, table7);
     await finish(partyId);
     const partiesBefore = await partyCount();
 
-    const refused = await captureError(() => seat(v, mesa6));
-    expect(refused).toMatchObject({ code: "table.needs_clearing", params: { tableId: mesa6 } });
+    const refused = await captureError(() => seat(v, table6));
+    expect(refused).toMatchObject({ code: "table.needs_clearing", params: { tableId: table6 } });
     expect(await partyCount()).toBe(partiesBefore);
-    expect(await condition(mesa6)).toBe("needs_clearing");
+    expect(await condition(table6)).toBe("needs_clearing");
 
-    await inTx(v, (tx) => markTableCleared(tx, mesa6));
-    expect(await condition(mesa6)).toBe("free");
-    expect((await tableRow(v, mesa6)).needsClearingSince).toBeNull();
-    expect(await condition(mesa7)).toBe("needs_clearing");
-    await seat(v, mesa6);
-    expect(await condition(mesa6)).toBe("held");
+    await inTx(v, (tx) => markTableCleared(tx, table6));
+    expect(await condition(table6)).toBe("free");
+    expect((await tableRow(v, table6)).needsClearingSince).toBeNull();
+    expect(await condition(table7)).toBe("needs_clearing");
+    await seat(v, table6);
+    expect(await condition(table6)).toBe("held");
   });
 
   it("refuses a tab opened straight onto a table that needs clearing, as the till's free-table route and a booking do", async () => {
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
-    const mesa4 = await v.table("Mesa 4c");
-    const { partyId } = await seat(v, mesa4);
+    const table4 = await v.table("Mesa 4c");
+    const { partyId } = await seat(v, table4);
     await finish(partyId);
 
     expect(
-      await captureError(() => inTx(v, (tx) => openPartyTab(tx, v.cfg, { tableId: mesa4 }))),
-    ).toMatchObject({ code: "table.needs_clearing", params: { tableId: mesa4 } });
-    expect(await condition(mesa4)).toBe("needs_clearing");
+      await captureError(() => inTx(v, (tx) => openPartyTab(tx, v.cfg, { tableId: table4 }))),
+    ).toMatchObject({ code: "table.needs_clearing", params: { tableId: table4 } });
+    expect(await condition(table4)).toBe("needs_clearing");
   });
 
   it("frees the tables at once when their department has Needs clearing off (P8)", async () => {
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
-    const mesa8 = await v.table("Mesa 8c");
-    const { partyId } = await seat(v, mesa8);
+    const table8 = await v.table("Mesa 8c");
+    const { partyId } = await seat(v, table8);
     expect(await finish(partyId)).toEqual({ state: "closed" });
-    expect(await condition(mesa8)).toBe("free");
-    expect((await tableRow(v, mesa8)).needsClearingSince).toBeNull();
+    expect(await condition(table8)).toBe("free");
+    expect((await tableRow(v, table8)).needsClearingSince).toBeNull();
   });
 
   it("frees the tables at once in a department that never switched Needs clearing on", async () => {
-    const mesa8 = await v.table("Mesa 8c");
-    const { partyId } = await seat(v, mesa8);
+    const table8 = await v.table("Mesa 8c");
+    const { partyId } = await seat(v, table8);
     await finish(partyId);
-    expect(await condition(mesa8)).toBe("free");
+    expect(await condition(table8)).toBe("free");
   });
 
   it("clears a table that does not need clearing without complaint, and changes nothing", async () => {
-    const mesa9 = await v.table("Mesa 9c");
-    const mesa11 = await v.table("Mesa 11c");
-    const { partyId, revision } = await seat(v, mesa9);
-    await inTx(v, (tx) => markTableCleared(tx, mesa9));
-    await inTx(v, (tx) => markTableCleared(tx, mesa11));
-    expect(await condition(mesa9)).toBe("held");
-    expect(await condition(mesa11)).toBe("free");
+    const table9 = await v.table("Mesa 9c");
+    const table11 = await v.table("Mesa 11c");
+    const { partyId, revision } = await seat(v, table9);
+    await inTx(v, (tx) => markTableCleared(tx, table9));
+    await inTx(v, (tx) => markTableCleared(tx, table11));
+    expect(await condition(table9)).toBe("held");
+    expect(await condition(table11)).toBe("free");
     expect(await revisionOf(v, partyId)).toBe(revision);
   });
 
@@ -589,8 +589,8 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
 describe("the next party", () => {
   it("starts a new party whose bills list is empty", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const first = await seat(venue, mesa4, 2);
+    const table4 = await venue.table("Mesa 4");
+    const first = await seat(venue, table4, 2);
     await order(venue, first.tabId, "Burger");
     await pay(venue, first.tabId, "12.00");
     await inTx(suite, (tx) =>
@@ -601,7 +601,7 @@ describe("the next party", () => {
       }),
     );
 
-    const next = await seat(venue, mesa4, 4);
+    const next = await seat(venue, table4, 4);
 
     expect(next.partyId).not.toBe(first.partyId);
     const bills = await inTx(suite, (tx) => readPartyBills(tx, next.partyId));
@@ -613,51 +613,51 @@ describe("the next party", () => {
 describe("joined tables (Mesa 4 and Mesa 5)", () => {
   async function joined() {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const mesa5 = await venue.table("Mesa 5");
-    const seated = await seat(venue, mesa4, 6);
-    await join(venue.cfg, seated.partyId, mesa5);
-    return { venue, mesa4, mesa5, ...seated };
+    const table4 = await venue.table("Mesa 4");
+    const table5 = await venue.table("Mesa 5");
+    const seated = await seat(venue, table4, 6);
+    await join(venue.cfg, seated.partyId, table5);
+    return { venue, table4, table5, ...seated };
   }
 
   it("gives both tables one party, and refuses seating the joined table", async () => {
-    const { venue, mesa4, mesa5, partyId } = await joined();
+    const { venue, table4, table5, partyId } = await joined();
 
     const memberships = await membershipsOf(partyId);
     expect(memberships.map((m) => [m.tableId, m.leftAt])).toEqual(
       expect.arrayContaining([
-        [mesa4, null],
-        [mesa5, null],
+        [table4, null],
+        [table5, null],
       ]),
     );
     expect(memberships).toHaveLength(2);
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toEqual({ partyId, revision: 1 });
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa5))).toEqual({ partyId, revision: 1 });
+    expect(await inTx(suite, (tx) => partyForTable(tx, table4))).toEqual({ partyId, revision: 1 });
+    expect(await inTx(suite, (tx) => partyForTable(tx, table5))).toEqual({ partyId, revision: 1 });
 
-    expect(await captureError(() => seat(venue, mesa5))).toMatchObject({
+    expect(await captureError(() => seat(venue, table5))).toMatchObject({
       code: "tab.already_open",
     });
     expect(await inTx(suite, (tx) => tx.select().from(parties))).toHaveLength(1);
-    for (const table of [mesa4, mesa5]) {
+    for (const table of [table4, table5]) {
       expect((await floorRow(venue, table)).party).toMatchObject({
         id: partyId,
-        tableIds: expect.arrayContaining([mesa4, mesa5]),
+        tableIds: expect.arrayContaining([table4, table5]),
       });
     }
   });
 
   it("keeps both tables seated after payment, and a dessert round lands on the same party for both", async () => {
-    const { venue, mesa4, mesa5, partyId, tabId } = await joined();
+    const { venue, table4, table5, partyId, tabId } = await joined();
     await order(venue, tabId, "Burger");
     await pay(venue, tabId, "12.00");
 
-    for (const table of [mesa4, mesa5]) {
+    for (const table of [table4, table5]) {
       expect((await floorRow(venue, table)).state).toBe("open-tab");
     }
 
     const { tabId: dessertTab } = await orderForParty(venue, partyId, ["Flan"]);
 
-    for (const table of [mesa4, mesa5]) {
+    for (const table of [table4, table5]) {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toMatchObject({ partyId });
     }
     expect(await partyIdOf(dessertTab)).toBe(partyId);
@@ -666,14 +666,14 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
   });
 
   it("lets the next party at either table see no earlier bill once the party finishes", async () => {
-    const { venue, mesa4, mesa5, partyId, tabId } = await joined();
+    const { venue, table4, table5, partyId, tabId } = await joined();
     await order(venue, tabId, "Burger");
     await pay(venue, tabId, "12.00");
     await inTx(suite, (tx) =>
       finishTable(tx, { partyId, expectedPartyRevision: 1, operatorId: OPERATOR }),
     );
 
-    for (const table of [mesa4, mesa5]) {
+    for (const table of [table4, table5]) {
       expect((await floorRow(venue, table)).state).toBe("free");
       const next = await seat(venue, table);
       const bills = await inTx(suite, (tx) => readPartyBills(tx, next.partyId));
@@ -682,33 +682,33 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
   });
 
   it("keeps both tables in the party when a split bill is merged back into the tab", async () => {
-    const { venue, mesa4, mesa5, partyId, tabId } = await joined();
+    const { venue, table4, table5, partyId, tabId } = await joined();
     await order(venue, tabId, "Burger", "Vino");
     const checkId = await split(venue, partyId, tabId, [2]);
     const command = await commandFor(suite, partyId);
 
     await inTx(suite, (tx) => mergeBills(tx, venue.cfg, tabId, checkId, command));
 
-    for (const table of [mesa4, mesa5]) {
+    for (const table of [table4, table5]) {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toMatchObject({ partyId });
     }
     expect(await statusOf(suite, checkId)).toBe("abandoned");
   });
 
   it("moves the party from both tables to Mesa 7 on the same party", async () => {
-    const { venue, mesa4, mesa5, partyId, tabId } = await joined();
-    const mesa7 = await venue.table("Mesa 7");
+    const { venue, table4, table5, partyId, tabId } = await joined();
+    const table7 = await venue.table("Mesa 7");
     const command = await commandFor(suite, partyId);
 
     await inTx(suite, (tx) =>
-      moveGuests(tx, venue.cfg, partyId, mesa7, { ...command, otherPartyId: null }),
+      moveGuests(tx, venue.cfg, partyId, table7, { ...command, otherPartyId: null }),
     );
 
     const memberships = await membershipsOf(partyId);
-    expect(memberships.filter((m) => m.leftAt === null).map((m) => m.tableId)).toEqual([mesa7]);
+    expect(memberships.filter((m) => m.leftAt === null).map((m) => m.tableId)).toEqual([table7]);
     expect(memberships).toHaveLength(3);
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa7))).toMatchObject({ partyId });
-    for (const table of [mesa4, mesa5]) {
+    expect(await inTx(suite, (tx) => partyForTable(tx, table7))).toMatchObject({ partyId });
+    for (const table of [table4, table5]) {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
       expect((await floorRow(venue, table)).state).toBe("free");
     }
@@ -719,28 +719,28 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
 describe("a paid party (paying changes no table of the party)", () => {
   async function paid() {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const seated = await seat(venue, mesa4, 2);
+    const table4 = await venue.table("Mesa 4");
+    const seated = await seat(venue, table4, 2);
     await order(venue, seated.tabId, "Burger");
     await pay(venue, seated.tabId, "12.00");
-    return { venue, mesa4, ...seated };
+    return { venue, table4, ...seated };
   }
 
   it("moves from Mesa 4 to Mesa 7 on the same party, leaving the settled tab as it was", async () => {
-    const { venue, mesa4, partyId, tabId } = await paid();
-    const mesa7 = await venue.table("Mesa 7");
+    const { venue, table4, partyId, tabId } = await paid();
+    const table7 = await venue.table("Mesa 7");
     const command = await commandFor(suite, partyId);
     const [settledBefore] = await inTx(suite, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
     );
 
     await inTx(suite, (tx) =>
-      moveGuests(tx, venue.cfg, partyId, mesa7, { ...command, otherPartyId: null }),
+      moveGuests(tx, venue.cfg, partyId, table7, { ...command, otherPartyId: null }),
     );
 
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toBeNull();
-    expect((await floorRow(venue, mesa4)).state).toBe("free");
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa7))).toEqual({
+    expect(await inTx(suite, (tx) => partyForTable(tx, table4))).toBeNull();
+    expect((await floorRow(venue, table4)).state).toBe("free");
+    expect(await inTx(suite, (tx) => partyForTable(tx, table7))).toEqual({
       partyId,
       revision: command.expectedPartyRevision + 1,
     });
@@ -751,15 +751,15 @@ describe("a paid party (paying changes no table of the party)", () => {
   });
 
   it("joins Mesa 5, and the next round opens the party's next tab on both tables", async () => {
-    const { venue, mesa4, partyId } = await paid();
-    const mesa5 = await venue.table("Mesa 5");
+    const { venue, table4, partyId } = await paid();
+    const table5 = await venue.table("Mesa 5");
     const command = await commandFor(suite, partyId);
 
     await inTx(suite, (tx) =>
-      joinTables(tx, venue.cfg, partyId, mesa5, { ...command, otherPartyId: null }),
+      joinTables(tx, venue.cfg, partyId, table5, { ...command, otherPartyId: null }),
     );
 
-    for (const table of [mesa4, mesa5]) {
+    for (const table of [table4, table5]) {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toEqual({
         partyId,
         revision: command.expectedPartyRevision + 1,
@@ -776,15 +776,15 @@ describe("stale moves", () => {
   /** Two parties, Mesa 4 (with three items) and Mesa 6 (one), and a free Mesa 5 and Mesa 7. */
   async function twoParties() {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const mesa5 = await venue.table("Mesa 5");
-    const mesa6 = await venue.table("Mesa 6");
-    const mesa7 = await venue.table("Mesa 7");
-    const a = await seat(venue, mesa4);
+    const table4 = await venue.table("Mesa 4");
+    const table5 = await venue.table("Mesa 5");
+    const table6 = await venue.table("Mesa 6");
+    const table7 = await venue.table("Mesa 7");
+    const a = await seat(venue, table4);
     await order(venue, a.tabId, "Burger", "Vino", "Agua");
-    const b = await seat(venue, mesa6);
+    const b = await seat(venue, table6);
     await order(venue, b.tabId, "Flan");
-    return { venue, mesa4, mesa5, mesa6, mesa7, a, b };
+    return { venue, table4, table5, table6, table7, a, b };
   }
 
   type Parties = Awaited<ReturnType<typeof twoParties>>;
@@ -807,7 +807,7 @@ describe("stale moves", () => {
     {
       name: "move guests",
       run: (p, tx, stale) =>
-        moveGuests(tx, p.venue.cfg, p.a.partyId, p.mesa7, {
+        moveGuests(tx, p.venue.cfg, p.a.partyId, p.table7, {
           expectedPartyRevision: stale.a,
           otherPartyId: null,
           operatorId: OPERATOR,
@@ -816,7 +816,7 @@ describe("stale moves", () => {
     {
       name: "join",
       run: (p, tx, stale) =>
-        joinTables(tx, p.venue.cfg, p.a.partyId, p.mesa5, {
+        joinTables(tx, p.venue.cfg, p.a.partyId, p.table5, {
           expectedPartyRevision: stale.a,
           otherPartyId: null,
           operatorId: OPERATOR,
@@ -825,7 +825,7 @@ describe("stale moves", () => {
     {
       name: "combine",
       run: (p, tx, stale) =>
-        joinTables(tx, p.venue.cfg, p.a.partyId, p.mesa6, {
+        joinTables(tx, p.venue.cfg, p.a.partyId, p.table6, {
           expectedPartyRevision: stale.a,
           otherPartyId: p.b.partyId,
           expectedOtherPartyRevision: stale.b,
@@ -945,7 +945,7 @@ describe("stale moves", () => {
     const p = await twoParties();
     const error = await captureError(() =>
       inTx(suite, (tx) =>
-        joinTables(tx, p.venue.cfg, p.a.partyId, p.mesa6, {
+        joinTables(tx, p.venue.cfg, p.a.partyId, p.table6, {
           expectedPartyRevision: 0,
           otherPartyId: p.b.partyId,
           operatorId: OPERATOR,
@@ -967,16 +967,16 @@ describe("merge (D2)", () => {
    */
   async function mergePair() {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const mesa6 = await venue.table("Mesa 6");
-    const t = { ...(await seat(venue, mesa4)), tableId: mesa4 };
+    const table4 = await venue.table("Mesa 4");
+    const table6 = await venue.table("Mesa 6");
+    const t = { ...(await seat(venue, table4)), tableId: table4 };
     await order(venue, t.tabId, "Vino");
-    const s = { ...(await seat(venue, mesa6)), tableId: mesa6 };
+    const s = { ...(await seat(venue, table6)), tableId: table6 };
     await order(venue, s.tabId, "Paella", "Tarta", "Agua");
     const settledId = await split(venue, s.partyId, s.tabId, [1]);
     await pay(venue, settledId, "20.00");
     const openCheckId = await split(venue, s.partyId, s.tabId, [2]);
-    return { venue, mesa4, mesa6, t, s, settledId, openCheckId };
+    return { venue, table4, table6, t, s, settledId, openCheckId };
   }
 
   it("absorbs the other party: its open check follows, its settled bill stays, and it closes", async () => {
@@ -1003,13 +1003,13 @@ describe("merge (D2)", () => {
   });
 
   it("frees the absorbed party's table when its guests move to T, and T keeps its own", async () => {
-    const { venue, mesa4, mesa6, t, s } = await mergePair();
+    const { venue, table4, table6, t, s } = await mergePair();
 
     await merge(venue.cfg, t, s, true);
 
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa6))).toBeNull();
-    expect((await floorRow(venue, mesa6)).state).toBe("free");
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toMatchObject({
+    expect(await inTx(suite, (tx) => partyForTable(tx, table6))).toBeNull();
+    expect((await floorRow(venue, table6)).state).toBe("free");
+    expect(await inTx(suite, (tx) => partyForTable(tx, table4))).toMatchObject({
       partyId: t.partyId,
     });
     expect(await membershipsOf(s.partyId)).toEqual([]);
@@ -1017,13 +1017,13 @@ describe("merge (D2)", () => {
   });
 
   it("moves the absorbed party's tables to T when T joins them", async () => {
-    const { venue, mesa4, mesa6, t, s } = await mergePair();
-    const mesa9 = await venue.table("Mesa 9");
-    await join(venue.cfg, s.partyId, mesa9);
+    const { venue, table4, table6, t, s } = await mergePair();
+    const table9 = await venue.table("Mesa 9");
+    await join(venue.cfg, s.partyId, table9);
 
     await merge(venue.cfg, t, s, false);
 
-    for (const table of [mesa4, mesa6, mesa9]) {
+    for (const table of [table4, table6, table9]) {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toMatchObject({
         partyId: t.partyId,
       });
@@ -1033,9 +1033,9 @@ describe("merge (D2)", () => {
       "Mesa 6",
       "Mesa 9",
     ]);
-    expect((await floorRow(venue, mesa6)).party).toMatchObject({
+    expect((await floorRow(venue, table6)).party).toMatchObject({
       id: t.partyId,
-      tableIds: expect.arrayContaining([mesa4, mesa6, mesa9]),
+      tableIds: expect.arrayContaining([table4, table6, table9]),
     });
   });
 
@@ -1079,7 +1079,7 @@ describe("merge (D2)", () => {
   });
 
   it("merges a check back into its own party's tab without closing the party", async () => {
-    const { venue, mesa6, s, openCheckId } = await mergePair();
+    const { venue, table6, s, openCheckId } = await mergePair();
     const expectedPartyRevision = await revisionOf(suite, s.partyId);
 
     await inTx(suite, (tx) =>
@@ -1094,7 +1094,7 @@ describe("merge (D2)", () => {
       mergedIntoPartyId: null,
       revision: expectedPartyRevision + 1,
     });
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa6))).toMatchObject({
+    expect(await inTx(suite, (tx) => partyForTable(tx, table6))).toMatchObject({
       partyId: s.partyId,
     });
     expect(await statusOf(suite, openCheckId)).toBe("abandoned");
@@ -1108,18 +1108,18 @@ describe("merged parties keep their bills", () => {
    */
   async function mergedParties() {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const mesa6 = await venue.table("Mesa 6");
-    const s = { ...(await seat(venue, mesa6)), tableId: mesa6 };
+    const table4 = await venue.table("Mesa 4");
+    const table6 = await venue.table("Mesa 6");
+    const s = { ...(await seat(venue, table6)), tableId: table6 };
     await order(venue, s.tabId, "Paella", "Tarta");
     const settledId = await split(venue, s.partyId, s.tabId, [1]);
     const placedId = await split(venue, s.partyId, s.tabId, [2]);
     await pay(venue, settledId, "20.00");
     await placeByHand(suite, placedId);
-    const t = { ...(await seat(venue, mesa4)), tableId: mesa4 };
+    const t = { ...(await seat(venue, table4)), tableId: table4 };
     await order(venue, t.tabId, "Vino");
     await merge(venue.cfg, t, s);
-    return { venue, mesa4, mesa6, s, t, settledId, placedId };
+    return { venue, table4, table6, s, t, settledId, placedId };
   }
 
   it("lists the absorbed party's bills with the surviving party's", async () => {
@@ -1147,15 +1147,15 @@ describe("merged parties keep their bills", () => {
   });
 
   it("counts the absorbed party's unpaid bill as outstanding, and the floor never shows the table paid", async () => {
-    const { venue, mesa4, t } = await mergedParties();
+    const { venue, table4, t } = await mergedParties();
 
-    expect((await floorRow(venue, mesa4)).party).toMatchObject({
+    expect((await floorRow(venue, table4)).party).toMatchObject({
       id: t.partyId,
       outstanding: "45.00",
     });
 
     await pay(venue, t.tabId, "30.00");
-    const floor = await floorRow(venue, mesa4);
+    const floor = await floorRow(venue, table4);
     expect(floor.state).toBe("open-tab");
     expect(floor.party).toMatchObject({ id: t.partyId, outstanding: "15.00" });
   });
@@ -1189,9 +1189,9 @@ describe("merged parties keep their bills", () => {
   });
 
   it("follows a chain of merges, and the next party at any of the tables sees none of it", async () => {
-    const { venue, mesa4, mesa6, s, t, settledId, placedId } = await mergedParties();
-    const mesa8 = await venue.table("Mesa 8");
-    const u = { ...(await seat(venue, mesa8)), tableId: mesa8 };
+    const { venue, table4, table6, s, t, settledId, placedId } = await mergedParties();
+    const table8 = await venue.table("Mesa 8");
+    const u = { ...(await seat(venue, table8)), tableId: table8 };
     await order(venue, u.tabId, "Flan");
     await merge(venue.cfg, u, t);
 
@@ -1228,7 +1228,7 @@ describe("merged parties keep their bills", () => {
       }),
     );
 
-    for (const table of [mesa4, mesa6, mesa8]) {
+    for (const table of [table4, table6, table8]) {
       const next = await seat(venue, table);
       const nextBills = await inTx(suite, (tx) => readPartyBills(tx, next.partyId));
       expect(nextBills.map((b) => b.workingOrderId)).toEqual([next.tabId]);
@@ -1722,8 +1722,8 @@ describe("money received against a bill before its invoice", () => {
 
   it("counts a contribution off what the bill and the party still owe", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId, tabId } = await seat(venue, mesa4, 2);
+    const table4 = await venue.table("Mesa 4");
+    const { partyId, tabId } = await seat(venue, table4, 2);
     await order(venue, tabId, "Burger", "Vino");
 
     await contribute(venue, tabId, "20.00");
@@ -1731,13 +1731,13 @@ describe("money received against a bill before its invoice", () => {
     expect(await inTx(suite, (tx) => readPartyBills(tx, partyId))).toMatchObject([
       { workingOrderId: tabId, total: "42.00", outstanding: "22.00" },
     ]);
-    expect((await floorRow(venue, mesa4)).party).toMatchObject({ outstanding: "22.00" });
+    expect((await floorRow(venue, table4)).party).toMatchObject({ outstanding: "22.00" });
   });
 
   it("says which bills hold a payment: one received, or a card's still pending, but not one that failed", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId, tabId } = await seat(venue, mesa4, 2);
+    const table4 = await venue.table("Mesa 4");
+    const { partyId, tabId } = await seat(venue, table4, 2);
     await order(venue, tabId, "Burger", "Vino", "Agua");
     const pendingId = await split(venue, partyId, tabId, [2]);
     const failedId = await split(venue, partyId, tabId, [3]);
@@ -1808,11 +1808,11 @@ describe("money received against a bill before its invoice", () => {
 describe("A803 bill order:", () => {
   it("a party whose Bill 2 was opened before its Bill 1 arrived lists Bill 1 first", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const mesa5 = await venue.table("Mesa 5");
-    const early = await seat(venue, mesa4);
+    const table4 = await venue.table("Mesa 4");
+    const table5 = await venue.table("Mesa 5");
+    const early = await seat(venue, table4);
     await order(venue, early.tabId, "Vino");
-    const late = await seat(venue, mesa5);
+    const late = await seat(venue, table5);
     await order(venue, late.tabId, "Agua");
     const moving = {
       expectedPartyRevision: await revisionOf(suite, early.partyId),
@@ -1820,7 +1820,7 @@ describe("A803 bill order:", () => {
       expectedOtherPartyRevision: await revisionOf(suite, late.partyId),
       operatorId: OPERATOR,
     };
-    await inTx(suite, (tx) => moveGuests(tx, venue.cfg, early.partyId, mesa5, moving));
+    await inTx(suite, (tx) => moveGuests(tx, venue.cfg, early.partyId, table5, moving));
     const opened = await suite.db
       .select({ id: workingOrders.id })
       .from(workingOrders)
