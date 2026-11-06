@@ -76,6 +76,8 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import { MenuReadController } from "../api/menu-read-controller.js";
+import { sendMenuUndo, undoRefusalText } from "../api/menu-undo.js";
+import { menuChangeActions } from "@waitron/catalogue/src/menu-undo.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import {
   HOME_COLUMN_RANGE,
@@ -711,6 +713,11 @@ export class MenusScreen extends LitElement {
    * between, where the link sits under the status. */
   @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
+  /** The Preview change whose Undo is out. */
+  @state() private undoing: string | null = null;
+  @state() private undoRefusals: Readonly<Record<string, string>> = {};
+  /** The bullet text of the last change undone. */
+  @state() private undoResult: string | null = null;
   @state() private patching = false;
 
   /** Null while closed; `id` is null while creating. */
@@ -1430,6 +1437,51 @@ export class MenusScreen extends LitElement {
     if (opener?.isConnected === false)
       this.renderRoot.querySelector<HTMLElement>('.header [data-test="add-menu"]')?.focus();
     this.#followStatus(true);
+  }
+
+  /** Puts one Preview change back with the write its own form would make. A refusal stays beside
+   * the change; once the person has left this menu's Preview, it is named beside the list. */
+  #undo(changeId: string, change: string): void {
+    const menuId = this.menuId;
+    const preview = this.preview;
+    if (menuId === null || preview === null || this.previewError) return;
+    if (this.busy || this.undoing !== null || this.homePending !== null) return;
+    if (this.publishing.has(menuId)) return;
+    const action = menuChangeActions({
+      preview,
+      languages: currentContentLanguages().languages,
+    }).get(changeId);
+    if (action?.kind !== "undo") return;
+    const command = action.command;
+    this.busy = true;
+    this.undoing = changeId;
+    this.undoRefusals = without(this.undoRefusals, [changeId]);
+    this.undoResult = null;
+    const shown = () => this.menuId === menuId && this.view === "preview";
+    const task = async () => {
+      try {
+        await sendMenuUndo(this.api, command);
+      } catch (error) {
+        const reason = undoRefusalText(error, command);
+        if (shown()) this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
+        else this.memberError = fill("menus.change_not_saved", { name: change, reason });
+        this.busy = false;
+        this.undoing = null;
+        return;
+      }
+      if (shown()) this.undoResult = change;
+      if (command.method === "renameCatalogue") await this.#watchMenus().catch(() => undefined);
+      await this.#refresh();
+      this.busy = false;
+      this.undoing = null;
+    };
+    if (command.method === "updateMenuItem" || command.method === "setMenuVariantPrice") {
+      const row =
+        command.method === "updateMenuItem"
+          ? command.menuItemId
+          : `${command.menuItemId}:${command.variantId}`;
+      this.#priceWrites.run(`undo:${row}`, task);
+    } else this.#writes.run(`undo:${menuId}`, task);
   }
 
   // ── Publishing ───────────────────────────────────────────────────────────────────────────────
@@ -3036,6 +3088,14 @@ export class MenusScreen extends LitElement {
       .failureReason=${this.previewResetRequired ? codeMessage("menu.reset_required") : ""}
       .publishing=${this.publishing.has(this.menuId!)}
       .result=${this.publishResult}
+      .undoing=${this.undoing}
+      .undoBlocked=${this.busy || this.homePending !== null || this.publishing.has(this.menuId!)}
+      .undoRefusals=${this.undoRefusals}
+      .undoResult=${this.undoResult}
+      @wt-menu-undo=${(event: CustomEvent<{ changeId: string; change: string }>) => {
+        event.stopPropagation();
+        this.#undo(event.detail.changeId, event.detail.change);
+      }}
       @wt-preview-clashes=${(event: Event) => {
         event.stopPropagation();
         this.#open(this.menuId!, "prices", "clashes");
