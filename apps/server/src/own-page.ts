@@ -6,7 +6,7 @@ import "./errors.js";
 
 export type TrustedOrigin = (origin: string) => Promise<boolean>;
 
-const CHANGES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const READS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** An empty header is present and foreign, never absent: only `undefined` means not sent. */
 export function sentFromThisOrigin(c: Context): boolean {
@@ -23,7 +23,12 @@ export function sentFromThisOrigin(c: Context): boolean {
 export async function sentFromOwnPage(c: Context, trusted: TrustedOrigin): Promise<boolean> {
   if (sentFromThisOrigin(c)) return true;
   const origin = c.req.header("Origin");
-  if (origin === undefined || origin === "null" || origin === new URL(c.req.url).origin) {
+  if (
+    origin === undefined ||
+    origin === "" ||
+    origin === "null" ||
+    origin === new URL(c.req.url).origin
+  ) {
     return false;
   }
   return trusted(origin);
@@ -37,7 +42,7 @@ export function requireManagementChangeFromOwnPage(
   log: Logger,
 ): MiddlewareHandler {
   return async (c, next) => {
-    if (!CHANGES.has(c.req.method)) return next();
+    if (READS.has(c.req.method)) return next();
     if (readManagementSessionToken(c) === null) return next();
     let own = false;
     let lookupFailed = false;

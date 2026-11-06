@@ -17,8 +17,8 @@ start's app), so a route added later is covered without anyone remembering.
 of the six copies the tree has today) and a Hono middleware. `boot.ts` builds the middleware once
 and mounts it on the main app straight after the request-id middleware, and hands the same
 middleware to `startWaiting`, which mounts it on its own app after its handover gate. The middleware
-acts only on `POST`, `PUT`, `PATCH` and `DELETE` requests that carry the management cookie;
-everything else passes untouched. B3 PR 9's route-level check in `box-host-api.ts` is removed,
+judges every request whose method is not `GET`, `HEAD` or `OPTIONS` that carries the management
+cookie; everything else passes untouched. B3 PR 9's route-level check in `box-host-api.ts` is removed,
 because the shared one now covers its routes.
 
 **Tech Stack:** Hono 4.13.16 and `@hono/node-server` 2.1.5 (`ls node_modules/.pnpm | grep hono`,
@@ -157,8 +157,9 @@ whole table.
 
 ### D2. Which requests it judges
 
-Only `POST`, `PUT`, `PATCH` and `DELETE` that carry a `waitron_management_session` cookie, any
-value. `GET`, `HEAD` and `OPTIONS` pass (another page cannot read the answers, and CORS
+Every method except `GET`, `HEAD` and `OPTIONS` (the shape `readOnlyGate` uses, so an unusual
+method such as `PROPFIND` is judged too), when it carries a `waitron_management_session` cookie,
+any value. `GET`, `HEAD` and `OPTIONS` pass (another page cannot read the answers, and CORS
 preflights must reach `corsForVenue`). A request with no management cookie passes: it cannot be
 acting as a signed-in manager through the cookie, and the paths that legitimately post from another
 origin without it (a till on another venue server, Stripe's webhook, the print agent) must keep
@@ -206,8 +207,8 @@ foreign, never as absent:
   `Sec-Fetch-Site` is absent, `same-origin` or `none`. This is exactly the test six files already
   copy (D5).
 - `sentFromOwnPage(c, trusted)`: true when `sentFromThisOrigin(c)` is true, OR `Origin` is present,
-  is not the literal `null`, differs from the request's own origin, and `await trusted(origin)` is
-  true. In that second branch any `Sec-Fetch-Site` is accepted, because a browser correctly calls a
+  is neither `""` nor the literal `null` (both are refused without asking `trusted`), differs from
+  the request's own origin, and `await trusted(origin)` is true. In that second branch any `Sec-Fetch-Site` is accepted, because a browser correctly calls a
   trusted page on another origin `same-site` or `cross-site`. If `trusted` throws or rejects, the
   request is refused (403 `management.origin_refused`, log param `lookupFailed: true`). The
   middleware runs outside every route's error boundary, and the app sets no `onError`

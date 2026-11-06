@@ -16,7 +16,7 @@ let calls: Record<string, number>;
 function build(): Hono {
   const app = new Hono();
   app.use("*", requireManagementChangeFromOwnPage(trusted, log));
-  for (const method of ["POST", "PUT", "PATCH", "DELETE", "GET", "OPTIONS"] as const) {
+  for (const method of ["POST", "PUT", "PATCH", "DELETE", "PROPFIND", "GET", "OPTIONS"]) {
     app.on(method, "/x", (c) => {
       calls[method] = (calls[method] ?? 0) + 1;
       return c.text("ok");
@@ -69,7 +69,7 @@ async function expectTaken(response: Response, method = "POST") {
   expect(log).not.toHaveBeenCalled();
 }
 
-const REFUSED_ROWS: [string, Record<string, string>, { ownOrigin?: boolean }][] = [
+const REFUSED_ROWS: [string, Record<string, string>, { noLookup?: boolean }][] = [
   [
     "another port of the box's own name",
     { origin: `${BOX}:8443`, "sec-fetch-site": "same-site" },
@@ -77,22 +77,22 @@ const REFUSED_ROWS: [string, Record<string, string>, { ownOrigin?: boolean }][] 
   ],
   ["the box's own name over plain HTTP", { origin: "http://box.test" }, {}],
   ["another site", { origin: "https://elsewhere.example", "sec-fetch-site": "cross-site" }, {}],
-  ["an empty origin", { origin: "" }, {}],
-  ["an empty Sec-Fetch-Site", { origin: BOX, "sec-fetch-site": "" }, { ownOrigin: true }],
-  ["a same-site fetch with no Origin", { "sec-fetch-site": "same-site" }, { ownOrigin: true }],
-  ["a cross-site fetch with no Origin", { "sec-fetch-site": "cross-site" }, { ownOrigin: true }],
+  ["an empty origin", { origin: "" }, { noLookup: true }],
+  ["an empty Sec-Fetch-Site", { origin: BOX, "sec-fetch-site": "" }, { noLookup: true }],
+  ["a same-site fetch with no Origin", { "sec-fetch-site": "same-site" }, { noLookup: true }],
+  ["a cross-site fetch with no Origin", { "sec-fetch-site": "cross-site" }, { noLookup: true }],
   [
     "the box's own origin with a same-site fetch",
     { origin: BOX, "sec-fetch-site": "same-site" },
-    { ownOrigin: true },
+    { noLookup: true },
   ],
 ];
 
 describe("requireManagementChangeFromOwnPage refuses a change carrying the manager's cookie", () => {
-  for (const [name, headers, { ownOrigin }] of REFUSED_ROWS) {
+  for (const [name, headers, { noLookup }] of REFUSED_ROWS) {
     it(name, async () => {
       await expectRefused(await send(headers), "POST", headers);
-      if (ownOrigin === true) expect(trusted).not.toHaveBeenCalled();
+      if (noLookup === true) expect(trusted).not.toHaveBeenCalled();
     });
   }
 
@@ -108,7 +108,7 @@ describe("requireManagementChangeFromOwnPage refuses a change carrying the manag
     await expectRefused(await send(headers), "POST", headers, { lookupFailed: true });
   });
 
-  for (const method of ["PUT", "PATCH", "DELETE"]) {
+  for (const method of ["PUT", "PATCH", "DELETE", "PROPFIND"]) {
     it(`a ${method} from another port of the box's own name`, async () => {
       const headers = { origin: `${BOX}:8443`, "sec-fetch-site": "same-site" };
       await expectRefused(await send(headers, { method }), method, headers);
@@ -175,6 +175,13 @@ describe("requireManagementChangeFromOwnPage takes", () => {
   it("a GET from another page", async () => {
     await expectTaken(
       await send({ origin: `${BOX}:8443`, "sec-fetch-site": "same-site" }, { method: "GET" }),
+      "GET",
+    );
+  });
+
+  it("a HEAD from another page", async () => {
+    await expectTaken(
+      await send({ origin: `${BOX}:8443`, "sec-fetch-site": "same-site" }, { method: "HEAD" }),
       "GET",
     );
   });
