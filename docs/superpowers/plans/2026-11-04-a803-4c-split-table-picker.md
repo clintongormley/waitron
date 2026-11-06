@@ -1925,6 +1925,8 @@ empty after each. Free memory read 74% before the browser run.
   | The earliest table still here (the rule before) | 6,198 | 202 | 68 |
   | Every listed table still here, falling through (the first form) | 6,308 | 1 | 159 |
 
+  _(2026-11-06: re-run at `269103fecb` after the timing fix: 5,949 correct, 519 extra, 0 missed of 6,468, control red. See "Build record (4c)".)_
+
   Extra slips per dish under this rule: 458 dishes had one, 32 had two, one had three. Without a combine earlier in the history: no miss, and 6 extras from 3 histories, each history with a floor pass; traced in one, the notice at `49.246Z` and the table's join at `49.247Z`, which is D6's floor-pass limit.
 
   **The one missed slip is not a combined party's paper.** Paper `Mesa 4`, after `Mesa 5`, Mesa 4 left. It did not repeat on three replays of the seed, so that history ran 3,000 more times: 84 misses in 9,000 judgements, all 84 printing `paper Mesa 4, after Mesa 5` and each with a table's `left_at` equal to the last notice's time. One of them: `["9df2","Mesa 5","59.731Z","59.780Z"]` and the notice `["BURG","Mesa 4","59.780Z"]`, Mesa 5 then rejoining at `59.786Z`. The floor pass that moved the guests off Mesa 5 wrote its slip in the same millisecond, and `left_at >= at` counts Mesa 5 as held at that slip. The driver then ruled that a table leaving in that millisecond is gone from that paper, so the code now compares with `>`. Seed 931 replayed in a throwaway copy of the fix, the two rules side by side with nothing else running: `>` 0 misses in 6,000 judgements, `>=` 10 in 6,000, all 10 `paper Mesa 4, after Mesa 5`. An earlier run with the move sweep beside it printed 0 under both (9,000 and 3,000 judgements), so that run shows nothing and is not counted. The 3,000 seeds were not run again, so the table above stays as measured at `90bf56cd57`.
@@ -1981,3 +1983,142 @@ empty after each. Free memory read 74% before the browser run.
   it, and Task 3b's case builds the state by hand.
 - Whether the panel jumps under a waiter's finger when a ticked bill's rows give way to a take-over row: a
   read can do that with Split already held, so a press cannot land on the wrong thing, but Task 16 looks.
+
+## Build record (4c)
+
+Written 2026-11-06 at `6f4eda1f54`, the branch tip before Task 18, from the lane's ledger and the
+control reports. The reports themselves are outside the repository; what the plan needs from them is
+copied here.
+
+### Built against planned
+
+Tasks 0 to 17c were built in plan order, each reviewed. What a waiter sees is what the plan's Goal
+says: one panel with every bill and its dishes, whole bills and single dishes ticked together, both
+guest counts in the panel, Move guests or Split anyway when everything is ticked, an empty bill when
+nothing is, take-over rows, MOVED slips for the dishes that changed table only, and A590 fixed. The
+route issues an invoice for each bill the split leaves fully paid, by the function Move dishes calls,
+in bill-number order and in the split's own transaction.
+
+Changes to the plan made while building, each on a driver's ruling recorded in the ledger, and each
+already written into the decision or row it changed:
+
+- Revision 3 (`d70d5bffa8`) and the slip fix (`4b9a803ded`): a dish's paper is the later of its ticket
+  and its last MOVED notice, naming the tables its party held then; print jobs could not serve as the
+  record (R15). Two more rounds of the same rule followed for a combined party's dish (D6).
+- Task 12b: a party with no bill composes with `#partyComposition([])`, not `#billComposition([])`
+  (D20), after the review found that pressing the real panel's Split with no bill sent nothing.
+- Task 12c kept the two "list of tables closes" cases under a retitled describe, where the brief said
+  delete them.
+- Task 12e: `DraftSync`'s `#takeOver` records the take-over's answer (`#recordTakeOver`), where Task 10
+  had said `takeOver` would not change.
+- D16: a panel's rows describe the read they came from, so `billsSeen` stays across a closed panel and
+  reopening reads the sources again if the list differs.
+- Task 14a: the two rows of `ignores a late %s after changing bill` changed to pin the panel reopening
+  with the sentence (row 31), because D16 and Task 12d are later than the old one-bill path.
+- Task 14b: seven assertions reading the answer's old `billId` moved to `billIds`, same strictness
+  (row 32).
+- Task 16 (LOOK): five commits brought the foot into view after a refusal at 390 wide, the take-over
+  line into view, and fixed three places where focus fell to the page (`b7e53e254d`, `952408528c`,
+  `62913ce894`, `dceef9eca8`, `c19280dcee`).
+
+### Fix rounds after the LOOK, A to G
+
+- **A** (`6a76e78f05`, `97368c13dc`, `7077fabf1b`): a reopening sent the newest party revision over rows
+  it had not read; it now takes the revision from before its read. Its review then found four more
+  paths to the same defect.
+- **B** (`428424d508`): the board's waiting mark, as the till's own words `Held · Mains` / `En espera ·
+  Mains`, drawn by the shared picker, so Move dishes gains it too; the shaded bill header; eight
+  Departures rows. The pale tick was not kept: 2.07:1 and 2.29:1 against the picker's 3:1.
+- **C** (`76e1acf0b4`): one snapshot. Four rounds of closing paths had not converged, so the rows and
+  the party revision a press sends became one value: `SplitSources` carries `partyRevision`, read in
+  the rows' own transaction, and one place writes it (`this.splitRead = read` in `#readSplitSources`).
+  Removed: `#splitRowsBehind`, `#retakeSplitRevision`, `#splitBillsSeen`, `splitReloading` and every
+  revision retake. A stale press is the server's to refuse. A seeded case was added
+  (`till-app-split-table.snapshot.test.ts`): 400 histories ran with none failing (847 presses, 410
+  stale, each sent with its rows' revision), and 40 are committed for CI time.
+- **D** (`40a8d7384f`): the waiting mark comes from the rows' read (`waitsInHeldGroup`), not a second
+  groups read, for the same one-read reason; a refusal's six reads stop at 25 seconds, the till's floor
+  read limit, and past it count as failed, because a silent close would leave a waiter believing a
+  refused split went through.
+- **E** (`e4d4a18e47`): the owner's words for a refused Split whose rows could not be read again
+  (`table.split_updated_elsewhere`); a tick with no recorded edit state sends and the server judges;
+  every read behind a refusal gets the 25-second limit, drafts included; new file
+  `till-app-split-table.reads.test.ts`. It also reversed the moved main case at
+  `till-app-parties.test.ts:11980`, which round G undid.
+- **F** (`df729217e7`): round D's review found that a refusal's reading state (`#splitRefusalReading`)
+  outlived its table; round F fixed that and a sibling path, with four minors.
+- **G** (`72520d3eb2`, `cfcf15fe33`): a remembered edit state is kept only when the refusal names no
+  editor or this person; a refusal naming someone else stops the press with `table.split_taken`, words
+  that exist, because D4 and spec §3.7 case 2 say take the bill over first. Main's assertion on
+  `keeps missing metadata at prompt opening from becoming permission after refresh` was restored, and
+  the moved case renamed to main's title (`cfcf15fe33`), because the owner approved moves "at least as
+  strictly" and "under their titles". A put-back on a handheld now says the sentence. Its re-review
+  found minors only, so the rounds stopped; the minors are backlog entries A1353 to A1355.
+- **Fix 17c** (`6f4eda1f54`): Task 17c found four pieces of code no case pinned at `cfcf15fe33`.
+  1. `#watchReopenedSplit`'s `party.out_of_date` code arm: pinned by a new case in
+     `till-app-split-table.reads.test.ts`, "party.out_of_date answering while Find bill is open, after a
+     failed floor read emptied the floor > still reads the panel's rows again, though the till cannot
+     say what changed".
+  2. `#splitPressEdit`'s `this.#billEditIfReady(billId) ??` fallback: **removed**. A logging probe over
+     1,192 tests never saw it give a value; a timing run over 80 promise-step offsets gave a value
+     only at one (k = 18), sending an edit state the waiter never saw, which round G's rule is meant to
+     stop. A browser delivers a click only after every pending promise step, which behaves as a large
+     k: stopped. The limit: this shows no browser click reaches it, not that no ordering could.
+  3. Round D's late-floor case now checks the floor list too.
+  4. `rereadBills`' `here()` check: the case counts rows reads from Back on, since round F moved the
+     read to Back.
+
+### Line numbers that moved
+
+- The backlog line numbers in Task 18 (`docs/backlog.md:1900`, `:2050`; `docs/backlog/till.md:2023-2034`,
+  `:2996`) were true at `6f4eda1f54`; Task 18's own commit moves them.
+- Task 17c part 2's `till-app.ts:16037` (`#watchReopenedSplit`'s arm) is `:16036` at `6f4eda1f54`:
+  fix 17c removed a line above it.
+- Rows 1 to 31 of "Changed test checks" cite main `4259a040d2`, and row 32 `7a89135db1`, as each says.
+- Task 17b's R3 table names the case counts at R15's run; the block has gained cases since, so R3-1
+  turned 28 red where the plan said 12.
+
+### Controls
+
+Every deletion control was re-run at `cfcf15fe33` (Tasks 17b and 17c) and fix 17c's at `6f4eda1f54`.
+Each was one edit, the named cases run, the file restored and `git status --short` read empty.
+
+| Group | Run | Red | Green, and why | Red only by a thrown error |
+| --- | --- | --- | --- | --- |
+| 17b, server, Tasks 1 to 7 | 27 | 27 | None. Inside T4e, the sibling case "a group whose name survives the split" stays green: its paper prints one name, so "some gone" and "every gone" agree; the plain Mesa 51 and 52 case pins the rule | None |
+| 17b, server, Revision 3 | 19 | 19 | None | None alone; R3-12's reds are 7 of 10 a `TypeError` (a moved dish's ticket item has no names entry), the other 3 assertions |
+| 17c part 1, Task 8 | 10 | 9 | T8f: the edit was narrower than the rule; T8f2 is the proof, red | None |
+| 17c part 1, Task 9 | 4 | 4 | None | T9b (`aria-describedby`) |
+| 17c part 1, Task 10 | 11 | 11 | None | None |
+| 17c part 1, Task 11a | 6 | 5 | T11a-a: `#followStoredGuests` also fills the staying count; T11a-a2, removing both, is the proof | T11a-b's named cases; part 3's T11a-b2 turns all eight red on assertions |
+| 17c part 1, Task 11b | 15 | 14 | T11b-g2 ran no case (wrong file); g5 is the proof | One of T11b-g4's two |
+| 17c part 1, Task 11c | 10 | 10 | None (f and g turned one case each, after Task 14a deleted the other) | None |
+| 17c part 1, Task 11d | 18 | 17 | T11d-i ran the wrong file; T11d-i2 is the proof | None |
+| 17c part 1, Tasks 12a and 12b | 16 | 16 | None | None |
+| 17c part 1, Task 12c | 10 | 9 | T12c-d: two paths give a press the bill; T12c-d2, both disabled, is the proof | None |
+| 17c part 1, Task 12d | 11 | 11 | None | T12d-g |
+| 17c part 1, Tasks 12e, 12f, 13 | 11 | 11 | None | None |
+| 17c part 1, rounds 16a to 16c | 16 | 15 | F16b-answer-not-clearing on one file; its wider re-run in part 2 is red | None |
+| 17c part 2, rounds 16c to 16g | 68 | 59 | 9: `party.out_of_date`'s code arm (two runs), round D's late floor, the state read since (three runs), round E's `here()`: the four pieces fix 17c pinned or removed. G-C8a and G-C8b, as designed: each half alone is covered elsewhere and both together are red | One case of G-C6/G-C7 (the sentence never drawn); F-reloadTables-read-keeps-no-record's first case beside two assertion reds |
+| 17c part 3, part 1's gaps | 11 | 11 | None | T12d-g2's two `till-app-parties.test.ts` cases, Task 11b's two party-gone cases, the recovery case under T12d-m |
+| Fix 17c | 3 | 3 | None | None |
+
+Part 1 also lists 13 specs with no log; part 2 ran 12 of them and part 3 the last.
+
+### The 3,000 random histories, re-run
+
+Measured at `269103fecb`, before rounds C to G, on the real `apps/server/src/kitchen-print.ts`: of 6,468
+judgements, 5,949 correct, 519 extra slips and **0 missed**. Two more passes also missed none, with
+519 and 524 extras, so about 520. The control: the same-millisecond rule put back (`>` to `>=`), seed
+931 replayed 3,000 times, missed 114 of 9,000, where the real code missed 0 of 9,000. The histories
+never move a bill onto another party's table or to the counter. `git log 269103fecb..6f4eda1f54`
+shows no commit to `apps/server/src/kitchen-print.ts` or `apps/server/src/table-actions.ts`. Two
+commits changed `apps/server/src/till-api.ts`: the split route now takes only a selection
+(`7a89135db1`), and the panel's read answers the party revision (`76e1acf0b4`). The histories were not
+re-run after them.
+
+### Not pinned by a case of 4c's own
+
+The spec walk (Task 17a) found no 4c case by name for "→ the table leaving"; the nearest is
+`till-table-order-screen.split-table.test.ts:1332`, "A803 split: the steps before the panel follow
+the party".

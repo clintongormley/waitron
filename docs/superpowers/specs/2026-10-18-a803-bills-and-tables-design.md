@@ -141,6 +141,7 @@ Boards 08–10.
      an empty bill.
   4. **Nothing ticked:** the leaving table starts with an empty bill.
 - Both tables keep the party's allergy answer (A669's decision). Bill numbers: section 6.
+  _(2026-11-06, A803 4c: how a split numbers bills as built, whole bills first in number order and the new bill last with nothing burnt at the staying table, is D9 of `../plans/2026-11-04-a803-4c-split-table-picker.md`.)_
 
 ### 3.8 Paying and merging
 
