@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type {
   DocumentMember,
   FrozenOffer,
@@ -7,7 +7,7 @@ import type {
   MenuChangeBody,
   MenuDocument,
   MenuPreview,
-} from "./menu-document-types.js";
+} from "@waitron/shared";
 import { menuChangeAction, menuChangeActions, type MenuUndoInput } from "./menu-undo.js";
 
 function document(menuName: string): MenuDocument {

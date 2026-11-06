@@ -6,8 +6,8 @@ import type {
   MenuChange,
   MenuDocument,
   MenuPreview,
-} from "./menu-document-types.js";
-import type { IncludeFolder, MemberRef, MenuHome, SectionInput } from "./section-types.js";
+} from "@waitron/shared";
+import type { IncludeFolder, MemberRef, MenuHome, SectionInput } from "@waitron/shared";
 
 export interface UndoStructureNode {
   memberId: string;

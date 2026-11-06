@@ -4,7 +4,7 @@ import { products, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
 import { readContentLanguages, writeContentLanguages } from "./content-languages.js";
-import type { MenuChange, MenuPreview } from "./menu-document-types.js";
+import type { MenuChange, MenuPreview } from "@waitron/shared";
 import { readMenuHome, setHomeDisplay } from "./menu-home.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
