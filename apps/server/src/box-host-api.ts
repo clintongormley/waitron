@@ -32,6 +32,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "box_host.unavailable": 409,
   "box_host.failed": 502,
+  "box_host.busy": 409,
   "box_network.busy": 409,
   "box_network.no_wifi": 409,
   "box_network.not_saved": 409,
@@ -39,6 +40,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const BODY_MAX_BYTES = 4096;
+
+/** The host's socket serves four connections at once, and the clock side uses one or two. */
+export const BOX_HOST_ROUTE_CALLS = 2;
+
+interface Places {
+  taken: number;
+}
 
 type OwnRefusalCode = "box_network.busy" | "box_network.no_wifi" | "box_network.not_saved";
 
@@ -48,12 +56,20 @@ function personActor(authorizedBy: string): PersonActor {
 }
 
 async function askHost<Value extends object, Refusal extends string>(
+  places: Places,
   call: () => Promise<HostAnswer<Value, Refusal>>,
   own: Record<Exclude<Refusal, ProtocolRefusal>, OwnRefusalCode>,
   onInvalid: () => Error = () =>
     new Error("the host protocol refused a request the route had checked"),
 ): Promise<Value> {
-  const result = await call();
+  if (places.taken >= BOX_HOST_ROUTE_CALLS) throw new AppError("box_host.busy", {});
+  places.taken += 1;
+  let result: HostAnswer<Value, Refusal>;
+  try {
+    result = await call();
+  } finally {
+    places.taken -= 1;
+  }
   if (result.available) {
     const value: Partial<typeof result> = { ...result };
     delete value.available;
@@ -149,6 +165,7 @@ function isJson(c: Context): boolean {
  * `system.manage`. */
 export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "box-host-route.failed");
+  const places: Places = { taken: 0 };
   const limit = bodyLimit({
     maxSize: BODY_MAX_BYTES,
     onError: (c) =>
@@ -160,19 +177,19 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
   app.get("/api/box/network", (c) =>
     run(c, log, async () => {
       const actor = personActor(await authorizeSystemManager(deps.db, c));
-      return c.json(await askHost(() => deps.host.networkRead(actor), {}), 200);
+      return c.json(await askHost(places, () => deps.host.networkRead(actor), {}), 200);
     }),
   );
   app.get("/api/box/screen", (c) =>
     run(c, log, async () => {
       const actor = personActor(await authorizeSystemManager(deps.db, c));
-      return c.json(await askHost(() => deps.host.screenRead(actor), {}), 200);
+      return c.json(await askHost(places, () => deps.host.screenRead(actor), {}), 200);
     }),
   );
   app.post("/api/box/network/scan", (c) =>
     run(c, log, async () => {
       const actor = personActor(await authorizeSystemManager(deps.db, c));
-      const scanned = await askHost(() => deps.host.networkScan(actor), {
+      const scanned = await askHost(places, () => deps.host.networkScan(actor), {
         busy: "box_network.busy",
         no_wifi: "box_network.no_wifi",
       });
@@ -185,6 +202,7 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
       if (!isJson(c)) throw new AppError("management.request_invalid", { field: "body" });
       const join = await bodyOf<WifiJoin>(c, { ssidHex, keyMgmt, psk, hidden });
       await askHost(
+        places,
         () => deps.host.networkJoin(join, actor),
         { busy: "box_network.busy", no_wifi: "box_network.no_wifi" },
         () => new AppError("box_network.password_invalid", { field: "psk", keyMgmt: join.keyMgmt }),
@@ -196,7 +214,7 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
     run(c, log, async () => {
       const actor = personActor(await authorizeSystemManager(deps.db, c));
       const forget = await bodyOf(c, { ssidHex });
-      await askHost(() => deps.host.networkForget(forget, actor), {
+      await askHost(places, () => deps.host.networkForget(forget, actor), {
         busy: "box_network.busy",
         not_saved: "box_network.not_saved",
       });
@@ -207,7 +225,7 @@ export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): v
     run(c, log, async () => {
       const actor = personActor(await authorizeSystemManager(deps.db, c));
       const set = await bodyOf(c, { start: startScreen });
-      return c.json(await askHost(() => deps.host.screenSet(set, actor), {}), 200);
+      return c.json(await askHost(places, () => deps.host.screenSet(set, actor), {}), 200);
     }),
   );
 }

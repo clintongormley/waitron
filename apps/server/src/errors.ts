@@ -1648,6 +1648,9 @@ declare module "@waitron/shared" {
         | "fields_invalid"
         | "host_failed";
     };
+    /** The server already has as many requests open to the box's host service as it allows, so
+     * this one was not sent. */
+    "box_host.busy": Record<string, never>;
     /** The box's host service answered `busy` to a scan, join or forget. */
     "box_network.busy": Record<string, never>;
     /** The box's host service answered `no_wifi` to a scan or join. */
