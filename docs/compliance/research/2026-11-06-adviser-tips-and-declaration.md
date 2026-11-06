@@ -515,6 +515,9 @@ name. It must also hold the invoice lines, since the record does not (Q48d).
 
 ## Q48g. "Acceso en línea" from a box at the venue — KEEP
 
+> **Later on 6 November 2026:** sources were found after all, and this is now a confirmation (T4). See
+> [the online access report](2026-11-06-adviser-online-access.md).
+
 Art. 21.2 asks for means «que garanticen un acceso en línea a los datos así como su carga remota y
 utilización por parte de la Administración tributaria ante cualquier solicitud de esta y sin demora
 injustificada». Art. 23 repeats it, «independiente del lugar en el que se conserven los documentos».

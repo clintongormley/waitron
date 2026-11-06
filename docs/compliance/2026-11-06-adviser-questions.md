@@ -9,7 +9,8 @@ into its separate points, checked against what is built and decided today, then 
 primary sources. Every Spanish quotation was checked by script against the downloaded text. The
 reports and their sources: [clock](research/2026-11-06-adviser-clock.md),
 [tips and declaration](research/2026-11-06-adviser-tips-and-declaration.md),
-[labour](research/2026-11-06-adviser-labour.md), [privacy](research/2026-11-06-adviser-privacy.md).
+[labour](research/2026-11-06-adviser-labour.md), [privacy](research/2026-11-06-adviser-privacy.md),
+[online access](research/2026-11-06-adviser-online-access.md).
 
 This is research, not legal advice. The limits are at the end.
 
@@ -17,13 +18,13 @@ This is research, not legal advice. The limits are at the end.
 
 | Adviser | Questions in the batch | Real judgement left | Hours (our estimate) |
 | --- | --- | --- | --- |
-| Tax and accounting | 8 | 4 points, plus confirmations | 2 to 3 |
+| Tax and accounting | 8 | 1 point, plus confirmations | 1 to 2 |
 | Labour or gestoría | 7 | 2 points, plus confirmations | 1 to 2 |
 | Privacy specialist | 9 | 1 point, plus confirmations | 2 to 3 |
 | Consumer law | 1 | None: removed | 0 |
 
-So about 5 to 8 hours rather than about 25. At the tax adviser's €300 an hour that is €1,500 to
-€2,400 rather than about €7,500. The hours are our estimate, and the other two advisers' rates are
+So about 4 to 7 hours rather than about 25. At the tax adviser's €300 an hour that is €1,200 to
+€2,100 rather than about €7,500. The hours are our estimate, and the other two advisers' rates are
 unknown.
 
 A **confirmation** below gives our answer and asks only for a yes or a correction.
@@ -77,31 +78,29 @@ real erasure means setting the data aside first, then destroying it. A980's S9 (
 email) just clear the field, and A664's removal has the same gap. The owner chose real blocking inside the
 database, which waits for A760.
 
+**6. A corrective reaches the customer only if we know who they are (owner, 2026-11-06).** Most
+customers are unknown, so all the restaurant can do is correct what it filed. T1 asks the adviser to
+confirm this.
+
+**7. Cloud gives the tax office a way in; other venues need their own (owner, 2026-11-06).** Waitron
+Cloud is to let customers give AEAT access through Waitron's servers. That does not help a venue
+without Cloud. See [how a venue gives the tax office access](#how-a-venue-gives-the-tax-office-access).
+
 ## For the tax and accounting adviser
 
-### Questions that need judgement
+### The question that needs judgement
 
-- **T1. Delivering a corrective invoice to strangers.** When a wrong clock misdates tickets, a
-  corrective invoice is needed. The customers are unknown. Must it reach them, or is keeping it and
-  filing its record enough? May a ticket the customer never received be cancelled and reissued?
 - **T2. Proving the real date.** When the box and its evidence cannot show the real time of a sale, what
   is enough to fix its date? The box usually can show it: the boot-time clock gives the size of the
   error within one run, and a card payment carries the provider's time. The hard case is a clock wrong
   across a restart with no internet, on a sale paid in cash. May the restaurant keep the stamped date
   if nothing shows it is wrong?
-- **T3. A false time from a crafted request.** During a stop found at start-up, a signed-in staff
-  member confirms a till's time, and a crafted request could send a false one. It would then date
-  invoices. Past records stay untouched, the person is named and the owner is alerted. Does this risk
-  breaching Reglamento article 8.2.b, or LGT article 201 bis.1, which fines a producer €150,000 a year
-  for systems that let recorded sales be altered or fall short of the traceability rules? Or our declaration?
-  What limits would make it safe? The DGT declined to judge a similar mechanism (V5067-26).
-- **T4. "Online access" to a box at the venue.** RD 1619/2012 articles 21.2 and 23 require «acceso en
-  línea» and «carga remota» for the tax authority. If the electronic copy is on the venue's server,
-  with no public address and a download on request, is that enough, or is permanent remote access
-  needed? No source says what satisfies this.
 
 ### Confirmations: clocks
 
+- **T1.** When a wrong clock misdates tickets and the customer is unknown, the restaurant makes the
+  corrective invoice, keeps it and files its record. It reaches a customer only where the restaurant
+  knows who they are, and tickets are not cancelled and reissued. No source covers this.
 - **T5.** A record may carry a time earlier than the previous record's when the new time is the exact
   one. The chain follows the order the records were made in, and nothing is marked.
 - **T6.** If only the hour was wrong and the date is right, keeping a record of the incident is enough.
@@ -119,6 +118,13 @@ database, which waits for A760.
 
 ### Confirmations: records and the declaration
 
+- **T4.** The words «acceso en línea» do not need the data on the internet. RD 1619/2012 articles 21.2
+  and 23 are met by a copy on the venue's own box if, when the tax office asks during a check, it can without
+  unjustified delay see every invoice, search it, copy or download it and print it. No permanent
+  connection or public address is needed. Orden EHA/962/2007 article 5.3 covers «un sistema de
+  almacenamiento local» and calls full access «una consulta en línea a los datos». DGT 0289-04 wants a
+  network link only «en caso necesario», for a remote database. If AEAT asks from its own office, a copy
+  of the period on a USB drive or by temporary download link is enough.
 - **T11.** The document list in the research is complete. It adds each past software declaration,
   proof of payment for €1,000 or more kept five years, and pro formas.
 - **T12.** Records still pending or refused are kept until settled, then on the common schedule.
@@ -198,6 +204,26 @@ here, the owner should say so.
   first is enough.
 - **P10.** The procedure and short text for collecting a customer's details on an invoice are right.
 
+## How a venue gives the tax office access
+
+**The law asks for the tax office to reach the documents when it asks, not for them to be on the
+internet** ([research](research/2026-11-06-adviser-online-access.md)). T4 asks the adviser to confirm
+this.
+
+| Route | Suits | How | Watch for |
+| --- | --- | --- | --- |
+| Waitron Cloud | Cloud customers | AEAT reaches the data through Waitron's servers. Not built | If Cloud keeps a copy, Waitron is a third party, and the venue stays responsible |
+| At the venue | Every venue; the default | A read-only sign-in on the box's own network: see, search, copy, print | Someone in charge must be able to open it |
+| A copy of the period | Every venue, for a written request | Export the period in its original formats, on a USB drive or by download | Rests on T4 |
+| A temporary link | A venue with its own storage account | Put the export there and share a link during the check | Use a Spanish region. The provider becomes a data processor |
+| A third party keeps it | A venue whose gestoría offers this | Regular exports to the gestoría | The venue stays responsible |
+| Paper | Rarely | Allowed by article 20.1, and the online rules then do not apply | Thermal paper fades, and emailed invoices stay electronic |
+
+**Waitron cannot do the default routes yet.** The dashboard has no invoice list, the till's lookup finds
+only full invoices with a named customer, up to 20, and nothing exports a period's invoices. Found by
+reading the code. The proposal is one read-only page for the tax office and one period export, on the
+box (A1411). Cloud can then show the same page, so a venue without Cloud gets the same capability.
+
 ## How a wrong clock is known, and what a late filing is
 
 **A late filing is not a wrong clock.** A record's time is when it was made, and sending it after an
@@ -251,6 +277,7 @@ midnight needs a remedy.
 
 ## Removed
 
+- **A false time from a crafted request (T3).** The owner removed it on 6 November.
 - **The consumer law question (Q50).** Nobody proposes a service charge, and the design forbids a
   mandatory one. If that changes: both specific bans are repealed, general consumer law still applies,
   and a charge would need express opt-in, which the restaurant must prove.
@@ -288,7 +315,7 @@ These cost nothing, and the gestoría the venue already pays can answer most of 
 - **The AEPD's free channel will not help.** Instrucción 1/2021 says it takes no questions from
   controllers, lawyers or consultants.
 - **The DGT** answers software producers with binding effect, but it declines to judge a mechanism, so
-  it suits T1 and not T3. It is slow.
+  it suits T1 and the meaning of «acceso en línea» in T4. It is slow.
 
 ## Problems found in Waitron
 
