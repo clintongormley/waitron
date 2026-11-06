@@ -136,7 +136,12 @@ export async function buildConfigurationBundle(
     },
     defaultCatalogueId,
     privacyContact: { privacyNoticeUrl, privacyEmail },
-    modules: moduleVersions,
+    // A trading box's versions also name its switched-off modules, which setup refuses by name.
+    modules: Object.fromEntries(
+      Object.entries(moduleVersions).filter(([name]) =>
+        modulesWithSets(modules).some((module) => module.name === name),
+      ),
+    ),
     ...transferred,
   };
 }
