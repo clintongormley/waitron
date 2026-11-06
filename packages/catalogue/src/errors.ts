@@ -2,8 +2,7 @@
 import "@waitron/shared";
 // Type-only, so it adds no runtime edge back to the module that side-effect-imports this file.
 import type { ProductUsingUnit } from "./unit-types.js";
-import type { MemberRef } from "@waitron/shared";
-import type { HomeDevice, OvertakenEdition } from "@waitron/shared";
+import type { MemberRef, HomeDevice, OvertakenEdition } from "@waitron/shared";
 
 /** @waitron/catalogue's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {
@@ -125,7 +124,7 @@ declare module "@waitron/shared" {
     "menu_patch.unchanged": { menuId: string };
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { ref: MemberRef };
-    /** A home display setting is outside what its device takes (device-home.ts). */
+    /** A home display setting is outside what its device takes (`@waitron/shared`'s menu-document/device-home.ts). */
     "menu.home_display_invalid": { device: HomeDevice; field: "columns" | "tiles" | "order" };
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */

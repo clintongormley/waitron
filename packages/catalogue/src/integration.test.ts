@@ -16,9 +16,8 @@ import {
 import { createUnit } from "./units.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { priceBasket } from "./pricing.js";
-import { customerPresentationText } from "@waitron/shared";
+import { customerPresentationText, deviceOrigin } from "@waitron/shared";
 import { seedVenueWithSeries } from "../test/fixtures.js";
-import { deviceOrigin } from "@waitron/shared";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**

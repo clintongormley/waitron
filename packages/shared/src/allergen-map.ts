@@ -1,16 +1,3 @@
-type AllergenKind =
-  | "wheat"
-  | "rye"
-  | "barley"
-  | "oats"
-  | "spelt"
-  | "kamut"
-  | "almonds"
-  | "hazelnuts"
-  | "walnuts"
-  | "cashews"
-  | "pecans"
-  | "brazil_nuts"
-  | "pistachios"
-  | "macadamia";
-export type AllergenMap = Record<string, { kinds?: AllergenKind[] }>;
+import type { ProductAllergens } from "./menu-document/allergens.js";
+
+export type AllergenMap = ProductAllergens;

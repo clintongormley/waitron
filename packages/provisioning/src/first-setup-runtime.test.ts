@@ -538,7 +538,6 @@ it("leaves a module with no set of its own out of the sets an empty database mus
     environment: {},
     modules: [...ALL_MODULES, setless],
   });
-  // A name the manifest does not hold makes the database read as not empty.
   expect(await host.resolution.inspectFirstSetupDatabase(["synthetic-setless"])).toMatchObject({
     emptyDatabase: false,
   });

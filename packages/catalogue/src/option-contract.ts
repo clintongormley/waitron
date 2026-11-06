@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { AppError, isUuid } from "@waitron/shared";
-import type { OptionLabel, OptionList } from "@waitron/shared";
-import type { OptionSelection } from "@waitron/shared";
+import { AppError, isUuid, nonBlankTranslations } from "@waitron/shared";
+import type { OptionLabel, OptionList, OptionSelection } from "@waitron/shared";
 import { effectiveDefaultLabelId } from "./option-default.js";
-import { nonBlankTranslations } from "@waitron/shared";
 import { validateOptionalTranslations } from "./optional-translations.js";
 import "./errors.js";
 

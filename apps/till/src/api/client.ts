@@ -28,7 +28,28 @@ import type {
   TenderRefundView,
   TenderRefundAcknowledgment,
 } from "./tender-refund-types.js";
-import type { ProductAllergens } from "@waitron/shared";
+import type {
+  ProductAllergens,
+  BumpMode,
+  ChangesAfterSending,
+  ContentLanguages,
+  JoinSide,
+  ExtraSelection,
+  KitchenSignal,
+  OptionSelection,
+  OptionSnapshot,
+  ReceiptPresentation,
+  StationThresholds,
+  TableSignal,
+  TimingBand,
+  AccessibleCatalogue,
+  OfferedModifier,
+  ProductOrdering,
+  LiveOffer,
+  MenuState,
+  MenuUnavailable,
+  ServedMenu,
+} from "@waitron/shared";
 import { readTransferEvents } from "./transfer-events.js";
 import type {
   BillRow,
@@ -38,7 +59,6 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import type { BumpMode, ChangesAfterSending, ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type {
   AttendanceCommand,
@@ -64,19 +84,6 @@ export type {
 } from "@waitron/workforce/attendance-contract";
 
 import type { FormFactor, CapabilityFlag, NavigationScreen } from "../layout.js";
-import type {
-  ExtraSelection,
-  KitchenSignal,
-  OptionSelection,
-  OptionSnapshot,
-  ReceiptPresentation,
-  StationThresholds,
-  TableSignal,
-  TimingBand,
-} from "@waitron/shared";
-import type { AccessibleCatalogue, OfferedModifier } from "@waitron/shared";
-import type { ProductOrdering } from "@waitron/shared";
-import type { LiveOffer, MenuState, MenuUnavailable, ServedMenu } from "@waitron/shared";
 
 export type { JoinSide } from "@waitron/shared";
 

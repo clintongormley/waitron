@@ -95,7 +95,7 @@ function planFor(
   });
 }
 
-function objectKeys(db: DatabaseSync): string[] {
+export function objectKeys(db: DatabaseSync): string[] {
   return (
     db
       .prepare(

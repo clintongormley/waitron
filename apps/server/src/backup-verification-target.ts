@@ -111,7 +111,6 @@ export function buildBackupVerificationTarget(input: {
           input.migrationsRoot,
         )[0]!.migrationsFolder;
         const migrations = migrationBytes(folder);
-        // A set's requirements are those of every module it holds, naming only other sets.
         const requires: Record<string, string> = {};
         for (const part of [module, ...hosted]) {
           for (const [name, range] of [

@@ -1,7 +1,7 @@
 import type { TranslationTarget } from "./content-translation-targets.js";
 import { and, asc, eq, gt, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { batches } from "./batches.js";
 import {
   blankName,
@@ -44,7 +44,6 @@ import {
 import "./errors.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 
-import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { invalidTranslationQuery, translationConfiguration } from "./content-translation-cells.js";
 
 type Fix = SuggestionResult["corrections"][number];

@@ -5,8 +5,8 @@ import {
   contentLanguageCode,
   FALLBACK_LOCALE,
   type ContentLanguages,
+  isStoredColor,
 } from "@waitron/shared";
-import { isStoredColor } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
   mergeOptionalTranslations,

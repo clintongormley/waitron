@@ -2,6 +2,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { objectKeys } from "../protection-list/build.js";
 import { LIST_FILE } from "../protection-list/cli.js";
 import type { SchemaListEntry, SchemaListFile } from "../protection-list/compare.js";
 import { readSchema } from "../protection-list/read-schema.js";
@@ -9,16 +10,6 @@ import { readSchema } from "../protection-list/read-schema.js";
 export interface FixtureSet {
   readonly name: string;
   readonly sql: string;
-}
-
-function keys(db: DatabaseSync): string[] {
-  return (
-    db
-      .prepare(
-        "select type, name from sqlite_schema where type in ('table','view','index','trigger')",
-      )
-      .all() as { type: string; name: string }[]
-  ).map((row) => `${row.type} ${row.name}`);
 }
 
 /** Applies each set in turn to `<dir>/databases/<composition>/<phase>/venue.db` and reads it. */
@@ -35,9 +26,9 @@ export function fixtureEntry(
   try {
     const owningSet: Record<string, string> = {};
     for (const set of sets) {
-      const before = new Set(keys(db));
+      const before = new Set(objectKeys(db));
       db.exec(set.sql);
-      for (const key of keys(db)) if (!before.has(key)) owningSet[key] = set.name;
+      for (const key of objectKeys(db)) if (!before.has(key)) owningSet[key] = set.name;
     }
     return {
       composition,

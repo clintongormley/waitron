@@ -3,6 +3,8 @@ import {
   joinCustomerPresentationText,
   kitchenPresentationName,
   staffPresentationName,
+  expandDietaryDeclarations,
+  validateDietaryDeclarations,
 } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
@@ -12,12 +14,14 @@ import { readProductExtras } from "./extra-projection.js";
 import type { ResolvedExtraList } from "./extra-projection.js";
 import { readOptionListsByIds } from "./options.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { expandDietaryDeclarations, validateDietaryDeclarations } from "@waitron/shared";
-import type { OptionList } from "@waitron/shared";
-import type { ProductModifierRef } from "@waitron/shared";
-import type { VatClass } from "@waitron/shared";
+import type {
+  OptionList,
+  ProductModifierRef,
+  VatClass,
+  OfferedExtraItem,
+  OfferedModifier,
+} from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
-import type { OfferedExtraItem, OfferedModifier } from "@waitron/shared";
 
 /**
  * One dish whose attachments are being resolved: the product it sells, and the menu offer it was

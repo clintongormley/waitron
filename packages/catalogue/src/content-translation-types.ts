@@ -1,5 +1,4 @@
-import type { ContentLanguages } from "@waitron/shared";
-import type { TranslationGapKind } from "@waitron/shared";
+import type { ContentLanguages, TranslationGapKind } from "@waitron/shared";
 
 /** The most UTF-8 bytes the save route takes in one name. */
 export const TRANSLATION_NAME_BYTES = 4096;

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Decimal } from "@waitron/shared";
-import type { CombineInput } from "@waitron/shared";
+import type { Decimal, CombineInput } from "@waitron/shared";
 import { combineOffer, clashesOf } from "./menu-combine.js";
 const d = (s: string) => s as Decimal;
 const input = (

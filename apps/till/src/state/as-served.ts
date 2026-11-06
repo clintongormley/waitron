@@ -1,8 +1,6 @@
 // Deep imports, not the barrel, which would pull the DB layer into the browser bundle.
-import { deriveDietProfile, overlayDietProfile } from "@waitron/shared";
-import { expandDietaryDeclarations } from "@waitron/shared";
-import type { DietaryLabel } from "@waitron/shared";
-import type { DietDerivation, DietOverride, DietProfile } from "@waitron/shared";
+import { deriveDietProfile, overlayDietProfile, expandDietaryDeclarations } from "@waitron/shared";
+import type { DietaryLabel, DietDerivation, DietOverride, DietProfile } from "@waitron/shared";
 import type { OrderLine } from "./working-order.js";
 
 /** `pending` when the dish's own allergens are unreviewed (a null base). */

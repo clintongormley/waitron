@@ -2,31 +2,18 @@ import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
-import { effectiveColor } from "@waitron/shared";
 import { readCatalogueSettings } from "./settings.js";
 import { includedMenus } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
-import type { CombinedOffer, MenuClash, ValueSource } from "@waitron/shared";
-import { listMenuOffers } from "./operations.js";
-import { effectiveDefaultLabelId } from "./option-default.js";
-import { homeDisplaysOf } from "./menu-home.js";
-import {
-  FOLLOWING_FOLDER,
-  fixedNameLanguages,
-  folderPresentation,
-} from "./include-folder-presentation.js";
-import { menuDetails } from "./schema/menu.js";
-import { optionLabels } from "./schema/options.js";
-import { sections } from "./schema/sections.js";
-import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
-import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
-import type { MenuOffer } from "@waitron/shared";
-import type { TileRef } from "@waitron/shared";
-import { HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type {
+  CombinedOffer,
+  MenuClash,
+  ValueSource,
+  MenuOffer,
+  TileRef,
   DocumentMember,
   DocumentTile,
   FrozenOffer,
@@ -41,6 +28,19 @@ import type {
   ProductChangeField,
   SectionChangeField,
 } from "@waitron/shared";
+import { listMenuOffers } from "./operations.js";
+import { effectiveDefaultLabelId } from "./option-default.js";
+import { homeDisplaysOf } from "./menu-home.js";
+import {
+  FOLLOWING_FOLDER,
+  fixedNameLanguages,
+  folderPresentation,
+} from "./include-folder-presentation.js";
+import { menuDetails } from "./schema/menu.js";
+import { optionLabels } from "./schema/options.js";
+import { sections } from "./schema/sections.js";
+import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
+import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
 
 export type {

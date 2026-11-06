@@ -3293,10 +3293,11 @@ manifest list compared with a descriptor list printed `EQUAL`.
 
 A760 replaces each migration set's history with one generated starting migration (a baseline).
 Three commands in `apps/server/scripts/migration-baseline/` support it. They run from `apps/server`
-as `pnpm migration-baseline <command>`, refuse a relative path, and exit 0 when all is well, 1 when
-they find a difference and 2 when they refuse the command (2 was seen through plain `pnpm`; through
-`pnpm -s` read the report as well, as above). None runs in CI; their unit tests run in
-`apps/server`'s suite.
+as `pnpm migration-baseline <command>` and refuse a relative path. `controls` and `copies` exit 0
+when all is well, 1 when they find a difference and 2 when they refuse the command. `preserve` exits
+0 when it rewrites the baseline or finds nothing to change, and 2 on any difference, because it
+refuses every difference it finds. (2 was seen through plain `pnpm`; through `pnpm -s` read the
+report as well, as above.) None runs in CI; their unit tests run in `apps/server`'s suite.
 
 - **`preserve --reference <list dir> --set <name> --from <old set,old set,...>`** rewrites the one
   generated SQL file of the manifest set `<name>`. The reference is a `protection-list list` folder

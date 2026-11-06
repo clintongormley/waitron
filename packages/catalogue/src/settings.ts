@@ -1,9 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
-import { colorOrNull } from "@waitron/shared";
+import { AppError, colorOrNull, VAT_CLASSES, type VatClass } from "@waitron/shared";
 import { catalogueSettings } from "./schema/settings.js";
-import { VAT_CLASSES, type VatClass } from "@waitron/shared";
 import "./errors.js";
 
 import type { CatalogueSettings } from "./settings-types.js";

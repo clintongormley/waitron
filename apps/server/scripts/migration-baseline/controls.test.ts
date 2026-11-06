@@ -205,4 +205,14 @@ describe("the real controls", () => {
     }
     expect(CONTROLS.filter((control) => control.expect.length === 0).length).toBeGreaterThan(1);
   });
+
+  it("read an unchanged copy of the node database and of the fiscal-none venue database", () => {
+    const unchanged = CONTROLS.filter((control) => control.change === null);
+    expect(unchanged).toContainEqual(
+      expect.objectContaining({ composition: "fiscal-verifactu", database: "node", expect: [] }),
+    );
+    expect(unchanged).toContainEqual(
+      expect.objectContaining({ composition: "fiscal-none", database: "venue", expect: [] }),
+    );
+  });
 });

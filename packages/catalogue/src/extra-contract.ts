@@ -1,8 +1,18 @@
-import { AppError, decimal, isUuid, multiplyDecimal, toScale } from "@waitron/shared";
-import type { ExtraSelection } from "@waitron/shared";
-import type { ExtraList, ExtraListItemInput, ExtraListInput } from "@waitron/shared";
+import {
+  AppError,
+  decimal,
+  isUuid,
+  multiplyDecimal,
+  toScale,
+  nonBlankTranslations,
+} from "@waitron/shared";
+import type {
+  ExtraSelection,
+  ExtraList,
+  ExtraListItemInput,
+  ExtraListInput,
+} from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "./modifier-limits.js";
-import { nonBlankTranslations } from "@waitron/shared";
 import { validateOptionalTranslations } from "./optional-translations.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
 import "./errors.js";

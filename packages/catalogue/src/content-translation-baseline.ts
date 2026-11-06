@@ -1,6 +1,5 @@
-import { AppError, type ContentLanguages } from "@waitron/shared";
+import { AppError, type ContentLanguages, TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { canonicalTranslationLanguage } from "./content-translation-cells.js";
-import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import type { TranslationStructure } from "./content-translation-targets.js";
 import {
   translationCellKey,

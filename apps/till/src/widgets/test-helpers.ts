@@ -2,7 +2,7 @@ import axe from "axe-core";
 import { commands, page } from "vitest/browser";
 import { beforeEach, expect, vi, type Mock } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import { normaliseDraftLines } from "@waitron/shared";
+import { normaliseDraftLines, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type {
   AdjustmentReason,
   Draft,
@@ -21,7 +21,6 @@ import type {
   SubmittedGroups,
 } from "../api/client.js";
 import type { DocumentMember, ServedMenu } from "@waitron/shared";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { png } from "@waitron/ui/test/venue-logo-fixture.js";
 import indexHtml from "../../index.html?raw";

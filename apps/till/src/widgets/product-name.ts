@@ -1,5 +1,4 @@
-import { staffPresentationName } from "@waitron/shared";
-import { contentLanguageCode, resolveContentText } from "@waitron/shared";
+import { staffPresentationName, contentLanguageCode, resolveContentText } from "@waitron/shared";
 import type { ProductPresentation } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";

@@ -190,6 +190,20 @@ export const CONTROLS: readonly Control[] = [
   { ...feed, label: "unchanged copy (change-feed)", change: null, expect: [] },
   {
     ...sqlOnly,
+    database: "node",
+    label: "unchanged copy (node database)",
+    change: null,
+    expect: [],
+  },
+  {
+    ...sqlOnly,
+    composition: "fiscal-none",
+    label: "unchanged copy (fiscal-none)",
+    change: null,
+    expect: [],
+  },
+  {
+    ...sqlOnly,
     label: "whitespace between tokens in a behavioural trigger",
     change: {
       rewrite: {

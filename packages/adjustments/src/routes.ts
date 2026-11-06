@@ -19,7 +19,16 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import { currentBusinessDay } from "@waitron/reporting";
-import { AppError, compareDecimal, decimal, isUuid } from "@waitron/shared";
+import {
+  AppError,
+  compareDecimal,
+  decimal,
+  isUuid,
+  ADJUSTMENT_ACTIONS,
+  REASON_KINDS,
+  type AdjustmentAction,
+  type ReasonKind,
+} from "@waitron/shared";
 import {
   createAdjustmentReason,
   deleteAdjustmentReason,
@@ -30,12 +39,6 @@ import {
   type AdjustmentReasonInput,
 } from "./operations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
-import {
-  ADJUSTMENT_ACTIONS,
-  REASON_KINDS,
-  type AdjustmentAction,
-  type ReasonKind,
-} from "@waitron/shared";
 import {
   computeAdjustmentReport,
   listAdjustmentEntries,

@@ -10,7 +10,13 @@ import {
   type DataTableColumn,
   type WtDataTable,
 } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import {
+  formatMoney,
+  categoryColorSource,
+  isStoredColor,
+  PRODUCT_ORDERINGS,
+  type ProductOrdering,
+} from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -26,7 +32,6 @@ import {
   vatClassName,
 } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
-import { categoryColorSource, isStoredColor } from "@waitron/shared";
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
@@ -61,7 +66,6 @@ import {
   type Product,
 } from "../api/client.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
-import { PRODUCT_ORDERINGS, type ProductOrdering } from "@waitron/shared";
 
 export const ROOT_KEY = "root";
 

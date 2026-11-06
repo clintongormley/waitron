@@ -1,9 +1,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { tableExists, type Transaction } from "@waitron/db";
-import { AppError, contentLanguageCode, FALLBACK_LOCALE } from "@waitron/shared";
+import { AppError, contentLanguageCode, FALLBACK_LOCALE, colorOrNull } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
-import { colorOrNull } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
   mergeOptionalTranslations,

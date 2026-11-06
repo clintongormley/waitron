@@ -1,8 +1,7 @@
 import type { Transaction } from "@waitron/db";
-import { AppError, contentLanguageCode } from "@waitron/shared";
+import { AppError, contentLanguageCode, TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { namedRows, type NamedRow } from "./content-translation-candidates.js";
-import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import {
   readTranslationSettings,
   resolveTranslationRow,

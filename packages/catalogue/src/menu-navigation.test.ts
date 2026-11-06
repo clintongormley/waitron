@@ -1,6 +1,5 @@
-import type { MenuChange, MenuChangeBody } from "@waitron/shared";
+import type { MenuChange, MenuChangeBody, DocumentMember, MenuDocument } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import type { DocumentMember, MenuDocument } from "@waitron/shared";
 import { diffMenuDocuments } from "./menu-document.js";
 import { indexMenuOccurrences, menuTargetKey } from "./menu-navigation.js";
 

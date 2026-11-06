@@ -28,8 +28,10 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { foldForSearch, formatMoney, searchFor } from "@waitron/shared";
 import {
+  foldForSearch,
+  formatMoney,
+  searchFor,
   HOME_GRID_COLUMNS,
   arrangeHome,
   indexDocument,

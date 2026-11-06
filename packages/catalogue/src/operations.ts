@@ -4,7 +4,23 @@ import { isDeepStrictEqual } from "node:util";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
-import { AppError, centsToDecimal, stringToCents, type Decimal } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  stringToCents,
+  type Decimal,
+  colorOrNull,
+  validateAllergens,
+  type ProductAllergens,
+  deriveDietProfile,
+  overlayDietProfile,
+  validateDietOverride,
+  type DietDerivation,
+  type DietOverride,
+  type DietProfile,
+  validateDietaryDeclarations,
+  type DietaryLabel,
+} from "@waitron/shared";
 import {
   catalogues,
   categories,
@@ -17,24 +33,24 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
-import { colorOrNull } from "@waitron/shared";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
 import "./errors.js"; // load the code registry for the `catalogue.*`/`product.*`/`menu_*` codes thrown below
-import { validateAllergens, type ProductAllergens } from "@waitron/shared";
 import { republish, type RecipeDerivation } from "./derivation.js";
-import {
-  deriveDietProfile,
-  overlayDietProfile,
-  validateDietOverride,
-  type DietDerivation,
-  type DietOverride,
-  type DietProfile,
+import type {
+  PricingUnit,
+  ProductOrdering,
+  VatClass,
+  ListedVariant,
+  Product,
+  AccessibleCatalogue,
+  AvailableProduct,
+  MenuItem,
+  MenuOffer,
+  MenuOfferVariant,
+  MenuPriceRow,
 } from "@waitron/shared";
-import type { PricingUnit } from "@waitron/shared";
-import type { ProductOrdering } from "@waitron/shared";
-import type { VatClass } from "@waitron/shared";
 import { menuItems } from "./schema/menu.js";
 import { sections } from "./schema/sections.js";
 import {
@@ -67,7 +83,6 @@ import {
   unitMeasure,
   type SellableUnit,
 } from "./units.js";
-import { validateDietaryDeclarations, type DietaryLabel } from "@waitron/shared";
 import {
   clearedPricingUnit,
   effectiveProductColumns as effective,
@@ -77,15 +92,6 @@ import {
   productWithId,
   unitOwnerJoin,
 } from "./variant-fallback.js";
-import type { ListedVariant, Product } from "@waitron/shared";
-import type {
-  AccessibleCatalogue,
-  AvailableProduct,
-  MenuItem,
-  MenuOffer,
-  MenuOfferVariant,
-  MenuPriceRow,
-} from "@waitron/shared";
 export type {
   AccessibleCatalogue,
   AvailableProduct,

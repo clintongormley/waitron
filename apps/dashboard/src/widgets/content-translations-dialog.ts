@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { ContentSuggestionView } from "@waitron/catalogue/src/content-suggestion-types.js";
-import { languageDisplayName, type ContentLanguages } from "@waitron/shared";
+import { languageDisplayName, type ContentLanguages, TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { QueryController, tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
@@ -26,7 +26,6 @@ import {
   type MissingIn,
   type TranslationRef,
 } from "@waitron/catalogue/src/content-translation-types.js";
-import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import type { DashboardApi, SuggestionRunView } from "../api/client.js";
 import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

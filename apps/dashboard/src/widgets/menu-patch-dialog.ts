@@ -22,6 +22,9 @@ import {
   toScale,
   type AppError,
   type TextSearch,
+  VAT_CLASSES,
+  localToday,
+  vatRateOn,
 } from "@waitron/shared";
 import {
   fixedLanguages,
@@ -30,7 +33,6 @@ import {
 } from "@waitron/catalogue/src/menu-patch.js";
 import type { MenuDocument } from "@waitron/shared";
 import { PATCH_FIELDS } from "@waitron/catalogue/src/menu-patch-types.js";
-import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";

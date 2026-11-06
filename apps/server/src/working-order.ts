@@ -2,7 +2,40 @@ import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import { newCustomerPresentation, newCustomerText } from "@waitron/shared";
+import {
+  newCustomerPresentation,
+  newCustomerText,
+  AppError,
+  type BumpMode,
+  centsToDecimal,
+  classifyBand,
+  compareDecimal,
+  type ContentLanguages,
+  type Decimal,
+  decimal,
+  decimalToCents,
+  decimalToThousandths,
+  compareLabels,
+  compareStationNames,
+  divideDecimal,
+  partyDisplayName,
+  MONEY_SCALE,
+  QUANTITY_SCALE,
+  multiplyDecimal,
+  perDishOptionQuantity,
+  rawCentsToDecimal,
+  type ChangesAfterSending,
+  type SaleId,
+  type StationThresholds,
+  stringToThousandths,
+  subtractDecimal,
+  sumDecimals,
+  thousandthsToDecimal,
+  type TimingBand,
+  toScale,
+  workingOrderId as brandWorkingOrderId,
+  worstBand,
+} from "@waitron/shared";
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
@@ -132,38 +165,6 @@ import {
 } from "drizzle-orm";
 import type { GetColumnData, SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import {
-  AppError,
-  type BumpMode,
-  centsToDecimal,
-  classifyBand,
-  compareDecimal,
-  type ContentLanguages,
-  type Decimal,
-  decimal,
-  decimalToCents,
-  decimalToThousandths,
-  compareLabels,
-  compareStationNames,
-  divideDecimal,
-  partyDisplayName,
-  MONEY_SCALE,
-  QUANTITY_SCALE,
-  multiplyDecimal,
-  perDishOptionQuantity,
-  rawCentsToDecimal,
-  type ChangesAfterSending,
-  type SaleId,
-  type StationThresholds,
-  stringToThousandths,
-  subtractDecimal,
-  sumDecimals,
-  thousandthsToDecimal,
-  type TimingBand,
-  toScale,
-  workingOrderId as brandWorkingOrderId,
-  worstBand,
-} from "@waitron/shared";
 import {
   allocateOrderNumber,
   appendOrderAmendment,

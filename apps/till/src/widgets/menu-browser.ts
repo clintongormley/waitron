@@ -13,8 +13,12 @@ import {
 } from "@waitron/ui";
 import "./product-info.js";
 import { nutritionDietLabels } from "./nutrition-icons.js";
-import { foldCache, foldForSearch, formatMoney, searchFor, type NameSearch } from "@waitron/shared";
 import {
+  foldCache,
+  foldForSearch,
+  formatMoney,
+  searchFor,
+  type NameSearch,
   HOME_GRID_COLUMNS,
   arrangeHome,
   indexDocument,

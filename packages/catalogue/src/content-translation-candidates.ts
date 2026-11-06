@@ -1,7 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
-import type { ContentLanguages } from "@waitron/shared";
+import type { ContentLanguages, TranslationGapKind } from "@waitron/shared";
 import { TRANSLATION_GAP_KINDS as KINDS } from "@waitron/shared";
-import type { TranslationGapKind } from "@waitron/shared";
 import type { TranslationRef } from "./content-translation-types.js";
 
 export type NamedRow = {

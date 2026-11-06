@@ -185,8 +185,8 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
   });
 
   describe("the catalogue wire-shape leaves stay type-only (emit no runtime)", () => {
-    // Each leaf holds wire shapes a browser app imports DIRECTLY
-    // (through `@waitron/shared`), so each must be a PURE type module that compiles to an
+    // Each leaf holds wire shapes a browser app imports through `@waitron/shared`'s index, so
+    // each must be a PURE type module that compiles to an
     // empty runtime module. The reachable-specifier scan above would false-positive here on an
     // erased `import type` edge, so the check is on each leaf's own statements instead.
     //

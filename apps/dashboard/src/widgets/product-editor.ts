@@ -15,9 +15,14 @@ import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } from "@waitron/ui";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
-import { VAT_CLASSES, localToday, vatRateOn, type VatClass } from "@waitron/shared";
-import { PRODUCT_ORDERINGS } from "@waitron/shared";
-import { categoryColor } from "@waitron/shared";
+import {
+  VAT_CLASSES,
+  localToday,
+  vatRateOn,
+  type VatClass,
+  PRODUCT_ORDERINGS,
+  categoryColor,
+} from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
