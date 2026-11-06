@@ -338,8 +338,8 @@ export interface CapturedPaymentForOrder {
   amount: string;
   saleId: string | null;
   externalRef: string | null;
-  settledAt: string | null; // always set for captured/accepted_offline, but typed nullable like the column
-  state: "captured" | "accepted_offline";
+  settledAt: string | null;
+  state: "captured" | "accepted_offline" | "settled";
   cardScheme: string | null;
   cardLast4: string | null;
   cardEntryMode: string | null;
@@ -375,7 +375,7 @@ async function selectCapturedForWorkingOrder(
       and(
         key.provider === undefined ? undefined : eq(payments.provider, key.provider),
         eq(payments.workingOrderId, key.workingOrderId),
-        inArray(payments.state, ["captured", "accepted_offline"]),
+        inArray(payments.state, ["captured", "accepted_offline", "settled"]),
       ),
     )
     .orderBy(sql`${payments.settledAt} desc nulls last`, sql`${payments}.rowid desc`)

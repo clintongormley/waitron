@@ -1,7 +1,7 @@
 # A placed order takes one payment at a time — implementation plan (A526)
 
-> **2026-11-06 — A1395:** Task 7's duplicate-fallback leftover is addressed by the
-> status check in `finalizeCapture`. The real-database case in
+> **2026-11-06 — A1395:** Task 7's duplicate-fallback leftover is addressed by removing
+> the fallback in `finalizeCapture`; its earlier settled-order replay stays. The real-database case in
 > `apps/server/src/placed-order-one-payment.test.ts` issues an invoice between capture and
 > finalization: the payment stays unassociated, the order stays placed, and no success ticket is
 > returned. This constructs that state with an invoice fixture; it does not establish a current

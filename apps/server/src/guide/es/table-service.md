@@ -1,5 +1,11 @@
 # Servicio en mesa
 
+## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
+
+Si al cancelar un pedido se indica que hay un pago con tarjeta pendiente, espera a que termine el
+datáfono y después pulsa **Cobrar** para comprobar ese pago antes de volver a cancelar. Si ya se
+cobró la tarjeta, no pidas al cliente que pague otra vez.
+
 ## Emitir una factura completa {#full-invoice}
 
 Cuando un cliente de una mesa necesita una factura a su nombre, elige **Factura completa** para

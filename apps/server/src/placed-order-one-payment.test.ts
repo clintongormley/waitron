@@ -2,7 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { deviceId as brandDeviceId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorZones, isUniqueViolation, constraintTarget, withTransaction } from "@waitron/db";
@@ -637,11 +637,11 @@ describe("cancelling a placed order respects stored cards", () => {
     });
   }
 
-  it.each(["attempting", "captured", "accepted_offline"] as const)(
+  it.each(["attempting", "captured", "accepted_offline", "settled"] as const)(
     "refuses an uninvoiced order with a stored %s payment after the live attempt ends",
     async (state) => {
       const id = await placed("uninvoiced");
-      if (state === "accepted_offline") {
+      if (state === "accepted_offline" || state === "settled") {
         await inTx(venue, (tx) =>
           insertAcceptedOffline(tx, {
             origin: venue.cfg.origin,
@@ -653,6 +653,7 @@ describe("cancelling a placed order respects stored cards", () => {
             settledAt: new Date(),
           }),
         );
+        if (state === "settled") await venue.card.forward(new Date());
       } else {
         venue.card.crashNextCollect(state);
         expect((await pay(id)).status).toBe(500);
@@ -753,5 +754,82 @@ describe("a captured card's duplicate-sale fallback", () => {
     expect(salesOf(id)).toHaveLength(1);
     expect(tendersOf(id)).toEqual([]);
     expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "captured", saleId: null }]);
+  });
+});
+
+describe("forwarded offline card recovery", () => {
+  it("files a forwarded offline charge without asking the reader again", async () => {
+    const id = await placed("uninvoiced");
+    await inTx(venue, (tx) =>
+      insertAcceptedOffline(tx, {
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        workingOrderId: id,
+        provider: "fake",
+        paymentRef: randomUUID(),
+        amount: "3.00",
+        settledAt: new Date(),
+      }),
+    );
+    await venue.card.forward(new Date());
+    expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "settled", saleId: null }]);
+    const calls = venue.card.collectCalls.length;
+
+    const recovered = await pay(id);
+
+    expect(recovered.status).toBe(200);
+    expect(recovered.json.outcome).toBe("captured");
+    expect(venue.card.collectCalls.length).toBe(calls);
+    const sale = salesOf(id);
+    expect(sale).toHaveLength(1);
+    expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
+    expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "settled", saleId: sale[0]!.id }]);
+  });
+});
+
+describe("unpaid duplicate invoice through the payment route", () => {
+  it("says the card was charged and recovers it on Pay again without another charge", async () => {
+    const id = await placed("uninvoiced");
+    const original = venue.card.collect.bind(venue.card);
+    const collect = vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
+      const result = await original(params);
+      await issueOrderInvoice(
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        venue.cfg,
+        id,
+        venue.operatorId,
+      );
+      return result;
+    });
+    let refused;
+    try {
+      refused = await pay(id);
+    } finally {
+      collect.mockRestore();
+    }
+    expect(refused).toEqual({
+      status: 507,
+      json: {
+        code: "sale.charged_not_recorded",
+        params: { workingOrderId: id, reason: "issuance_refused" },
+      },
+    });
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "captured", saleId: null }]);
+    const calls = venue.card.collectCalls.length;
+    const recovered = await pay(id);
+    expect(recovered.status).toBe(200);
+    expect(recovered.json.outcome).toBe("captured");
+    expect(venue.card.collectCalls.length).toBe(calls);
+    expect(await statusOf(venue, id)).toBe("settled");
+    const sale = salesOf(id);
+    expect(sale).toHaveLength(1);
+    expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "captured", saleId: sale[0]!.id }]);
+    expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
   });
 });

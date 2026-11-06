@@ -430,7 +430,11 @@ and shows a clear message.
   [Detail](payments.md#a-whole-order-card-payment-does-not-refuse-a-negative-tip)
 - **A whole-order payment records the amount it expected, not the amount captured** (found by
   A793's design, read). Next: compare the captured amount at capture time, as the bill payment
-  loop does (`payment.bill_capture_mismatch`).
+  loop does (`payment.bill_capture_mismatch`). A1395's review also constructed a stored €1.00
+  capture on a €3.00 placed order: Pay cannot file it, cancellation stays refused, and no second
+  charge is taken. No current public route producing this state was established. Watcher decision,
+  2026-11-06: keep that protection; add no automatic refund or manager action. Check the recovery
+  limit here, and bring any real route that produces it to the watcher.
   [Detail](payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
 
 ## Bundle A1399: What happens when a bill payment is sent again under one id
