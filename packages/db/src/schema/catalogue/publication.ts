@@ -1,17 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  catalogues,
-  count,
-  enumCheck,
-  enumType,
-  id,
-  json,
-  label,
-  newId,
-  table,
-  ts,
-} from "@waitron/db";
+import { catalogues } from "../catalogue.js";
+import { count, enumCheck, enumType, id, json, label, newId, table, ts } from "../columns.js";
 import type { MenuDocument } from "@waitron/shared";
 
 /**

@@ -1,6 +1,14 @@
 import { navigateMenuChanges } from "./menu-navigation.js";
 import { and, asc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
-import { now, products, type Transaction } from "@waitron/db";
+import {
+  now,
+  products,
+  type Transaction,
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
+} from "@waitron/db";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { BATCH_SIZE, batches } from "./batches.js";
 import { alias, unionAll } from "drizzle-orm/sqlite-core";
@@ -15,12 +23,6 @@ import {
   type DiffEntry,
   type OmittedShortcut,
 } from "./menu-document.js";
-import {
-  menuPublications,
-  menuScheduledPublications,
-  menuVersionImages,
-  menuVersions,
-} from "./schema/publication.js";
 import { menusContaining, reachableProducts } from "./section-graph.js";
 import { readContentLanguages } from "./content-languages.js";
 import { applyMenuPatch, parseMenuPatch } from "./menu-patch.js";

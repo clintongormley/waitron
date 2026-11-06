@@ -1,16 +1,14 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import { products, type Transaction, contentLanguages, productUnits, units } from "@waitron/db";
 import type { ProductUsingUnit } from "./unit-types.js";
 
 export type { ProductUsingUnit };
 import { AppError } from "@waitron/shared";
 import { contentLanguagesOr } from "./content-languages.js";
-import { contentLanguages } from "./schema/menu.js";
 import {
   mergeOptionalTranslations,
   validateOptionalTranslations,
 } from "./optional-translations.js";
-import { productUnits, units } from "./schema/units.js";
 import { EACH_UNIT_ID, unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { clearedPricingUnit, isTopLevelProduct, productWithId } from "./variant-fallback.js";
 export {

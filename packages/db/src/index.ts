@@ -393,3 +393,43 @@ export {
 } from "./schema/hosted.js";
 export { liveDisplayNameKey, loginEmailKey, pendingEmailKey } from "./schema/identity/persons.js";
 export { challengePurpose } from "./schema/identity/webauthn.js";
+export {
+  catalogueSettings,
+  categoryDetails,
+  contentLanguages,
+  contentSuggestionJobs,
+  contentSuggestions,
+  extraListItems,
+  extraLists,
+  menuDetails,
+  menuItems,
+  menuItemVariantOverrides,
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
+  optionLabels,
+  optionLists,
+  productModifiers,
+  productUnits,
+  sectionMembers,
+  sections,
+  units,
+  unitSeedStates,
+} from "./schema/hosted.js";
+export {
+  SUGGESTION_FAILURES,
+  SUGGESTION_JOB_STATES,
+  SUGGESTION_REFUSALS,
+} from "./schema/catalogue/suggestions.js";
+export type { SuggestionJobRow, SuggestionRow } from "./schema/catalogue/suggestions.js";
+export {
+  adjustmentLines,
+  adjustmentReasons,
+  adjustmentRefunds,
+  adjustments,
+  adjustmentSettings,
+  adjustmentStage,
+} from "./schema/hosted.js";
+export { DEFAULT_BILL_APPROVER_ROLES } from "./schema/adjustments/settings.js";
+export type { AdjustmentSplit, AdjustmentStage } from "./schema/adjustments/adjustments.js";

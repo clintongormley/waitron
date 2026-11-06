@@ -1,7 +1,15 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, catalogues } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  catalogues,
+  menuPublications,
+  menuVersions,
+  menuVersionImages,
+  catalogueSettings,
+  contentSuggestionJobs,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import {
@@ -11,9 +19,6 @@ import {
 import { CATALOGUE_BACKUP_VERIFICATION as OWNER } from "./index.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_CLASSIFICATION } from "./classification.js";
-import { menuPublications, menuVersions, menuVersionImages } from "./schema/publication.js";
-import { catalogueSettings } from "./schema/settings.js";
-import { contentSuggestionJobs } from "./schema/suggestions.js";
 import type { MenuDocument } from "@waitron/shared";
 const migrations = [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS];
 const original = useVenueDb({ migrations });

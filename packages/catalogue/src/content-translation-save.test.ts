@@ -7,6 +7,15 @@ import {
   products,
   withTransaction,
   type Transaction,
+  sections,
+  sectionMembers,
+  menuDetails,
+  contentLanguages,
+  units,
+  optionLists,
+  optionLabels,
+  extraLists,
+  contentSuggestions,
 } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -16,12 +25,6 @@ import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { addMember } from "./sections.js";
-import { sections, sectionMembers } from "./schema/sections.js";
-import { menuDetails, contentLanguages } from "./schema/menu.js";
-import { units } from "./schema/units.js";
-import { optionLists, optionLabels } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { contentSuggestions } from "./schema/suggestions.js";
 import type { TranslationCellEdit, TranslationCellRef } from "./content-translation-types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });

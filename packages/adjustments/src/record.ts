@@ -10,7 +10,7 @@ import {
 } from "@waitron/shared";
 import { isFullComp } from "./full-comp.js";
 import type { AdjustmentAction, AdjustmentPolicySnapshot } from "@waitron/shared";
-import { adjustments, type AdjustmentSplit, type AdjustmentStage } from "./schema/adjustments.js";
+import { adjustments, type AdjustmentSplit, type AdjustmentStage } from "@waitron/db";
 
 /** An adjustment to record. `line` is null for a discount on the whole bill. */
 export interface NewAdjustment {

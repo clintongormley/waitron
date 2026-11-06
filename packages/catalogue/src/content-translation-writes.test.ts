@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  type Transaction,
+  optionLists,
+  optionLabels,
+  extraLists,
+  extraListItems,
+  productModifiers,
+  menuDetails,
+  sections,
+  sectionMembers,
+  units,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -10,12 +24,7 @@ import { setProductVariants } from "./variants.js";
 import { createOptionList, getOptionList, updateOptionList } from "./options.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { createUnit, updateUnit } from "./units.js";
-import { optionLists, optionLabels } from "./schema/options.js";
-import { extraLists, extraListItems, productModifiers } from "./schema/extras.js";
-import { menuDetails } from "./schema/menu.js";
-import { sections, sectionMembers } from "./schema/sections.js";
 import { addMember } from "./sections.js";
-import { units } from "./schema/units.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import { writeTranslationMaps } from "./content-translation-writes.js";

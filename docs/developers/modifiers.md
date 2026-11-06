@@ -16,7 +16,7 @@ is what it is.
 A list is authored once and attached to as many dishes as you like. A dish carries ONE ordered
 attachment list, `product_modifiers`, and each row of it names either an extras list or an options
 list — never both (`product_modifiers_one_reference_ck`,
-`packages/catalogue/src/schema/extras.ts`). The three names every list and every label carries —
+`packages/db/src/schema/catalogue/extras.ts`). The three names every list and every label carries —
 staff `name`, translated `customerName`, plain `kitchenName` — follow the product convention, and
 which surface reads which is in [products.md](products.md).
 

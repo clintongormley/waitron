@@ -9,12 +9,12 @@ import {
   products,
   withTransaction,
   type Transaction,
+  productUnits,
+  menuItemVariantOverrides,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { productUnits } from "./schema/units.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { racePair } from "../test/fixtures.js";
 import { createCatalogue, createProduct, addProductToMenu } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";

@@ -1,6 +1,14 @@
 import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { captureError, withTransaction, type Transaction } from "@waitron/db";
+import {
+  captureError,
+  withTransaction,
+  type Transaction,
+  menuDetails,
+  menuItems,
+  sectionMembers,
+  sections,
+} from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product, section, type MenusFixture } from "../test/menus-fixture.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
@@ -18,8 +26,6 @@ import { readSection } from "./sections.js";
 import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { deactivateCatalogue, deactivateProduct, listMenuOffers } from "./operations.js";
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
-import { menuDetails, menuItems } from "./schema/menu.js";
-import { sectionMembers, sections } from "./schema/sections.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

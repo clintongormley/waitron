@@ -7,6 +7,9 @@ import {
   products,
   venueLocationId,
   withTransaction,
+  productUnits,
+  units,
+  categoryDetails,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seriesId as brandSeriesId } from "@waitron/shared";
@@ -22,8 +25,6 @@ import {
 import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { nameColumns } from "../src/product-names.js";
 import { createUnit } from "../src/units.js";
-import { productUnits, units } from "../src/schema/units.js";
-import { categoryDetails } from "../src/schema/categories.js";
 
 /** The unit a product's OWN `product_units` row names, or null when it has none (a
  * top-level product then reads as Each). A variant reads its parent's unit whatever row it stores.

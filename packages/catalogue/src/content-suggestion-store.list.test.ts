@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
-import { products } from "@waitron/db";
+import { products, optionLists, optionLabels, contentSuggestions } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
@@ -18,8 +18,6 @@ import {
   suggestionStale,
 } from "./content-suggestion-store.js";
 import type { ContentSuggestionQuery, ContentSuggestionView } from "./content-suggestion-types.js";
-import { optionLists, optionLabels } from "./schema/options.js";
-import { contentSuggestions } from "./schema/suggestions.js";
 import {
   addPlainProducts,
   context,

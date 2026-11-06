@@ -1,4 +1,4 @@
-import { workingOrders } from "@waitron/db";
+import { workingOrders, adjustments } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import {
@@ -8,7 +8,6 @@ import {
   ADJUSTMENT_ACTIONS,
 } from "@waitron/shared";
 import { and, asc, eq, or } from "drizzle-orm";
-import { adjustments } from "./schema/adjustments.js";
 
 /** A row marked `by_guest` is the guests' request, never the requester's, as the Adjustment report
  * counts it; its approver's part still stands. `note` is left out: it is free text that can name

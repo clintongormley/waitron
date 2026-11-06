@@ -4,6 +4,10 @@ import {
   readTenant,
   readVenue,
   venueLocationId,
+  catalogueSettings,
+  contentLanguages,
+  unitSeedStates,
+  units,
 } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import {
@@ -13,12 +17,9 @@ import {
   starterName,
   starterNames,
 } from "@waitron/country-packs";
-import { catalogueSettings } from "./schema/settings.js";
 import type { VatClass } from "@waitron/shared";
-import { contentLanguages } from "./schema/menu.js";
 import { createMenuShell } from "./menu-structure.js";
 import { assignCatalogueToVenue } from "./operations.js";
-import { unitSeedStates, units } from "./schema/units.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 
 /** The starter units, by their English staff names; their words in other languages are in

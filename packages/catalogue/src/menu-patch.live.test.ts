@@ -1,6 +1,13 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withTransaction, type Transaction } from "@waitron/db";
+import {
+  withTransaction,
+  type Transaction,
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
+} from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
 import {
@@ -18,12 +25,6 @@ import {
 } from "./menu-schedule.js";
 import { updateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
-import {
-  menuPublications,
-  menuScheduledPublications,
-  menuVersionImages,
-  menuVersions,
-} from "./schema/publication.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

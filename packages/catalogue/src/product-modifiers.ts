@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { extraLists, productModifiers } from "./schema/extras.js";
-import { optionLists } from "./schema/options.js";
+import { extraLists, productModifiers, optionLists } from "@waitron/db";
 import type { ProductModifierRef } from "@waitron/shared";
 import "./errors.js";
 

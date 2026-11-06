@@ -13,7 +13,7 @@ import {
   nowIso,
   table,
   tsString,
-} from "@waitron/db";
+} from "../columns.js";
 import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 
 export const SUGGESTION_JOB_STATES = [

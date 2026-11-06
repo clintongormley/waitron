@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { products } from "@waitron/db";
-import { contentSuggestions } from "./schema/suggestions.js";
-import { optionLists, optionLabels } from "./schema/options.js";
-import { units } from "./schema/units.js";
-import { menuDetails } from "./schema/menu.js";
-import { sections, sectionMembers } from "./schema/sections.js";
+import {
+  products,
+  contentSuggestions,
+  optionLists,
+  optionLabels,
+  units,
+  menuDetails,
+  sections,
+  sectionMembers,
+} from "@waitron/db";
 import { addMember } from "./sections.js";
 import { createCatalogue } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";

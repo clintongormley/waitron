@@ -5,3 +5,5 @@ export * from "./credentials/index.js";
 export * from "./media/index.js";
 export * from "./handover/index.js";
 export * from "./identity/index.js";
+export * from "./catalogue/index.js";
+export * from "./adjustments/index.js";

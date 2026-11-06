@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import {
+  products,
+  type Transaction,
+  extraListItems,
+  extraLists,
+  productModifiers,
+  productUnits,
+  units,
+} from "@waitron/db";
 import {
   AppError,
   centsToDecimal,
@@ -10,7 +18,6 @@ import {
   thousandthsToDecimal,
   toScale,
 } from "@waitron/shared";
-import { extraListItems, extraLists, productModifiers } from "./schema/extras.js";
 import {
   parseExtraListInput,
   type ExtraList,
@@ -24,7 +31,6 @@ import {
   validateOptionalTranslations,
 } from "./optional-translations.js";
 import { parentsWithActiveVariants } from "./variants.js";
-import { productUnits, units } from "./schema/units.js";
 import { parentJoin, parentProducts, unitOwnerJoin } from "./variant-fallback.js";
 import { assertQuantityPrecision, EACH_UNIT_ID } from "./unit-validation.js";
 import { isEachUnit } from "./units.js";

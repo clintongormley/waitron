@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { catalogues, now, products, type Transaction } from "@waitron/db";
+import { catalogues, now, products, type Transaction, productUnits } from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { readContentLanguages } from "./content-languages.js";
@@ -10,7 +10,6 @@ import {
   updateProductSkippingNameCheck,
 } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
-import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
 import { archiveProducts } from "./archive.js";
 import { assertFamilyNamesFree, readUpdatedName, type StoredName } from "./product-names.js";

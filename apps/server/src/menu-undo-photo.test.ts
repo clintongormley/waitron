@@ -9,12 +9,12 @@ import {
   previewMenu,
   publishMenu,
   readMenuStructure,
+  sections,
   updateSection,
 } from "@waitron/catalogue";
 import { createCategory } from "@waitron/catalogue/src/categories.js";
 import { menuChangeActions } from "@waitron/catalogue/src/menu-undo.js";
 import { updateMenuItem } from "@waitron/catalogue/src/operations.js";
-import { sections } from "@waitron/catalogue/src/schema/sections.js";
 import { addMember, createSectionIn } from "@waitron/catalogue/src/sections.js";
 import { seedLegacySellingUnits, seedVenueWithSeries } from "@waitron/catalogue/test/fixtures.js";
 import { offerOf } from "@waitron/catalogue/test/menus-fixture.js";

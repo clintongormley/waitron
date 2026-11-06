@@ -1,12 +1,12 @@
 import { foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { id, money, newId, quantity, table } from "@waitron/db";
+import { id, money, newId, quantity, table } from "../columns.js";
 import { adjustments } from "./adjustments.js";
 
 /**
  * What one comp or discount took off one working-order line, and the line's quantity then.
  * `line_id` has no key, as `adjustments.line_id` has none: a cancel deletes the line, and a key from
  * a row nothing may change would refuse that delete. Declared `appendOnly()` in
- * `../classification.ts`.
+ * `packages/adjustments/src/classification.ts`.
  */
 export const adjustmentLines = table(
   "adjustment_lines",

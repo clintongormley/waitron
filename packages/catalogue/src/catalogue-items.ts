@@ -1,8 +1,14 @@
-import { categories, now, products, tableExists, type Transaction } from "@waitron/db";
+import {
+  categories,
+  now,
+  products,
+  tableExists,
+  type Transaction,
+  categoryDetails,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
-import { categoryDetails } from "./schema/categories.js";
 import { listCategories, vacateCategories, validateParent, type Category } from "./categories.js";
 import { assertCategoryNamesFree } from "./category-names.js";
 import { archiveProducts } from "./archive.js";

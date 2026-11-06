@@ -9,6 +9,10 @@ import {
   UNIQUE_VIOLATION,
   withTransaction,
   type Transaction,
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
 } from "@waitron/db";
 import { racePair, useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus-fixture.js";
@@ -32,12 +36,6 @@ import {
 import { BATCH_SIZE } from "./batches.js";
 import { addMember } from "./sections.js";
 import { updateMenuItem, updateProduct } from "./operations.js";
-import {
-  menuPublications,
-  menuScheduledPublications,
-  menuVersionImages,
-  menuVersions,
-} from "./schema/publication.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

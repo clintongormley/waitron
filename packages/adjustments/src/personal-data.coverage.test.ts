@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/db/schema/adjustments.js";
 
 // Copied from apps/server/src/personal-data-actions.coverage.test.ts, which a package cannot import.
 const ACTOR_COLUMN =

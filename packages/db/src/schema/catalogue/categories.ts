@@ -1,5 +1,6 @@
 import { foreignKey, index, primaryKey } from "drizzle-orm/sqlite-core";
-import { categories, id, label, table } from "@waitron/db";
+import { categories } from "../catalogue.js";
+import { id, label, table } from "../columns.js";
 
 export const categoryDetails = table(
   "category_details",

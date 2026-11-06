@@ -1,14 +1,13 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
-import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, tenants, withTransaction, adjustmentSettings } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
 import { ADJUSTMENTS_PROVISIONING } from "./provisioning.js";
-import { adjustmentSettings } from "./schema/settings.js";
 import { STARTER_REASON_NAMES } from "./starter-content.js";
 
 const expected: StarterTranslations<StarterContentLanguage> = STARTER_REASON_NAMES;

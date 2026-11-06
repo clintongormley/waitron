@@ -1,11 +1,16 @@
-import { products, type Transaction } from "@waitron/db";
+import {
+  products,
+  type Transaction,
+  optionLists,
+  optionLabels,
+  extraLists,
+  units,
+  sections,
+  sectionMembers,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import type { TranslationItem, TranslationField } from "./content-translation-types.js";
-import { optionLists, optionLabels } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { units } from "./schema/units.js";
-import { sections, sectionMembers } from "./schema/sections.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
 import "./errors.js";
 

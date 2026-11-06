@@ -1,7 +1,6 @@
 import { asc, eq, inArray } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import { products, type Transaction, extraListItems, extraLists } from "@waitron/db";
 import { buildMenuDocuments } from "./menu-document.js";
-import { extraListItems, extraLists } from "./schema/extras.js";
 import { productsUsingUnit } from "./units.js";
 
 export interface ExtraOfferUsage {

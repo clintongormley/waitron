@@ -7,6 +7,7 @@ import {
   kitchenCourses,
   products,
   withTransaction,
+  productUnits,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -25,7 +26,6 @@ import { createExtraList } from "./extras.js";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { productUnits } from "./schema/units.js";
 import { createUnit, EACH_UNIT } from "./units.js";
 import {
   effectiveProductColumns,

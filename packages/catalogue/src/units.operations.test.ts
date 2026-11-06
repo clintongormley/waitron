@@ -7,6 +7,7 @@ import {
   products,
   withTransaction,
   type Transaction,
+  contentLanguages,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -23,7 +24,6 @@ import {
   updateUnit,
 } from "./units.js";
 import { assertQuantityPrecision } from "./units.js";
-import { contentLanguages } from "./schema/menu.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);

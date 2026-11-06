@@ -1,5 +1,11 @@
 import { and, desc, eq, inArray, lt, ne, or, sql, type SQL } from "drizzle-orm";
-import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
+import {
+  workingOrderLines,
+  workingOrders,
+  type Transaction,
+  adjustments,
+  type AdjustmentStage,
+} from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { validatedRangeWindow } from "@waitron/reporting";
 import {
@@ -17,7 +23,6 @@ import {
   type AdjustmentAction,
 } from "@waitron/shared";
 import { DEFAULT_ENTRY_PAGE_SIZE, MAX_ENTRY_PAGE_SIZE } from "./entry-pages.js";
-import { adjustments, type AdjustmentStage } from "./schema/adjustments.js";
 
 /** An inclusive range of the venue's business days, and the clock that places them. */
 export interface AdjustmentReportInput extends BusinessDayClock {

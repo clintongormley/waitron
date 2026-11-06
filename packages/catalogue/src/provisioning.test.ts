@@ -8,16 +8,17 @@ import {
   tenants,
   withTransaction,
   venueLocationId,
+  contentLanguages,
+  menuDetails,
+  sections,
+  units,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
-import { contentLanguages, menuDetails } from "./schema/menu.js";
 import { readCatalogueSettings, saveCatalogueDefaultColor } from "./settings.js";
-import { sections } from "./schema/sections.js";
-import { units } from "./schema/units.js";
 import { getSeededUnit } from "./units.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 

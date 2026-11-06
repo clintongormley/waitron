@@ -13,7 +13,7 @@ import {
 } from "@waitron/shared";
 import { reasonShapeFault, type AdjustmentReason } from "./policy.js";
 import type { AdjustmentAction, ReasonKind } from "@waitron/shared";
-import { adjustmentReasons } from "./schema/reasons.js";
+import { adjustmentReasons } from "@waitron/db";
 import "./errors.js";
 
 /** Everything an owner edits on a reason; `position` has an operation of its own. */

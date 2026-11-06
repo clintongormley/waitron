@@ -1,4 +1,4 @@
-import { products } from "@waitron/db";
+import { products, menuItems, sectionMembers, menuItemVariantOverrides } from "@waitron/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
@@ -22,9 +22,6 @@ import {
   updateProduct,
 } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
-import { menuItems } from "./schema/menu.js";
-import { sectionMembers } from "./schema/sections.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { addMember, addProducts, createSectionIn, replaceMember } from "./sections.js";
 import { listProductVariants, setMenuVariantPrice, setProductVariants } from "./variants.js";
 

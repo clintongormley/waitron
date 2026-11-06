@@ -8,7 +8,7 @@
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { CATALOGUE_MIGRATIONS } from "../migrations.js";
-import * as barrel from "./index.js";
+import * as barrel from "@waitron/db/schema/catalogue.js";
 
 describeSchemaConformance({
   subjectName: "catalogue",
@@ -19,6 +19,6 @@ describeSchemaConformance({
   declarations: barrel,
   // True: `sections.role` carries the `enumText`/`enumCheck` pair, through `enumType`.
   // `units.hardware_unit` is a plain `label()` beside a hand-written check, and
-  // `src/schema/units.ts` says why.
+  // `packages/db/src/schema/catalogue/units.ts` says why.
   declaresClosedVocabularies: true,
 });

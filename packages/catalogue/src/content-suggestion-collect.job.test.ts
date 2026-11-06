@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  type Transaction,
+  menuDetails,
+  sections,
+  optionLabels,
+  optionLists,
+  extraLists,
+  units,
+  contentSuggestionJobs,
+  contentSuggestions,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -14,12 +27,6 @@ import {
 } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
-import { menuDetails } from "./schema/menu.js";
-import { sections } from "./schema/sections.js";
-import { optionLabels, optionLists } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { units } from "./schema/units.js";
-import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 import { startSuggestionRun } from "./content-suggestion-jobs.js";
 import { addOversizedFamily } from "../test/suggestion-fixture.js";
 import {

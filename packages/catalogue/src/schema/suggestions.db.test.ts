@@ -1,8 +1,12 @@
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withTransaction,
+  contentSuggestionJobs,
+  contentSuggestions,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "../migrations.js";
-import { contentSuggestionJobs, contentSuggestions } from "./suggestions.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const job = {

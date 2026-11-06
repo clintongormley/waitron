@@ -1,6 +1,6 @@
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { ADJUSTMENTS_MIGRATIONS } from "../migrations.js";
-import * as declarations from "./index.js";
+import * as declarations from "@waitron/db/schema/adjustments.js";
 
 describeSchemaConformance({
   subjectName: "adjustments",

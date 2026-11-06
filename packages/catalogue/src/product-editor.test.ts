@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { kitchenCourses, products, withTransaction, venueLocationId } from "@waitron/db";
+import {
+  kitchenCourses,
+  products,
+  withTransaction,
+  venueLocationId,
+  contentLanguages,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -15,7 +21,6 @@ import { createCategory } from "./categories.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
-import { contentLanguages } from "./schema/menu.js";
 import {
   plantStoredCategory,
   plantStoredUnit,

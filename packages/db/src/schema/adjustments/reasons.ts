@@ -14,7 +14,7 @@ import {
   rate,
   table,
   tsString,
-} from "@waitron/db";
+} from "../columns.js";
 import { REASON_KINDS, type AdjustmentAction, type PersonRoleValue } from "@waitron/shared";
 
 const reasonKind = enumType(REASON_KINDS);

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey } from "drizzle-orm/sqlite-core";
-import { id, money, products, table } from "@waitron/db";
+import { products } from "../catalogue.js";
+import { id, money, table } from "../columns.js";
 import { menuItems } from "./menu.js";
 
 /** A row exists only to set this variant's price on this menu. */

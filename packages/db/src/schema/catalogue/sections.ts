@@ -1,18 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  catalogues,
-  count,
-  enumCheck,
-  enumType,
-  flag,
-  id,
-  json,
-  label,
-  newId,
-  products,
-  table,
-} from "@waitron/db";
+import { catalogues, products } from "../catalogue.js";
+import { count, enumCheck, enumType, flag, id, json, label, newId, table } from "../columns.js";
 import type { IncludeFolderOverrides, SectionRole } from "@waitron/shared";
 
 // Not in `@waitron/shared`'s menu-document/section-types.ts: the dashboard imports that file, and

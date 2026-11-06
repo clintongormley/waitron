@@ -1,6 +1,17 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { catalogues, withTransaction, type Transaction } from "@waitron/db";
+import {
+  catalogues,
+  withTransaction,
+  type Transaction,
+  menuDetails,
+  menuItems,
+  menuPublications,
+  menuVersions,
+  sectionMembers,
+  sections,
+  menuItemVariantOverrides,
+} from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { duplicateMenu } from "./menu-copy.js";
@@ -13,10 +24,6 @@ import { addMember, createSectionIn, deleteSection, removeMember } from "./secti
 import { membersOf } from "./section-members.js";
 import type { TileRef } from "@waitron/shared";
 import { setMenuVariants, setProductVariants } from "./variants.js";
-import { menuDetails, menuItems } from "./schema/menu.js";
-import { menuPublications, menuVersions } from "./schema/publication.js";
-import { sectionMembers, sections } from "./schema/sections.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

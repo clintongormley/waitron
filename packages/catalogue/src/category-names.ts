@@ -1,9 +1,8 @@
-import { categories, type Transaction } from "@waitron/db";
+import { categories, type Transaction, categoryDetails } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { eq, isNull } from "drizzle-orm";
 import type { Category } from "./categories.js";
 import { firstNewClash, foldName } from "./name-uniqueness.js";
-import { categoryDetails } from "./schema/categories.js";
 import "./errors.js";
 
 type NamedCategory = Pick<Category, "id" | "name" | "parentId">;

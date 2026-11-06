@@ -1,11 +1,10 @@
 import { eq, inArray } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import { products, type Transaction, productUnits, units } from "@waitron/db";
 import { centsToDecimal } from "@waitron/shared";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
 import { readProductModifiers } from "./product-modifiers.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import { unitOwnerJoin } from "./variant-fallback.js";
-import { productUnits, units } from "./schema/units.js";
 import { EACH_UNIT } from "./units.js";
 import type { ExtraList, ExtraListItem } from "./extra-contract.js";
 import type { ProductModifierRef } from "./product-modifiers.js";

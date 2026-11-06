@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { withTransaction, type Transaction } from "@waitron/db";
+import {
+  withTransaction,
+  type Transaction,
+  optionLabels,
+  optionLists,
+  extraLists,
+  sectionMembers,
+  sections,
+} from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -11,9 +19,6 @@ import { addMember, createSectionIn, readSection, updateSection } from "./sectio
 import { requireMenuRoot } from "./menu-structure.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { folderPresentation } from "./include-folder-presentation.js";
-import { optionLabels, optionLists } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { sectionMembers, sections } from "./schema/sections.js";
 
 const fx = useCatalogueDb();
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, body);

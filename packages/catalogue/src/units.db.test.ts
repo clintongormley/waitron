@@ -1,6 +1,13 @@
 import { inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
+import {
+  catalogues,
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  productUnits,
+  units,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -14,7 +21,6 @@ import {
   reassignProductsToUnit,
   updateUnit,
 } from "./units.js";
-import { productUnits, units } from "./schema/units.js";
 import { plantStoredUnit, racePair, storedUnitId } from "../test/fixtures.js";
 
 /**

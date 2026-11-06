@@ -1,5 +1,13 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
-import { now, products, type Transaction } from "@waitron/db";
+import {
+  now,
+  products,
+  type Transaction,
+  menuItems,
+  extraListItems,
+  extraLists,
+  menuItemVariantOverrides,
+} from "@waitron/db";
 import { AppError, decimal, decimalToCents, toScale } from "@waitron/shared";
 import type {
   ContentLanguages,
@@ -20,9 +28,6 @@ import { reachableMenuItem } from "./menu-structure.js";
 import { batches } from "./batches.js";
 import { dropMenuPrices } from "./menu-removal.js";
 import { assertOffPublishedMenus, removeFromExtraLists } from "./archive.js";
-import { menuItems } from "./schema/menu.js";
-import { extraListItems, extraLists } from "./schema/extras.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 export type { MenuVariant } from "@waitron/shared";

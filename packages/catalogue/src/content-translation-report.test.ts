@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  type Transaction,
+  optionLabels,
+  optionLists,
+  extraLists,
+  sections,
+  sectionMembers,
+  menuDetails,
+  units,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -20,11 +32,6 @@ import {
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, createSectionIn } from "./sections.js";
 import { setProductVariants } from "./variants.js";
-import { optionLabels, optionLists } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { sections, sectionMembers } from "./schema/sections.js";
-import { menuDetails } from "./schema/menu.js";
-import { units } from "./schema/units.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 

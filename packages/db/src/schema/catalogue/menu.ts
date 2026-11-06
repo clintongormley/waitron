@@ -1,16 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  catalogues,
-  count,
-  id,
-  label,
-  labelList,
-  money,
-  newId,
-  products,
-  table,
-} from "@waitron/db";
+import { catalogues, products } from "../catalogue.js";
+import { count, id, label, labelList, money, newId, table } from "../columns.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type { HomeOrder, HomeTileMode } from "@waitron/shared";
 import { sections } from "./sections.js";
@@ -85,7 +76,7 @@ export const menuDetails = table(
 
 /**
  * A menu's setting for one product: its price. A blank `gross_price` means the product's own price
- * (`resolveOfferPrice`, `offer-price.ts`).
+ * (`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`).
  */
 export const menuItems = table(
   "menu_items",

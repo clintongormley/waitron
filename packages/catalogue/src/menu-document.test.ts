@@ -6,7 +6,17 @@ import type {
 } from "@waitron/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { products, withTransaction, type Transaction } from "@waitron/db";
+import {
+  products,
+  withTransaction,
+  type Transaction,
+  extraListItems,
+  menuDetails,
+  optionLabels,
+  optionLists,
+  sectionMembers,
+  sections,
+} from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { decimal, HOME_DISPLAY_DEFAULTS, shownMembers } from "@waitron/shared";
 import { plantStoredCategory, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
@@ -56,12 +66,8 @@ import { readMenuStructure, type MenuStructureNode } from "./menu-structure.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
-import { extraListItems } from "./schema/extras.js";
 import { createExtraList } from "./extras.js";
-import { menuDetails } from "./schema/menu.js";
 import { addShortcut, setHomeDisplay } from "./menu-home.js";
-import { optionLabels, optionLists } from "./schema/options.js";
-import { sectionMembers, sections } from "./schema/sections.js";
 
 const fx = useCatalogueDb();
 

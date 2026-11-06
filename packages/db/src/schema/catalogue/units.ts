@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
-import { count, flag, id, json, label, newId, products, table } from "@waitron/db";
+import { products } from "../catalogue.js";
+import { count, flag, id, json, label, newId, table } from "../columns.js";
 
 export const units = table(
   "units",

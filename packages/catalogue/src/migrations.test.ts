@@ -11,18 +11,23 @@ import {
   products,
   engineErrorMessage,
   UNIQUE_VIOLATION,
+  contentLanguages,
+  menuDetails,
+  menuItems,
+  sections,
+  categoryDetails,
+  extraListItems,
+  extraLists,
+  optionLabels,
+  productUnits,
+  unitSeedStates,
+  units,
+  menuItemVariantOverrides,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { contentLanguages, menuDetails, menuItems } from "./schema/menu.js";
-import { sections } from "./schema/sections.js";
-import { categoryDetails } from "./schema/categories.js";
-import { extraListItems, extraLists } from "./schema/extras.js";
-import { optionLabels } from "./schema/options.js";
-import { productUnits, unitSeedStates, units } from "./schema/units.js";
-import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 
 // One SQLite file with the core set and this package's set applied, which is what the product
 // opens.
@@ -237,7 +242,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       // The list is JSON text, and the membership test matches the QUOTED token so one code cannot
       // match a prefix of a longer one.
       content_languages_default_ck: `instr("content_languages"."languages", '"' || "content_languages"."default_language" || '"') > 0`,
-      // This does not refuse a NULL ENTRY in the list; `schema/menu.ts` says what does.
+      // This does not refuse a NULL ENTRY in the list; `packages/db/src/schema/catalogue/menu.ts` says what does.
       content_languages_list_ck: `json_array_length("content_languages"."languages") between 1 and 200`,
       menu_items_gross_price_ck: `"menu_items"."gross_price" >= 0`,
       units_precision_ck: `"units"."precision" between 0 and 3`,

@@ -1,14 +1,12 @@
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction, menuItems, sectionMembers } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { racePair, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { and } from "drizzle-orm";
 import { readMenuHome } from "./menu-home.js";
 import { requireMenuRoot } from "./menu-structure.js";
-import { menuItems } from "./schema/menu.js";
-import { sectionMembers } from "./schema/sections.js";
 import { createCatalogue, createProduct, updateMenuItem } from "./operations.js";
 import { loadSectionGraph, wouldCreateCycle } from "./section-graph.js";
 import {

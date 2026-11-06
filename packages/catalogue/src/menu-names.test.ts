@@ -1,11 +1,10 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { catalogues, withTransaction, type Transaction } from "@waitron/db";
+import { catalogues, withTransaction, type Transaction, sections } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, listCatalogues, updateMenuDetails } from "./operations.js";
 import { readMenuStructure } from "./menu-structure.js";
-import { sections } from "./schema/sections.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);

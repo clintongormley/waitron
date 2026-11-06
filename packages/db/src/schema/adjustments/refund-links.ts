@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { id, money, newId, nowIso, table, tenderRefunds, tsString } from "@waitron/db";
+import { id, money, newId, nowIso, table, tsString } from "../columns.js";
+import { tenderRefunds } from "../tender-refunds.js";
 import { adjustments } from "./adjustments.js";
 
-/** How much of one refund paid back one cancel. Declared `appendOnly()` in `../classification.ts`. */
+/** How much of one refund paid back one cancel. Declared `appendOnly()` in `packages/adjustments/src/classification.ts`. */
 export const adjustmentRefunds = table(
   "adjustment_refunds",
   {

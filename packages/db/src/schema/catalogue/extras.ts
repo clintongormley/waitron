@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, flag, id, json, label, money, newId, products, quantity, table } from "@waitron/db";
+import { products } from "../catalogue.js";
+import { count, flag, id, json, label, money, newId, quantity, table } from "../columns.js";
 import { optionLists } from "./options.js";
 
 /** A reusable, named list of products a diner may add to a dish, with rules on how many. Its items
@@ -24,7 +25,7 @@ export const extraLists = table(
     active: flag("active").notNull().default(true),
   },
   (t) => [
-    // The backstop under `parseExtraListInput` (extra-contract.ts), which refuses the same pair with
+    // The backstop under `parseExtraListInput` (`packages/catalogue/src/extra-contract.ts`), which refuses the same pair with
     // a field an editor can use. The parser also refuses a maximum of 0, which this CHECK allows.
     check(
       "extra_lists_picks_ck",

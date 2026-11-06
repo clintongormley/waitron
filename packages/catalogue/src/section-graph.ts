@@ -1,6 +1,5 @@
-import { catalogues, type Transaction } from "@waitron/db";
+import { catalogues, type Transaction, sectionMembers, sections } from "@waitron/db";
 import { FOLLOWING_FOLDER } from "./include-folder-presentation.js";
-import { sectionMembers, sections } from "./schema/sections.js";
 import type {
   IncludeFolder,
   IncludeFolderOverrides,

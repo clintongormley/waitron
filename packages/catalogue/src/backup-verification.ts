@@ -6,7 +6,7 @@ import type { BackupQuery, BackupValue } from "@waitron/store";
 import { CATALOGUE_CLASSIFICATION } from "./classification.js";
 import { documentImages, menuDocumentHash, MENU_DOCUMENT_FORMAT } from "./menu-document.js";
 import type { MenuDocument } from "@waitron/shared";
-import * as schema from "./schema/index.js";
+import * as schema from "@waitron/db/schema/catalogue.js";
 
 const immutableTables = ["menu_versions", "menu_version_images"];
 export const CATALOGUE_BACKUP_VERIFICATION: BackupVerificationContribution = {

@@ -12,7 +12,7 @@ import {
   mergeOptionalTranslations,
   validateOptionalTranslations,
 } from "./optional-translations.js";
-import { sectionMembers } from "./schema/sections.js";
+import { sectionMembers } from "@waitron/db";
 import { loadSectionGraph } from "./section-graph.js";
 import type { IncludeFolder, IncludeFolderInput, IncludeFolderOverrides } from "@waitron/shared";
 import { sectionColorOf, sectionImageOf, writableMember } from "./sections.js";

@@ -1,7 +1,15 @@
 import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
 import { eq, inArray, type SQL } from "drizzle-orm";
-import { catalogues, categories, products, type Transaction } from "@waitron/db";
+import {
+  catalogues,
+  categories,
+  products,
+  type Transaction,
+  menuDetails,
+  optionLabels,
+  sections,
+} from "@waitron/db";
 import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
@@ -36,9 +44,6 @@ import {
   fixedNameLanguages,
   folderPresentation,
 } from "./include-folder-presentation.js";
-import { menuDetails } from "./schema/menu.js";
-import { optionLabels } from "./schema/options.js";
-import { sections } from "./schema/sections.js";
 import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";

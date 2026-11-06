@@ -42,7 +42,7 @@ import {
   type TranslationBaseline,
 } from "./content-translation-baseline.js";
 import "./errors.js";
-import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
+import { contentSuggestionJobs, contentSuggestions } from "@waitron/db";
 
 import { invalidTranslationQuery, translationConfiguration } from "./content-translation-cells.js";
 

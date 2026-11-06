@@ -6,6 +6,13 @@ import {
   products,
   withTransaction,
   type Transaction,
+  menuDetails,
+  sections,
+  optionLabels,
+  optionLists,
+  extraLists,
+  units,
+  contentSuggestions,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -29,12 +36,6 @@ import type { TranslationRef } from "./content-translation-types.js";
 import type { SuggestionItem } from "./content-suggestion-types.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember } from "./sections.js";
-import { menuDetails } from "./schema/menu.js";
-import { sections } from "./schema/sections.js";
-import { optionLabels, optionLists } from "./schema/options.js";
-import { extraLists } from "./schema/extras.js";
-import { units } from "./schema/units.js";
-import { contentSuggestions } from "./schema/suggestions.js";
 import {
   buildSuggestionJob,
   collectSuggestionItems,
