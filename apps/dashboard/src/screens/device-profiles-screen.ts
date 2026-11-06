@@ -1188,6 +1188,7 @@ export class DeviceProfilesScreen extends LitElement {
     } catch (error) {
       if (opened === this.#opened) {
         this.#openingId = null;
+        if (this.#url.read("profile") === id) void this.#url.write({ profile: null }, true);
         this.#showReadError(error);
       }
     }

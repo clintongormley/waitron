@@ -3720,6 +3720,21 @@ describe("a device profile's address", () => {
     expect(api.getDeviceProfile).toHaveBeenCalledTimes(1);
   });
 
+  it("takes the profile's name out of the address when the profile it names cannot be read", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+    const push = vi.spyOn(history, "pushState");
+    const api = stubApi({
+      getDeviceProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const el = await mount(api);
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy());
+    expect(api.getDeviceProfile).toHaveBeenCalledWith("p1");
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
+    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("opens nothing for an address naming no profile", async () => {
     history.replaceState(null, "", "/manage/device-profiles/profile/gone");
     const push = vi.spyOn(history, "pushState");
