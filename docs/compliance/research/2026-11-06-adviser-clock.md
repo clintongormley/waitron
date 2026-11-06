@@ -387,7 +387,7 @@ Waitron's side (read, not run): a rejection opens a filing case, and after
 `SAME_CODE_REFUSAL_LIMIT` (three) identical refusals later records on the chain are held
 (`drain.ts`). A clock a day ahead could therefore stop the filing of later, correctly dated records.
 
-**Corrected the same day:** developer FAQ §17, case 2.a, covers this directly, so the corrective goes at once and the original needs nothing more. The text below is the first proposal, kept as written.
+**Corrected the same day:** developer FAQ §17, case 2.a, covers this directly, so the corrective goes at once and the original needs nothing more. AEAT's test service took an R1 naming a refused invoice as `Correcto` on 2026-10-05 (verifactu run 37286368370, mode `rejected-invoice-credit`), which this pass missed. The text below is the first proposal, kept as written.
 
 **Proposed answer for a yes or no:** once the real date reaches the stamped date, send the original
 unchanged, then issue the corrective. A preproduction test can show whether AEAT takes the resend.

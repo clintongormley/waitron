@@ -110,10 +110,7 @@ database, which waits for A760.
   simplified one, with the real operation date and no VAT change (V1665-22, V0902-22). One corrective
   may cover many invoices. The VAT period follows the day VAT fell due, and a return already filed
   wrongly is fixed with a complementary return.
-- **T8.** There is no duty or channel to tell AEAT. A record AEAT refused for a future date is corrected
-  at once with a corrective invoice naming the refused invoice. AEAT's developer FAQ §17 says the
-  refused record then needs nothing more: such errors «se dan por solucionadas» when the corrective's
-  record is received. AEAT's preproduction service can show this before anyone is paid.
+- **T8.** There is no duty or channel to tell AEAT.
 
 ### Confirmations: tips (hold, see decision 3)
 
@@ -243,6 +240,7 @@ midnight needs a remedy.
 | A share of tips kept by the restaurant | Taxable income, outside VAT while voluntary. The design keeps none | V1808-22, V5110-26 |
 | Time record rules today | Start and end per person per day, kept four years, open to staff, representatives and the inspectorate. No remote access duty | ET arts. 34.9, 12.4.c, 35.5 |
 | Is the digital time record decree law? | **No.** Not in the BOE up to 6 November 2026. Recheck on the day of sending | BOE scan |
+| A record refused for a future date | Send the corrective at once, naming the refused invoice. The error then counts as solved. AEAT's test service took a credit note naming a refused invoice as `Correcto` ([run 37286368370](https://github.com/waitron-io/verifactu/actions/runs/37286368370), an R1, refused for another reason) | Developer FAQ §17, case 2.a |
 | Agreement limits for Barcelona | 1,783 hours a year, two days' weekly rest, 20 paid minutes over five hours, nights 22:00 to 06:00 at +25%, no split-shift pay | DOGC 9630 |
 | Overtime for part-timers | None outside emergencies. Extra hours are complementary hours, up to 50% | ET art. 12 |
 | Final settlement | A proposed settlement goes with the notice | ET art. 49.2 |
@@ -285,8 +283,8 @@ These cost nothing, and the gestoría the venue already pays can answer most of 
 ## Free routes
 
 - **AEAT's preproduction service** can show what happens to a record dated earlier than the previous
-  one, and to a corrective naming an invoice AEAT refused. It needs one run with the owner's approval, and it would settle
-  part of T5 and T8 before paying anyone.
+  one. It needs one run with the owner's approval, and it would settle
+  part of T5 before paying anyone.
 - **AEAT's general information line** can be asked about T8's "no duty to tell AEAT". It binds nobody.
 - **The AEPD's free channel will not help.** Instrucción 1/2021 says it takes no questions from
   controllers, lawyers or consultants.
@@ -325,7 +323,7 @@ A1406, A1407 and A1408.
   STS 692/2021, the main new labour source, came from a publisher's copy. EUR-Lex downloads failed, so
   CJEU rulings rest on quotations already held or on other copies. Each report lists these.
 - A "no rule found" means none in the sources read.
-- AEAT's real behaviour on T5 and T8 is untested. Error 1112 is known only from the published rules.
+- AEAT's real behaviour on T5 is untested, and an R4 or R5 naming a refused invoice has not been tried. Error 1112 is known only from the published rules.
 - Rulings after 30 September 2026 were not in the DGT database searched.
 - The press reports a possible digital time record decree before the 29 November election, and a
   Veri\*Factu move to 2028. Neither is in the BOE. Recheck both on the day of sending.
