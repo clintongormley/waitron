@@ -255,9 +255,34 @@ const refusals: { name: string; summary: () => Response; words: (lang: "en" | "e
       name: "the box answers setup.not_ready",
       summary: () =>
         Response.json({ error: { code: "setup.not_ready", params: {} } }, { status: 409 }),
-      words: (lang) => initialOwnerStrings[lang].wipeUnavailable,
+      words: (lang) => initialOwnerStrings[lang].wipeFault,
     },
+    ...(
+      [
+        ["may-have-filed", "wipeMayHaveFiled"],
+        ["unexpected", "wipeUnexpected"],
+        ["too-large", "wipeTooLarge"],
+        ["unreadable", "wipeUnreadable"],
+      ] as const
+    ).map(([cause, key]) => ({
+      name: `the box answers setup.not_ready for ${cause}`,
+      summary: () =>
+        Response.json({ error: { code: "setup.not_ready", params: { cause } } }, { status: 503 }),
+      words: (lang: "en" | "es") => initialOwnerStrings[lang][key],
+    })),
   ];
+
+it.each([
+  "wipeMayHaveFiled",
+  "wipeUnexpected",
+  "wipeTooLarge",
+  "wipeUnreadable",
+  "wipeFault",
+] as const)("%s has English and Spanish words, and they differ", (key) => {
+  expect(initialOwnerStrings.en[key]).toMatch(/\S/);
+  expect(initialOwnerStrings.es[key]).toMatch(/\S/);
+  expect(initialOwnerStrings.es[key]).not.toBe(initialOwnerStrings.en[key]);
+});
 
 for (const [locale, lang] of locales)
   for (const r of refusals)
@@ -331,7 +356,7 @@ for (const [name, refusal, words] of [
   [
     "setup.not_ready",
     () => Response.json({ error: { code: "setup.not_ready", params: {} } }, { status: 409 }),
-    t.wipeUnavailable,
+    t.wipeFault,
   ],
 ] as const)
   it(`a send refused ${name} closes the confirmation, draws the box's words and offers no Start again`, async () => {

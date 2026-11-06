@@ -37,6 +37,16 @@ export const initialOwnerStrings = {
       "The setup database holds records that Waitron never deletes. An unfinished setup should hold none, so this is a fault in Waitron. Deleting this setup is not offered. Reconnect keeps everything as it is.",
     wipeUnavailable:
       "This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect keeps everything as it is.",
+    wipeMayHaveFiled:
+      "This box cannot show that this setup sent nothing to AEAT, so deleting it is not offered. Reconnect keeps everything as it is.",
+    wipeUnexpected:
+      "This box finds files or data it does not expect, so deleting this setup is not offered. Reconnect keeps everything as it is. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+    wipeTooLarge:
+      "This setup holds more than Start again can check, so deleting it is not offered. Reconnect keeps everything as it is. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+    wipeUnreadable:
+      "This box cannot read some of this setup's files, so deleting it is not offered. Reconnect keeps everything as it is. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+    wipeFault:
+      "Deleting this setup is not offered because of a fault in Waitron. Reconnect keeps everything as it is.",
     setupDatabaseUnreadable: "The previous setup process was unsuccessful.",
     tradingSaved:
       "This setup already saved the settings the box sells with, so deleting it is not offered.",
@@ -98,6 +108,16 @@ export const initialOwnerStrings = {
       "La base de datos de configuración guarda registros que Waitron nunca borra. Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. No se ofrece borrar esta configuración. Reconectar lo deja todo como está.",
     wipeUnavailable:
       "Este equipo no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.",
+    wipeMayHaveFiled:
+      "Este equipo no puede demostrar que esta configuración no haya enviado nada a la AEAT, así que no se ofrece borrarla. Reconectar lo deja todo como está.",
+    wipeUnexpected:
+      "Este equipo encuentra archivos o datos que no espera, así que no se ofrece borrar esta configuración. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+    wipeTooLarge:
+      "Esta configuración guarda más de lo que Empezar de nuevo puede comprobar, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+    wipeUnreadable:
+      "Este equipo no puede leer algunos archivos de esta configuración, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+    wipeFault:
+      "No se ofrece borrar esta configuración por un fallo de Waitron. Reconectar lo deja todo como está.",
     setupDatabaseUnreadable: "El proceso de configuración anterior no tuvo éxito.",
     tradingSaved:
       "Esta configuración ya guardó los ajustes con los que vende el equipo, así que no se ofrece borrarla.",

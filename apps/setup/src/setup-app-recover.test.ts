@@ -143,7 +143,7 @@ const refusals: [string, () => Response, string][] = [
   [
     "setup.not_ready",
     () => Response.json({ error: { code: "setup.not_ready", params: {} } }, { status: 409 }),
-    t.wipeUnavailable,
+    t.wipeFault,
   ],
   [
     "setup.owner_required",

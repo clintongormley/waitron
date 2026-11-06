@@ -227,6 +227,21 @@ it.each(["trading-settings", "setup-finished", "kept-records"] as const)(
 );
 it.each([
   { name: "setup.not_ready", error: { code: "setup.not_ready" }, cause: "unavailable" },
+  ...(["may-have-filed", "unexpected", "too-large", "unreadable"] as const).map((cause) => ({
+    name: `the box's setup.not_ready for ${cause}`,
+    error: { code: "setup.not_ready", params: { cause }, status: 503 },
+    cause,
+  })),
+  {
+    name: "the box's setup.not_ready with no cause",
+    error: { code: "setup.not_ready", params: {}, status: 503 },
+    cause: "fault",
+  },
+  {
+    name: "the box's setup.not_ready with an unknown cause",
+    error: { code: "setup.not_ready", params: { cause: "something-new" }, status: 503 },
+    cause: "fault",
+  },
   { name: "setup.owner_required", error: { code: "setup.owner_required" }, cause: "unavailable" },
   {
     name: "an unknown refusal cause",
