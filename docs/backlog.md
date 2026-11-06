@@ -87,7 +87,7 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 
 **1. The owner's sessions, which need no building.**
 
-- Send the [curated adviser list](compliance/2026-11-06-adviser-questions.md), once A1324 is tested, the blocking decision is made and the Spanish is rebuilt from it. It holds up 26 entries,
+- Send the [curated adviser list](compliance/2026-11-06-adviser-questions.md), once the A1324 and blocking decisions are made and the Spanish is rebuilt from it. It holds up 26 entries,
   seven of them go-live, including 0% VAT and free items on mixed-rate bills.
 - [The owner's yes-or-no read: built defaults that wait only for a nod](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)

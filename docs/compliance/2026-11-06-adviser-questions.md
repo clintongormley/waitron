@@ -39,12 +39,12 @@ catches. Since April 2026
 so setup would have to unblock them, and other providers differ. Also, the AEPD's guide for small
 businesses (November 2025) has a case with these facts and calls encrypting backups «una medida
 fundamental». It says backups need «el mismo nivel de seguridad que los datos originales». B3 will
-encrypt the box's disk, which would leave the bucket copy as the weaker one. The owner chose to test
-it. If it works, the proposal is to derive the key from the recovery key the box already keeps, so
-there is no new secret to hold, and where a provider refuses, the box says so. A run on the local test
-server showed Litestream accepts the setting and restores with it, but that server ignores these
-keys, so it proves nothing about protection. The test needs a real Amazon bucket, and the test login
-expired on 3 November.
+encrypt the box's disk, which would leave the bucket copy as the weaker one. **Tested on real Amazon S3 on 6 November:** the
+bucket login alone was refused, a wrong key was refused, and the right key restored every row
+([receipt](../receipts/a1324/README.md)). The local test server ignores these keys, so only Amazon
+could show this. It was one short run on Amazon only, not through Waitron's own code. The proposal is
+to derive the key from the recovery key the box already keeps, so there is no new secret to hold, and
+where a provider refuses, the box says so. Building it awaits the owner's decision.
 
 **2. The stop on payments stays (owner, 2026-11-06).** The law does not require it: article 3 of Orden
 HAC/1177/2024 switches off the one-minute rule for Veri\*Factu systems, and AEAT's FAQ says so. The

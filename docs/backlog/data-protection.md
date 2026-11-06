@@ -258,8 +258,10 @@ by the answers):
   customer-supplied key, though nobody has run this. A key would sit on the box beside the bucket
   secret, so it protects nothing against someone who reaches the box. It would help when someone
   reaches the bucket without the box, such as a stolen storage login. The box relies on the provider's
-  encryption, which it does not check. The owner's second look, with the AEPD's guidance, is decision
-  1 of the [curated adviser list](../compliance/2026-11-06-adviser-questions.md).
+  encryption, which it does not check. A test on real Amazon S3 on 2026-11-06 showed the bucket login
+  alone refused and the right key restoring every row ([receipt](../receipts/a1324/README.md)).
+  Whether to build it is decision 1 of the
+  [curated adviser list](../compliance/2026-11-06-adviser-questions.md).
 - **A980 S2c, decision 3:** no product path records a whole-sale void yet, so the voids list is
   empty on every box until one does. See the
   [S2c plan](../superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md).
