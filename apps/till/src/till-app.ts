@@ -13151,7 +13151,11 @@ export class TillApp extends LitElement {
       this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
     await this.#onGroupRequest(
       (party, command) =>
-        composition.api.splitHeldLineIntoUnits(party.id, lineId, { ...command, expectedEdit }),
+        composition.api.splitHeldLineIntoUnits(party.id, lineId, {
+          ...command,
+          personId: composition.sync!.personId,
+          expectedEdit,
+        }),
       live,
     );
   }
@@ -13193,6 +13197,7 @@ export class TillApp extends LitElement {
           {
             submissionId: crypto.randomUUID(),
             expectedPartyRevision: party.revision,
+            personId: state.personId,
             expectedEdit: state.expectedEdit,
           },
           options,
@@ -13538,6 +13543,7 @@ export class TillApp extends LitElement {
             {
               submissionId: crypto.randomUUID(),
               expectedPartyRevision: party.revision,
+              personId: state.personId,
               expectedEdit: state.expectedEdit,
             },
             options,

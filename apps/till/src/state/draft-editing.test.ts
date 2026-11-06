@@ -286,6 +286,7 @@ describe("bill-scoped saved work and retained local candidates", () => {
       "draft-1",
       {
         revision: 4,
+        personId: "ana",
         submissionId: expect.any(String),
         expectedEdit: { billId: "bill-1", editorVersion: 3, draftId: "draft-1", draftRevision: 4 },
       },

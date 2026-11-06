@@ -834,6 +834,7 @@ export interface PartyDraftSnapshot {
 
 export interface DraftTakeover {
   revision: number;
+  personId: string;
   expectedEdit: BillEditExpected;
   submissionId: string;
 }
@@ -4250,7 +4251,7 @@ export class TillApi {
   splitHeldLineIntoUnits(
     partyId: string,
     lineId: string,
-    command: GroupCommand & { expectedEdit: BillEditExpected },
+    command: GroupCommand & { personId: string; expectedEdit: BillEditExpected },
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4373,7 +4374,7 @@ export class TillApi {
   recallToDraft(
     partyId: string,
     lineId: string,
-    command: GroupCommand & { expectedEdit: BillEditExpected },
+    command: GroupCommand & { personId: string; expectedEdit: BillEditExpected },
     options: ReadOptions = {},
   ): Promise<{ revision: number; draft: Draft; edit: BillEditState }> {
     return this.#request(

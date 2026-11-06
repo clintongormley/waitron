@@ -4486,6 +4486,7 @@ describe("TillApi: a seated party", () => {
       api.splitHeldLineIntoUnits("v1", "l2", {
         submissionId: "split-1",
         expectedPartyRevision: 10,
+        personId: "p1",
         expectedEdit: { billId: "wo-4", editorVersion: 3, draftId: null, draftRevision: null },
       }),
     ).resolves.toEqual({ revision: 11 });
@@ -4494,6 +4495,7 @@ describe("TillApi: a seated party", () => {
       post({
         submissionId: "split-1",
         expectedPartyRevision: 10,
+        personId: "p1",
         expectedEdit: { billId: "wo-4", editorVersion: 3, draftId: null, draftRevision: null },
         lineId: "l2",
       }),
@@ -4665,7 +4667,12 @@ describe("TillApi: a party's drafts", () => {
   const emptyEdit = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
   const observed = { billId: "wo-4", editorVersion: 1, draftId: "d1", draftRevision: 1 };
   const edit = { ...observed, editorId: "p-alex", editorName: "Alex" };
-  const takeover = { revision: 1, expectedEdit: observed, submissionId: "takeover-1" };
+  const takeover = {
+    revision: 1,
+    personId: "p-sam",
+    expectedEdit: observed,
+    submissionId: "takeover-1",
+  };
 
   it("getSplitSources reads the party's route and hands a caller's abort signal to fetch", async () => {
     const answer = { partyRevision: 3, bills: [] };

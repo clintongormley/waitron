@@ -1760,6 +1760,7 @@ describe("DraftSync: taking over another person's draft", () => {
       theirs.id,
       {
         revision: theirs.revision,
+        personId: "p1",
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -2099,6 +2100,7 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
       elsewhere.id,
       {
         revision,
+        personId: "p1",
         expectedEdit: {
           billId: "wo-check",
           editorVersion: 1,

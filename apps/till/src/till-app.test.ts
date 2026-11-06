@@ -9852,6 +9852,7 @@ describe("till-app", () => {
           {
             submissionId: expect.any(String),
             expectedPartyRevision: 3,
+            personId: "p1",
             expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
           },
           { signal: expect.any(AbortSignal) },

@@ -143,6 +143,7 @@ export type DraftCommandOutcome<T> =
 export interface DraftCommandState {
   draftId: string | null;
   revision: number;
+  personId: string;
   expectedEdit: BillEditExpected;
 }
 
@@ -701,6 +702,7 @@ export class DraftSync {
         draftId,
         {
           revision,
+          personId: this.personId,
           expectedEdit: this.expectedEdit!,
           submissionId: crypto.randomUUID(),
         },
@@ -740,7 +742,7 @@ export class DraftSync {
       taken = await this.#options.api.takeOverDraft(
         this.partyId,
         draftId,
-        { revision, expectedEdit, submissionId: crypto.randomUUID() },
+        { revision, personId: this.personId, expectedEdit, submissionId: crypto.randomUUID() },
         { signal: limit.signal },
       );
     } catch (error) {
@@ -793,7 +795,12 @@ export class DraftSync {
       let applied: T;
       try {
         applied = await send(
-          { draftId: this.#draftId, revision: this.#revision, expectedEdit: this.expectedEdit! },
+          {
+            draftId: this.#draftId,
+            revision: this.#revision,
+            personId: this.personId,
+            expectedEdit: this.expectedEdit!,
+          },
           { signal: limit.signal },
         );
       } catch (error) {

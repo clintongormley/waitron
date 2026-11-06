@@ -8,7 +8,12 @@ describe("party Recall client", () => {
       revision: 9,
       draft: { id: "draft-7", billId: "bill-4", lines: [{ id: "ref-2", sourceLineId: "dish-3" }] },
     };
-    const request = { submissionId: "recall-1", expectedPartyRevision: 8, expectedEdit };
+    const request = {
+      submissionId: "recall-1",
+      expectedPartyRevision: 8,
+      personId: "person-1",
+      expectedEdit,
+    };
     const fetcher = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(answer), {
         status: 200,
@@ -41,6 +46,7 @@ describe("party Recall client", () => {
       new TillApi("", fetcher).recallToDraft("party-1", "dish-3", {
         submissionId: "recall-1",
         expectedPartyRevision: 8,
+        personId: "person-1",
         expectedEdit,
       }),
     ).rejects.toMatchObject({ code: error.code, ticketItemId: "ticket-1", status: 409 });
