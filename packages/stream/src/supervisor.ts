@@ -152,6 +152,11 @@ const PROBE_EVERY_MS = 24 * 60 * 60_000;
  * a bucket that stays unreadable is logged.
  */
 const CLASSIFY_EVERY_MS = 10 * 60_000;
+/**
+ * How often, while streaming, the bucket is read with no change waiting, no failed read and no
+ * problem named.
+ */
+const QUIET_READ_EVERY_MS = 10 * 60_000;
 /** A read of the bucket unanswered this long is given up on, and the next tick starts another. */
 export const READ_DEADLINE_MS = 5 * 60_000;
 /** Beside the configuration: the PID of the Litestream this supervisor started. */
@@ -590,6 +595,7 @@ export class StreamSupervisor {
 
   async #stream(generation: string, signal: AbortSignal): Promise<void> {
     let reading: { since: number; cancel: AbortController } | undefined;
+    let lastReadAt = Number.NEGATIVE_INFINITY;
     // Not awaited, like the prune: a bucket that never answers must not hold the tick. One read of
     // the bucket at a time, until it has gone unanswered past the deadline and is cancelled.
     const readBucket = () => {
@@ -599,6 +605,8 @@ export class StreamSupervisor {
         reading.cancel.abort();
         this.#noteUnreadable({ errorCode: "timeout" });
       }
+      if (this.#readCanWait() && now - lastReadAt < QUIET_READ_EVERY_MS) return;
+      lastReadAt = now;
       const mine = { since: now, cancel: new AbortController() };
       reading = mine;
       const read = AbortSignal.any([signal, mine.cancel.signal]);
@@ -615,6 +623,14 @@ export class StreamSupervisor {
       reading?.cancel.abort();
       await this.#pauseAndResume(generation, walBytes, signal);
     }
+  }
+
+  #readCanWait(): boolean {
+    return (
+      this.#commits.pending().length === 0 &&
+      this.#unreadableLoggedAt === null &&
+      this.#status.bucketProblem === null
+    );
   }
 
   /**
@@ -644,8 +660,8 @@ export class StreamSupervisor {
   }
 
   /**
-   * Level 0 each time; level 1 as well once a commit has waited longer than level 0 keeps a file,
-   * since it may have been compacted and tidied between two reads.
+   * Level 0 each time; level 1 as well once a commit has waited longer than level 0 is sure to keep
+   * a file, since it may have been compacted and tidied between two reads.
    */
   async #newestUpload(
     generation: string,
