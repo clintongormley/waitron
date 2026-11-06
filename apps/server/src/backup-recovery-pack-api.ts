@@ -65,6 +65,7 @@ import { createPasswordThrottle } from "./password-throttle.js";
 import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
+import { sentFromThisOrigin } from "./own-page.js";
 import "./errors.js";
 
 export interface BackupRecoveryPackApiDeps {
@@ -156,12 +157,7 @@ function requireSecurePackRequest(c: Context): void {
   if (!(socket instanceof TLSSocket) || !socket.encrypted) {
     throw new AppError("recovery.pack_connection_insecure", {});
   }
-  const origin = c.req.header("Origin");
-  const site = c.req.header("Sec-Fetch-Site");
-  if (
-    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
-    (site !== undefined && site !== "same-origin" && site !== "none")
-  ) {
+  if (!sentFromThisOrigin(c)) {
     throw new AppError("recovery.pack_origin_refused", {});
   }
   if (c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {

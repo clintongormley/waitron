@@ -19,6 +19,7 @@ import { FULL_DISK_BYTES } from "./boot-failure.js";
 import "./errors.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
+import { sentFromThisOrigin } from "./own-page.js";
 import { escapeHtml, type RecoveryDeps } from "./recovery-surface.js";
 import { lowestFreeBytes } from "./start-space.js";
 
@@ -298,15 +299,6 @@ export function isSecure(c: Context): boolean {
   return socket instanceof TLSSocket && socket.encrypted;
 }
 
-function fromThisPage(c: Context): boolean {
-  const origin = c.req.header("Origin");
-  const site = c.req.header("Sec-Fetch-Site");
-  return (
-    (origin === undefined || origin === new URL(c.req.url).origin) &&
-    (site === undefined || site === "same-origin" || site === "none")
-  );
-}
-
 async function formBody(c: Context): Promise<string> {
   const type = c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase();
   if (type !== "application/x-www-form-urlencoded") invalid("body");
@@ -479,7 +471,7 @@ export function mountStartAgainChoice(
     let result: Awaited<ReturnType<typeof choose>>;
     try {
       if (!isSecure(c)) throw new Refusal(403, { kind: "insecure" }, false);
-      if (!fromThisPage(c)) throw new Refusal(403, { kind: "otherPage" });
+      if (!sentFromThisOrigin(c)) throw new Refusal(403, { kind: "otherPage" });
       const form = parseForm(await formBody(c));
       chosen = form.choice;
       if (form.password === undefined) invalid("password");

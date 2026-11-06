@@ -16,6 +16,7 @@ import type {
 } from "./box-host-client.js";
 import "./errors.js";
 import type { Logger } from "./logger.js";
+import { sentFromThisOrigin } from "./own-page.js";
 import { START_SCREENS } from "../../../scripts/box/host-protocol.mjs";
 import { isSsidHex } from "../../../scripts/box/wifi-record.mjs";
 
@@ -132,21 +133,10 @@ const keyMgmt = (value: unknown): value is WifiJoin["keyMgmt"] =>
 const psk = (value: unknown): value is string => typeof value === "string";
 const hidden = (value: unknown): value is boolean => typeof value === "boolean";
 
-/** SameSite ignores the port, so a page on another port of the box's own name carries a
- * manager's cookie; these two headers are what tell it apart. */
-function fromOtherPage(c: Context): boolean {
-  const origin = c.req.header("Origin");
-  const site = c.req.header("Sec-Fetch-Site");
-  return (
-    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
-    (site !== undefined && site !== "same-origin" && site !== "none")
-  );
-}
-
 function insecureJoin(c: Context): "unencrypted" | "other_origin" | null {
   const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
   if (!(socket instanceof TLSSocket) || !socket.encrypted) return "unencrypted";
-  return fromOtherPage(c) ? "other_origin" : null;
+  return sentFromThisOrigin(c) ? null : "other_origin";
 }
 
 function refuse(c: Context, log: Logger, err: AppError): Response {

@@ -9,6 +9,7 @@ import { readFirstFiscalBody } from "./setup-first-fiscal-api.js";
 import { parseRecoveryEntryContext, type RecoveryEntryContext } from "./recovery-entry.js";
 import { requestFromBox } from "./request-from-box.js";
 import { parseRecoveryOperationInput } from "./recovery-module-operation.js";
+import { sentFromThisOrigin } from "./own-page.js";
 import "./errors.js";
 
 export interface RecoveryPreparationRequest {
@@ -110,14 +111,7 @@ async function readMultipart(c: Context, limit: number): Promise<FormData> {
 
 function assertOwnerTransport(c: Context): void {
   const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-  const origin = c.req.header("Origin"),
-    site = c.req.header("Sec-Fetch-Site");
-  if (
-    !(socket instanceof TLSSocket) ||
-    !socket.encrypted ||
-    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
-    (site !== undefined && !["same-origin", "none"].includes(site))
-  )
+  if (!(socket instanceof TLSSocket) || !socket.encrypted || !sentFromThisOrigin(c))
     throw new AppError("setup.owner_required", {});
 }
 async function readUpload(
