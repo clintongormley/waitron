@@ -122,9 +122,33 @@ const jobs: PrintJobRow[] = [
 ];
 
 const printerProfiles: PrinterProfileOffer[] = [
-  { printerId: "p1", profileId: "dp1", profileName: "Waiters" },
-  { printerId: "p2", profileId: "dp1", profileName: "Waiters" },
-  { printerId: "p1", profileId: "dp2", profileName: "Counter" },
+  {
+    printerId: "p1",
+    profileId: "dp1",
+    profileName: "Waiters",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p2",
+    profileId: "dp1",
+    profileName: "Waiters",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p1",
+    profileId: "dp2",
+    profileName: "Counter",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
 ];
 
 // An unregistered USB device, a disabled registration offered for adding again, and an office printer.
@@ -203,6 +227,7 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
     listPagePrinters: vi.fn().mockResolvedValue([]),
     listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
+    listPrinterStationNames: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }

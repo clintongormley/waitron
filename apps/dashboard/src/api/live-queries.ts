@@ -103,6 +103,7 @@ export const QUERY_DEPENDENCIES = {
   getContentTranslationCells: TRANSLATION_READS,
   listPrinters: ["printers", "print_jobs", "printer_holders"],
   listPrinterProfiles: ["device_profile_printers", "device_profiles"],
+  listPrinterStationNames: ["station_printers", "kitchen_stations"],
   listPagePrinters: ["page_printers", "print_agents"],
   getPrinterDeleteImpact: [
     "printers",

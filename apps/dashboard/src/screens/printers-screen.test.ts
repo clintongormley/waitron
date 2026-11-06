@@ -259,9 +259,33 @@ const jobs: PrintJobRow[] = [
 ];
 
 const printerProfiles: PrinterProfileOffer[] = [
-  { printerId: "p1", profileId: "dp1", profileName: "Camareros" },
-  { printerId: "p2", profileId: "dp1", profileName: "Camareros" },
-  { printerId: "p1", profileId: "dp2", profileName: "Mostrador" },
+  {
+    printerId: "p1",
+    profileId: "dp1",
+    profileName: "Camareros",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p2",
+    profileId: "dp1",
+    profileName: "Camareros",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
+  {
+    printerId: "p1",
+    profileId: "dp2",
+    profileName: "Mostrador",
+    pagePrinterId: null,
+    roles: ["receipt"],
+    departmentId: null,
+    departmentName: null,
+  },
 ];
 
 const pending: JoinRequestRow[] = [
@@ -317,6 +341,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([] as DiscoveredPrinter[]),
     listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
+    listPrinterStationNames: vi.fn().mockResolvedValue([]),
     listPagePrinters: vi.fn().mockResolvedValue([] as PagePrinterRow[]),
     registerPagePrinter: vi.fn().mockResolvedValue({ id: "pp9", outcome: "created" }),
     ...overrides,
@@ -4895,6 +4920,7 @@ it("shows the saved drawer independently of the profiles offering it, and the de
       },
     ]),
     listPrinterProfiles: vi.fn().mockResolvedValue([]),
+    listPrinterStationNames: vi.fn().mockResolvedValue([]),
   });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);

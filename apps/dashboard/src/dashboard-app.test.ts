@@ -7946,6 +7946,7 @@ describe("printer details window during a pending save", () => {
               },
             ]),
             listPrinterProfiles: vi.fn().mockResolvedValue([]),
+            listPrinterStationNames: vi.fn().mockResolvedValue([]),
             listDiscoveredPrinters: vi.fn().mockResolvedValue([]),
             listPagePrinters: vi.fn().mockResolvedValue([]),
             pairingMode: vi.fn().mockResolvedValue({

@@ -68,6 +68,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listPrinters: async () => [],
       listRecentJobs: async () => [],
       listPrinterProfiles: async () => [],
+      listPrinterStationNames: async () => [],
       joinRequests: async () => [],
       pairingMode: async () => ({
         open: false,
