@@ -3,6 +3,7 @@ import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { LITESTREAM_VERSION } from "@waitron/stream";
 import {
   type Answer,
   BUCKET,
@@ -201,7 +202,7 @@ describe("withAwsRehearsal — the happy path", () => {
       sdkVersion: (
         createRequire(import.meta.url)("@aws-sdk/client-s3/package.json") as { version: string }
       ).version,
-      litestreamVersion: "0.5.17",
+      litestreamVersion: LITESTREAM_VERSION,
       region: "eu-north-1",
       startedAt: "2026-10-14T10:00:00.005Z",
     });
