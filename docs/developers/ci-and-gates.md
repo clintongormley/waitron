@@ -413,7 +413,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
-| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
+| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 | `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
 | `handover` | the unsharded `mutation-handover` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/handover mutation` fails below 90 too, because the bar is in its own config |
 
@@ -701,14 +701,30 @@ gh run download <nightly run> -p 'mutation-report-db-shard-*' -D <scratch dir>
 node scripts/mutation-costs.mjs db packages/db/mutation-costs.json <scratch dir>/*/mutation.json
 ```
 
-Several runs can be given at once; each file takes its median. The table committed with A1309 came
-from the three runs above, so `src/testing/venue-db.ts` still carries its three old timeouts
-(about 246 s) until the next refresh.
+Several runs can be given at once; each file takes its median. A report made locally serves as
+well as a CI one, because the model reads only what the report records. Before using one from a run
+that followed another in the same checkout, keep only the files its own `config.mutate` names:
+Stryker's incremental file carries the earlier run's files into the later report.
 
-The job logs, the reports, the fit and the replay are in `/Users/clintongormley/waitron-campaign-b/a1309/`,
+**The 2026-11-07 refresh (A760 part 3).** At ten shards, dispatched run 42344158863 had whole-file
+shards 4, 8, 9 and 10 cancelled at the limit, without a report. The table was rebuilt from that
+run's six reports (shards 1 to 3 and 5 to 7) and four reports of shards 4, 8, 9 and 10 made locally
+on 7 November 2026 with that shard's file list (`pnpm exec stryker run --mutate "<files>"
+--concurrency 10 --force` in `packages/db`). Against that run's job logs (from "Initial test run
+succeeded" to "MutationTestExecutor Done" or, in a cancelled shard, its last progress line), the
+model under-read the cancelled shards: shard 10 had tested 856 of its 998 mutants after 1,370 s
+against 1,078 estimated for all of them, about 1.5 times the estimate if the rest ran at the same
+pace, and shards 4 and 8 about 1.3 and 1.4 times. It over-read shards 5 and 6 (480 and 670 s
+against 752 and 1,050). The refreshed table puts about 1,065 estimated seconds in each of the
+seven whole-file shards at ten, and about 746 in each of ten at thirteen shards: about 19 minutes of
+mutation at 1.5 times, after the up to about 2.5 minutes each job spent before mutating.
+
+A1309's job logs, reports, fit and replay are in `/Users/clintongormley/waitron-campaign-b/a1309/`,
+and this refresh's reports and scripts in `/Users/clintongormley/waitron-campaign/a760-p3/mut/`, both
 outside the repository.
 
-**Limits.** The model is a fit over three nights, not a measurement of any one file. The guard in
+**Limits.** The model is a fit over three nights, not a measurement of any one file, and on the
+2026-11-07 tree a shard's mutation time ran from 0.64 to about 1.5 times its estimate. The guard in
 `scripts/mutation-shard.test.mjs` checks only that db's table exists, holds positive seconds for
 unsplit `src/` files and names only files db's Stryker config still mutates, never that it is fresh. Nothing guards against another condition, in code
 that every test runs, that its own guard already implies.
