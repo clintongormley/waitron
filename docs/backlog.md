@@ -429,7 +429,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
 - **The recovery page's operator texts send the person to whoever installed the box**, which a
-  test requires and CLAUDE.md §3's first rule forbids. For the owner. Found by A760 part 3's review.
+  test still requires against CLAUDE.md §3's first rule. Left open by A1384 (#2527).
   [Detail](backlog/setup.md#the-recovery-pages-operator-texts-send-the-person-to-whoever-installed-the-box)
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
