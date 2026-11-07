@@ -417,12 +417,24 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     async setRemoteAccess(enabled: boolean, authorize: () => Promise<void>) {
       return run(async () => {
         const state = await read();
-        if (!state?.view?.registration || state.lifecycle?.revoked)
+        if (
+          !state?.view?.registration ||
+          state.lifecycle?.revoked ||
+          (enabled && state.lifecycle?.pending?.action === "revoke")
+        )
           throw new AppError("cloud.not_configured", {});
         await authorize();
         state.remoteAccessEnabled = enabled;
         await save(state);
-        await writeTunnelConfiguration(options.tunnelDir, state);
+        try {
+          await writeTunnelConfiguration(options.tunnelDir, state);
+        } catch (error) {
+          if (enabled) {
+            state.remoteAccessEnabled = false;
+            await save(state);
+          }
+          throw error;
+        }
         return project(state);
       }, true);
     },

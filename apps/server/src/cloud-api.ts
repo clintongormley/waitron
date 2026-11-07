@@ -1,4 +1,4 @@
-import { managementOriginFor } from "./request-from-box.js";
+import { isRemoteStaffRequest, managementOriginFor } from "./request-from-box.js";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { withTransaction, type Database } from "@waitron/db";
@@ -96,6 +96,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         replacementEligible,
         configured: !!deps.connection,
         isPrimary: deps.isPrimary(),
+        isRemote: isRemoteStaffRequest(c),
       });
     }),
   );
@@ -168,7 +169,12 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         await authorize(c, true);
         primary();
       });
-      return c.json({ ...status, configured: true, isPrimary: deps.isPrimary() });
+      return c.json({
+        ...status,
+        configured: true,
+        isPrimary: deps.isPrimary(),
+        isRemote: isRemoteStaffRequest(c),
+      });
     }),
   );
   for (const action of ["start", "check", "complete", "refresh", "revoke"] as const)
@@ -225,7 +231,12 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
                       primary();
                     });
         await authorize(c, true);
-        return c.json({ ...result, configured: true, isPrimary: deps.isPrimary() });
+        return c.json({
+          ...result,
+          configured: true,
+          isPrimary: deps.isPrimary(),
+          isRemote: isRemoteStaffRequest(c),
+        });
       }),
     );
 }

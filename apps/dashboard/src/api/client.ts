@@ -1632,6 +1632,7 @@ export type BackupFreshness =
   | { configured: true; destinations: BackupDestinationStatus[] };
 
 export interface CloudConnectionStatus {
+  isRemote?: boolean;
   remoteAccessEnabled?: boolean;
   replacementEligible?: boolean;
   replacementPending?: boolean;
