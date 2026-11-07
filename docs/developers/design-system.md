@@ -5741,14 +5741,16 @@ Language, Settings and Log out, then, while a venue logo is in use and has not f
 `wt-powered-by` with `login.powered_by` (A1096), last even when Testing shows. Settings holds Equipment and Zones on this device. Kitchen appears
 only under Testing on Demo or Preparation installs with the existing kitchen permission. Live tills
 keep Kitchen off their navigation; kitchen displays retain their own fixed primary screen. Find a
-bill opens Bills and Transactions. Its Back returns to Counter without replacing the basket; a
-transaction receipt keeps the page's tab, query and server page for its own Back action. On a
-device with no Counter (a handheld, or a till with no counter zones) Back reads "Back" and returns
-to the Floor; there a presented counter bill opens Find a bill's collecting dialog on what it owes,
-and a parked one opens the pay window, on the whole bill on a handheld and on an amount on a till,
-emptying the basket when that window closes or settles the bill. The collecting dialog offers only
-the ways of paying the profile allows: cash with take-cash, card on the terminal with hand-keyed card
-payment; with neither it says so and offers no Collect.
+bill opens Bills and Transactions. Its Back returns to the device's home screen without replacing
+the basket, and reads "Back to counter" only where that home is Counter; elsewhere it reads "Back".
+The Pass, the station screen and My schedule label their Back the same way. A transaction receipt
+keeps the page's tab, query and server page for its own Back action. On a device with no Counter (a
+handheld, or a till with no counter zones) a presented counter bill opens Find a bill's collecting
+dialog on what it owes, and a parked one opens the pay window, on the whole bill on a handheld
+while none of it is paid and otherwise on an amount, emptying the basket when that window closes or
+settles the bill. The collecting dialog offers only the ways of paying the profile allows: cash
+with take-cash, card on the terminal with hand-keyed card payment, though a payment still waiting
+for its answer keeps its own method; with neither it says so and offers no Collect.
 
 A handheld's bar (A797 slice 3) holds the brand mark while it fits, Floor, then one button for each
 table where the signed-in person has unsent dishes, then the person's name while it fits, the Help
