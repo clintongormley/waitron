@@ -654,9 +654,9 @@ not verify that every provider, device or process eventually recovers.
 `apps/server/src/recovery-surface.ts` has no literal “contact support”. Its database-ahead/schema
 rows name backup/reinstall, its disk-full row names freeing space or a bigger disk (2026-10-28, A1127: the full-disk page's action now names nobody; it says what fills the disk, that Waitron cannot free more by itself, and what reinstalling costs. 2026-11-06, A1384: the `storage.disk_full` email in `apps/server/src/i18n/box-emails.ts` now says the same and names nobody), and its unknown
 boot row names a retry followed by the installer. Those are already distinct instructions rather
-than an endless wait. The same rows and most others also end by sending the person to whoever installed
-the box, against CLAUDE.md §3's first rule
-([setup.md](setup.md#the-recovery-pages-operator-texts-send-the-person-to-whoever-installed-the-box)). The page's rendered action is a boot retry (`:563`); a restore or reinstall
+than an endless wait. _2026-11-07: the database-ahead, schema and unknown-boot rows, and others, but not the disk-full
+row, also send the person to whoever installed the box, against CLAUDE.md §3's first rule
+([setup.md](setup.md#the-recovery-pages-operator-texts-send-the-person-to-whoever-installed-the-box))._ The page's rendered action is a boot retry (`:563`); a restore or reinstall
 is an operator procedure, not a second button. The actual accessibility of each installer procedure
 was not exercised by this audit. Do not describe this as qualified end-user recovery.
 

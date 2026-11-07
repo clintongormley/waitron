@@ -319,13 +319,14 @@ password field at phone width (`apps/setup/src/setup-app.ts`, the first-owner sc
 ## The recovery page's operator texts send the person to whoever installed the box
 
 Left open by A1384 (#2527). The recovery page's operator texts
-(`apps/server/src/i18n/recovery-page.ts`: about 15 codes' actions, among them
+(`apps/server/src/i18n/recovery-page.ts`: most codes' actions, among them
 `provisioning.database_ahead`, `provisioning.schema_mismatch`, `holderStalledText` and the generic
 fallback, English and Spanish, plus the `forInstaller` heading "For whoever installed this box")
-end "ask whoever installed this box …". CLAUDE.md §3's first rule (owner, 2026-10-25) names that as
+send the person to whoever installed the box. CLAUDE.md §3's first rule (owner, 2026-10-25) names that as
 no remedy; `apps/server/src/recovery-surface.test.ts` still requires it beside a restore action,
 for #310's reason of 2026-09-11, from before the rule. Each code needs words a person with no
-terminal can act on: the approved reinstall sentence, a fault in Waitron where only a bug reaches
+terminal can act on: the owner's approved reinstall sentence (A1127, 2026-10-28;
+`shell.first_setup.disk_full`), a fault in Waitron where only a bug reaches
 the state (established at its site), or a new self-service step; a code with none of these goes to
 the owner. After A760 a box moved to the new image without a reset shows
 `provisioning.database_ahead`'s page.

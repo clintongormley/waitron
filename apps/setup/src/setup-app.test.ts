@@ -3203,11 +3203,11 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "This export was made by a different version of Waitron, or on a box that runs different parts of Waitron, so this box cannot load it. Make a new export on a box running this box's version, then load that.",
+      "This export was made by a different version of Waitron, or on a box that runs different parts of Waitron, so this box cannot load it. If the box it came from runs a different version, make a new export on a box running this box's version and load that. Otherwise, choose Start empty and enter the configuration yourself.",
     ],
     [
       "es-ES",
-      "Esta exportación la hizo otra versión de Waitron, o un equipo que usa otras partes de Waitron, así que este equipo no puede cargarla. Haz una exportación nueva en un equipo con la versión de este y carga esa.",
+      "Esta exportación la hizo otra versión de Waitron, o un equipo que usa otras partes de Waitron, así que este equipo no puede cargarla. Si el equipo de origen tiene otra versión, haz una exportación nueva en un equipo con la versión de este y carga esa. Si no, elige «Empezar desde cero» y configúralo tú.",
     ],
   ] as const)(
     "explains an export from another version or using different parts of Waitron (%s)",

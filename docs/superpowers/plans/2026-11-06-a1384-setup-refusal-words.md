@@ -613,6 +613,8 @@ tests `apps/server/src/first-setup-start-again.test.ts`,
   `"setup.configuration_newer": 400`. `describeConfigurationRefusal` maps it to
   `shell.configuration.newer`; drop `params.field === "version"` there. Add the EN and ES strings
   and reword `shell.configuration.incompatible_version` (words table).
+  _2026-11-07: superseded for module versions; both directions throw
+  `setup.configuration_other_version` (see the dated note under the Decision)._
 - [ ] **Step 4:** the three commands green. Also run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-command-deployment`
   (the command line validates the same bundle, `first-setup-command-deployment.ts:97`) and
   `pnpm exec vitest run scripts/errors-reachable.test.ts`. Typecheck provisioning, server and setup;
