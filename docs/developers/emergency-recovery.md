@@ -165,11 +165,14 @@ permits no new activation. A newer image's database is refused before migration 
 consumption.
 
 Set `priorActivation` to `committed` only after checking the outside record and local result.
-An uncertain result refuses recovery. Once placement is marked started, a thrown error keeps the
-staged request and its owner-only key file too, even on the first attempt. This includes a failed
-trading-settings write or outside-result publication after activation commits. A refusal while
-resuming keeps them for another checked attempt. A completed restore removes those files. A venue
-lock refusal before placement leaves a fresh request, rather than declaring it interrupted.
+An uncertain result refuses recovery. Once placement is marked started, an error thrown after the
+restore hooks' transaction body has returned keeps the staged request and its owner-only key file,
+even on the first attempt. This includes a failed trading-settings write or outside-result
+publication after activation commits. An error thrown before then (before placement, in the
+migration, or in a restore hook) puts the original request back, so the next start restores afresh
+with the same event and name. A refusal while resuming keeps them for another checked attempt. A
+completed restore removes those files. A venue lock refusal before placement leaves a fresh
+request, rather than declaring it interrupted.
 
 If no local activation committed, the name stays burned. Prepare a new event against current
 outside history and submit a fresh restore request; do not delete the old incident to free it.

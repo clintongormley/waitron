@@ -152,6 +152,8 @@ export interface RestoreHookResult {
 }
 
 // Authentication is reconstructed by the trusted host, never deserialised from a backup or marker.
+// A runner calls `run` once, as the body of the venue transaction it saves, and saves nothing to
+// venue.db before `run` returns: `onFailedBeforeHooksCommit` relies on it.
 export interface RestoreOperationRunner {
   (
     context: {

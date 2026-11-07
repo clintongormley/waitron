@@ -401,7 +401,18 @@ describe("waitron-restore restore", () => {
     ]);
   });
 
-  it("says a failed schema update can be fixed by running the same command again", async () => {
+  it.each([
+    [
+      "a step that fails",
+      { code: "ERR_SQLITE_ERROR", errcode: 1, errstr: "SQL logic error" },
+      "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; install a version that fixes this, then run the same command again: it starts the restore over",
+    ],
+    [
+      "a full disk",
+      { code: "ERR_SQLITE_ERROR", errcode: 13, errstr: "database or disk is full" },
+      "restore failed: the disk filled during the restore; free some space and run it again",
+    ],
+  ])("says what a schema update that fails on %s means", async (_name, engine, line) => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-migration-"));
     const artifactPath = await makeArtifact(dir);
     const out: string[] = [];
@@ -413,15 +424,16 @@ describe("waitron-restore restore", () => {
       },
       lockVenue: unlockedVenue,
       out: (line) => out.push(line),
+      // The shape `runSet` (`packages/migrations/src/apply.ts`) throws.
       restore: async () => {
-        throw new AppError("migrations.apply_failed", { set: "__drizzle_migrations_db" });
+        throw Object.assign(
+          new AppError("migrations.apply_failed", { set: "__drizzle_migrations_db" }),
+          { cause: Object.assign(new Error("migration failed"), { cause: engine }) },
+        );
       },
     });
     expect(code).toBe(1);
-    expect(out).toEqual([
-      COLD_RESTORE_NOTICE,
-      "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; run the same command again: it starts the restore over",
-    ]);
+    expect(out).toEqual([COLD_RESTORE_NOTICE, line]);
   });
 });
 

@@ -26,7 +26,12 @@ import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { ALL_MODULES } from "./modules.js";
-import { restoreFromArtifactFile, runRestoreHooks, type PlacementDeps } from "./restore.js";
+import {
+  restoreFromArtifactFile,
+  runRestoreHooks,
+  type PlacementDeps,
+  type RestoreOperationRunner,
+} from "./restore.js";
 import { runStagedRestore } from "./restore-request.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { stagedHourCrash } from "./testing/staged-hour-crash.js";
@@ -288,6 +293,7 @@ it.each(
     const before = await readFile(markerPath, "utf8");
     const fault = afterPlacement[name];
     const injected = fault.inject(f);
+    const journal = f.journal();
     const hooksDone: unknown[] = [];
     await expect(
       runStagedRestore(
@@ -303,6 +309,7 @@ it.each(
     ).rejects.toMatchObject({ code: fault.code });
     expect(hooksDone.includes("fiscal-verifactu")).toBe(fault.fiscalHookRan);
     expect(await readFile(markerPath, "utf8")).toBe(before);
+    expect(f.journal()).toBe(journal);
     const placed = await f.snapshot();
     expect(placed.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
     await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
@@ -314,6 +321,15 @@ it.each(
     const restored = await f.snapshot();
     expect(restored.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
     expect(restored.records).toEqual(f.originalRecords);
+    expect(restored.registrations).toHaveLength(2);
+    const selected: { code: string }[] =
+      JSON.parse(before).recoveryOperation.input.allocation.series;
+    expect(
+      restored.series
+        .filter((row) => row.retiredAt === null)
+        .map((row) => row.code)
+        .sort(),
+    ).toEqual(selected.map((row) => row.code).sort());
     const identity = await readFile(join(f.stateDir, "trading.env"), "utf8");
     expect(identity).toContain(f.node.nodeId);
     expect(identity).not.toBe(previousIdentity);
@@ -344,6 +360,50 @@ it.each(["archive", "stream"] as const)(
         { ...f.restore },
         (deps) => restoreFromArtifactFile({ ...deps, openDb }),
         (args) => writeStreamRestore({ ...args, openDb }),
+      ),
+    ).rejects.toBe(failure);
+    expect(
+      JSON.parse(await readFile(join(f.stateDir, "restore-request.json"), "utf8")),
+    ).toHaveProperty("placementStarted", true);
+    const committed = await f.snapshot();
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
+      "0CNNW",
+      "0CNQR",
+    ]);
+    await expect(f.run()).resolves.toBe(true);
+    expect(await f.snapshot()).toEqual(committed);
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
+  },
+);
+
+it.each(["archive", "stream"] as const)(
+  "a started %s request whose restore runner fails after its save went through keeps placement started, and the next start finishes it by a checked replay",
+  async (kind) => {
+    const f = await stage(kind);
+    await f.seedDestination();
+    const failure = new Error("injected failure after the runner's save");
+    const failAfter = (runner: RestoreOperationRunner | undefined): RestoreOperationRunner => {
+      const wrapped: RestoreOperationRunner = async (context, run) => {
+        await runner!(context, run);
+        throw failure;
+      };
+      if (runner?.checkBeforePlacement !== undefined)
+        wrapped.checkBeforePlacement = runner.checkBeforePlacement;
+      return wrapped;
+    };
+    await expect(
+      runStagedRestore(
+        { ...f.restore },
+        (deps) =>
+          restoreFromArtifactFile({
+            ...deps,
+            withModuleOperations: failAfter(deps.withModuleOperations),
+          }),
+        (args) =>
+          writeStreamRestore({
+            ...args,
+            withModuleOperations: failAfter(args.withModuleOperations),
+          }),
       ),
     ).rejects.toBe(failure);
     expect(
