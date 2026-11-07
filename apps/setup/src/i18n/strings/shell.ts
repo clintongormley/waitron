@@ -13,6 +13,8 @@ export const shellEn = {
     "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
   "shell.first_setup.disk_full_restart_unknown":
     "The box's disk is full, so Waitron cannot save anything. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+  "shell.first_setup.series_minute_taken":
+    "The series cannot be made: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
 
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
@@ -173,6 +175,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
   "shell.first_setup.disk_full_restart_unknown":
     "El disco del equipo está lleno, así que Waitron no puede guardar nada. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+  "shell.first_setup.series_minute_taken":
+    "No se pueden crear las series: el minuto que eligió esta configuración ya está en los registros de este equipo. Es un fallo de Waitron.",
 
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",
