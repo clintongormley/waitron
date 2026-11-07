@@ -871,7 +871,11 @@ describe("the app's mount of the box's clock socket", () => {
   });
 
   it("gives no container the power to set the clock itself", () => {
-    expect(COMPOSE).not.toMatch(/^\s*cap_add:/m);
+    expect(COMPOSE.split("\n").filter((line) => /^\s*cap_add:/.test(line))).toEqual([
+      "    cap_add: [NET_ADMIN]",
+    ]);
+    const tunnel = only(COMPOSE, /^ {2}tunnel:\n((?: {4}.*\n|[ \t]*\n)+)/m, "tunnel service");
+    expect(tunnel).toContain("    cap_add: [NET_ADMIN]\n");
     expect(COMPOSE).not.toContain("SYS_TIME");
     expect(COMPOSE).not.toContain("/dev/rtc");
   });
