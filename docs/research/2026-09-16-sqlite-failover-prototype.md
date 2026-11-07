@@ -1165,6 +1165,27 @@ version mode                     peak side file  sales restored  integrity
 0.5.18  running when it began     58429872       12020/12020     ok
 ```
 
+**A bucket written by 0.5.17 restores whole on 0.5.18, and so does one a box upgraded in place
+(2026-11-07, one run each).** The question was whether boxes on different Litestream versions can
+restore each other's backups; Cloud runs no Litestream and reads only Waitron's signed pointer
+(`waitron-cloud` `packages/backups/src/managed-streams.ts`). The official darwin-arm64 releases,
+checked against the checksums Waitron pins, against versitygw 1.8.0, with each version's own
+`litestreamConfig` text and Waitron's `restore -config … -o … <path>` call. Sales were written in
+batches of 40 every 150 ms with occasional updates, and every row's body was compared:
+
+```
+case                                         written by               restored by  missing  changed  integrity
+A  one version                               0.5.17, 70 s             0.5.18       0/18520  0        ok
+A  one version                               0.5.17, 70 s             0.5.17       0/18520  0        ok
+A  control: 25 rows written after the stop   0.5.17                   0.5.18       25/18545 0        ok
+B  upgraded in place, same bucket path       0.5.17 45 s, 0.5.18 45 s 0.5.18       0/23800  0        ok
+B  upgraded in place, same bucket path       0.5.17 45 s, 0.5.18 45 s 0.5.17       0/23800  0        ok
+```
+
+Both buckets held level 0, 1 and 2 files and a level-9 snapshot, so every level was read. No
+warning or error was logged and every stop exited 0. Not run: a bucket compacted over hours or days,
+Linux, and any pair of versions other than these two; a later pin move needs the same check.
+
 ## Reproducing this
 
 ```bash
