@@ -803,8 +803,8 @@ it("says a clock behind the last sale means nothing can be recorded, in both lan
     codeMessage("clock.behind_chain", "en-GB"),
     codeMessage("clock.behind_chain", "es-ES"),
   ]).toEqual([
-    "Can't be recorded: the box's clock reads earlier than its last sale. Tell a manager.",
-    "No se puede registrar: la hora del equipo es anterior a la última venta. Avisa al encargado.",
+    "Can't be recorded: the server's clock reads earlier than its last sale. Tell a manager.",
+    "No se puede registrar: la hora del servidor es anterior a la última venta. Avisa al encargado.",
   ]);
 });
 
@@ -812,8 +812,8 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
   const cases: [string, string, string][] = [
     [
       "storage.disk_full",
-      "No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.",
-      "Not saved: the box is out of disk space. Tell a manager.",
+      "No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.",
+      "Not saved: the server is out of disk space. Tell a manager.",
     ],
     [
       "sale.charged_not_recorded",
@@ -822,8 +822,8 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
     ],
     [
       "clock.unusable",
-      "Venta no registrada: la hora del equipo es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
-      "Sale not recorded: the box's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
+      "Venta no registrada: la hora del servidor es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+      "Sale not recorded: the server's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
     ],
   ];
   for (const [code, spanish, english] of cases) {

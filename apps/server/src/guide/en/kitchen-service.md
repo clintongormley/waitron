@@ -339,7 +339,7 @@ waits for the pass](kitchen-service.md#station-waits) goes to the pass's **To fi
 instead: see
 [Work the pass](kitchen-service.md#pass-screen).
 While the box is out of disk space, moving a dish on is refused. The station says
-**Not saved: the box is out of disk space. Tell a manager.** and the dish stays where it was.
+**Not saved: the server is out of disk space. Tell a manager.** and the dish stays where it was.
 
 Confirm allergy instructions in the table's allergy window before requesting cooking. At a
 station or the pass, read the copy already attached to each dish. The kitchen screens do not open

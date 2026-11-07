@@ -376,7 +376,7 @@ Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estaci√
 **Por marchar** del pase: consulta
 [Trabaja en el pase](kitchen-service.md#pass-screen).
 Si el equipo no tiene espacio en disco, no se puede avanzar un plato. La estaci√≥n dice
-**No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.** y el plato se
+**No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.** y el plato se
 queda donde estaba.
 
 Confirma las instrucciones de alergia en la ventana de alergias de la mesa antes de pedir la

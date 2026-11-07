@@ -162,7 +162,7 @@ base de datos, las claves de recuperación y las copias guardadas.
 ## Cuando el equipo no tiene espacio {#out-of-space}
 
 Cuando el disco está lleno, no se puede guardar nada: los terminales no pueden guardar pedidos,
-pagos ni otros cambios, y muestran **No se puede guardar nada: el equipo no tiene espacio**. En
+pagos ni otros cambios, y muestran **No se puede guardar nada: el servidor no tiene espacio**. En
 esta página, **Ventas** y **Espacio en disco** se ponen en rojo.
 
 Mientras el disco está lleno, una barra roja arriba de cada página del panel empieza por **Disco
@@ -193,10 +193,9 @@ envío a cocina que terminaría de pagar una cuenta pagada en parte, y anular un
 factura. La [guía de avisos del terminal](till-notices.md#notices) explica qué puede y qué no puede
 hacer el personal mientras tanto.
 
-Los terminales muestran **No se puede cobrar: la hora del equipo es anterior a la última venta**. La
+Los terminales muestran **No se puede cobrar: la hora del servidor es anterior a la última venta**. La
 campana de avisos también lo dice, con las dos horas: la del reloj del equipo y la de la última
-venta. En esta página, **Ventas** y **Reloj** se ponen en rojo con las mismas palabras que los
-terminales, y la fila **Reloj** añade qué hacer: **Con internet, el equipo corrige la hora solo; si
+venta. En esta página, **Ventas** y **Reloj** se ponen en rojo, y la fila **Reloj** añade qué hacer: **Con internet, el equipo corrige la hora solo; si
 no, un administrador puede usar «Comprobar con la hora de este dispositivo».** Cuando el equipo
 puede saberlo, la fila dice también si **Se pone en hora por internet** o **No se pone en hora por
 internet**, como explica [su servicio de hora](box-status.md#clock-service).
@@ -385,7 +384,7 @@ registra ese pago por sí solo cuando se puede volver a cobrar, pero el aviso si
 hasta que un encargado pulsa **Marcar como resuelto** en él.
 
 Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran en su lugar
-**No se pueden registrar ventas: la hora del equipo es incorrecta**, y la campana también lo dice,
+**No se pueden registrar ventas: la hora del servidor es incorrecta**, y la campana también lo dice,
 con la fecha que marca el reloj del equipo. Entonces nada puede confirmar la hora, y el equipo no
 puede pedir la hora a Hacienda, porque con una fecha tan temprana no puede comprobar su certificado.
 La salida es poner la hora bien: en un equipo que se pone en hora por internet, conectándolo a

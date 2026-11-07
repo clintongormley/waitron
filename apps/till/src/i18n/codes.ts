@@ -779,36 +779,36 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // Its "Tell a manager" is the owner's stated exception to never sending the person elsewhere: a
   // waiter at a stopped till has no step of their own (2026-11-06, A1384).
   "storage.disk_full": {
-    en: "Not saved: the box is out of disk space. Tell a manager.",
-    es: "No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.",
+    en: "Not saved: the server is out of disk space. Tell a manager.",
+    es: "No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.",
   },
   "sale.charged_not_recorded": {
     en: "Card charged, but the sale is not recorded. Do not charge again; tell a manager.",
     es: "Cobrado con tarjeta, pero la venta no se ha registrado. No vuelvas a cobrar; avisa al encargado.",
   },
   "clock.unusable": {
-    en: "Sale not recorded: the box's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
-    es: "Venta no registrada: la hora del equipo es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    en: "Sale not recorded: the server's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
+    es: "Venta no registrada: la hora del servidor es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   },
   "clock.behind_chain": {
-    en: "Can't be recorded: the box's clock reads earlier than its last sale. Tell a manager.",
-    es: "No se puede registrar: la hora del equipo es anterior a la última venta. Avisa al encargado.",
+    en: "Can't be recorded: the server's clock reads earlier than its last sale. Tell a manager.",
+    es: "No se puede registrar: la hora del servidor es anterior a la última venta. Avisa al encargado.",
   },
   "clock.set_refused": {
-    en: "The box's clock was not set. Use “Check the time” to see why.",
-    es: "No se ha puesto en hora el reloj del equipo. Usa «Comprobar la hora» para ver por qué.",
+    en: "The server's clock was not set. Use “Check the time” to see why.",
+    es: "No se ha puesto en hora el reloj del servidor. Usa «Comprobar la hora» para ver por qué.",
   },
   "clock.set_failed": {
-    en: "The box could not set its clock. Nothing was changed.",
-    es: "El equipo no ha podido poner su reloj en hora. No se ha cambiado nada.",
+    en: "The server could not set its clock. Nothing was changed.",
+    es: "El servidor no ha podido poner su reloj en hora. No se ha cambiado nada.",
   },
   "clock.check_expired": {
     en: "The time check took too long. Check again.",
     es: "La comprobación de la hora ha tardado demasiado. Vuelve a comprobarla.",
   },
   "clock.confirm_refused": {
-    en: "The box's time was not confirmed. Use “Check the time” to see why.",
-    es: "No se ha confirmado la hora del equipo. Usa «Comprobar la hora» para ver por qué.",
+    en: "The server's time was not confirmed. Use “Check the time” to see why.",
+    es: "No se ha confirmado la hora del servidor. Usa «Comprobar la hora» para ver por qué.",
   },
   "handover.stepping_down": {
     en: "This server no longer runs the venue, so it is not taking requests now. Nothing was changed.",
