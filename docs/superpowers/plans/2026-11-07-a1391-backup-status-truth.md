@@ -95,6 +95,9 @@ FULL with two Codex angles.
   _2026-11-07, finish-branch: the read rates above are wrong. Each open Backups screen reads status
   every 10 seconds; the Box status page does not read it. The corrected figures are in the decision
   entry in `docs/backlog/box.md`._
+  _2026-11-07, 11:36: the watcher then chose a smaller way, built on this branch: status reads keep
+  their own client per destination between reads, sharing nothing with the sweep. What was built
+  and measured is in that decision entry._
 
 _As built 2026-11-07: the Backups form refuses the same parts with its own check, sharing
 `isPlainWebAddress`, now in `apps/dashboard/src/screens/backup-destination-model.ts`._

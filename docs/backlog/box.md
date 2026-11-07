@@ -1667,18 +1667,20 @@ The owner's four answers: no reserved
   [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies)
   and [the backup room note](../developers/conventions-data.md#the-backup-room-note).
 
-- **A backup status read builds its own storage client (watcher, 2026-11-07, A1391).** Each read
-  builds a client per destination and closes it when its listing settles, even while the running
-  backup holds clients for the same destinations; it does not borrow those. The alert source keeps
-  the answer for 60 seconds (`apps/server/src/boot.ts`, the `backupCache` beside
-  `backupAlertSource`); each open Backups screen reads it every 10 seconds (`refreshMs` in
-  `apps/dashboard/src/api/live-queries.ts`); `GET /api/box/status` reads it uncached but has no
-  dashboard caller. Building an S3 client sends nothing over the network, but each new client opens
-  its own connection for its listing, so sharing would save up to one connection set-up per
-  destination per read: about six a minute per destination for each open Backups screen. Against that, reference counting in the supervisor
-  and a risk of closing a client a read still uses. The read rates come from reading the code; the
-  connection count from a review probe on 2026-11-07 (two clients against a local S3 server opened
-  two connections).
+- **Backup status reads keep their own storage client per destination (watcher, 2026-11-07,
+  A1391).** The status read holds one client per destination (`StatusClients`,
+  `apps/server/src/backup-status-clients.ts`, owned by `BackupSupervisor`), built on the first read
+  and lent to every later one; it shares nothing with the running backup's clients. A destination
+  whose settings differ by value from the client's (any field, the secret included) gets a new
+  client at its next read; a destination no longer configured, or every one when a reload leaves
+  backups off, loses its client at the reload; all are closed when the supervisor stops, and reads
+  after that build a client each and close it. A replaced or removed client is closed only once
+  every listing lent from it has settled, so a read under way on it still answers. Measured in
+  `apps/server/src/backup-status-clients.test.ts` against a local HTTPS server: two reads in a row
+  on the kept client opened one connection, and two reads each on a new client opened two. That
+  test trusts its certificate through the client's own keep-alive agent, and its reads are back to
+  back; whether a real bucket keeps the connection open across the Backups screen's 10-second
+  reads was not measured.
 
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and

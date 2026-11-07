@@ -28,9 +28,9 @@ import type { ScheduleClock } from "./backup-schedule.js";
 import {
   STATUS_READ_TIMEOUT_MS,
   readDestinationStatus,
-  unreadDestination,
   type DestinationStatus,
 } from "./backup-status.js";
+import { StatusClients } from "./backup-status-clients.js";
 import { runBackupSweep, type DestinationResult, type LatestClockStep } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
@@ -211,10 +211,15 @@ export class BackupSupervisor {
    * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
   #stopped = false;
   #sweep: SweepRecords = new Map();
+  readonly #statusClients: StatusClients;
 
   constructor(deps: BackupSupervisorDeps) {
     this.#deps = deps;
     this.#buildBackend = deps.buildBackend ?? buildBackupBackend;
+    this.#statusClients = new StatusClients(
+      (dest) => this.#buildBackend(dest),
+      (backend, err) => this.#logCloseFailed(backend, err),
+    );
   }
 
   /** Latched: a concurrent reload throws `backup.reload_in_progress` rather than racing two
@@ -256,6 +261,7 @@ export class BackupSupervisor {
         cfg = loaded;
       }
       this.#config = cfg;
+      this.#statusClients.keepOnly(cfg?.enabled === true ? cfg.destinations : []);
       this.#sweep = new Map();
       if (
         cfg === undefined ||
@@ -277,6 +283,7 @@ export class BackupSupervisor {
         if (db !== undefined) await db.close().catch(() => {});
         this.#deps.log("error", "backup.disabled_open_failed", { errorCode: codeOf(err) });
         this.#config = undefined;
+        this.#statusClients.keepOnly([]);
         return;
       }
       // A `stop()` landed while we opened the venue: bail WITHOUT assigning `#db` or starting a
@@ -458,21 +465,15 @@ export class BackupSupervisor {
     };
   }
 
-  /** Answers by the read limit; the backend is closed only once its listing has settled. */
+  /** Answers by the read limit, on the status reads' own client for `dest`. */
   #readDestination(
     dest: BackupDestination,
     staleAfterMs: number,
     now: Date,
   ): Promise<DestinationStatus> {
-    let backend: StorageBackend;
-    try {
-      backend = this.#buildBackend(dest);
-    } catch (err) {
-      return Promise.resolve(unreadDestination(dest.id, codeOf(err)));
-    }
-    const read = readDestinationStatus(backend, staleAfterMs, now, this.#deps.statusReadTimeoutMs);
-    void read.settled.then(() => this.#closeBackends([backend]));
-    return read.status;
+    return this.#statusClients.read(dest, (backend) =>
+      readDestinationStatus(backend, staleAfterMs, now, this.#deps.statusReadTimeoutMs),
+    );
   }
 
   /** Counted as stored before its pruning finishes; the pruning code stands until that pruning's
@@ -500,6 +501,7 @@ export class BackupSupervisor {
     // Terminal: set the flag FIRST, so a route-triggered `reload()` still in flight sees it at its
     // next await-checkpoint and bails instead of starting (or leaving) a worker after this teardown.
     this.#stopped = true;
+    this.#statusClients.closeAll();
     await this.#teardown();
   }
 
@@ -520,12 +522,16 @@ export class BackupSupervisor {
       try {
         backend.close();
       } catch (err) {
-        this.#deps.log("warn", "backup.destination_close_failed", {
-          destination: backend.id,
-          errorCode: codeOf(err),
-        });
+        this.#logCloseFailed(backend, err);
       }
     }
+  }
+
+  #logCloseFailed(backend: StorageBackend, err: unknown): void {
+    this.#deps.log("warn", "backup.destination_close_failed", {
+      destination: backend.id,
+      errorCode: codeOf(err),
+    });
   }
 
   #now(): Date {

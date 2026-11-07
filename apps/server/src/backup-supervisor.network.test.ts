@@ -833,3 +833,98 @@ describe("BackupSupervisor status, one destination at a time", () => {
     expect(closed.sort()).toEqual(["local", "usb"]);
   }, 60_000);
 });
+
+describe("BackupSupervisor keeps one status client per destination", () => {
+  /** Every destination client built, the sweep's and the status reads' alike, in build order. */
+  function recording() {
+    const built: { id: string; dir: string; closed: boolean }[] = [];
+    const buildBackend: BackupSupervisorDeps["buildBackend"] = (dest) => {
+      const backend = buildBackupBackend(dest);
+      const record = { id: dest.id, dir: dest.kind === "local-fs" ? dest.dir : "", closed: false };
+      built.push(record);
+      const close = backend.close.bind(backend);
+      backend.close = () => {
+        record.closed = true;
+        close();
+      };
+      return backend;
+    };
+    return { built, buildBackend };
+  }
+
+  it("reuses the status client across reads, replaces it when the settings change, and closes it when the destination goes and when the server stops", async () => {
+    const { built, buildBackend } = recording();
+    const dirA = await tempDir("waitron-bsupnet-a-");
+    const dirB = await tempDir("waitron-bsupnet-b-");
+    const dirC = await tempDir("waitron-bsupnet-c-");
+    let cfg = config([{ id: "usb", dir: dirA }]);
+    const logs: LogLine[] = [];
+    const sup = await supervisor(() => cfg, logs, undefined, undefined, { buildBackend });
+    try {
+      await sup.reload();
+      const sweepBuilds = built.length;
+      await destinations(sup);
+      await destinations(sup);
+      await destinations(sup);
+      const statusUsbA = built.slice(sweepBuilds);
+      expect(statusUsbA.map(({ id, dir, closed }) => ({ id, dir, closed }))).toEqual([
+        { id: "usb", dir: dirA, closed: false },
+      ]);
+
+      // Same settings again: the reload's sweep builds anew, the status client stays.
+      await sup.reload();
+      await destinations(sup);
+      expect(built.filter((b) => b.dir === dirA && b.closed === false)).toHaveLength(2);
+      expect(statusUsbA[0]!.closed).toBe(false);
+
+      cfg = config([
+        { id: "usb", dir: dirB },
+        { id: "spare", dir: dirC },
+      ]);
+      await sup.reload();
+      await destinations(sup);
+      await poll(() => (statusUsbA[0]!.closed ? true : undefined));
+      const statusSpare = built.filter((b) => b.id === "spare").at(-1)!;
+      const statusUsbB = built.filter((b) => b.dir === dirB).at(-1)!;
+
+      cfg = config([{ id: "usb", dir: dirB }]);
+      await sup.reload();
+      await poll(() => (statusSpare.closed ? true : undefined));
+      expect(statusUsbB.closed).toBe(false);
+
+      await sup.stop();
+      await poll(() => (statusUsbB.closed ? true : undefined));
+      expect(built.every(({ closed }) => closed)).toBe(true);
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+
+  it("closes the status client when a reload cannot open the venue and so leaves backups off", async () => {
+    const { built, buildBackend } = recording();
+    const cfg = config([{ id: "usb", dir: await tempDir("waitron-bsupnet-a-") }]);
+    const logs: LogLine[] = [];
+    let opens = 0;
+    const sup = await supervisor(() => cfg, logs, undefined, undefined, {
+      buildBackend,
+      openVenue: async (dir) => {
+        opens += 1;
+        if (opens > 1) throw new AppError("backup.reload_in_progress", {});
+        return openVenueDatabase(dir);
+      },
+    });
+    try {
+      await sup.reload();
+      const sweepBuilds = built.length;
+      await destinations(sup);
+      const statusClient = built[sweepBuilds]!;
+      expect(statusClient.closed).toBe(false);
+
+      await sup.reload();
+      expect(logs.some((l) => l.event === "backup.disabled_open_failed")).toBe(true);
+      await poll(() => (statusClient.closed ? true : undefined));
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+});
