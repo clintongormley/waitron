@@ -1,5 +1,7 @@
 # A1427 related tests and nightly coverage implementation plan
 
+> **Outcome, 2026-11-07 22:49:** the watcher stopped PR2 for cost: “Stop PR2: no more selection machinery, no changed-test-only proposal.” Keep its prototype and receipts unpublished. PR1 is the delivery. The [measurement decision](../../backlog/ci.md#decisions-and-deliberate-limits) supersedes the PR2 build steps below.
+
 > Driver implements inline using `superpowers:executing-plans`; read TDD before code. Build PR1 test first now from main containing landed PR2555, then PR2 straight after. D599's full-scale dependency is lifted. This amendment changes documentation only; the driver checks and commits it.
 
 **Goal:** Reduce PR/landing test work through package scope followed by measured Vitest runtime-related selection. Keep conservative full-package fallback; run the full suite with unchanged coverage thresholds nightly, manually and for releases. Ordinary-main container publishing follows full verification.

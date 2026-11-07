@@ -32,7 +32,8 @@ a passing retry alone is not a repair. On main this command also publishes after
 
 The local guards execute classification, aggregate and watchdog shells with controlled external
 commands. Their workflow-expression checks establish wiring, not hosted scheduling or publication.
-File-level selection remains the second A1427 delivery; this first change scopes whole packages.
+The watcher stopped the file-level prototype for cost on 7 November. Keep package-level selection;
+the measurement is retained in [CI decisions](../backlog/ci.md#decisions-and-deliberate-limits).
 
 
 This file holds the evidence behind Waitron's test gates: the mechanisms, the measurements, the
@@ -963,10 +964,11 @@ on the actual CI head to check those.
 
 ## CI job layout and scheduling
 
-### CI's test jobs measure coverage, never plain `test`
+### Full verification measures coverage
 
-Before calling a package green, verify its CI coverage result on the current head. Run
-`pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
+For nightly, manual and release full verification, check the selected head’s coverage results.
+PR and landing runs use the scoped mode described above. Run `pnpm --filter <pkg> test:coverage`
+locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way and twenty-four-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal

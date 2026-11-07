@@ -2118,16 +2118,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **A1427. Test changed runtime dependencies on PRs and landings; run full coverage nightly.**
-  [Plan](superpowers/plans/2026-11-07-a1427-related-tests-nightly.md). Owner/watcher 2026-11-07
-  19:51 lifts D599's full-scale wait; 19:58 directs PR1 test first now from main containing landed
-  PR2555: package-scoped main with completed-successful-ancestor recovery, nightly/manual/release
-  full coverage at unchanged thresholds, full-mode container publishing, reuse retirement, unique
-  non-PR concurrency, explicit private UI-publisher exclusion, till-to-server reader fix, admission-only
-  watchdog and policy docs. PR2 follows straight after with measured Vitest-related selection starting
-  with server, other packages where install/discovery cost pays, and package-level light bins in v1.
-  Keep failed-main rechecks; no first-parent rewrite, new owner gate or extra Claude read solely for this split.
-
 - **Add a control to each check that cannot fail** (bundle of 4, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
 
 - **The logo retry checks' deadline and counting** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-the-logo-retry-checks-deadline-and-counting)
