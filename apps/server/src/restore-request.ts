@@ -3,7 +3,6 @@ import {
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "@waitron/provisioning";
-import { lockVenueDatabase } from "@waitron/db";
 import { chmod, copyFile, mkdtemp, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { VENUE_FILE } from "@waitron/store";
 import { join } from "node:path";
@@ -15,6 +14,7 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
+  lockRestoreTarget,
   restoreFromArtifactFile,
   validateArtifactFile,
   validateDatabaseEntries,
@@ -418,14 +418,26 @@ export async function runStagedRestore(
     }
   }
   await assertNoStartAgainDeletion(deps.venueDir);
-  if ((await inspectFirstSetupMarker(deps.venueDir)) !== null) {
-    const claimHold = await lockVenueDatabase(deps.venueDir);
-    try {
+  // Held until this returns: another process's start removes restore working folders whenever it
+  // can take this folder (`restoreLeftovers`), and this run makes them before placement's own hold.
+  // Refused here, nothing is cleared, so the request stays staged.
+  const hold = await lockRestoreTarget(deps.venueDir);
+  try {
+    if ((await inspectFirstSetupMarker(deps.venueDir)) !== null)
       await assertVenueFirstSetupAllowed(deps.venueDir);
-    } finally {
-      claimHold.release();
-    }
+    return await runHeld(deps, raw, snapshot, restore, restoreStream);
+  } finally {
+    hold.release();
   }
+}
+
+async function runHeld(
+  deps: StagedRestoreDeps,
+  raw: string,
+  snapshot: Awaited<ReturnType<typeof readSnapshotRecoveryBinding>>,
+  restore: Restore,
+  restoreStream: RestoreStream,
+): Promise<boolean> {
   let managedCloud: { requestId: string; pointId: string } | undefined;
   let resuming = false;
   let markedStarted = false;

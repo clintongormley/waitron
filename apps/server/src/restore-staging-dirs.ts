@@ -23,8 +23,9 @@ export const STAGING_SCRATCH_PREFIXES = [
 /**
  * Full paths of the working folders a restore leaves behind when it is killed. Only real folders are
  * listed, and nothing inside a `RESTORE_STAGING_DIR` that is a symbolic link, because a deletion
- * there would land in its target. Only safe to delete while this process holds the venue folder:
- * every maker of these folders holds it too.
+ * there would land in its target. Every maker of these folders (the server, the restore command and
+ * a staged restore) holds the venue folder from before it makes one until it is done with it, so a
+ * process holding that folder finds only what a killed run left.
  */
 export async function restoreLeftovers(stateDir: string): Promise<string[]> {
   const found = await foldersIn(stateDir, (name) =>

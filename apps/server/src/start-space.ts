@@ -75,7 +75,7 @@ export async function freeSpaceAtStart(
       failed(error);
     }
   };
-  const deleteStagingLeftovers = async () => {
+  const deleteStagingLeftovers = async (restoreFolders: readonly string[]) => {
     const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
     for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
       if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
@@ -84,13 +84,20 @@ export async function freeSpaceAtStart(
     }
     // Listed for its skipped-link and failed-listing logs; restoreLeftovers makes the same skip.
     await entries(join(deps.stateDir, RESTORE_STAGING_DIR), RESTORE_STAGING_DIR, deps.log, failed);
-    for (const path of await restoreLeftovers(deps.stateDir)) await remove(path, true);
+    for (const path of restoreFolders) await remove(path, true);
   };
   // On a box, only the server runs a backup or stages a recovery copy, and only a process holding
   // the venue folder's lock runs a restore; each holds that lock while it does.
   const removeStagingLeftovers = async () => {
-    // Taking the lock would create a missing venue folder; with none, no process can hold it.
-    if (deps.venueHeld === true || (await missing(deps.venueDir))) return deleteStagingLeftovers();
+    if (deps.venueHeld === true)
+      return deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
+    // Taking the lock would create a missing venue folder; with none, no process can hold it. A
+    // restore makes that folder before its first working folder, so one still missing after the
+    // listing means nothing listed is a live restore's.
+    if (await missing(deps.venueDir)) {
+      const listed = await restoreLeftovers(deps.stateDir);
+      if (await missing(deps.venueDir)) return deleteStagingLeftovers(listed);
+    }
     let hold: VenueLock;
     try {
       hold = await deps.lockVenue(deps.venueDir);
@@ -101,10 +108,10 @@ export async function freeSpaceAtStart(
       // The time is read again: the deletions before this can outlast VENUE_HOLDER_STALE_MS, and a
       // live heartbeat judged against the start of them reads as one from the future.
       if (holder !== null && isVenueHolderFresh(holder, deps.now())) return;
-      return deleteStagingLeftovers();
+      return deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
     }
     try {
-      await deleteStagingLeftovers();
+      await deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
     } finally {
       hold.release();
     }
