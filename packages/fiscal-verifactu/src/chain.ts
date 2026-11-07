@@ -8,6 +8,7 @@ import {
   constraintTarget,
   isUniqueViolation,
   readHistoryNodes,
+  readNodeMembership,
   type Transaction,
 } from "@waitron/db";
 import type {
@@ -140,6 +141,7 @@ async function attemptAppend(
   registro: PendingRegistro,
   sif?: SifRegistration,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
+  await refuseUnlessServingPrimary(tx, nodeId);
   await refuseWhileClockBehind(tx, {
     instant: registro.input.generadoEn,
     offsetMinutes: registro.input.offsetMinutes,
@@ -303,6 +305,18 @@ async function raiseWarning(
     // stamp an incident at an instant nothing else in the transaction shares.
     detectedAt: registro.input.generadoEn,
   });
+}
+
+/**
+ * A chain whose box handed over takes no further record. Read off the held chart, never off
+ * activation times: those come from two boxes' clocks, and a chart moves by term, so a box that
+ * took back is named primary again. With no chart held, nothing is refused.
+ */
+async function refuseUnlessServingPrimary(tx: Transaction, nodeId: NodeId): Promise<void> {
+  const chart = await readNodeMembership(tx);
+  if (chart === null) return;
+  const primary = chart.body.nodes.find((n) => n.standing === "serving-primary")?.nodeId;
+  if (primary !== nodeId) throw new AppError("fiscal.chain_handed_over", { nodeId });
 }
 
 /**

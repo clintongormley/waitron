@@ -83,6 +83,10 @@ declare module "@waitron/shared" {
      */
     "chain.append_contention": { nodeId: string; attempts: number };
 
+    /** Thrown by `appendToChain` (./chain.ts) before anything is written, when the held membership
+     * chart does not name `nodeId` the serving primary: that box handed over. */
+    "fiscal.chain_handed_over": { nodeId: string };
+
     /**
      * Params carry the offending field names and issue codes — never the offending
      * values. The shared error boundary writes params into `waitron.log`, which the

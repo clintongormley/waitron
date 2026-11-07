@@ -233,13 +233,13 @@ export async function openFilingCasesSummary(
 /**
  * Every `detenido` record that has no case of its own: the records held behind another record,
  * or behind a run of refusals with one code. A held cancellation whose current original alta
- * (same `sif_id`, same invoice identity, not replaced by a correction) is `detenido` names its
- * original's case. Any other held record names the case of the nearest earlier `detenido`
- * record on its chain (`sif_id`): that record's own case, or, when it has none, the case it names in turn. With no
- * earlier `detenido` record, it names the case of the record immediately before it, set-aside
- * records skipped (`recordsBefore`), when that one is `rechazado`: the last refusal of the run
- * that held it. Otherwise it names none. Mirrors the hold
- * rule in `./drain.ts`'s `haltOpenChainClaims`: the two change together.
+ * (same `sif_id`, same invoice identity) is `detenido` names its original's case. Any other held
+ * record names the case of the nearest earlier `detenido` record on its chain (`sif_id`): that
+ * record's own case, or, when it has none, the case it names in turn. With no earlier `detenido`
+ * record, it names the case of the record immediately before it, set-aside records skipped
+ * (`recordsBefore`), when that one is `rechazado`: the last refusal of the run that held it.
+ * Otherwise it names none. Mirrors the hold rule in `./drain.ts`'s `haltOpenChainClaims`: the two
+ * change together.
  */
 export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
   const { rows } = await tx.execute<{
@@ -248,16 +248,12 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
     estado: string;
     tipo_registro: string;
     identity: string;
-    replaced: number;
     case_id: string | null;
     refused_before_case_id: string | null;
   }>(sql`
     select e.registro_id, r.sif_id, e.estado, r.tipo_registro,
       r.id_emisor_factura || '|' || r.num_serie_factura || '|' || r.fecha_expedicion_factura
         as identity,
-      exists (
-        select 1 from registros_facturacion replacement where replacement.corrects_registro_id = r.id
-      ) as replaced,
       c.id as case_id,
       case when e.estado = 'detenido' and c.id is null then (
         select case when preceding_envio.estado = 'rechazado' then (
@@ -297,7 +293,7 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
             : row.refused_before_case_id;
       held.push({ registroId: row.registro_id, caseId });
     }
-    if (row.tipo_registro === "alta" && row.estado === "detenido" && row.replaced === 0)
+    if (row.tipo_registro === "alta" && row.estado === "detenido")
       altaCases.set(row.identity, caseId);
     if (row.estado === "detenido") {
       holding = caseId;
