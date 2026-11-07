@@ -589,11 +589,14 @@ the server checks each at the route, never trusting the till's copy:
   as any permission it already asked of the person, except the routes the action map named below
   lists as left unchecked by decision. Showing or hiding a screen (`show-*`) decides only what the
   till draws; a hidden screen's route is still refused by its action. Which route
-  needs which action, and the case that fails without each check, is the map at the top of
+  needs which action, and the case that fails without each check, is the data in
   `apps/server/src/till-api.profile-actions.test.ts`; the zone each route acts in is the map at the
-  top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds a row to each and a
-  refusing case. Weaker than that sounds: both maps are comments, and nothing fails when a new
-  route has no row.
+  top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds an inventory row, a zone-map row and a refusing case. The inventory
+  comparison walks the mounted till, device and schedule APIs, including their optional routes;
+  it rejects missing and stale classifications. It does not inspect theme/node routes or a newly
+  introduced API. Device-proof labels are source readings unless a named test backs them. The
+  existing action cases check their stated refusals; the inventory comparison alone does not
+  prove enforcement, and the independent zone map remains a comment.
 - **A kitchen display's preparation and movement use device authority.** A `kds` profile is a shared display
   with nobody signed in: `profileAllows` (`packages/layouts/src/device-profile.ts`) refuses it
   every action but `prepare-orders`, `take-orders` and `hand-over-orders`, even one its stored
@@ -2203,11 +2206,13 @@ suites [conventions-ui.md](conventions-ui.md) names, weaker than the set looks â
 
 **A device's profile and the signed-in person must both allow what a till does.** A till route
 that orders, takes a payment, prepares, hands over, prints or opens the drawer checks the
-profile's action beside the person's permission, except the routes the map atop
-`apps/server/src/till-api.profile-actions.test.ts` leaves unchecked by decision; the profile's
+profile's action beside the person's permission, except the actionless routes classified in
+`apps/server/src/till-api.profile-actions.test.ts`; the profile's
 zones bound where it serves, and its admission list who may sign in. A new till route adds a row
-to that map and to the zone map atop `apps/server/src/till-api.profile-zones.test.ts`, and a
-refusing case â€” weaker than that sounds: both route maps are comments.
+to that inventory and to the zone map atop `apps/server/src/till-api.profile-zones.test.ts`, and a
+refusing case. The inventory guard covers only the APIs it mounts, not theme/node routes or a new
+API, and its device-proof labels are source readings unless backed by a named test. The zone map
+remains a comment; inventory completeness does not prove a gate executes.
 
 ### A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`
 
