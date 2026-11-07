@@ -25,8 +25,9 @@ added to the sale path.
 
 For the A951-S trial, set `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control
 directory. The container persists its private key before publishing `public-key`; the app reads
-only that public file. On a connected test installation, the existing primary Cloud worker submits
-it through the signed `tunnel-provision` action after refreshing the lease. The directory is
+only that public file. On a connected test installation, the primary Cloud worker and **Refresh
+status** submit it through the signed `tunnel-provision` action after a successful connection
+refresh. That refresh renews the lease when needed and otherwise reads configuration. The directory is
 optional, and an absent public-key file leaves provisioning alone.
 
 Cloud chooses the cell and port and must enable its one-box trial receiver separately. A 200 reply
@@ -36,7 +37,13 @@ works. The configuration writer and runtime apply the returned placement separat
 A lost reply is retried with the same saved key and a fresh request identifier. A
 `placement_conflict` refusal is remembered in `cloud-connection.json` as `tunnelConflict: true`, so
 restarting does not keep submitting a key Cloud has refused. The caller neither replaces the
-container key nor rotates the Cloud placement. Stop Cloud access remains available.
+container key nor rotates the Cloud placement. A later configuration that already matches the
+saved key needs no new submission, including while its service reports a failure. A tunnel refusal
+leaves the successful Cloud control read available to the other services.
+
+You can still choose **Stop Cloud access**. This revokes the current registration; it does not
+repair the conflicting placement or replace the container key. A bad public-key file is reported
+separately from an unreadable saved Cloud connection.
 
 ## Refresh or stop Cloud access
 

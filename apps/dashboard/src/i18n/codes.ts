@@ -69,6 +69,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The staff tunnel could not be configured on this box. Check its tunnel configuration and refresh status to try again.",
     es: "No se pudo configurar el túnel del personal en esta caja. Revisa su configuración del túnel y actualiza el estado para volver a intentarlo.",
   },
+  "cloud.tunnel_conflict": {
+    en: "This tunnel setup conflicts with a connection already saved in Cloud. Automatic attempts have stopped. You can stop Cloud access here; local trading continues.",
+    es: "Esta configuración del túnel entra en conflicto con una conexión ya guardada en Cloud. Los intentos automáticos se han detenido. Puedes detener el acceso a Cloud aquí; las ventas locales siguen funcionando.",
+  },
   "cloud.request_unavailable": {
     en: "This request is unavailable. Start again to get a new code.",
     es: "Esta solicitud no está disponible. Empieza de nuevo para obtener otro código.",
