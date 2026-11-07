@@ -176,6 +176,7 @@ function paymentsApp(venue: Venue): Hono {
   mountPaymentsApi(
     app,
     {
+      isPrimary: () => true,
       admission: testTradingAdmission(),
       db: suite.db,
       backend,

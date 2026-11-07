@@ -2359,6 +2359,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       mountPaymentsApi(
         management,
         {
+          isPrimary: () => true,
           admission: testTradingAdmission(),
           db: venue.db,
           backend: venue.backend,

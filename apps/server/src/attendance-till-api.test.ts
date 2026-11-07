@@ -632,6 +632,7 @@ describe("till refund attendance", () => {
       mountPaymentsApi(
         management,
         {
+          isPrimary: () => true,
           admission: testTradingAdmission(),
           db: suite.db,
           backend: v.backend,

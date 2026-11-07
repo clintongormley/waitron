@@ -103,6 +103,7 @@ function paymentsAt(ms: number): Hono {
   mountPaymentsApi(
     app,
     {
+      isPrimary: () => true,
       admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
