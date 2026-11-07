@@ -2177,8 +2177,9 @@ Left open by A1382, which changed only `device.forbidden_action`. By code:
   notices: `clock.unusable`, `clock.behind_chain`, `storage.space_low`, `clock.check_time`,
   `fiscal.records_unsent` with a held record, and a notice the till has no words for.
 
-Not listed: the owner's full-disk strip (`storage.disk_full` in `staff-notices.ts`); the till's other
-full-disk words, which _Other full-disk words still send the person elsewhere_ in `setup.md` holds;
+Not listed: the owner's full-disk strip (`storage.disk_full` in `staff-notices.ts`) and the till's
+other full-disk words (`storage.disk_full` in `codes.ts`, the `sale.disk_full` group in
+`strings.ts`), which the owner's exception also covers (2026-11-06, A1384; see conventions-ui.md);
 sentences that take a manager's PIN or choice on the spot; labels such as `approval.title_manager`;
 and the joining steps `device.join_name_hint` and `device.join_approval_guide`, which are no refusal.
 
