@@ -3742,8 +3742,8 @@ index by NAME, so an index whose columns changed under a kept name passes.
 ## Editing a shipped migration file, even a comment, needs a venue reset
 
 Drizzle records a hash of each migration file's whole text in the database's journal table, and
-`assertNotAhead` (`packages/provisioning/src/schema-ahead.ts`) treats a recorded hash the image does
-not ship as a migration from a NEWER image, refusing the start with `provisioning.database_ahead`.
+`assertNotAhead` (`packages/provisioning/src/schema-ahead.ts`) refuses the start with
+`provisioning.database_ahead` when the journal records a hash the image does not ship.
 `packages/migrations/src/journal-hashes.test.ts` pins how drizzle computes the hash. Measured
 2026-10-02 with drizzle's own `readMigrationFiles` (`drizzle-orm@0.45.3`): editing only comment
 lines in `packages/db/drizzle/0001_behavioural_triggers.sql` and
@@ -4702,7 +4702,7 @@ this error. `waitron.sh`'s advice on that failure depends on the box: on one tha
 production, it names `waitron.sh --reset install [ref]`, which wipes the database as
 `waitron.sh reset` does and installs again in one run, the clean way back to a working box; on a
 production box the script refuses to suggest that (a reset there would destroy the fiscal chain) and
-says to install a newer ref instead (#314). It has three callers (`grep -rn assertNotAhead` before
+says to install the version that wrote the database instead (#314). It has three callers (`grep -rn assertNotAhead` before
 believing otherwise): boot, in `apps/server/src/node-entry.ts`, a resumed restore, in
 `apps/server/src/restore.ts`, and the bucket rebuild's
 preparation, `prepareStreamRestore` in `apps/server/src/restore-stream.ts`, which checks the
