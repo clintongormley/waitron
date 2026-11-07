@@ -108,7 +108,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 - [A1392. Discard and Cancel fail on a table bill reached from the counter](backlog/till.md#bundle-a1392-discard-and-cancel-fail-on-a-table-bill-reached-from-the-counter)
-- [A1396. A save refused after the person left must say so](backlog/dashboard.md#bundle-a1396-a-save-refused-after-the-person-left-must-say-so)
 - [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
 - [A1399. What happens when a bill payment is sent again under one id](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
@@ -1565,8 +1564,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps Waitron's
   default hover, text and disabled colours, and no theme writes the danger ones**
   [Detail](backlog/dashboard.md#a-deployment-that-overrides---wt-color-primary-or---wt-color-danger-by-hand-keeps-waitrons-default-hover-text-and-disabled-colours)
-
-- **A1396. A save refused after the person left must say so** (bundle of 2, 2 important, size S). [Detail](backlog/dashboard.md#bundle-a1396-a-save-refused-after-the-person-left-must-say-so)
 
 - **A541. A `wt-disclosure` reopened after an animated close snaps open with no animation** — OPEN,
   found by A539's mutation tests, not fixed. The close sets `body.hidden` behind Lit's back, so the

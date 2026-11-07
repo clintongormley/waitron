@@ -146,6 +146,7 @@ export class VenueDetailsPanel extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) reportLateRefusal?: () => void;
   @property({ attribute: false }) readOnly = false;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
@@ -722,6 +723,7 @@ export class VenueDetailsPanel extends LitElement {
             })}
             <dashboard-legal-name-dialog
               .api=${this.api}
+              .reportLateRefusal=${this.reportLateRefusal}
               @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
                 if (generation === this.#generation) {
                   this.#show(++this.#places, event.detail.model);

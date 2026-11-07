@@ -239,6 +239,9 @@ variants whose allergens are unreviewed. Select a name to open that product's ow
 still publish or schedule: the warning asks you to check the declarations, rather than refusing
 the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
 
+If a schedule change is not confirmed after you leave the menu, open that menu's **Preview** tab
+and check **Scheduled versions** before trying again.
+
 Existing purchasing data and recorded order facts remain available, but you maintain live
 product allergens and dietary suitability in **Products**.
 

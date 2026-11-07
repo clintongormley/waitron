@@ -981,6 +981,8 @@ export const en = {
     "Register the new name with the tax agency first. Fiscal records already issued keep the old name.",
   "venue_details.legal_name_unchanged": "This is already the legal name.",
   "venue_details.legal_name_format": "Use at most 120 characters, without control characters.",
+  "venue_details.legal_name_not_saved":
+    "The legal-name change was not confirmed. Check the legal name in Venue settings before trying again.",
   "venue_details.legal_name_changed":
     "The legal name changed in another session. Close and try again.",
   "venue_details.unset": "Not set",
@@ -3013,6 +3015,8 @@ export const en = {
     "Another change took {name} away from where you were editing it, so its window was closed.",
   "menus.list_gone_saved":
     "Your change to {name} was saved, but meanwhile another change took it away from where you were editing it.",
+  "menus.schedule_not_saved":
+    "The schedule change for {name} was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
   "menus.tab_preview": "Preview",
   "menus.tab_preview_unpublished": "unpublished changes",
@@ -4747,6 +4751,8 @@ export const es: Record<StringKey, string> = {
     "Registra antes el nuevo nombre en la Agencia Tributaria. Los registros fiscales ya emitidos conservan el nombre anterior.",
   "venue_details.legal_name_unchanged": "Ya es la razón social.",
   "venue_details.legal_name_format": "Usa como máximo 120 caracteres, sin caracteres de control.",
+  "venue_details.legal_name_not_saved":
+    "No se ha confirmado el cambio de razón social. Comprueba la razón social en Ajustes del local antes de volver a intentarlo.",
   "venue_details.legal_name_changed":
     "La razón social ha cambiado en otra sesión. Cierra e inténtalo de nuevo.",
   "venue_details.unset": "Sin definir",
@@ -6854,6 +6860,8 @@ export const es: Record<StringKey, string> = {
     "Otro cambio ha quitado {name} de donde la estabas editando, así que se ha cerrado su ventana.",
   "menus.list_gone_saved":
     "Se ha guardado tu cambio en {name}, pero entretanto otro cambio la ha quitado de donde la estabas editando.",
+  "menus.schedule_not_saved":
+    "No se ha confirmado el cambio de programación de {name}. Abre su pestaña Vista previa y comprueba las Versiones programadas antes de volver a intentarlo.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
   "menus.tab_preview": "Vista previa",
   "menus.tab_preview_unpublished": "cambios sin publicar",

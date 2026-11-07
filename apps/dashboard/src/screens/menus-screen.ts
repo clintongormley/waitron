@@ -333,6 +333,7 @@ function withOrder(
  */
 @customElement("dashboard-menus-screen")
 export class MenusScreen extends LitElement {
+  @property({ attribute: false }) reportLateSave?: (name: string) => void;
   static override styles = [
     baseStyles,
     iconButtonStyles,
@@ -3123,6 +3124,8 @@ export class MenusScreen extends LitElement {
   }
 
   #renderPreview() {
+    const name = this.#menuName();
+    const reportLateSave = this.reportLateSave;
     return html`<dashboard-menu-preview
       menuName=${this.#menuName()}
       .includedBy=${this.structure?.includedBy ?? []}
@@ -3156,7 +3159,11 @@ export class MenusScreen extends LitElement {
         slot="schedule"
         .api=${this.api}
         menuId=${this.menuId!}
-        menuName=${this.#menuName()}
+        menuName=${name}
+        .reportLateRefusal=${() => {
+          if (this.isConnected) this.memberError = fill("menus.schedule_not_saved", { name });
+          else reportLateSave?.(name);
+        }}
         .preview=${this.previewError ? null : this.preview}
         .blocked=${this.undoOut?.menuId === this.menuId}
       ></dashboard-menu-publications
