@@ -1073,7 +1073,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -3733,6 +3733,114 @@ jobs:
       - name: Score the package
         run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 4 --break 90
 
+  server-queue-watchdog:
+    timeout-minutes: 22
+    needs: changes
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Bound the disposable server queue
+        env:
+          SHOULD_WATCH: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') }}
+          LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
+          SHARD_COUNT: "24"
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REPO_ID: ${{ github.repository_id }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$SHOULD_WATCH" != true ]; then exit 0; fi
+          exec timeout -k 2s 1260 bash -e <<'WATCHDOG'
+          scratch=$(mktemp -d)
+          trap 'rm -rf "$scratch"' EXIT
+          start=$(date +%s)
+          queue_end=$((start + 1200))
+          end=$((start + 1260))
+          calls=0
+          request() {
+            local deadline=$1
+            shift
+            local remaining=$((deadline - $(date +%s)))
+            [ "$remaining" -gt 0 ] || return 1
+            if [ "$calls" -ge 200 ]; then echo 'API call limit reached (200)' >&2; exit 1; fi
+            calls=$((calls + 1))
+            if [ "$remaining" -gt 10 ]; then remaining=10; fi
+            timeout -k 1s "$remaining" gh api "$@" > "$scratch/response" 2> "$scratch/error"
+          }
+          polls=0
+          while [ "$polls" -lt 40 ] && [ "$(date +%s)" -lt "$queue_end" ]; do
+            polls=$((polls + 1))
+            poll_end=$(($(date +%s) + 10))
+            if [ "$poll_end" -gt "$queue_end" ]; then poll_end=$queue_end; fi
+            pages=''
+            count=0
+            total=-1
+            page=1
+            complete=true
+            while :; do
+              if ! request "$poll_end" "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=30&page=$page"; then complete=false; break; fi
+              if ! next_total=$(jq -er 'select(type == "object" and (.jobs | type) == "array" and (.total_count | type) == "number" and .total_count > 0 and (.total_count | floor) == .total_count) | .total_count' "$scratch/response"); then complete=false; break; fi
+              if [ "$total" -eq -1 ]; then total=$next_total; fi
+              if [ "$next_total" -ne "$total" ]; then complete=false; break; fi
+              size=$(jq '.jobs | length' "$scratch/response")
+              if [ "$size" -eq 0 ] || [ "$size" -gt 30 ]; then complete=false; break; fi
+              pages="$pages$(cat "$scratch/response")"$'\n'
+              count=$((count + size))
+              if [ "$count" -ge "$total" ]; then break; fi
+              page=$((page + 1))
+            done
+            if [ "$complete" = true ] && state=$(printf '%s' "$pages" | jq -ers '
+              [.[].jobs[]] as $jobs
+              | if ($jobs | length) != .[0].total_count or
+                   ($jobs | map(.id) | unique | length) != ($jobs | length) or
+                   any($jobs[]; (.id | type) != "number" or .id <= 0)
+                then error("incomplete or duplicate job inventory") else . end
+              | [$jobs[] | select(.name | test("^test-server \\([0-9]+\\)$"))] as $server
+              | if ($server | map(.name | capture("\\((?<n>[0-9]+)\\)$").n | tonumber) | sort) !=
+                   [range(1; ($ENV.SHARD_COUNT | tonumber) + 1)] or
+                   any($server[]; .run_id != ($ENV.RUN_ID | tonumber) or
+                       .run_attempt != ($ENV.RUN_ATTEMPT | tonumber) or .head_sha != $ENV.HEAD_SHA or
+                       (.labels | type) != "array")
+                then error("missing or foreign server shard") else . end
+              | [$server[] | select(.labels | index("self-hosted"))] as $routed
+              | if any($routed[]; . as $job |
+                   ($ENV.LABEL_PREFIX + "-" + $ENV.REPO_ID + "-" + $ENV.RUN_ID + "-" + $ENV.RUN_ATTEMPT +
+                    "-test-server-" + (.name | capture("\\((?<n>[0-9]+)\\)$").n)) as $label |
+                   ($job.labels | index($label)) == null)
+                then error("unexpected server routing label")
+                elif ($routed | length) == 0 then "empty"
+                elif all($routed[]; .status == "completed" or
+                     (.status == "in_progress" and (.runner_id | type) == "number" and .runner_id > 0))
+                then "assigned" else "waiting" end
+            '); then
+              if [ "$state" = assigned ]; then exit 0; fi
+              if [ "$state" = empty ]; then echo 'No disposable server jobs in the complete inventory' >&2; exit 1; fi
+            fi
+            remaining=$((queue_end - $(date +%s)))
+            if [ "$remaining" -gt 30 ]; then remaining=30; fi
+            if [ "$remaining" -gt 0 ]; then sleep "$remaining"; fi
+          done
+          if ! request "$end" "repos/$REPO/actions/runs/$RUN_ID" ||
+             ! jq -e '.id == ($ENV.RUN_ID | tonumber) and .run_attempt == ($ENV.RUN_ATTEMPT | tonumber) and .head_sha == $ENV.HEAD_SHA' "$scratch/response"; then
+            echo 'Cannot confirm this run attempt before cancellation' >&2; exit 1
+          fi
+          if jq -e '.status == "completed"' "$scratch/response" > /dev/null; then exit 0; fi
+          for attempt in 1 2; do
+            if request "$end" --method POST "repos/$REPO/actions/runs/$RUN_ID/cancel"; then
+              echo "Cancellation requested for unassigned server jobs in run $RUN_ID; rerun this head on GitHub" >&2
+              exit 1
+            fi
+            if grep -q 'HTTP 409' "$scratch/error" && request "$end" "repos/$REPO/actions/runs/$RUN_ID" &&
+               jq -e '.id == ($ENV.RUN_ID | tonumber) and .run_attempt == ($ENV.RUN_ATTEMPT | tonumber) and .head_sha == $ENV.HEAD_SHA and .status == "completed"' "$scratch/response"; then exit 0; fi
+          done
+          echo 'Could not request cancellation of the queued server jobs' >&2
+          exit 1
+          WATCHDOG
+
   # The aggregate gate. This file's header covers what branch protection requires and why the job
   # ids above are free to change; what follows is only how this job itself works.
   #
@@ -3757,6 +3865,7 @@ jobs:
       - test-heavy
       - test-heavy-merge
       - test-server
+      - server-queue-watchdog
       - test-server-stream
       - test-server-merge
       - test-fiscal-verifactu

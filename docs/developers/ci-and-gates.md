@@ -74,6 +74,73 @@ External provenance, read 2026-11-06:
 | Uploads can queue without replacing the one pending run | [Actions concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency): “Up to 100 jobs or workflow runs” | `queue: max` permits multiple pending publications in one group. |
 | Packages start private | [GitHub npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry): “default visibility is private” | The existing private package keeps its Cloud repository association; publication requests restricted access. |
 
+## Disposable server-test runners
+
+When hosted jobs spend longer waiting than testing, you can move selected server shards
+to Lane I's disposable Linux runners. Routing is disabled by default. After the runner
+qualification below, set `DISPOSABLE_TESTS_MODE=server` and
+`DISPOSABLE_TESTS_SERVER_JOBS=1` for the first measured slot. Increase the job count only
+from measured capacity; one runner slot does not make several shards run in parallel.
+
+Only the first attempt of a same-repository pull request uses this route. Main pushes,
+tags, manual runs, forks and every retry use GitHub-hosted runners. This includes retries
+that retain the successful `changes` job's outputs: routing reads the current attempt
+directly. Same-repository bot branches also satisfy the routing condition; confirm their
+admission with the controller before enabling it.
+
+`DISPOSABLE_TESTS_LABEL_PREFIX` defaults to `dt`. Each selected shard requests
+`self-hosted` and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-test-server-N`, where N is its shard
+number from 1 through 24. I currently provisions the `dt` prefix. Use a deliberately
+unavailable prefix only for the fallback drill; do not register a runner for that prefix.
+The settings affect the existing server job, without changing its check name, test
+command, coverage merge, setup retries or ten-minute execution limit.
+
+The hosted `server-queue-watchdog` checks the actual attempt's job assignments. It reads
+30 records per API page, retaining the smaller page size qualified after A1340's HTTP
+502 failures. Each complete paginated read has ten seconds. It polls at thirty-second
+intervals for up to twenty minutes, at most forty polls and 200 API calls including
+pagination and cancellation. It requires all server shards, unique job IDs, consistent
+totals within that read and matching run, attempt, head and routing labels. Totals may
+grow between reads. A routed job is assigned when it is in progress with a positive
+runner ID; a completed job also ends its queue wait. The aggregate still checks its result.
+
+If jobs remain unassigned, the watchdog verifies the current run's identity and requests
+normal cancellation, with one retry. An accepted cancellation request still fails the
+watchdog. A 409 response passes only after completion of the same run attempt is read
+back. The shell has a 1,260-second deadline inside a 22-minute job, reserving a minute
+for cancellation. A complete inventory with no routed jobs fails immediately without
+cancelling. Exhausted API calls, unreadable metadata and refused cancellation end red.
+If cancellation cannot reach GitHub, the aggregate can remain pending until queued jobs
+expire. The watchdog itself must also obtain a hosted runner, so this is not a bound on
+total elapsed time during a GitHub outage.
+
+The watchdog shares the server job's code, package and reuse gate. Outside a routed
+attempt it exits successfully without an API call. This costs one small hosted job on
+selected server runs and preserves the reuse verifier's requirement that every job in
+the previous full main run succeeded. The first merge adding this job cannot reuse a
+parent run that did not contain it. The verifier and existing reuse assertions are unchanged.
+
+Before activation, have I confirm Linux tools, `/proc`, `/dev/shm`, Node/pnpm/cache
+support, Chromium's headless-shell libraries, measured global capacity and ordinary PR
+admission. Read back `all_external_contributors`. Qualify an actual server-scoped PR on
+the rented runner, retaining its runner ID/name/labels, source head and coverage/aggregate
+results. Then take the label away and stop the server for the requested fallback drills.
+Read the visible first-attempt failure or cancellation and an unchanged-head second
+attempt finishing on GitHub. I owns automatic retry of attempts it admitted; an unowned
+label requires an explicit rerun. These live qualifications remain open; local shell
+tests do not establish GitHub scheduling, VM isolation or a speed improvement.
+
+The public repository still exposes the runner VM, host and reachable network to code
+that obtains admission. Labels are routing information, not isolation. I owns disposable
+VMs and keeps durable credentials on its Mac controller. Follow the linked hardening
+guidance before enabling a slot.
+
+| Source, checked 7 November 2026 | Source's words | Application |
+| --- | --- | --- |
+| [GitHub runner hardening](https://docs.github.com/en/enterprise-cloud@latest/actions/reference/security/secure-use#hardening-for-self-hosted-runners) | “can be persistently compromised by untrusted code in a workflow” | Disposable VMs and contributor approval reduce exposure without establishing isolation. |
+| [Self-hosted routing](https://docs.github.com/en/actions/reference/runners/self-hosted-runners#routing-precedence-for-self-hosted-runners) | “the job will remain queued until a runner comes online” | Execution limits alone do not stop an unavailable-label queue; the watchdog needs hosted availability. |
+| [REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) | “1,000 requests per hour per repository” | The watchdog uses bounded polling and a 200-call cap; this is not a reservation of the repository's shared allowance. |
+
 ## The optional whole-workspace check
 
 Run focused behavior tests during implementation. Use this broader local command when investigating

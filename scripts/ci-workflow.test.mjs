@@ -46,6 +46,324 @@ const { AbortController, structuredClone } = globalThis;
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
+describe("disposable server routing", () => {
+  it("routes only the first attempt of same-repository server PR shards within the configured budget", () => {
+    expect(job("test-server").body).toContain(
+      "    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('[\"self-hosted\",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}",
+    );
+    for (const entry of jobs.filter(({ id }) => id !== "test-server")) {
+      const runner = entry.body.find((line) => /^ {4}runs-on:/.test(line));
+      if (runner !== undefined) expect(runner, entry.id).toBe("    runs-on: ubuntu-latest");
+    }
+  });
+
+  it("watches exactly the routing condition for shard one with the same prefix and shard count", () => {
+    const server = job("test-server").body;
+    const watchdog = job("server-queue-watchdog").body;
+    expect(watchdog.find((line) => /^ {4}if:/.test(line))).toBe(
+      server.find((line) => /^ {4}if:/.test(line)),
+    );
+    const routing = server.find((line) => /^ {4}runs-on:/.test(line));
+    const condition = routing.slice(routing.indexOf("${{ ") + 4, routing.indexOf(" && fromJSON("));
+    expect(watchdog).toContain(
+      `          SHOULD_WATCH: \u0024{{ ${condition.replace("matrix.shard <=", "1 <=")} }}`,
+    );
+    const prefix = /vars\.DISPOSABLE_TESTS_LABEL_PREFIX \|\| 'dt'/.exec(routing)?.[0];
+    expect(prefix).toBeDefined();
+    expect(watchdog).toContain(`          LABEL_PREFIX: \u0024{{ ${prefix} }}`);
+    const count = watchdog.find((line) => line.includes("SHARD_COUNT:"));
+    expect(count).toBe(`          SHARD_COUNT: "${matrixShards(server).length}"`);
+    expect(needsOf(job("ci").body)).toContain("server-queue-watchdog");
+    expect(jobPermissions(watchdog)).toEqual(["actions: write"]);
+    expect(watchdog).toContain("    timeout-minutes: 22");
+    expect(watchdog.join("\n")).not.toContain("uses:");
+    expect(watchdog.join("\n")).not.toContain("force-cancel");
+  });
+});
+
+describe("the server queue watchdog shell", () => {
+  let root;
+  let bin;
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "waitron-server-queue-"));
+    bin = join(root, "bin");
+    mkdirSync(bin);
+    const stubs = {
+      date: '#!/bin/sh\ncat "$STUB_DIR/clock"\n',
+      sleep:
+        '#!/bin/sh\nclock=$(cat "$STUB_DIR/clock")\necho "$((clock + CLOCK_JUMP))" > "$STUB_DIR/clock"\n',
+      gh: `#!/bin/bash
+printf '%s\\n' "$*" >> "$STUB_DIR/calls"
+endpoint=''
+for arg in "$@"; do case "$arg" in repos/*) endpoint=$arg ;; esac; done
+advance() {
+  local kind=$1 n=0 max
+  if [ -f "$STUB_DIR/$kind.count" ]; then read -r n < "$STUB_DIR/$kind.count"; fi
+  n=$((n + 1))
+  echo "$n" > "$STUB_DIR/$kind.count"
+  read -r max < "$STUB_DIR/$kind.max"
+  if [ "$n" -gt "$max" ]; then n=$max; fi
+  selected=$n
+}
+case "$endpoint" in
+  repos/o/r/actions/runs/1234/attempts/1/jobs\\?per_page=30\\&page=*)
+    page=\${endpoint##*page=}
+    if [ "$page" = 1 ]; then advance jobs; echo "$selected" > "$STUB_DIR/poll"; fi
+    read -r selected < "$STUB_DIR/poll"
+    response="$STUB_DIR/jobs.$selected.$page"
+    if [ -f "$STUB_DIR/jobs-error.status" ]; then response="$STUB_DIR/jobs-error"; fi
+    ;;
+  repos/o/r/actions/runs/1234/cancel)
+    case " $* " in *' POST '*) ;; *) echo 'Expected POST' >&2; exit 1 ;; esac
+    advance cancel; response="$STUB_DIR/cancel.$selected" ;;
+  repos/o/r/actions/runs/1234)
+    advance runs; response="$STUB_DIR/runs.$selected" ;;
+  *) echo "Unexpected endpoint: $endpoint" >&2; exit 1 ;;
+esac
+if [ ! -f "$response.status" ]; then echo 'Missing response' >&2; exit 1; fi
+if [ -f "$response.out" ]; then cat "$response.out"; fi
+if [ -f "$response.error" ]; then cat "$response.error" >&2; fi
+read -r status < "$response.status"
+exit "$status"
+`,
+    };
+    for (const [name, source] of Object.entries(stubs)) {
+      writeFileSync(join(bin, name), source);
+      chmodSync(join(bin, name), 0o755);
+    }
+  });
+  afterAll(() => {
+    if (root !== undefined) rmSync(root, { recursive: true, force: true });
+  });
+
+  const identity = { id: 1234, run_attempt: 1, head_sha: "a".repeat(40), status: "in_progress" };
+  const inventory = (change = () => {}) => {
+    const entries = Array.from({ length: 24 }, (_, at) => ({
+      id: at + 1,
+      name: `test-server (${at + 1})`,
+      run_id: 1234,
+      run_attempt: 1,
+      head_sha: "a".repeat(40),
+      status: "queued",
+      runner_id: 0,
+      labels: at === 0 ? ["self-hosted", "dt-42-1234-1-test-server-1"] : ["ubuntu-latest"],
+    }));
+    change(entries);
+    return entries;
+  };
+  const pages = (entries) =>
+    Array.from({ length: Math.max(1, Math.ceil(entries.length / 30)) }, (_, page) => ({
+      total_count: entries.length,
+      jobs: entries.slice(page * 30, (page + 1) * 30),
+    }));
+  function runWatch(overrides = {}, env = {}) {
+    const body = job("server-queue-watchdog").body;
+    const at = body.indexOf("        run: |");
+    expect(at).toBeGreaterThan(-1);
+    const script = body
+      .slice(at + 1)
+      .map((line) => line.slice(10))
+      .join("\n");
+    const dir = mkdtempSync(join(root, "case-"));
+    writeFileSync(join(dir, "clock"), "0");
+    const fixture = {
+      polls: [pages(inventory())],
+      runs: [{ out: identity }],
+      cancel: [{}],
+      ...overrides,
+    };
+    const answer = (name, value) => {
+      writeFileSync(join(dir, `${name}.status`), `${value.status ?? 0}\n`);
+      if (value.out !== undefined)
+        writeFileSync(
+          join(dir, `${name}.out`),
+          typeof value.out === "string" ? value.out : JSON.stringify(value.out),
+        );
+      if (value.error !== undefined) writeFileSync(join(dir, `${name}.error`), value.error);
+    };
+    writeFileSync(join(dir, "jobs.max"), `${fixture.polls.length}\n`);
+    fixture.polls.forEach((poll, index) =>
+      poll.forEach((page, at) => answer(`jobs.${index + 1}.${at + 1}`, { out: page })),
+    );
+    if (fixture.jobsError) answer("jobs-error", { status: 1, error: "HTTP 503" });
+    for (const kind of ["runs", "cancel"]) {
+      writeFileSync(join(dir, `${kind}.max`), `${fixture[kind].length}\n`);
+      fixture[kind].forEach((response, index) => answer(`${kind}.${index + 1}`, response));
+    }
+    const result = spawnSync("bash", ["-e", "-c", script], {
+      encoding: "utf8",
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        STUB_DIR: dir,
+        CLOCK_JUMP: "400",
+        SHOULD_WATCH: "true",
+        GH_TOKEN: "test-token",
+        REPO: "o/r",
+        REPO_ID: "42",
+        RUN_ID: "1234",
+        RUN_ATTEMPT: "1",
+        HEAD_SHA: "a".repeat(40),
+        LABEL_PREFIX: "dt",
+        SHARD_COUNT: "24",
+        ...env,
+      },
+    });
+    expect(result.error, `${result.stdout}${result.stderr}`).toBeUndefined();
+    const calls = existsSync(join(dir, "calls"))
+      ? readFileSync(join(dir, "calls"), "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => line.split(" "))
+      : [];
+    return { status: result.status, output: `${result.stdout}${result.stderr}`, calls };
+  }
+  const cancellations = (result) => result.calls.filter((args) => args.includes("POST"));
+
+  it("is a successful zero-API no-op when routing is disabled for this attempt", () => {
+    const result = runWatch({}, { SHOULD_WATCH: "false" });
+    expect(result.status, result.output).toBe(0);
+    expect(result.calls).toEqual([]);
+  });
+  it.each(["assigned", "completed"])(
+    "accepts a complete inventory with the routed job %s",
+    (state) => {
+      const entries = inventory((rows) => {
+        Object.assign(
+          rows[0],
+          state === "assigned" ? { status: "in_progress", runner_id: 9 } : { status: "completed" },
+        );
+      });
+      const result = runWatch({ polls: [pages(entries)] });
+      expect(result.status, result.output).toBe(0);
+      expect(cancellations(result)).toEqual([]);
+    },
+  );
+  it("allows an initial empty listing and legitimate inventory growth between paginated polls", () => {
+    const ready = inventory((rows) => {
+      Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+      rows.push(...Array.from({ length: 10 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })));
+    });
+    const result = runWatch({
+      polls: [[{ total_count: 0, jobs: [] }], pages(inventory()), pages(ready)],
+    });
+    expect(result.status, result.output).toBe(0);
+    expect(result.calls.some((args) => args.some((arg) => arg.endsWith("&page=2")))).toBe(true);
+    expect(cancellations(result)).toEqual([]);
+  });
+  it("compares the configured label prefix as data", () => {
+    const result = runWatch(
+      {
+        polls: [
+          pages(
+            inventory((rows) => {
+              Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+              rows[0].labels[1] = 'dt"quoted-42-1234-1-test-server-1';
+            }),
+          ),
+        ],
+      },
+      { LABEL_PREFIX: 'dt"quoted' },
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(cancellations(result)).toEqual([]);
+  });
+  it.each([
+    "missing",
+    "duplicate",
+    "foreign identity",
+    "foreign attempt",
+    "foreign head",
+    "wrong label",
+    "changing total",
+  ])(
+    "never accepts %s inventory and requests visible cancellation after the allowance",
+    (fault) => {
+      const entries = inventory((rows) => {
+        Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+        if (fault === "missing") rows.pop();
+        if (fault === "duplicate") rows[1].id = rows[0].id;
+        if (fault === "foreign identity") rows[0].run_id = 5678;
+        if (fault === "foreign attempt") rows[0].run_attempt = 2;
+        if (fault === "foreign head") rows[0].head_sha = "b".repeat(40);
+        if (fault === "wrong label") rows[0].labels[1] = "dt-42-5678-1-test-server-1";
+        if (fault === "changing total")
+          rows.push(
+            ...Array.from({ length: 10 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })),
+          );
+      });
+      const listing = pages(entries);
+      if (fault === "changing total") listing[1].total_count++;
+      const result = runWatch({ polls: [listing] });
+      expect(result.status, result.output).not.toBe(0);
+      expect(cancellations(result)).toHaveLength(1);
+    },
+  );
+  it("fails a complete all-hosted inventory immediately without cancelling", () => {
+    const result = runWatch({
+      polls: [
+        pages(
+          inventory((rows) => {
+            rows[0].labels = ["ubuntu-latest"];
+          }),
+        ),
+      ],
+    });
+    expect(result.status, result.output).not.toBe(0);
+    expect(result.calls).toHaveLength(1);
+    expect(cancellations(result)).toEqual([]);
+  });
+  it("cannot turn API failures or a still-unassigned job into success", () => {
+    for (const jobsError of [false, true]) {
+      const result = runWatch({ jobsError });
+      expect(result.status, result.output).not.toBe(0);
+      expect(cancellations(result)).toHaveLength(1);
+    }
+  });
+  it("makes no more than forty inventory polls even when the clock does not advance", () => {
+    const result = runWatch({}, { CLOCK_JUMP: "0" });
+    expect(result.status, result.output).not.toBe(0);
+    expect(result.calls.filter((args) => args.some((arg) => arg.includes("/jobs?")))).toHaveLength(
+      40,
+    );
+    expect(cancellations(result)).toHaveLength(1);
+  });
+  it.each([{ id: 999 }, { run_attempt: 2 }, { head_sha: "b".repeat(40) }])(
+    "refuses cancellation after an identity change %j",
+    (change) => {
+      const result = runWatch({ runs: [{ out: { ...identity, ...change } }] });
+      expect(result.status, result.output).not.toBe(0);
+      expect(cancellations(result)).toEqual([]);
+    },
+  );
+  it("retries a failed cancellation once, and an accepted request still cannot pass", () => {
+    const result = runWatch({ cancel: [{ status: 1, error: "HTTP 503" }, {}] });
+    expect(result.status, result.output).not.toBe(0);
+    expect(cancellations(result)).toHaveLength(2);
+  });
+  it("accepts a 409 only when the same run attempt is read back completed", () => {
+    const result = runWatch({
+      cancel: [{ status: 1, error: "HTTP 409" }],
+      runs: [{ out: identity }, { out: { ...identity, status: "completed" } }],
+    });
+    expect(result.status, result.output).toBe(0);
+    expect(cancellations(result)).toHaveLength(1);
+    const rejected = runWatch({ cancel: [{ status: 1, error: "HTTP 409" }] });
+    expect(rejected.status, rejected.output).not.toBe(0);
+    expect(cancellations(rejected)).toHaveLength(2);
+  });
+  it("caps the complete watchdog at 200 HTTP requests, including pagination", () => {
+    const entries = inventory((rows) => {
+      rows.push(...Array.from({ length: 600 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })));
+    });
+    const result = runWatch({ polls: [pages(entries)] }, { CLOCK_JUMP: "0" });
+    expect(result.status, result.output).not.toBe(0);
+    expect(result.calls).toHaveLength(200);
+    expect(result.output).toContain("API call limit");
+  }, 60_000);
+});
+
 // `pnpm ls` runs two ways here, under two timeouts:
 //   * `workspaceListing()` runs once, through `spawnSync`, while the file is collected
 //     (`scriptsByPackage()` needs it then). `spawnSync` blocks the event loop, so no Vitest timer
