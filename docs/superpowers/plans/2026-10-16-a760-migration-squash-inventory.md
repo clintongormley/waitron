@@ -1,5 +1,8 @@
 # A760 migration inventory appendix
 
+> **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
+> deleted on the owner's word; the files are readable at commit f519799de0.
+
 Pinned tree: `13bb9ec1aa4d49eac4903c22b90b39c560085c93`, 16 October 2026. Read this with the [operator procedure](2026-10-16-a760-migration-squash.md). Refresh it at the execution freeze; it does not cover later merges.
 
 ## What was run

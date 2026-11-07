@@ -245,6 +245,9 @@ schema's columns. Keep its populated rows, audit history and whole-database comp
 explicit empty-table expectation for each new table the upgrade creates. Do not make a live request
 handler understand an old schema just to populate a test.
 
+(2026-11-07, A1422) The upgrade tests named below were deleted with the frozen history; the two
+receipts describe them as they were.
+
 A predecessor's append-only list must name only tables that exist at that migration cut. On
 1 November 2026, W41s-7's new conflict ledger made the clock-confirmation and outage upgrade
 fixtures fail during setup: today's trigger list named `fiscal_conflict_evidence` before its
@@ -400,8 +403,9 @@ pnpm --filter @waitron/staffing exec vitest run --project node src/schema/schema
 
 The unchanged checkout passed all eight cases. Removing only `ON DELETE restrict` from the
 `shift_assignments.staff_role_id` reference to `staff_roles.id` in
-staffing's `0001_staffing_days_blocks_assignments.sql` (then in `packages/staffing/drizzle/`, frozen
-since A760 in `scripts/fixtures/a760-history/staffing/`), leaving the declaration and test
+staffing's `0001_staffing_days_blocks_assignments.sql` (then in `packages/staffing/drizzle/`; frozen
+at A760, deleted with that frozen history on 2026-11-07 (A1422), and readable with
+`git show f519799de0:scripts/fixtures/a760-history/staffing/0001_staffing_days_blocks_assignments.sql`), leaving the declaration and test
 unchanged, made the `shift_assignments` comparison fail with this difference:
 
 ```diff

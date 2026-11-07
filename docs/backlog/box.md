@@ -1990,6 +1990,9 @@ coverage remain open. The existing synthetic walk stays complementary and unchan
 below records the gap that prompted the design, not a new runtime measurement.
 
 - **Upgrade testing — blocking before go-live (owner, 2026-09-26).**
+  (2026-11-07, A1422) Since A760 the walk starts at the squash epoch and `RESETS` is empty; the old
+  steps named below are history, readable with
+  `git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.
   `scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
   order, with the change feed installed between steps, and since A164 (#970) carries two synthetic
   rows per table through every step. The steps that cannot carry those rows are listed in the test's

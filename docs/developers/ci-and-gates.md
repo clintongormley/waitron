@@ -3555,6 +3555,11 @@ passed in Chromium. Check host execution before deferring browser testing to ano
 
 ## Migration-upgrade test coverage
 
+(2026-11-07, A1422) Since A760 the walk starts at the squash epoch
+(`scripts/migration-baseline-epoch.json`) and then runs each later migration at its own date. The
+old migrations named in the dated measurements below were deleted with the frozen history; read
+one with `git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.
+
 ### A migration can fail on a database that already carries earlier migrations and what boot installed after them
 
 Drizzle applies a set's pending migrations in one transaction, so a statement that is legal on a
@@ -3571,19 +3576,21 @@ adds); deleting the feed's triggers and retrying started the box, and boot recre
 `applyMigrations` now removes the feed before migrating (`removeChangeFeed`,
 `packages/db/src/change-feed.ts`).
 
-`scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
-order, installing the change feed between steps as boot does. Measured 2026-09-26: with
+`scripts/migration-upgrade.test.ts` walks one database from the squash epoch through every later
+shipped migration in date order, installing the change feed between steps as boot does. Measured 2026-09-26: with
 `removeChangeFeed(store.venue)` deleted from `packages/migrations/src/apply.ts`,
 `pnpm exec vitest run scripts/migration-upgrade.test.ts` failed dropping
 `working_order_lines.variant_id` (core `0006_drop_line_variant_id`) with
 `no such column: new.variant_id`. Inferred from that, not run against a real box: a box that booted
-before that migration would have failed the same way. The guard also meets the shape
+before that migration would have failed the same way. Before A760 the guard also met the shape
 [conventions-data.md](conventions-data.md#a-migration-set-depends-on-another-through-a-foreign-key-a-trigger-on-its-table-or-a-trigger-body-naming-its-table)
-already records: core `0003_variant_inherited_nullable` rebuilds `products` while a trigger from
-media's `0001_image_references` reads it in its body, and SQLite refuses the rename that ends the
+already records: core `0003_variant_inherited_nullable` rebuilt `products` while a trigger from
+media's `0001_image_references` read it in its body, and SQLite refuses the rename that ends the
 rebuild (`error in trigger products_media_image_fk_parent_delete: no such table: main.products`).
-The guard applies everything up to `0003` together for that reason; a future rebuild of a table
-another set's trigger BODY reads fails it. Until A164 (2026-10-01) it seeded no rows, so a
+A later rebuild of a table an earlier trigger's BODY reads fails the walk: on 2026-11-07 (A1422) a
+synthetic set whose epoch migration added a trigger reading table `p`, followed by a drizzle-shaped
+rebuild of `p`, failed the walk with `migrations.apply_failed`, caused by the rename's
+`error in trigger watch_reads_p: no such table: main.p`; the same set without the trigger passed. Until A164 (2026-10-01) it seeded no rows, so a
 migration that failed only on data passed it; the next section says what it carries now.
 
 After `applyMigrations` removes the change feed, `installChangeFeed` in `apps/server/src/boot.ts`

@@ -1,5 +1,8 @@
 # A760: squash the migration history into eight sets — Implementation Plan
 
+> **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
+> deleted on the owner's word; the files are readable at commit f519799de0.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to
 > implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -382,6 +385,9 @@ but this one is running on Waitron. **Tell the watcher when PR 2 lands, so it ca
 Expect the tree to stay red from Task 11 until Task 15: commit at each task end anyway, and say so.
 
 ### Task 10: Clearance, the old reference and the history fixtures
+
+> **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
+> deleted on the owner's word; the files are readable at commit f519799de0.
 
 Follow the runbook's "Freeze before you create the squash branch", "Capture the old reference" and
 "Adapt the history consumers before generation", with this plan's overrides.

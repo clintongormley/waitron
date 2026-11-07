@@ -2169,13 +2169,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   historical controls. The A696 fixtures themselves are corrected; the scanner gap remains.
   [Reproduction](backlog/ci.md#retired-settings-after-a-source-escape).
 
-- **The receipt-guests upgrade test reinstalls the append-only triggers itself** (left open by
-  A1164, #2176). `packages/db/src/schema/sale-receipt-guests-upgrade.test.ts` calls
-  `installAppendOnlyTriggers` by hand after migrating, so it does not prove `applyMigrations` puts
-  them back; `packages/migrations/src/order-group-events-rebuild.test.ts` runs the real one. The
-  "copy the migrations, cut the journal, migrate to there" setup is also repeated across the
-  `*-upgrade.test.ts` files with no shared helper.
-
 - **The nightly mutation run: downloads, shard layout and repeated jobs** (bundle of 3, size M). [Detail](backlog/ci.md#bundle-the-nightly-mutation-run-downloads-shard-layout-and-repeated-jobs)
 
 For package distribution and the four-minute target, use the

@@ -1,5 +1,8 @@
 # A760 migration squash operator plan
 
+> **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
+> deleted on the owner's word; the files are readable at commit f519799de0.
+
 > **For the later executor:** use `superpowers:executing-plans` for native execution in one job.
 > Do not delegate implementation. Check off each step and retain its receipt. This procedure is
 > approved on 16 October 2026. Start only when the watcher records the freeze and named reset

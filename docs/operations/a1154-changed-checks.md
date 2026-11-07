@@ -1,5 +1,7 @@
 # A1154 changed test checks
 
+_2026-11-07, A1422: `scripts/fiscal-allocation-migration.test.ts` and `scripts/fiscal-certificate-migration.test.ts` were deleted with the frozen migration history on the owner's word; they are readable at commit f519799de0._
+
 _2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
 
 > 2026-10-29: Start again no longer keeps the start-again note; the promotion's floor case now checks that a leftover note file is ignored (A1206).
@@ -68,8 +70,8 @@ Historical review inventory, 2026-10-28. The owner authorizes removal of the obs
 | [packages/fiscal-verifactu/src/substitution-path.e2e.test.ts](../../packages/fiscal-verifactu/src/substitution-path.e2e.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [packages/fiscal-verifactu/src/verify.test.ts](../../packages/fiscal-verifactu/src/verify.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [packages/provisioning/src/venue-operation.test.ts](../../packages/provisioning/src/venue-operation.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
-| [scripts/fiscal-allocation-migration.test.ts](../../scripts/fiscal-allocation-migration.test.ts) | Remove retired-action variants or convert recovery arithmetic to restore/promote; retain assertions for surviving operations. |
-| [scripts/fiscal-certificate-migration.test.ts](../../scripts/fiscal-certificate-migration.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
+| [scripts/fiscal-allocation-migration.test.ts](https://github.com/clintongormley/waitron/blob/f519799de0509915c3655e39bf8dad1b350ec950/scripts/fiscal-allocation-migration.test.ts) | Remove retired-action variants or convert recovery arithmetic to restore/promote; retain assertions for surviving operations. |
+| [scripts/fiscal-certificate-migration.test.ts](https://github.com/clintongormley/waitron/blob/f519799de0509915c3655e39bf8dad1b350ec950/scripts/fiscal-certificate-migration.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [scripts/generate-hour-release.test.mjs](../../scripts/generate-hour-release.test.mjs) | Require the retired bundle to be absent; all surviving release entries remain required. |
 
 New coverage: `scripts/no-till-as-issuer.test.ts` exercises retired entry paths, action/setting spellings, fiscal identifiers, real file discovery, legitimate historical/device uses and migrated fiscal ownership. `packages/provisioning/src/venue-operation.test.ts` adds a no-input setup retry with stable node, exactly one seed and no second seed report.

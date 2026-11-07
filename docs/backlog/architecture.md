@@ -214,8 +214,7 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
 before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
 was fixed only for the last 28 documents. Find the rest with
-`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench
-':!scripts/fixtures/a760-history'`. Some hits point
+`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench`. Some hits point
 into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
 so check which document each one names before cutting it. One was left on purpose:
 `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a
@@ -1122,10 +1121,9 @@ product failures.
     `locations` to the importing venue's row (`venueLocationId`); the export no longer carries
     `fire_control`, whose column goes with `locations` in S28 rather than in A773-2, since dropping
     it alone rebuilds `locations` (S17, #2415; A773-2 PR D plan D113). S28 also deletes the tests
-    that still set it, listed in D113 and in [kitchen.md](kitchen.md). Two raw
-    `insert into working_orders` statements (`working-order.test.ts`'s `seedForeignNodeOrder`,
-    `station-order-migration.test.ts`): the schema slice that drops `working_orders.location_id`
-    changes them (F5, #2403). A bucket restore reads the venue from the downloaded copy before any
+    that still set it, listed in D113 and in [kitchen.md](kitchen.md). One raw
+    `insert into working_orders` statement (`working-order.test.ts`'s `seedForeignNodeOrder`): the
+    schema slice that drops `working_orders.location_id` changes it (F5, #2403). A bucket restore reads the venue from the downloaded copy before any
     migration runs, so the slice that moves the venue's columns keeps that read working on an older
     copy (S12; the plan's "Carried to the schema plan"). Server test helpers take the venue row's
     id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which

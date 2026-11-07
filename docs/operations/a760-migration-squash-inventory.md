@@ -1,5 +1,8 @@
 # A760 migration inventory appendix
 
+> **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
+> deleted on the owner's word; the files are readable at commit f519799de0.
+
 > Retained on 22 October 2026 for A979, before the planned removal of planning files.
 > This is the approved 16 October procedure, not a record of execution. Its measured counts,
 > paths, source lines and branch examples describe that authoring date. Refresh the inventory,

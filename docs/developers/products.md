@@ -808,8 +808,9 @@ parent's and holds no use of it.
 `products.image` is protected by the database, variant rows included, but not by a real foreign
 key: core's set (`packages/db/drizzle/0000_baseline.sql`) protects it with **four triggers** — one on
 insert, one on an update of `image`, one on deleting the parent image, one on renaming it.
-The header of the old migration that first made them,
-`scripts/fixtures/a760-history/media/0001_image_references.sql`, states what a trigger is not, and two of its points matter to anyone reading
+The header of the old migration that first made them, media's `0001_image_references.sql` (deleted
+with the frozen history on 2026-11-07, A1422; read it with
+`git show f519799de0:scripts/fixtures/a760-history/media/0001_image_references.sql`), states what a trigger is not, and two of its points matter to anyone reading
 this page: `pragma foreign_key_list('products')` does not list the rule, so nothing that enumerates
 keys from the engine sees it; and a write naming a missing filename is refused with errcode 1811
 (`SQLITE_CONSTRAINT_TRIGGER`), where a declared key refuses it with 787
