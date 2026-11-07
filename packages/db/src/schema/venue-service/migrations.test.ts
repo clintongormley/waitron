@@ -1143,7 +1143,7 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, moved_to,
              created_at)
           values (${randomUUID()}, ${station!.id}, ${orderId}, '#1', ${kind}, 'Burger', 1000,
-                  'Mesa 7', ${new Date().toISOString()})`;
+                  'Table 7', ${new Date().toISOString()})`;
     // The control: a move names the table it went to.
     await db.execute(movedTo("moved"));
     const onVoid = await captureError(() => db.execute(movedTo("void")));

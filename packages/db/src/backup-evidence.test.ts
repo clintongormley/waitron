@@ -11,7 +11,7 @@ import {
   verifyBackupMembershipIdentity,
   CORE_BACKUP_TABLE_POLICIES,
 } from "./backup-evidence.js";
-import { CORE_CLASSIFICATION } from "./classification.js";
+import { CORE_OWN_CLASSIFICATION } from "./classification.js";
 import { appendOrderAmendment } from "./append-order-amendment.js";
 import { withTransaction } from "./tenancy.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
@@ -583,7 +583,7 @@ describe("generated complete core preservation", () => {
       for (const db of [before.db, after.db]) {
         db.run(sql`pragma foreign_keys = off`);
         db.run(sql`pragma ignore_check_constraints = on`);
-        for (const { table } of CORE_CLASSIFICATION) {
+        for (const { table } of CORE_OWN_CLASSIFICATION) {
           restores.push(dropTriggers(db, table));
           const columns = db.all<{ name: string; type: string }>(
             sql.raw(`pragma table_info(${quote(table)})`),
@@ -598,7 +598,7 @@ describe("generated complete core preservation", () => {
         }
       }
       await queries(before.db, after.db, async (a, b) => {
-        for (const { table } of CORE_CLASSIFICATION) {
+        for (const { table } of CORE_OWN_CLASSIFICATION) {
           const policies = CORE_BACKUP_TABLE_POLICIES.filter((policy) => policy.table === table);
           expect(await compareBackupTables({ before: a, after: b, policies }), table).toBe(true);
           const columns = after.db.all<{ name: string; type: string }>(
