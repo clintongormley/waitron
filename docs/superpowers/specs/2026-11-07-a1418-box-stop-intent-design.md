@@ -1,6 +1,6 @@
 # A1418: how a box stops, and what it does when it starts again
 
-**Status: proposed, 2026-11-07; nothing is built.** Decisions marked **(owner)** quote the owner from
+**Status: approved by the owner, 2026-11-07 ("approved"); nothing is built.** Decisions marked **(owner)** quote the owner from
 the conversation of 7 November 2026. Decisions marked **(default)** are this design's, open to
 correction. Everything else is a fact, with a pointer, and says whether it was read or run.
 
@@ -279,7 +279,7 @@ Each needs a dated note when this is approved. None is rewritten.
 - **`CLAUDE.md` §5, "The bucket stream never waits on the bucket to sell", and "Nothing EXTERNAL may
   block a sale".** After an unplanned stop, a box with one box waits up to 60 seconds for the bucket
   and Cloud before it sells, and an answer from either can stop it. The owner chose the wait (see
-  "What the owner decided"); both rule lines are amended with this design.
+  "What the owner decided"); both rule lines are amended in the pull request that builds §3.
 
 - **A1188 §6 and answer 15:** "With no internet and no till or peer to ask, it waits for a person."
   Narrowed: for a box with no other machine in its chart, that wait is the 60 seconds of §3, unless

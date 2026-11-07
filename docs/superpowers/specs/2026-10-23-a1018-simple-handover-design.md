@@ -10,6 +10,12 @@
 > The A1018 section is unchanged on Cloud `main`: the same file fetched without `ref` (Cloud
 > `main` at `7b8ffec5b68d169e4e6c3d340e5bea67d993dd93`), each copy cut from
 > `## Handover between local and hosted machines: A1018` up to the next `## ` heading, and the two
+
+> **2026-11-07, A1418:** for a box with no other machine in its chart, the wait for a person after an
+> unplanned stop is replaced by a bounded wait of about a minute, then selling; after a deliberate
+> shutdown it still waits for a person. [A1418 design](2026-11-07-a1418-box-stop-intent-design.md) §3
+> and §9.
+
 > cuts compared with `diff`. The pinned cut's 194 lines match the first 194 lines of `main`'s;
 > `main` adds only a `### A951 routing revision 2 response, 2026-10-23 (D136)` subsection after
 > them, which is about A951.

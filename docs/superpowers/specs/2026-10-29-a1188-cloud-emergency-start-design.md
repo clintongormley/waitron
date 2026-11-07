@@ -1,5 +1,10 @@
 # A1188: starting the venue in the cloud when the box has died
 
+> **2026-11-07, A1418:** for a box with no other machine in its chart, the wait for a person after an
+> unplanned stop is replaced by a bounded wait of about a minute, then selling; after a deliberate
+> shutdown it still waits for a person. [A1418 design](2026-11-07-a1418-box-stop-intent-design.md) §3
+> and §9.
+
 **Approved by the owner, 2026-10-29, with its defaults; nothing is built yet.** Building waits for
 A1018's build approval, A947's strip and Cloud's half (§11). Revised the same day after a fresh
 review (one critical finding, ten important, thirteen minor), and again after a narrow check of its

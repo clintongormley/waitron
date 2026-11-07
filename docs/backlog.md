@@ -2021,7 +2021,7 @@ Not in any track until the standalone primary is done.
 - **A1418. A box records how it stopped, and a replaced box stays stopped (owner, 2026-11-07).** One
   admin action takes a box out of service with a full, checked backup; a shutdown waits for an admin
   at the next start, a power cut waits a minute, a restart does not wait.
-  [A1418 design](superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md), proposed, not yet approved.
+  [A1418 design](superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md), approved 2026-11-07; plan next.
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
   2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. Building waits for
