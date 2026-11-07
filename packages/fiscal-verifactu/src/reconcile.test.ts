@@ -953,6 +953,90 @@ describe("reconcile — an invoice the old box issued and the box that took over
   });
 });
 
+describe("reconcile — a conflict on a record of the box this one took over from", () => {
+  it("is recorded on the old box's record and does not stop the selling box", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const old = await seedPendingEnvios(suite.db, { count: 2 });
+    const head = await seedSecondChain(suite.db, old, 5);
+    await drain(drainDeps(staticResolver(aeat.client())), DRAIN_AT);
+    expect([...(await estadosFor()).values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
+    const records = await suite.db.select().from(registrosFacturacion);
+    const inherited = records.find((row) => row.id === old.registroIds[1])!;
+    const selling = brandNodeId(records.find((row) => row.id === head.registroId)!.nodeId);
+    await recordTakeover(suite.db, old.nodeId, selling);
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 2,
+        nodes: [
+          { nodeId: selling, contactUrl: "https://selling", standing: "serving-primary" },
+          { nodeId: old.nodeId, contactUrl: "https://old", standing: "sell-only" },
+        ],
+      },
+      signerNodeId: selling,
+      signature: "sig-2",
+      endorsements: [],
+    });
+    const client = aeat.client();
+    const foreign: VerifactuClient = {
+      submit: (...args) => client.submit(...args),
+      consultar: async (...args) => {
+        const response = await client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((r) =>
+            r.IDFactura.NumSerieFactura !== inherited.numSerieFactura
+              ? r
+              : {
+                  ...r,
+                  DatosRegistroFacturacion: {
+                    ...r.DatosRegistroFacturacion,
+                    Huella: "E".repeat(64),
+                    SistemaInformatico: {
+                      ...(r.DatosRegistroFacturacion.SistemaInformatico as object),
+                      NumeroInstalacion: "FOREIGN",
+                    },
+                  },
+                },
+          ),
+        };
+      },
+    };
+
+    const result = await reconcile(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(foreign),
+        clock: old.clock,
+        scope: {
+          nodeId: selling,
+          historyNodeIds: [selling, old.nodeId],
+          taxpayerId: old.nif,
+          environment: "production",
+        },
+      },
+      PERIOD,
+    );
+
+    expect(result.conflicts?.map((row) => row.recordId)).toEqual([inherited.id]);
+    expect(
+      (await incidentsFor()).map(({ code, params }) => ({ code, registroId: params.registroId })),
+    ).toEqual([{ code: "fiscal.huella_divergente", registroId: inherited.id }]);
+    const { rows: cases } = await suite.db.execute<{ registro_id: string; cause: string }>(
+      sql`select registro_id, cause from filing_cases`,
+    );
+    expect(cases).toEqual([{ registro_id: inherited.id, cause: "fiscal.huella_divergente" }]);
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(client),
+    });
+    await expect(
+      withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe("reconcile — malformed consulta paging", () => {
   it("Copilot finding B: throws when AEAT reports more pages but gives no continuation key", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 }); // ≥1 local row so T1 does not short-circuit
