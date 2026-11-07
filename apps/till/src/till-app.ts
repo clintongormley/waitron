@@ -8547,6 +8547,7 @@ export class TillApp extends LitElement {
         .api=${this.api}
         .busy=${this.findBillBusy}
         .active=${this.drill?.kind === "find-bill"}
+        .backKey=${this.#resolveScreen("counter") === "counter" ? "find_page.back" : "action.back"}
         @find-bill-open=${(event: CustomEvent<{ row: BillRow }>) => void this.#onFindBillOpen(event)}
         @find-bill-back=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @find-transaction-open=${(event: CustomEvent<{ row: TransactionRow }>) => void this.#onFindTransactionOpen(event)}

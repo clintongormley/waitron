@@ -6436,6 +6436,26 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     },
   );
 
+  it.each([...devices, ["a till with counter zones", {}]] as const)(
+    "on %s, Find a bill's back button names where it goes",
+    async (name, device) => {
+      const { el } = await mountApp({
+        ...device,
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listBills: vi.fn().mockResolvedValue(listPage([])),
+      });
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      emit(shell(el), "find-bill");
+      await flush(el);
+      const back = el
+        .shadowRoot!.querySelector("till-find-bill-screen")!
+        .shadowRoot!.querySelector("header wt-button");
+      expect(text(back)).toBe(name === "a till with counter zones" ? "Back to counter" : "Back");
+    },
+  );
+
   it.each(devices)("on %s, a presented TABLE bill still opens its table", async (_, device) => {
     const row = billRow({
       workingOrderId: "wo-4",

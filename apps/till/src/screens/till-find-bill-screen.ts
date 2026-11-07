@@ -108,6 +108,7 @@ export class TillFindBillScreen extends LitElement {
   @property({ attribute: false }) api!: TillApi;
   @property({ type: Boolean }) active = false;
   @property({ type: Boolean }) busy = false;
+  @property({ attribute: false }) backKey: "find_page.back" | "action.back" = "find_page.back";
   @state() private tab: Tab = "bills";
   @state() private options?: FindBillOptions;
   @state() private optionsError = "";
@@ -585,7 +586,7 @@ export class TillFindBillScreen extends LitElement {
             this.#cancel();
             this.#emit("find-bill-back");
           }}
-          >${label("back")}</wt-button
+          >${t(this.backKey)}</wt-button
         >
         <h1>${t("find_bill.title")}</h1>
       </header>
