@@ -6,6 +6,7 @@ their full text.
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17).**
+  [Plan](../superpowers/plans/2026-11-07-a646-modules-page.md) written 2026-11-07; build remains open and waits for A739.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
   static mockups (removed from the repository on 2026-11-02). Build waits for A739. The
   first independent build PR must repair retained disabled-module append-only protection before
