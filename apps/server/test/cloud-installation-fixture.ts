@@ -24,7 +24,8 @@ export async function installationFixture(
     revoked = false,
     patch: Record<string, unknown> = {},
     delay = async () => {},
-    failure = "";
+    failure = "",
+    failureStatus = 401;
   // Contract, "Seeing the service": any other configuration body is an invalid proof.
   const configurationBodies = options.cloudBeforeVersion2
     ? ["{}"]
@@ -82,7 +83,7 @@ export async function installationFixture(
       failure ||
       (values[2] === "configuration" && !configurationBodies.includes(String(values[7])))
     ) {
-      res.writeHead(401);
+      res.writeHead(failureStatus);
       res.end(JSON.stringify({ error: failure || "invalid_proof" }));
       return;
     }
@@ -170,8 +171,9 @@ export async function installationFixture(
     delay: (fn: () => Promise<void>) => {
       delay = fn;
     },
-    fail: (code: string) => {
+    fail: (code: string, status = 401) => {
       failure = code;
+      failureStatus = status;
     },
   };
 }

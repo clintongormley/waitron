@@ -576,7 +576,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
             );
             try {
               const info = await file.stat();
-              if (!info.isFile() || info.size > 45) throw new Error();
+              if (!info.isFile()) throw new Error();
               const bytes = Buffer.alloc(46),
                 { bytesRead } = await file.read(bytes, 0, 46, 0);
               peerPublicKey = bytes.subarray(0, bytesRead).toString("utf8").trim();
@@ -592,15 +592,10 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           } catch (error) {
             if (error instanceof Error && "code" in error && error.code === "ENOENT")
               return project(state);
-            throw new AppError("cloud.state_invalid", {});
+            throw new AppError("cloud.tunnel_unavailable", {});
           }
           const remote = state.lifecycle?.view?.services.find((s) => s.service === "remote_access");
-          if (
-            state.lifecycle?.tunnelConflict ||
-            !remote ||
-            !["provisioning", "ready"].includes(remote.state) ||
-            remote.configuration.peerPublicKey !== peerPublicKey
-          )
+          if (remote?.configuration.peerPublicKey !== peerPublicKey)
             await client.provisionTunnel(peerPublicKey, signal);
         }
         return project(state);

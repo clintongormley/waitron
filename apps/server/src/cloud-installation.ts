@@ -317,7 +317,7 @@ export function installationClient(
           value.error === "placement_conflict"
         ) {
           c.tunnelConflict = true;
-          throw new AppError("cloud.binding_conflict", {});
+          throw new AppError("cloud.tunnel_conflict", {});
         }
         if (response.status === 403 && object(value) && value.error === "revoked") {
           markRevoked(c);
@@ -371,9 +371,8 @@ export function installationClient(
   }
   return {
     async provisionTunnel(peerPublicKey: string, signal?: AbortSignal) {
-      if (c.revoked || state.environment !== "test") return;
       if (c.tunnelConflict) {
-        throw new AppError("cloud.binding_conflict", {});
+        throw new AppError("cloud.tunnel_conflict", {});
       }
       // The saved container key makes a lost reply retryable with a fresh proof, without a new intent record.
       await exchange(signal, {
