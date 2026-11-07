@@ -139,6 +139,68 @@ describe("durationSequencer", () => {
     ]);
   });
 
+  it("warns once with only this shard's files absent from the table", async () => {
+    const warnings = [];
+    const Sequencer = durationSequencer(seconds, {
+      write: () => {},
+      warn: (line) => warnings.push(line),
+    });
+    for (let index = 1; index <= 3; index += 1) {
+      await new Sequencer(ctx(index)).shard(specs);
+    }
+    expect(warnings).toEqual([
+      "::warning::[duration-sequencer] shard 3/3: 1 file absent from the duration table: src/6.test.ts",
+    ]);
+  });
+
+  it("combines multiple missing files into one sorted annotation", async () => {
+    const warnings = [];
+    const Sequencer = durationSequencer(
+      {},
+      {
+        write: () => {},
+        warn: (line) => warnings.push(line),
+      },
+    );
+    const one = { config: { root: "/r", shard: { index: 1, count: 1 } } };
+    await new Sequencer(one).shard([
+      { moduleId: "/r/src/z.test.ts" },
+      { moduleId: "/r/src/a.test.ts" },
+    ]);
+    expect(warnings).toEqual([
+      "::warning::[duration-sequencer] shard 1/1: 2 files absent from the duration table: src/a.test.ts, src/z.test.ts",
+    ]);
+  });
+
+  it("keeps an empty or fully measured shard quiet", async () => {
+    const warnings = [];
+    const Sequencer = durationSequencer(seconds, {
+      write: () => {},
+      warn: (line) => warnings.push(line),
+    });
+    await new Sequencer(ctx(1)).shard(specs);
+    await new Sequencer(ctx(1)).shard([]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("writes missing-duration annotations to stderr by default", async () => {
+    const written = [];
+    const original = process.stderr.write;
+    process.stderr.write = (chunk) => {
+      written.push(String(chunk));
+      return true;
+    };
+    try {
+      const Sequencer = durationSequencer(seconds, { write: () => {} });
+      await new Sequencer(ctx(3)).shard(specs);
+    } finally {
+      process.stderr.write = original;
+    }
+    expect(written).toEqual([
+      "::warning::[duration-sequencer] shard 3/3: 1 file absent from the duration table: src/6.test.ts\n",
+    ]);
+  });
+
   it("returns the shard Vitest asked for", async () => {
     const Sequencer = durationSequencer(seconds, { write: () => {} });
     const shard = await new Sequencer(ctx(3)).shard(specs);
