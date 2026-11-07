@@ -410,7 +410,7 @@ sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is m
 ```
 
 Both forms stop the optional staff tunnel and remove its control and key volumes. A reset box
-re-pairs with Cloud and makes a new WireGuard key. Both forms wipe every volume in the table above. Plain `reset` keeps four things inside the box's
+re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue databases and wizard settings, logs, local backups, the captured mail inbox and print-agent settings. Plain `reset` keeps four things inside the box's
 `state` volume:
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own

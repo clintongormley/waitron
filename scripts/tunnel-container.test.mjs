@@ -53,7 +53,7 @@ afterEach(async () => {
   }
 });
 afterAll(async () => {
-  await rm(root, { recursive: true, force: true });
+  if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
 
 async function start(
