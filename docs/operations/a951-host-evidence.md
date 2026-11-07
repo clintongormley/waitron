@@ -28,7 +28,9 @@ The bounded run stopped its own fixture and peer and removed its network. It lef
 managed demo and the owner's containers running. Managed deployment of these combined cuts,
 physical reboot, public certificate renewal, wrong-venue refusal, revocation, offline sale and
 the remaining cross-venue and LAN isolation checks are still open. Nothing landed during the
-A760 freeze. The earlier native-protocol evidence below belongs to the parked A951 build.
+A760 freeze. The [later bounded managed check](#bounded-managed-server-restart-7-november-2026)
+covers the normal server bundle and restart while off. The earlier native-protocol evidence below
+belongs to the parked A951 build.
 
 ## Settings on and off, 7 November 2026
 
@@ -54,7 +56,39 @@ The bounded run stopped its own app and peer, removed its network and released t
 lock. It did not replace the managed demo or the owner's app. This checks a temporary run;
 managed deployment, process restart with this setting, physical reboot and the other finish-line
 checks above remain open. The automated client case covers remembering off in a new client
-instance. The A760 landing freeze remains in force.
+instance. The [later bounded managed check](#bounded-managed-server-restart-7-november-2026)
+covers a real server process restart while off. The A760 landing freeze remains in force.
+
+## Bounded managed server restart, 7 November 2026
+
+The combined Settings source at `8a346293a1b106ab010d5fe4871e3d36f6bac02a` was built
+on the Debian box and run as its normal `server.js` bundle under a separate systemd unit.
+Six relevant server and dashboard source files matched the private checkout by SHA-256.
+The fresh registration's state was copied while its fixture was stopped to
+`/home/clinton/lanes/E/a951s-managed-20261107`. The earlier `/tmp` fixture is an inactive
+snapshot; do not run both copies of this registration.
+
+Public HTTPS returned 200 with normal certificate verification. After remote access was turned
+off, restarting the server changed its process ID. A fresh local sign-in and Cloud refresh
+succeeded, remote access stayed off and `peer.json` stayed absent. Turning access on restored
+trusted public HTTP 200. Registration, public key and certificate bytes were unchanged.
+An ordinary TERM of this app made systemd restart it once; trusted public HTTP recovered.
+Restarting the peer container also recovered trusted public HTTP.
+
+The initial probe requested a refresh while the new process was already refreshing and received
+`cloud.busy`. Its retained replacement waits only for that explicit refusal before checking the
+refresh result. No application source changed for this check. Commands, both attempts, source
+hashes and results are in Lane E's local `receipts/a951s-managed-20261107/`:
+`managed-proof.sh`, `managed-proof.mjs`, `managed-proof.log`, `managed-restored.log`,
+`source-match.json` and `managed-result.json`.
+
+This was a bounded managed check. Cleanup removed its systemd unit, peer container and network;
+`cleanup.log` confirms those absences, a free test-box lock, the earlier managed demo running and
+the owner's three containers healthy. The fresh state and runtime remain for resumption, with
+remote access saved on. This unit was not enabled across a physical reboot. Reboot, automatic
+public certificate renewal, wrong-venue refusal, revocation, offline sale and the remaining
+cross-venue and LAN checks are still open. The earlier managed demo remains the owner's
+persistent try-out. Nothing landed during the A760 freeze.
 
 # Current addendum: returned Debian box, 5 November 2026
 

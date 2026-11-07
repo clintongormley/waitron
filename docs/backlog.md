@@ -2107,8 +2107,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   tunnel configuration, certificate installation and trusted public browser sign-in on 7 November;
   its peer restart recovered. The optional tunnel runtime now has its own container and box
   key. The signed Cloud refresh now submits that key and feeds the tunnel's control file through
-  one public-key reader. Left: automatic startup, image publication, Settings on/off/status, remaining isolation
-  qualification, final combined installation and reboot, and retirement of `@waitron/tunnel`.
+  one public-key reader. A bounded normal-bundle systemd run retained Settings off across app
+  restart and Cloud refresh; on restored trusted public access. Process and peer recovery retained
+  the same keys and certificate. Left: image publication, final combined installation and reboot,
+  public renewal, remaining isolation qualification and retirement of `@waitron/tunnel`.
   Translate all returned one editable menu suggestion on the test box; address completion
   remains a trial to build.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
