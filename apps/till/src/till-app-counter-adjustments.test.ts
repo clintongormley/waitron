@@ -1412,6 +1412,157 @@ describe("till-app: comping a stored counter order", () => {
     expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
   });
 
+  describe("a save refused because the kitchen has started the dish since the till read it", () => {
+    const refused = { code: "ticket.already_started", status: 409 };
+    const startedListing = () => {
+      const lines = listing(5);
+      lines.lines[0] = { ...lines.lines[0]!, state: "preparing" };
+      return lines;
+    };
+    const startsMeanwhile = () => ({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockResolvedValue(heldOrder(5)),
+      getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(startedListing()),
+    });
+    const raise = (el: TillApp) => press(el, inBasket(el, ".line .step-inc")!);
+    const stepInc = (el: TillApp) => inBasket(el, ".line .step-inc");
+    const leaveBy: Record<string, (el: TillApp) => void> = {
+      Park: (el) => emit(counter(el), "park-order", {}),
+      Send: (el) => emit(counter(el), "place-order"),
+      "Pay in cash": (el) => emit(counter(el), "confirm-payment", { method: "cash", amount: "20" }),
+      "Pay by card": (el) => emit(counter(el), "collect-card", {}),
+    };
+
+    const sentence = {
+      en: "The kitchen has already started this item, so it can no longer be changed. The order has been reloaded: cancel the item if needed, or add more as a new dish",
+      es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Se ha vuelto a cargar el pedido: cancela el plato si hace falta, o añade más como un plato nuevo",
+    };
+
+    describe.each(["en", "es"] as const)("in %s", (language) => {
+      let previous: ReturnType<typeof currentLocale>;
+      beforeEach(() => {
+        previous = currentLocale();
+      });
+      afterEach(() => setLocale(previous));
+
+      it.each(Object.keys(leaveBy))(
+        "%s reloads the order and says so, with the raise gone and Cancel on screen",
+        async (action) => {
+          const updateWorkingOrder = vi.fn().mockRejectedValue(refused);
+          const placeOrder = vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" });
+          const recordSale = vi.fn();
+          const pay = vi.fn();
+          const el = await placeCounter({
+            ...startsMeanwhile(),
+            updateWorkingOrder,
+            placeOrder,
+            recordSale,
+            pay,
+          });
+          setLocale(language);
+          await raise(el);
+          expect(counter(el).store.dirty).toBe(true);
+
+          leaveBy[action]!(el);
+          await flush(el);
+
+          expect(updateWorkingOrder).toHaveBeenCalledOnce();
+          expect(placeOrder).not.toHaveBeenCalled();
+          expect(recordSale).not.toHaveBeenCalled();
+          expect(pay).not.toHaveBeenCalled();
+          expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+          expect(banner(el)!.textContent!.trim()).toBe(sentence[language]);
+          expect(counter(el).store.revision).toBe(5);
+          expect(counter(el).store.dirty).toBe(false);
+          expect(counter(el).store.lines[0]!.quantity).toBe("1");
+          expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
+          expect(counter(el).stage).toBe("order");
+          expect(el as unknown as Record<string, boolean>).toMatchObject({
+            placing: false,
+            parking: false,
+            submitting: false,
+          });
+        },
+      );
+    });
+
+    it("offers no + after the reload, and the Cancel on screen sends the dish's cancellation", async () => {
+      const el = await retrieved({
+        ...startsMeanwhile(),
+        updateWorkingOrder: vi.fn().mockRejectedValue(refused),
+      });
+      await raise(el);
+      emit(counter(el), "park-order", {});
+      await flush(el);
+
+      expect(
+        basket(el).shadowRoot!.querySelectorAll(".line")[0]!.querySelector(".step-inc"),
+      ).toBeNull();
+
+      await press(el, inBasket(el, '[data-cancel-line="0"]')!);
+      await chooseReason(el, "Mistake");
+      await press(el, inDialog(el, "[data-adjust-continue]"));
+
+      expect(api.previewAdjustment).toHaveBeenCalledWith(
+        "wo-9",
+        expect.objectContaining({ expectedRevision: 5, lineId: "l-1", action: "cancel" }),
+      );
+    });
+
+    it("saves more of the started dish as a new line beside it, the started one as stored", async () => {
+      const updateWorkingOrder = vi
+        .fn()
+        .mockRejectedValueOnce(refused)
+        .mockResolvedValue({ revision: 6 });
+      const el = await retrieved({ ...startsMeanwhile(), updateWorkingOrder });
+      await raise(el);
+      emit(counter(el), "park-order", {});
+      await flush(el);
+
+      const store = counter(el).store;
+      store.addProduct(store.lines[0]!.product, "1");
+      emit(counter(el), "park-order", {});
+      await flush(el);
+
+      expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+      const saved = vi.mocked(updateWorkingOrder).mock.calls[1]![1] as {
+        lines: { workingOrderLineId?: string; quantity: string; productId?: string }[];
+        revision: number;
+      };
+      expect(saved.revision).toBe(5);
+      expect(saved.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+        ["l-1", "1"],
+        ["l-2", "1"],
+        [undefined, "1"],
+      ]);
+      expect(banner(el)).toBeNull();
+    });
+
+    it("says the order could not be read again, not to cancel the item, when its lines cannot be", async () => {
+      const el = await retrieved({
+        retrieveWorkingOrder: vi
+          .fn()
+          .mockResolvedValueOnce(heldOrder(4))
+          .mockResolvedValue(heldOrder(5)),
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce(listing(4))
+          .mockRejectedValue(new TypeError("Failed to fetch")),
+        updateWorkingOrder: vi.fn().mockRejectedValue(refused),
+      });
+      await raise(el);
+      expect(stepInc(el)).not.toBeNull();
+
+      emit(counter(el), "park-order", {});
+      await flush(el);
+
+      expect(inBasket(el, '[data-cancel-line="0"]')).toBeNull();
+      expect(banner(el)!.textContent!.trim()).toBe(t("held.reread_failed"));
+    });
+  });
+
   it("cancels a dish the kitchen has with a reason", async () => {
     const el = await retrieved();
 
