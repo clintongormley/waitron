@@ -725,6 +725,7 @@ it("a rename answered after Back and Discard closed its dialog still updates the
   expect(native.matches(":modal")).toBe(false);
   answer();
   await expect.poll(banner).toBe("Nuevo SL");
+  expect(app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeNull();
   await host.updateComplete;
   expect(dialog.open).toBe(false);
   expect(native.matches(":modal")).toBe(false);
@@ -777,8 +778,6 @@ it.each([
     expect(box.right).toBeLessThanOrEqual(width);
     expect(box.top).toBeGreaterThanOrEqual(0);
     await expectNoA11yViolations(notice()!);
-    await commands.parkPointer();
-    await page.screenshot({ path: `node_modules/.cache/a1396/${locale}-${theme}-${width}.png` });
     await new Promise((resolve) => setTimeout(resolve, 0));
     await host.updateComplete;
     expect(dialog.open).toBe(false);
@@ -817,9 +816,44 @@ for (const ended of ["removed", "expired", "new session"] as const) {
     refuse();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await app.updateComplete;
+    if (ended === "expired") {
+      app
+        .shadowRoot!.querySelector("dashboard-login-screen")!
+        .dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
+      await expect
+        .poll(() => app.shadowRoot!.querySelector('[data-test="nav-overview"]'))
+        .toBeTruthy();
+    }
     expect(app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeNull();
   });
 }
+
+it("signing out clears a late-save notice before the next sign-in", async () => {
+  let refuse!: () => void;
+  const { app } = await mount(undefined, "en-GB", "light", {
+    renameTaxpayer: () =>
+      new Promise((_, reject) => {
+        refuse = () => reject({ code: "connection.failed" });
+      }),
+  } as Partial<DashboardApi>);
+  const { dialog } = await openLegalName(app, "Proposed Ltd");
+  dialog.querySelector<HTMLElement>("[data-test=save-legal-name]")!.click();
+  await expect.poll(() => refuse).toBeTypeOf("function");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("kitchen");
+  refuse();
+  await expect.poll(() => app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeTruthy();
+  window.dispatchEvent(
+    new CustomEvent("waitron-session-invalid", { detail: { code: "management_session.expired" } }),
+  );
+  await expect.poll(() => app.shadowRoot!.querySelector("dashboard-login-screen")).toBeTruthy();
+  app
+    .shadowRoot!.querySelector("dashboard-login-screen")!
+    .dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
+  await expect.poll(() => app.shadowRoot!.querySelector('[data-test="nav-overview"]')).toBeTruthy();
+  expect(app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeNull();
+});
 
 it("leaving Venue details by Back and Keep leaves the legal-name dialog open with its draft", async () => {
   const { app } = await mount();

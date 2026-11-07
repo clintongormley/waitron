@@ -9029,6 +9029,19 @@ describe("publishing", () => {
       .poll(() => publication()?.shadowRoot?.querySelector('[data-test="schedule-open"]'))
       .toBeTruthy();
     const schedule = publication()!;
+    const menus = app.shadowRoot!.querySelector("dashboard-menus-screen")!;
+    await menus.updateComplete;
+    await schedule.updateComplete;
+    const menuRenders = vi.spyOn(menus, "render");
+    const scheduleRenders = vi.spyOn(schedule, "render");
+    for (let i = 0; i < 3; i++) {
+      app.requestUpdate();
+      await app.updateComplete;
+      await menus.updateComplete;
+      await schedule.updateComplete;
+    }
+    expect(menuRenders).not.toHaveBeenCalled();
+    expect(scheduleRenders).not.toHaveBeenCalled();
     const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
     sq('[data-test="schedule-open"]').click();
     await schedule.updateComplete;
@@ -9057,6 +9070,36 @@ describe("publishing", () => {
         "The schedule change for Lunch Menu was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
       );
     expect(client.scheduleMenuPublication).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a schedule refusal in its still-open dialog without a page notice", async () => {
+    const pending = deferred<never>();
+    const client = api({
+      getMenuPreview: vi.fn().mockResolvedValue({ ...lunchPreview(), warnings: [] }),
+      scheduleMenuPublication: vi.fn(() => pending.promise),
+    });
+    const el = await mountPreview(client);
+    const schedule = panel(el).querySelector("dashboard-menu-publications")!;
+    const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    await expect.poll(() => sq('[data-test="schedule-open"]')).toBeTruthy();
+    sq('[data-test="schedule-open"]').click();
+    await schedule.updateComplete;
+    type(sq('wt-input[name="date"]'), "2030-01-02");
+    type(sq('wt-input[name="time"]'), "13:00");
+    await schedule.updateComplete;
+    sq('[data-test="schedule-submit"]').click();
+    await expect.poll(() => client.scheduleMenuPublication.mock.calls.length).toBe(1);
+    pending.reject({ code: "connection.failed" });
+    await expect
+      .poll(
+        () =>
+          sq('[data-test="schedule-dialog"]').querySelector<
+            HTMLElementTagNameMap["wt-form-actions"]
+          >("wt-form-actions")!.error,
+      )
+      .toBe(codeMessage("connection.failed"));
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(sq('[data-test="late-refusal"]')).toBeNull();
   });
 
   it("renders the publications widget for the open menu with the preview it read", async () => {

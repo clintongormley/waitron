@@ -3123,9 +3123,15 @@ export class MenusScreen extends LitElement {
     return out !== null && out.menuId === this.menuId ? out.changeId : null;
   }
 
-  #renderPreview() {
-    const name = this.#menuName();
+  readonly #lateScheduleRefusalFor = (name: string): (() => void) => {
     const reportLateSave = this.reportLateSave;
+    return () => {
+      if (this.isConnected) this.memberError = fill("menus.schedule_not_saved", { name });
+      else reportLateSave?.(name);
+    };
+  };
+
+  #renderPreview() {
     return html`<dashboard-menu-preview
       menuName=${this.#menuName()}
       .includedBy=${this.structure?.includedBy ?? []}
@@ -3159,11 +3165,8 @@ export class MenusScreen extends LitElement {
         slot="schedule"
         .api=${this.api}
         menuId=${this.menuId!}
-        menuName=${name}
-        .reportLateRefusal=${() => {
-          if (this.isConnected) this.memberError = fill("menus.schedule_not_saved", { name });
-          else reportLateSave?.(name);
-        }}
+        menuName=${this.#menuName()}
+        .lateRefusalFor=${this.#lateScheduleRefusalFor}
         .preview=${this.previewError ? null : this.preview}
         .blocked=${this.undoOut?.menuId === this.menuId}
       ></dashboard-menu-publications

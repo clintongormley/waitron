@@ -250,9 +250,6 @@ de ese producto. Aun así puedes publicar o programar: el aviso te pide que comp
 declaraciones, no rechaza la publicación. Si cancelas la confirmación de programación, se conservan la
 fecha y la hora que introdujiste.
 
-Si un cambio de programación no se confirma después de salir de la carta, abre su pestaña
-**Vista previa** y comprueba las **Versiones programadas** antes de volver a intentarlo.
-
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
 alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
 

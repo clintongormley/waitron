@@ -1981,16 +1981,17 @@ export class DashboardApp extends LitElement {
     return this.screen === "floor-plan" && this.contentLanguagesReady;
   }
 
+  #saveReporters = new Map<StringKey, { generation: number; report: (name?: string) => void }>();
+
   #lateSaveReporter(key: StringKey): (name?: string) => void {
     const generation = this.sessionGeneration;
-    return (name = "") => {
-      if (
-        this.isConnected &&
-        this.sessionRole !== undefined &&
-        generation === this.sessionGeneration
-      )
-        this.saveRefusal = { key, name };
+    const existing = this.#saveReporters.get(key);
+    if (existing?.generation === generation) return existing.report;
+    const report = (name = "") => {
+      if (generation === this.sessionGeneration) this.saveRefusal = { key, name };
     };
+    this.#saveReporters.set(key, { generation, report });
+    return report;
   }
 
   #notices(slot?: string): TemplateResult {

@@ -230,7 +230,7 @@ export class MenuPublicationsPanel extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property() menuId = "";
   @property() menuName = "";
-  @property({ attribute: false }) reportLateRefusal?: () => void;
+  @property({ attribute: false }) lateRefusalFor?: (name: string) => () => void;
   @property({ attribute: false }) preview: MenuPreview | null = null;
   /** Set by the screen while an Undo of this menu is out. */
   @property({ type: Boolean }) blocked = false;
@@ -584,7 +584,7 @@ export class MenuPublicationsPanel extends LitElement {
     const submitted = this.#draft();
     const opening = this.#opening;
     const menuId = this.menuId;
-    const reportLateRefusal = this.reportLateRefusal;
+    const reportLateRefusal = this.lateRefusalFor?.(this.menuName);
     this.scheduleBusy = true;
     try {
       if (moving === null)
