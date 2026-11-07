@@ -33,7 +33,7 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import {
   captureError,
@@ -82,7 +82,6 @@ import {
   readMenuStructure,
   updateProduct,
 } from "@waitron/catalogue";
-import { runTunnelClient } from "@waitron/tunnel";
 import { DEFAULT_MIGRATIONS_ROOT, MAX_UPLOAD_BYTES, type StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { listBoxIpv4 } from "./box-reach.js";
@@ -196,19 +195,6 @@ vi.mock("undici", async (importOriginal) => {
 });
 
 /**
- * `boot.ts` imports `runTunnelClient` directly, with no injection seam. The tunnel tests observe the
- * call through this spy, which calls through to the real client so `close()`'s teardown runs for
- * real.
- */
-vi.mock("@waitron/tunnel", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/tunnel")>();
-  return {
-    ...actual,
-    runTunnelClient: vi.fn(actual.runTunnelClient),
-  };
-});
-
-/**
  * Passes through to the real queue that `boot.ts` builds, counting the bodies routes hand it and the
  * bodies it starts, and holding every started body on `gate` while a test sets one.
  */
@@ -260,11 +246,6 @@ vi.mock("./box-secrets.js", async (importOriginal) => {
     ...actual,
     tightenTlsDir: vi.fn(actual.tightenTlsDir),
   };
-});
-
-// The tunnel spy is one shared module mock, so its calls accumulate across tests.
-beforeEach(() => {
-  vi.mocked(runTunnelClient).mockClear();
 });
 
 /**
@@ -2260,43 +2241,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("dials the outbound cloud-mirror tunnel to config.httpPort when WAITRON_TUNNEL_* is set, and close() aborts it", async () => {
-    // The relay is unreachable, so the real client just backs off; what is asserted is boot's wiring
-    // of the call, and that `close()` aborts its signal.
-    const port = await freePort();
-    const server = await startConfiguredServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      // A pool size distinct from the client's own default.
-      WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
-      WAITRON_TUNNEL_BOX_ID: "box-mirror-7",
-      WAITRON_TUNNEL_TOKEN: "tunnel-secret",
-      WAITRON_TUNNEL_POOL_SIZE: "3",
-    });
-    try {
-      expect(runTunnelClient).toHaveBeenCalledTimes(1);
-      const deps = vi.mocked(runTunnelClient).mock.calls[0]![0];
-      // The box's OWN served port — a paired connection is spliced to the exact listener bound below.
-      expect(deps.localPort).toBe(port);
-      expect(deps.relayHost).toBe("127.0.0.1");
-      expect(deps.relayPort).toBe(1);
-      expect(deps.boxId).toBe("box-mirror-7");
-      expect(deps.token).toBe("tunnel-secret");
-      expect(deps.poolSize).toBe(3); // WAITRON_TUNNEL_POOL_SIZE, threaded through so the knob is live
-      // The boot signal, not yet aborted while the host runs.
-      expect(deps.signal.aborted).toBe(false);
-      // ...and `close()` aborts exactly that signal, which is what tears the client down.
-      await server.close();
-      expect(deps.signal.aborted).toBe(true);
-    } finally {
-      await server.close(); // idempotent; guarantees teardown even if an assertion above threw
-    }
-  }, 60_000);
-
-  it("does not dial the tunnel when WAITRON_TUNNEL_* is unset", async () => {
+  it("ignores retired relay settings and keeps the local listener available", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -2304,10 +2249,15 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
+      WAITRON_TUNNEL_RELAY_URL: "not a relay URL",
+      WAITRON_TUNNEL_BOX_ID: "",
+      WAITRON_TUNNEL_TOKEN: "",
+      WAITRON_TUNNEL_POOL_SIZE: "0",
     });
     try {
-      await awaitListening(httpPort());
-      expect(runTunnelClient).not.toHaveBeenCalled();
+      const health = await fetchHealthOk(`http://127.0.0.1:${httpPort()}/health`);
+      expect(health.status).toBe(200);
+      expect(await health.json()).toMatchObject({ ok: true });
     } finally {
       await server.close();
     }

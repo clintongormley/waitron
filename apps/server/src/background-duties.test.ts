@@ -34,9 +34,7 @@ const CLOSERS = [
   "freeSpaceWatch",
   "boxEmails",
   "liveEvents",
-  "tunnelController",
   "loop",
-  "tunnelWorker",
   "backupSupervisor",
   "demoPrinterLoop",
   "clockWatch",
@@ -85,14 +83,7 @@ function recordingHandles(
     freeSpaceWatch: stopper("freeSpaceWatch"),
     boxEmails: stopper("boxEmails"),
     liveEvents: { close: () => void calls.push("close liveEvents") },
-    tunnelController: { abort: () => void calls.push("abort tunnelController") },
     loop: awaited("loop"),
-    tunnelWorker: {
-      catch: () => {
-        calls.push("catch tunnelWorker");
-        return Promise.resolve();
-      },
-    } as unknown as Promise<void>,
     backupSupervisor: stopper("backupSupervisor"),
     demoPrinterLoop: stopper("demoPrinterLoop"),
     clockWatch: stopper("clockWatch"),
@@ -133,9 +124,7 @@ describe("background duties", () => {
       "stop freeSpaceWatch",
       "stop boxEmails",
       "close liveEvents",
-      "abort tunnelController",
       "await loop",
-      "catch tunnelWorker",
       "stop backupSupervisor",
       "stop demoPrinterLoop",
       "stop clockWatch",
@@ -152,14 +141,12 @@ describe("background duties", () => {
       attendanceLoop: undefined,
       certificateDiagnosis: undefined,
       suggestionLoop: undefined,
-      tunnelWorker: undefined,
       demoPrinterLoop: undefined,
     });
     await stopBackgroundDuties(backgroundDuties(handles));
     expect(calls).not.toContain("abort certificateReminderController");
     expect(calls).not.toContain("await attendanceLoop");
     expect(calls).not.toContain("stop certificateDiagnosis");
-    expect(calls).not.toContain("catch tunnelWorker");
     expect(calls).not.toContain("stop demoPrinterLoop");
     expect(calls.at(-1)).toBe("stop streamHost");
   });

@@ -2110,12 +2110,13 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   one public-key reader. A bounded normal-bundle systemd run retained Settings off across app
   restart and Cloud refresh; on restored trusted public access. Process and peer recovery retained
   the same keys and certificate. Left: image publication, final combined installation and reboot,
-  public renewal, remaining isolation qualification and retirement of `@waitron/tunnel`.
+  public renewal and remaining isolation qualification. The private combined build removes the old
+  `@waitron/tunnel` TCP relay and its settings.
   Translate all returned one editable menu suggestion on the test box; address completion
   remains a trial to build.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
-- **Waitron retains:** box-side networking and `@waitron/tunnel`'s retirement; first-contact trust
+- **Waitron retains:** publication of box-side networking; first-contact trust
   bootstrap; and the cloud-standby end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
   [Detail](backlog/replication-cloud.md#waitron-retains)
 

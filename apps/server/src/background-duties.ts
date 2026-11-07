@@ -53,9 +53,7 @@ export interface BackgroundDutyHandles {
   freeSpaceWatch: Stopper;
   boxEmails: Stopper;
   liveEvents: { close(): unknown };
-  tunnelController: Aborter;
   loop: unknown;
-  tunnelWorker: Promise<unknown> | undefined;
   backupSupervisor: Stopper;
   demoPrinterLoop: Stopper | undefined;
   clockWatch: Stopper;
@@ -180,19 +178,9 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       reason: "only tells open screens of changes",
     },
     {
-      name: "tunnelController",
-      close: () => h.tunnelController.abort(),
-      reason: "the tunnel only carries requests, which the gate refuses",
-    },
-    {
       name: "loop",
       close: () => h.loop,
       reason: SIGNALLED_LOOP_WAIT,
-    },
-    {
-      name: "tunnelWorker",
-      close: () => h.tunnelWorker?.catch(() => {}),
-      reason: "waits for the tunnel, which only carries requests",
     },
     {
       name: "backupSupervisor",
