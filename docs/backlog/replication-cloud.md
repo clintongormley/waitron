@@ -1054,8 +1054,12 @@ Remaining work, following the owner's certificate-first order:
   submit/status exchange, resumes pending requests after restart and renews before expiry. A local
   TLS handshake observed the renewed chain without restarting the listener; no new public
   certificate was issued for that synthetic test.
-- Add the managed outbound tunnel container, send box details over the existing signed connection,
-  provide Settings on/off/status, and retire `@waitron/tunnel`.
+- Wire the optional tunnel runtime to the existing signed connection, publish its image and
+  start it automatically from Settings on/off/status, then retire `@waitron/tunnel`. The
+  [runtime](../../deploy/tunnel/README.md) stays off without its control file; its private
+  WireGuard key is held in a separate container volume. The Linux container check covers
+  traffic to the fixed staff upstream, refused source/port, disconnect, reconnect and restart.
+  Final combined installation and physical reboot qualification remain open.
 - Explain the manual demo's changed connection-file hash and qualify the final combined
   installation across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the

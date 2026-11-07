@@ -116,6 +116,9 @@ describe("isRootScopePath", () => {
 });
 
 describe("isImageInputPath", () => {
+  it("rebuilds the image when the tunnel container smoke changes", () => {
+    expect(isImageInputPath("scripts/tunnel-container-smoke.sh")).toBe(true);
+  });
   it.each([
     "scripts/bundle-node.mjs",
     "scripts/npm-bundle-notices.mjs",

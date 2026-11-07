@@ -1,5 +1,10 @@
 # Current addendum: returned Debian box, 5 November 2026
 
+> 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol
+> build and its admission gates below belong to the parked branch. Use the [simple staff tunnel
+> runtime](../../deploy/tunnel/README.md) for A951-S; this historical material adds no build steps to it.
+
+
 The owner/watchers' 11:55 and 12:15 direction chooses Debian 13 on the reinstalled
 shared test box, with no EC2 work. The watcher now reports its return and this
 inventory: Debian 13.7, kernel 6.12, x86_64, systemd, AppArmor, Docker 29.9.3,
