@@ -5,6 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { webauthnChallenges, webauthnCredentials } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { mountBackupRecoveryPackApi } from "./backup-recovery-pack-api.js";
+import { createStaffApp } from "./cloud-remote.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -68,6 +69,23 @@ it("refuses an admin with no passkey as passkey.not_registered", async () => {
   expect(response.status).toBe(404);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.json()).toMatchObject({ error: { code: "passkey.not_registered" } });
+});
+
+it("binds a remote recovery-pack check to the staff hostname", async () => {
+  const { personId, token } = await openManagementSession(suite.db, "admin");
+  await suite.db
+    .insert(webauthnCredentials)
+    .values({ personId, credentialId: "cred-remote", publicKey: "AQID", counter: 0 });
+  const staff = createStaffApp(app(), "https://staff.example.test");
+  const response = await staff.request(
+    "https://staff.example.test/api/backup/recovery-pack/passkey-options",
+    {
+      method: "POST",
+      headers: { cookie: `waitron_management_session=${token}` },
+    },
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ options: { rpId: "staff.example.test" } });
 });
 
 it("logs an unexpected failure under the backup routes' tag, answering an opaque 500", async () => {

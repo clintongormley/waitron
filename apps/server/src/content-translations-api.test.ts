@@ -1,3 +1,4 @@
+import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -1101,4 +1102,32 @@ it("projects eight languages and refuses nine without reducing the enabled langu
     400,
     "content.translation_invalid",
   );
+});
+
+it("uses the staff origin for remote translation saves and refuses another origin", async () => {
+  const input = await batch(await many(1));
+  const local = new Hono();
+  mountCatalogueApi(
+    local,
+    {
+      db: suite.db,
+      venueLocale: "es-ES",
+      managementOrigin: "https://venue.test",
+      contentLanguageRules: { required: ["es", "ca"], official: [] },
+    },
+    () => {},
+  );
+  const staff = createStaffApp(local, "https://staff.example.test");
+  const request = (origin: string) =>
+    staff.request("https://staff.example.test/management-api/content-translations", {
+      method: "PUT",
+      headers: { cookie: managerCookie, origin },
+      body: JSON.stringify(input),
+    });
+  await error(await request("https://attacker.test"), 403, "authorization.not_permitted");
+  expect((await request("https://staff.example.test")).status).toBe(200);
+  expect((await suite.db.select().from(units))[0]!.name).toEqual({
+    es: "Unit 0",
+    en: "CLIENT English unit",
+  });
 });

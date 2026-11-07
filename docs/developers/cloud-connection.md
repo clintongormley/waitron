@@ -208,22 +208,26 @@ pnpm --filter @waitron/server exec tsx scripts/cloud-certificate.ts install \
   /path/to/node-state staff-v-venue-id.example.com /tmp/staff-chain.pem
 ```
 
-Set `WAITRON_TLS_KEY_FILE` and `WAITRON_TLS_CERT_FILE` to the resulting
-`cloud-staff.key` and `cloud-staff.crt`, and set `WAITRON_MANAGEMENT_ORIGIN` to the
-HTTPS staff origin and `WAITRON_MANAGEMENT_RP_ID` to its hostname. The initial
-HTTP-to-HTTPS change needs a restart. Subsequent certificate updates are checked
-every ten seconds and applied to new TLS connections without restarting Waitron.
-An invalid replacement leaves the loaded context intact and logs
-`cloud.certificate_reload_failed`, repeating every five minutes while it persists.
-Check that the certificate covers `WAITRON_MANAGEMENT_ORIGIN`, as well as its key
-and dates. Fix the configuration or certificate before the valid certificate expires; the watcher does not obtain certificates itself.
+For the A951-S entrance (6 November 2026), set `WAITRON_STAFF_ORIGIN` to the
+assigned HTTPS staff origin, `WAITRON_STAFF_HOST` to its tunnel bind address and
+`WAITRON_STAFF_PORT` to its receiving port (8443 by default). Keep the LAN listener's
+TLS files, management origin and passkey hostname configured for the LAN. Start
+with the matching staff key and certificate in `WAITRON_STATE_DIR`; the separate
+listener checks replacements every ten seconds and applies valid ones to new TLS
+connections without a restart. An invalid replacement keeps the loaded context
+and logs `cloud.certificate_reload_failed`.
 
-Use the same hostname on your LAN by configuring your local DNS resolver to return
-the server's LAN address. Keep that address reserved in DHCP. Devices using a
-separate secure-DNS resolver may bypass the override; test each device with the
-internet disconnected and a fresh browser session. The Cloud runner proves this
-with an isolated DNS resolver and a new TLS client, without changing your router
-or installing a global certificate authority.
+Venue devices continue to use the LAN address. On 6 November a Mac browser signed
+in through the public gateway with normal certificate trust, and an issued
+replacement was installed without restarting the server
+([PR #2525](https://github.com/clintongormley/waitron/pull/2525)). That bounded test
+was stopped afterwards. The owner then authorised a separate managed demo: its
+unprivileged app restarts through systemd and its separate tunnel through Docker.
+Both recovered from a controlled process exit and the public page returned 200.
+They are enabled for startup; a physical box reboot has not been tested. Automatic
+renewal and offline-sale checks remain open. A fresh Chromium sign-in through the
+rented server's outside-home exit also passed with normal certificate trust. The gateway behavior below records the earlier
+local proof, not a completed A951-S qualification.
 
 The gateway removes revoked installations on its next signed configuration update.
 Its cached authority lasts at most ten minutes during a Cloud management outage;
@@ -359,6 +363,13 @@ makes one attempt; the scheduler retries from the durable spool with backoff. It
 abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
+
+**6 November 2026: the owner stopped this implementation and replaced it with A951-S.** Start with
+one remote dashboard entrance and one real browser-to-box path through the existing gateway.
+The old branch stays private and parked. The intake below records the earlier proposal; it does
+not add requirements to the replacement. Current work is listed in the
+[backlog](../backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client).
+
 
 ### Provisioning-source requirements agreement: 6 November 2026
 

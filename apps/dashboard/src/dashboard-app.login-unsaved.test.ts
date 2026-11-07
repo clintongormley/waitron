@@ -81,6 +81,38 @@ function unload() {
   return event.defaultPrevented;
 }
 
+it.each(["email", "password"] as const)(
+  "a late initial missing-session response preserves the %s draft",
+  async (step) => {
+    let refuse!: () => void;
+    const initialSession = new Promise<never>((_resolve, reject) => {
+      refuse = () => reject({ code: "management_session.required" });
+    });
+    const app = await mount("/manage/", { getMe: () => initialSession });
+    let input = await enter(app, "email", "draft@example.test");
+    if (step === "password") {
+      await userEvent.click(login(app).shadowRoot!.querySelector("wt-button[data-test=continue]")!);
+      input = await enter(app, "password", "synthetic password");
+    }
+    window.dispatchEvent(
+      new CustomEvent("waitron-session-invalid", {
+        detail: { code: "management_session.required", generation: app.sessionEpoch.current() },
+      }),
+    );
+    refuse();
+    await expect
+      .poll(() => app.shadowRoot!.querySelector("[data-test=venue-name]")?.textContent?.trim())
+      .toBe("Venue");
+    expect(field(app, step)).toBe(input);
+    await input.updateComplete;
+    expect(input.shadowRoot!.querySelector("input")!.value).toBe(
+      step === "password" ? "synthetic password" : "draft@example.test",
+    );
+    expect(asked(app)).toBe(false);
+    expect(unload()).toBe(false);
+  },
+);
+
 it.each(["typed", "clean", "reverted"])(
   "the real login reset link acts at once with a %s password",
   async (state) => {

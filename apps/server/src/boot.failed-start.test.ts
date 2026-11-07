@@ -35,6 +35,13 @@ import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { createSealedStateRefresher } from "./sealed-state.js";
 import { freePorts } from "./testing/free-ports.js";
+import { startStaffListener } from "./cloud-remote.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+
+vi.mock("./cloud-remote.js", async (original) => {
+  const actual = await original<typeof import("./cloud-remote.js")>();
+  return { ...actual, startStaffListener: vi.fn(actual.startStaffListener) };
+});
 
 /**
  * A start that fails after boot's long-lived open of the venue folder must give the folder back:
@@ -396,6 +403,41 @@ async function tradingEnv(venueDir: string, state: string, { landing = false } =
 }
 
 describe("a start that fails after the venue folder is opened gives the folder back", () => {
+  it("closes the staff socket when a later boot step fails", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const [localPort, landingPort, staffPort] = await freePorts(3);
+    const certificate = mintSelfSignedServerCert({
+      now: new Date(),
+      hostnames: ["staff.example.test"],
+      ipAddresses: [],
+    });
+    await writeFile(join(state, "cloud-staff.key"), certificate.serverKeyPem);
+    await writeFile(join(state, "cloud-staff.crt"), certificate.serverCertPem);
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    try {
+      await expect(
+        startServer({
+          WAITRON_VENUE_DIR: venueDir,
+          WAITRON_STATE_DIR: state,
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "preproduction",
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          ...TILL_ENV,
+          WAITRON_HTTP_PORT: String(localPort),
+          WAITRON_HTTP_LANDING_PORT: String(landingPort),
+          WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+          WAITRON_STAFF_PORT: String(staffPort),
+        }),
+      ).rejects.toBe(failure);
+      await expect(bindAndRelease(staffPort)).resolves.toBeUndefined();
+    } finally {
+      await vi.mocked(startStaffListener).mock.results.at(-1)?.value?.close();
+    }
+  }, 60_000);
+
   it("when the pending-adoption file cannot be read", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir();

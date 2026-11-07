@@ -1,3 +1,4 @@
+import { createStaffApp } from "./cloud-remote.js";
 import {
   departments,
   departmentReceipts,
@@ -3087,4 +3088,105 @@ it("preserves a manager changing their own email through staff details", async (
   const expired = await app.request("/management-api/staff", { headers: { cookie } });
   expect(expired.status).toBe(401);
   expect(await expired.json()).toMatchObject({ error: { code: "management_session.required" } });
+});
+
+it("keeps password backoff and ordinary password login through the remote entrance", async () => {
+  await setupTenant();
+  let now = 0;
+  const local = mountApp(
+    undefined,
+    createPasswordThrottle(() => now),
+  );
+  const staff = createStaffApp(local, "https://staff.example.test");
+  const attempt = (password: string) =>
+    staff.request("https://staff.example.test/management-api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: MANAGER_EMAIL, password }),
+    });
+  for (let n = 0; n < 4; n++) expect((await attempt("wrong")).status).toBe(401);
+  const refused = await attempt(PASSWORD);
+  expect(refused.status).toBe(429);
+  expect(await refused.json()).toEqual({
+    error: { code: "password.throttled", params: { retryAfterSeconds: 2 } },
+  });
+  now = 2000;
+  const accepted = await attempt(PASSWORD);
+  expect(accepted.status).toBe(200);
+  expect(accepted.headers.get("set-cookie")).toContain("waitron_management_session=");
+  expect(accepted.headers.get("set-cookie")).toContain("; Secure");
+});
+
+it("requires a real session for the staff roster through the remote entrance", async () => {
+  await setupTenant();
+  const local = mountApp(),
+    staff = createStaffApp(local, "https://staff.example.test");
+  const url = "https://staff.example.test/management-api/staff-roster";
+  expect((await local.request("/management-api/staff-roster")).status).toBe(200);
+  const anonymous = await staff.request(url);
+  expect(anonymous.status).toBe(401);
+  expect(await anonymous.json()).toEqual({
+    error: { code: "management_session.required", params: {} },
+  });
+  const cookie = await login(local, MANAGER_EMAIL);
+  const signed = await staff.request(url, { headers: { cookie } });
+  expect(signed.status).toBe(200);
+  expect(await signed.json()).toEqual(
+    expect.arrayContaining([{ personId: expect.any(String), displayName: "The Manager" }]),
+  );
+});
+
+it("keeps the remote Google ceremony and its return on the staff origin", async () => {
+  const { managerId } = await setupTenant();
+  await suite.db
+    .update(persons)
+    .set({ googleSubject: "remote-google" })
+    .where(eq(persons.id, managerId));
+  const exchange = vi.fn<typeof exchangeGoogleCode>().mockImplementation(async (config) => {
+    if (config.redirectUri !== "https://staff.example.test/management-api/google/callback")
+      throw new Error("wrong redirect");
+    return { subject: "remote-google" };
+  });
+  const staff = createStaffApp(
+    mountApp(undefined, undefined, { exchange }),
+    "https://staff.example.test",
+  );
+  const started = await staff.request("https://staff.example.test/management-api/google/login", {
+    method: "POST",
+  });
+  const authorization = new URL(
+    ((await started.json()) as { authorizationUrl: string }).authorizationUrl,
+  );
+  expect(authorization.searchParams.get("redirect_uri")).toBe(
+    "https://staff.example.test/management-api/google/callback",
+  );
+  expect(started.headers.get("set-cookie")).toContain("; Secure");
+  const callback = await staff.request(
+    `https://staff.example.test/management-api/google/callback?state=${encodeURIComponent(authorization.searchParams.get("state")!)}&code=code`,
+    { headers: { cookie: started.headers.get("set-cookie")!.split(";")[0]! } },
+  );
+  expect(callback.status).toBe(302);
+  expect(callback.headers.get("location")).toBe("https://staff.example.test/manage/?login=google");
+  expect(callback.headers.get("set-cookie")).toContain("; Secure");
+});
+
+it("sends password-reset links back to the requesting staff origin", async () => {
+  await setupTenant();
+  const sent: Parameters<AccountEmailSender>[0][] = [];
+  const local = mountApp(async (message) => {
+    sent.push(message);
+  });
+  const staff = createStaffApp(local, "https://staff.example.test");
+  expect(
+    (
+      await staff.request("https://staff.example.test/management-api/password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: STAFF_EMAIL }),
+      })
+    ).status,
+  ).toBe(202);
+  await local.settle();
+  expect(sent).toHaveLength(1);
+  expect(new URL(sent[0]!.actionUrl).origin).toBe("https://staff.example.test");
 });

@@ -20,7 +20,13 @@ import {
 } from "@waitron/db";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, verifySecretAsync } from "@waitron/identity";
+import {
+  beginOwnPasskeyCheck,
+  persons,
+  verifySecretAsync,
+  webauthnCredentials,
+} from "@waitron/identity";
+import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
@@ -38,6 +44,12 @@ import { invoiceFontBytes } from "./invoice-font.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { createStaffApp } from "./cloud-remote.js";
+
+vi.mock("@simplewebauthn/server", async (original) => ({
+  ...(await original<typeof import("@simplewebauthn/server")>()),
+  verifyAuthenticationResponse: vi.fn(),
+}));
 
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
@@ -124,6 +136,7 @@ const drawingSeat: Seat = async (_tx, _node, context) =>
 
 function fixture(
   options: {
+    remote?: boolean;
     seat?: Seat | null;
     seats?: number;
     turns?: Turns;
@@ -133,7 +146,8 @@ function fixture(
     readBoxEnv?: () => Promise<Record<string, string | undefined>>;
   } = {},
 ) {
-  const app = new Hono();
+  const local = new Hono();
+  const app = options.remote ? createStaffApp(local, "https://staff.example.test") : local;
   const seat = options.seat === undefined ? drawingSeat : options.seat;
   const modules: WaitronModule[] =
     seat === null
@@ -143,7 +157,7 @@ function fixture(
           backup: { recoveryPackPage: seat },
         }));
   mountBackupRecoveryPackMakeApi(
-    app,
+    local,
     {
       db: suite.db,
       nodeDb: suite.node,
@@ -188,7 +202,7 @@ function fixture(
     const socket = tls ? new TLSSocket(new Socket()) : undefined;
     if (socket) sockets.push(socket);
     return app.request(
-      `https://box.test${path}`,
+      `https://${options.remote ? "staff.example.test" : "box.test"}${path}`,
       {
         method: "POST",
         headers: {
@@ -218,6 +232,53 @@ function fixture(
       }),
   };
 }
+
+it("verifies remote recovery-pack passkeys against the staff origin and hostname", async () => {
+  await suite.db.insert(webauthnCredentials).values({
+    personId: admin.personId,
+    credentialId: "cred-remote",
+    publicKey: "AQID",
+    counter: 0,
+  });
+  const { challengeHandle } = await withTransaction(suite.db, (tx) =>
+    beginOwnPasskeyCheck(tx, { managementSessionId: admin.token, rpId: "staff.example.test" }),
+  );
+  const verify = vi.mocked(verifyAuthenticationResponse);
+  verify.mockImplementation(async (input) => {
+    if (
+      input.expectedRPID !== "staff.example.test" ||
+      input.expectedOrigin !== "https://staff.example.test"
+    )
+      throw new Error("wrong passkey site");
+    return {
+      verified: true,
+      authenticationInfo: {
+        credentialID: "cred-remote",
+        newCounter: 1,
+        userVerified: true,
+        credentialDeviceType: "singleDevice",
+        credentialBackedUp: false,
+        origin: "https://staff.example.test",
+        rpID: "staff.example.test",
+      },
+    };
+  });
+  onTestFinished(() => {
+    verify.mockReset();
+  });
+  const response = await fixture({ remote: true }).make(
+    false,
+    {},
+    {
+      locale: "en",
+      newServerKey: false,
+      signIn: { method: "passkey", challengeHandle, response: { id: "cred-remote" } },
+    },
+  );
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("application/pdf");
+  await response.arrayBuffer();
+});
 
 async function pdfText(bytes: ArrayBuffer): Promise<string> {
   const loading = getDocument({ data: new Uint8Array(bytes.slice(0)), useSystemFonts: false });
