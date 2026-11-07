@@ -8,7 +8,6 @@ import { dispatchSetupGoto } from "../events.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
-/** Why the mirror card promises so little: `PendingAdoption` in `apps/server/src/finish-adoption.ts`. */
 @customElement("setup-role-screen")
 export class SetupRoleScreen extends LitElement {
   static override styles = [

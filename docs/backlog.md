@@ -127,7 +127,7 @@ no design yet.
 - [After A760: A877's one helper first](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
 - [One rule for what holds a table back at a reset](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
 - [The key ring after a join](backlog/setup.md#bundle-the-key-ring-after-a-join)
-- [Requests through the tunnel look like the box itself](backlog/box.md#bundle-requests-through-the-tunnel-look-like-the-box-itself)
+- [Qualify clock confirmation through remote access](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 - [Which state files a handover carries; summary checks](backlog/replication-cloud.md#bundle-which-state-files-a-handover-carries-summary-checks)
 - [Recheck that a spare gets later charts](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
@@ -1867,7 +1867,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   same clock appear in no alert. Whether a disproof should stop payments again is for the owner
   (slice 9 decision 14). Left open by A798-B slice 9 (#2025).
 
-- **Requests through the tunnel look like the box itself** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/box.md#bundle-requests-through-the-tunnel-look-like-the-box-itself)
+- **Qualify clock confirmation through remote access** (bundle of 2, 1 important, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 
 - **A1407. A wrong date needs a corrective invoice, and Waitron cannot yet issue the right one.** Research found the remedy is R4 on a full invoice and R5 on a simplified one, and `recordCorrection` handles only F2 to R5. `computeVatReturn` sorts by issue date, so a misdated sale lands in the wrong period in that report. Three identical refusals hold the rest of a chain, so a clock a day ahead could stop later filings; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
 

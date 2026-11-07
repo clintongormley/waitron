@@ -385,10 +385,10 @@ that slice 3 has to restore:
   in slice 3 has to close this.
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard's copy was made honest rather than the option removed — `apps/setup`'s role, connect and done
-  screens say plainly that joining does not work in this version and that the box ends up holding
-  none of the restaurant's data, with no till and no dashboard. But the option is still there and the
-  flow still runs, so an operator can still spend a box on it. Removing or disabling it until slice 3
+  wizard still offers the option. The A951-S private build removes the old relay: the primary
+  refuses the request, and the adopting server stays in setup. Its role, connect and refusal
+  wording now points to restore instead of promising a restart or suggesting another attempt.
+  Removing or disabling the option until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.
 
@@ -1221,8 +1221,6 @@ restructuring wider than a review fix:
   `apps/server/src/box-secrets.ts` (`keyRingEnv`) and `mirror-bundle.ts` (`encodeKeyRing`) as well
   as `packages/credentials/src/keyring.ts`; adopt decodes the bundle's ring through the env format.
   Own the format in `keyring.ts`.
-- `apps/server/src/mirror-bundle-fetch.ts` hand-writes an HTTPS client on `node:https`;
-  `tunnel-http.ts` already uses undici's `Agent({ connect: { ca } })` with `fetch`.
 - `node.dump` is opened twice in one verification run: read-only with an authorizer
   (`backup-verification-compatibility.ts`) and writable in memory without one
   (`packages/composition/src/node-backup-verification.ts`). Open it once, through the hardened

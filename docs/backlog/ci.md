@@ -150,6 +150,9 @@ checks. Explicit configured-port, tunnel-target, advertised-origin and paired la
 cases retain the configured binding, including an unused peer drawn alongside the HTTP port. A907's
 existing clock-listener fixture already selects at bind time. None changes production validation.
 
+7 November 2026: A951-S removes the retired TCP relay's tunnel-target case. The remaining
+configured-binding checks above still apply.
+
 C88 (#920) reproduced the release-to-bind gap as one way the pause test's single CI failure
 could happen; `startS3TestServer` now recovers from it. A sibling scan found two draws in
 `promote-endpoint-e2e.test.ts`, but its mirror is bound and closed before the primary draw.

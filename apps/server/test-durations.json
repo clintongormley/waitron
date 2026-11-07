@@ -1185,7 +1185,6 @@
   "src/trust-page-devices.test.ts": 0.1,
   "src/trust-page.test.ts": 0.1,
   "src/ttl-cache.test.ts": 0.1,
-  "src/tunnel-http.test.ts": 2.7,
   "src/units-api.test.ts": 7.5,
   "src/unpaid-departure.test.ts": 19,
   "src/unpaid-invoice-delivery.test.ts": 14,

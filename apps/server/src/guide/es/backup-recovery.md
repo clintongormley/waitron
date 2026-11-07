@@ -80,6 +80,8 @@ para un archivo de copia, o **Restaurar desde mi bucket** para la copia continua
 de almacenamiento. Para una copia de Waitron Cloud, elige **Restaurar una copia de seguridad** y
 después **Restaurar desde Waitron Cloud**.
 
+**Añadir una réplica** no está disponible en esta versión. Elige una opción de restauración para recuperar un restaurante existente.
+
 Para un archivo de copia, elígelo en **Archivo de copia de seguridad**, introduce la clave que lo
 abre en **Clave de recuperación** y elige su **Entorno de la copia**. Para tu bucket, elige tu
 paquete de recuperación o archivo del kit en **Paquete de recuperación o archivo del kit**, o pega

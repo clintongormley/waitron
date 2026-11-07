@@ -2008,12 +2008,6 @@ async function bootServer(
         log,
         pointerTerm: () => readBucketPointerTerm(db, ring),
       });
-  // The singleton duties gate on this, not on `isMirror`: a sell-only local secondary is not a mirror,
-  // and must not write scheduled backups beside the primary.
-  // `node_mode_role_valid_ck` rejects `(mirror, primary)`, so a mirror is always 'secondary'.
-  //
-  // A BOOT decision, deliberately not live: an in-process promotion does not start the duties gated
-  // on this without a restart.
   const isSingletonPrimary = holders.singletonRole.current === "primary";
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
   // start: the watch looks only on the primary, so it would not close it there (plan decision 14).
@@ -3352,7 +3346,6 @@ async function bootServer(
     log,
   );
 
-  // The bundle a cloud mirror adopts; only the singleton primary emits one.
   if (isSingletonPrimary) {
     mountMirrorBundleApi(
       app,
