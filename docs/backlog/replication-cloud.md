@@ -1035,8 +1035,8 @@ until its operator enables it. A successful allocation means provisioning, not a
 
 Remaining work:
 
-- Land and combine these cuts after A760's freeze; qualify automatic provisioning and certificate
-  work on the managed public demo.
+- Land and combine these cuts after A760's freeze, sharing the public-key reader with the
+  configuration writer. Qualify automatic provisioning and certificate work on the managed public demo.
 - Publish the tunnel image, start it automatically from Settings on/off/status, and retire
   `@waitron/tunnel`.
 - Qualify public reconnect, a physical reboot, renewal, wrong-venue refusal, revocation, a sale

@@ -1,4 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { execFile, execFileSync } from "node:child_process";
+import { promisify } from "node:util";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -13,6 +15,12 @@ async function fixture() {
     tunnel: async (_values, saved, req, res, sent) => {
       urls.push(req.url ?? "");
       envelopeFields.push(Object.keys(sent).sort());
+      const refusals: Record<string, number> = { off: 503, absent: 404, denied: 403, limited: 429 };
+      if (mode in refusals) {
+        res.writeHead(refusals[mode]!);
+        res.end(mode === "absent" ? "<h1>Not found</h1>" : JSON.stringify({ error: mode }));
+        return;
+      }
       if (mode === "lost") {
         mode = "ok";
         req.socket.destroy();
@@ -32,8 +40,7 @@ async function fixture() {
             ? {
                 ...s,
                 state: mode === "unconfigured" ? "unconfigured" : "provisioning",
-                configuration:
-                  mode === "unconfigured" ? {} : { version: 1, peerPublicKey: publicKey },
+                configuration: mode === "unconfigured" ? {} : placement,
               }
             : s,
         );
@@ -58,6 +65,21 @@ async function fixture() {
   const directory = join(f.stateDir, "tunnel");
   await mkdir(directory);
   const publicKey = randomBytes(32).toString("base64");
+  const registration = JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"))
+    .view.registration;
+  const placement = {
+    version: 1,
+    installationId: registration.installationId,
+    venueId: registration.venueId,
+    cellId: randomUUID(),
+    address: "10.77.17.2",
+    port: 443,
+    peerPublicKey: publicKey,
+    gatewayPublicKey: randomBytes(32).toString("base64"),
+    endpoint: "gateway.example.test:51820",
+    staffHostname: `staff-v-${registration.venueId}.cell.example.test`,
+    publicHostname: `v-${registration.venueId}.cell.example.test`,
+  };
   await writeFile(join(directory, "public-key"), publicKey + "\n");
   const options = { ...f.options, tunnelDir: directory };
   return {
@@ -65,6 +87,7 @@ async function fixture() {
     options,
     directory,
     publicKey,
+    placement,
     urls,
     envelopeFields,
     client: createCloudConnection(options),
@@ -100,6 +123,9 @@ it("submits only the persisted public key with the live lease and retains the fo
     expect(status.installation?.services.find((s) => s.service === "remote_access")?.state).toBe(
       "provisioning",
     );
+    expect(status.installation?.services.some((s) => s.service === "content_translation")).toBe(
+      true,
+    );
     await f.client.refresh();
     expect(f.submissions()).toHaveLength(1);
     expect(
@@ -133,9 +159,9 @@ it("stops retrying a placement conflict across refreshes and restarts", async ()
   const f = await fixture();
   try {
     f.mode("conflict");
-    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.tunnel_conflict" });
     await expect(createCloudConnection(f.options).refresh()).rejects.toMatchObject({
-      code: "cloud.binding_conflict",
+      code: "cloud.tunnel_conflict",
     });
     expect(f.submissions()).toHaveLength(1);
     expect((await f.client.status()).installation?.state).toBe("active");
@@ -249,7 +275,7 @@ it.each([false, "true", {}])("refuses a malformed terminal-conflict marker %j", 
   }
 });
 
-it.each(["bad", "oversized", "link"])(
+it.each(["bad", "oversized", "link", "noncanonical", "directory"])(
   "refuses a %s public-key file without submitting it",
   async (kind) => {
     const f = await fixture();
@@ -259,11 +285,136 @@ it.each(["bad", "oversized", "link"])(
         await rm(path);
         await writeFile(join(f.directory, "other"), f.publicKey);
         await symlink(join(f.directory, "other"), path);
-      } else await writeFile(path, kind === "bad" ? "invalid" : "x".repeat(46));
-      await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.state_invalid" });
+      } else if (kind === "directory") {
+        await rm(path);
+        await mkdir(path);
+      } else
+        await writeFile(
+          path,
+          kind === "bad"
+            ? "invalid"
+            : kind === "noncanonical"
+              ? "A".repeat(42) + "B="
+              : f.publicKey + "\n\n",
+        );
+      await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.tunnel_unavailable" });
       expect(f.submissions()).toHaveLength(0);
     } finally {
       await f.close();
     }
   },
 );
+
+async function configuredRemote(
+  f: Awaited<ReturnType<typeof fixture>>,
+  state: string,
+  peerPublicKey = f.publicKey,
+) {
+  await createCloudConnection({ ...f.options, tunnelDir: undefined }).refresh();
+  f.patch({
+    services: (await f.saved()).lifecycle.view.services.map((s: { service: string }) =>
+      s.service === "remote_access"
+        ? { ...s, state, configuration: { ...f.placement, peerPublicKey } }
+        : s,
+    ),
+  });
+}
+
+it.each(["off", "absent", "denied", "limited"])(
+  "keeps control active when the tunnel receiver is %s",
+  async (mode) => {
+    const f = await fixture();
+    try {
+      f.mode(mode);
+      await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+      expect((await f.client.status()).installation?.state).toBe("active");
+      expect((await f.saved()).lifecycle.tunnelConflict).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it.each(["provisioning", "ready", "failed"])(
+  "does not reprovision a %s placement with the saved key",
+  async (state) => {
+    const f = await fixture();
+    try {
+      await configuredRemote(f, state);
+      await f.client.refresh();
+      await f.client.refresh();
+      expect(f.submissions()).toHaveLength(0);
+      expect(
+        (await f.client.status()).installation?.services.find((s) => s.service === "remote_access")
+          ?.state,
+      ).toBe(state);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("submits the persisted key when the existing placement holds a different key", async () => {
+  const f = await fixture();
+  try {
+    await configuredRemote(f, "ready", randomBytes(32).toString("base64"));
+    await f.client.refresh();
+    expect(f.submissions().map((v) => v[7])).toEqual([
+      JSON.stringify({ peerPublicKey: f.publicKey }),
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("accepts a later matching placement without repeating the refused key submission", async () => {
+  const f = await fixture();
+  try {
+    f.mode("conflict");
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.tunnel_conflict" });
+    await configuredRemote(f, "ready");
+    await expect(f.client.refresh()).resolves.toMatchObject({ installation: { state: "active" } });
+    expect(f.submissions()).toHaveLength(1);
+  } finally {
+    await f.close();
+  }
+});
+
+it("does not turn a control request's placement-conflict response into a terminal tunnel refusal", async () => {
+  const f = await fixture();
+  try {
+    f.fail("placement_conflict", 409);
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect((await f.saved()).lifecycle.tunnelConflict).toBeUndefined();
+  } finally {
+    await f.close();
+  }
+});
+
+it("refuses a FIFO public-key file without waiting for a writer", async () => {
+  const f = await fixture();
+  try {
+    const path = join(f.directory, "public-key");
+    await rm(path);
+    execFileSync("mkfifo", [path]);
+    const script = `import { createCloudConnection } from ${JSON.stringify(new URL("./cloud-client.ts", import.meta.url).href)};
+      try { await createCloudConnection(${JSON.stringify(f.options)}).refresh(); console.log("resolved"); }
+      catch(error) { console.log(error.code); }`;
+    const result = await promisify(execFile)(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "-e", script],
+      { timeout: 8000 },
+    ).then(
+      (value) => ({ value, error: undefined }),
+      (error) => ({ value: undefined, error }),
+    );
+    expect(
+      result.error,
+      "the key read must finish without a child-process timeout",
+    ).toBeUndefined();
+    expect(result.value?.stdout.trim()).toBe("cloud.tunnel_unavailable");
+    expect(f.submissions()).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+}, 15000);
