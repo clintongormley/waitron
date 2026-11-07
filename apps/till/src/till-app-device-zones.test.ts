@@ -18,7 +18,8 @@ import {
 } from "./widgets/test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
-import { currentLocale, setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import type { TillApi, FloorZone, ZoneOfferCatalogue } from "./api/client.js";
 import type { TillShell } from "./widgets/till-shell.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -1709,6 +1710,10 @@ describe("a handheld's zones", () => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-device-zones-empty]")).not.toBeNull(),
     );
+    const section = el.shadowRoot!.querySelector("[data-device-zones-empty]")!;
+    expect(section.textContent).toContain(t("device_zones.read_failed"));
+    expect(section.textContent).not.toContain(codeMessage("device_profile.no_service_zone"));
+    expect(section.querySelector("[data-retry-device-zones]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-floor-screen")).toBeNull();
     shell(el).dispatchEvent(
       new CustomEvent("open-table", {
@@ -1723,6 +1728,119 @@ describe("a handheld's zones", () => {
     const store = screen()!.draftStore!;
     store.addProduct(screen()!.products[0]!, "1");
     expect(store.lines).toHaveLength(0);
+  });
+
+  describe("a profile that allows no zones (A1057)", () => {
+    const noZones = { ...selection([], null), zones: [] };
+    const refusedOffers = () =>
+      vi.fn().mockRejectedValue({ code: "device_profile.no_service_zone" });
+    const empty = (el: TillApp) => el.shadowRoot!.querySelector("[data-device-zones-empty]");
+    const alerts = (el: TillApp) =>
+      [...el.shadowRoot!.querySelectorAll("[role=alert]")].map((node) => node.textContent ?? "");
+
+    it.each(handhelds)(
+      "says so with Retry and no Settings, and no red banner says it too (%s)",
+      async (formFactor) => {
+        const { el } = await mountHandheld(noZones, formFactor, {
+          listDefaultZoneOffers: refusedOffers(),
+        });
+        await vi.waitFor(() => expect(empty(el)).not.toBeNull());
+        expect(empty(el)!.textContent).toContain(codeMessage("device_profile.no_service_zone"));
+        expect(empty(el)!.querySelector("[data-retry-device-zones]")).not.toBeNull();
+        expect(empty(el)!.querySelector("[data-open-device-settings]")).toBeNull();
+        expect(el.shadowRoot!.querySelector("till-floor-screen")).toBeNull();
+        expect(
+          alerts(el).filter((text) => text.includes(codeMessage("device_profile.no_service_zone"))),
+        ).toEqual([]);
+      },
+    );
+
+    it("Find a bill then Back keeps the section", async () => {
+      const { el } = await mountHandheld(noZones, "phone-portrait", {
+        listDefaultZoneOffers: refusedOffers(),
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listBills: vi.fn().mockResolvedValue(listPage([])),
+      });
+      await vi.waitFor(() => expect(empty(el)).not.toBeNull());
+      shell(el).dispatchEvent(new CustomEvent("find-bill", { bubbles: true, composed: true }));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-find-bill-screen")).not.toBeNull(),
+      );
+      el.shadowRoot!.querySelector("till-find-bill-screen")!.dispatchEvent(
+        new CustomEvent("find-bill-back", { bubbles: true, composed: true }),
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-find-bill-screen")).toBeNull(),
+      );
+      await el.updateComplete;
+      expect(empty(el)?.textContent).toContain(codeMessage("device_profile.no_service_zone"));
+      expect(el.shadowRoot!.querySelector("till-floor-screen")).toBeNull();
+    });
+
+    it("Retry while the zones are still empty never mounts the Floor, not even for a moment", async () => {
+      let readZones!: (value: DeviceZoneSelection) => void;
+      const { el, api } = await mountHandheld(noZones, "phone-portrait", {
+        listDefaultZoneOffers: refusedOffers(),
+      });
+      await vi.waitFor(() => expect(empty(el)).not.toBeNull());
+      api.getDeviceZones.mockImplementation(
+        () => new Promise<DeviceZoneSelection>((resolve) => (readZones = resolve)),
+      );
+      let floorMounted = false;
+      const watch = new MutationObserver(() => {
+        if (el.shadowRoot!.querySelector("till-floor-screen") !== null) floorMounted = true;
+      });
+      watch.observe(el.shadowRoot!, { childList: true, subtree: true });
+      await userEvent.click(empty(el)!.querySelector<HTMLElement>("[data-retry-device-zones]")!);
+      await vi.waitFor(() => expect(api.getDeviceZones).toHaveBeenCalledTimes(2));
+      await el.updateComplete;
+      expect(empty(el)).not.toBeNull();
+      readZones({ ...noZones, snapshot: "still-empty" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await el.updateComplete;
+      watch.disconnect();
+      expect(floorMounted).toBe(false);
+      expect(empty(el)?.textContent).toContain(codeMessage("device_profile.no_service_zone"));
+      expect(api.listDefaultZoneOffers).not.toHaveBeenCalled();
+    });
+
+    it("Retry with the zones back draws the Floor and leaves no banner", async () => {
+      const { el, api } = await mountHandheld(noZones, "phone-portrait", {
+        listDefaultZoneOffers: refusedOffers(),
+      });
+      await vi.waitFor(() => expect(empty(el)).not.toBeNull());
+      api.getDeviceZones.mockResolvedValue({
+        ...selection(["garden"], "garden"),
+        snapshot: "restored",
+      });
+      api.listDefaultZoneOffers.mockResolvedValue(catalogue("garden"));
+      await userEvent.click(empty(el)!.querySelector<HTMLElement>("[data-retry-device-zones]")!);
+      expect(await floorZoneIds(el)).toEqual(["garden"]);
+      expect(empty(el)).toBeNull();
+      expect(alerts(el)).toEqual([]);
+    });
+
+    it("a handheld whose zones read failed draws the Floor with every zone and the read-failed notice, not the section", async () => {
+      const { el } = await mountHandheld(selection(["garden"], "garden"), "phone-portrait", {
+        getDeviceZones: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      });
+      expect(await floorZoneIds(el)).toEqual(orderedFloorZones.map((zone) => zone.id));
+      expect(
+        [...el.shadowRoot!.querySelectorAll('[role="status"]')].map((node) =>
+          node.textContent?.trim(),
+        ),
+      ).toContain(t("device_zones.read_failed"));
+      expect(empty(el)).toBeNull();
+    });
+
+    it("a till's no-zones section keeps the profile sentence, Settings and Retry", async () => {
+      const { el } = await mount(noZones);
+      expect(empty(el)?.querySelector("p")?.textContent).toBe(
+        codeMessage("device_profile.no_service_zone"),
+      );
+      expect(empty(el)!.querySelector("[data-open-device-settings]")).not.toBeNull();
+      expect(empty(el)!.querySelector("[data-retry-device-zones]")).not.toBeNull();
+    });
   });
 
   describe("Floor after a table", () => {

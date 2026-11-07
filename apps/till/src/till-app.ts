@@ -3126,6 +3126,10 @@ export class TillApp extends LitElement {
   @state() private deviceZonesReadError = "";
   @state() private deviceZonesRefusal?: DeviceZonesRefusal;
   @state() private deviceZonesNotice = "";
+  /** Set where the sign-in read of the device's zones failed, so the no-zones section does not
+   * blame the profile. */
+  @state() private deviceZonesUnread = false;
+  @state() private deviceZonesRetrying = false;
   #deviceZonesOpening = 0;
   #deviceZonesRead = 0;
   #deviceZonesWrite = 0;
@@ -5441,6 +5445,7 @@ export class TillApp extends LitElement {
     this.drill = undefined;
     this.#floorLoaded = false;
     this.deviceZoneSelection = null;
+    this.deviceZonesUnread = false;
     let offerLoadFailed: CounterError | false = false;
     const retainedZone = this.#store.lines.length > 0 ? this.counterServiceZoneId : undefined;
     try {
@@ -5457,10 +5462,12 @@ export class TillApp extends LitElement {
           this.deviceZonesNotice = selection === null ? t("device_zones.read_failed") : "";
         }
       }
+      const navigation = this.#deviceNavigation();
+      const handheld = kindOfFormFactor(this.formFactor ?? "") === "handheld";
       if (
-        this.formFactor === "till" &&
-        !this.#deviceNavigation()?.counterZoneIds.length &&
-        retainedZone === undefined
+        retainedZone === undefined &&
+        ((this.formFactor === "till" && !navigation?.counterZoneIds.length) ||
+          (handheld && navigation?.floorZoneIds.length === 0))
       ) {
         this.#loadCounterOffers({
           offers: [],
@@ -5474,6 +5481,7 @@ export class TillApp extends LitElement {
             zoneKeepOpen: null,
           },
         });
+        if (handheld) this.profileServiceZones = [];
         this.counterServiceZoneId = "";
       } else {
         const catalogue =
@@ -5492,6 +5500,7 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (replaced()) return;
       offerLoadFailed = zoneLoadError(error);
+      if (this.#choosesZones() && this.deviceZoneSelection === null) this.deviceZonesUnread = true;
       if (
         ["device_profile.no_service_zone", "service_zone.default_missing"].includes(
           (error as { code?: string })?.code ?? "",
@@ -20192,23 +20201,46 @@ export class TillApp extends LitElement {
 
   #activeTabBody(): TemplateResult | typeof nothing {
     const tab = this.#activeTab();
-    return tab !== undefined
-      ? this.#tabBody(tab)
-      : html`<section data-device-zones-empty role="status">
-          <p>${codeMessage("device_profile.no_service_zone")}</p>
-          <wt-button
-            data-open-device-settings
-            variant="secondary"
-            @click=${() => (this.deviceSettingsOpen = true)}
-            >${t("device_zones.settings")}</wt-button
-          >
-          <wt-button
-            data-retry-device-zones
-            variant="secondary"
-            @click=${() => void this.#enterSignedIn({ personId: this.operatorPersonId, displayName: this.operatorName, permissions: this.permissions })}
-            >${t("find_page.retry")}</wt-button
-          >
-        </section>`;
+    const handheld = kindOfFormFactor(this.formFactor ?? "") === "handheld";
+    // A handheld's tab is always the Floor, so its empty selection is caught here; a Retry nulls the
+    // selection while it reads again, which would otherwise draw the Floor with every venue zone.
+    const noZones =
+      handheld &&
+      ((this.deviceZonesRetrying && this.deviceZoneSelection === null) ||
+        this.#deviceNavigation()?.floorZoneIds.length === 0);
+    if (tab !== undefined && !noZones) return this.#tabBody(tab);
+    const said =
+      this.deviceZoneSelection === null && this.deviceZonesUnread
+        ? t("device_zones.read_failed")
+        : codeMessage("device_profile.no_service_zone");
+    return html`<section data-device-zones-empty role="status">
+      <p>${said}</p>
+      ${
+        handheld
+          ? nothing
+          : html`<wt-button
+              data-open-device-settings
+              variant="secondary"
+              @click=${() => (this.deviceSettingsOpen = true)}
+              >${t("device_zones.settings")}</wt-button
+            >`
+      }
+      <wt-button
+        data-retry-device-zones
+        variant="secondary"
+        @click=${() => this.#retryDeviceZones()}
+        >${t("find_page.retry")}</wt-button
+      >
+    </section>`;
+  }
+
+  #retryDeviceZones(): void {
+    this.deviceZonesRetrying = true;
+    void this.#enterSignedIn({
+      personId: this.operatorPersonId,
+      displayName: this.operatorName,
+      permissions: this.permissions,
+    }).finally(() => (this.deviceZonesRetrying = false));
   }
 
   /** Drill-ins mount non-embedded, so each keeps its own Back or Close; an `embedded` mount would trap
