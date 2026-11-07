@@ -17,6 +17,10 @@ import { createCloudConnection } from "./cloud-client.js";
 import { mountCloudApi } from "./cloud-api.js";
 import type { ReplacementView } from "./cloud-replacement.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
+import { installationFixture } from "../test/cloud-installation-fixture.js";
+import { randomBytes } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60000,
@@ -31,6 +35,44 @@ async function person(role: "manager" | "staff") {
     return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }
+it("distinguishes a local tunnel refusal from a Cloud outage in the actual management route", async () => {
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager"),
+      app = new Hono();
+    await writeFile(join(f.stateDir, "public-key"), randomBytes(32).toString("base64"));
+    f.patch({
+      services: ["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
+        service,
+        state: "ready",
+        configuration: {},
+        health: "unknown",
+        failure: null,
+        observedAt: null,
+      })),
+    });
+    const connection = createCloudConnection({ ...f.options, tunnelDir: f.stateDir });
+    mountCloudApi(
+      app,
+      { db: suite.db, connection, managementOrigin: "https://venue.test", isPrimary: () => true },
+      () => {},
+    );
+    const reply = await app.request("/management-api/cloud/refresh", {
+      method: "POST",
+      headers: {
+        cookie: manager.cookie,
+        origin: "https://venue.test",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(reply.status).toBe(422);
+    expect(await reply.json()).toEqual({ error: { code: "cloud.tunnel_unavailable", params: {} } });
+    expect((await connection.status()).installation?.state).toBe("active");
+  } finally {
+    await f.close();
+  }
+});
 it("requires a live manager, correct Origin and serving primary; status reads are passive", async () => {
   const f = await cloudFixture();
   try {

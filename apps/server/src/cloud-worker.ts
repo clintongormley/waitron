@@ -12,6 +12,7 @@ export async function runCloudWorker(options: {
   while (!options.signal.aborted) {
     try {
       if (options.isPrimary()) await options.connection.refresh(options.signal);
+      else await options.connection.syncTunnel();
     } catch (error) {
       if (!options.signal.aborted) options.onError?.(error);
     }
