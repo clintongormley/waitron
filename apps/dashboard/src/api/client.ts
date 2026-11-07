@@ -1609,6 +1609,8 @@ export type BackupFreshness =
   | { configured: true; destinations: BackupDestinationStatus[] };
 
 export interface CloudConnectionStatus {
+  isRemote?: boolean;
+  remoteAccessEnabled?: boolean;
   replacementEligible?: boolean;
   replacementPending?: boolean;
   replacementError?: string | null;
@@ -4500,6 +4502,9 @@ export class DashboardApi {
 
   refreshCloudConnection(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/refresh", "POST", {});
+  }
+  setCloudRemoteAccess(enabled: boolean): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/remote-access", "POST", { enabled });
   }
   revokeCloudConnection(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/revoke", "POST", {});

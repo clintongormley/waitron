@@ -36,8 +36,9 @@ import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
-import { mountCloudPublic } from "./cloud-remote.js";
+import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
+import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
@@ -46,7 +47,7 @@ import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
@@ -133,7 +134,7 @@ import {
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
-import { loadConfig, loadTunnelConfig, type ServerConfig } from "./config.js";
+import { loadConfig, type ServerConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import {
@@ -189,7 +190,7 @@ import {
   DUTY_BUDGET_MS,
   type HealthState,
 } from "./health.js";
-import { runLoop, realSleep } from "./loop.js";
+import { runLoop } from "./loop.js";
 import { createLoopWaker } from "./loop-wake.js";
 import { reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
@@ -410,7 +411,6 @@ import { endMirrorViewer, ensureMirrorViewer, mirrorSession } from "./mirror-ses
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
-import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule } from "./node-config.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import type { TradingContext } from "./trading-context.js";
@@ -1152,6 +1152,11 @@ async function bootServer(
   // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
   // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
+  try {
+    await writeTunnelConfiguration(config.tunnelControlDir);
+  } catch (error) {
+    log("error", "cloud.refresh_failed", { errorCode: codeOf(error) });
+  }
   // Here and not in entry so that `startServer`-based starts and the dev entry place too. It follows
   // entry's ahead check, whose close drains the old file's -wal before placing removes it (pinned in
   // `boot.place-copy.test.ts`). A box with no identity has no node id to read an operation by, and
@@ -2002,12 +2007,6 @@ async function bootServer(
         log,
         pointerTerm: () => readBucketPointerTerm(db, ring),
       });
-  // The singleton duties gate on this, not on `isMirror`: a sell-only local secondary is not a mirror,
-  // and must not dial a second tunnel or write scheduled backups beside the primary.
-  // `node_mode_role_valid_ck` rejects `(mirror, primary)`, so a mirror is always 'secondary'.
-  //
-  // A BOOT decision, deliberately not live: an in-process promotion does not start the duties gated
-  // on this without a restart.
   const isSingletonPrimary = holders.singletonRole.current === "primary";
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
   // start: the watch looks only on the primary, so it would not close it there (plan decision 14).
@@ -3232,6 +3231,7 @@ async function bootServer(
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
         stateDir: config.stateDir,
+        tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
         localVenueId: venueId,
         environment: config.environment === "production" ? "production" : "test",
@@ -3348,34 +3348,6 @@ async function bootServer(
     log,
   );
 
-  // The outbound tunnel: the box sits behind NAT with no inbound ports, so it dials OUT to the relay,
-  // which splices a paired cloud client to the box's own served port. A singleton duty: only the
-  // singleton primary keeps the one outbound tunnel.
-  const tunnelConfig = loadTunnelConfig(env);
-  const tunnelController = new AbortController();
-  let tunnelWorker: Promise<void> | undefined;
-  if (isSingletonPrimary && tunnelConfig !== undefined) {
-    tunnelWorker = runTunnelClient({
-      relayHost: tunnelConfig.relayHost,
-      relayPort: tunnelConfig.relayPort,
-      boxId: tunnelConfig.boxId,
-      token: tunnelConfig.token,
-      localPort: config.httpPort,
-      poolSize: tunnelConfig.poolSize,
-      sleep: realSleep,
-      signal: tunnelController.signal,
-      log,
-    });
-    tunnelWorker.catch((err) => log("error", "tunnel.worker_rejected", { errorCode: codeOf(err) }));
-    undoOnFailure.push(async () => {
-      tunnelController.abort();
-      await tunnelWorker?.catch(() => {});
-    });
-  } else if (isSingletonPrimary) {
-    log("info", "tunnel.disabled", {});
-  }
-
-  // The bundle a cloud mirror adopts; only the singleton primary emits one.
   if (isSingletonPrimary) {
     mountMirrorBundleApi(
       app,
@@ -3384,11 +3356,8 @@ async function bootServer(
         node: store.node,
         ring,
         stateDir: config.stateDir,
-        // https: the mirror reaches the box's own certificate end-to-end through the tunnel.
-        relayUrl:
-          tunnelConfig !== undefined
-            ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
-            : undefined,
+        // Staff access carries no standby protocol; adoption remains refused without a relay.
+        relayUrl: undefined,
         boxHostname: BOX_HOSTNAME,
         designated: config.node,
         accountKey: accountKey.toString("base64"),
@@ -3560,6 +3529,18 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(async () => appendOnlyWatch.stop());
+
+  // A mirror's ambient administrator session must stay off the staff entrance.
+  const waitingForStaffCertificate =
+    cloudConnection &&
+    config.staff &&
+    config.environment !== "production" &&
+    !existsSync(join(config.stateDir, "cloud-staff.crt"));
+  let staffListener =
+    isMirror || waitingForStaffCertificate ? undefined : startStaffListener(config, app, log);
+  undoOnFailure.push(async () => {
+    await staffListener?.close();
+  });
 
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
@@ -3774,6 +3755,22 @@ async function bootServer(
         connection: cloudConnection,
         signal: cloudController.signal,
         isPrimary: cloudPrimary,
+        ...(config.staff && config.environment !== "production"
+          ? {
+              staffHostname: new URL(config.staff.origin).hostname,
+              onStaffCertificate: async () => {
+                if (
+                  cloudController.signal.aborted ||
+                  !cloudPrimary() ||
+                  staffListener?.isListening()
+                )
+                  return;
+                await staffListener?.close();
+                if (!cloudController.signal.aborted && cloudPrimary())
+                  staffListener = startStaffListener(config, app, log);
+              },
+            }
+          : {}),
         onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
       })
     : undefined;
@@ -3853,9 +3850,7 @@ async function bootServer(
     freeSpaceWatch,
     boxEmails,
     liveEvents,
-    tunnelController,
     loop,
-    tunnelWorker,
     backupSupervisor,
     demoPrinterLoop,
     clockWatch,
@@ -3868,7 +3863,18 @@ async function bootServer(
     health,
     log,
     {
-      stopWork: () => stopBackgroundDuties(duties),
+      stopWork: () =>
+        closeAll([
+          async () => {
+            cloudController.abort();
+            try {
+              await cloudWorker;
+            } finally {
+              await staffListener?.close();
+            }
+          },
+          () => stopBackgroundDuties(duties),
+        ]),
       settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },

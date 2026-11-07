@@ -146,6 +146,17 @@ describe("image source labels", () => {
 });
 
 describe("the container image's environment", () => {
+  it("passes the app's tunnel control directory through the server configuration", () => {
+    const app = only(COMPOSE, /\n {2}app:\n([\s\S]*?)(?=\n {2}[a-z])/, "app service");
+    const directory = only(
+      app,
+      /^\s+WAITRON_TUNNEL_CONTROL_DIR:\s*(\S+)/m,
+      "tunnel control directory",
+    );
+    expect(load({ ...IMAGE_ENV, WAITRON_TUNNEL_CONTROL_DIR: directory }).tunnelControlDir).toBe(
+      "/var/lib/waitron/tunnel",
+    );
+  });
   it("parses as a non-empty ENV block", () => {
     // A parser that silently returned {} would make every assertion below vacuous.
     expect(IMAGE_ENV.WAITRON_STATE_DIR).toBe("/var/lib/waitron/state");
@@ -871,7 +882,11 @@ describe("the app's mount of the box's clock socket", () => {
   });
 
   it("gives no container the power to set the clock itself", () => {
-    expect(COMPOSE).not.toMatch(/^\s*cap_add:/m);
+    expect(COMPOSE.split("\n").filter((line) => /^\s*cap_add:/.test(line))).toEqual([
+      "    cap_add: [NET_ADMIN]",
+    ]);
+    const tunnel = only(COMPOSE, /^ {2}tunnel:\n((?: {4}.*\n|[ \t]*\n)+)/m, "tunnel service");
+    expect(tunnel).toContain("    cap_add: [NET_ADMIN]\n");
     expect(COMPOSE).not.toContain("SYS_TIME");
     expect(COMPOSE).not.toContain("/dev/rtc");
   });

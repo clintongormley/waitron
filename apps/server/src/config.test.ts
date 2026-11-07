@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/payments";
 import { isAppError } from "@waitron/shared";
-import { deploymentEnvironment, isDevMode, loadConfig, loadTunnelConfig } from "./config.js";
+import { deploymentEnvironment, isDevMode, loadConfig } from "./config.js";
 
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -28,6 +28,24 @@ function codeOf(error: unknown): string {
 }
 
 describe("loadConfig", () => {
+  it("enables the optional staff tunnel writer only with an explicit control directory", () => {
+    for (const value of [undefined, ""])
+      expect(
+        loadConfig({ ...MIN_ENV, WAITRON_TUNNEL_CONTROL_DIR: value }, ROOT, STATE_ROOT),
+      ).not.toHaveProperty("tunnelControlDir");
+    expect(
+      loadConfig({ ...MIN_ENV, WAITRON_TUNNEL_CONTROL_DIR: "control" }, ROOT, STATE_ROOT),
+    ).toHaveProperty("tunnelControlDir", resolve("control"));
+  });
+  it("enables the tunnel control directory only when explicitly configured", () => {
+    expect(loadConfig(MIN_ENV, ROOT, STATE_ROOT)).not.toHaveProperty("tunnelControlDir");
+    expect(
+      loadConfig({ ...MIN_ENV, WAITRON_TUNNEL_CONTROL_DIR: "" }, ROOT, STATE_ROOT),
+    ).not.toHaveProperty("tunnelControlDir");
+    expect(
+      loadConfig({ ...MIN_ENV, WAITRON_TUNNEL_CONTROL_DIR: "./tunnel" }, ROOT, STATE_ROOT),
+    ).toHaveProperty("tunnelControlDir", resolve("./tunnel"));
+  });
   it("defaults every optional value, and defaults the deployment environment to preproduction", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config).toEqual({
@@ -897,120 +915,56 @@ describe("WAITRON_PAYMENT_TEST_PROVIDERS", () => {
   });
 });
 
-describe("loadTunnelConfig", () => {
-  const base = {
-    WAITRON_TUNNEL_RELAY_URL: "tcp://relay.example:9000",
-    WAITRON_TUNNEL_BOX_ID: "box-1",
-    WAITRON_TUNNEL_TOKEN: "secret",
-  };
-
-  it("returns undefined when the relay url is unset (tunnel off)", () => {
-    expect(loadTunnelConfig({})).toBeUndefined();
-  });
-
-  // Empty means off, not a refusal; a present-but-unparseable url is refused (below).
-  it("returns undefined when the relay url is empty (tunnel off), never reaching a dialer as ''", () => {
-    expect(loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "" })).toBeUndefined();
-  });
-
-  it("parses a full config with the default pool size", () => {
-    expect(loadTunnelConfig(base)).toEqual({
-      relayHost: "relay.example",
-      relayPort: 9000,
-      boxId: "box-1",
-      token: "secret",
-      poolSize: 4,
-    });
-  });
-
-  it("reads WAITRON_TUNNEL_POOL_SIZE as the connection pool size", () => {
-    expect(loadTunnelConfig({ ...base, WAITRON_TUNNEL_POOL_SIZE: "8" })!.poolSize).toBe(8);
-  });
-
-  it("refuses a present-but-unparseable relay url", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "not a url" })),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TUNNEL_RELAY_URL",
-      reason: "not_a_url",
-    });
-  });
-
-  // No scheme, so it parses as scheme + opaque path with hostname "", which a dialer must never see.
-  it("refuses a relay url that parses but names no host", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "relay.example:9000" }),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TUNNEL_RELAY_URL",
-      reason: "not_a_url",
-    });
-  });
-
-  // `.port` is "", and `Number("")` is 0.
-  it("refuses a relay url that omits the port", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "tcp://relay.example" }),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TUNNEL_RELAY_URL",
-      reason: "no_port",
-    });
-  });
-
-  // `.port` is "0", not "", so an empty-string check alone would let it through.
-  it("refuses a relay url whose port is zero", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "tcp://relay.example:0" }),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TUNNEL_RELAY_URL",
-      reason: "no_port",
-    });
-  });
-
-  // A blank token must never mean "no auth".
-  it("refuses a blank box id when the relay url is set", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_BOX_ID: "" })),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TUNNEL_BOX_ID",
-      reason: "field_blank",
-    });
-  });
-
-  it("refuses a blank token when the relay url is set", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_TOKEN: "" })),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TUNNEL_TOKEN",
-      reason: "field_blank",
-    });
-  });
-
-  it("refuses a non-positive pool size", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_POOL_SIZE: "0" })),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TUNNEL_POOL_SIZE",
-      reason: "not_a_positive_integer",
-    });
+it("starts no remote staff entrance until an HTTPS origin is explicitly configured", () => {
+  expect(loadConfig({}, ROOT, STATE_ROOT)).not.toHaveProperty("staff");
+  expect(loadConfig({ WAITRON_STAFF_ORIGIN: "" }, ROOT, STATE_ROOT)).not.toHaveProperty("staff");
+  expect(
+    loadConfig({ WAITRON_STAFF_ORIGIN: "https://staff.example.test" }, ROOT, STATE_ROOT).staff,
+  ).toEqual({
+    origin: "https://staff.example.test",
+    host: "127.0.0.1",
+    port: 8443,
   });
 });
+it.each([
+  "http://staff.example.test",
+  "https://staff.example.test/path",
+  "https://staff.example.test/",
+])("refuses a non-bare HTTPS staff origin %s", (origin) => {
+  expect(() => loadConfig({ WAITRON_STAFF_ORIGIN: origin }, ROOT, STATE_ROOT)).toThrow();
+});
+it("takes the explicit tunnel bind and port without changing the LAN listener", () => {
+  const config = loadConfig(
+    {
+      WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+      WAITRON_STAFF_HOST: "10.77.0.2",
+      WAITRON_STAFF_PORT: "9443",
+    },
+    ROOT,
+    STATE_ROOT,
+  );
+  expect(config.staff).toEqual({
+    origin: "https://staff.example.test",
+    host: "10.77.0.2",
+    port: 9443,
+  });
+  expect([config.httpHost, config.httpPort]).toEqual(["127.0.0.1", 8080]);
+});
+it.each(["8080", "80"])(
+  "refuses staff port %s when the local or landing listener uses it",
+  (port) => {
+    try {
+      loadConfig(
+        { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: port },
+        ROOT,
+        STATE_ROOT,
+      );
+      expect.unreachable("colliding listener port accepted");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_STAFF_PORT", reason: "listener_port_conflict" },
+      });
+    }
+  },
+);

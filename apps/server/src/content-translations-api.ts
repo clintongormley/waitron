@@ -1,3 +1,4 @@
+import { managementOriginFor } from "./request-from-box.js";
 import type { Context, Hono } from "hono";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -162,7 +163,10 @@ export function mountContentTranslationsApi(
   app.put(path, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
-      if (c.req.header("origin") !== (managementOrigin ?? new URL(c.req.url).origin))
+      if (
+        c.req.header("origin") !==
+        managementOriginFor(c, managementOrigin ?? new URL(c.req.url).origin)
+      )
         return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
       const input = await body(c);
       return c.json(await gated(c, session, (tx) => saveContentTranslations(tx, input, context)));

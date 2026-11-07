@@ -1,5 +1,10 @@
 # Connect a venue to Waitron Cloud
 
+> 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol
+> build and its admission gates below belong to the parked branch. Use the [simple staff tunnel
+> runtime](../../deploy/tunnel/README.md) for A951-S; this historical material adds no build steps to it.
+
+
 The Cloud services screen in Settings connects this installation to a Cloud
 organisation and legal business. You need a local manager with `system.manage` and
 a Cloud account with permission to register venues for that business.
@@ -15,6 +20,41 @@ managed backup setup follows separately. The screen shows configuration
 and observed health separately; a five-minute-old observation reads Health unknown.
 No account or Cloud call is
 added to the sale path.
+
+## Submit the test box's tunnel key
+
+Use the WireGuard container for remote staff access. The old in-process TCP relay package
+`@waitron/tunnel` and its `WAITRON_TUNNEL_RELAY_URL`, `WAITRON_TUNNEL_BOX_ID`,
+`WAITRON_TUNNEL_TOKEN` and `WAITRON_TUNNEL_POOL_SIZE` settings are retired. Remove those
+settings from your environment; boot no longer reads them. `WAITRON_TUNNEL_CONTROL_DIR`
+still selects the WireGuard container's control directory.
+
+The staff entrance carries dashboard requests only. It supplies no standby relay to the
+mirror-bundle route, which answers `mirror.no_relay`. The adopting server's fetcher reports
+that refusal as `mirror.bundle_fetch_failed` before saving its setup. A staff connection
+does not enable the parked cloud-standby work.
+
+For the A951-S trial, set `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control
+directory. The container persists its private key before publishing `public-key`; the app reads
+only that public file. On a connected test installation, the primary Cloud worker and **Refresh
+status** submit it through the signed `tunnel-provision` action after a successful connection
+refresh. That refresh renews the lease when needed and otherwise reads configuration. The directory is
+optional, and an absent public-key file leaves provisioning alone.
+
+Cloud chooses the cell and port and must enable its one-box trial receiver separately. A 200 reply
+can still say `unconfigured`; an allocated peer says `provisioning`. Neither proves that the tunnel
+works. The configuration writer and runtime apply the returned placement separately.
+
+A lost reply is retried with the same saved key and a fresh request identifier. A
+`placement_conflict` refusal is remembered in `cloud-connection.json` as `tunnelConflict: true`, so
+restarting does not keep submitting a key Cloud has refused. The caller neither replaces the
+container key nor rotates the Cloud placement. A later configuration that already matches the
+saved key needs no new submission, including while its service reports a failure. A tunnel refusal
+leaves the successful Cloud control read available to the other services.
+
+You can still choose **Stop Cloud access**. This revokes the current registration; it does not
+repair the conflicting placement or replace the container key. A bad public-key file is reported
+separately from an unreadable saved Cloud connection.
 
 ## Refresh or stop Cloud access
 
@@ -181,6 +221,44 @@ When the read fails, the screen clears the values it showed and says the details
 available. The signing vector is `apps/server/test/billing-display-vector.json`, a copy of the
 contract's.
 
+## A951-S tunnel configuration writer
+
+To use the optional tunnel container from PR #2533, set `WAITRON_TUNNEL_CONTROL_DIR` to its
+shared control mount. Compose passes `/var/lib/waitron/tunnel`. Without this setting the
+writer does nothing. Starting the container profile and publishing its image remain separate work.
+
+The existing Cloud worker refreshes the installation once a minute. When Cloud supplies a
+`provisioning` or `ready` remote-access placement, the writer matches its venue, installation
+and peer key to this box, then replaces `peer.json` with the address, gateway public key and
+endpoint. The private WireGuard key stays in the container's separate key volume. The writer
+accepts only the runtime's staff port 443 and gateway UDP port 51820.
+
+The primary submits the container's `public-key` through the signed `tunnel-provision` action
+when its saved placement names a different key. The writer consumes that reply and later
+signed configuration reads. Cloud must enable the receiver for this test installation; a
+successful allocation reports provisioning, not a working tunnel.
+
+A Cloud outage retains the last usable placement. A missing registration, revoked installation,
+unconfigured or failed service, saved remote access off, missing peer key or invalid placement removes the peer file.
+A rejected saved connection also removes the peer. Startup clears a stale peer even without a
+Cloud origin. When the worker is secondary, it reconciles locally recorded state without calling Cloud.
+An authorised **Stop Cloud access** tries local removal before sending the revoke request. A local
+removal error does not block saving and sending the Cloud stop, and is still reported afterwards.
+An already-revoked installation retries local removal. Stop and startup also remove abandoned
+writer temporary files, leaving other control files alone.
+
+A failed replacement write preserves the previous complete file. Local configuration and file
+errors use `cloud.tunnel_unavailable`; a refused placement can therefore leave the Cloud connection
+active while its tunnel is off. The container notices removal on its next poll; this gives no
+instant shutdown guarantee. The writer runs in Cloud's background refresh and when you change remote access in Settings.
+
+The on/off choice belongs to this box. A replacement starts with its own choice; importing the
+Cloud registration does not copy the old box's saved off choice.
+
+The owner approved this simpler A951-S path on 6 November. The watcher explicitly approved
+the operator-provisioned writer on 7 November at 03:06 in Lane E’s local `questions.md`. The
+native-protocol plan and host-custody material below describe the earlier parked branch and add no steps to this build.
+
 ## Local remote-access integration
 
 Cloud's [local remote-access runner](https://github.com/waitron-io/waitron-cloud/blob/main/docs/local-remote-access.md)
@@ -208,28 +286,76 @@ pnpm --filter @waitron/server exec tsx scripts/cloud-certificate.ts install \
   /path/to/node-state staff-v-venue-id.example.com /tmp/staff-chain.pem
 ```
 
-Set `WAITRON_TLS_KEY_FILE` and `WAITRON_TLS_CERT_FILE` to the resulting
-`cloud-staff.key` and `cloud-staff.crt`, and set `WAITRON_MANAGEMENT_ORIGIN` to the
-HTTPS staff origin and `WAITRON_MANAGEMENT_RP_ID` to its hostname. The initial
-HTTP-to-HTTPS change needs a restart. Subsequent certificate updates are checked
-every ten seconds and applied to new TLS connections without restarting Waitron.
-An invalid replacement leaves the loaded context intact and logs
-`cloud.certificate_reload_failed`, repeating every five minutes while it persists.
-Check that the certificate covers `WAITRON_MANAGEMENT_ORIGIN`, as well as its key
-and dates. Fix the configuration or certificate before the valid certificate expires; the watcher does not obtain certificates itself.
+For the A951-S entrance (6 November 2026), set `WAITRON_STAFF_ORIGIN` to the
+assigned HTTPS staff origin, `WAITRON_STAFF_HOST` to its tunnel bind address and
+`WAITRON_STAFF_PORT` to its receiving port (8443 by default). Keep the LAN listener's
+TLS files, management origin and passkey hostname configured for the LAN. Start
+with a connected test installation and `WAITRON_CLOUD_ORIGIN` set. The Cloud worker
+creates the staff key and requests its certificate through that signed connection.
+It opens the separate listener after the first certificate arrives. Existing matching
+staff keys and certificates in `WAITRON_STATE_DIR` also work at startup. The listener
+checks replacements every ten seconds and applies valid ones to new TLS connections
+without a restart. An invalid replacement keeps the loaded context
+and logs `cloud.certificate_reload_failed`.
 
-Use the same hostname on your LAN by configuring your local DNS resolver to return
-the server's LAN address. Keep that address reserved in DHCP. Devices using a
-separate secure-DNS resolver may bypass the override; test each device with the
-internet disconnected and a fresh browser session. The Cloud runner proves this
-with an isolated DNS resolver and a new TLS client, without changing your router
-or installing a global certificate authority.
+The worker reads the existing request from Cloud, so a lost reply or a box restart
+resumes the accepted request with the retained staff key. It writes no local request
+file and polls pending requests on the existing one-minute Cloud loop. Renewal starts when at most thirty days remain,
+or one third of the certificate lifetime for shorter certificates. An unsuccessful
+exchange leaves the installed chain in place. This client keeps the existing
+test-installation restriction; it does not request production-installation certificates.
+
+Venue devices continue to use the LAN address. On 6 November a Mac browser signed
+in through the public gateway with normal certificate trust, and an issued
+replacement was installed without restarting the server
+([PR #2525](https://github.com/clintongormley/waitron/pull/2525)). That bounded test
+was stopped afterwards. The owner then authorised a separate managed demo: its
+unprivileged app restarts through systemd and its separate tunnel through Docker.
+Both recovered from a controlled process exit and the public page returned 200.
+They are enabled for startup; a physical box reboot has not been tested. Automatic
+renewal on the public demo and offline-sale checks remain open. A fresh Chromium sign-in through the
+rented server's outside-home exit also passed with normal certificate trust. The gateway behavior below records the earlier
+local proof, not a completed A951-S qualification.
 
 The gateway removes revoked installations on its next signed configuration update.
 Its cached authority lasts at most ten minutes during a Cloud management outage;
 a restart cannot extend it. Expiry closes remote connections while local HTTPS
 continues. The local peer container grants no access to the rest of your LAN and
 has no SSH support feature.
+
+### Staff-certificate status discovery, 6 November 2026
+
+A box needs to discover the request Cloud already holds after a lost response or local chain.
+The Cloud receiver must support this discovery form of the signed `staff-certificate-status`
+action. Existing installation authentication, leases, test restrictions and limits stay in place.
+
+Send `{ "version": 1, "requestId": null }` for discovery. The reply has `version: 1`, the
+`installationId`, the currently assigned staff `hostname`, the current configuration `revision`
+and `request`. With no exchange row, `request` is null. Otherwise it contains the stored
+`requestId`, `hostname`, `revision` and `csrDigest`. Return that metadata even when the stored hostname or revision is stale, so a replacement can name the exact predecessor. Discovery
+returns no CSR, certificate or private key. A request naming a UUID and every submit retain their
+existing bodies and replies; the ordinary status returns a chain only for a current matching request.
+
+On each pass, first check the installed chain locally. End it without a certificate exchange if
+it is valid for the configured hostname, matches the retained private key and is outside the
+renewal window, regardless of the configuration revision. Otherwise create the CSR, creating
+a missing key through a synced temporary file linked into place. The same key and hostname
+must produce the same CSR bytes.
+
+Refuse discovery unless its installation and configured hostname match and `request` is null
+or fully well formed. A row matches when its CSR digest and stored revision match this CSR
+and the reply's current revision. Poll a matching row. Install a ready chain only when it is
+outside the renewal window and not expired. Keep polling a matching pending row. Cloud's
+existing staff worker rechecks and renews a due chain under the same request ID; the box retains
+the installed chain while that work is pending. A ready chain already due for renewal can be
+replaced once in that pass, using the discovered predecessor.
+Also replace a nonmatching row, or submit with a null predecessor when no row exists. Use a new
+UUID and the discovery reply's current revision for every replacement.
+
+Lease preparation and certificate requests share one eight-second abort signal. A lost submit reply is resolved by
+the next discovery rather than by guessing its predecessor. Cloud's existing row holds this
+request state; no local request file, table, job or route is needed. A valid installed chain stays
+in place during failures and unrelated configuration changes.
 
 ### Recover a test venue from a Cloud snapshot
 
@@ -303,26 +429,24 @@ reconnection** is running may be refused as busy; if it is, press it again once 
 finishes. On a server that was not restored from a Cloud snapshot, the screen offers **Connect to
 Cloud** instead of **Request reconnection**. Keep the previous server out of service throughout.
 
-Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel and a
-new TLS certificate remain operator steps, and Cloud access and backups need their own checks
+Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel remains
+an operator step. For a test installation using the separate staff entrance, the certificate
+worker requests its new chain after reconnection. Cloud access and backups need their own checks
 afterwards. Cloud owns route placement and fencing. Continuous complete-server recovery, a
 planned handover of the final writes and production recovery are not implemented.
 
 ### Reissue staff TLS after a restore
 
 A recovery archive deliberately excludes `cloud-staff.key` and `cloud-staff.crt`.
-If your restored configuration still points at those missing files, Waitron refuses
-to start; it does not silently serve plain HTTP. Before enabling remote access on a
-replacement, generate a new staff key/CSR and have the Cloud operator issue its chain
-for the authorized replacement. Set the TLS paths and management origin consistently
-before starting it. The certificate commands work without a running server.
+If your LAN listener's TLS paths point at those missing files, Waitron refuses to start.
+Keep the LAN certificate and management origin configured for the LAN. For the separate staff
+entrance, reconnect the replacement to Cloud and set its assigned `WAITRON_STAFF_ORIGIN`;
+the test-installation certificate worker creates a new staff key and opens that listener after
+issuance. You can also use the certificate commands above without a running server.
 
-The certificate commands do not reconnect the replacement to Cloud; that is the separate
-step in [Reconnect a restored test server to its Cloud venue](#reconnect-a-restored-test-server-to-its-cloud-venue).
-For local recovery first, use Waitron's existing local-certificate setup and its matching
-local management origin, then change to the staff hostname once the replacement is reconnected
-and its new tunnel and certificate are installed. Do not copy the old staff key.
-
+The certificate commands do not reconnect the replacement to Cloud; use
+[Reconnect a restored test server to its Cloud venue](#reconnect-a-restored-test-server-to-its-cloud-venue)
+first. Do not copy the old staff key.
 
 ## Deliver a managed snapshot locally
 
@@ -359,6 +483,13 @@ makes one attempt; the scheduler retries from the durable spool with backoff. It
 abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
+
+**6 November 2026: the owner stopped this implementation and replaced it with A951-S.** Start with
+one remote dashboard entrance and one real browser-to-box path through the existing gateway.
+The old branch stays private and parked. The intake below records the earlier proposal; it does
+not add requirements to the replacement. Current work is listed in the
+[backlog](../backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client).
+
 
 ### Provisioning-source requirements agreement: 6 November 2026
 

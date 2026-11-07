@@ -1040,7 +1040,9 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   at UTC midnight; AEAT validations §3.1.3.1 and the error wording do not name the comparison zone.
   Establish it from an authoritative definition or controlled preproduction probe, then correct and
   release `@waitron/verifactu` if needed. Keep this separate from A696's venue-zone implementation.
-  Audit server fixtures found by `rg 'createFakeAeat.*serverNow: new Date' apps/server`;
+  The handover simulation now uses an advancing noon clock after its first filing reproduced
+  `1112` at 23:28 UTC on 6 November, on both main and the certificate-worker branch.
+  Audit the other server fixtures found by `rg 'createFakeAeat.*serverNow: new Date' apps/server`;
   their exposure to the same date boundary has not been reproduced.
   [Reproduction and sources](../developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
 - **A888. After A795 lands: the owner's checks with real certificates** (left open by A795). The

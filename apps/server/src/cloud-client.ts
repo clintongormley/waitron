@@ -31,9 +31,12 @@ import {
   sign,
 } from "node:crypto";
 import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { constants } from "node:fs";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
+import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import "./errors.js";
+import { refreshStaffCertificate } from "./cloud-staff-certificate.js";
 
 export interface CloudRegistration {
   venueId: string;
@@ -54,6 +57,7 @@ export interface CloudPairingView {
   registration?: CloudRegistration;
 }
 export interface CloudConnectionStatus extends Partial<Omit<CloudPairingView, "state">> {
+  remoteAccessEnabled?: boolean;
   state: "not_connected" | "awaiting_cloud" | "awaiting_local" | "complete";
   code: string;
   installation?: CloudInstallationStatus;
@@ -67,12 +71,14 @@ export interface CloudChoice {
   legalBusinessId: string;
 }
 export interface CloudConnectionOptions {
+  tunnelDir?: string;
   stateDir: string;
   origin: string;
   localVenueId: string;
   environment: "test" | "production";
 }
 export interface SavedCloudState {
+  remoteAccessEnabled?: boolean;
   lifecycle?: CloudInstallationState;
   version: 1;
   origin: string;
@@ -193,6 +199,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         value.origin !== options.origin ||
         value.localVenueId !== options.localVenueId ||
         value.environment !== options.environment ||
+        (value.remoteAccessEnabled !== undefined &&
+          typeof value.remoteAccessEnabled !== "boolean") ||
         !uuid(value.requestId) ||
         typeof value.code !== "string" ||
         !/^\d{8}$/.test(value.code) ||
@@ -256,6 +264,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ...(state.view?.registration
         ? {
             installation: projectCloudInstallation(state),
+            remoteAccessEnabled: state.remoteAccessEnabled !== false,
             ...(state.lifecycle?.revoked ? {} : { accountUrl: `${options.origin}/account` }),
           }
         : { signupUrl: `${options.origin}/signup` }),
@@ -406,6 +415,51 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ? `${state.publicKey} ${state.view.registration.installationId}`
       : undefined;
   return {
+    async setRemoteAccess(enabled: boolean, authorize: () => Promise<void>) {
+      return run(async () => {
+        const state = await read();
+        if (
+          !state?.view?.registration ||
+          state.lifecycle?.revoked ||
+          (enabled && state.lifecycle?.pending?.action === "revoke")
+        )
+          throw new AppError("cloud.not_configured", {});
+        await authorize();
+        state.remoteAccessEnabled = enabled;
+        await save(state);
+        try {
+          await writeTunnelConfiguration(options.tunnelDir, state);
+        } catch (error) {
+          if (enabled) {
+            state.remoteAccessEnabled = false;
+            await save(state);
+          }
+          throw error;
+        }
+        return project(state);
+      }, true);
+    },
+    async staffCertificate(hostname: string, signal?: AbortSignal): Promise<boolean> {
+      const deadline = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+        : AbortSignal.timeout(8000);
+      const state = await leaseState(deadline);
+      const registration = registrationOf(state);
+      return refreshStaffCertificate(
+        state,
+        options.stateDir,
+        hostname,
+        deadline,
+        recordRefusal,
+        async () => {
+          const current = await read();
+          return (
+            registrationOf(current) === registration &&
+            current?.lifecycle?.pending?.action !== "revoke"
+          );
+        },
+      );
+    },
     async billing(signal?: AbortSignal): Promise<BillingDisplay> {
       const registration = registrationOf(await read());
       if (!registration) throw new AppError("cloud.not_configured", {});
@@ -559,19 +613,84 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     async status() {
       return project(await read());
     },
+    async syncTunnel() {
+      return run(async () => {
+        let state: SavedCloudState | undefined;
+        try {
+          state = await read();
+        } finally {
+          await writeTunnelConfiguration(options.tunnelDir, state);
+        }
+      }, true);
+    },
     async refresh(signal?: AbortSignal) {
       return run(async () => {
-        const state = await read();
-        if (!state?.view?.registration) return project(state);
-        await installationClient(state, save).refresh(signal);
-        return project(state);
+        let state: SavedCloudState | undefined;
+        try {
+          state = await read();
+          if (!state?.view?.registration) return project(state);
+          const client = installationClient(state, save);
+          await client.refresh(signal);
+          if (
+            options.tunnelDir &&
+            state.environment === "test" &&
+            !state.lifecycle?.revoked &&
+            state.remoteAccessEnabled !== false
+          ) {
+            let peerPublicKey: string;
+            try {
+              const file = await open(
+                join(options.tunnelDir, "public-key"),
+                constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+              );
+              try {
+                const info = await file.stat();
+                if (!info.isFile()) throw new Error();
+                const bytes = Buffer.alloc(46),
+                  { bytesRead } = await file.read(bytes, 0, 46, 0);
+                peerPublicKey = bytes.subarray(0, bytesRead).toString("utf8").trim();
+                if (
+                  bytesRead > 45 ||
+                  !/^[A-Za-z0-9+/]{43}=$/.test(peerPublicKey) ||
+                  Buffer.from(peerPublicKey, "base64").toString("base64") !== peerPublicKey
+                )
+                  throw new Error();
+              } finally {
+                await file.close();
+              }
+            } catch (error) {
+              if (error instanceof Error && "code" in error && error.code === "ENOENT")
+                return project(state);
+              throw new AppError("cloud.tunnel_unavailable", {});
+            }
+            const remote = state.lifecycle?.view?.services.find(
+              (s) => s.service === "remote_access",
+            );
+            if (remote?.configuration.peerPublicKey !== peerPublicKey)
+              await client.provisionTunnel(peerPublicKey, signal);
+          }
+          return project(state);
+        } finally {
+          await writeTunnelConfiguration(options.tunnelDir, state);
+        }
       });
     },
     async revoke(authorize: () => Promise<void>, signal?: AbortSignal) {
       return run(async () => {
         const state = await read();
         if (!state?.view?.registration) throw new AppError("cloud.binding_conflict", {});
-        await installationClient(state, save).revoke(authorize, signal);
+        let localFailure: unknown;
+        const authorizeStop = async () => {
+          await authorize();
+          try {
+            await writeTunnelConfiguration(options.tunnelDir);
+          } catch (error) {
+            localFailure = error;
+          }
+        };
+        if (state.lifecycle?.revoked) await authorizeStop();
+        else await installationClient(state, save).revoke(authorizeStop, signal);
+        if (localFailure) throw localFailure;
         return project(state);
       }, true);
     },

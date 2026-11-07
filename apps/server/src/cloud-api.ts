@@ -1,3 +1,4 @@
+import { isRemoteStaffRequest, managementOriginFor } from "./request-from-box.js";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { withTransaction, type Database } from "@waitron/db";
@@ -30,6 +31,8 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "person.suspended": 403,
       "authorization.not_permitted": 403,
       "cloud.unavailable": 503,
+      "cloud.tunnel_unavailable": 422,
+      "cloud.tunnel_conflict": 409,
       "cloud.request_unavailable": 409,
       "cloud.state_invalid": 409,
       "cloud.binding_conflict": 409,
@@ -93,6 +96,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         replacementEligible,
         configured: !!deps.connection,
         isPrimary: deps.isPrimary(),
+        isRemote: isRemoteStaffRequest(c),
       });
     }),
   );
@@ -112,7 +116,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
   for (const action of ["prepare", "check"] as const)
     app.post(`/management-api/cloud/replacement/${action}`, (c) =>
       run(c, log, async () => {
-        if (c.req.header("origin") !== deps.managementOrigin)
+        if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
           return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
         await authorize(c);
         const body = await readRawJsonBody<unknown>(c);
@@ -145,10 +149,38 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         });
       }),
     );
+  app.post("/management-api/cloud/remote-access", (c) =>
+    run(c, log, async () => {
+      if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
+        return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
+      await authorize(c);
+      primary();
+      const body = await readRawJsonBody<unknown>(c);
+      if (
+        !body ||
+        typeof body !== "object" ||
+        Array.isArray(body) ||
+        Object.keys(body).length !== 1 ||
+        !("enabled" in body) ||
+        typeof body.enabled !== "boolean"
+      )
+        throw new AppError("cloud.request_invalid", {});
+      const status = await connection().setRemoteAccess(body.enabled, async () => {
+        await authorize(c, true);
+        primary();
+      });
+      return c.json({
+        ...status,
+        configured: true,
+        isPrimary: deps.isPrimary(),
+        isRemote: isRemoteStaffRequest(c),
+      });
+    }),
+  );
   for (const action of ["start", "check", "complete", "refresh", "revoke"] as const)
     app.post(`/management-api/cloud/${action}`, (c) =>
       run(c, log, async () => {
-        if (c.req.header("origin") !== deps.managementOrigin)
+        if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
           return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
         await authorize(c);
         const body = await readRawJsonBody<unknown>(c);
@@ -199,7 +231,12 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
                       primary();
                     });
         await authorize(c, true);
-        return c.json({ ...result, configured: true, isPrimary: deps.isPrimary() });
+        return c.json({
+          ...result,
+          configured: true,
+          isPrimary: deps.isPrimary(),
+          isRemote: isRemoteStaffRequest(c),
+        });
       }),
     );
 }

@@ -79,6 +79,8 @@ declare module "@waitron/shared" {
     "fiscal.certificate_diagnosis_busy": Record<string, never>;
     "fiscal.certificate_diagnosis_unavailable": Record<string, never>;
     "cloud.unavailable": Record<string, never>;
+    "cloud.tunnel_unavailable": Record<string, never>;
+    "cloud.tunnel_conflict": Record<string, never>;
     "cloud.request_unavailable": Record<string, never>;
     "cloud.state_invalid": Record<string, never>;
     "cloud.binding_conflict": Record<string, never>;
@@ -1293,7 +1295,6 @@ declare module "@waitron/shared" {
      * environment and `actual` the primary's.
      */
     "mirror.environment_mismatch": { expected: string; actual: string };
-    /** A mirror bundle was requested from a primary that has no relay configured to reach it through. */
     "mirror.no_relay": Record<string, never>;
     /**
      * A mirror-bundle request carried a malformed STANDBY identity: `standbyNodeId` absent or not a

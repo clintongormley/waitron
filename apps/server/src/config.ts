@@ -33,6 +33,7 @@ export interface ServerConfig {
   /** Lets a Prepare node exercise a configured payment provider with test credentials. */
   paymentTestProviders: boolean;
   httpPort: number;
+  staff?: { origin: string; host: string; port: number };
   /**
    * The plain-HTTP trust/landing listener's port; `0` disables it. A phone meets the browser's
    * interstitial for the untrusted self-signed leaf before any page runs, so the CA download is
@@ -57,6 +58,7 @@ export interface ServerConfig {
    * falls back to it via `isUnset`, never `resolve("")`, which is the cwd (CLAUDE.md §3).
    */
   stateDir: string;
+  tunnelControlDir?: string;
   /**
    * Where `openVenueStore` creates `venue.db` and `node.db`. Defaults to `join(stateDir, "venue")`;
    * `WAITRON_VENUE_DIR` overrides it. An unset OR EMPTY value falls back to the default via
@@ -233,72 +235,6 @@ function loadTenantDomain(env: Env): string | undefined {
     });
   }
   return raw.toLowerCase();
-}
-
-export interface TunnelConfig {
-  relayHost: string;
-  relayPort: number;
-  boxId: string;
-  token: string;
-  poolSize: number;
-}
-
-/** Standing outbound connections the box pre-dials to the relay. */
-const DEFAULT_TUNNEL_POOL_SIZE = 4;
-
-/**
- * The outbound tunnel is on iff `WAITRON_TUNNEL_RELAY_URL` is set; an unset or empty url turns it
- * off, and a malformed one throws rather than disabling it. When on, a blank box id or token is
- * refused: a blank token must never mean "no auth".
- */
-export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
-  const rawUrl = env.WAITRON_TUNNEL_RELAY_URL;
-  if (isUnset(rawUrl)) return undefined;
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_TUNNEL_RELAY_URL",
-      reason: "not_a_url",
-    });
-  }
-  // `relay.example:9000` (no scheme) parses as scheme `relay.example` with an empty hostname.
-  if (url.hostname === "") {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_TUNNEL_RELAY_URL",
-      reason: "not_a_url",
-    });
-  }
-  // Catches an omitted port (`.port` is `""`) and port 0 alike. Use a non-special scheme such as
-  // `tcp://`: WHATWG `URL` strips a special scheme's default port, so `https://relay:443` has none.
-  if (Number(url.port) === 0) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_TUNNEL_RELAY_URL",
-      reason: "no_port",
-    });
-  }
-  const boxId = env.WAITRON_TUNNEL_BOX_ID;
-  if (isUnset(boxId)) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_TUNNEL_BOX_ID",
-      reason: "field_blank",
-    });
-  }
-  const token = env.WAITRON_TUNNEL_TOKEN;
-  if (isUnset(token)) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_TUNNEL_TOKEN",
-      reason: "field_blank",
-    });
-  }
-  return {
-    relayHost: url.hostname,
-    relayPort: Number(url.port),
-    boxId,
-    token,
-    poolSize: positiveInt(env, "WAITRON_TUNNEL_POOL_SIZE", DEFAULT_TUNNEL_POOL_SIZE),
-  };
 }
 
 function parsePositiveInt(env: Env, variable: string): number | undefined {
@@ -500,7 +436,36 @@ export function loadConfig(
       reason: "google_requires_client_id_and_secret",
     });
   }
+  const staffOrigin = env.WAITRON_STAFF_ORIGIN;
+  let staff: ServerConfig["staff"];
+  if (!isUnset(staffOrigin)) {
+    if (!isBareOrigin(staffOrigin) || new URL(staffOrigin).protocol !== "https:")
+      throw new AppError("server.config_invalid", {
+        variable: "WAITRON_STAFF_ORIGIN",
+        reason: "https_origin_required",
+      });
+    const port = positiveInt(env, "WAITRON_STAFF_PORT", 8443);
+    if (port > MAX_HTTP_PORT)
+      throw new AppError("server.config_invalid", {
+        variable: "WAITRON_STAFF_PORT",
+        reason: "port_out_of_range",
+      });
+    if (
+      port === httpPort ||
+      port === boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT)
+    )
+      throw new AppError("server.config_invalid", {
+        variable: "WAITRON_STAFF_PORT",
+        reason: "listener_port_conflict",
+      });
+    staff = {
+      origin: staffOrigin,
+      host: isUnset(env.WAITRON_STAFF_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_STAFF_HOST,
+      port,
+    };
+  }
   return {
+    ...(staff === undefined ? {} : { staff }),
     environment,
     devMode: isDevMode(env),
     onboardingIntent: onboardingIntent(env, environment),
@@ -516,6 +481,9 @@ export function loadConfig(
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
     litestreamBin: resolveLitestreamBin(env),
     stateDir: resolvedStateDir,
+    ...(isUnset(env.WAITRON_TUNNEL_CONTROL_DIR)
+      ? {}
+      : { tunnelControlDir: resolve(env.WAITRON_TUNNEL_CONTROL_DIR) }),
     venueDir: resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, "venue")),
     // Validated at load so a typo fails boot rather than minting a certificate for it.
     boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),

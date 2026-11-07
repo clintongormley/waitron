@@ -15,7 +15,6 @@ import {
   type NodeDatabase,
 } from "@waitron/db";
 import { setSingletonRole } from "@waitron/node-db";
-import { runTunnelClient } from "@waitron/tunnel";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
@@ -31,9 +30,9 @@ const { startServer } = ephemeralServerFixture();
 
 /**
  * A sell-only local secondary — `node_mode.mode='primary'` with `singleton_role='secondary'` — is
- * not a mirror, yet must run neither singleton duty (scheduled backup, outbound tunnel client),
+ * not a mirror, yet must not run scheduled backups,
  * because the one singleton primary owns them. A default-`primary` directory of the same identity is
- * the control that runs both, so the secondary's absence is not a boot that wired nothing.
+ * the control that runs the primary duties, so the secondary's absence is not a boot that wired nothing.
  *
  * Each seeding handle is closed before `startServer` is called, and no test reads the database
  * while a server is up.
@@ -47,16 +46,8 @@ vi.mock("./cloud-snapshot-loop.js", async (original) => {
   const actual = await original<typeof import("./cloud-snapshot-loop.js")>();
   return { ...actual, runCloudSnapshotLoop: vi.fn(actual.runCloudSnapshotLoop) };
 });
-vi.mock("@waitron/tunnel", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/tunnel")>();
-  return {
-    ...actual,
-    runTunnelClient: vi.fn(actual.runTunnelClient),
-  };
-});
 
 beforeEach(() => {
-  vi.mocked(runTunnelClient).mockClear();
   vi.mocked(createCloudSnapshotWorker).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
 });
@@ -231,17 +222,13 @@ function hasEvent(lines: readonly string[], event: string): boolean {
   });
 }
 
-// Full duty config on both boots, so only `singleton_role` decides whether the duties run. The relay
-// is unreachable on purpose: the suite asserts the wiring, never a live connection.
+// Full duty config on both boots, so only `singleton_role` decides whether the duties run.
 function dutyEnv(port: number) {
   return {
     ...KEY_ENV,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_TUNNEL_BOX_ID: "box-secondary",
-    WAITRON_TUNNEL_TOKEN: "tunnel-secret",
   };
 }
 
@@ -260,7 +247,7 @@ function backupBase() {
 }
 
 describe("singleton-duty boot (node_mode.singleton_role gating)", () => {
-  it("a sell-only local secondary (primary, secondary) runs NEITHER singleton duty, though it is not a mirror", async () => {
+  it("a sell-only local secondary (primary, secondary) runs no scheduled backup, though it is not a mirror", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
       const started = await startServer(
@@ -278,7 +265,6 @@ describe("singleton-duty boot (node_mode.singleton_role gating)", () => {
       expect(hasEvent(lines, "backup.disabled")).toBe(true);
       expect(hasEvent(lines, "backup.disabled_open_failed")).toBe(false);
 
-      expect(runTunnelClient).not.toHaveBeenCalled();
       expect(createCloudSnapshotWorker).toHaveBeenCalledTimes(1);
       expect(vi.mocked(createCloudSnapshotWorker).mock.calls[0]![0].isPrimary()).toBe(false);
 
@@ -291,7 +277,7 @@ describe("singleton-duty boot (node_mode.singleton_role gating)", () => {
     expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
   }, 60_000);
 
-  it("the singleton primary (primary, primary) of the same identity DOES run both (control: the secondary's absence is real)", async () => {
+  it("the singleton primary (primary, primary) of the same identity runs its singleton duties (control: the secondary's absence is real)", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
       const started = await startServer(
@@ -308,7 +294,6 @@ describe("singleton-duty boot (node_mode.singleton_role gating)", () => {
       // See `backupBase` for why this is the only backup assertion.
       expect(hasEvent(lines, "backup.disabled")).toBe(false);
 
-      expect(runTunnelClient).toHaveBeenCalledTimes(1);
       expect(createCloudSnapshotWorker).toHaveBeenCalledTimes(1);
       expect(vi.mocked(createCloudSnapshotWorker).mock.calls[0]![0].isPrimary()).toBe(true);
       expect(runCloudSnapshotLoop).toHaveBeenCalledTimes(1);

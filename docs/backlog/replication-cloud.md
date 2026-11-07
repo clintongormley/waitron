@@ -288,8 +288,8 @@ record the stop somewhere that survives the repair.
 
 ## Waitron retains
 
-The implemented Cloud connection screen and manager adapter; box-side networking
-and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby end-to-end
+The implemented Cloud connection screen and manager adapter; publication of box-side networking;
+first-contact trust bootstrap; and the cloud-standby end-to-end
 proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
 settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute
 to the promoted cloud → the venue sells and files. Local maintenance requirements remain in
@@ -386,10 +386,10 @@ that slice 3 has to restore:
   in slice 3 has to close this.
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard's copy was made honest rather than the option removed — `apps/setup`'s role, connect and done
-  screens say plainly that joining does not work in this version and that the box ends up holding
-  none of the restaurant's data, with no till and no dashboard. But the option is still there and the
-  flow still runs, so an operator can still spend a box on it. Removing or disabling it until slice 3
+  wizard still offers the option. The A951-S private build removes the old relay: the primary
+  refuses the request, and the adopting server stays in setup. Its role, connect and refusal
+  wording now points to restore instead of promising a restart or suggesting another attempt.
+  Removing or disabling the option until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.
 
@@ -1024,109 +1024,65 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
-Provisioning-source requirements review is complete: E accepts D’s entire immutable proposal for
-isolated unmounted verification/composition and synthetic examples; no engineering amendment is
-required. D still owes durable Cloud enrollment/currentness. Installed source anchors, source-authority
-custody and physical mapping, aggregate peak accounting, shared executable evidence and matching full
-consumer pins in both ledgers plus launch-registry acceptance remain unqualified. One synthetic crypto
-receipt supplies none of those qualifications. Preserve complete history, budgets, independent C/L,
-all host/privacy/path gates and A1308/A760. Consumers/runtime NONE; admission CLOSED; no partial
-foundation finishing. [Requirements
-agreement](../superpowers/plans/2026-10-22-a951-connection.md#provisioning-source-requirements-agreement-6-november-2026).
+**Owner decision, 6 November 2026: A951-S replaces the earlier build.** The old private branch
+stays parked. Use the existing Cloud gateway and one outbound WireGuard container. Staff use
+password sign-in on the box; staff-host passkeys enrol separately. Venue devices keep using
+`.local`, and local sales never depend on Cloud or the internet. Customer pages stay later.
 
-D582 accepts the complete [appliance successor](../superpowers/specs/2026-11-05-a951-appliance-v1-successor.md)
-requirements solely for isolated codec/shared signed-corpus work, the policy/proof
-and initially unmounted path shapes, and L as the final local publication boundary.
-Cloud consume C is independent; no continuous Cloud permission through L is
-required. Both owning current-permission checks and the independent later safety
-fences still need implementation proof. The dated plan/intake amendment records
-the exact final-disposition receipt and scope; full connected acceptance stays open.
+The first cut adds an optional dashboard-only HTTPS listener, using the existing staff key and
+certificate files. It excludes the setup and recovery pages, till, device, print and machine-operation routes and marks requests
+remote before the box's own-device check. Password guessing keeps the existing backoff. The local
+listener and its passkey hostname keep their configuration.
 
-E and D agree the exact [native private protocol](../superpowers/specs/2026-11-05-a951-native-publication-protocol.md)
-requirements for implementation and synthetic byte examples. The newest
-[plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#native-publication-requirements-acceptance-amendment-5-november-2026)
-records protocol digest `db920d5b…5018` and D disposition `5a33aa87…888d`.
-Both ledgers still need the matching companion digest/scope and both full
-executable consumer commits before the affected native boundary connects; launch
-must check the root-provisioned accepted-contract registry. No executable,
-private-corpus, runtime or connected acceptance follows. Native caller/signer custody,
-publication/ack/status consumers, cross-store durability, replay/crash/expiry and
-peak-budget evidence remain open. D owns receiver/provisioning authentication,
-Cloud one-use ledger and the shared signed corpus. The owner-selected server-trust
-exception stands: a compromised server may forge local approval for its exact
-provisioned binding; it gains no independent Cloud approval or general helper
-operation. No protected database owner, relocated sign-in/TLS authority or new
-owner-held secret is a dependency. Preserve historical artifacts unchanged.
+On 6 November a manual Chromium session used the public gateway to sign in to the test box
+with its ordinary password and normal certificate trust, then opened its overview. Installing
+an issued replacement changed new TLS connections without restarting the server. This was a Mac
+client on the home network using the public Internet path. A fresh Chromium session then
+repeated the password sign-in through the rented server's outside-home exit with normal trust.
+The bounded test app and peer were stopped afterwards. At the owner's request a separate
+managed demo then replaced them: the unprivileged app and its separate tunnel recovered from
+controlled process exits, and the public page returned 200. Both are enabled for startup; a
+physical box reboot remains untested. The owner's containers were untouched.
+[Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
 
-All five [plan](../superpowers/plans/2026-10-22-a951-connection.md) cuts have owner
-build approval. D560's exact G1 mapping acceptance remains isolated planning only;
-D136's complete routing requirements remain accepted solely for isolated T4
-fixtures with injected synthetic contexts and policy. Full appliance acceptance,
-approval/provisioning/PP consumers, complete signed corpus and parser implementation
-remain open.
+On 7 November the five reviewed cuts on private `feat/a951s-integration` completed the fresh
+test-box path. After pairing, the boot worker submitted the container's saved public key, wrote
+its assigned placement, requested and installed the staff certificate, and opened the staff
+listener without restarting. Chromium signed in through the public gateway with normal certificate
+trust. A peer-container restart recovered the trusted public page. The bounded test stopped its
+own fixture and peer afterwards; the earlier managed demo remains separate and running.
+[Receipt and limits](../operations/a951-host-evidence.md#a951-s-automatic-staff-connection-7-november-2026).
 
-E proposes the [Debian host successor](../superpowers/specs/2026-11-05-a951-debian13-host-profile.md),
-`proposal-2026-11-05.1`, incorporating the entire immutable predecessor and H.
-It changes only the host target to native x86_64 Debian 13 with distinct profile
-`a951-debian13-systemd-docker-v1`; G's 13:15 relay agrees this target for
-engineering planning only. Canonical ledger return/runtime qualification remain
-separate. Use the newest
-plan amendment and [intake](../developers/cloud-connection.md#a951-build-intake)
-for exact publication digests and acceptance scopes.
+The second-venue trial exercised a simulated due-input public renewal and listener reload,
+signed revocation, and separation from a live allocated venue. The earlier managed offline sale
+and Compose forwarding checks retain their recorded scope.
+[Second-venue receipt and limits](../operations/a951-host-evidence.md#second-venue-renewal-and-revocation-7-november-2026).
 
-The watcher reports the shared Debian box has returned. Its reported inventory is
-unqualified; the [operations addendum](../operations/a951-host-evidence.md) preserves
-earlier Ubuntu/Mac fixture evidence and its limits. Accepted host digest, both
-executable consumers and qualified runtime pair remain NONE. Admission CLOSED;
-all remaining affected-path gates retain their scope.
+Remaining work, following the owner's certificate-first order:
 
-Keep the remaining work separate:
+- Finish publication of the combined build and its installation path. Its normal
+  server bundle passed a bounded systemd run: Settings off survived an app restart and Cloud
+  refresh, local sign-in worked, and on restored trusted public access with the same registration,
+  key and certificate. Systemd app recovery and a peer-container restart also passed. The temporary
+  unit, peer and network were removed; the earlier persistent demo is unchanged.
+  [Receipt and limits](../operations/a951-host-evidence.md#bounded-managed-server-restart-7-november-2026).
+  The Settings review repairs passed a fresh managed/public run: the remote-only dialog's
+  Stop retained access, confirmed off disconnected it and local on restored it.
+  [Receipt and limits](../operations/a951-host-evidence.md#managed-review-repairs-and-relay-retirement-7-november-2026).
+  The private combined build removes
+  `@waitron/tunnel`, its boot worker and its four relay settings. The staff listener is the
+  remote entrance; it supplies no relay for standby adoption.
+- Qualify the managed demo across a physical reboot.
+- Once the browser path works, try Translate all and the existing address fields with a Cloud
+  provider on the test box. Provider keys stay on the gateway host and come from the owner.
 
-- **G1, E/G:** implement and accept the named AP-establish/recover/reconnect
-  consumers, authenticated AP-channel/one-use ledger, REG/POL/PEER/KEY and
-  protected PP realization. Return the full revised appliance edition and complete
-  expanded signed-byte corpus; record both resulting full consumer pins before
-  affected integration. Preserve D132's bounds, complete 256-entry lifetime
-  history, four independent 64 KiB safety copies and one shared 256 KiB journal
-  with its emergency reserve inside the total. Shared admission heads remain
-  separate from helper replay and observation/custody progress. Stops win over
-  prepared commits and late opens. Intact reboot, damaged-state recovery and
-  reconnect after a local stop keep their separate authenticated requirements.
-- **G7 real host, E:** obtain matching E/G acceptance of the exact Debian successor
-  and record consumer pins in both ledgers before affected integration. Populate
-  `qualification-unpopulated-2026-11-05.1` under the inherited exact-pin grammar.
-  Preserve the complete GUARD16 inventory, four protected stores and shared
-  journal/reserve budgets. Qualify every inherited positive/negative/deletion/
-  restored matrix row, including full-budget closure, crash/stop races, network
-  expiry and elapsed listener custody. Old Ubuntu/Mac receipts cannot qualify
-  Debian. Use the returned shared box through its helper, one lane at a time;
-  leave owner `/opt/waitron`, containers/networks and Windows-shared partitions
-  untouched. Host configuration/sleep/reboot experiments must be safe for owner
-  Waitron; configuration changes require separate explicit approval. Sleep
-  evidence remains open. Changed host bytes invalidate relevant receipts.
-- **G2:** obtain the actual A947 current-authority/freshness/withdrawal consumer
-  and accepted source-floor mapping, reconciled with the approved A1018 direction
-  and D88. Endpoint identity, a role boolean, lease or tunnel supplies no authority.
-- **G3/G4/G5:** retain unchanged opt-in test-only staff v1 and its client-policy
-  gate; separately agree public-upstream identity/issuer/trust/mTLS and
-  movement/replacement. Moves and replacement remain refused in this profile.
-- **G6:** E/G accept the complete routing revision 2 requirements for isolated T4
-  fixtures. Use the newest plan amendment and intake for exact pins/digests and
-  scope. Before connecting consumers, record both resulting full implementation
-  commits, accepted artifacts and allowed path in both repositories, then qualify
-  that pair. Diagnostic/export and flow-scoped A980/D101
-  processing, access, destinations and retention remain open, including staff
-  metadata. Local receipts grant no export permission.
+The owner accepts that a compromised Cloud could obtain a staff certificate and intercept logins,
+that the sign-in page and a bug in the remote entrance face the internet, and that this version
+has no protected owner service, strict instant shutdown or independent protection against a
+compromised box server. The A760 landing freeze and no-new-tables hold remain in force.
 
-A951 supplies reachability for one venue. Keep staff TLS ending at the box,
-public HTTPS ending at Cloud with its
-independent authenticated upstream, the original 83-byte empty production
-manifest without final LF, admission CLOSED and `.local` independent.
-Customer pages, routes, credentials and business operations remain with A1013
-bookings, A508 table QR, A509 collection and later A1012 delivery. No live
-permission, production, provider, deployment, publication/pause, writer or fiscal
-change follows. New mapping/host vectors remain UNRUN until their exact consumers
-and host are exercised.
+The [old plan](../superpowers/plans/2026-10-22-a951-connection.md) and its linked protocol and host
+artifacts describe the parked implementation. They do not add work or gates to A951-S.
 
 ## A mirror keeps a renamed server's old chart (A917)
 
@@ -1253,8 +1209,6 @@ restructuring wider than a review fix:
   `apps/server/src/box-secrets.ts` (`keyRingEnv`) and `mirror-bundle.ts` (`encodeKeyRing`) as well
   as `packages/credentials/src/keyring.ts`; adopt decodes the bundle's ring through the env format.
   Own the format in `keyring.ts`.
-- `apps/server/src/mirror-bundle-fetch.ts` hand-writes an HTTPS client on `node:https`;
-  `tunnel-http.ts` already uses undici's `Agent({ connect: { ca } })` with `fetch`.
 - `node.dump` is opened twice in one verification run: read-only with an authorizer
   (`backup-verification-compatibility.ts`) and writable in memory without one
   (`packages/composition/src/node-backup-verification.ts`). Open it once, through the hardened

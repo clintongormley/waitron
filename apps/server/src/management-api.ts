@@ -1,3 +1,4 @@
+import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
@@ -174,9 +175,10 @@ async function deliverAccountAction(
   deps: ManagementApiDeps,
   log: Logger,
   issued: IssuedAccountAction,
+  origin: string,
 ): Promise<boolean> {
   if (deps.sendAccountEmail === undefined) return false;
-  const actionUrl = new URL("/manage/account", deps.origin);
+  const actionUrl = new URL("/manage/account", origin);
   actionUrl.searchParams.set("token", issued.token);
   actionUrl.searchParams.set("purpose", issued.purpose);
   // Keep the email out of the action query. The SPA reads this fragment and supplies the semantic
@@ -759,6 +761,12 @@ export function mountManagementApi(
   );
   const recoveries = new Set<Promise<void>>();
   const credentialKeyRing = deps.credentialKeyRing;
+  const passkeySite = (c: Context) => managementSite(c, deps);
+  const secureCookie = (c: Context) => deps.secureCookies || isRemoteStaffRequest(c);
+  const googleRedirect = (c: Context) =>
+    isRemoteStaffRequest(c)
+      ? new URL("/management-api/google/callback", c.req.url).href
+      : deps.googleOidc!.redirectUri;
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();
@@ -774,7 +782,7 @@ export function mountManagementApi(
     setCookie(c, googleFlowCookie, state, {
       httpOnly: true,
       sameSite: "Lax",
-      secure: deps.secureCookies,
+      secure: secureCookie(c),
       path: "/management-api/google/callback",
       maxAge: 10 * 60,
     });
@@ -797,7 +805,7 @@ export function mountManagementApi(
       const out = await withTransaction(deps.db, async (tx) => {
         return beginGoogleLogin(tx, {
           clientId: deps.googleOidc!.clientId,
-          redirectUri: deps.googleOidc!.redirectUri,
+          redirectUri: googleRedirect(c),
         });
       });
       bindGoogleFlow(c, out.state);
@@ -819,7 +827,7 @@ export function mountManagementApi(
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
           keyRing: credentialKeyRing,
           clientId: deps.googleOidc!.clientId,
-          redirectUri: deps.googleOidc!.redirectUri,
+          redirectUri: googleRedirect(c),
         }),
         beginGoogleLink,
       );
@@ -846,11 +854,14 @@ export function mountManagementApi(
       // the account/session write instead of holding a database transaction open across the network.
       let subject: string;
       try {
-        ({ subject } = await googleCodeExchange(deps.googleOidc, {
-          code,
-          verifier: claimed.verifier,
-          nonce: claimed.nonce,
-        }));
+        ({ subject } = await googleCodeExchange(
+          { ...deps.googleOidc, redirectUri: googleRedirect(c) },
+          {
+            code,
+            verifier: claimed.verifier,
+            nonce: claimed.nonce,
+          },
+        ));
       } catch {
         throw new AppError("google.invalid", {});
       }
@@ -862,19 +873,20 @@ export function mountManagementApi(
             subject,
           });
         });
-        return c.redirect(`${deps.origin}/manage/profile?google=linked`);
+        return c.redirect(`${passkeySite(c).origin}/manage/profile?google=linked`);
       }
       const completion = await withTransaction(deps.db, async (tx) => {
         return loginWithGoogle(tx, { subject });
       });
-      setManagementCookie(c, completion.token, deps.secureCookies);
-      return c.redirect(`${deps.origin}/manage/?login=google`);
+      setManagementCookie(c, completion.token, secureCookie(c));
+      return c.redirect(`${passkeySite(c).origin}/manage/?login=google`);
     }),
   );
-  // Deliberately unauthenticated: `listActiveStaff` returns only `{ personId, displayName }`.
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
       const roster = await withTransaction(deps.db, async (tx) => {
+        if (isRemoteStaffRequest(c))
+          await readOwnProfile(tx, { managementSessionId: requireManagementSession(c) });
         return listActiveStaff(tx);
       });
       return c.json(roster);
@@ -929,7 +941,7 @@ export function mountManagementApi(
         throw error;
       }
       finishAttempt("success");
-      setManagementCookie(c, session.token, deps.secureCookies);
+      setManagementCookie(c, session.token, secureCookie(c));
       return c.json({ personId: session.personId, offerPasskey: session.offerPasskey });
     }),
   );
@@ -953,7 +965,8 @@ export function mountManagementApi(
         )
           .then(
             (issued) => {
-              if (issued !== null) void deliverAccountAction(deps, log, issued).catch(() => {});
+              if (issued !== null)
+                void deliverAccountAction(deps, log, issued, passkeySite(c).origin).catch(() => {});
             },
             () => {},
           )
@@ -1018,7 +1031,7 @@ export function mountManagementApi(
         return completeAccountAction(tx, { ...common, token: body.token as string });
       });
       if (completion.session === null) clearManagementCookie(c);
-      else setManagementCookie(c, completion.session.token, deps.secureCookies);
+      else setManagementCookie(c, completion.session.token, secureCookie(c));
       return c.json({ personId: completion.personId, authenticated: completion.session !== null });
     }),
   );
@@ -1142,7 +1155,7 @@ export function mountManagementApi(
         });
         return { created, issued };
       });
-      const invitationSent = await deliverAccountAction(deps, log, issued);
+      const invitationSent = await deliverAccountAction(deps, log, issued, passkeySite(c).origin);
       return c.json({ ...created, invitationSent }, 201);
     }),
   );
@@ -1164,7 +1177,9 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
+      return c.json({
+        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
+      });
     }),
   );
 
@@ -1248,7 +1263,9 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
+      return c.json({
+        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
+      });
     }),
   );
 
@@ -1269,7 +1286,9 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
+      return c.json({
+        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
+      });
     }),
   );
 
@@ -1868,7 +1887,7 @@ export function mountManagementApi(
           await verifyOwnCredentials(tx, credentials);
           return beginPasskeyRegistration(tx, {
             managementSessionId: sessionId,
-            rpId: deps.rpId,
+            rpId: passkeySite(c).rpId,
             rpName: "Waitron",
           });
         },
@@ -1887,8 +1906,8 @@ export function mountManagementApi(
           managementSessionId: sessionId,
           challengeHandle,
           response: response as never,
-          rpId: deps.rpId,
-          origin: deps.origin,
+          rpId: passkeySite(c).rpId,
+          origin: passkeySite(c).origin,
         });
       });
       return c.json(out);
@@ -1901,14 +1920,14 @@ export function mountManagementApi(
       const out = await withTransaction(deps.db, (tx) =>
         readPasskeySignals(tx, { managementSessionId: sessionId }),
       );
-      return c.json({ rpId: deps.rpId, ...out });
+      return c.json({ rpId: passkeySite(c).rpId, ...out });
     }),
   );
 
   app.post("/management-api/passkey/auth/options", (c) =>
     run(c, log, async () => {
       const out = await withTransaction(deps.db, async (tx) => {
-        return beginPasskeyAuthentication(tx, { rpId: deps.rpId });
+        return beginPasskeyAuthentication(tx, { rpId: passkeySite(c).rpId });
       });
       return c.json(out);
     }),
@@ -1921,11 +1940,11 @@ export function mountManagementApi(
         return finishPasskeyAuthentication(tx, {
           challengeHandle,
           response: response as never,
-          rpId: deps.rpId,
-          origin: deps.origin,
+          rpId: passkeySite(c).rpId,
+          origin: passkeySite(c).origin,
         });
       });
-      setManagementCookie(c, session.token, deps.secureCookies);
+      setManagementCookie(c, session.token, secureCookie(c));
       return c.json({ personId: session.personId });
     }),
   );

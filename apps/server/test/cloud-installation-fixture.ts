@@ -9,6 +9,8 @@ export async function installationFixture(
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
     billing?: MachineHandler;
+    staffCertificate?: MachineHandler;
+    tunnel?: MachineHandler;
     translationState?: () => ServiceState;
   } = {},
 ) {
@@ -23,7 +25,8 @@ export async function installationFixture(
     revoked = false,
     patch: Record<string, unknown> = {},
     delay = async () => {},
-    failure = "";
+    failure = "",
+    failureStatus = 401;
   // Contract, "Seeing the service": any other configuration body is an invalid proof.
   const configurationBodies = options.cloudBeforeVersion2
     ? ["{}"]
@@ -52,12 +55,24 @@ export async function installationFixture(
   ];
   const f = await cloudFixture(async (values, saved, req, res, sent) => {
     requests.push(values);
+    if (values[2] === "tunnel-provision") {
+      if (options.tunnel) await options.tunnel(values, saved, req, res, sent);
+      else {
+        res.writeHead(503);
+        res.end(JSON.stringify({ error: "temporarily_unavailable" }));
+      }
+      return;
+    }
     if (String(values[2]).startsWith("backup-") && capture) {
       await capture(values, saved, req, res, sent);
       return;
     }
     if (String(values[2]).startsWith("translation-") && options.translation) {
       await options.translation(values, saved, req, res, sent);
+      return;
+    }
+    if (String(values[2]).startsWith("staff-certificate-") && options.staffCertificate) {
+      await options.staffCertificate(values, saved, req, res, sent);
       return;
     }
     if (values[2] === "billing-display" && options.billing) {
@@ -77,7 +92,7 @@ export async function installationFixture(
       failure ||
       (values[2] === "configuration" && !configurationBodies.includes(String(values[7])))
     ) {
-      res.writeHead(401);
+      res.writeHead(failureStatus);
       res.end(JSON.stringify({ error: failure || "invalid_proof" }));
       return;
     }
@@ -98,7 +113,7 @@ export async function installationFixture(
           randomUUID(),
           view.installationId,
           view.venueId,
-          "test",
+          saved.environment,
           saved.publicKey,
           now,
           now + 3600000,
@@ -112,7 +127,7 @@ export async function installationFixture(
       if (values[2] === "revoke") revoked = true;
       replies.set(operation, {
         ...view,
-        environment: "test",
+        environment: saved.environment,
         revision: 0,
         revokedAt: revoked ? new Date().toISOString() : null,
         lastContactAt: new Date().toISOString(),
@@ -165,8 +180,9 @@ export async function installationFixture(
     delay: (fn: () => Promise<void>) => {
       delay = fn;
     },
-    fail: (code: string) => {
+    fail: (code: string, status = 401) => {
       failure = code;
+      failureStatus = status;
     },
   };
 }

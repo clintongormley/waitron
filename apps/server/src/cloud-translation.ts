@@ -9,6 +9,9 @@ import type { SavedCloudState } from "./cloud-client.js";
 import { machinePayload } from "./cloud-installation.js";
 import "./errors.js";
 
+export type MachineServiceAction =
+  TranslationAction | "staff-certificate-submit" | "staff-certificate-status";
+
 export type TranslationAction =
   "translation-submit" | "translation-status" | "translation-collect" | "translation-release";
 
@@ -25,7 +28,7 @@ export function submitSignedBody(body: string): string {
 
 export function translationEnvelope(
   state: Pick<SavedCloudState, "origin" | "view" | "privateKey">,
-  action: TranslationAction,
+  action: MachineServiceAction,
   input: { operationId: string; lease: string; signedBody: string },
   now = Date.now(),
 ): { payload: string; signature: string } {
@@ -84,7 +87,9 @@ export type OnRefusal = (
   lease: string,
   publicKey: string,
 ) => Promise<void>;
-const LIMITS: Record<TranslationAction, { reply: number; ms: number }> = {
+const LIMITS: Record<MachineServiceAction, { reply: number; ms: number }> = {
+  "staff-certificate-submit": { reply: 32768, ms: 8000 },
+  "staff-certificate-status": { reply: 32768, ms: 8000 },
   "translation-submit": { reply: 65536, ms: 60000 },
   "translation-status": { reply: 65536, ms: 8000 },
   "translation-collect": { reply: COLLECT_REPLY_BYTES, ms: 120_000 },
@@ -120,9 +125,9 @@ export function refusalOf(status: number, value: unknown): AppError {
   return new AppError("cloud.unavailable", {});
 }
 
-async function exchange(
+export async function serviceExchange(
   state: SavedCloudState,
-  action: TranslationAction,
+  action: MachineServiceAction,
   operationId: string,
   signedBody: string,
   extra: { body?: string },
@@ -187,7 +192,7 @@ export async function submitTranslation(
   signal?: AbortSignal,
   onRefusal?: OnRefusal,
 ): Promise<{ jobId: string; state: CloudJobState; total: number }> {
-  const v = await exchange(
+  const v = await serviceExchange(
     state,
     "translation-submit",
     operationId,
@@ -206,7 +211,7 @@ export async function translationStatus(
   signal?: AbortSignal,
   onRefusal?: OnRefusal,
 ): Promise<TranslationStatus> {
-  const v = await exchange(
+  const v = await serviceExchange(
     state,
     "translation-status",
     randomUUID(),
@@ -270,7 +275,7 @@ export async function collectTranslation(
   signal?: AbortSignal,
   onRefusal?: OnRefusal,
 ): Promise<CollectedPage> {
-  const v = await exchange(
+  const v = await serviceExchange(
     state,
     "translation-collect",
     randomUUID(),
@@ -311,7 +316,7 @@ export async function releaseTranslation(
   signal?: AbortSignal,
   onRefusal?: OnRefusal,
 ): Promise<void> {
-  const v = await exchange(
+  const v = await serviceExchange(
     state,
     "translation-release",
     randomUUID(),

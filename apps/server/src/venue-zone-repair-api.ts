@@ -1,3 +1,4 @@
+import { managementOriginFor } from "./request-from-box.js";
 import type { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { withTransaction, type Database } from "@waitron/db";
@@ -40,12 +41,13 @@ export function mountVenueZoneRepairApi(
   app.get(path, (c) =>
     run(c, log, async () => {
       const origin = c.req.header("origin");
+      const expectedOrigin = managementOriginFor(c, deps.managementOrigin);
       // A GET without Origin needs browser origin evidence; the dashboard suppresses referrers.
       const sameOriginRead =
         origin === undefined &&
         c.req.header("sec-fetch-site") === "same-origin" &&
-        new URL(c.req.url).origin === deps.managementOrigin;
-      if (origin !== deps.managementOrigin && !sameOriginRead)
+        new URL(c.req.url).origin === expectedOrigin;
+      if (origin !== expectedOrigin && !sameOriginRead)
         throw new AppError("authorization.not_permitted", { permission: "venue.configure" });
       const session = requireManagementSession(c);
       const query = c.req.query();
@@ -66,7 +68,7 @@ export function mountVenueZoneRepairApi(
   );
   app.post(path, (c) =>
     run(c, log, async () => {
-      if (c.req.header("origin") !== deps.managementOrigin)
+      if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
         throw new AppError("authorization.not_permitted", { permission: "venue.configure" });
       const session = requireManagementSession(c);
       if (

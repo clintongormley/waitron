@@ -1402,18 +1402,18 @@ once released. Belongs with A1016.
 - **What slice 9b leaves to slice 9c and to a restart.**
   [Detail](box.md#what-slice-9b-leaves-to-slice-9c-and-to-a-restart)
 
-## Bundle: Requests through the tunnel look like the box itself
+## Bundle: Qualify clock confirmation through remote access
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A remote administrator reaching the box through the cloud tunnel cannot confirm its clock.**
-  The tunnel delivers requests from the box's own loopback address, so the box takes them for its
-  own screen and refuses them (`same_machine`). It fails closed; how to tell the two apart is open
-  (owner FYI 13). Left open by A798-B slice 9 (#2025).
-- **A future cloud or proxied primary sees every request as the box's own**, so no device would
-  count as a clock witness and no administrator could confirm its clock. Today a venue has one node
-  and no cloud primary; one that exists needs its own rule (design §4.9 h, point 3). Left open by
-  A798-B slice 9 (#2025).
+- **Qualify a remote administrator's clock confirmation through the staff entrance.** A951-S
+  marks staff requests remote before the own-box check. Its listener test observes `box: false`
+  for a remote request and `box: true` for the unmarked control. That boundary check does not
+  exercise the clock-confirm route. Run the real route before closing this qualification.
+  Left open by A798-B slice 9 (#2025), narrowed by the A951-S retirement review on 7 November.
+- **A future cloud or proxied primary needs its own clock-witness rule.** Today a venue has no
+  cloud primary. Qualify how a future one distinguishes its own device from remote devices
+  (design §4.9 h, point 3). Left open by A798-B slice 9 (#2025).
 
 ## Bundle: Full disk: the till read that fails, and the words
 

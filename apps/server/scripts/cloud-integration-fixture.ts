@@ -56,7 +56,7 @@ if (savedEnv !== undefined) {
         initialAllocation: { kind: "throwaway", hostEnvironment: "preproduction" },
         venue: {
           country: "ES",
-          taxId: "73000001K",
+          taxId: "73000001W",
           legalName: "Cloud Test SL",
           name: "Cloud Test Venue",
           fiscalTerritory: "ES-common",

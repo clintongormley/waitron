@@ -103,7 +103,6 @@ describe("configuration", () => {
       "identity",
       "catalogue",
       "media",
-      "tunnel",
       "membership",
       "module",
       "layouts",

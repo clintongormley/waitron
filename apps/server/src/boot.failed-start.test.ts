@@ -1,4 +1,4 @@
-import { connect, createServer as createNetServer, type AddressInfo, type Socket } from "node:net";
+import { connect, createServer as createNetServer } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,6 +35,18 @@ import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { createSealedStateRefresher } from "./sealed-state.js";
 import { freePorts } from "./testing/free-ports.js";
+import { startStaffListener } from "./cloud-remote.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { stopBackgroundDuties } from "./background-duties.js";
+vi.mock("./background-duties.js", async (original) => {
+  const actual = await original<typeof import("./background-duties.js")>();
+  return { ...actual, stopBackgroundDuties: vi.fn(actual.stopBackgroundDuties) };
+});
+
+vi.mock("./cloud-remote.js", async (original) => {
+  const actual = await original<typeof import("./cloud-remote.js")>();
+  return { ...actual, startStaffListener: vi.fn(actual.startStaffListener) };
+});
 
 /**
  * A start that fails after boot's long-lived open of the venue folder must give the folder back:
@@ -396,6 +408,144 @@ async function tradingEnv(venueDir: string, state: string, { landing = false } =
 }
 
 describe("a start that fails after the venue folder is opened gives the folder back", () => {
+  it.each(["waiting", "busy", "shutdown"])(
+    "handles the staff entrance while %s",
+    async (mode) => {
+      const venueDir = await seededVenueDir(),
+        state = await stateDir(undefined, { leaf: true });
+      const [localPort, staffPort] = await freePorts(2);
+      const material = mintSelfSignedServerCert({
+        now: new Date(),
+        hostnames: ["staff.example.test"],
+        ipAddresses: [],
+      });
+      const install = async () => {
+        await writeFile(join(state, "cloud-staff.key"), material.serverKeyPem, { mode: 0o600 });
+        await writeFile(join(state, "cloud-staff.crt"), material.serverCertPem);
+      };
+      let workerOptions: Parameters<typeof runCloudWorker>[0] | undefined;
+      vi.mocked(runCloudWorker).mockImplementationOnce(async (options) => {
+        workerOptions = options;
+        await new Promise<void>((resolve) =>
+          options.signal.addEventListener("abort", () => resolve(), { once: true }),
+        );
+      });
+      const blocker = createNetServer();
+      let refused = () => {};
+      const refusal = new Promise<void>((resolve) => {
+        refused = resolve;
+      });
+      if (mode === "busy") {
+        await install();
+        await new Promise<void>((resolve) => blocker.listen(staffPort, "127.0.0.1", resolve));
+        const actual =
+          await vi.importActual<typeof import("./cloud-remote.js")>("./cloud-remote.js");
+        vi.mocked(startStaffListener).mockImplementationOnce((config, app, log) =>
+          actual.startStaffListener(config, app, (...args) => {
+            if (args[1] === "server.listen_failed") refused();
+            log(...args);
+          }),
+        );
+      }
+      let server: StartedServer | undefined;
+      try {
+        const lines = await withLoggedLines(async () => {
+          server = await startServer({
+            WAITRON_VENUE_DIR: venueDir,
+            WAITRON_STATE_DIR: state,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+            WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+            WAITRON_CREDENTIALS_KEY_VERSION: "1",
+            ...TILL_ENV,
+            WAITRON_HTTP_PORT: String(localPort),
+            WAITRON_HTTP_LANDING_PORT: "0",
+            WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+            WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+            WAITRON_STAFF_PORT: String(staffPort),
+          });
+        });
+        if (mode === "waiting") {
+          expect(
+            lines.filter(
+              (line) => line.event === "server.listen_failed" && line.listener === "staff",
+            ),
+          ).toEqual([]);
+          await bindAndRelease(staffPort);
+          await install();
+          expect(workerOptions?.staffHostname).toBe("staff.example.test");
+          await workerOptions?.onStaffCertificate?.();
+          await vi.waitFor(async () => {
+            await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
+          });
+        } else if (mode === "busy") {
+          await refusal;
+          await new Promise<void>((resolve) => blocker.close(() => resolve()));
+          await workerOptions!.onStaffCertificate!();
+          await vi.waitFor(async () => {
+            await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
+          });
+          const calls = vi.mocked(startStaffListener).mock.calls.length;
+          await workerOptions!.onStaffCertificate!();
+          expect(vi.mocked(startStaffListener).mock.calls.length).toBe(calls);
+        } else {
+          await install();
+          const actual =
+            await vi.importActual<typeof import("./background-duties.js")>(
+              "./background-duties.js",
+            );
+          vi.mocked(stopBackgroundDuties).mockImplementationOnce(async (duties) => {
+            await workerOptions!.onStaffCertificate!();
+            await actual.stopBackgroundDuties(duties);
+          });
+        }
+        await server!.close();
+        await bindAndRelease(staffPort);
+      } finally {
+        if (blocker.listening) await new Promise<void>((resolve) => blocker.close(() => resolve()));
+        await server?.close();
+        for (const result of vi.mocked(startStaffListener).mock.results)
+          await result.value?.close();
+      }
+    },
+    60000,
+  );
+
+  it("closes the staff socket when a later boot step fails", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const [localPort, landingPort, staffPort] = await freePorts(3);
+    const certificate = mintSelfSignedServerCert({
+      now: new Date(),
+      hostnames: ["staff.example.test"],
+      ipAddresses: [],
+    });
+    await writeFile(join(state, "cloud-staff.key"), certificate.serverKeyPem);
+    await writeFile(join(state, "cloud-staff.crt"), certificate.serverCertPem);
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    try {
+      await expect(
+        startServer({
+          WAITRON_VENUE_DIR: venueDir,
+          WAITRON_STATE_DIR: state,
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "preproduction",
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          ...TILL_ENV,
+          WAITRON_HTTP_PORT: String(localPort),
+          WAITRON_HTTP_LANDING_PORT: String(landingPort),
+          WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+          WAITRON_STAFF_PORT: String(staffPort),
+        }),
+      ).rejects.toBe(failure);
+      await expect(bindAndRelease(staffPort)).resolves.toBeUndefined();
+    } finally {
+      await vi.mocked(startStaffListener).mock.results.at(-1)?.value?.close();
+    }
+  }, 60_000);
+
   it("when the pending-adoption file cannot be read", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir();
@@ -495,49 +645,6 @@ describe("a start that fails after the venue folder is opened gives the folder b
       ),
     ).rejects.toMatchObject({ code: "ENOENT" });
     expect(readVenueHolder(venueDir)).toBeNull();
-  }, 60_000);
-
-  it("when a step after the tunnel starts throws, closing its connection to the relay", async () => {
-    const venueDir = await seededVenueDir();
-    const state = await stateDir(undefined, { leaf: true });
-    // Reads and never answers, so it sees a client close, and a connection nobody stops stays open.
-    const open = new Set<Socket>();
-    let everAccepted = 0;
-    let firstAccept!: () => void;
-    const accepted = new Promise<void>((resolve) => (firstAccept = resolve));
-    const relay = createNetServer((socket) => {
-      everAccepted += 1;
-      open.add(socket);
-      socket.resume();
-      socket.on("close", () => open.delete(socket));
-      socket.on("error", () => socket.destroy());
-      firstAccept();
-    });
-    await new Promise<void>((resolve) => relay.listen(0, "127.0.0.1", resolve));
-    const relayPort = (relay.address() as AddressInfo).port;
-    const failure = new Error("interfaces unreadable");
-    // Whether the tunnel has dialled by the time its undo runs is otherwise a race, so the fake mDNS
-    // stop, which the unwind runs before the tunnel's undo, waits for the relay's first accept (or
-    // 10s, which fails the count below).
-    failLandingAfterMdns(failure, () => Promise.race([accepted, delay(10_000)]));
-
-    try {
-      await expect(
-        startServer({
-          ...(await tradingEnv(venueDir, state, { landing: true })),
-          WAITRON_TUNNEL_RELAY_URL: `tcp://127.0.0.1:${relayPort}`,
-          WAITRON_TUNNEL_BOX_ID: "box-failed-start",
-          WAITRON_TUNNEL_TOKEN: "tunnel-secret",
-          WAITRON_TUNNEL_POOL_SIZE: "1",
-        }),
-      ).rejects.toBe(failure);
-      expect(readVenueHolder(venueDir)).toBeNull();
-      expect(everAccepted).toBeGreaterThanOrEqual(1);
-      await vi.waitFor(() => expect(open.size).toBe(0), { timeout: 2_000 });
-    } finally {
-      for (const socket of open) socket.destroy();
-      await new Promise<void>((resolve) => relay.close(() => resolve()));
-    }
   }, 60_000);
 
   it("in trading mode, when a step after the listener is started throws, stopping what started", async () => {
@@ -1072,29 +1179,10 @@ describe("closing a started server", () => {
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
-  it("when unsubscribing from the change feed throws, still closes the tunnel and gives the folder back", async () => {
+  it("when unsubscribing from the change feed throws, still closes live events and gives the folder back", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
-    // Reads and never answers, so a tunnel nobody aborts keeps a connection open.
-    const open = new Set<Socket>();
-    let firstAccept!: () => void;
-    const accepted = new Promise<void>((resolve) => (firstAccept = resolve));
-    const relay = createNetServer((socket) => {
-      open.add(socket);
-      socket.resume();
-      socket.on("close", () => open.delete(socket));
-      socket.on("error", () => socket.destroy());
-      firstAccept();
-    });
-    await new Promise<void>((resolve) => relay.listen(0, "127.0.0.1", resolve));
-    const relayPort = (relay.address() as AddressInfo).port;
-    const env = {
-      ...(await tradingEnv(venueDir, state)),
-      WAITRON_TUNNEL_RELAY_URL: `tcp://127.0.0.1:${relayPort}`,
-      WAITRON_TUNNEL_BOX_ID: "box-close",
-      WAITRON_TUNNEL_TOKEN: "tunnel-secret",
-      WAITRON_TUNNEL_POOL_SIZE: "1",
-    };
+    const env = await tradingEnv(venueDir, state);
     const failure = new Error("unsubscribe threw");
     const { subscribeToChanges: realSubscribe } =
       await vi.importActual<typeof import("@waitron/db")>("@waitron/db");
@@ -1110,8 +1198,6 @@ describe("closing a started server", () => {
     let server: Awaited<ReturnType<typeof startServer>> | undefined;
     try {
       server = await startServer(env);
-      await Promise.race([accepted, delay(10_000)]);
-      expect(open.size).toBe(1);
 
       const settled = await Promise.race([
         server.close().then(
@@ -1122,14 +1208,11 @@ describe("closing a started server", () => {
       ]);
       expect(settled).toBe(failure);
       expect(liveEventsClose).toHaveBeenCalled();
-      await vi.waitFor(() => expect(open.size).toBe(0), { timeout: 2_000 });
       expect(readVenueHolder(venueDir)).toBeNull();
       await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
     } finally {
       await server?.close().catch(() => {});
       liveEventsClose.mockRestore();
-      for (const socket of open) socket.destroy();
-      await new Promise<void>((resolve) => relay.close(() => resolve()));
     }
   }, 60_000);
 });
