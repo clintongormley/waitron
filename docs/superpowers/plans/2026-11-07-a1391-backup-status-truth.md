@@ -4,8 +4,12 @@ Status: plan, 2026-11-07. Lane B. Branch `fix/a1391-backup-status-truth`. One PR
 Source: the bundle `docs/backlog/box.md#bundle-a1391-backup-status-tells-the-truth-and-leaks-nothing`
 (three entries). No table, column, index or trigger changes (the A1308 hold allows it).
 
-Risk triggers: concurrency (Task 3 shares a storage client between the running backup and status
-reads). So: a review after every task, and `/finish-branch` FULL with two Codex angles.
+Revision 2 (2026-11-07): the fresh plan review's findings folded (I1–I5, M1–M6). Task 3 is held
+for the watcher (questions.md, 2026-11-07 ~09:05): the review says it should not exist.
+
+Risk triggers: none if Task 3 is dropped (a secret's exposure is close to one, so the review stays
+FULL); concurrency if Task 3 is built. A review after every task either way, and `/finish-branch`
+FULL with two Codex angles.
 
 ## What is wrong today (read on main 59be31e3b7)
 
@@ -17,141 +21,147 @@ reads). So: a review after every task, and `/finish-branch` FULL with two Codex 
    settings-evidence answer masks it (`backup-settings-evidence.ts:206`).
    Masking in the status reply alone would break the Backups form: `openingDestinations`
    (`apps/dashboard/src/screens/backup-destination-model.ts:104-127`) fills the custom bucket form
-   from the held endpoint, and `keepsHeldSecret` compares it to the typed one, so a masked address
-   would be saved back masked, with the held secret kept, and the bucket would stop working.
+   from the held endpoint, so the person would see the masked address, and a save without retyping
+   the secret is refused as `secretAccessKey` (the server's `customBucket` compares the full address,
+   `archive-settings.ts:445-453`).
 2. **A destination that fails to build leaves archives reported as on.** In
    `BackupSupervisor.reload()` (`backup-supervisor.ts:288-292`) `#db` is assigned before
-   `cfg.destinations.map(this.#buildBackend)`; a throw there (`archiveNamespace` refusing, or the S3
-   store refusing its settings) escapes `reload()` with `#db` set, so `current().enabled` is true and
-   no sweep runs. The opened venue handle is not closed until the next teardown.
+   `cfg.destinations.map(this.#buildBackend)`; a throw there escapes `reload()` with `#db` set, so
+   `current().enabled` is true and no sweep runs. The opened venue handle is not closed until the next
+   teardown. NOT reachable from settings that load today (plan review I4: `archiveNamespace` already
+   runs at load, `archive-settings.ts:197`, `backup-config.ts:164`, and the review constructed
+   `S3Client` with bad region and endpoint values without a throw), so the fix is defensive against an
+   injected or future builder.
 3. **Every status read builds a new client per destination** (`#readDestination`,
    `backup-supervisor.ts:453-467`), a new S3 client for a bucket, and closes it once its listing
    settles, even while the running sweep holds live clients for the same destinations.
 
 ## Decisions (stated here so the reviews can check them)
 
-- **D1 — refuse, do not mask.** An S3 endpoint is reached with the access key and secret; a user
-  name or password in the URL is not how the S3 client signs requests. `readBucketConfig` refuses an
-  endpoint whose URL has a non-empty `username` or `password`, as `endpoint`. Every S3 destination
-  and the stream bucket pass through `readBucketConfig` (callers: `archive-settings.ts:175` stored
-  archive bucket, `:436` dashboard save; `stream-api.ts:111` stream save; `backup-config.ts:161`
-  environment settings; `archive-recovery-pack.ts:101`; `packages/stream/src/kit.ts:60`), so the
-  address can no longer be saved, loaded or restored with a password, and status cannot send one.
-  A record already stored with one now fails to load (archives off with the stored-settings code,
-  the existing path). Before go-live no compatibility code is owed (CLAUDE.md §3 last rule).
-  `destinationView` is left as it is: masking there would be a second rule for a value that can no
-  longer arrive, and it would reopen the form round trip above.
-- **D2 — the refusal's words.** The endpoint refusal already says
-  `stream.form.endpoint_invalid` ("Enter the full address, starting with https:// or http://"). It
-  gains "with no user name or password in it" (English and Spanish, `apps/dashboard/src/i18n/strings.ts`),
-  so the person reading the field's refusal knows what to change. Grep for any other screen that
-  words an `endpoint` refusal (setup's restore and first-setup forms) and change it the same way.
-- **D3 — a destination that fails to build leaves archives off, honestly.** `reload()` builds every
-  destination's backend before it adopts the venue handle. If one throws: close the backends already
-  built, close the venue handle, log `backup.disabled_backend_failed` with the destination id and the
-  error's code, and return normally (as the venue-open failure does). Keep `#config`, so the screen
-  still lists the destinations and each status read reports that destination's build code through
-  `unreadDestination` (`#readDestination` already does this when building throws). `enabled` reads
-  false because `#db` stays undefined; the Backups screen then shows "off" and its configure form
-  (`backup-screen.ts:1330`, `:1360-1363`), which is the truth and offers the fix.
-- **D4 — status reads borrow the running sweep's backends; nothing waits for them.** When the
-  status read's settings are the running sweep's settings (taken together, synchronously, as
-  `#sweep` is now) and the sweep holds a backend for that destination id, the read uses it instead of
-  building one. Each backend the supervisor hands out carries a count of status reads in flight. The
-  teardown releases its backends without waiting: one with no read in flight is closed at once; one
-  with a read in flight is closed when that read's listing settles (`DestinationRead.settled`). So
-  `close()` still runs only once no call is in flight (`storage-backend.ts:54`), and a reload or
-  `stop()` never waits on a listing that may never settle (`backup-status.ts:37-38`: a folder
-  listing's `readdir` takes no abort signal). A read whose settings are not the sweep's (no sweep,
-  not primary, a reload between, a build failure) builds its own backend and closes it on settle,
-  as now.
+- **D1 — refuse, do not mask.** An S3 endpoint is reached with the access key and secret. The plan
+  review pointed `@aws-sdk/client-s3` at a local server with `http://user:secret@127.0.0.1:<port>`:
+  the request was signed the same (`AWS4-HMAC-SHA256`, no Basic auth) as without user info, so no
+  configuration that works with the Node client depends on it (Litestream, Go, not tried).
+  `readBucketConfig` refuses, as `endpoint`, an endpoint whose URL has a user name or password, or
+  a query string or fragment (the second is `redactSecrets`'s other password position,
+  `?password=`). This is the house convention already: Cloud-provided bucket addresses are refused
+  for the same parts (`apps/server/src/cloud-backup.ts:142-150`).
+  **What it covers.** Every WRITE of a bucket address goes through `readBucketConfig` or the Cloud
+  check: archive save (`archive-settings.ts:436`), stream save (`stream-api.ts:111`), environment
+  settings (`backup-config.ts:161`), a kit (`packages/stream/src/kit.ts:60`), a recovery pack
+  (`archive-recovery-pack.ts:101`); a stored archive record is re-read through it
+  (`archive-settings.ts:175`). A stored STREAM record is not re-read through it
+  (`readStreamSettingsIn`, `stream-host.ts:66-89`), so a stream record written before this change
+  could still hold one and be sent by `GET /api/backup/stream` (`stream-api.ts:194`). Before go-live
+  no compatibility code is owed for records written earlier (CLAUDE.md §3, last rule); the claim is
+  "no new record can hold one", and Task 1 checks that list of writers is complete.
+  `destinationView` is left as it is.
+- **D2 — the refusal's words reach both forms.** `stream.form.endpoint_invalid` ("Enter the full
+  address, starting with https:// or http://") gains "with no user name or password in it" (English
+  and Spanish, `apps/dashboard/src/i18n/strings.ts`). The Backups form already shows it for a server
+  `endpoint` refusal (`backup-screen.ts:1584-1585`). The stream panel does not: its own check
+  (`stream-settings-panel.ts:329`, `/^https?:\/\/\S+$/`) passes `https://u:p@h`, and its `#fail`
+  (`:303-309`) shows "Check this value." for a server `backup.request_invalid` on `endpoint`. So the
+  panel's own check refuses the same parts inline (Forms rule: inline error, action disabled until
+  fixed), and a server `endpoint` refusal maps to `stream.form.endpoint_invalid`. Setup has no
+  endpoint field (review grepped `apps/setup/src`).
+- **D3 — a destination that fails to build leaves nothing half-started, and still reports.**
+  `reload()` builds every destination's backend before it adopts the venue handle (`this.#db =
+  venue`). If one throws: close the backends already built, close the venue handle, and RETHROW, as
+  today. Rethrowing keeps what callers already do with a failed reload: a save answers
+  `reloadErrorCode` and the screen says the box could not load the new settings
+  (`backup-api.ts:314-323`, `backup-screen.ts:1317-1320`); a throw at boot (`boot.ts:2890`) still
+  fails the start, unchanged. `#config` stays as `reload()` already sets it; `enabled` reads false
+  because `#db` stays undefined; `status()` stays `configured: true`, so the alert source raises
+  `backup.destination_overdue` (`alert-sources.ts:207-216`), which is true: nothing is being copied.
+  No new log code. Building is synchronous, so there is no `await` between the `#stopped` check at
+  `:284` and adopting the handle.
+- **D4 — HELD for the watcher.** The third entry (a status read builds its own client per
+  destination) would be met by letting status reads borrow the running sweep's backends, closing a
+  borrowed backend only once its last read settles and never making a teardown wait. The plan review
+  measured how often status is read: the alert source caches it for 60 s (`boot.ts:2945-2949`), Box
+  status reads once on opening (`boot.ts:3101`), the Backups screen on its own actions; building an
+  S3 client does no network work. So the saving is at most one connection set-up per destination
+  per minute, against reference counting in the supervisor, seven tests, and the branch's only
+  concurrency risk. Default unless the watcher says otherwise: do not build it; record "a status
+  read keeps its own client" under the box area's `## Decisions and deliberate limits` with these
+  figures, and delete the entry.
 
 ## Tasks
 
 Each task is test-first: write the failing test, run it and see it fail for the stated reason,
 then the smallest change. Focused commands are given; the pre-push hook and CI do the rest.
 
-### Task 1 — refuse a user name or password in a bucket address (D1, D2)
+### Task 1 — refuse a user name, password, query or fragment in a bucket address (D1, D2)
 
-Files: `packages/stream/src/bucket-config.ts` and its test; `apps/server/src/archive-settings.test.ts`
-(or the status route's suite) for the stored-record case; `apps/dashboard/src/i18n/strings.ts`;
-any other screen wording found by the D2 grep.
+Files: `packages/stream/src/bucket-config.ts` and its test; the server suites named below;
+`apps/dashboard/src/i18n/strings.ts`; `apps/dashboard/src/screens/stream-settings-panel.ts` and its
+test.
 
-1. Failing tests in `packages/stream/src/bucket-config.test.ts`: `https://user:secret@host`,
-   `https://user@host` and `https://:secret@host` are refused as `endpoint`; `https://host:9000/path`
-   is still accepted (a port is not a password). Run
+1. Failing tests in `packages/stream/src/bucket-config.test.ts`: refused as `endpoint` —
+   `https://user:secret@host`, `https://user@host`, `https://:secret@host`,
+   `https://host/?password=x`, `https://host/#x`; still accepted — `https://host:9000/path` (a port
+   is not a password) and `https://host`. Also `https://@host` (empty user info; `new URL` reports
+   both parts empty): state in the test which way it goes and why. Run
    `pnpm --filter @waitron/stream exec vitest run src/bucket-config.test.ts`.
-2. Failing test at the server: a stored archive record whose bucket endpoint carries a password
-   loads as unusable (the existing stored-settings code), and `GET /api/backup/status` answers with no
-   occurrence of the password anywhere in its body (assert on the serialised body, not one field).
-   Also: a dashboard save of `custom-s3` with such an endpoint is refused with `field: "endpoint"`,
-   and the stream save likewise. Find the existing suites for these routes and add cases there.
-3. Implement in `readBucketConfig` with `new URL(endpoint)`'s `username`/`password`.
-4. Words: amend `stream.form.endpoint_invalid` in English and Spanish; update any test that reads
-   the English words from the strings file (do not edit an assertion that spells them; if one does,
-   STOP and report). Grep `apps/setup/src` for endpoint refusal words and treat them the same.
-5. Prove by deletion: remove the new check, see steps 1-2's tests fail, restore.
+2. Failing server tests, in the existing suites for these routes: a dashboard archive save of
+   `custom-s3` with such an endpoint is refused with `field: "endpoint"`; the stream save likewise;
+   an archive record carrying one, written directly as the sealed credential (it can no longer be
+   written through `writeArchiveSettings`), loads as unusable with the existing stored-settings
+   code, and `GET /api/backup/status` answers with no occurrence of the password anywhere in its
+   serialised body.
+3. `apps/server/src/backup-api.settings-evidence.proof.test.ts:599-629` saves such a record and
+   expects it readable with the password masked; it fails under D1 (plan review ran it). Change that
+   case to the new truth, keeping its point (the evidence answer leaks no password): the record,
+   written directly, reads as unreadable and the answer's serialised body holds no password. List
+   it in the PR as a changed assertion.
+4. Implement in `readBucketConfig` with `new URL(endpoint)`'s `username`, `password`, `search`
+   and `hash`.
+5. Dashboard: amend `stream.form.endpoint_invalid` in English and Spanish. The stream panel's
+   `#validate` refuses the same parts (parse with `URL`, not a wider regex); its `#fail` maps a
+   server `backup.request_invalid` on `endpoint` to `stream.form.endpoint_invalid`. Failing tests in
+   the panel's suite first, for both; read the expected words from the strings file.
+6. Check D1's writer list is complete: grep for every place that stores stream or archive bucket
+   settings or builds a `BucketConfig` from outside input, and confirm each goes through
+   `readBucketConfig` or `cloud-backup.ts`'s check. Report the list; a writer that does not is a
+   STOP-and-report, not a silent fix.
+7. Prove by deletion: remove the server check, see steps 1–2 fail; remove the panel check, see
+   its test fail; restore.
 
-### Task 2 — a destination that fails to build leaves archives off (D3)
+### Task 2 — a destination that fails to build leaves nothing half-started (D3)
 
 Files: `apps/server/src/backup-supervisor.ts`, `apps/server/src/backup-supervisor.test.ts`.
 
 1. Failing test: with `buildBackend` throwing an `AppError` for the second of two destinations,
-   `reload()` resolves; `current().enabled` is false; the first destination's backend was closed;
-   the venue handle `openVenue` returned was closed; no sweep tick ran (no upload, no `onScheduled`);
-   the log carries `backup.disabled_backend_failed` with that destination's id and code; `status()`
-   lists both destinations and the failing one's `readErrorCode` is the build code.
-2. Failing test: the same with `buildBackend` throwing on the FIRST destination (nothing built yet).
-3. Failing test: a later `reload()` with a buildable config starts the sweep normally (nothing left
-   latched).
-4. Implement: build the backends in a `try` after the venue opens and the `#stopped` check, before
-   `this.#db = venue`; on failure close what was built and the venue, log, return. If the
-   `#stopped` check after opening applies, keep its current order.
-5. Add `backup.disabled_backend_failed` wherever log codes must be registered (grep how
-   `backup.disabled_open_failed` is registered; run `scripts/alert-codes.test.ts` and
-   `scripts/errors-reachable.test.ts` if either names it).
-6. Prove by deletion.
+   `reload()` rejects with that error; afterwards `current().enabled` is false; the first
+   destination's backend was closed; the venue handle `openVenue` returned was closed; no sweep tick
+   ran (no upload, no `onScheduled`).
+2. Failing test: the same with the FIRST destination throwing (nothing built yet).
+3. Test: a later `reload()` with a buildable config starts the sweep normally (nothing latched).
+4. Implement: build the backends right after the `#stopped` check that follows opening the venue,
+   in a `try`, before `this.#db = venue`; on failure close what was built and the venue, rethrow.
+5. Prove by deletion (put the build back after `this.#db = venue`; see 1 fail).
 
-### Task 3 — status reads use the running sweep's backends; close waits for them (D4)
+### Task 3 — HELD (D4)
 
-Files: `apps/server/src/backup-supervisor.ts`, its test.
-
-1. Failing tests (use the existing `buildBackend` stub that records builds and closes):
-   a. While the sweep runs, `status()` builds NO new backend for a destination the sweep holds, and
-      the listing is served by the sweep's backend.
-   b. A `reload()` (or `stop()`) while a status read's listing is pending does not close that
-      backend until the listing settles, and does not wait for it: `reload()`/`stop()` resolves while
-      the listing is still pending. After the listing settles, the backend is closed exactly once.
-   c. A backend with no read in flight is closed by the teardown at once, exactly once.
-   d. Two overlapping status reads on one backend: closed only after BOTH settle.
-   e. A listing that never settles: `stop()` still resolves, and that backend is never closed.
-   f. With no sweep running (settings off, not primary, or Task 2's build failure), `status()`
-      builds its own backend and closes it on settle, as before.
-   g. A status read that captured the settings before a reload replaced them does not borrow the new
-      sweep's backends (it builds its own), and a read started after the reload borrows the new ones.
-2. Implement per D4. Keep the backends the sweep runs with and the bookkeeping in one place; the
-   sweep (`runBackupSweep`) is given the same backend objects it gets today.
-3. Run `pnpm --filter @waitron/server exec vitest run src/backup-supervisor.test.ts
-   src/backup-supervisor.network.test.ts src/backup-api.test.ts` (and any `backup-*.test.ts` that
-   drives `status()`; grep for `.status()` callers).
-4. Prove by deletion: make the teardown close every backend at once; see b and d fail. Make status
-   always build; see a fail.
+Built only if the watcher says so; otherwise Task 4 records the decision. If built: the design
+in D4; the existing build-per-read cases at `backup-supervisor.network.test.ts:570,604,795` stay
+unchanged for reads with no sweep running.
 
 ### Task 4 — backlog and words that describe the old behaviour
 
 1. Delete the bundle `## Bundle A1391` in `docs/backlog/box.md`, the two detail sections it links
-   ("Backup status sends a saved bucket address as stored, password included." and "A backup
-   destination that fails to build leaves archives reported as on."), and A1391's two lines in
-   `docs/backlog.md` (index ~116 and the list ~1781). Grep `docs/` for any other link to the
-   removed anchors and fix it.
-2. Grep comments and docs (`docs/developers`, the guides under `apps/server/src/guide/`) for
-   sentences describing the old behaviour: the status read building per destination, or an endpoint
-   that may hold a password. `redact-secrets.ts`'s "WHERE IT IS APPLIED" list stays true (the
-   evidence answer still masks); leave it.
+   (`box.md:409` and `:1327`), and A1391's two lines in `docs/backlog.md` (~116 and ~1781). No other
+   doc links to the removed anchors (plan review grepped).
+2. If Task 3 is not built: add under the box area's `## Decisions and deliberate limits` one short
+   entry, "A backup status read builds its own storage client", with the figures in D4.
+3. Grep comments and docs for sentences describing the old behaviour (an endpoint that may hold a
+   password). `redact-secrets.ts`'s "WHERE IT IS APPLIED" list names the evidence answer's endpoint;
+   decide whether that line is still true (records written before this change; the evidence
+   answer's own masking stays) and keep or cut it accordingly. No guide text mentions the address
+   field (plan review grepped `apps/server/src/guide/{en,es}`).
 
 ## Out of scope
 
-- The settings-evidence answer keeps its masking (records written before this change may still be
-  shown there as evidence of what was stored).
-- No change to `runBackupSweep`.
-- No alert for a destination that fails to build; the log line and the "off" status are the change.
+- No change to `runBackupSweep`, to how a stored stream record is read (D1), or to boot's handling
+  of a failed first reload (D3).
