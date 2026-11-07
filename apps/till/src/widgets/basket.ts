@@ -354,8 +354,8 @@ export class TillBasket extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
-      /* Unseen copies of the −, + and × a dish the kitchen has does not offer, so its count, total
-         and Note line up with the rows that keep them whatever width the font gives those buttons. */
+      /* Unseen copies of the −, + and × a line does not offer, so its count, total and Note line
+         up with the rows that keep them whatever width the font gives those buttons. */
       .step-gap,
       .remove-gap {
         visibility: hidden;
@@ -1200,8 +1200,7 @@ export class TillBasket extends LitElement {
   }
 
   /** `−` is disabled at 1: removing a line is the × control's job, never the stepper's. A dish the
-   * kitchen has has no `−`: less of it leaves only through Cancel. One it has started has no `+`
-   * either: the server refuses any change to it. */
+   * kitchen has has no `−`: less of it leaves only through Cancel. */
   #quantityCell(line: OrderLine, index: number, sent: boolean, started: boolean) {
     if (this.readOnly) return html`<span class="qty">${quantityLabel(line)}</span>`;
     const unit = productUnit(line.product);

@@ -301,13 +301,20 @@ describe("till-basket: a stored counter order", () => {
   });
 
   it("offers no + on a dish whose extra the kitchen has started", async () => {
+    const sentAt = "2026-09-30T09:00:00.000Z";
+    const sent = { sentAt, firedAt: sentAt };
     const lines = listed.map((row) =>
-      row.id === "l-4" ? { ...row, state: "preparing" as const } : row,
+      row.id === "l-3"
+        ? { ...row, ...sent }
+        : row.id === "l-4"
+          ? { ...row, ...sent, state: "preparing" as const }
+          : row,
     );
     const el = await mount(storedOrder(), { ...stored, lines });
 
     expect(rows(el)[2]!.querySelector(".step-inc")).toBeNull();
-    expect(rows(el)[2]!.querySelector(".step-gap")).not.toBeNull();
+    expect(rows(el)[2]!.querySelectorAll(".step-gap")).toHaveLength(2);
+    expect(within(el, 2, "data-cancel-line")).not.toBeNull();
     expect(rows(el)[1]!.querySelector(".step-inc")).not.toBeNull();
   });
 

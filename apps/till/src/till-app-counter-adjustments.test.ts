@@ -1414,8 +1414,8 @@ describe("till-app: comping a stored counter order", () => {
 
   describe("a save refused because the kitchen has started the dish since the till read it", () => {
     const refused = { code: "ticket.already_started", status: 409 };
-    const startedListing = () => {
-      const lines = listing(5);
+    const startedListing = (revision = 5) => {
+      const lines = listing(revision);
       lines.lines[0] = { ...lines.lines[0]!, state: "preparing" };
       return lines;
     };
@@ -1436,8 +1436,8 @@ describe("till-app: comping a stored counter order", () => {
     };
 
     const sentence = {
-      en: "The kitchen has already started this item, so it can no longer be changed. The order has been reloaded: cancel the item if needed",
-      es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Se ha vuelto a cargar el pedido: cancela el plato si hace falta",
+      en: "The kitchen has already started a dish on this order, so it can no longer be changed. The order has been reloaded: cancel that dish if needed",
+      es: "La cocina ya ha empezado un plato de este pedido, así que ya no se puede cambiar. Se ha vuelto a cargar el pedido: cancela ese plato si hace falta",
     };
 
     describe.each(["en", "es"] as const)("in %s", (language) => {
@@ -1488,7 +1488,7 @@ describe("till-app: comping a stored counter order", () => {
       );
     });
 
-    it("offers no + after the reload, and the Cancel on screen sends the dish's cancellation", async () => {
+    it("offers no + after the reload, and the Cancel on screen opens the dish's cancellation", async () => {
       const el = await retrieved({
         ...startsMeanwhile(),
         updateWorkingOrder: vi.fn().mockRejectedValue(refused),
@@ -1561,6 +1561,58 @@ describe("till-app: comping a stored counter order", () => {
       expect(inBasket(el, '[data-cancel-line="0"]')).toBeNull();
       expect(banner(el)!.textContent!.trim()).toBe(t("held.reread_failed"));
     });
+
+    it("says the order could not be read again, not to cancel the item, when another write lands between its two reads, and parking and retrieving it brings Cancel back", async () => {
+      const el = await retrieved({
+        retrieveWorkingOrder: vi
+          .fn()
+          .mockResolvedValueOnce(heldOrder(4))
+          .mockResolvedValue(heldOrder(5)),
+        getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(startedListing(6)),
+        updateWorkingOrder: vi.fn().mockRejectedValue(refused),
+      });
+      await raise(el);
+
+      emit(counter(el), "park-order", {});
+      await flush(el);
+
+      expect(counter(el).store.revision).toBe(5);
+      expect(inBasket(el, '[data-cancel-line="0"]')).toBeNull();
+      expect(banner(el)!.textContent!.trim()).toBe(t("held.reread_failed"));
+
+      vi.mocked(api.retrieveWorkingOrder).mockResolvedValue(heldOrder(6));
+      emit(counter(el), "park-order", {});
+      await flush(el);
+      expect(counter(el).store.lines).toEqual([]);
+
+      emit(counter(el), "retrieve-order", { id: "wo-9" });
+      await flush(el);
+      expect(counter(el).store.revision).toBe(6);
+      expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
+    });
+
+    it.each([
+      ["ticket.already_started", "held.started_reloaded"],
+      ["working_order.out_of_date", "held.changed_elsewhere"],
+    ] as const)(
+      "keeps the sentence for %s when the held list cannot be read after the reload",
+      async (code, key) => {
+        const el = await retrieved({
+          ...startsMeanwhile(),
+          updateWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
+        });
+        await raise(el);
+        const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+        vi.mocked(api.listWorkingOrders).mockRejectedValue(new TypeError("Failed to fetch"));
+
+        emit(counter(el), "park-order", {});
+        await flush(el);
+
+        expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+        expect(counter(el).store.revision).toBe(5);
+        expect(banner(el)!.textContent!.trim()).toBe(t(key));
+      },
+    );
   });
 
   it("cancels a dish the kitchen has with a reason", async () => {
