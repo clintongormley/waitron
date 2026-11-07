@@ -1,24 +1,11 @@
 name: image-nightly
 
-# The box image's build + smoke on a schedule and on request, as the safety net for ci.yml scoping
-# the per-PR smoke to image-input changes (`isImageInputPath` in scripts/changed-scope.mjs). ci.yml
-# still smokes every code-gated push to `main` before `publish` ships an image, so this is not that
-# gate; it exists to catch drift the PR gate cannot see — a base image rebuilt for a CVE, a change
-# to the ubuntu-latest runner, an app source change that breaks the container at boot — on days no
-# image-input change and no code push to main exercised it. It is also how you validate an edit to
-# the image workflow itself: dispatch it.
-#
-# The build + smoke live in the reusable image-smoke.yml, shared with ci.yml — this file is only its
-# triggers. `schedule` runs against the default branch; `workflow_dispatch` lets you pick any ref.
+# Manual image qualification; full ci.yml now owns the nightly smoke.
 
 on:
-  schedule:
-    - cron: "0 3 * * *" # nightly, 03:00 UTC — clear of stripe-sandbox (04:00) and mutation (05:00)
   workflow_dispatch:
 
-# The same guard stripe-sandbox.yml sets on this trigger shape: a manual dispatch
-# overlapping the nightly (or another dispatch) supersedes the older run rather than booting a second
-# box beside it.
+# A newer manual check of the same ref supersedes its previous run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

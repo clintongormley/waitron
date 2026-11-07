@@ -1026,12 +1026,6 @@ interface TillRouter extends EventTarget {
   probeNow(): Promise<void>;
 }
 
-/**
- * The till's real router, loaded by path because `tsc` refuses an import from outside this package's
- * root, and it imports nothing itself. So a renamed method fails only at run time, and a change to
- * the till alone does not select `@waitron/server` in CI (`scripts/changed-scope.mjs`), so it does not
- * run this test: the next pull request touching the server is the one that goes red.
- */
 async function loadTillRouter(options: {
   origin: string;
   fetchImpl: typeof fetch;

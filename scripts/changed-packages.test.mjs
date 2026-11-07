@@ -901,3 +901,34 @@ describe("the runnable CLI", () => {
     expect(result.stderr).toContain("@waitron/gone");
   });
 });
+
+describe("implicit package test readers", () => {
+  const packages = [
+    { name: "@waitron/till", dir: "apps/till" },
+    { name: "@waitron/server", dir: "apps/server" },
+    { name: "@waitron/shared", dir: "packages/shared" },
+  ];
+  it.each([
+    "apps/till/src/api/server-router.ts",
+    "apps/till/src/api/client.ts",
+    "apps/till/src/i18n/strings.ts",
+  ])("selects the server reader when %s changes", (path) => {
+    expect(scopeForPaths([path], () => packages)).toMatchObject({
+      kind: "packages",
+      packages: ["@waitron/server", "@waitron/till"],
+    });
+  });
+  it("runs globally if the implicit reader is absent from the workspace", () => {
+    expect(
+      scopeForPaths(["apps/till/src/api/client.ts"], () =>
+        packages.filter((p) => p.name !== "@waitron/server"),
+      ).kind,
+    ).toBe("global");
+  });
+  it("keeps an unrelated package independent", () => {
+    expect(scopeForPaths(["packages/shared/src/time-zone.ts"], () => packages)).toMatchObject({
+      kind: "packages",
+      packages: ["@waitron/shared"],
+    });
+  });
+});

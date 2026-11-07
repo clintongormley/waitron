@@ -1,9 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+diff_paths() {
+  local paths
+  if ! paths=$(git diff --name-only "$@"); then
+    echo "cannot diff the main CI baseline or PR range: running everything" >&2
+    return
+  fi
+  if [[ ${#paths} -gt 131072 ]] || printf '%s\n' "$paths" | LC_ALL=C grep -q '[^A-Za-z0-9._/-]'; then
+    echo "unsafe or oversized changed paths: running everything" >&2
+    return
+  fi
+  printf '%s\n' "$paths"
+}
+
 if [[ "$EVENT" == pull_request ]]; then
-  git fetch --no-tags origin "$BASE_REF"
-  git diff --name-only "origin/$BASE_REF...HEAD"
+  if ! git fetch --no-tags origin "$BASE_REF"; then
+    echo "cannot fetch the PR base: running everything" >&2
+    exit
+  fi
+  diff_paths "origin/$BASE_REF...HEAD"
   exit
 fi
 
@@ -20,7 +36,7 @@ if [[ -z "$deadline" ]]; then
 fi
 if ! candidates=$("$deadline" -k 5 30 gh api \
   "repos/$REPOSITORY/actions/workflows/ci.yml/runs?branch=main&per_page=100" \
-  --jq '.workflow_runs[] | select(.head_branch == "main" and (.event == "push" or .event == "workflow_dispatch") and ((.status == "completed" and .conclusion == "success") or ((.status == "queued" or .status == "in_progress") and .conclusion == null))) | .head_sha'); then
+  --jq '.workflow_runs[] | select(.head_branch == "main" and (.event == "push" or .event == "schedule" or .event == "workflow_dispatch") and .status == "completed" and .conclusion == "success") | .head_sha'); then
   echo "cannot read main CI runs: running everything" >&2
   exit
 fi
@@ -37,10 +53,7 @@ done <<< "$candidates"
 
 if [[ -n "$baseline" ]]; then
   echo "main CI baseline: $baseline" >&2
-  if ! git diff --name-only "$baseline" "$SHA"; then
-    echo "cannot diff the main CI baseline" >&2
-    exit 1
-  fi
+  diff_paths "$baseline" "$SHA"
 else
   echo "no eligible ancestor in the latest 100 main CI runs: running everything" >&2
 fi

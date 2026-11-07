@@ -3,11 +3,8 @@
 # job in `.github/workflows/ci.yml`; the guard suite is `scripts/main-tag-guard.test.mjs`, which
 # runs this script for real against a stubbed `docker` and `gh`.
 #
-# WHY IT EXISTS. Every push to `main` now runs in a concurrency group of its own (ci.yml's
-# `concurrency:` block), so two merges landing close together build at the same time and the run
-# that finishes LAST is not always the one carrying the newest commit. A registry tag is
-# last-write-wins, so the older run would retag `:main` and pull every box following that tag back
-# onto an older image. The immutable `sha-` tag names one commit, and a `hold` still publishes it.
+# Full verification runs can overlap; the stable tag must not move behind an already published commit.
+# A hold still permits this run's immutable SHA image.
 #
 # WHAT IT DOES NOT BUY. This is a question asked before the build, not a compare-and-swap at the
 # registry. It covers the case this repository actually hits — a newer run that has ALREADY
@@ -21,7 +18,7 @@
 #   stdout   `move` (this commit may take the tag) or `hold` (a newer commit already has it).
 #   exit     0 with a decision; non-zero with a message on stderr when it cannot reach one.
 #
-# It fails rather than guessing. For a transient registry error the next merge repairs it. Two
+# It fails rather than guessing. For a transient registry error the next full nightly or manual run can retry it. Two
 # states are NOT self-repairing and need a person: a `:main` carrying no `WAITRON_BUILD_ID`, and one
 # built from a commit GitHub's comparison cannot place against the commit being published: any
 # comparison GitHub refuses fails the script, including one against an old tip GitHub no longer
