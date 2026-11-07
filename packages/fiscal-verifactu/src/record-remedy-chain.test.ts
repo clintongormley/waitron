@@ -5,6 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { type SaleId } from "@waitron/shared";
 import { computeHuella } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -181,3 +182,50 @@ it.each([
     expect(await readChainHead(suite.db, appendNodeId)).toEqual(headBefore);
   },
 );
+
+it("appends a correction of a record of the box this one took over from on this box's chain", async () => {
+  const original = await withTransaction(suite.db, (tx) =>
+    appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1, "preproduction")),
+  );
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  const ownSaleId = await seedSale(suite.db, successor, 1);
+  const own = await withTransaction(suite.db, (tx) =>
+    appendToChain(tx, successor.nodeId, altaFor(successor, ownSaleId, 7, 2, "preproduction")),
+  );
+
+  const appended = await withTransaction(suite.db, (tx) =>
+    appendToChain(tx, successor.nodeId, correction(original.id, 3)),
+  );
+
+  const [row] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, appended.id));
+  expect(row).toMatchObject({
+    nodeId: successor.nodeId,
+    sifId: successor.sifId,
+    secuencia: own.secuencia + 1,
+    anteriorHuella: own.huella,
+    correctsRegistroId: original.id,
+  });
+});
+
+it("refuses a correction of a record of a box this one did not take over from", async () => {
+  const original = await withTransaction(suite.db, (tx) =>
+    appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1, "preproduction")),
+  );
+  const successor = await seedNode(suite.db, "B");
+  const unrelated = await seedNode(suite.db, "C");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  const before = await rows();
+  const headBefore = await readChainHead(suite.db, unrelated.nodeId);
+
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      appendToChain(tx, unrelated.nodeId, correction(original.id, 3)),
+    ),
+  ).rejects.toMatchObject({ code: "fiscal.remedy_invalid", params: { registroId: original.id } });
+  expect(await rows()).toEqual(before);
+  expect(await readChainHead(suite.db, unrelated.nodeId)).toEqual(headBefore);
+});

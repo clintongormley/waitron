@@ -4,7 +4,12 @@ import { eq } from "drizzle-orm";
 import { IssuanceRefusal, recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, SaleOrigin } from "@waitron/shared";
-import { constraintTarget, isUniqueViolation, type Transaction } from "@waitron/db";
+import {
+  constraintTarget,
+  isUniqueViolation,
+  readHistoryNodes,
+  type Transaction,
+} from "@waitron/db";
 import type {
   AltaInput,
   AnulacionInput,
@@ -224,9 +229,12 @@ async function attemptAppend(
       })
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.id, registro.correctsRegistroId));
+    // A correction may name a record of this box or of a box it took over from; it is always
+    // appended to this box's chain.
+    const history = await readHistoryNodes(tx, nodeId);
     if (
       target === undefined ||
-      target.nodeId !== nodeId ||
+      !history.some((id) => id === target.nodeId) ||
       target.saleId !== registro.saleId ||
       target.tipoRegistro !== "alta" ||
       target.idEmisorFactura !== row.idEmisorFactura ||
