@@ -1027,7 +1027,9 @@ file-progress line. An unset or empty selector emits no detail lines. Existing f
 start/end lines still feed the outer deadline's unfinished-file report.
 
 The dashboard shard selects A1230's three unfinished files and sets `DEBUG=pw:api`
-for Playwright's API log. This records reported phases and browser API calls.
+for Playwright's API log. The till shard selects the parties, line-detail and
+refund-unsaved files from [A1027](../backlog/ci.md#the-till-shards-blocked-operation-is-unknown-a1027)
+and enables the same browser-call log. This records reported phases and browser API calls.
 Read the last event for each file alongside the last browser call before
 assigning a cause. A hook that
 throws can emit `hook-start` without `hook-end`. Check later events before treating
