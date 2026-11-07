@@ -1719,11 +1719,13 @@ export class SetupApp extends LitElement {
         this.restoreError =
           code === "restore.environment_mismatch"
             ? say("shell.restore.environment_mismatch")
-            : this.restoreInvalidField !== undefined
-              ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
-              : typeof code === "string"
-                ? sayWith("shell.restore.staging_failed_code", { code })
-                : say("shell.restore.staging_failed");
+            : code === "restore.schema_too_new" || code === "provisioning.database_ahead"
+              ? say("shell.restore.other_version")
+              : this.restoreInvalidField !== undefined
+                ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
+                : typeof code === "string"
+                  ? sayWith("shell.restore.staging_failed_code", { code })
+                  : say("shell.restore.staging_failed");
       }
       this.screen = "restore";
     }
