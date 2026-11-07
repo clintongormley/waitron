@@ -1,29 +1,29 @@
 # A1389: detect card amount mismatches
 
-Authority: watcher, 2026-11-06 23:12, recorded in Lane F questions:
-“Land the detection now, as a normal PR after the freeze: both adapters, mismatch stays uncertain, both amounts in the alert, checks stop at 15 minutes. No migration.”
-The manager release follows after A760. This split deliberately leaves a persistent mismatch holding an unpaid order.
+Authority: watcher, 2026-11-07 02:53, in Lane F questions: “No later processor answer ends a known mismatch: not failed, cancelled or exact success. Only the later manager action does.” “Stop automatic reads at the first mismatch.” This replaces the earlier 15-minute limit. The watcher accepts the reader remaining occupied; A1381, A1395 and the later release must be qualified together before landing.
 
-Preserve signed `8b2f940f4a`’s tip validation and free-sale mark fixes. No table, state, amount-field meaning, fiscal writer, refund or release changes. Claude reviews this page before build; execute inline with failing tests first.
+Preserve signed `8b2f940f4a`’s tip/free-sale fixes. No table, migration, payment-state/amount meaning, fiscal writer, refund or release changes. Claude reviews this revision before build. Execute inline, failing tests first.
 
-## Compare actual amounts
+## Compare and retain
 
-- Trace collect/sweep, payment storage, bill settlement, till marks, reader busy checks and manager routes before changing their gates.
-- Extend both adapters’ `provider.test.ts` and their sweep suites: under, over, zero and exact amounts, plus unavailable evidence. Assert requested amount/reference retained, attempting state, no settlement or refund; exact succeeds. Observe RED.
-- Stripe `provider.ts`: retrieve the intent after reader success and require succeeded plus exact `fromMinorUnits(amountReceived)` before capture; reuse the sweep comparison. Lookup failure stays unknown.
-- SumUp `provider.ts`: carry the transaction’s existing Decimal amount through classification and compare before collect/sweep capture. Keep known mismatches attempting through later unavailable/deferred answers; preserve ordinary resolution. Run GREEN.
+- Trace both adapters, storage, host ticks, bill settlement, till marks, reader checks and manager routes. Keep golden huella and inmutabilidad unedited.
+- Add under/over/zero/exact and lookup-failure cases through collect and sweep. Assert attempting with requested amount/reference, null settlement and no refund; exact succeeds when no mismatch was recorded. Observe RED.
+- Stripe retrieves the intent after reader success and compares `fromMinorUnits(amountReceived)` before capture; the sweep uses the same rule. SumUp carries the existing transaction Decimal through classification and checks both capture paths.
+- Once evidence exists, neither automatic nor manual resolution may capture/fail the row, including later FAILED, CANCELLED, REFUNDED, missing or exact-success answers. Ordinary rows retain their current resolution. Test these alternate paths and concurrent detection.
 
-## Alert and bound automatic checks
+## Persist one readable alert and stop
 
-- Compare existing holds and incident facilities first. Positive-only holds cannot represent zero mismatches; use existing incidents, without fake sale ids or resolution records.
-- Test a small shared `payments/src/capture-mismatch.ts` helper before implementation. Register `payment.capture_mismatch`, expose both amounts and provider/payment/order references, and wire the existing sinks, including Stripe’s contribution.
-- Use existing immutable aggregate-alert replacement: multiple payments must remain visible when deduplication collides. Read historical evidence even after handling the alert.
-- Bound automatic provider calls at 15 minutes after the earliest matching mismatch incident. Test both sides of the boundary, provider reconstruction/restart, handled/replaced alerts and mixed ordinary rows. Acknowledgment never unlocks or resets the window.
-- Gate before network calls. Prove repeated host ticks make no calls for expired mismatches; the host ignores `nextDueAt`. Manual reads retain their current behavior.
+- A shared `payments/src/capture-mismatch.ts` helper records `payment.capture_mismatch` using existing incidents. Keep provider/payment/order references and exact requested/reported values, including zero. Wrap collect-time evidence writes with `saveCharge`; test a full-disk failure.
+- Existing holds require positive amounts. Existing incident deduplication would hide a second payment. Reuse the `HeldAlertSink` shape for aggregate immutable-alert replacement, retaining the open alert’s entries. Wire it through provider contributions/pool. Add no new dependency on core.
+- To enforce the stop across restarts, read whether any open or handled mismatch snapshot names the payment. No earliest-time calculation, deadline, new marker or timer. A repeated detection/handled alert never unlocks or re-alerts that payment.
+- Gate automatic calls before Stripe’s resolve loop and SumUp’s lookup; test repeated host ticks, reconstruction, handled alerts and mixed ordinary rows. A known mismatch stays unknown on explicit manager checking too.
+- Show every amount pair in English/Spanish with the smallest necessary formatter; arrays currently render JSON. Preserve a second payment’s evidence and readable figures. Promise no release action.
 
 ## Verify and finish
 
-- Server tests prove the retained unpaid order/mark cannot be charged again, with no sale, tender, fiscal write or refund. Verify stuck-list visibility and current manual-resolution behavior before/after expiry.
-- Add bilingual alert wording/tests showing both amounts and the limit, without promising release. Update affected guides/backlog and inspect alerts in both themes at phone width.
-- Preserve existing assertions; run focused adapter/shared/server cases, alert/guide guards, partial-commit cases and affected types. Stop for an uncovered storage or policy decision.
-- Run normal finish-branch review, push hook and current-head CI. Publish the normal PR; land only after the A760 freeze is explicitly lifted.
+- Test unpaid order/mark, occupied reader, stuck visibility and no second payment, sale/tender/fiscal write or refund. Cover placed-order cancellation on the combined A1381/A1395/release candidate before landing.
+- Deliberately change only the existing Stripe mismatch `incidentsRaised: 0` expectation to one; preserve its other assertions. Retire affected provider/SumUp sweep comments. Add the helper to the incident-code source list; change no guard policy.
+- Update bilingual guides/backlog and inspect alert views in both themes at phone width. Run focused suites, alert/guide guards, scoped types and partial-commit checks.
+- Normal finish-branch review, push hook and current-head CI follow. Land only after the freeze and the named dependencies; manager release remains a separate slice.
+
+Provenance, read 2026-11-07: [SumUp transaction](https://developer.sumup.com/api/transactions/get/) describes `tip_amount` as “Tip included in the total transaction amount”; compare its existing total `amount`. [Stripe](https://docs.stripe.com/api/payment_intents/object) describes `amount_received` as “Amount that this PaymentIntent collects.”
