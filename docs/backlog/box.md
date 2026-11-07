@@ -1669,13 +1669,16 @@ The owner's four answers: no reserved
 
 - **A backup status read builds its own storage client (watcher, 2026-11-07, A1391).** Each read
   builds a client per destination and closes it when its listing settles, even while the running
-  backup holds clients for the same destinations; it does not borrow those. Status is read rarely:
-  the alert source keeps it for 60 seconds (`apps/server/src/boot.ts`, the `backupCache` beside
-  `backupAlertSource`), the Box status page reads it once when it opens, and the Backups screen on
-  its own actions. Building an S3 client sends nothing over the network, so sharing would save at
-  most one connection set-up per destination per minute, against reference counting in the
-  supervisor and a risk of closing a client a read still uses. These figures come from reading the
-  code, not from a measurement.
+  backup holds clients for the same destinations; it does not borrow those. The alert source keeps
+  the answer for 60 seconds (`apps/server/src/boot.ts`, the `backupCache` beside
+  `backupAlertSource`); each open Backups screen reads it every 10 seconds (`refreshMs` in
+  `apps/dashboard/src/api/live-queries.ts`); `GET /api/box/status` reads it uncached but has no
+  dashboard caller. Building an S3 client sends nothing over the network, but each new client opens
+  its own connection for its listing, so sharing would save up to one connection set-up per
+  destination per read: about six a minute per destination for each open Backups screen. Against that, reference counting in the supervisor
+  and a risk of closing a client a read still uses. The read rates come from reading the code; the
+  connection count from a review probe on 2026-11-07 (two clients against a local S3 server opened
+  two connections).
 
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and

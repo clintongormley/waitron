@@ -286,6 +286,7 @@ export class BackupSupervisor {
         return;
       }
       const venue = db;
+      // Unlike a venue that will not open, this rethrows, so a save answers `reloadErrorCode`.
       const backends: StorageBackend[] = [];
       try {
         for (const dest of cfg.destinations) backends.push(this.#buildBackend(dest));
