@@ -251,7 +251,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { clock } = await buildReportContext(tx);
+        const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
         const businessDay = currentBusinessDay(clock);
         // No `nodeIds`: venue-wide.
         const input = {
