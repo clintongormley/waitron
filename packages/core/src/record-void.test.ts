@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, deviceOrigin } from "@waitron/shared";
+import { AppError, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -508,5 +508,34 @@ describe("recordVoid — stored-predecessor and clock warnings", () => {
     await voidSale(backend, saleId);
 
     expect(observed).toEqual(["checkIntegrity", "recordVoid"]);
+  });
+
+  it("checks and extends the issuing box's chain, not the box that sold", async () => {
+    const issuingBox = brandNodeId("6ba7b810-9dad-11d1-80b4-00c04fd430cb");
+    const seen: { method: string; node: NodeId }[] = [];
+    const fake = new FakeFiscalBackend(suite.db);
+    const backend = wrapBackend(fake, {
+      async checkIntegrity(tx, node) {
+        seen.push({ method: "checkIntegrity", node });
+        return fake.checkIntegrity(tx, node);
+      },
+      async recordVoid(tx, id, reason, issuingNodeId) {
+        seen.push({ method: "recordVoid", node: issuingNodeId });
+        return fake.recordVoid(tx, id, reason, issuingNodeId);
+      },
+    });
+    const { saleId } = await sell(backend);
+    seen.length = 0;
+
+    await withTransaction(suite.db, (tx) =>
+      recordVoid(tx, backend, saleId, "Wrong table", { sessionId: managerSessionId }, issuingBox),
+    );
+
+    expect(seen).toEqual([
+      { method: "checkIntegrity", node: issuingBox },
+      { method: "recordVoid", node: issuingBox },
+    ]);
+    expect((await fake.recordsFor(issuingBox)).map((r) => r.kind)).toEqual(["void"]);
+    expect((await fake.recordsFor(nodeId)).map((r) => r.kind)).toEqual(["sale"]);
   });
 });

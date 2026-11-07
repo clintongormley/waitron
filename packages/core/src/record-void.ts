@@ -98,8 +98,8 @@ export async function recordVoid(
     throw error;
   }
 
-  // Only the sale id: a fiscal identity passed through here would give that fact a second source
-  // of truth in the generic layer.
+  // Only the sale id and the issuing box: a fiscal identity passed through here would give that
+  // fact a second source of truth in the generic layer.
   const fiscal = await backend.recordVoid(tx, saleId, reason, issuingNodeId);
 
   return { fiscal };

@@ -432,9 +432,8 @@ export class VerifactuBackend implements FiscalBackend {
     // The anulación extends the ISSUING box's chain, under that box's SIF, and inherits the
     // original's origin and invoice identity.
     const origin = readSaleOrigin(original.source, original.device_id);
-    const nodeId = issuingNodeId;
-    await this.refuseNewIssuance(tx, nodeId);
-    const sif = await currentSif(tx, nodeId);
+    await this.refuseNewIssuance(tx, issuingNodeId);
+    const sif = await currentSif(tx, issuingNodeId);
     const tenant = await this.taxpayer(tx);
     const now = this.clock.now();
 
@@ -458,7 +457,7 @@ export class VerifactuBackend implements FiscalBackend {
 
     const appended = await appendToChain(
       tx,
-      nodeId,
+      issuingNodeId,
       {
         tipo: "anulacion",
         saleId,
