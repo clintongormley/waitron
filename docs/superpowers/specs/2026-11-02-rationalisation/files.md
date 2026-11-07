@@ -361,6 +361,12 @@ together.
 | 86 | `/var/lib/waitron-host/disk-recovery/<disk id>.json` + `.next` (B3 disk recovery key, #2370) | keep (host-owned) | Written once per disk and never removed (`scripts/box/disk-key.mjs:33,39`, `:246-273`, "nothing may remove a key" at `:259`). The design keeps it outside venue backups and rollback (`docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:619-626`). Nothing outside `scripts/box/` calls it yet (`git grep -l createDiskRecoveryStore -- ':!docs'` → its own file and its test). |
 | 87 | `handover/<operation id>/venue.db` + `.retake-<uuid>` (A1018 Slice 4, #2442) | keep; A1018 owns it | The final copy a stepped-down box describes and hands over (`apps/server/src/handover-capture.ts:60-62`, `handover-source-api.ts:121-134`). New since the inventory. It is a plain copy of the database, and I found no code that deletes a finished one: the only `rm` calls replace the copy or clear a leftover retake (`handover-capture.ts:108`, `handover-source-api.ts:109-112`, `:134`). |
 
+*2026-11-07 (A1390): a start now also removes `archive-download-*`, `archive-validate-*` and
+`restore-admission-*` inside `restore-staging/`, and `restore-entry-*` and `stream-restore-*` in the
+state folder (`restoreLeftovers` in `restore-staging-dirs.ts`, called from `freeSpaceAtStart` and
+`bootServer`). Rows 21 and 22, the layout paragraph in §1 and §4's "Unencrypted copies" worry
+predate it.*
+
 ---
 
 ## 4. How each worry is answered

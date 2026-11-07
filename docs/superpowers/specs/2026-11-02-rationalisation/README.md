@@ -513,7 +513,7 @@ slice 3b.
   ended with one rename. A failed setup always offers Start again (A1322), and a backup recovery cut
   off during setup is redone, not resumed.
 - *Everything temporary goes under `<state>/scratch/`,* emptied at every start; today two of seven
-  kinds of leftover are swept.
+  kinds of leftover are swept (A1390, 2026-11-07: a restore's working folders are swept too).
 - *One durable write everywhere:* the most used helper today does not flush to disk
   (A1329, 2026-11-06: the box's key files done; the rest remain).
 - *The TLS repair archive keeps only its newest copy,* not every old private key forever.
