@@ -1670,6 +1670,21 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     );
   });
 
+  it.each([
+    ["en", "whole", "Pay"],
+    ["es", "whole", "Cobrar"],
+    ["en", "contribution", "Pay"],
+  ] as const)(
+    "titles a bill with no table without saying part of it (%s, %s)",
+    async (locale, way, heading) => {
+      setLocale(locale);
+      const el = await handheld({ tableName: "", way });
+      expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
+        heading,
+      );
+    },
+  );
+
   it("keeps Whole bill, and Continue, disabled until the balance has been read", async () => {
     const el = await handheld({ balance: null });
     const whole = radios(el, "way")[0]!;
