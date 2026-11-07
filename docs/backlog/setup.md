@@ -631,6 +631,7 @@ that operation's reader. Do not remove exact-content checks to make a large file
   Today, once a setup has saved the settings the box sells with, Start again is refused and Continue is the only choice, so a lost password means reinstalling.
   Remove Continue and its password step, and let Start again delete such a setup, still refusing when the database holds an invoice or another record Waitron never deletes.
   This replaces the owner's 16 October order (Continue first). Not yet checked: what else depends on Continue, including its repair of a damaged setup record.
+  Part 1 landed as #2521 (2026-11-07): Start again is offered for a record whose claim mark needs repair. Part 2, removing Continue, waits for the owner's answers to the three questions in [the plan](../superpowers/plans/2026-11-06-a1379-setup-start-again.md).
 - **The repair page's Continue sits tight against the password field at phone width.**
   [Detail](setup.md#the-repair-pages-continue-sits-tight-against-the-password-field-at-phone-width)
 - **The repair page draws a Start-again error twice**, under the password and under the tick box.
