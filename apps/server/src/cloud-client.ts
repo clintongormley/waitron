@@ -33,7 +33,7 @@ import {
 import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
-import { writeTunnelConfiguration } from "./cloud-tunnel.js";
+import { readTunnelPublicKey, writeTunnelConfiguration } from "./cloud-tunnel.js";
 import "./errors.js";
 import { refreshStaffCertificate } from "./cloud-staff-certificate.js";
 
@@ -599,7 +599,17 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         try {
           state = await read();
           if (!state?.view?.registration) return project(state);
-          await installationClient(state, save).refresh(signal);
+          const client = installationClient(state, save);
+          await client.refresh(signal);
+          if (options.tunnelDir && state.environment === "test" && !state.lifecycle?.revoked) {
+            const peerPublicKey = await readTunnelPublicKey(options.tunnelDir);
+            if (peerPublicKey === undefined) return project(state);
+            const remote = state.lifecycle?.view?.services.find(
+              (s) => s.service === "remote_access",
+            );
+            if (remote?.configuration.peerPublicKey !== peerPublicKey)
+              await client.provisionTunnel(peerPublicKey, signal);
+          }
           return project(state);
         } finally {
           await writeTunnelConfiguration(options.tunnelDir, state);

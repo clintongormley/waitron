@@ -2108,8 +2108,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   changed hash is still being investigated. The certificate worker now resumes pending requests,
   renews before expiry and opens the listener after first issuance; its automated public-demo
   deployment is not yet qualified. The optional tunnel runtime now has its own container and box
-  key. The signed Cloud refresh now feeds the tunnel's control file. Left: automatic key
-  submission and startup, image publication, Settings on/off/status, remaining isolation
+  key. The signed Cloud refresh now submits that key and feeds the tunnel's control file through
+  one public-key reader. Left: automatic startup, image publication, Settings on/off/status, remaining isolation
   qualification, final combined installation and reboot, and retirement of `@waitron/tunnel`.
   Translate all returned one editable menu suggestion on the test box; address completion
   remains a trial to build.

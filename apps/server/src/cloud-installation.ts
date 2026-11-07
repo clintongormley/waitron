@@ -37,6 +37,7 @@ interface View extends CloudRegistration {
   services: ServiceView[];
 }
 export interface CloudInstallationState {
+  tunnelConflict?: true;
   view?: View;
   lease?: Envelope;
   pending?: Pending;
@@ -176,6 +177,10 @@ export function readCloudInstallation(
   )
     unavailable();
   const result: CloudInstallationState = { unavailable: value.unavailable, revoked: value.revoked };
+  if (value.tunnelConflict !== undefined) {
+    if (value.tunnelConflict !== true) unavailable();
+    result.tunnelConflict = true;
+  }
   if (value.view !== undefined) result.view = readView(value.view, state);
   if (value.lease !== undefined) result.lease = readLease(value.lease, state);
   if (value.pending !== undefined) {
@@ -268,8 +273,10 @@ export function installationClient(
   save: (state: SavedCloudState) => Promise<void>,
 ) {
   const c = (state.lifecycle ??= { unavailable: false, revoked: false });
-  async function exchange(signal?: AbortSignal): Promise<void> {
-    const p = c.pending;
+  async function exchange(
+    signal?: AbortSignal,
+    p: (Omit<Pending, "action"> & { action: Action | "tunnel-provision" }) | undefined = c.pending,
+  ): Promise<void> {
     if (!p) return;
     try {
       const bytes = machinePayload(state, p),
@@ -303,13 +310,24 @@ export function installationClient(
         new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size)),
       );
       if (!response.ok) {
+        if (
+          p.action === "tunnel-provision" &&
+          response.status === 409 &&
+          object(value) &&
+          value.error === "placement_conflict"
+        ) {
+          c.tunnelConflict = true;
+          throw new AppError("cloud.tunnel_conflict", {});
+        }
         if (response.status === 403 && object(value) && value.error === "revoked") {
           markRevoked(c);
           await save(state);
           return;
         }
         if (
-          (p.action === "configuration" || p.action === "report") &&
+          (p.action === "configuration" ||
+            p.action === "report" ||
+            p.action === "tunnel-provision") &&
           object(value) &&
           ((response.status === 401 && value.error === "invalid_proof") ||
             (response.status === 400 && value.error === "conflict"))
@@ -341,7 +359,7 @@ export function installationClient(
       if (c.revoked) delete c.lease;
       await save(state);
     } catch (error) {
-      c.unavailable = true;
+      if (p.action !== "tunnel-provision") c.unavailable = true;
       await save(state);
       if (error instanceof AppError) throw error;
       throw new AppError("cloud.unavailable", {});
@@ -352,6 +370,18 @@ export function installationClient(
     await save(state);
   }
   return {
+    async provisionTunnel(peerPublicKey: string, signal?: AbortSignal) {
+      if (c.tunnelConflict) {
+        throw new AppError("cloud.tunnel_conflict", {});
+      }
+      // The saved container key makes a lost reply retryable with a fresh proof, without a new intent record.
+      await exchange(signal, {
+        action: "tunnel-provision",
+        operationId: randomUUID(),
+        lease: JSON.stringify(c.lease),
+        body: JSON.stringify({ peerPublicKey }),
+      });
+    },
     async refresh(signal?: AbortSignal) {
       if (c.revoked) return;
       if (c.pending) await exchange(signal);

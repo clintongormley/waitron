@@ -200,6 +200,51 @@ async function readOutbox({ port, venue }: Booted): Promise<unknown> {
 
 const VERIFACTU = { "fiscal-none": false };
 
+it("submits the container's public key through boot's real Cloud worker", async () => {
+  const submitted: unknown[][] = [];
+  const f = await installationFixture(undefined, {
+    tunnel: async (values, saved, _req, res) => {
+      submitted.push(values);
+      const state = saved as unknown as { lifecycle: { view: object } };
+      res.end(JSON.stringify(state.lifecycle.view));
+    },
+  });
+  const publicKey = randomBytes(32).toString("base64");
+  const source = join(f.stateDir, "cloud-connection.json");
+  const saved = JSON.parse(await readFile(source, "utf8"));
+  try {
+    await boot({
+      modules: VERIFACTU,
+      testSubmissions: false,
+      beforeStart: async (venue, directory, env) => {
+        saved.localVenueId = venue.cfg.locationId;
+        saved.view.localVenueId = venue.cfg.locationId;
+        const destination = join(directory, "cloud-connection.json");
+        await writeFile(destination, JSON.stringify(saved), { mode: 0o600 });
+        await rm(source);
+        await symlink(destination, source);
+        env.WAITRON_CLOUD_ORIGIN = f.options.origin;
+        env.WAITRON_ENV = "dev";
+        env.WAITRON_TUNNEL_CONTROL_DIR = join(directory, "tunnel");
+        await mkdir(env.WAITRON_TUNNEL_CONTROL_DIR);
+        await writeFile(join(env.WAITRON_TUNNEL_CONTROL_DIR, "public-key"), publicKey + "\n");
+      },
+    });
+    await vi.waitFor(
+      () =>
+        expect(submitted.map((v) => v[7])).toEqual([JSON.stringify({ peerPublicKey: publicKey })]),
+      { timeout: 10_000 },
+    );
+  } finally {
+    try {
+      if (server) await server.close();
+    } finally {
+      server = undefined;
+      await f.close();
+    }
+  }
+}, 60_000);
+
 describe("boot's Retry now wiring", () => {
   it("a press wakes the fiscal loop out of its ten-minute sleep, and the read shows the outbox", async () => {
     const booted = await boot({ modules: VERIFACTU, testSubmissions: true });
