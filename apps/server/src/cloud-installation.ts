@@ -359,7 +359,7 @@ export function installationClient(
       if (c.revoked) delete c.lease;
       await save(state);
     } catch (error) {
-      c.unavailable = true;
+      if (p.action !== "tunnel-provision") c.unavailable = true;
       await save(state);
       if (error instanceof AppError) throw error;
       throw new AppError("cloud.unavailable", {});
@@ -373,8 +373,6 @@ export function installationClient(
     async provisionTunnel(peerPublicKey: string, signal?: AbortSignal) {
       if (c.revoked || state.environment !== "test") return;
       if (c.tunnelConflict) {
-        c.unavailable = true;
-        await save(state);
         throw new AppError("cloud.binding_conflict", {});
       }
       // The saved container key makes a lost reply retryable with a fresh proof, without a new intent record.
