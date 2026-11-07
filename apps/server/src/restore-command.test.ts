@@ -400,6 +400,29 @@ describe("waitron-restore restore", () => {
       "restore failed: restore.hook_failed (module fiscal-verifactu: series.code_too_long)",
     ]);
   });
+
+  it("says a failed schema update can be fixed by running the same command again", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-migration-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: {
+        WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+        WAITRON_ENV: "preproduction",
+      },
+      lockVenue: unlockedVenue,
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new AppError("migrations.apply_failed", { set: "__drizzle_migrations_db" });
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; run the same command again: it starts the restore over",
+    ]);
+  });
 });
 
 const KIT: RecoveryKit = {

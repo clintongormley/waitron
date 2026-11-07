@@ -411,6 +411,9 @@ function sharedRefusal(err: unknown): string {
   if (err.code === "provisioning.database_in_use") {
     return "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
   }
+  if (err.code === "migrations.apply_failed") {
+    return "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; run the same command again: it starts the restore over";
+  }
   if (hasCode(err, "restore.hook_failed")) {
     return `restore failed: restore.hook_failed (module ${err.params.module}: ${err.params.code})`;
   }
