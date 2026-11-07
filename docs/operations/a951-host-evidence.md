@@ -236,6 +236,57 @@ registration and earlier demo remain available; the owner's three containers sta
 Physical reboot, public renewal, revocation, another allocated venue and publication/installation
 remain open. The watcher reserved reboot coordination and the remaining gateway checks with D.
 
+## Second venue, renewal and revocation, 7 November 2026
+
+The later coordinated trial closes the public renewal, revocation and allocated-venue checks
+left open by the earlier sections. It used the same application source as `01772954f3` in the
+existing disposable fixture, beside the running old demo. The canonical managed fixture stayed
+stopped with its state retained. This trial does not add a managed installation or physical reboot.
+
+A fresh signed pairing created second installation `bb7fd7d1-fdf7-4009-8294-ee410b6248bd`,
+Cloud venue `2b8389b1-480a-49a1-9fa8-8674ca49831a`, at `10.77.17.4`. Its normal boot worker
+collected the signed placement and its first trusted staff certificate. Chromium reached the
+assigned staff hostname through `2.29.248.230:443`, signed in and opened the overview with normal
+certificate trust. Both that venue and the old demo returned trusted HTTP 200. Holding TLS's
+hostname on the second venue while sending the old demo's Host header returned 404 on three
+reads. The second venue's session cookie returned 401 at the live old demo; its own session
+remained usable. Five non-staff routes returned 404. From the second peer's network namespace,
+its own staff listener returned trusted 200, while connections to `10.77.17.2:443` and
+`10.77.17.3:443` timed out. This covers those addresses and requests.
+
+Renewal used an agreed simulated due input. A self-signed certificate with the retained staff
+key, a start yesterday and expiry about one hour ahead satisfied the existing renewal formula.
+Cloud replaced only this registration's saved public certificate input and woke its existing
+staff certificate job. The box then installed that same due input atomically. A public connection
+refused its self-signed chain. The normal worker collected the replacement issued by Let's
+Encrypt, and new public connections returned trusted 200 with the replacement fingerprint
+`F0:0A:A7:5D:7C:D5:4D:50:B6:4F:69:CD:89:DD:40:95:4B:E7:94:AA:39:00:39:AB:3A:83:BC:0C:84:D5:E8:51`.
+PID `2205283`, its process start time, private-key digest and registration remained equal.
+Cloud retained request `d585cb53-df9c-488a-b7e5-65002144971f` and revision 1 for this replacement.
+This proves renewal and listener reload from a simulated due input, not elapsed calendar time.
+Neither machine's clock changed, and the private key stayed on the box.
+
+Authenticated local `POST /management-api/cloud/revoke` then returned 200 for this second
+installation. The saved revoked state had no lease or peer configuration, and its WireGuard
+interface disappeared. A new public connection failed with `ECONNRESET`; a new local
+administrator login and session read still returned 200. Cloud's readback confirmed gateway
+sequence 164 contained exactly the original two routes and peers, with both earlier placements
+unchanged. The old demo still returned trusted 200. The separate customer-site certificate job
+had missing public-CSR input failures before revocation; no customer-site certificate was issued
+by hand. This trial qualifies the staff entrance.
+
+Commands and raw results are in Lane E's local `receipts/a951s-renewal-20261107/`:
+`refresh-pairing.sh`, `complete-pairing.sh`, `run-second-live.sh`, `two-venue-public.mjs`,
+`second-browser.mjs`, `peer-cross-venue.log`, `prepare-due-input.log`, `apply-due-input.log`,
+`observe-renewal.log`, `due-public-readback.log`, `renewed-public.mjs`, `revoke-local.log`,
+`revoke-public.log`, `cloud-revocation-return.md` and `cleanup-box.log`. The first fixture restart
+consumed an old ready file; the first peer check ran before configuration; the first Host probe
+left TLS's hostname implicit and reached the old venue. Those probe failures are retained.
+The corrected commands produced the results above without an application repair. Cleanup removed
+the second fixture process, peer and network, released the box turn and closed this firing's
+SSH masters. The owner's three containers remained healthy. Physical reboot, publication and
+installation of the combined build remain open under the landing freeze.
+
 # Current addendum: returned Debian box, 5 November 2026
 
 > 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol

@@ -1048,12 +1048,13 @@ trust. A peer-container restart recovered the trusted public page. The bounded t
 own fixture and peer afterwards; the earlier managed demo remains separate and running.
 [Receipt and limits](../operations/a951-host-evidence.md#a951-s-automatic-staff-connection-7-november-2026).
 
+The second-venue trial exercised a simulated due-input public renewal and listener reload,
+signed revocation, and separation from a live allocated venue. The earlier managed offline sale
+and Compose forwarding checks retain their recorded scope.
+[Second-venue receipt and limits](../operations/a951-host-evidence.md#second-venue-renewal-and-revocation-7-november-2026).
+
 Remaining work, following the owner's certificate-first order:
 
-- Qualify the certificate worker on the managed public demo. The worker uses the existing signed
-  submit/status exchange, resumes pending requests after restart and renews before expiry. A local
-  TLS handshake observed the renewed chain without restarting the listener; no new public
-  certificate was issued for that synthetic test.
 - Finish publication of the combined build and its installation path. Its normal
   server bundle passed a bounded systemd run: Settings off survived an app restart and Cloud
   refresh, local sign-in worked, and on restored trusted public access with the same registration,
@@ -1067,15 +1068,6 @@ Remaining work, following the owner's certificate-first order:
   `@waitron/tunnel`, its boot worker and its four relay settings. The staff listener is the
   remote entrance; it supplies no relay for standby adoption.
 - Qualify the final combined installation across a physical reboot and explain the manual demo's changed connection-file hash.
-- Complete public renewal, revocation and separation from another allocated venue.
-  A fresh unpaired preproduction venue completed a real €2.50 cash sale and replay through the
-  managed bundle in its own offline network namespace. The paired registration was retained;
-  the new fixture's invalid tax number was fixed test-first before that successful run.
-  [Offline sale and limits](../operations/a951-host-evidence.md#managed-bundle-cash-sale-without-internet-7-november-2026). The managed public check rejected foreign Host
-  headers and eight authenticated non-staff paths, and password guessing reached its wait window.
-  A controlled Compose LAN forwarding probe and one existing cash/F1 route case in a network
-  namespace with no external route passed; their scope is recorded in the
-  [receipt](../operations/a951-host-evidence.md#staff-hostname-and-network-isolation-7-november-2026).
 - Translate all returned one real editable English menu suggestion on the test box on
   7 November through the signed connection; it remains unaccepted. The address fields still need
   their trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
