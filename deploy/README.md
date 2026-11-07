@@ -617,13 +617,20 @@ command against it treat that entrypoint differently:
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that
   fails after its fiscal step has committed keeps the restored database and the box's old secrets,
-  with no `trading.env`; a restore staged for the next start is finished by that start. One that
-  fails in between (while migrating the restored database, or in a module's restore step) keeps the
-  restored database, with the box's old identity set aside as `trading.env.replaced`. Outside "as
-  they were": a restore that is killed; a folder made to hold a secret (such as `tls/`) on a box
-  that had none; the backup room note, deleted before anything changes and written again by the
-  next backup; and Litestream's `.venue.db-litestream/` folder beside the old database, which is
-  not put back if the move fails after removing it.
+  with no `trading.env`; a restore staged with a node recovery key for the next start is finished
+  by that start. One that fails in between (while migrating the restored database, or in a module's
+  restore step) keeps the restored database, with the box's old identity set aside as
+  `trading.env.replaced`; a command-line restore that failed while migrating finished when the
+  command was run again. Outside "as they were": a restore that is killed; a folder made to hold a
+  secret (such as `tls/`) on a box that had none; the backup room note, deleted before anything
+  changes and written again by the next backup; Litestream's `.venue.db-litestream/` folder beside
+  the old database, which is not put back if the move fails after removing it; a move that could
+  not put all of the old database back, covered in the next paragraph; an identity that could not
+  be renamed back (`restore.identity.put_back_failed` in the log), left as `trading.env.replaced`
+  with no `trading.env`; a secret that could not be renamed back after a failed publish
+  (`restore.secrets.put_back_failed`), which leaves the backup's file in its place and the box's
+  own beside it as `<name>.restore-previous`; and an older `trading.env.replaced` from an earlier
+  restore, which a failed move that put the old database back does not keep.
 
   A restore moves the old database into a hidden folder in the venue folder
   (`/var/lib/waitron/state/venue/` inside the container), named `.venue.db-replaced-` and six

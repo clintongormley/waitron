@@ -46,7 +46,7 @@ const ENTRIES = [
 
 async function leftovers(stateDir: string): Promise<string[]> {
   const names = (await readdir(stateDir, { recursive: true })).map(String);
-  return names.filter((name) => name.endsWith(".incoming") || name.endsWith(".previous"));
+  return names.filter((name) => name.endsWith(".incoming") || name.endsWith(".restore-previous"));
 }
 
 async function renamesDuring(run: () => Promise<unknown>): Promise<string[][]> {
@@ -155,7 +155,7 @@ describe("stageSecrets", () => {
   // `.replaced` is the set-aside identity's name; `.tmp` a staged file's working copy.
   it.each([
     "secrets/trading.env.replaced",
-    "secrets/secrets.env.previous",
+    "secrets/secrets.env.restore-previous",
     "secrets/tls/server.key.incoming.tmp",
     "secrets/tls/server.key.tmp",
     "secrets/trading.env.INCOMING",
@@ -223,6 +223,34 @@ describe("stageSecrets", () => {
     expect(renames.filter(([from]) => from.endsWith(".incoming"))).toHaveLength(ENTRIES.length);
   });
 
+  it.each(["publishes", "fails to publish"])(
+    "keeps the certificate reissue's own server.crt.previous when it %s a server.crt",
+    async (outcome) => {
+      const stateDir = await seedState();
+      const boxCopy = join(stateDir, "tls/server.crt.previous");
+      await writeFile(join(stateDir, "tls/server.crt"), "old-server-crt\n");
+      await writeFile(boxCopy, "reissue's copy of the certificate before\n");
+      const staged = await stageSecrets({
+        entries: [...ENTRIES, entry("secrets/tls/server.crt", "new-server-crt\n")],
+        stateDir,
+        log: vi.fn(),
+      });
+      if (outcome === "publishes") {
+        await staged.publish();
+        await staged.finish();
+      } else {
+        const real = await vi.importActual<typeof fs>("node:fs/promises");
+        vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+          if (String(to) === join(stateDir, "trading.env")) return failing("EIO");
+          return real.rename(from, to);
+        });
+        await expect(staged.publish()).rejects.toMatchObject({ code: "EIO" });
+        expect(await readFile(join(stateDir, "tls/server.crt"), "utf8")).toBe("old-server-crt\n");
+      }
+      expect(await readFile(boxCopy, "utf8")).toBe("reissue's copy of the certificate before\n");
+    },
+  );
+
   // Eight rename calls: each target set aside (tls/ca.crt has none to set aside), then placed.
   it.each([1, 2, 3, 4, 5, 6, 7, 8])(
     "a publish whose rename %i fails puts back what it renamed and throws the failure",
@@ -255,15 +283,15 @@ describe("stageSecrets", () => {
     const stateDir = await seedState();
     const staged = await stageSecrets({ entries: ENTRIES, stateDir, log: vi.fn() });
     expect(await renamesAndSyncsDuring(stateDir, () => staged.publish())).toEqual([
-      "secrets.env → secrets.env.previous",
+      "secrets.env → secrets.env.restore-previous",
       "secrets.env.incoming → secrets.env",
-      "tls/ca.crt → tls/ca.crt.previous",
+      "tls/ca.crt → tls/ca.crt.restore-previous",
       "tls/ca.crt.incoming → tls/ca.crt",
-      "tls/server.key → tls/server.key.previous",
+      "tls/server.key → tls/server.key.restore-previous",
       "tls/server.key.incoming → tls/server.key",
       "sync .",
       "sync tls",
-      "trading.env → trading.env.previous",
+      "trading.env → trading.env.restore-previous",
       "trading.env.incoming → trading.env",
       "sync .",
     ]);
@@ -290,9 +318,11 @@ describe("stageSecrets", () => {
       expect(await readFile(join(stateDir, rel), "utf8")).toBe(text);
     await expect(stat(join(stateDir, "tls/ca.crt"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await leftovers(stateDir)).toEqual([]);
-    expect(events.slice(events.lastIndexOf("tls/server.key.previous → tls/server.key"))).toEqual([
-      "tls/server.key.previous → tls/server.key",
-      "secrets.env.previous → secrets.env",
+    expect(
+      events.slice(events.lastIndexOf("tls/server.key.restore-previous → tls/server.key")),
+    ).toEqual([
+      "tls/server.key.restore-previous → tls/server.key",
+      "secrets.env.restore-previous → secrets.env",
       "sync tls",
       "sync .",
     ]);
@@ -325,7 +355,7 @@ describe("stageSecrets", () => {
     const injected = Object.assign(new Error("injected rename failure"), { code: "EIO" });
     vi.mocked(fs.rename).mockImplementation(async (from, to) => {
       if (String(from) === join(stateDir, "tls/server.key.incoming")) throw injected;
-      if (String(from) === join(stateDir, "secrets.env.previous"))
+      if (String(from) === join(stateDir, "secrets.env.restore-previous"))
         throw Object.assign(new Error("injected put-back failure"), { code: "EACCES" });
       return real.rename(from, to);
     });
@@ -334,7 +364,9 @@ describe("stageSecrets", () => {
       file: "secrets.env",
       errno: "EACCES",
     });
-    expect(await readFile(join(stateDir, "secrets.env.previous"), "utf8")).toBe(OLD["secrets.env"]);
+    expect(await readFile(join(stateDir, "secrets.env.restore-previous"), "utf8")).toBe(
+      OLD["secrets.env"],
+    );
   });
 
   it("a target that cannot be set aside as previous fails the publish with nothing replaced", async () => {
@@ -342,7 +374,7 @@ describe("stageSecrets", () => {
     const staged = await stageSecrets({ entries: ENTRIES, stateDir, log: vi.fn() });
     const real = await vi.importActual<typeof fs>("node:fs/promises");
     vi.mocked(fs.rename).mockImplementation(async (from, to) => {
-      if (String(to) === join(stateDir, "tls/server.key.previous")) return failing("EPERM");
+      if (String(to) === join(stateDir, "tls/server.key.restore-previous")) return failing("EPERM");
       return real.rename(from, to);
     });
     await expect(staged.publish()).rejects.toMatchObject({ code: "EPERM" });
@@ -388,8 +420,8 @@ describe("stageSecrets", () => {
     const stale = [
       "secrets.env.incoming",
       "tls/server.key.incoming.tmp",
-      "trading.env.previous",
-      "tls/server.key.previous",
+      "trading.env.restore-previous",
+      "tls/server.key.restore-previous",
     ];
     for (const rel of stale) {
       await writeFile(join(stateDir, rel), "stale\n");

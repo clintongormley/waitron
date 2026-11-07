@@ -133,6 +133,114 @@ it.each([
   },
 );
 
+/** Every call of `nativeFs[method]` that `matches` picks throws `failure` until the mocks are
+ * restored. */
+function failEvery(
+  method: "copyFile" | "rename" | "writeFile",
+  matches: (...args: string[]) => boolean,
+  failure: Error,
+) {
+  const original = nativeFs[method] as (...args: unknown[]) => Promise<unknown>;
+  vi.spyOn(nativeFs, method).mockImplementation((async (...args: unknown[]) => {
+    if (matches(...args.map(String))) throw failure;
+    return original(...args);
+  }) as never);
+  syncBuiltinESMExports();
+}
+
+const enospc = () =>
+  Object.assign(new Error("injected full disk before placement"), { code: "ENOSPC" });
+
+const beforePlacement = {
+  "the first-start marker cannot be written": (f: Awaited<ReturnType<typeof stage>>) =>
+    failEvery(
+      "writeFile",
+      (path) => path === join(f.stateDir, "rebuild-first-start.json.tmp"),
+      enospc(),
+    ),
+  "the copy for the admission check cannot be written": () =>
+    failEvery("copyFile", (_from, to) => to.includes("restore-admission-"), enospc()),
+};
+
+it.each(
+  (["archive", "stream"] as const).flatMap((kind) =>
+    Object.keys(beforePlacement).map(
+      (name) => [kind, name as keyof typeof beforePlacement] as const,
+    ),
+  ),
+)(
+  "a started %s request whose restore stops before placement because %s gets its marker back and the next start finishes it",
+  async (kind, name) => {
+    const inject = beforePlacement[name];
+    const f = await stage(kind);
+    const markerPath = join(f.stateDir, "restore-request.json");
+    const before = await readFile(markerPath, "utf8");
+    inject(f);
+    await expect(f.run()).rejects.toMatchObject({ code: "ENOSPC" });
+    vi.restoreAllMocks();
+    syncBuiltinESMExports();
+    expect(await readFile(markerPath, "utf8")).toBe(before);
+    expect(await readdir(f.venueDir)).not.toContain("venue.db");
+    await expect(f.run()).resolves.toBe(true);
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
+  },
+);
+
+it("a started request whose database move leaves the old one set aside gets its marker back and the next start finishes it", async () => {
+  const f = await stage("archive");
+  await f.seedDestination();
+  const markerPath = join(f.stateDir, "restore-request.json");
+  const before = await readFile(markerPath, "utf8");
+  const venueFile = join(f.venueDir, "venue.db");
+  failEvery(
+    "rename",
+    (_from, to) => to === venueFile,
+    Object.assign(new Error("injected placement failure"), { code: "EIO" }),
+  );
+  await expect(f.run()).rejects.toMatchObject({
+    code: "restore.placement_failed",
+    params: { kept: "set_aside" },
+  });
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
+  expect(await readFile(markerPath, "utf8")).toBe(before);
+  await expect(f.run()).resolves.toBe(true);
+  expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
+  expect((await f.snapshot()).allocations).toHaveLength(2);
+});
+
+// The identity's way back failing does not keep "placement started": nothing a module step commits
+// has run, so the next start places the archive afresh, and the old identity stays set aside.
+it("a started request whose old identity cannot be put back after a placement failure gets its marker back", async () => {
+  const f = await stage("archive");
+  await f.seedDestination();
+  const previousIdentity = `WAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n# old box\n`;
+  await writeFile(join(f.stateDir, "trading.env"), previousIdentity, { mode: 0o600 });
+  const markerPath = join(f.stateDir, "restore-request.json");
+  const before = await readFile(markerPath, "utf8");
+  const venueFile = join(f.venueDir, "venue.db");
+  const replaced = join(f.stateDir, "trading.env.replaced");
+  failEvery(
+    "rename",
+    (from, to) => (from === `${venueFile}.incoming` && to === venueFile) || from === replaced,
+    Object.assign(new Error("injected placement failure"), { code: "EIO" }),
+  );
+  await expect(f.run()).rejects.toMatchObject({
+    code: "restore.placement_failed",
+    params: { kept: "previous" },
+  });
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
+  await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
+  expect(await readFile(markerPath, "utf8")).toBe(before);
+  await expect(f.run()).resolves.toBe(true);
+  expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).not.toBe(previousIdentity);
+  expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
+});
+
 it.each(["archive", "stream"] as const)(
   "a %s stage marker cannot substitute for a committed activation",
   async (kind) => {

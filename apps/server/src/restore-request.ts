@@ -9,13 +9,12 @@ import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
-import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
+import { stagedPath, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
   lockRestoreTarget,
-  placementLeftNothingChanged,
   restoreFromArtifactFile,
   validateArtifactFile,
   validateDatabaseEntries,
@@ -442,7 +441,7 @@ async function runHeld(
   let managedCloud: { requestId: string; pointId: string } | undefined;
   let resuming = false;
   let markedStarted = false;
-  let admissionRefused = false;
+  let placed = false;
   try {
     const marker = JSON.parse(raw) as {
       version?: unknown;
@@ -553,22 +552,6 @@ async function runHeld(
         await copy.discard();
       }
     }
-    const admission = withModuleOperations?.checkBeforePlacement;
-    if (
-      marker.nodeRecoveryKey === true &&
-      !resuming &&
-      withModuleOperations !== undefined &&
-      admission !== undefined
-    ) {
-      withModuleOperations.checkBeforePlacement = async (context) => {
-        try {
-          await admission(context);
-        } catch (error) {
-          admissionRefused = true;
-          throw error;
-        }
-      };
-    }
     const common = {
       venueDir: deps.venueDir,
       stateDir: deps.stateDir,
@@ -579,6 +562,9 @@ async function runHeld(
       log: deps.log,
       ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
       ...(resuming && operation !== undefined ? { resumeOperation: operation.binding } : {}),
+      onDatabasePlaced: () => {
+        placed = true;
+      },
     };
     let run: () => Promise<void>;
     if (marker.kind === "stream") {
@@ -627,19 +613,16 @@ async function runHeld(
     }
     await run();
   } catch (error) {
-    // Refused admission, and a placement that put back all it changed, leave nothing to resume. A
-    // later failure can follow activation and must retain the checked-replay marker.
-    if (snapshot && error instanceof SnapshotPlacementRefused) {
-      if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
+    if (markedStarted && !placed) {
+      // No module step ran on the archive's database, so the next start places it afresh. Once it
+      // is placed, a failure can follow a committed activation, which only a checked replay finds.
+      await writeFileDurable(join(deps.stateDir, MARKER), raw, 0o600);
     } else if (
       !resuming &&
-      (admissionRefused ||
-        (markedStarted && placementLeftNothingChanged(error)) ||
-        (isAppError(error) && error.code === "provisioning.database_in_use"))
+      !markedStarted &&
+      !(snapshot && error instanceof SnapshotPlacementRefused) &&
+      !(isAppError(error) && error.code === "provisioning.database_in_use")
     ) {
-      if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
-    } else if (!resuming && !markedStarted) {
-      // A later file error can follow a committed activation; started requests need checked replay.
       await clearStagedRestore(deps.stateDir);
     }
     throw error;
