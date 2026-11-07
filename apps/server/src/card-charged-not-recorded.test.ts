@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { randomUUID } from "node:crypto";
@@ -522,6 +523,7 @@ function realSumUp(): RealProvider {
   });
   return {
     provider: new SumUpCloudProvider({
+      captureAlerts,
       db: venue.db,
       client,
       incidents: () => Promise.resolve(true),
@@ -547,7 +549,7 @@ function realStripe(): RealProvider {
     return intent;
   });
   return {
-    provider: new StripeTerminalProvider({ db: venue.db, client, poll: noWait }),
+    provider: new StripeTerminalProvider({ captureAlerts, db: venue.db, client, poll: noWait }),
     charges: async () =>
       Promise.all(begun.map(async (id) => (await client.retrievePaymentIntent(id)).status)),
   };

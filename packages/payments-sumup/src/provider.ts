@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, compareDecimal, jobOrigin } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, jobOrigin } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -8,6 +8,7 @@ import type {
   CollectParams,
   CollectionOwners,
   ForwardResult,
+  CaptureMismatchSink,
   IncidentSink,
   PaymentProvider,
   PaymentResult,
@@ -21,8 +22,10 @@ import type {
 } from "@waitron/payments";
 import {
   captureAttempting,
-  failAttempting,
   getPaymentByRef,
+  hasCaptureMismatch,
+  recordCaptureMismatch,
+  failAttempting,
   insertAttempting,
   listAttempting,
   refundLookupOf,
@@ -72,6 +75,7 @@ export interface SumUpCloudProviderOptions {
   db: Database;
   /** Where `resolvePending` raises `payment.pending_outcome_unactionable`. */
   incidents: IncidentSink;
+  captureAlerts: CaptureMismatchSink;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
   now?: () => Date;
 }
@@ -114,24 +118,19 @@ export function cardFromTransaction(t: SumUpTransaction): CardDetails | undefine
  * stays `attempting`, and `resolvePending` decides. `card` rides the `captured`
  * variant so both capture paths persist it without re-fetching the transaction. */
 type PollOutcome =
-  | { kind: "captured"; transactionId: string; settledAt: Date; card?: CardDetails }
+  | {
+      kind: "captured";
+      transactionId: string;
+      settledAt: Date;
+      amount: Decimal;
+      card?: CardDetails;
+    }
   | { kind: "failed" }
   | { kind: "pending" }
   | { kind: "deferred" };
 
-/**
- * The SumUp Cloud API `PaymentProvider` (server-driven, asynchronous outcome). `collect`:
- *  T1   commit an `attempting` row keyed by a fresh `payment_ref` (before any network);
- *  net  create a reader checkout carrying that `payment_ref` as `foreign_transaction_id`;
- *  T1.5 stamp SumUp's `client_transaction_id` into `external_ref` (the POLL key — on a captured row
- *       `external_ref` becomes SumUp's transaction id, the REFUNDABLE key; see `captureAttempting`);
- *  poll the transaction until `status` leaves `PENDING`;
- *  T2   `captured` on `SUCCESSFUL`, `failed` on `FAILED`/`CANCELLED` or a definite create refusal.
- * Anything else — a timeout, a network error, `REFUNDED`, an unknown status — is NOT resolved here:
- * the row stays `attempting` and the result carries `state: "attempting"`, `settledAt: null`.
- * `Terminate Checkout` is never called: it races the customer's tap. `resolvePending` (the sweep) is
- * what terminates those rows.
- */
+/** The attempt is committed before the checkout begins. While attempting, `externalRef` is the
+ * poll key; capture replaces it with the refundable transaction id. */
 export class SumUpCloudProvider implements PaymentProvider {
   readonly provider = SUMUP_PROVIDER;
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
@@ -192,7 +191,11 @@ export class SumUpCloudProvider implements PaymentProvider {
       return this.pendingResult(paymentRef, params.amount);
     }
     if (!created.accepted) {
-      const row = await this.inTransaction((tx) => failAttempting(tx, key));
+      const row = await this.inTransaction(async (tx) =>
+        (await hasCaptureMismatch(tx, key))
+          ? (await getPaymentByRef(tx, key))!
+          : failAttempting(tx, key),
+      );
       return {
         provider: SUMUP_PROVIDER,
         paymentRef,
@@ -215,19 +218,35 @@ export class SumUpCloudProvider implements PaymentProvider {
       return this.pendingResult(paymentRef, params.amount);
     }
     const card = outcome.kind === "captured" ? outcome.card : undefined;
-    const row =
-      outcome.kind === "captured"
-        ? await saveCharge(() =>
-            this.inTransaction((tx) =>
-              captureAttempting(tx, {
+    const save = () =>
+      this.inTransaction(async (tx) => {
+        if (await hasCaptureMismatch(tx, key)) return (await getPaymentByRef(tx, key))!;
+        if (outcome.kind === "captured") {
+          if (compareDecimal(outcome.amount, params.amount) !== 0) {
+            await recordCaptureMismatch(
+              tx,
+              this.opts.captureAlerts,
+              {
                 ...key,
-                settledAt: outcome.settledAt,
+                workingOrderId: params.workingOrderId,
                 externalRef: outcome.transactionId,
-                card,
-              }),
-            ),
-          )
-        : await this.inTransaction((tx) => failAttempting(tx, key));
+                requestedAmount: params.amount,
+                reportedAmount: outcome.amount,
+              },
+              outcome.settledAt,
+            );
+            return (await getPaymentByRef(tx, key))!;
+          }
+          return captureAttempting(tx, {
+            ...key,
+            settledAt: outcome.settledAt,
+            externalRef: outcome.transactionId,
+            card,
+          });
+        }
+        return failAttempting(tx, key);
+      });
+    const row = outcome.kind === "captured" ? await saveCharge(save) : await save();
     return {
       provider: SUMUP_PROVIDER,
       paymentRef,
@@ -242,15 +261,13 @@ export class SumUpCloudProvider implements PaymentProvider {
     return { provider: SUMUP_PROVIDER, paymentRef, state: "attempting", amount, settledAt: null };
   }
 
-  /** Only the three documented terminal statuses resolve a row; `REFUNDED` and anything
-   * unrecognised are `deferred` to the sweep. A null (SumUp holds no transaction yet —
-   * the reader has not started the checkout) is `pending`. */
   static classify(t: SumUpTransaction | null, now: Date): PollOutcome {
     if (t === null || t.status === "PENDING") return { kind: "pending" };
     if (t.status === "SUCCESSFUL")
       return {
         kind: "captured",
         transactionId: t.id,
+        amount: t.amount,
         settledAt: now,
         card: cardFromTransaction(t),
       };
@@ -280,31 +297,7 @@ export class SumUpCloudProvider implements PaymentProvider {
   forward(_now: Date): Promise<ForwardResult> {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
-  /**
-   * One pass over this provider's `attempting` rows that `owners` covers. T1 lists them
-   * (unlocked); each is looked up at SumUp OUTSIDE any transaction — by the stamped poll key, else
-   * by OUR `payment_ref` (`foreign_transaction_id`) for a row that crashed before T1.5 — and
-   * resolved in its own short T2. The non-null case runs through `classify`, shared with
-   * `collect`'s poll:
-   *   captured → captured;  failed → failed, no incident;
-   *   pending → left, `nextDueAt` set;  deferred (REFUNDED / unknown) → failed +
-   *   `payment.pending_outcome_unactionable` (money may have moved through a payment that never
-   *   carried a sale — a human must look).
-   * A null (SumUp holds no transaction) inside the grace period is left; PAST the grace period it is
-   * failed AND raises the same unactionable incident with `status: "not_found"`. With no affiliate
-   * key, the sweep queries by a `foreign_transaction_id` SumUp never received, so a create SumUp
-   * accepted but whose response was lost is a not-found we cannot correlate — an uncertain charge,
-   * not a proven non-event.
-   * This is the one place a terminal state is written on incomplete information, safe only because
-   * the outcome has stopped moving by the time the sweep sees it. The sweep MUST terminate every
-   * row it can, or a deferred status would be swept forever.
-   *
-   * The incident names the payment check and carries no `saleId` (an attempting row has none), so
-   * `recordIncidentOnce` (the sink boot wires) keeps one open incident of this code: a second
-   * unactionable row, in this sweep or a later one while the first is open, raises nothing and
-   * `incidentsRaised` undercounts. Accepted: one open alert is enough to send a human to the
-   * payments screen; the count is a log field, not a per-row guarantee.
-   */
+  // Known amount mismatches stay attempting, including after their alert is handled.
   async resolvePending(
     now: Date,
     owners: CollectionOwners,
@@ -319,31 +312,25 @@ export class SumUpCloudProvider implements PaymentProvider {
     let declined = 0;
     let incidentsRaised = 0;
     let deferred = false;
-    // A listed attempt may already have been resolved when this pass reaches its write.
-    const resolve = async <T>(action: () => Promise<T>): Promise<T | undefined> => {
-      try {
-        return await action();
-      } catch (error) {
-        if (error instanceof AppError && error.code === "payment.not_found") return undefined;
-        throw error;
-      }
-    };
-    const unresolved = (tx: Transaction, paymentRef: string, status: string) =>
-      this.opts.incidents(tx, {
-        origin: jobOrigin("payment_check"),
-        error: new AppError("payment.pending_outcome_unactionable", { paymentRef, status }),
-        severity: "error",
-        detectedAt: now,
-      });
-    // Keep a refused outcome and its alert in the same transaction.
+    // Recheck evidence in the same transaction as the outcome; the lookup ran without the lock.
     const failWith = (
       key: { provider: string; paymentRef: string },
       status: string | null,
-    ): Promise<boolean | undefined> =>
+    ): Promise<{ resolved: boolean; raised: boolean }> =>
       this.inTransaction(async (tx) => {
-        const failed = await resolve(() => failAttempting(tx, key));
-        if (failed === undefined) return undefined;
-        return status === null ? false : unresolved(tx, key.paymentRef, status);
+        if (await hasCaptureMismatch(tx, key)) return { resolved: false, raised: false };
+        await failAttempting(tx, key);
+        if (status === null) return { resolved: true, raised: false };
+        const raised = await this.opts.incidents(tx, {
+          origin: jobOrigin("payment_check"),
+          error: new AppError("payment.pending_outcome_unactionable", {
+            paymentRef: key.paymentRef,
+            status,
+          }),
+          severity: "error",
+          detectedAt: now,
+        });
+        return { resolved: true, raised };
       });
     for (const row of rows) {
       if (signal?.aborted) {
@@ -351,6 +338,7 @@ export class SumUpCloudProvider implements PaymentProvider {
         break;
       }
       const key = { provider: SUMUP_PROVIDER, paymentRef: row.paymentRef };
+      if (await this.inTransaction((tx) => hasCaptureMismatch(tx, key))) continue;
       let t: SumUpTransaction | null;
       try {
         t = await this.opts.client.findTransaction(
@@ -369,9 +357,8 @@ export class SumUpCloudProvider implements PaymentProvider {
         }
         // A not-found we cannot correlate to a key SumUp recorded is an uncertain charge — surface it.
         const failed = await failWith(key, "not_found");
-        if (failed === undefined) continue;
-        if (failed) incidentsRaised++;
-        declined++;
+        if (failed.raised) incidentsRaised++;
+        if (failed.resolved) declined++;
         continue;
       }
       const outcome = SumUpCloudProvider.classify(t, now);
@@ -380,31 +367,42 @@ export class SumUpCloudProvider implements PaymentProvider {
         continue;
       }
       if (outcome.kind === "captured") {
-        const result = await this.inTransaction(async (tx) => {
-          const captured = await resolve(() =>
-            captureAttempting(tx, {
-              ...key,
-              settledAt: outcome.settledAt,
-              externalRef: outcome.transactionId,
-              card: outcome.card,
-            }),
-          );
-          if (captured !== undefined) return { captured: true, incident: false };
-          const current = await getPaymentByRef(tx, key);
-          const incident =
-            current?.state === "failed" && (await unresolved(tx, key.paymentRef, t.status));
-          return { captured: false, incident };
+        const captured = await this.inTransaction(async (tx) => {
+          if (await hasCaptureMismatch(tx, key)) return false;
+          if (compareDecimal(outcome.amount, decimal(row.amount)) !== 0) {
+            if (
+              await recordCaptureMismatch(
+                tx,
+                this.opts.captureAlerts,
+                {
+                  ...key,
+                  workingOrderId: row.workingOrderId,
+                  externalRef: outcome.transactionId,
+                  requestedAmount: row.amount,
+                  reportedAmount: outcome.amount,
+                },
+                now,
+              )
+            )
+              incidentsRaised++;
+            return false;
+          }
+          await captureAttempting(tx, {
+            ...key,
+            settledAt: outcome.settledAt,
+            externalRef: outcome.transactionId,
+            card: outcome.card,
+          });
+          return true;
         });
-        if (result.captured) forwarded++;
-        if (result.incident) incidentsRaised++;
+        if (captured) forwarded++;
         continue;
       }
       // failed → no incident; deferred (REFUNDED / unknown) → incident naming the status.
       const status = outcome.kind === "deferred" ? t.status : null;
       const failed = await failWith(key, status);
-      if (failed === undefined) continue;
-      if (failed) incidentsRaised++;
-      declined++;
+      if (failed.raised) incidentsRaised++;
+      if (failed.resolved) declined++;
     }
     return {
       nextDueAt: deferred ? new Date(now.getTime() + RESOLVE_RETRY_MS) : null,

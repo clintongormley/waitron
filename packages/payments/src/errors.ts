@@ -19,6 +19,7 @@ export type OrphanRemediation =
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "payment.capture_mismatch": { payments: import("./capture-mismatch.js").CaptureMismatch[] };
     "payment.not_found": { provider: string; paymentRef: string };
     "payment.refund_exceeds_capture": {
       paymentRef: string;

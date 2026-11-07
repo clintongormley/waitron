@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -55,6 +56,7 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
 
     const s = await seedWorkingOrder(suite.db, freshNif());
     const provider = new SumUpCloudProvider({
+      captureAlerts,
       client,
       db: suite.db,
       incidents: () => Promise.resolve(true),

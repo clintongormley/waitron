@@ -42,11 +42,10 @@ export class AlertsScreen extends LitElement {
         font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
-      /* The table sizes to its content (min-width: max-content), so an uncapped sentence would never
-         wrap and push the actions column off the right edge. */
+      /* Reserve room for the pinned actions while long payment references wrap on a phone. */
       wt-data-table::part(alert-message) {
         display: block;
-        max-width: 60ch;
+        max-width: min(60ch, calc(100dvw - 3 * var(--wt-tap-min) - 2 * var(--wt-space-6)));
       }
       wt-data-table::part(alert-actions) {
         display: flex;

@@ -248,7 +248,7 @@ export interface PaymentProvider {
   readonly provider: string;
   readonly capabilities: ProviderCapabilities;
 
-  /** An uncertain charge stays `attempting` until its provider can determine the outcome. SumUp's
+  /** An uncertain charge stays `attempting`; a known amount mismatch needs manual resolution. SumUp's
    * and Stripe's terminal adapters throw `ChargeNotSavedError` (./charge-not-saved.ts) when saving a
    * charge their processor reported fails for a full disk; the on-device Stripe adapter and the
    * simulator do not. */
@@ -259,12 +259,9 @@ export interface PaymentProvider {
    * A provider with no device-local offline queue answers all-zeros. */
   forward(now: Date): Promise<ForwardResult>;
 
-  /** Resolve this provider's `attempting` rows whose outcome `collect` did not learn. One pass: each
-   * row is polled at the processor and resolved `captured` or `failed`; a row the processor still
-   * reports pending is left for the next pass (`nextDueAt`). `forwarded` counts rows captured,
-   * `declined` rows failed. Only rows `owners` covers are read. An adapter whose `collect` never
-   * leaves a row `attempting` answers all-zeros. Once `signal` is aborted the pass asks the
-   * processor about no further row, leaving each unasked row `attempting` for a later pass. */
+  /** Resolve uncertain rows owned by this box. Known capture amount mismatches stay attempting
+   * without more processor reads. Other unresolved rows set `nextDueAt`; `forwarded` counts
+   * captures and `declined` failures. An aborted pass leaves unasked rows for a later pass. */
   resolvePending(now: Date, owners: CollectionOwners, signal?: AbortSignal): Promise<ForwardResult>;
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller

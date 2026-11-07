@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -84,6 +85,29 @@ const suite = useVenueDb({
 });
 
 describe("SumUpCloudProvider.collect", () => {
+  it.each(["0.00", "12.00", "13.00"])(
+    "does not report the requested amount as captured when SumUp reports %s",
+    async (amount) => {
+      const { fake, provider, params, row } = await setup(suite);
+      const findTransaction = fake.findTransaction.bind(fake);
+      vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => {
+        const transaction = await findTransaction(query);
+        return transaction === null ? null : { ...transaction, amount: decimal(amount) };
+      });
+
+      const result = await provider.collect(params);
+
+      expect
+        .soft(result)
+        .toMatchObject({ state: "attempting", amount: params.amount, settledAt: null });
+      expect(await row(result.paymentRef)).toMatchObject({
+        state: "attempting",
+        settledAt: null,
+        amount: params.amount,
+      });
+    },
+  );
+
   it("captures: T1 attempting → checkout keyed by our payment_ref → poll → T2 captured with SumUp's transaction id", async () => {
     const { fake, provider, params, row } = await setup(suite);
     const result = await provider.collect(params);
@@ -339,6 +363,7 @@ describe("SumUpCloudProvider default poll", () => {
   it("waits one second between polls when no poll is injected", async () => {
     const { fake, params, row } = await setup(suite, (f) => f.stallNext());
     const provider = new SumUpCloudProvider({
+      captureAlerts,
       client: fake,
       db: suite.db,
       incidents: () => Promise.resolve(true),
@@ -508,6 +533,7 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
   it("answers no answer as uncertain, a timed-out one as a timeout", async () => {
     const { provider, transactionId } = await refundable();
     const timedOut = new SumUpCloudProvider({
+      captureAlerts,
       client: {
         ...({} as SumUpClient),
         sendRefund: () => Promise.reject(new DOMException("aborted", "AbortError")),
@@ -516,6 +542,7 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
       incidents: () => Promise.resolve(true),
     });
     const lost = new SumUpCloudProvider({
+      captureAlerts,
       client: {
         ...({} as SumUpClient),
         sendRefund: () => Promise.reject(new TypeError("fetch failed")),
@@ -553,6 +580,7 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
       try {
         const { port } = server.address() as AddressInfo;
         const provider = new SumUpCloudProvider({
+          captureAlerts,
           client: sumupClient({
             apiKey: "k",
             merchantCode: "MC",

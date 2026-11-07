@@ -337,3 +337,35 @@ describe("words that are not a registered alert", () => {
     expect(alertWords(entry, { count: 1, unknown: true }, "en")).toBe("Found some.");
   });
 });
+
+describe("an alert's item details", () => {
+  const entry = {
+    en: "Amounts differ.",
+    es: "ES amounts differ.",
+    items: {
+      param: "payments",
+      en: "{provider} {paymentRef}: requested {requestedAmount:money}, reported {reportedAmount:money}.",
+      es: "ES {provider} {paymentRef}: requested {requestedAmount:money}, reported {reportedAmount:money}.",
+    },
+  };
+  it("renders every payment in readable words with exact localized amounts including zero", () => {
+    const params = {
+      payments: [
+        { provider: "stripe", paymentRef: "p1", requestedAmount: "12.10", reportedAmount: "0.00" },
+        { provider: "sumup", paymentRef: "p2", requestedAmount: "20.00", reportedAmount: "21.50" },
+      ],
+    };
+    expect(alertWords(entry, params, "en")).toBe(
+      "Amounts differ. stripe p1: requested €12.10, reported €0.00. sumup p2: requested €20.00, reported €21.50.",
+    );
+    expect(alertWords(entry, params, "es")).toBe(
+      "ES amounts differ. ES stripe p1: requested 12,10\u00a0€, reported 0,00\u00a0€. ES sumup p2: requested 20,00\u00a0€, reported 21,50\u00a0€.",
+    );
+  });
+  it.each([undefined, null, 3, "wrong", [null, 2, "wrong"]])(
+    "keeps a malformed detail value %s from throwing or becoming JSON",
+    (payments) => {
+      expect(alertWords(entry, { payments }, "en")).toBe("Amounts differ.");
+    },
+  );
+});

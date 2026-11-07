@@ -313,15 +313,6 @@ and by pay period, frozen when a pay period closes (once the product has a step 
 The first design had six build slices (its §7). Replaces the old "Tip-collection UI" entry: cash and
 typed-card tips already arrived with bill payments (#956).
 
-## A whole-order payment records the amount it expected, not the amount captured
-
-(found by A793's
-design, read). A capture that differs from bill plus till tip is written as bill plus till tip
-(`apps/server/src/till-sale.ts:1647`, and `:1974` for an order already placed); only the recovery
-path reads the captured amount and calls the excess a tip. The only cause found is a reader whose
-own tip screen was switched on outside Waitron; other causes were not checked. Next: compare the captured amount at capture time, as the bill payment loop does
-(`payment.bill_capture_mismatch`).
-
 ## A payment whose read shows it settled the bill needs one press of Comprobar de nuevo to show the ticket
 
 A bill read that lists a held payment frees the bill, except when that payment
@@ -362,17 +353,19 @@ and shows a clear message.
 
 ## Bundle A1389: Refuse bad tips and compare the amount captured on the whole-order card path
 
-1 entry, size S. Tip validation and the stale mark after a free reader sale are covered by the
-route and integrated-payment suites; the captured-amount comparison remains.
+Remaining: the approved manager release, after the migration freeze. Detection compares processor
+amounts in both adapters, retains a mismatch as uncertain, and stops automatic reads immediately.
+The alert names both amounts. Handling the alert leaves the order and reader held.
 
-- **A whole-order payment records the amount it expected, not the amount captured** (found by
-  A793's design, read). Next: compare the captured amount at capture time, as the bill payment
-  loop does (`payment.bill_capture_mismatch`). A1395's review also constructed a stored €1.00
-  capture on a €3.00 placed order: Pay cannot file it, cancellation stays refused, and no second
-  charge is taken. No current public route producing this state was established. Watcher decision,
-  2026-11-06: keep that protection; add no automatic refund or manager action. Check the recovery
-  limit here, and bring any real route that produces it to the watcher.
-  [Detail](payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
+- Add the owner's `released_unpaid` outcome: record which amount is right and free the unpaid
+  order without filing, rewriting the recorded amount or moving money. Show what the card took.
+  Qualify with A1381 and A1395 before landing detection, and land release immediately after it.
+  Authority: watcher 2026-11-06 23:12 and 2026-11-07 02:53; implementation plan
+  [detection](../superpowers/plans/2026-11-07-a1389-card-mismatch-detection.md).
+
+A1395 joint qualification also covers its stored €1.00 capture on a €3.00 placed order: Pay
+cannot file it, cancellation stays refused, and no second charge is taken. Its review did not
+establish a public route producing that state; keep those protections while checking recovery.
 
 ## Bundle: Stripe adapter upkeep
 
