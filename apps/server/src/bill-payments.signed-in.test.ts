@@ -101,12 +101,12 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       {
         country: "ES",
         taxId: "62000001M",
-        legalName: "Pagos SL",
+        legalName: "Payments Ltd",
         taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
-        name: "Sala",
+        name: "Dining room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Restaurante",
+        operationDescription: "Restaurant",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -117,7 +117,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -178,7 +178,7 @@ async function freshTill(): Promise<Till> {
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
   const printer = await inTx((tx) =>
     createPrinter(tx, {
-      name: `Recibos ${randomUUID().slice(0, 8)}`,
+      name: `Receipts ${randomUUID().slice(0, 8)}`,
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
       hasCashDrawer: true,
