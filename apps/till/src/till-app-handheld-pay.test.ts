@@ -2438,6 +2438,8 @@ describe("till-app: the next guest on a handheld", () => {
     expect(inDialog(el, "[data-pay-next]")).toBeNull();
     expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
     expect(inDialog(el, "[data-pay-taken]")).toBeNull();
+    await press(el, "[data-pay-close]");
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
   });
 
   it("three equal shares paid in turn offer the second, then the third, of three", async () => {
