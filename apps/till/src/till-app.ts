@@ -762,17 +762,7 @@ function isPaymentsReceived(error: unknown): boolean {
 function wholeTabErrorOf(error: unknown, tender: { manualCard: boolean }): CounterError {
   const saleRefusal = saleRefusalOf(error, tender);
   if (saleRefusal !== undefined) return saleRefusal;
-  return isPaymentsReceived(error)
-    ? "bill.pay_with_bill_payments"
-    : isPermanentSaleRefusal(error)
-      ? "sale.refused"
-      : isNetworkFailure(error)
-        ? "sale.unconfirmed"
-        : isTakePaymentRefusal(error)
-          ? "take_payment.not_permitted"
-          : isPaymentInFlight(error)
-            ? "sale.payment_in_flight"
-            : (settleRefusalOf(error) ?? "sale.error");
+  return isPaymentsReceived(error) ? "bill.pay_with_bill_payments" : settlingErrorOf(error);
 }
 
 /** The sheet's words for a card the reader did not charge. */
@@ -1843,6 +1833,30 @@ function saleRefusalOf(
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
+}
+
+/** What a refused payment says once `saleRefusalOf` and any check of the site's own have passed it by. */
+function settlingErrorOf(
+  error: unknown,
+):
+  | Extract<
+      StringKey,
+      | "sale.refused"
+      | "sale.unconfirmed"
+      | "take_payment.not_permitted"
+      | "sale.payment_in_flight"
+      | "sale.error"
+    >
+  | NonNullable<ReturnType<typeof settleRefusalOf>> {
+  return isPermanentSaleRefusal(error)
+    ? "sale.refused"
+    : isNetworkFailure(error)
+      ? "sale.unconfirmed"
+      : isTakePaymentRefusal(error)
+        ? "take_payment.not_permitted"
+        : isPaymentInFlight(error)
+          ? "sale.payment_in_flight"
+          : (settleRefusalOf(error) ?? "sale.error");
 }
 
 /** `POST /api/pay` names its reader refusal `pay`; a profile that takes no orders is `take-orders`. */
@@ -7834,16 +7848,7 @@ export class TillApp extends LitElement {
       // permanent refusal takes `sale.refused`.
       if (session !== this.#operatorSession) return;
       this.errorKey =
-        saleRefusalOf(error, { manualCard: tender.method === "card" }) ??
-        (isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : isPaymentInFlight(error)
-                ? "sale.payment_in_flight"
-                : (settleRefusalOf(error) ?? "sale.error"));
+        saleRefusalOf(error, { manualCard: tender.method === "card" }) ?? settlingErrorOf(error);
     } finally {
       this.submitting = false;
     }
@@ -8623,15 +8628,7 @@ export class TillApp extends LitElement {
       if (!current()) return;
       this.findBillError =
         saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
-        (isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : isPaymentInFlight(error)
-                ? "sale.payment_in_flight"
-                : (settleRefusalOf(error) ?? "sale.error"));
+        settlingErrorOf(error);
     } finally {
       this.submitting = false;
       if (current()) this.findBillBusy = false;
