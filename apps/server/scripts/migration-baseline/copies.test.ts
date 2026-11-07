@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -91,6 +91,13 @@ describe("manifestCopySets", () => {
     expect(names).toContain("node");
     expect(names).toContain("fiscal-verifactu");
     expect(names).toContain("fiscal-none");
-    expect(names.length).toBeGreaterThan(8);
+    const manifest = JSON.parse(
+      readFileSync(
+        new URL("../../../../packages/migrations/migrations.manifest.json", import.meta.url),
+        "utf8",
+      ),
+    ) as { name: string }[];
+    expect(manifest.length).toBeGreaterThan(1);
+    expect(names).toEqual(manifest.map((set) => set.name));
   });
 });

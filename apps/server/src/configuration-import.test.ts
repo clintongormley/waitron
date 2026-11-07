@@ -489,15 +489,11 @@ describe("staged configuration import", () => {
         name: "venue-service",
         version: "0.0.0",
         tier: "mandatory",
-        migrations: {
-          name: "venue-service",
-          table: "__drizzle_migrations_venue_service",
-          from: "../venue-service/drizzle",
-        },
+        tablesIn: "core",
         configurationTransfer: VENUE_SERVICE_CONFIGURATION_TRANSFER,
       } satisfies WaitronModule,
     ];
-    const versions = { core: 1, "venue-service": 1 };
+    const versions = { core: 1 };
     const tables: ConfigurationBundle["tables"] = Object.fromEntries(
       VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => [table.name, []]),
     );
@@ -917,24 +913,24 @@ describe("routing cells in a staged import", () => {
     expect(await readdir(rejected.stateDir)).toEqual([]);
   });
 
-  it("refuses a bundle exported before the routing grid by its venue-service version, before any write", async () => {
+  it("refuses a bundle exported before the routing grid by its core version, before any write", async () => {
     const { bundle, versions } = await exported();
     const journal = JSON.parse(
       await readFile(
-        new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
+        new URL("../../../packages/db/drizzle/meta/_journal.json", import.meta.url),
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    expect(versions["venue-service"]).toBeGreaterThanOrEqual(1);
-    expect(versions["venue-service"]).toBe(journal.entries.length);
+    expect(versions.core).toBeGreaterThanOrEqual(1);
+    expect(versions.core).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...bundle,
-      modules: { ...bundle.modules, "venue-service": versions["venue-service"]! - 1 },
+      modules: { ...bundle.modules, core: versions.core! - 1 },
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({
       code: "setup.request_invalid",
-      params: { field: "module:venue-service" },
+      params: { field: "module:core" },
     });
     expect(await readdir(stateDir)).toEqual([]);
   });
@@ -963,9 +959,9 @@ describe("routing cells in a staged import", () => {
 
   it("accepts a fresh bundle whose versions match the journal", async () => {
     const { bundle, versions } = await exported();
-    const venueService = ALL_MODULES.find((module) => module.name === "venue-service")!;
-    expect(versions["venue-service"]).toBe(expectedSchemaVersion(venueService.migrations!, null));
-    expect(bundle.modules["venue-service"]).toBe(versions["venue-service"]);
+    const core = ALL_MODULES.find((module) => module.name === "core")!;
+    expect(versions.core).toBe(expectedSchemaVersion(core.migrations!, null));
+    expect(bundle.modules.core).toBe(versions.core);
     const { stateDir, result } = await staged(bundle, versions);
     await expect(result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
     expect((await readdir(stateDir)).sort()).toEqual([

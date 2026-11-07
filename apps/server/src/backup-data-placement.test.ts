@@ -47,7 +47,7 @@ async function syncs(run: () => Promise<unknown>): Promise<string[]> {
 
 const modules = ALL_MODULES.filter((m) => ["core", "catalogue"].includes(m.name));
 const sets = orderedMigrationSets(modules);
-// The backup's database stands one catalogue step behind the code that places it: its own last
+// The backup's database stands one core step behind the code that places it: its own last
 // step drops the two columns the code's next step adds back.
 const withoutCursor = {
   tag: "9998_drop_collect_cursor",
@@ -59,9 +59,9 @@ const withCursor = {
 };
 const scratchRoot = mkdtempSync(join(tmpdir(), "a850-catalogue-predecessor-"));
 afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
-const olderRoot = migrationsRootWith(join(scratchRoot, "older"), { catalogue: [withoutCursor] });
+const olderRoot = migrationsRootWith(join(scratchRoot, "older"), { core: [withoutCursor] });
 const codeRoot = migrationsRootWith(join(scratchRoot, "code"), {
-  catalogue: [withoutCursor, withCursor],
+  core: [withoutCursor, withCursor],
 });
 const node = "20000000-0000-4000-8000-000000000002";
 const location = "10000000-0000-4000-8000-000000000001";
@@ -279,8 +279,8 @@ it("migrates the populated catalogue predecessor and preserves every original co
   expect(after.foreignKeys).toEqual([]);
   const db = new DatabaseSync(join(f.venueDir, "venue.db"));
   try {
-    expect(db.prepare("select count(*) as n from __drizzle_migrations_catalogue").get()).toEqual({
-      n: expectedSchemaVersion(modules[1]!.migrations!, f.migrationsRoot),
+    expect(db.prepare("select count(*) as n from __drizzle_migrations_db").get()).toEqual({
+      n: expectedSchemaVersion(modules[0]!.migrations!, f.migrationsRoot),
     });
     expect(() => db.exec("update menu_versions set published_at = null")).toThrow(/append.only/i);
   } finally {

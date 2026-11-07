@@ -209,7 +209,7 @@ describe("negative control", () => {
   it.concurrent(
     "writes a new migration when the snapshot lacks a table the schema declares",
     async ({ expect }) => {
-      const set = join("packages", "identity", "drizzle");
+      const set = join("packages", "workforce", "drizzle");
       const pkg = await drizzlePackage(set);
       const copy = join(scratch, "control");
       cpSync(join(repoRoot, set), copy, { recursive: true });
@@ -220,8 +220,8 @@ describe("negative control", () => {
       const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as {
         tables: Record<string, unknown>;
       };
-      expect(snapshot.tables).toHaveProperty("persons");
-      delete snapshot.tables.persons;
+      expect(snapshot.tables).toHaveProperty("shifts");
+      delete snapshot.tables.shifts;
       writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
 
       const run = await generate(pkg, copy, "control");

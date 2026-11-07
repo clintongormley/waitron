@@ -420,20 +420,29 @@ describe("the tree's module graph is honest", () => {
     }
   }
 
-  // An empty scan would leave `violations` empty and pass. So pin modules that are not going away,
-  // and one known real edge per detector in the tree's own spelling: `workforce → identity`, a
-  // backtick-quoted `REFERENCES` onto identity's `persons`, and `media → core`, a trigger that
-  // `packages/media/drizzle/0001_image_references.sql` puts ON core's `products`.
+  // An empty scan would leave `violations` empty and pass. So pin sets that are not going away,
+  // and one known real edge in the tree's own spelling: `workforce → core`, a backtick-quoted
+  // `REFERENCES` onto core's `persons`. No trigger crosses a set in today's tree, so the two trigger
+  // detectors are pinned on core's own baseline SQL with two of its tables handed to another owner.
   it("discovers the modules and finds the known real cross-module edges", () => {
-    for (const name of ["core", "identity", "payments", "workforce"]) {
+    for (const name of ["core", "payments", "workforce", "bookings"]) {
       expect(modules).toContain(name);
     }
-    expect(modules.length).toBeGreaterThanOrEqual(10);
-    expect(foundEdgeDetails.has("workforce→identity via FK reference on persons")).toBe(true);
-    expect(foundEdgeDetails.has("media→core via trigger on products")).toBe(true);
-    expect(foundEdgeDetails.has("media→catalogue via trigger body JOIN on menu_publications")).toBe(
-      true,
+    expect(modules.length).toBeGreaterThanOrEqual(8);
+    expect(foundEdgeDetails.has("workforce→core via FK reference on persons")).toBe(true);
+
+    const core = discovered.find((pkg) => pkg.moduleName === "core");
+    expect(core?.sqls.length).toBeGreaterThan(0);
+    const moved = new Map(owner);
+    moved.set("products", "elsewhere");
+    moved.set("menu_publications", "elsewhere");
+    const coreEdges = new Set(
+      (core?.sqls ?? []).flatMap((raw) =>
+        migrationEdges(raw, "core", moved).map((edge) => `${edge.kind} on ${edge.target}`),
+      ),
     );
+    expect(coreEdges.has("trigger on products")).toBe(true);
+    expect(coreEdges.has("trigger body JOIN on menu_publications")).toBe(true);
   });
 
   it("every migration edge in the SQL is named in the depending descriptor's requires", () => {

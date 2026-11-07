@@ -21,7 +21,7 @@ import {
   type ModuleOperationInput,
   type WaitronModule,
 } from "@waitron/module";
-import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
+import { fakeModule, fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { ALL_MODULES } from "./modules.js";
@@ -363,8 +363,7 @@ it("rolls authentication and earlier hook writes back together when a later modu
     modules: [
       ...f.deps.modules,
       {
-        ...fakeModule("second"),
-        migrations: ALL_MODULES.find((m) => m.name === "identity")!.migrations,
+        ...fakeSetlessModule("second", binding.module),
         backup: {
           restore: async () => {
             throw new AppError("restore.series_conflict", { modules: "second" });
@@ -446,8 +445,7 @@ it("snapshots operation inputs issued by the host before an earlier restore hook
         ),
       modules: [
         {
-          ...fakeModule("earlier"),
-          migrations: ALL_MODULES.find((m) => m.name === "identity")!.migrations,
+          ...fakeSetlessModule("earlier", binding.module),
           backup: {
             restore: async () => {
               suppliedBinding.eventId = "changed";
