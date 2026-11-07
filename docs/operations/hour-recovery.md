@@ -119,7 +119,7 @@ the box would take, the page says so, counts down to the next free minute and ch
 target in the surviving database"). A later name, or invoices dated after the box's time, no
 longer stop the restore (the same file's "selected although a later name is known" cases;
 `apps/server/src/hour-recovery-host.test.ts`, "selects at the ordinary wait although the backup's
-newest record and creation time are later"). Names made after the backup, or by a box this one
+newest record is later"). Names made after the backup, or by a box this one
 never saw, are invisible to it, and a later name held only in the database the restore replaces is
 not in the database the restore places (`apps/server/src/hour-recovery-placement-3.test.ts`, "places an older
 selected hour over a newer surviving %s destination").
@@ -144,14 +144,24 @@ event each time it opens (`apps/setup/src/screens/recovery-copy.ts` mounts the p
 binding, and `apps/setup/src/screens/recovery-allocation.ts` then uses
 `eventId: crypto.randomUUID()`), and the box keeps each event's wait apart
 (`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`). No test reloads a
-restore page end to end. What the page shows when it cannot go
-ahead, and what it asks for:
+restore page end to end. The page goes back to the box by itself only after **Make the series**
+was pressed on this page load; **Compare clocks** (**Check again**), Clear, the key or either
+declaration cancel that press. A wait the page shows without a press (a reload during the box's
+wait, or a wait the box had recorded that **Compare clocks** shows) says "When the time left
+reaches zero, press “Make the series”." and "Time left:", and at zero it sends nothing and offers
+**Make the series** (`recovery-hour.browser.test.ts`, "a recorded wait shown by Compare clocks
+ends at zero with no request and offers Make the series" and "a recorded wait shown by Compare
+clocks says to press Make the series at zero"). What the page shows when it cannot go ahead, and
+what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
-  internet, or open the page on a phone or laptop on the venue's network that has the backup. It
-  checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`, "Compare
-  clocks with no second clock explains the wait and checks again by itself" and "with no second
-  clock it explains itself and carries on when the internet arrives").
+  internet, or open the page on a phone or laptop on the venue's network that has the backup.
+  After **Make the series** it checks again about every 15 seconds and carries on by itself
+  (`recovery-hour.browser.test.ts`, "with no second clock it explains itself and carries on when
+  the internet arrives"). After **Compare clocks** alone it checks nothing by itself and says
+  "Once the box reaches the internet, press “Check again”." (`recovery-hour.browser.test.ts`,
+  "Compare clocks with no second clock explains the wait and leaves the next check to the person"
+  and "Compare clocks with no second clock asks the person to press Check again").
 - **The clocks differ by more than 30 seconds**: the page shows both readings and asks you to try
   from another phone or laptop that has the backup; if they still differ, the box's time may be
   wrong, so ask for help. It does not retry by itself; press **Check again**
@@ -169,9 +179,11 @@ ahead, and what it asks for:
   repeat"). An answer from the box the page cannot read still shows the page's failure message
   (`recovery-hour.browser.test.ts`, "an answer it cannot read during a taken minute shows the failure"). If this attempt
   has already chosen its name and that name then turns up in the box's records, the attempt is refused
-  (`minute_in_use`, with no time) and is offered no way on yet
-  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is refused when a record naming its
-  own minute appears after it"; backlog A1223).
+  (`minute_in_use`, with no time; `packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is
+  refused when a record naming its own minute appears after it"). The page says this is a fault in
+  Waitron and that reloading the page and starting the restore again makes a new restore, which
+  chooses a new series name (`recovery-hour.browser.test.ts`, "a stored pick found taken names the
+  fault and how to start the restore again (%s)").
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
   name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
   its name
@@ -189,6 +201,20 @@ Follow the form's preparation and restore steps. Preserve the exact selected sou
 operation if interrupted. The host checks the event, source, target and recovery authority again;
 a started marker by itself grants no activation. Do not delete a staged request, key file or
 spent-name record to retry. An uncertain outcome needs inspection rather than a new submission.
+
+The box makes the new series when it places the backup, after the restart the restore asks for, and
+it checks its time against the internet's again at that moment. If it cannot read the internet's
+clock then, placement is refused (`sif.allocation_invalid`, `second_clock_missing`), the staged
+restore is kept, and the next start tries again (`apps/server/src/hour-recovery-placement-3.test.ts`,
+"a fresh-box Cloud restore refused at placement for no internet clock keeps its request and places
+on the next start"). How long a Cloud download took makes no difference to this (0 and 31 seconds were tried while
+building A1385; no test keeps that comparison). The box restarts by
+itself after a failed start (`restart: unless-stopped`, `deploy/compose.yml`); after three failed
+starts in a row (`RECOVERY_AT`, `apps/server/src/recovery-state.ts`) it shows the start-failure
+page, which says "The box could not make its new invoice series." and asks you to connect the box
+to the internet and press **Retry a normal boot**; once the box reads the internet's clock the restore finishes
+(`apps/server/src/recovery-surface.test.ts`, "names a refused series in both languages"; the
+restart and the three-start count are read, not run here).
 
 ## Keep the resulting evidence
 

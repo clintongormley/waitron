@@ -165,7 +165,9 @@ deja de cobrar al terminar la recuperación hasta que su reloj las alcance o se 
 [Cuando se paran los cobros por la hora](box-status.md#clock-behind).
 
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si la comprobación
-del reloj lo impide, resuelve la causa e inténtalo de nuevo.
+del reloj lo impide, resuelve la causa e inténtalo de nuevo. Si después el equipo muestra una
+página que dice que no pudo crear sus nuevas series de facturas, conéctalo a internet y pulsa
+**Reintentar un arranque normal**.
 
 ## Si una recuperación se interrumpe {#resume}
 
