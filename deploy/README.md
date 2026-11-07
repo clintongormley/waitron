@@ -645,7 +645,7 @@ command against it treat that entrypoint differently:
   them when it ends. A run that is killed leaves them, holding a full copy of the venue's database
   or the encrypted archive, and the next server start removes them. A `--from-archive` run that
   downloaded the archive but cannot remove its `archive-download-*` folder afterwards prints its
-  result and then a line saying the next server start removes it. Break-glass is the exception by design: it runs beside the server
+  result and then a line saying the next server start tries to remove it. Break-glass is the exception by design: it runs beside the server
   and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of

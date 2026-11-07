@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { lockVenueDatabase, readVenueHolder, type VenueHolder } from "@waitron/db";
@@ -17,7 +17,7 @@ import {
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...real, stat: vi.fn(real.stat) };
+  return { ...real, lstat: vi.fn(real.lstat), stat: vi.fn(real.stat) };
 });
 
 const NOW = new Date("2026-10-21T12:00:00Z");
@@ -41,6 +41,7 @@ beforeEach(async () => {
 afterEach(async () => {
   // Drops a queued one-off rejection a failed case left unused; stat delegates to the real one again.
   vi.mocked(stat).mockReset();
+  vi.mocked(lstat).mockReset();
   await Promise.all(stops.splice(0).map((stop) => stop()));
   await rm(root, { recursive: true, force: true });
 });
@@ -509,6 +510,32 @@ describe("freeSpaceAtStart", () => {
       });
       await freeSpaceAtStart(stale);
       expect(existsSync(stagedCopy())).toBe(false);
+    });
+
+    it("keeps the working folder of a restore that makes the venue folder after the start found none", async () => {
+      const absent = join(root, "no-venue");
+      const live = join(restoreStaging(), "archive-validate-live");
+      const real = vi.mocked(lstat).getMockImplementation()!;
+      let first = true;
+      // The start's first look finds no venue folder; a restore then starts, making the folder,
+      // holding it, and making its first working folder, in that order.
+      vi.mocked(lstat).mockImplementation((async (path: string) => {
+        if (path !== absent || !first) return real(path);
+        first = false;
+        const answer = real(path);
+        await answer.catch(() => {});
+        await mkdir(absent);
+        stops.push((await holdVenueElsewhere(absent)).stop);
+        await mkdir(live, { recursive: true });
+        return answer;
+      }) as typeof lstat);
+      const { deps: d } = deps({
+        venueDir: absent,
+        statfs: statfsStub({ [stateDir]: [5000], [absent]: [new Error("ENOENT")] }),
+      });
+      await freeSpaceAtStart(d);
+      expect(first).toBe(false);
+      expect(existsSync(live)).toBe(true);
     });
 
     it("leaves alone a restore staging folder that is a symbolic link, and what it points at", async () => {
