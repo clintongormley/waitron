@@ -385,14 +385,6 @@ Live path has it today;
 A987's design does not change the route
 ([§7](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md#7-security)).
 
-## A backup destination that fails to build leaves archives reported as on.
-
-In
-`BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
-before `buildBackupBackend` runs for each destination, so a throw there leaves `current().enabled`
-true with no sweep running. Reported by A538-4's second Codex review; the driver read the order
-but did not reproduce the throw. Build the backends before adopting the handle, or undo on failure.
-
 ## The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.
 
 `GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
@@ -1310,15 +1302,6 @@ once released. Belongs with A1016.
   falls back to "Something went wrong, try again". That names nothing to try, beside a "What the box
   recorded" panel saying Read again turns nothing on.
 
-## Backup status sends a saved bucket address as stored, password included.
-
-- **Backup status sends a saved bucket address as stored, password included.** A bucket address
-  written as `https://user:secret@host` passes the settings checks, and `GET /api/backup/status`
-  returns it unchanged (`destinationView`, `apps/server/src/backup-supervisor.ts`, since
-  2026-10-13). The settings-evidence answer masks that password with `redactSecrets`; the status
-  reply does not, and the Backups form may need the address back as saved, so check the form
-  before masking it there.
-
 ## A route whose failure is the system's `ENOSPC` still answers `server.internal`.
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
@@ -1349,18 +1332,6 @@ once released. Belongs with A1016.
   sentence the plan's decision 20 lists for a collect. Left open by A798-B slice 8 (#2012).
 - **A clock that jumps before 28-10-2024 while a card is charged answers `clock.unusable`, and the
   till never says the card was charged.** Left open by A798-B slice 8 (#2012).
-
-## Bundle A1391: Backup status tells the truth and leaks nothing
-
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Backup status sends a saved bucket address as stored, password included.**
-  [Detail](box.md#backup-status-sends-a-saved-bucket-address-as-stored-password-included).
-- **A backup destination that fails to build leaves archives reported as on.**
-  [Detail](box.md#a-backup-destination-that-fails-to-build-leaves-archives-reported-as-on)
-- **Every backup status read builds a new client per destination**, a new S3 client for a bucket,
-  and closes it once its listing settles, even while the running sweep holds live ones. This predates A538-3, which added
-  `close()`; reusing the sweep's backends needs `close()` to wait for a status read in flight.
 
 ## Bundle: Finish the clock work: a check at every start and every change
 
@@ -1695,6 +1666,16 @@ The owner's four answers: no reserved
   venue's name. How the run, the free-space watch and the start delete:
   [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies)
   and [the backup room note](../developers/conventions-data.md#the-backup-room-note).
+
+- **A backup status read builds its own storage client (watcher, 2026-11-07, A1391).** Each read
+  builds a client per destination and closes it when its listing settles, even while the running
+  backup holds clients for the same destinations; it does not borrow those. Status is read rarely:
+  the alert source keeps it for 60 seconds (`apps/server/src/boot.ts`, the `backupCache` beside
+  `backupAlertSource`), the Box status page reads it once when it opens, and the Backups screen on
+  its own actions. Building an S3 client sends nothing over the network, so sharing would save at
+  most one connection set-up per destination per minute, against reference counting in the
+  supervisor and a risk of closing a client a read still uses. These figures come from reading the
+  code, not from a measurement.
 
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and
