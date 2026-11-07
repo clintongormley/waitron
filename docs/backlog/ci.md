@@ -3,23 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## Shortened random table labels outside the floor suites
-
-The 6 November 2026 floor-label review found shortened UUIDs in table labels in
-`device-levers.test.ts`, `till-api.expo-board.test.ts`, `till-api.profile-zones.test.ts`,
-`order-groups.test.ts` and `till-api.tables.test.ts`, under `apps/server/src`.
-These sites were inspected, not tested with forced collisions. Trace each fixture's database
-lifetime, reproduce repeated suffixes through its real table writer, and replace the label
-suffix where needed without changing the production uniqueness guard or existing assertions.
-
-## Floor-plan short-name fixtures
-
-`apps/server/src/floor-plan.test.ts` retains two four-character UUID suffix sites for short
-names, separate from the full table labels. The 6 November 2026 review forced a repeated suffix
-and reported one failed case. Reproduce the failure and check the reported refusal before fixing
-these fixtures. Keep the five-character short-name limit, the case-insensitive comparisons and
-every existing refusal assertion. The limit does not require a random suffix.
-
 ## Three adjustment-portion refusal checks also pass with shortened ID lists
 
 A974's 5 November 2026 naming review observed that three cases in
@@ -501,19 +484,6 @@ repair’s parent, while both ordinary reply variants logged their outcomes. Che
 fixture must abort and await that call during teardown. Those runs did not establish whether it
 sends any further requests after the fake printer closes or retains a live resource; do not
 infer either from the missing outcome alone.
-
-## Bundle A1397: Replace short random table labels
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Shortened random table labels remain outside the floor suites.** Inspect the non-floor
-  fixture sites and reproduce repeated suffixes before replacing them; preserve the existing
-  uniqueness and refusal checks.
-  [Detail](ci.md#shortened-random-table-labels-outside-the-floor-suites).
-- **Floor-plan short-name fixtures still draw only four random characters.** A review probe
-  forcing one repeated suffix failed a case. Reproduce it and replace the fixture suffix while
-  retaining the five-character limit and the original case-insensitive refusal checks.
-  [Detail](ci.md#floor-plan-short-name-fixtures).
 
 ## Bundle A1398: Pack the other packages' test shards by measured time, and check the packing on every run
 

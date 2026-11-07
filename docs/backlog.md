@@ -115,7 +115,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1394. SumUp's sweep and refund call stop throwing](backlog/payments.md#bundle-a1394-sumups-sweep-and-refund-call-stop-throwing)
 - [A1395. Cancelling or settling a placed order respects stored card payments](backlog/payments.md#bundle-a1395-cancelling-or-settling-a-placed-order-respects-stored-card-payments)
 - [A1396. A save refused after the person left must say so](backlog/dashboard.md#bundle-a1396-a-save-refused-after-the-person-left-must-say-so)
-- [A1397. Replace short random table labels](backlog/ci.md#bundle-a1397-replace-short-random-table-labels)
 - [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
 - [A1399. What happens when a bill payment is sent again under one id](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
@@ -2126,7 +2125,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **A1397. Replace short random table labels** (bundle of 2, 2 important, size S). [Detail](backlog/ci.md#bundle-a1397-replace-short-random-table-labels)
 
 - **A change to the till alone does not run the handover's end-to-end test.** The test loads the
   till's router by path, and a till-only change selects no `@waitron/server` (`scripts/changed-scope.mjs`),
