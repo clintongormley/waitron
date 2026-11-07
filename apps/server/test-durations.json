@@ -261,7 +261,7 @@
   "src/business-day-persistence.test.ts": 8.7,
   "src/business-day-start.test.ts": 16.3,
   "src/cancel-invoiced-order.test.ts": 15.8,
-  "src/canvas-retirement.test.ts": 16.6,
+  "src/canvas-retirement.test.ts": 1.1,
   "src/card-charged-not-recorded.test.ts": 12.8,
   "src/card-provider-pool.test.ts": 3.1,
   "src/card-reader-delete.db.test.ts": 8.8,
