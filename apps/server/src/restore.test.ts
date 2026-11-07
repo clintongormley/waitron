@@ -1070,7 +1070,7 @@ describe("restore hooks (identity phase)", () => {
 
     it.each([
       ["through a folder link", "secrets/real-tls/server.key"],
-      ["differing only in case", "secrets/TLS/server.key"],
+      ["differing only in case", "secrets/tls/SERVER.KEY"],
     ])("are refused %s before anything changes", async (_, second) => {
       await seedOldBox();
       await mkdir(join(stateDir, "real-tls"));

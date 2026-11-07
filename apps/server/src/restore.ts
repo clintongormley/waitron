@@ -383,8 +383,8 @@ async function validateEntryMetadata(
     const target = await assertSafeEntryName(entry.name.slice(prefix.length), root);
     // Two names for one file would share one staged and one set-aside copy, and the second publish
     // would set the first one's new file aside over the box's old one. Resolved through links (the
-    // guard has made the parent), and in lower case because a case-insensitive filesystem treats
-    // `TLS` and `tls` as one folder.
+    // guard has made the parent), and the name in lower case because a case-insensitive filesystem
+    // treats `server.key` and `SERVER.KEY` as one file.
     const location = join(await realpath(dirname(target)), basename(target)).toLowerCase();
     if (destinations.has(location)) {
       throw new AppError("restore.unsafe_entry_path", { name: entry.name });
