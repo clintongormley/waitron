@@ -8008,13 +8008,17 @@ export class TillApp extends LitElement {
             await this.#loadHeldOrder(row.workingOrderId, () => !current(), controller.signal);
             if (!current() || this.#store.id !== row.workingOrderId) return;
             this.#onBackToCounter();
-            if (row.state === "part-paid")
+            const unpaid = row.state !== "part-paid";
+            if (!unpaid || this.#resolveScreen("counter") !== "counter") {
+              // Only a handheld's pay window offers the whole bill as a way to pay.
+              const whole = unpaid && this.handheldMode;
               await this.#openBillPaying(
-                "contribution",
+                whole ? "whole" : "contribution",
                 payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
-                undefined,
+                unpaid && !whole ? row.stillOwed : undefined,
                 { surface: "counter", billId: row.workingOrderId, visit: session },
               );
+            }
           } else this.errorKey = "held.stale";
         },
       });
@@ -10673,7 +10677,11 @@ export class TillApp extends LitElement {
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
-        @bill-pay-close=${() => this.#closeBillPaying()}
+        @bill-pay-close=${() => {
+          const open = this.billPaying;
+          this.#closeBillPaying();
+          if (open !== null) this.#releaseFoundCounterBill(open);
+        }}
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
@@ -19374,6 +19382,7 @@ export class TillApp extends LitElement {
     payments: BillPaymentView[],
   ): Promise<void> {
     this.#closeBillPaying();
+    this.#releaseFoundCounterBill(open);
     this.result = invoice;
     // A counter order is no bill of the party a handheld may still hold.
     this.#showTicket(open.billId, true, open.surface === "table" ? payments : null);
@@ -19468,6 +19477,23 @@ export class TillApp extends LitElement {
       return;
     }
     this.billPaying = { ...this.billPaying!, asked: null, preview: null, refusal: null };
+  }
+
+  /** A device with no counter screen holds a counter bill only to pay it from Find a bill, so the
+   * basket lets it go when that pay window closes. */
+  #releaseFoundCounterBill(open: PayingOrder): void {
+    if (
+      open.surface !== "counter" ||
+      this.#resolveScreen("counter") === "counter" ||
+      this.#counterOrderInFlight() ||
+      this.#store.id !== open.billId
+    )
+      return;
+    this.#dismissStationChoices();
+    this.#clearBasket();
+    this.stage = "order";
+    this.collectFlow = undefined;
+    this.counterLines = null;
   }
 
   #closeBillPaying(): void {

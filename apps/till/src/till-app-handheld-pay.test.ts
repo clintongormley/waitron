@@ -57,6 +57,7 @@ import {
   flush,
   inDialog,
   invoiceOf as saleOf,
+  line,
   openDialog,
   openTable,
   press,
@@ -6513,4 +6514,230 @@ describe("a presented counter bill from Find a bill, on a device with no counter
       expect(shown).not.toBe(t("sale.error"));
     },
   );
+});
+
+describe("a parked counter bill from Find a bill, on a device with no counter screen", () => {
+  const cana = {
+    id: "cana",
+    menuItemId: "offer-cana",
+    catalogueId: "cat-default",
+    name: "Caña",
+    pricingUnit: "each" as const,
+    unitPrice: "9.90",
+    vatClass: "general",
+    category: null,
+    allergens: null,
+  };
+  const parked = billRow({
+    workingOrderId: "wo-parked",
+    orderStatus: "open",
+    partyId: null,
+    collectionStatus: null,
+    state: "unpaid",
+    total: "9.90",
+    paid: "0.00",
+    stillOwed: "9.90",
+  });
+  const partPaid = billRow({
+    workingOrderId: "wo-parked",
+    orderStatus: "open",
+    partyId: null,
+    collectionStatus: null,
+    state: "part-paid",
+    total: "9.90",
+    paid: "5.00",
+    stillOwed: "4.90",
+  });
+  const stage = (el: TillApp) => (el as unknown as { stage: string }).stage;
+  const counterLines = (el: TillApp) => (el as unknown as { counterLines: unknown }).counterLines;
+  const noCounterTill = {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["z1"])),
+  };
+  const counterScreen = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & { store: { id: string; lines: unknown[] } }>(
+      "till-counter-screen",
+    );
+
+  async function openRow(row: BillRow, device: Record<string, unknown>) {
+    const { el } = await mountApp({
+      ...device,
+      findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listBills: vi.fn().mockResolvedValue(listPage([row])),
+      getFindBill: vi.fn().mockResolvedValue(row),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-parked" },
+          note: null,
+          revision: 0,
+          ownerRevision: 1,
+        },
+        id: "wo-parked",
+        orderNumber: 42,
+        label: "Lucía",
+        revision: 1,
+        lines: [
+          { workingOrderLineId: "l1", menuItemId: "offer-cana", quantity: "1.000", product: cana },
+        ],
+      }),
+      getTabLines: vi.fn().mockResolvedValue({
+        revision: 1,
+        lines: [line({ id: "l1", lineNo: 1, name: "Caña", unitPriceGross: "9.90" })],
+      }),
+      getBillBalance: vi.fn().mockResolvedValue(
+        balanceOf({
+          workingOrderId: "wo-parked",
+          total: "9.90",
+          received: row.paid,
+          outstanding: row.stillOwed,
+        }),
+      ),
+      previewBillPayment: vi.fn().mockResolvedValue(cash(row.stillOwed, "0.00")),
+      takeBillPayment: vi.fn().mockResolvedValue(
+        takenOf(
+          { method: "cash", applied: row.stillOwed, tendered: row.stillOwed, change: "0.00" },
+          {
+            workingOrderId: "wo-parked",
+            total: "9.90",
+            received: "9.90",
+            outstanding: "0.00",
+            status: "settled",
+          },
+          { ...saleOf("9.90"), invoiceNumber: "F-PARKED" },
+        ),
+      ),
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValue({ status: "done", jobId: "job-1", canRetry: false }),
+      getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    emit(shell(el), "find-bill");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", { row });
+    await flush(el);
+    return el;
+  }
+
+  /** Cash for what the bill owes: a handheld picks it, a till types what was handed over. */
+  async function payCash(el: TillApp, owed: string) {
+    if (inDialog(el, 'input[name="method"][value="cash"]') !== null)
+      await press(el, 'input[name="method"][value="cash"]');
+    if (inDialog(el, 'wt-input[name="tendered"]') !== null) await type(el, "tendered", owed);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+  }
+
+  /** Signs out and in again; the basket is empty when the sign-in reads the default zone's offers. */
+  async function signInAgain(el: TillApp) {
+    emit(shell(el), "logout");
+    await flush(el);
+    vi.mocked(api.listDefaultZoneOffers).mockClear();
+    vi.mocked(api.listZoneOffers).mockClear();
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+  }
+
+  function expectEmptied(el: TillApp) {
+    expect(stage(el)).toBe("order");
+    expect(counterLines(el)).toBeNull();
+    expect(floor(el).checkVisibility()).toBe(true);
+  }
+
+  const devices = [
+    ["a handheld", onPhone()],
+    ["a till with no counter zones", noCounterTill],
+  ] as const;
+
+  it.each([
+    ["a handheld", onPhone(), "whole", ""],
+    // A till's pay window offers no whole-bill way; a contribution of what is owed sends the same.
+    ["a till with no counter zones", noCounterTill, "contribution", "9.90"],
+  ] as const)(
+    "on %s, a parked bill opens the pay window on paying all of it, and cash pays it once and shows the ticket",
+    async (_, device, way, amount) => {
+      const el = await openRow(parked, device);
+      await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+      expect(inDialog(el, 'input[name="way"]:checked')).toHaveProperty("value", way);
+      expect(dialog(el)!.amount).toBe(amount);
+      await payCash(el, "9.90");
+      await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+      expect(api.takeBillPayment).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(api.takeBillPayment).mock.calls[0]![0]).toBe("wo-parked");
+      expect(sent()[0]).toMatchObject({ method: "cash" });
+      expect(ticketView(el)!.shadowRoot!.textContent).toContain("F-PARKED");
+    },
+  );
+
+  it.each(devices)("on %s, a part-paid bill still opens on a contribution", async (_, device) => {
+    const el = await openRow(partPaid, device);
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    expect(inDialog(el, 'input[name="way"]:checked')).toHaveProperty("value", "contribution");
+  });
+
+  it.each([
+    ["a handheld", "parked", onPhone(), parked],
+    ["a handheld", "part-paid", onPhone(), partPaid],
+    ["a till with no counter zones", "parked", noCounterTill, parked],
+    ["a till with no counter zones", "part-paid", noCounterTill, partPaid],
+  ] as const)(
+    "on %s, Close on a %s bill's pay window empties the basket and leaves the Floor showing",
+    async (_, __, device, row) => {
+      const el = await openRow(row, device);
+      await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+      emit(dialog(el)!, "bill-pay-close");
+      await flush(el);
+      expect(dialog(el)).toBeNull();
+      expectEmptied(el);
+
+      await signInAgain(el);
+      expect(api.listZoneOffers).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(devices)(
+    "on %s, paying the bill empties the basket, without waiting for New sale",
+    async (_, device) => {
+      const el = await openRow(parked, device);
+      await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+      await payCash(el, "9.90");
+      await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+      expect(stage(el)).toBe("order");
+      expect(counterLines(el)).toBeNull();
+
+      await signInAgain(el);
+      expect(api.listZoneOffers).not.toHaveBeenCalled();
+    },
+  );
+
+  it("on a till with counter zones, a parked bill loads into the counter with no pay window", async () => {
+    const el = await openRow(parked, {});
+    await vi.waitFor(() => expect(counterScreen(el)?.store.id).toBe("wo-parked"));
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(counterScreen(el)!.store.lines).toHaveLength(1);
+  });
+
+  it("on a till with counter zones, Close on a part-paid bill's pay window keeps it in the basket", async () => {
+    const el = await openRow(partPaid, {});
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    expect(inDialog(el, 'input[name="way"]:checked')).toHaveProperty("value", "contribution");
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(counterScreen(el)!.store.id).toBe("wo-parked");
+    expect(counterScreen(el)!.store.lines).toHaveLength(1);
+  });
+
+  it("on a till with counter zones, paying a part-paid bill off keeps it in the basket until New sale", async () => {
+    const el = await openRow(partPaid, {});
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await type(el, "amount", "4.90");
+    await payCash(el, "4.90");
+    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    expect(api.takeBillPayment).toHaveBeenCalledTimes(1);
+    await signInAgain(el);
+    expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
+  });
 });
