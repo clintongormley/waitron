@@ -422,6 +422,17 @@ export class TillFloorScreen extends LitElement {
         margin: 0;
       }
 
+      .read-failed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .read-failed p {
+        margin: 0;
+      }
+
       .tabs {
         display: flex;
         min-width: 0;
@@ -904,6 +915,9 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** When the read that drew `tables` started, numbered by `nextFloorMoment`. */
   @property({ attribute: false }) tablesReadAt = 0;
+  /** `tables` is a read's answer, not a list kept after a failed read; `tablesReadAt` moves on either. */
+  @property({ attribute: false }) tablesAnswered = false;
+  @property({ attribute: false }) floorReadFailed = false;
   /** Rooms' revisions a change the app sent was answered with, as `tablesReadAt` is numbered. */
   @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
     new Map();
@@ -2417,6 +2431,8 @@ export class TillFloorScreen extends LitElement {
   override render() {
     const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
       this.#zone;
+    // A read still out keeps the empty list or map.
+    const empty = listed.length === 0 && onMap.length === 0 ? this.#emptyFloor(activeKey) : nothing;
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -2501,15 +2517,36 @@ export class TillFloorScreen extends LitElement {
         })()}
         ${this.#stationSummary()}
         ${
-          view === "list"
-            ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
-            : this.#plannedMap(onMap, unplaced, activeKey)
+          empty !== nothing
+            ? empty
+            : view === "list"
+              ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
+              : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
         ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()}
         ${this.#renameWindow()} ${this.#joinWith()} ${this.#readyBar()}
       </section>
     `;
+  }
+
+  /** Keyed on what would be drawn, not on `visible`: tables taken off today's plan are not drawn. */
+  #emptyFloor(activeKey: string | undefined): TemplateResult | typeof nothing {
+    if (this.tablesAnswered && activeKey !== undefined)
+      return html`<p data-floor-no-tables role="status">
+        ${t(this.#zone.visible.length === 0 ? "floor.no_tables" : "floor.no_tables_today")}
+      </p>`;
+    if (!this.floorReadFailed) return nothing;
+    return html`<div class="read-failed">
+      <p data-floor-read-failed role="status">${t("floor.read_failed")}</p>
+      <wt-button
+        data-floor-retry
+        variant="secondary"
+        @click=${() => this.#requestFloorRefresh({ zones: true })}
+      >
+        ${t("find_page.retry")}
+      </wt-button>
+    </div>`;
   }
 
   /** `fitKey` and `tables` change in one update, so a new zone is fitted to its own tables. */

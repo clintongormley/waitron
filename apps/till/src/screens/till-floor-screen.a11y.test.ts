@@ -682,6 +682,27 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     },
   );
 
+  it("has no violations saying a read zone has no tables", async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables, selectedZoneId: "z2", tablesAnswered: true },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-floor-no-tables]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations saying the tables could not be read, with its Retry", async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: [], floorReadFailed: true },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-floor-read-failed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-floor-retry]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with the needs-moving question open", async () => {
     const needing: TableState[] = [{ ...tables[2]!, today: { ...todayRow(6), needsMoving: true } }];
     const { el, host } = await mountWidget<TillFloorScreen>(
