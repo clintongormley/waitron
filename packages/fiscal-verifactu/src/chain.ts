@@ -2,6 +2,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { IssuanceRefusal, recordIncident } from "@waitron/core";
+import { IssuanceRefusedError } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, SaleOrigin } from "@waitron/shared";
 import {
@@ -308,15 +309,17 @@ async function raiseWarning(
 }
 
 /**
- * A chain whose box handed over takes no further record. Read off the held chart, never off
- * activation times: those come from two boxes' clocks, and a chart moves by term, so a box that
- * took back is named primary again. With no chart held, nothing is refused.
+ * Refuses unless the held membership chart names `nodeId` the serving primary; with no chart held,
+ * nothing is refused. Read off the chart, never off activation times: those come from two boxes'
+ * clocks, while a chart moves by term, so a box that takes back is named primary again.
+ * An `IssuanceRefusedError`, so a refusal after money moved is answered as charged-not-recorded.
  */
-async function refuseUnlessServingPrimary(tx: Transaction, nodeId: NodeId): Promise<void> {
+export async function refuseUnlessServingPrimary(tx: Transaction, nodeId: NodeId): Promise<void> {
   const chart = await readNodeMembership(tx);
   if (chart === null) return;
+  // `servingPrimaryNodeId` in packages/membership/src/fence.ts, which this package does not import.
   const primary = chart.body.nodes.find((n) => n.standing === "serving-primary")?.nodeId;
-  if (primary !== nodeId) throw new AppError("fiscal.chain_handed_over", { nodeId });
+  if (primary !== nodeId) throw new IssuanceRefusedError("fiscal.chain_handed_over", { nodeId });
 }
 
 /**

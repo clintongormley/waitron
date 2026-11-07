@@ -476,6 +476,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // basket, so 409 rather than 400 or 500.
   "fiscal.record_invalid": 409,
   "fiscal.fingerprint_mismatch": 409,
+  "fiscal.chain_handed_over": 409,
   "clock.unusable": 409,
   "clock.behind_chain": 409,
   "fiscal.foreign_recipient_unsupported": 409,

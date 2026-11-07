@@ -9,7 +9,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { Database } from "@waitron/db";
+import { writeNodeMembership, type Database } from "@waitron/db";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -840,6 +840,99 @@ describe("active fiscal conflict stops new money", () => {
     expect(await saleCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  });
+});
+
+describe("a box the held chart does not name primary takes no new money", () => {
+  async function chartNamingAnotherBoxPrimary(cfg: DeviceRequestConfig) {
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 2,
+        nodes: [
+          { nodeId: cfg.nodeId, contactUrl: "https://this-box", standing: "sell-only" },
+          { nodeId: randomUUID(), contactUrl: "https://new-box", standing: "serving-primary" },
+        ],
+      },
+      signerNodeId: "new-box",
+      signature: "sig-2",
+      endorsements: [],
+    });
+  }
+
+  it("refuses a cash sale before any money or record", async () => {
+    const { cfg, cafe } = await setupVenue();
+    await chartNamingAnotherBoxPrimary(cfg);
+    const id = randomUUID();
+
+    await expect(
+      payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
+        id,
+        zoneId: cafe.zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      }),
+    ).rejects.toMatchObject({ code: "fiscal.chain_handed_over", params: { nodeId: cfg.nodeId } });
+    expect(await paymentCount(id)).toBe(0);
+    expect(await saleCount(id)).toBe(0);
+  });
+
+  it("refuses a connected-card sale before the reader is asked to charge", async () => {
+    const { cfg, cafe } = await setupVenue();
+    await chartNamingAnotherBoxPrimary(cfg);
+    const provider = new FakePaymentProvider(suite.db);
+    const id = randomUUID();
+
+    await expect(
+      payWorkingOrderIntegrated(
+        {
+          admission: testTradingAdmission(),
+          db: suite.db,
+          backend,
+          clock,
+          provider,
+          sayCardChargedNotRecorded: true,
+        },
+        cfg,
+        { id, zoneId: cafe.zoneId, lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }] },
+      ),
+    ).rejects.toMatchObject({ code: "fiscal.chain_handed_over", params: { nodeId: cfg.nodeId } });
+    expect(provider.collectCalls).toEqual([]);
+    expect(await paymentCount(id)).toBe(0);
+    expect(await saleCount(id)).toBe(0);
+  });
+
+  it("answers a card charged before the chart moved as charged and not recorded", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const provider = new FakePaymentProvider(suite.db);
+    const collect = provider.collect.bind(provider);
+    provider.collect = async (params) => {
+      const captured = await collect(params);
+      await chartNamingAnotherBoxPrimary(cfg);
+      return captured;
+    };
+    const id = randomUUID();
+
+    await expect(
+      payWorkingOrderIntegrated(
+        {
+          admission: testTradingAdmission(),
+          db: suite.db,
+          backend,
+          clock,
+          provider,
+          sayCardChargedNotRecorded: true,
+        },
+        cfg,
+        { id, zoneId: cafe.zoneId, lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }] },
+      ),
+    ).rejects.toMatchObject({
+      code: "sale.charged_not_recorded",
+      params: { reason: "issuance_refused" },
+    });
+    expect(provider.collectCalls).toHaveLength(1);
+    expect(await paymentCount(id)).toBe(1);
+    expect(await saleCount(id)).toBe(0);
+    expect(provider.refundCalls).toEqual([]);
   });
 });
 

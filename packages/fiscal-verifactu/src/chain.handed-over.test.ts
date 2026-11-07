@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { captureError, withTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { IssuanceRefusedError } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { registrosFacturacion } from "./schema/registros.js";
+import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
+import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -20,14 +23,22 @@ beforeEach(async () => {
   m2 = await seedNode(suite.db, "B");
 });
 
-function chart(term: number, primary: string, other: string): Chart {
+function chart(
+  term: number,
+  primary: string,
+  other: string,
+  order: "primary first" | "primary second" = "primary first",
+): Chart {
+  const named = {
+    nodeId: primary,
+    contactUrl: "https://primary",
+    standing: "serving-primary" as const,
+  };
+  const second = { nodeId: other, contactUrl: "https://other", standing: "sell-only" as const };
   return {
     body: {
       term,
-      nodes: [
-        { nodeId: primary, contactUrl: "https://primary", standing: "serving-primary" },
-        { nodeId: other, contactUrl: "https://other", standing: "sell-only" },
-      ],
+      nodes: order === "primary first" ? [named, second] : [second, named],
     },
     signerNodeId: primary,
     signature: `sig-${term}`,
@@ -56,14 +67,14 @@ describe("appendToChain after a handover", () => {
 
     const error = await captureError(() => append(m1, 1));
 
-    expect(error).toBeInstanceOf(AppError);
+    expect(error).toBeInstanceOf(IssuanceRefusedError);
     expect((error as AppError).code).toBe("fiscal.chain_handed_over");
     expect((error as AppError).params).toEqual({ nodeId: m1.nodeId });
     expect(await recordsOf(m1)).toBe(0);
   });
 
   it("the box the chart names primary appends", async () => {
-    await writeNodeMembership(suite.db, chart(2, m2.nodeId, m1.nodeId));
+    await writeNodeMembership(suite.db, chart(2, m2.nodeId, m1.nodeId, "primary second"));
 
     const result = await append(m2, 1);
 
@@ -89,5 +100,52 @@ describe("appendToChain after a handover", () => {
 
     expect(result.secuencia).toBe(1);
     expect(await recordsOf(m1)).toBe(1);
+  });
+});
+
+describe("refuseNewIssuance after a handover", () => {
+  function backend(): VerifactuBackend {
+    return new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(fakeClient),
+    });
+  }
+
+  it("refuses a box the chart does not name primary", async () => {
+    await writeNodeMembership(suite.db, chart(2, m2.nodeId, m1.nodeId, "primary second"));
+
+    const error = await captureError(() =>
+      withTransaction(suite.db, (tx) => backend().refuseNewIssuance(tx, m1.nodeId)),
+    );
+
+    expect(error).toBeInstanceOf(IssuanceRefusedError);
+    expect((error as AppError).code).toBe("fiscal.chain_handed_over");
+    expect((error as AppError).params).toEqual({ nodeId: m1.nodeId });
+  });
+
+  it("refuses every box when the chart names no primary", async () => {
+    await writeNodeMembership(suite.db, {
+      ...chart(2, m2.nodeId, m1.nodeId),
+      body: {
+        term: 2,
+        nodes: [{ nodeId: m2.nodeId, contactUrl: "https://other", standing: "serving-secondary" }],
+      },
+    });
+
+    const error = await captureError(() =>
+      withTransaction(suite.db, (tx) => backend().refuseNewIssuance(tx, m2.nodeId)),
+    );
+
+    expect((error as AppError).code).toBe("fiscal.chain_handed_over");
+  });
+
+  it("lets the box the chart names primary issue", async () => {
+    await writeNodeMembership(suite.db, chart(2, m2.nodeId, m1.nodeId, "primary second"));
+
+    await expect(
+      withTransaction(suite.db, (tx) => backend().refuseNewIssuance(tx, m2.nodeId)),
+    ).resolves.toBeUndefined();
   });
 });

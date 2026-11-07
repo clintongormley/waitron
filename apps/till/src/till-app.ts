@@ -993,6 +993,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "device.unauthorized",
   "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
+  "fiscal.chain_handed_over",
   "bill.unsent_dishes",
   "service_zone.closed",
   "device.forbidden_action",
@@ -1829,6 +1830,7 @@ function saleRefusalOf(
   switch (refusal?.code) {
     case "sale.full_invoice_unavailable":
     case "fiscal.fingerprint_mismatch":
+    case "fiscal.chain_handed_over":
       return { code: refusal.code };
     case "storage.disk_full":
       return tender.manualCard ? "sale.disk_full_manual_card" : "sale.disk_full";

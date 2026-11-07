@@ -9,6 +9,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Fingerprint check failed; ask a manager.",
     es: "Ha fallado la comprobación de la huella; avisa a un responsable.",
   },
+  "fiscal.chain_handed_over": {
+    en: "This server is no longer the main server, so it cannot record sales. If you already charged a card on the terminal, refund it there.",
+    es: "Este servidor ya no es el servidor principal, así que no puede registrar ventas. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+  },
   "allergy.unanswered": { en: en["allergy.unanswered"], es: es["allergy.unanswered"] },
   "allergy.out_of_date": { en: en["allergy.stale"], es: es["allergy.stale"] },
   "allergy.invalid": { en: en["allergy.invalid"], es: es["allergy.invalid"] },

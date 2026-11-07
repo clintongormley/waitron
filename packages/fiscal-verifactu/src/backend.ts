@@ -48,7 +48,7 @@ import type {
   SistemaInformatico,
   VerifactuClient,
 } from "@waitron/verifactu";
-import { appendToChain } from "./chain.js";
+import { appendToChain, refuseUnlessServingPrimary } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { assertNoActiveConflict } from "./conflict-evidence.js";
 import type { SifRegistration } from "./registro-sif.js";
@@ -179,8 +179,9 @@ export class VerifactuBackend implements FiscalBackend {
     refuseBeforeFirstIssueDate(reading);
   }
 
-  refuseNewIssuance(tx: Transaction, nodeId: NodeId): Promise<void> {
-    return assertNoActiveConflict(tx, nodeId);
+  async refuseNewIssuance(tx: Transaction, nodeId: NodeId): Promise<void> {
+    await refuseUnlessServingPrimary(tx, nodeId);
+    await assertNoActiveConflict(tx, nodeId);
   }
 
   clockBehindLatestRecord(
