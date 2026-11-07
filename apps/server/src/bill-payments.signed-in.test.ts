@@ -141,13 +141,13 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     const cat = await createCatalogue(tx, {
       name: `Bill payments signed in menu ${cfg.locationId}`,
     });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const bebidas = await createCategory(tx, { name: "Drinks" });
     const cana = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      name: "Caña",
+      name: "Draft beer",
       customerName: { [LOCALE]: "Caña de cerveza" },
-      kitchenName: "CANA",
+      kitchenName: "BAR BEER",
       pricingUnit: "each",
       unitPrice: "3.00",
       vatClass: "general",

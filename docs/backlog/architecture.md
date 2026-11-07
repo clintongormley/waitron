@@ -842,10 +842,9 @@ product failures.
 
 ## A976. Finish the server's English test-venue defaults.
 
-- **A976. Finish the server's English test-venue defaults.** Signed-in bill-payment venue,
-  operation, administrator and printer labels use English. Spanish dish samples remain in
+- **A976. Finish the server's English test-venue defaults.** Spanish dish samples remain in
   `party-bill-actions.test.ts`. Spanish display samples remain in
-  `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
+  `bill-payments.test.ts`, `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
   `receipt-guests.test.ts`, `receipt-print.test.ts`, `working-order.test.ts`, `till-api.reprint.test.ts`,
   `order-portions.counter.test.ts`, `order-portions.filing.test.ts`,
   `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts`,
