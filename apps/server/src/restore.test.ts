@@ -1082,6 +1082,25 @@ describe("restore hooks (identity phase)", () => {
     await expectOldBox();
   });
 
+  it.each(["secrets/trading.env.incoming", "secrets/trading.env.replaced"])(
+    "an archive entry named %s is refused before anything changes",
+    async (name) => {
+      await seedOldBox();
+      const migrate = vi.fn(async () => {});
+      const thrown = await restoreFromArtifact(
+        makeRestoreDeps({
+          artifact: buildArtifact([...FULL_ENTRIES, { name, bytes: Buffer.from("UNCHECKED") }]),
+          migrate,
+        }),
+      ).catch((error: unknown) => error);
+      expect(thrown).toMatchObject({ code: "restore.unsafe_entry_path", params: { name } });
+      expect(migrate).not.toHaveBeenCalled();
+      await expectOldBox();
+      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
+      expect(placementLeftNothingChanged(thrown)).toBe(true);
+    },
+  );
+
   it("a disk or write failure while writing the secrets leaves the box's database, identity and secrets", async () => {
     await seedOldBox();
     const migrate = vi.fn(async () => {});

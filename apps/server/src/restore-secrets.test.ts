@@ -1,6 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import * as fs from "node:fs/promises";
-import { lstat, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +11,7 @@ import { stageSecrets } from "./restore-secrets.js";
 vi.mock("node:fs/promises", { spy: true });
 
 afterEach(() => {
-  for (const spy of [fs.rename, fs.open, fs.rm, fs.lstat, fs.link]) vi.mocked(spy).mockReset();
+  for (const spy of [fs.rename, fs.open, fs.rm, fs.stat]) vi.mocked(spy).mockReset();
 });
 
 async function failing<T>(code: string): Promise<T> {
@@ -60,6 +60,30 @@ async function renamesDuring(run: () => Promise<unknown>): Promise<string[][]> {
   return renames;
 }
 
+/** Every rename (`from → to`) and every folder opened to be synced (`sync <folder>`), in order,
+ * paths relative to `stateDir`; calls go on to any failure already injected. */
+async function renamesAndSyncsDuring(
+  stateDir: string,
+  run: () => Promise<unknown>,
+): Promise<string[]> {
+  const real = await vi.importActual<typeof fs>("node:fs/promises");
+  const rename = vi.mocked(fs.rename).getMockImplementation() ?? real.rename;
+  const open = vi.mocked(fs.open).getMockImplementation() ?? real.open;
+  const folders = new Set([stateDir, join(stateDir, "tls")]);
+  const events: string[] = [];
+  const rel = (path: unknown) => String(path).slice(stateDir.length + 1);
+  vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+    events.push(`${rel(from)} → ${rel(to)}`);
+    return rename(from, to);
+  });
+  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+    if (folders.has(String(args[0]))) events.push(`sync ${rel(args[0]) || "."}`);
+    return open(...args);
+  });
+  await run();
+  return events;
+}
+
 describe("stageSecrets", () => {
   it("stages every secrets/ entry beside its target, owner-only, leaving the targets as they were", async () => {
     const stateDir = await seedState();
@@ -88,6 +112,60 @@ describe("stageSecrets", () => {
       params: { name: "secrets/tls/server.key" },
     });
     expect(await readdir(stateDir)).toEqual(["tls"]);
+  });
+
+  it("refuses a target that is a link to a folder before writing any staged file", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "restore-secrets-folder-link-"));
+    await mkdir(join(stateDir, "elsewhere"));
+    await symlink(join(stateDir, "elsewhere"), join(stateDir, "secrets.env"));
+    await expect(
+      stageSecrets({
+        entries: [entry("secrets/trading.env", "t\n"), entry("secrets/secrets.env", "s\n")],
+        stateDir,
+        log: vi.fn(),
+      }),
+    ).rejects.toMatchObject({
+      code: "restore.unsafe_entry_path",
+      params: { name: "secrets/secrets.env" },
+    });
+    expect((await readdir(stateDir)).sort()).toEqual(["elsewhere", "secrets.env"]);
+    expect(await readdir(join(stateDir, "elsewhere"))).toEqual([]);
+  });
+
+  it("refuses an entry named like another entry's staged file, so it cannot replace the identity", async () => {
+    const stateDir = await seedState();
+    const before = (await readdir(stateDir, { recursive: true })).map(String).sort();
+    await expect(
+      stageSecrets({
+        entries: [
+          entry("secrets/trading.env", "VALIDATED-IDENTITY\n"),
+          entry("secrets/trading.env.incoming", "UNCHECKED\n"),
+        ],
+        stateDir,
+        log: vi.fn(),
+      }),
+    ).rejects.toMatchObject({
+      code: "restore.unsafe_entry_path",
+      params: { name: "secrets/trading.env.incoming" },
+    });
+    expect((await readdir(stateDir, { recursive: true })).map(String).sort()).toEqual(before);
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(OLD["trading.env"]);
+  });
+
+  // `.replaced` is the set-aside identity's name; `.tmp` a staged file's working copy.
+  it.each([
+    "secrets/trading.env.replaced",
+    "secrets/secrets.env.previous",
+    "secrets/tls/server.key.incoming.tmp",
+    "secrets/tls/server.key.tmp",
+    "secrets/trading.env.INCOMING",
+  ])("refuses %s, a name a restore uses for its own working files", async (name) => {
+    const stateDir = await seedState();
+    const before = (await readdir(stateDir, { recursive: true })).map(String).sort();
+    await expect(
+      stageSecrets({ entries: [...ENTRIES, entry(name, "UNCHECKED\n")], stateDir, log: vi.fn() }),
+    ).rejects.toMatchObject({ code: "restore.unsafe_entry_path", params: { name } });
+    expect((await readdir(stateDir, { recursive: true })).map(String).sort()).toEqual(before);
   });
 
   it("refuses an entry that escapes the state folder, removing what it had staged", async () => {
@@ -119,9 +197,9 @@ describe("stageSecrets", () => {
       expect(await readFile(join(stateDir, rel), "utf8")).toBe(text);
   });
 
-  it("throws an lstat failure other than a missing target before staging anything", async () => {
+  it("throws a stat failure other than a missing target before staging anything", async () => {
     const stateDir = await seedState();
-    vi.mocked(fs.lstat).mockImplementationOnce(() => failing("EACCES"));
+    vi.mocked(fs.stat).mockImplementationOnce(() => failing("EACCES"));
     await expect(stageSecrets({ entries: ENTRIES, stateDir, log: vi.fn() })).rejects.toMatchObject({
       code: "EACCES",
     });
@@ -142,26 +220,82 @@ describe("stageSecrets", () => {
       join(stateDir, "trading.env.incoming"),
       join(stateDir, "trading.env"),
     ]);
-    expect(renames).toHaveLength(ENTRIES.length);
+    expect(renames.filter(([from]) => from.endsWith(".incoming"))).toHaveLength(ENTRIES.length);
   });
 
-  it("a publish whose third rename fails puts back what it renamed and throws the failure", async () => {
+  // Eight rename calls: each target set aside (tls/ca.crt has none to set aside), then placed.
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+    "a publish whose rename %i fails puts back what it renamed and throws the failure",
+    async (failing) => {
+      const stateDir = await seedState();
+      const log = vi.fn<Logger>();
+      const staged = await stageSecrets({ entries: ENTRIES, stateDir, log });
+      const real = await vi.importActual<typeof fs>("node:fs/promises");
+      const injected = Object.assign(new Error("injected rename failure"), { code: "EIO" });
+      let count = 0;
+      vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+        count += 1;
+        if (count === failing) throw injected;
+        return real.rename(from, to);
+      });
+      await expect(staged.publish()).rejects.toBe(injected);
+      for (const [rel, text] of Object.entries(OLD))
+        expect(await readFile(join(stateDir, rel), "utf8")).toBe(text);
+      await expect(stat(join(stateDir, "tls/ca.crt"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await leftovers(stateDir)).toEqual([]);
+      expect(log).not.toHaveBeenCalledWith(
+        expect.anything(),
+        "restore.secrets.put_back_failed",
+        expect.anything(),
+      );
+    },
+  );
+
+  it("syncs every other secret's folder before trading.env is renamed, and the state folder after", async () => {
+    const stateDir = await seedState();
+    const staged = await stageSecrets({ entries: ENTRIES, stateDir, log: vi.fn() });
+    expect(await renamesAndSyncsDuring(stateDir, () => staged.publish())).toEqual([
+      "secrets.env → secrets.env.previous",
+      "secrets.env.incoming → secrets.env",
+      "tls/ca.crt → tls/ca.crt.previous",
+      "tls/ca.crt.incoming → tls/ca.crt",
+      "tls/server.key → tls/server.key.previous",
+      "tls/server.key.incoming → tls/server.key",
+      "sync .",
+      "sync tls",
+      "trading.env → trading.env.previous",
+      "trading.env.incoming → trading.env",
+      "sync .",
+    ]);
+  });
+
+  it("a publish whose folder sync fails puts the old secrets back, then syncs the folders", async () => {
     const stateDir = await seedState();
     const log = vi.fn<Logger>();
     const staged = await stageSecrets({ entries: ENTRIES, stateDir, log });
     const real = await vi.importActual<typeof fs>("node:fs/promises");
-    const injected = Object.assign(new Error("injected rename failure"), { code: "EIO" });
-    let count = 0;
-    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
-      count += 1;
-      if (count === 3) throw injected;
-      return real.rename(from, to);
+    const injected = Object.assign(new Error("injected folder sync failure"), { code: "EIO" });
+    let failed = false;
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      if (!failed && String(args[0]) === join(stateDir, "tls")) {
+        failed = true;
+        throw injected;
+      }
+      return real.open(...args);
     });
-    await expect(staged.publish()).rejects.toBe(injected);
+    const events = await renamesAndSyncsDuring(stateDir, async () => {
+      await expect(staged.publish()).rejects.toBe(injected);
+    });
     for (const [rel, text] of Object.entries(OLD))
       expect(await readFile(join(stateDir, rel), "utf8")).toBe(text);
     await expect(stat(join(stateDir, "tls/ca.crt"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await leftovers(stateDir)).toEqual([]);
+    expect(events.slice(events.lastIndexOf("tls/server.key.previous → tls/server.key"))).toEqual([
+      "tls/server.key.previous → tls/server.key",
+      "secrets.env.previous → secrets.env",
+      "sync tls",
+      "sync .",
+    ]);
     expect(log).not.toHaveBeenCalledWith(
       expect.anything(),
       "restore.secrets.put_back_failed",
@@ -190,7 +324,7 @@ describe("stageSecrets", () => {
     const real = await vi.importActual<typeof fs>("node:fs/promises");
     const injected = Object.assign(new Error("injected rename failure"), { code: "EIO" });
     vi.mocked(fs.rename).mockImplementation(async (from, to) => {
-      if (String(to) === join(stateDir, "tls/server.key")) throw injected;
+      if (String(from) === join(stateDir, "tls/server.key.incoming")) throw injected;
       if (String(from) === join(stateDir, "secrets.env.previous"))
         throw Object.assign(new Error("injected put-back failure"), { code: "EACCES" });
       return real.rename(from, to);
@@ -203,11 +337,16 @@ describe("stageSecrets", () => {
     expect(await readFile(join(stateDir, "secrets.env.previous"), "utf8")).toBe(OLD["secrets.env"]);
   });
 
-  it("a target that cannot be kept as previous fails the publish with nothing replaced", async () => {
+  it("a target that cannot be set aside as previous fails the publish with nothing replaced", async () => {
     const stateDir = await seedState();
     const staged = await stageSecrets({ entries: ENTRIES, stateDir, log: vi.fn() });
-    vi.mocked(fs.link).mockImplementationOnce(() => failing("EPERM"));
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      if (String(to) === join(stateDir, "tls/server.key.previous")) return failing("EPERM");
+      return real.rename(from, to);
+    });
     await expect(staged.publish()).rejects.toMatchObject({ code: "EPERM" });
+    await expect(stat(join(stateDir, "tls/ca.crt"))).rejects.toMatchObject({ code: "ENOENT" });
     for (const [rel, text] of Object.entries(OLD))
       expect(await readFile(join(stateDir, rel), "utf8")).toBe(text);
     expect(await leftovers(stateDir)).toEqual([]);
@@ -242,6 +381,36 @@ describe("stageSecrets", () => {
     expect(await readFile(join(stateDir, "real-tls/server.key"), "utf8")).toBe("new-server-key\n");
     expect(await readFile(join(stateDir, "real-tls/ca.crt"), "utf8")).toBe("new-ca\n");
     expect(await leftovers(join(stateDir, "real-tls"))).toEqual([]);
+  });
+
+  it("stages, publishes and finishes over what a killed restore left, staged files owner-only", async () => {
+    const stateDir = await seedState();
+    const stale = [
+      "secrets.env.incoming",
+      "tls/server.key.incoming.tmp",
+      "trading.env.previous",
+      "tls/server.key.previous",
+    ];
+    for (const rel of stale) {
+      await writeFile(join(stateDir, rel), "stale\n");
+      await chmod(join(stateDir, rel), 0o644);
+    }
+    const staged = await stageSecrets({ entries: ENTRIES, stateDir, log: vi.fn() });
+    for (const e of ENTRIES) {
+      const path = join(stateDir, `${e.name.slice("secrets/".length)}.incoming`);
+      expect(await readFile(path)).toEqual(Buffer.from(e.bytes));
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
+    }
+    await staged.publish();
+    await staged.finish();
+    for (const e of ENTRIES)
+      expect(await readFile(join(stateDir, e.name.slice("secrets/".length)))).toEqual(
+        Buffer.from(e.bytes),
+      );
+    expect(await leftovers(stateDir)).toEqual([]);
+    expect(
+      (await readdir(stateDir, { recursive: true })).map(String).filter((n) => n.endsWith(".tmp")),
+    ).toEqual([]);
   });
 
   it("discard removes every staged file and nothing else", async () => {

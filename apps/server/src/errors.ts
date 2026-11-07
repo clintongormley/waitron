@@ -1692,8 +1692,10 @@ declare module "@waitron/shared" {
      */
     "restore.schema_too_new": { module: string; backup: number; target: number };
     /**
-     * An archive entry name is unsafe, repeats a destination already named in the archive, or
-     * names a destination that already exists as a folder.
+     * An archive entry name is unsafe, repeats a destination already named in the archive, names
+     * a destination that already exists as a folder (or a link to one), or names a secret ending
+     * in a suffix the restore gives its own working files (`.incoming`, `.previous`, `.tmp`,
+     * `.replaced`).
      * Duplicates are refused by `validateArtifact`; escapes by `restore-entry-guard.ts`, before any
      * write, both lexically (an absolute name or a `../` escape) and through symlinks (a parent
      * directory that is a pre-existing symlink out of the target). The archive's integrity check
