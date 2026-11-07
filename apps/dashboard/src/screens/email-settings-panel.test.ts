@@ -169,6 +169,43 @@ it.each(["resolve", "reject"] as const)(
   },
 );
 
+it("refreshes the reopened card when an earlier removal finishes on the server", async () => {
+  const { el, host, client, read } = await mount();
+  let finish!: () => void;
+  const done = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let current: EmailSettingsView = stored;
+  read.mockImplementation(async () => current);
+  vi.mocked(client.removeEmailSettings).mockImplementationOnce(async () => {
+    await done;
+    current = { mode: "unconfigured", editable: true, settings: null };
+    return { removed: true };
+  });
+  await askToRemove(el);
+  q(el, "[data-test=remove-confirm]")!.click();
+  await vi.waitFor(() => expect(client.removeEmailSettings).toHaveBeenCalledOnce());
+  el.remove();
+  host.appendChild(el);
+  await el.updateComplete;
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+  expect(q(el, "[data-test=summary]")!.textContent).toContain("smtp.example.test");
+  finish();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=summary]")!.textContent).not.toContain("smtp.example.test"),
+  );
+  expect(q(el, "[data-test=change]")!.textContent).toContain("Set up mail server");
+  expect(q(el, "[role=alert]")).toBeNull();
+});
+
+it("shows the Prepare save warning only to an administrator who can act on it", async () => {
+  const { el } = await mount({ mode: "local_capture", editable: false, settings: null });
+  el.intent = "prepare";
+  await el.updateComplete;
+  expect(el.shadowRoot!.textContent).not.toContain("Saving a mail server");
+  expect(q(el, "[data-test=change]")).toBeNull();
+});
+
 it("returns keyboard focus to Change when the inline editor closes", async () => {
   const { el } = await mount();
   q(el, "[data-test=change]")!.click();

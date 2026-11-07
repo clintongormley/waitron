@@ -35,6 +35,11 @@ export class EmailSettingsPanel extends LitElement {
       .summary {
         overflow-wrap: anywhere;
       }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -121,7 +126,10 @@ export class EmailSettingsPanel extends LitElement {
     this.actionError = undefined;
     try {
       await this.api.removeEmailSettings();
-      if (!current()) return;
+      if (!current()) {
+        if (this.isConnected) void this.#load();
+        return;
+      }
       ++this.#generation;
       this.view = { ...this.view!, settings: null };
       this.modeKnown = false;
@@ -130,6 +138,7 @@ export class EmailSettingsPanel extends LitElement {
       this.api.liveData?.invalidate([{ type: "email_inbox" }]);
     } catch (error) {
       if (current()) this.actionError = codeOf(error);
+      else if (this.isConnected) void this.#load();
     } finally {
       if (current()) this.removing = false;
     }
@@ -158,7 +167,7 @@ export class EmailSettingsPanel extends LitElement {
                     </p>`
                   : nothing
               }
-              ${this.intent === "prepare" && !view.settings ? html`<p>${t("email.settings.prepare_save")}</p>` : nothing}
+              ${this.intent === "prepare" && view.editable && !view.settings ? html`<p>${t("email.settings.prepare_save")}</p>` : nothing}
               ${
                 view.settings
                   ? html`<p>
@@ -197,7 +206,8 @@ export class EmailSettingsPanel extends LitElement {
               ></dashboard-email-settings-form>`,
             )
           : view?.editable
-            ? html`<wt-button
+            ? html`<div class="actions">
+                <wt-button
                   data-test="change"
                   variant="secondary"
                   @click=${() => {
@@ -227,7 +237,8 @@ export class EmailSettingsPanel extends LitElement {
                         >${t("email.settings.remove")}</wt-button
                       >`
                     : nothing
-                }`
+                }
+              </div>`
             : nothing
       }
       <wt-dialog

@@ -8,6 +8,7 @@ import { hashPassword, hashPin, persons, startManagementSession } from "@waitron
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
+  deleteCredential,
   loadKeyRing,
   putCredential,
   tenantCredentials,
@@ -621,6 +622,43 @@ it("keeps SMTP settings read-only for a manager", async () => {
   const response = await request(mount(), venue.manager);
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ mode: "unconfigured", editable: false, settings: null });
+});
+
+it("reads stored settings and delivery mode from the same turn before a queued removal", async () => {
+  const venue = await setupVenue();
+  const app = mount("live");
+  expect((await request(app, venue.admin, settings)).status).toBe(200);
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const held = withTransaction(suite.db, async () => {
+    entered();
+    await wait;
+  });
+  await started;
+  const reading = request(app, venue.admin);
+  const removing = withTransaction(suite.db, (tx) =>
+    deleteCredential(tx, { purpose: "email.smtp" }),
+  );
+  release();
+  await held;
+  await removing;
+  expect(await (await reading).json()).toEqual({
+    mode: "smtp",
+    editable: true,
+    settings: {
+      server: "smtp.example.test",
+      port: 587,
+      encryption: "starttls",
+      from: "venue@example.test",
+      hasAuthentication: true,
+    },
+  });
+  expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
 });
 
 it("lets a Prepare admin save, read and remove a sealed relay while managers only read and test their own proposal", async () => {

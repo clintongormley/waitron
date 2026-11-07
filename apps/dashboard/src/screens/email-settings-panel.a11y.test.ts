@@ -24,7 +24,7 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
     "configured",
     "unconfigured",
     "captured",
-    "prepare",
+    "read-only",
     "initial",
     "invalid",
     "accepted",
@@ -52,7 +52,7 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
               : {
                   ...stored,
                   mode: state === "dev-stored" ? "local_capture" : "smtp",
-                  editable: state !== "prepare",
+                  editable: state !== "read-only",
                 };
       const api = {
         getEmailSettings:
