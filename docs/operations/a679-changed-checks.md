@@ -1,5 +1,13 @@
 # A679 changed test checks
 
+_2026-11-07, A1383: the clock sample, committed preparation action and early recovery-source
+gaps described below are now pinned by the [clock](../../packages/fiscal-verifactu/src/hour-clock.test.ts),
+[action](../../packages/fiscal-verifactu/src/hour-selection.test.ts) and
+[recovery-source](../../apps/server/src/hour-recovery-placement-3.test.ts) tests.
+The [live preparation tests](../../apps/server/src/node-operation-preparation.test.ts) also pin
+all three preparation-time key rechecks. The gap notes below record the earlier tree; these
+completed entries are removed from the backlog._
+
 _2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
 
 _2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._

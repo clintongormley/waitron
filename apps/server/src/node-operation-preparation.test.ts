@@ -133,60 +133,73 @@ it("hands a conflict switch to the module with its isolation answers and not rel
 });
 
 it.each([
-  { rotateAfter: "history", steps: ["history"] },
-  { rotateAfter: "state", steps: ["history", "state"] },
-  { rotateAfter: "key", steps: ["history", "state", "key"] },
-  { rotateAfter: "none", steps: ["history", "state", "key", "delivered"] },
-])(
-  "stops live preparation after $rotateAfter when the current key changes",
-  async ({ rotateAfter, steps }) => {
-    const seen: string[] = [];
-    const afterRead = async (step: string) => {
-      seen.push(step);
-      if (rotateAfter === step) {
-        await withNodeTransaction(suite.node, (tx) =>
-          setRecoveryKeyTx(tx, node.nodeId, hashSecret("replacement"), "paper-2"),
-        );
-      }
-    };
-    const readHistory = provisioning.readModulePreparationHistory;
-    vi.spyOn(provisioning, "readModulePreparationHistory").mockImplementation(async (...args) => {
-      const result = await readHistory(...args);
-      await afterRead("history");
-      return result;
-    });
-    const readKey = nodeApi.readRecoveryKeyName;
-    vi.spyOn(nodeApi, "readRecoveryKeyName").mockImplementation(async (...args) => {
-      const result = await readKey(...args);
-      await afterRead("key");
-      return result;
-    });
-    const preparation = service({
-      readState: () => afterRead("state"),
-      facts: () => seen.push("delivered"),
-    });
-    const binding = { ...promote, action: "conflict-switch", sourceId: "conflict-1" };
-    const result = preparation.withLiveRecovery(
-      binding,
-      secret,
-      { oldMachineOffline: false, noParallelRecovery: false },
-      (scope) =>
-        scope.operations.recovery!({ binding, authority: scope.authority }, {}, { onBox: false }),
-    );
-
-    if (rotateAfter === "none") {
-      await expect(result).resolves.toMatchObject({
-        contextKey: expect.stringContaining("paper-1"),
-      });
-    } else {
-      await expect(result).rejects.toMatchObject({
-        code: "promotion.break_glass_invalid",
-        params: {},
-      });
-    }
-    expect(seen).toEqual(steps);
+  {
+    scenario: "refuses rotation after the history read",
+    rotateAfter: "history",
+    steps: ["history"],
   },
-);
+  {
+    scenario: "refuses rotation after the state read",
+    rotateAfter: "state",
+    steps: ["history", "state"],
+  },
+  {
+    scenario: "refuses rotation after the key read",
+    rotateAfter: "key",
+    steps: ["history", "state", "key"],
+  },
+  {
+    scenario: "accepts an unchanged key",
+    rotateAfter: "none",
+    steps: ["history", "state", "key", "delivered"],
+  },
+])("live preparation: $scenario", async ({ rotateAfter, steps }) => {
+  const seen: string[] = [];
+  const afterRead = async (step: string) => {
+    seen.push(step);
+    if (rotateAfter === step) {
+      await withNodeTransaction(suite.node, (tx) =>
+        setRecoveryKeyTx(tx, node.nodeId, hashSecret("replacement"), "paper-2"),
+      );
+    }
+  };
+  const readHistory = provisioning.readModulePreparationHistory;
+  vi.spyOn(provisioning, "readModulePreparationHistory").mockImplementation(async (...args) => {
+    const result = await readHistory(...args);
+    await afterRead("history");
+    return result;
+  });
+  const readKey = nodeApi.readRecoveryKeyName;
+  vi.spyOn(nodeApi, "readRecoveryKeyName").mockImplementation(async (...args) => {
+    const result = await readKey(...args);
+    await afterRead("key");
+    return result;
+  });
+  const preparation = service({
+    readState: () => afterRead("state"),
+    facts: () => seen.push("delivered"),
+  });
+  const binding = { ...promote, action: "conflict-switch", sourceId: "conflict-1" };
+  const result = preparation.withLiveRecovery(
+    binding,
+    secret,
+    { oldMachineOffline: false, noParallelRecovery: false },
+    (scope) =>
+      scope.operations.recovery!({ binding, authority: scope.authority }, {}, { onBox: false }),
+  );
+
+  if (rotateAfter === "none") {
+    await expect(result).resolves.toMatchObject({
+      contextKey: expect.stringContaining("paper-1"),
+    });
+  } else {
+    await expect(result).rejects.toMatchObject({
+      code: "promotion.break_glass_invalid",
+    });
+    await expect(result).rejects.toHaveProperty("params", {});
+  }
+  expect(seen).toEqual(steps);
+});
 
 it.each([
   ["fiscal-verifactu", true],

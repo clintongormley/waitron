@@ -27,7 +27,7 @@ import { startServer, type StartedServer } from "./boot.js";
 import { freePorts } from "./testing/free-ports.js";
 import { copyFile, cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -858,6 +858,7 @@ describe("selected-hour admission before archive placement", () => {
   it("refuses a mismatched interactive binding before reading the recovery copy", async () => {
     const f = await interactiveHost();
     const preview = vi.spyOn(recoveryPreview, "readRecoveryCopyPreview");
+    onTestFinished(() => preview.mockRestore());
 
     await expect(
       f.invoke(

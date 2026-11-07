@@ -166,6 +166,7 @@ it.each([
     expect(f.writes).toEqual(writes);
   },
 );
+
 const historyRow = (identity = "0CNPG", change: Record<string, unknown> = {}) => ({
   ...scope,
   reference: "retired-other-node",
