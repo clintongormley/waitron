@@ -1500,7 +1500,7 @@ export const en = {
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
   "held.started_reloaded":
-    "The kitchen has already started this item, so it can no longer be changed. The order has been reloaded: cancel the item if needed, or add more as a new dish",
+    "The kitchen has already started this item, so it can no longer be changed. The order has been reloaded: cancel the item if needed",
   "place.error": "Could not send the order, try again",
   "place.unconfirmed":
     "The server did not answer. Send again: the kitchen will not get the order twice.",
@@ -3394,7 +3394,7 @@ export const es: Record<StringKey, string> = {
   "held.changed_elsewhere":
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
   "held.started_reloaded":
-    "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Se ha vuelto a cargar el pedido: cancela el plato si hace falta, o añade más como un plato nuevo",
+    "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Se ha vuelto a cargar el pedido: cancela el plato si hace falta",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "place.unconfirmed":
     "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",
