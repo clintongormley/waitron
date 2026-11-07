@@ -1275,7 +1275,9 @@ describe("till-app table ordering: refused and failed table actions", () => {
     "a refused %s shows table.error and re-reads neither the tab nor the floor",
     async (type, detail, method) => {
       const { el } = await mountApp({
-        [method]: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+        [method]: vi.fn().mockRejectedValue({
+          code: method === "moveDishes" ? "tab.transfer_modifier_line" : "tab.not_open",
+        }),
       });
       const screen = await toTableOrder(el);
       const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
@@ -1418,7 +1420,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
   it("a move to a new bill refused for any other reason shows table.error and keeps paying the original tab", async () => {
     const { el } = await mountApp({
-      moveDishes: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+      moveDishes: vi.fn().mockRejectedValue({ code: "tab.transfer_modifier_line" }),
     });
     const screen = await toTableOrder(el);
 

@@ -1328,6 +1328,8 @@ export const en = {
   "line.quantity_invalid": "Enter a positive quantity that fits this dish’s unit.",
   "table.split_quantity_whole_error": "Choose a whole quantity from 1 up to the amount ordered",
   "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
+  "table.move_dish_gone": "A dish you picked has left this bill, so nothing moved.",
+  "table.move_bill_gone": "That bill is no longer open, so nothing moved.",
   "table.round_sending": "Sending the order…",
   "table.draft_actions": "Send the order",
   "table.draft_joins_group": "Joins Group {n}",
@@ -3217,6 +3219,9 @@ export const es: Record<StringKey, string> = {
   "table.split_quantity_whole_error": "Elige una cantidad entera entre 1 y la cantidad pedida",
   "table.split_held_error":
     "Envía los artículos en espera a cocina antes de pasarlos a otra cuenta",
+  "table.move_dish_gone":
+    "Un plato que has elegido ya no está en esta cuenta, así que no se ha movido nada.",
+  "table.move_bill_gone": "Esa cuenta ya no está abierta, así que no se ha movido nada.",
   "table.round_sending": "Enviando el pedido…",
   "table.draft_actions": "Enviar el pedido",
   "table.draft_joins_group": "Al grupo {n}",

@@ -16833,7 +16833,11 @@ export class TillApp extends LitElement {
       if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string } | undefined)?.code;
       if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
-      else {
+      else if (code === "tab.line_not_found" || code === "tab.not_open") {
+        this.errorKey =
+          code === "tab.line_not_found" ? "table.move_dish_gone" : "table.move_bill_gone";
+        await this.#loadLinesAndBills();
+      } else {
         const destination = this.#refusedBill(
           error,
           toBillId === null ? [] : [toBillId],
