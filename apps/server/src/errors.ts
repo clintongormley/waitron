@@ -995,8 +995,10 @@ declare module "@waitron/shared" {
     /**
      * A line was fired but no routing cell applies and the venue has no active
      * default station. Firing fails loud rather than silently dropping food from the kitchen.
+     * `dishes`: the staff names of the dishes no station can make, each once, in line order,
+     * joined by ", ".
      */
-    "station.no_default": Record<string, never>;
+    "station.no_default": { dishes: string };
     "station.no_replacement": { stationId: string; productIds: string[] };
     /**
      * A per-line kitchen ticket-item bump is not legal from the item's current state (a skip, a

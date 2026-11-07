@@ -63,10 +63,10 @@ describe("the station error codes carry their declared params", () => {
     expect(error.params).toEqual({ stationId });
   });
 
-  it("constructs station.no_default with no details", () => {
-    const error = new AppError("station.no_default", {});
+  it("constructs station.no_default naming its dishes", () => {
+    const error = new AppError("station.no_default", { dishes: "Pulpo" });
     expect(error.code).toBe("station.no_default");
-    expect(error.params).toEqual({});
+    expect(error.params).toEqual({ dishes: "Pulpo" });
   });
 });
 

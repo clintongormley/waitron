@@ -1881,6 +1881,28 @@ export async function assertPartyBillOpen(
   return order.revision;
 }
 
+async function noDefaultStation(
+  tx: Transaction,
+  lines: readonly FireableLine[],
+): Promise<AppError<"station.no_default">> {
+  const rows = await tx
+    .select({
+      id: workingOrderLines.id,
+      name: workingOrderLines.name,
+      variantName: workingOrderLines.variantName,
+    })
+    .from(workingOrderLines)
+    .where(
+      inArray(
+        workingOrderLines.id,
+        lines.map((line) => line.id),
+      ),
+    );
+  const nameOf = new Map(rows.map((row) => [row.id, staffPresentationName(row)]));
+  const dishes = [...new Set(lines.map((line) => nameOf.get(line.id)!))].join(", ");
+  return new AppError("station.no_default", { dishes });
+}
+
 /** The columns of a stored line {@link fireLines} reads. */
 export const fireableLineColumns = {
   id: workingOrderLines.id,
@@ -2192,9 +2214,14 @@ export async function fireLines(
       .from(kitchenStations)
       .where(and(eq(kitchenStations.isDefault, true), eq(kitchenStations.active, true)));
     fallbackStationId = fallback?.id ?? null;
-    if (fallbackStationId === null) throw new AppError("station.no_default", {});
+    if (fallbackStationId === null)
+      throw await noDefaultStation(
+        tx,
+        lines.filter((line) => line.productId === null && !chosenStations.has(line.id)),
+      );
   }
   const unrouted: FireableLine[] = [];
+  const nowhere: FireableLine[] = [];
   const noReplacement: { stationId: string; productId: string }[] = [];
   lines = lines.filter((line) => {
     const outcome = line.productId === null ? undefined : makers.get(line.productId);
@@ -2204,11 +2231,14 @@ export async function fireLines(
     if (hasMaker) return true;
     if (outcome?.kind === "no_replacement")
       noReplacement.push({ stationId: outcome.stationId, productId: line.productId! });
-    if (options.unroutable !== "skip" && outcome?.kind !== "no_replacement")
-      throw new AppError("station.no_default", {});
+    if (options.unroutable !== "skip" && outcome?.kind !== "no_replacement") {
+      nowhere.push(line);
+      return false;
+    }
     unrouted.push(line);
     return false;
   });
+  if (nowhere.length > 0) throw await noDefaultStation(tx, nowhere);
   if (noReplacement.length > 0 && options.unroutable !== "skip")
     throw new AppError("station.no_replacement", {
       stationId: noReplacement[0]!.stationId,

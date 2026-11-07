@@ -856,7 +856,37 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       );
 
     await expect(round(stranded)).rejects.toMatchObject({ code: "station.no_replacement" });
-    await expect(round(missing)).rejects.toMatchObject({ code: "station.no_default" });
+    await expect(round(missing)).rejects.toMatchObject({
+      code: "station.no_default",
+      params: { dishes: missing.name },
+    });
+  });
+
+  it("names every dish in a round that no station can take, once each, in line order", async () => {
+    const navajas = await dish("Navajas");
+    const { dish: routed } = await routedDish("Pulpo");
+    const almejas = await dish("Almejas");
+    const { partyId } = await seat(v, await v.table(`T-${randomUUID().slice(0, 8)}`));
+
+    await expect(
+      inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, partyId, {
+          groups: [
+            {
+              lines: [navajas, routed, almejas, navajas].map((d) => ({
+                menuItemId: d.tablesOffer,
+                quantity: "1",
+              })),
+              release: "fire",
+            },
+          ],
+          operatorId: OPERATOR,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "station.no_default",
+      params: { dishes: `${navajas.name}, ${almejas.name}` },
+    });
   });
 
   it("with an active default station, a table round sends a dish with no route and one whose route's station is off", async () => {
@@ -870,7 +900,10 @@ describe("paying a pay-first order, or an open counter order in a zone that send
           operatorId: OPERATOR,
         }),
       );
-    await expect(round(missing)).rejects.toMatchObject({ code: "station.no_default" });
+    await expect(round(missing)).rejects.toMatchObject({
+      code: "station.no_default",
+      params: { dishes: missing.name },
+    });
 
     await inTx(v, async (tx) =>
       tx.run(
