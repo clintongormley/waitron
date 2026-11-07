@@ -629,7 +629,15 @@ except the last, added on 2026-11-07.
 
 ## Bundle: Finish the time limits on CI's network steps
 
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+The original entries retain their text from the index (backlog review, 2026-11-06).
+A1424's live qualification was added on 7 November 2026.
+
+- **A1424: qualify disposable server runners before activation.** Routing and its bounded
+  metadata watchdog are prepared, disabled by default. I still supplies measured readiness
+  and capacity. Run a real server-scoped PR on the rented runner, then qualify the unavailable
+  label and server-down paths through visible failure/cancellation and hosted attempt two.
+  Retain runner identity, unchanged source head, coverage merge and aggregate results.
+  [Procedure and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
 
 - **`scripts/ci-diff-paths.sh` never looks for `gnutimeout` for its `-k` bound** (left open by
   A1310, #2400). On ubuntu-26.04 runners it gets uutils' `timeout`, whose forced kill reaches only

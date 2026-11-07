@@ -117,6 +117,36 @@ async function verifier() {
   return source.findReuse;
 }
 
+describe("the metadata watchdog in a full main run", () => {
+  it.each([
+    ["success", true],
+    ["skipped", false],
+  ])(
+    "retains reuse eligibility only when the main watchdog concluded %s",
+    async (conclusion, allowed) => {
+      const { data, api } = fixture();
+      for (const [key, runId, headSha] of [
+        ["jobs", 42, head],
+        ["mainJobs", 40, base],
+      ]) {
+        data[key].jobs.push({
+          id: 999,
+          name: "server-queue-watchdog",
+          run_id: runId,
+          run_attempt: 1,
+          head_sha: headSha,
+          status: "completed",
+          conclusion,
+        });
+        data[key].total_count++;
+      }
+      const withWatchdog = workflow.replace("  ci:\n", "  server-queue-watchdog:\n  ci:\n");
+      const result = (await verifier())(context, api, withWatchdog);
+      expect(result !== null).toBe(allowed);
+    },
+  );
+});
+
 describe("small job-list pages", () => {
   function manyJobs(data) {
     for (const key of ["jobs", "mainJobs"]) {
