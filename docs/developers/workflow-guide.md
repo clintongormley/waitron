@@ -502,7 +502,7 @@ its read. A driver commit during that read also triggers “reviewer changed the
 and discards the unpublished report. Use a fixed disposable snapshot when independent work must
 continue. On 7 November 2026, A1393's amendment read started at `f1a0675ea0`; the driver committed
 `c03db64c92` during it and the wrapper refused the result. The retry used an installed disposable
-clone and returned the completed 397-second plan report. This checks Git state, not ignored files.
+clone and returned the completed 397-second plan report.
 
 ### Read the review report before treating it as complete
 

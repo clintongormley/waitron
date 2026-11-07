@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
+import { codeMessage } from "../i18n/codes.js";
 import { clockDateTime, setLocale } from "../i18n/t.js";
 import "./box-time-dialog.js";
 import type { BoxTimeApi, TillBoxTimeDialog } from "./box-time-dialog.js";
@@ -504,11 +505,7 @@ describe("request-device refusal recovery", () => {
           api.boxClockChallenge.mockRejectedValue({ code: "device.unauthorized" });
         const el = await open(api);
         if (phase === "confirm") await press(el, "primary");
-        expect(shownError(el)).toContain(
-          locale === "en-GB"
-            ? "Reload or reopen Waitron on this device, then try again."
-            : "Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",
-        );
+        expect(shownError(el)).toContain(codeMessage("device.unauthorized", locale));
         expect(controls(el)).not.toContain("check-again");
       },
     );

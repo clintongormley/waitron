@@ -529,10 +529,10 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
     routes: ["POST /api/device/working-orders/:id/lines/move-station"],
   },
   {
-    proof: "matching request (source)",
+    proof: "device cookie (source)",
     actions: ["prepare-orders"],
     basis:
-      "device-api.pass.test.ts; releasePassItems also checks the run-the-pass screen flag; a signed-in person is required except on a shared display",
+      "device-api.pass.test.ts; releasePassItems also checks the run-the-pass screen flag. Outside a shared display, the request also needs a session matching that device.",
     routes: ["POST /api/device/pass-screen/release"],
   },
 ];
