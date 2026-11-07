@@ -30,6 +30,32 @@ physical reboot, public certificate renewal, wrong-venue refusal, revocation, of
 the remaining cross-venue and LAN isolation checks are still open. Nothing landed during the
 A760 freeze. The earlier native-protocol evidence below belongs to the parked A951 build.
 
+## Settings on and off, 7 November 2026
+
+Source `9e3ac54d0c6e4e4af2e047b372a18e9fcc1d3be8` ran against the same isolated
+registration through `test-box-run.sh E` and the retained tunnel image. The local management
+route saved remote access off and removed `peer.json`. A new public HTTPS request then failed
+to connect; the local administrator session still answered, and a Cloud refresh kept remote
+access off. Turning it on restored public HTTP 200 with normal certificate verification.
+The registration, tunnel public key and certificate bytes matched their values before the test.
+
+A fresh Chromium session signed in through the public gateway and opened `/manage/cloud`,
+showing the saved choice and **Turn off remote access**. The same five non-staff paths listed
+above returned 404. This browser ran on the Mac through the public gateway. The off/on route
+checks ran on the Debian box, where the helper reported 5,255 MB available memory.
+
+Commands and results are in Lane E's local `receipts/a951s-settings-20261107/`:
+`settings-proof.sh`, `test-box.log`, `public-browser.mjs`, `public-browser.json` and the browser
+capture. Five one-time guard removals in a separately installed disposable clone failed
+assertions; restoring the source passed the five selected cases (`controls.json`). The clone
+was removed. Eight English/Spanish, light/dark, phone/desktop widget captures were also inspected.
+
+The bounded run stopped its own app and peer, removed its network and released the test-box
+lock. It did not replace the managed demo or the owner's app. This checks a temporary run;
+managed deployment, process restart with this setting, physical reboot and the other finish-line
+checks above remain open. The automated client case covers remembering off in a new client
+instance. The A760 landing freeze remains in force.
+
 # Current addendum: returned Debian box, 5 November 2026
 
 > 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol
