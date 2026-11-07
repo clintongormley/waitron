@@ -1331,7 +1331,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
-  it("never confirms a copy that names no tax id, even against an empty confirmation", async () => {
+  it("refuses a copy with no taxpayer as an unknown identity, staging nothing", async () => {
     const deps = await stageDeps({
       venueConfirmed: "",
       restoreGeneration: async (args) => {
@@ -1345,8 +1345,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
       },
     });
     await expect(stageStreamRestore(deps)).rejects.toMatchObject({
-      code: "restore.stream_venue_unconfirmed",
-      params: { legalName: "", taxId: "", venueName: VENUE.venueName },
+      code: "restore.identity_unknown",
     });
     await expectStateUntouched(deps.stateDir);
   });
