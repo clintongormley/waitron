@@ -561,6 +561,16 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     async status() {
       return project(await read());
     },
+    async syncTunnel() {
+      return run(async () => {
+        let state: SavedCloudState | undefined;
+        try {
+          state = await read();
+        } finally {
+          await writeTunnelConfiguration(options.tunnelDir, state);
+        }
+      }, true);
+    },
     async refresh(signal?: AbortSignal) {
       return run(async () => {
         let state: SavedCloudState | undefined;
@@ -578,10 +588,18 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       return run(async () => {
         const state = await read();
         if (!state?.view?.registration) throw new AppError("cloud.binding_conflict", {});
-        await installationClient(state, save).revoke(async () => {
+        let localFailure: unknown;
+        const authorizeStop = async () => {
           await authorize();
-          await writeTunnelConfiguration(options.tunnelDir);
-        }, signal);
+          try {
+            await writeTunnelConfiguration(options.tunnelDir);
+          } catch (error) {
+            localFailure = error;
+          }
+        };
+        if (state.lifecycle?.revoked) await authorizeStop();
+        else await installationClient(state, save).revoke(authorizeStop, signal);
+        if (localFailure) throw localFailure;
         return project(state);
       }, true);
     },
