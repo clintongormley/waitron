@@ -695,6 +695,9 @@ const TABLE_REFUSALS = new Set([
   "storage.disk_full",
   "clock.behind_chain",
   "menu_period.ended",
+  "station.no_default",
+  "department.operation_description_required",
+  "sale.department_missing",
 ]);
 
 /** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
@@ -761,17 +764,7 @@ function isPaymentsReceived(error: unknown): boolean {
 function wholeTabErrorOf(error: unknown, tender: { manualCard: boolean }): CounterError {
   const saleRefusal = saleRefusalOf(error, tender);
   if (saleRefusal !== undefined) return saleRefusal;
-  return isPaymentsReceived(error)
-    ? "bill.pay_with_bill_payments"
-    : isPermanentSaleRefusal(error)
-      ? "sale.refused"
-      : isNetworkFailure(error)
-        ? "sale.unconfirmed"
-        : isTakePaymentRefusal(error)
-          ? "take_payment.not_permitted"
-          : isPaymentInFlight(error)
-            ? "sale.payment_in_flight"
-            : (settleRefusalOf(error) ?? "sale.error");
+  return isPaymentsReceived(error) ? "bill.pay_with_bill_payments" : settlingErrorOf(error);
 }
 
 /** The sheet's words for a card the reader did not charge. */
@@ -1003,6 +996,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "storage.disk_full",
   "clock.behind_chain",
   "menu_period.ended",
+  "station.no_default",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -1840,6 +1834,30 @@ function saleRefusalOf(
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
+}
+
+/** What a refused payment says once `saleRefusalOf` and any check of the site's own have passed it by. */
+function settlingErrorOf(
+  error: unknown,
+):
+  | Extract<
+      StringKey,
+      | "sale.refused"
+      | "sale.unconfirmed"
+      | "take_payment.not_permitted"
+      | "sale.payment_in_flight"
+      | "sale.error"
+    >
+  | NonNullable<ReturnType<typeof settleRefusalOf>> {
+  return isPermanentSaleRefusal(error)
+    ? "sale.refused"
+    : isNetworkFailure(error)
+      ? "sale.unconfirmed"
+      : isTakePaymentRefusal(error)
+        ? "take_payment.not_permitted"
+        : isPaymentInFlight(error)
+          ? "sale.payment_in_flight"
+          : (settleRefusalOf(error) ?? "sale.error");
 }
 
 /** `POST /api/pay` names its reader refusal `pay`; a profile that takes no orders is `take-orders`. */
@@ -7589,6 +7607,10 @@ export class TillApp extends LitElement {
         await this.#reloadChangedOrder(id);
         return false;
       }
+      if (code === "ticket.already_started") {
+        await this.#reloadChangedOrder(id, true);
+        return false;
+      }
       if (code !== "working_order.not_open") throw error;
       return true;
     }
@@ -7784,7 +7806,7 @@ export class TillApp extends LitElement {
         this.errorKey = isPermanentSaleRefusal(error)
           ? "place.refused"
           : reachedPlace && isNetworkFailure(error)
-            ? "sale.unconfirmed"
+            ? "place.unconfirmed"
             : counterError(error, "place.error");
     } finally {
       this.placing = false;
@@ -7831,16 +7853,7 @@ export class TillApp extends LitElement {
       // permanent refusal takes `sale.refused`.
       if (session !== this.#operatorSession) return;
       this.errorKey =
-        saleRefusalOf(error, { manualCard: tender.method === "card" }) ??
-        (isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : isPaymentInFlight(error)
-                ? "sale.payment_in_flight"
-                : (settleRefusalOf(error) ?? "sale.error"));
+        saleRefusalOf(error, { manualCard: tender.method === "card" }) ?? settlingErrorOf(error);
     } finally {
       this.submitting = false;
     }
@@ -8620,15 +8633,7 @@ export class TillApp extends LitElement {
       if (!current()) return;
       this.findBillError =
         saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
-        (isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : isPaymentInFlight(error)
-                ? "sale.payment_in_flight"
-                : (settleRefusalOf(error) ?? "sale.error"));
+        settlingErrorOf(error);
     } finally {
       this.submitting = false;
       if (current()) this.findBillBusy = false;
@@ -8966,22 +8971,20 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders();
   }
 
-  /**
-   * A save refused `working_order.out_of_date` was made from a copy another till has since
-   * changed: the order is loaded again as it now stands, and staff are told, so they make their
-   * change again on it. An order closed meanwhile reads as a stale retrieve.
-   */
-  async #reloadChangedOrder(id: string): Promise<void> {
+  /** Loads the order again after a save was refused for an out-of-date copy or, with `started`,
+   * for a dish the kitchen has started. A failed read of the held list keeps the sentence. */
+  async #reloadChangedOrder(id: string, started = false): Promise<void> {
     const session = this.#operatorSession;
     try {
       await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
       if (session !== this.#operatorSession) return;
-      this.errorKey = "held.changed_elsewhere";
-    } catch {
+      this.errorKey = started ? "held.started_reloaded" : "held.changed_elsewhere";
+    } catch (error) {
       if (session !== this.#operatorSession) return;
-      this.errorKey = "held.stale";
+      const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
+      this.errorKey = gone ? "held.stale" : "held.reread_failed";
     }
-    await this.#refreshHeldOrders();
+    await this.#refreshHeldOrders().catch(() => undefined);
   }
 
   /** Replaces the basket with the open order `id` as stored, with its lines as the server lists
@@ -12218,8 +12221,11 @@ export class TillApp extends LitElement {
     this.activeTabId = next;
     this.#billAfterSplit = undefined;
     if (gone !== undefined) {
-      const was = [...bills, ...before].find((bill) => bill.workingOrderId === gone);
-      const numbered = was !== undefined && was.billNumber !== null;
+      // A bill merged away is still listed, without its number; the earlier read holds the number.
+      const was = [...bills, ...before].find(
+        (bill) => bill.workingOrderId === gone && bill.billNumber !== null,
+      );
+      const numbered = was !== undefined;
       const shown = bills.find((bill) => bill.workingOrderId === next);
       const key =
         shown === undefined
@@ -16830,7 +16836,11 @@ export class TillApp extends LitElement {
       if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string } | undefined)?.code;
       if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
-      else {
+      else if (code === "tab.line_not_found" || code === "tab.not_open") {
+        this.errorKey =
+          code === "tab.line_not_found" ? "table.move_dish_gone" : "table.move_bill_gone";
+        await this.#loadLinesAndBills();
+      } else {
         const destination = this.#refusedBill(
           error,
           toBillId === null ? [] : [toBillId],

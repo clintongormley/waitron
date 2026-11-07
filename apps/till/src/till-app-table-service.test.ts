@@ -1219,6 +1219,23 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
+  it.each([
+    ["send-lines", "sendLines"],
+    ["submit-draft", "submitDraft"],
+  ] as const)("a %s refused because no station can make a dish says so", async (type, method) => {
+    const { el } = await mountApp({
+      ...seatedFloor(),
+      [method]: vi.fn().mockRejectedValue({ code: "station.no_default", status: 409 }),
+    });
+    const screen = await toTableOrder(el);
+
+    emit(screen, type, type === "submit-draft" ? await ringCoffee(el, screen) : { lineNos: [1] });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("station.no_default"));
+    expect(banner(el)!.textContent).not.toContain(t("table.error"));
+  });
+
   it("a cancel refused because a card payment of the order is running says so", async () => {
     const { el } = await mountApp({
       ...seatedFloor(),
@@ -1258,7 +1275,9 @@ describe("till-app table ordering: refused and failed table actions", () => {
     "a refused %s shows table.error and re-reads neither the tab nor the floor",
     async (type, detail, method) => {
       const { el } = await mountApp({
-        [method]: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+        [method]: vi.fn().mockRejectedValue({
+          code: method === "moveDishes" ? "tab.transfer_modifier_line" : "tab.not_open",
+        }),
       });
       const screen = await toTableOrder(el);
       const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
@@ -1401,7 +1420,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
   it("a move to a new bill refused for any other reason shows table.error and keeps paying the original tab", async () => {
     const { el } = await mountApp({
-      moveDishes: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+      moveDishes: vi.fn().mockRejectedValue({ code: "tab.transfer_modifier_line" }),
     });
     const screen = await toTableOrder(el);
 

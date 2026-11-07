@@ -3822,22 +3822,6 @@ describe("till-app: a change refused on a bill that holds money", () => {
     expectReadAgain({ bills: reads.bills, balance: reads.balance });
   });
 
-  it("says why a move of dishes to another bill holding money was refused, and reads the bills again", async () => {
-    const moveDishes = vi
-      .fn()
-      .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-9" });
-    const { el, order, reads } = await openHolding({ moveDishes });
-    const before = listed(order);
-
-    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" });
-    await flush(el);
-
-    expect(moveDishes).toHaveBeenCalledOnce();
-    expect(text(banner(el))).toBe(codeMessage("bill.payments_received"));
-    expect(listed(tableOrder(el))).toEqual(before);
-    expectReadAgain({ bills: reads.bills, balance: reads.balance });
-  });
-
   it.each(["bill.refund_in_progress", "working_order.not_open"])(
     "says a move to a new bill refused %s in that code's own words, and reads the bill again",
     async (code) => {
@@ -4236,6 +4220,42 @@ describe("till-app: a partly paid order at the counter", () => {
     emit(c, "counter-bill-pay", { amount: "70.00" });
     await flush(el);
     expect(dialog(el)!.lines.map((row) => row.lineNo)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("opens no payment when the save is refused for a dish the kitchen has started, and reloads the order", async () => {
+    const el = await retrieved({
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 3 }),
+      updateWorkingOrder: vi
+        .fn()
+        .mockRejectedValue({ code: "ticket.already_started", status: 409 }),
+    });
+    const retrieveWorkingOrder = vi.mocked(api.retrieveWorkingOrder);
+    const c = counter(el);
+    const reads = retrieveWorkingOrder.mock.calls.length;
+    c.store.addProduct(
+      {
+        id: "beer",
+        menuItemId: "offer-beer",
+        catalogueId: "cat-default",
+        name: "Beer",
+        pricingUnit: "each",
+        unitPrice: "5.00",
+        vatClass: "general",
+        category: null,
+        allergens: null,
+      },
+      "1",
+    );
+
+    emit(c, "counter-bill-pay", { amount: "70.00" });
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(retrieveWorkingOrder.mock.calls.length).toBe(reads + 1);
+    expect(c.store.dirty).toBe(false);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      t("held.started_reloaded"),
+    );
   });
 
   it("offers to take the rest as a bill payment in place of the single payment, and files the invoice when it is paid", async () => {

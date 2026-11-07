@@ -794,6 +794,8 @@ export const en = {
   "expo.reprint": "Reprint",
   "expo.item_forgotten": "Forgotten",
   "expo.undo": "Undo",
+  "expo.zone_not_allowed":
+    "This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
   "expo.watcher_empty": "Nothing waiting here",
   "cancel.reason_prompt": "Reason for cancelling",
   // Integrated card terminal
@@ -1326,6 +1328,8 @@ export const en = {
   "line.quantity_invalid": "Enter a positive quantity that fits this dish’s unit.",
   "table.split_quantity_whole_error": "Choose a whole quantity from 1 up to the amount ordered",
   "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
+  "table.move_dish_gone": "A dish you picked is no longer on this bill, so nothing moved.",
+  "table.move_bill_gone": "That bill is no longer open, so nothing moved.",
   "table.round_sending": "Sending the order…",
   "table.draft_actions": "Send the order",
   "table.draft_joins_group": "Joins Group {n}",
@@ -1490,7 +1494,11 @@ export const en = {
     "The order could not be read again. Park it, then retrieve it, to check it.",
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
+  "held.started_reloaded":
+    "The kitchen has already started a dish on this order, and a started dish can no longer be changed. The order has been reloaded",
   "place.error": "Could not send the order, try again",
+  "place.unconfirmed":
+    "The server did not answer. Send again: the kitchen will not get the order twice.",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
@@ -2692,6 +2700,8 @@ export const es: Record<StringKey, string> = {
   "expo.reprint": "Reimprimir",
   "expo.item_forgotten": "Olvidado",
   "expo.undo": "Deshacer",
+  "expo.zone_not_allowed":
+    "El perfil de este dispositivo no trabaja en esa zona. Se puede cambiar en el panel, en Perfiles de dispositivo.",
   "expo.watcher_empty": "Nada pendiente aquí",
   "cancel.reason_prompt": "Motivo de la cancelación",
   "card.collecting": "Acerca o inserta la tarjeta…",
@@ -3213,6 +3223,9 @@ export const es: Record<StringKey, string> = {
   "table.split_quantity_whole_error": "Elige una cantidad entera entre 1 y la cantidad pedida",
   "table.split_held_error":
     "Envía los artículos en espera a cocina antes de pasarlos a otra cuenta",
+  "table.move_dish_gone":
+    "Un plato que has elegido ya no está en esta cuenta, así que no se ha movido nada.",
+  "table.move_bill_gone": "Esa cuenta ya no está abierta, así que no se ha movido nada.",
   "table.round_sending": "Enviando el pedido…",
   "table.draft_actions": "Enviar el pedido",
   "table.draft_joins_group": "Al grupo {n}",
@@ -3372,7 +3385,11 @@ export const es: Record<StringKey, string> = {
     "No se pudo volver a leer el pedido. Apárcalo y recupéralo para comprobarlo.",
   "held.changed_elsewhere":
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
+  "held.started_reloaded":
+    "La cocina ya ha empezado un plato de este pedido, y un plato empezado ya no se puede cambiar. Se ha vuelto a cargar el pedido",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
+  "place.unconfirmed":
+    "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",
   "place.refused":
     "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja.",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",

@@ -206,10 +206,10 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     expect(codeMessage(code, "en")).not.toContain(code);
   }
   expect(codeMessage("bill.payments_received", "en")).toBe(
-    "A bill that has taken payments cannot be merged, and items cannot be transferred between it and another bill. Take the rest from the bill's payments",
+    "A bill that has taken payments cannot be merged with another. Take the rest from the bill's payments",
   );
   expect(codeMessage("bill.payments_received", "es")).toBe(
-    "Una cuenta que ya ha recibido pagos no se puede juntar con otra, ni se pueden transferir artículos entre ella y otra cuenta. Cobra el resto desde los pagos de la cuenta",
+    "Una cuenta que ya ha recibido pagos no se puede juntar con otra. Cobra el resto desde los pagos de la cuenta",
   );
 });
 
@@ -499,6 +499,24 @@ it("explains that unsupported published menus require a venue reset in both lang
   );
   expect(codeMessage("menu.reset_required", "es-ES")).toBe(
     "Este local tiene una carta en un formato no compatible. Restablece el local antes de usar las cartas.",
+  );
+});
+
+it("says no station can make a dish and where to make one the default, in both locales", () => {
+  expect(codeMessage("station.no_default", "en")).toBe(
+    "No station can make one of these dishes. A station can be made the default in the dashboard, under Prep stations",
+  );
+  expect(codeMessage("station.no_default", "es")).toBe(
+    "Ninguna estación puede preparar uno de estos platos. Se puede hacer predeterminada una estación en el panel, en Estaciones de preparación",
+  );
+});
+
+it("says where a device's profile can be changed when it refuses an action, in both locales", () => {
+  expect(codeMessage("device.forbidden_action", "en")).toBe(
+    "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",
+  );
+  expect(codeMessage("device.forbidden_action", "es")).toBe(
+    "El perfil de este dispositivo no lo permite. Se puede cambiar en el panel, en Perfiles de dispositivo.",
   );
 });
 
