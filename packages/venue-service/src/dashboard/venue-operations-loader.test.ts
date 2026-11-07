@@ -49,28 +49,30 @@ async function mount(path = "/manage/venue-operations", initial = model()) {
   let pendingRead: Promise<VenueServiceView> | undefined;
   let pendingSave: Promise<VenueServiceView> | undefined;
   const liveData = new LiveData();
-  const request = vi.fn(async (url: string, method = "GET", _body?: unknown) => {
-    if (method !== "GET") {
-      if (failWrite) throw { code: "connection.failed" };
-      if (url.endsWith("/settings") && pendingSave) {
-        const answer = pendingSave;
-        pendingSave = undefined;
-        return answer;
+  const request = vi.fn<(url: string, method?: string, body?: unknown) => Promise<unknown>>(
+    async (url, method = "GET") => {
+      if (method !== "GET") {
+        if (failWrite) throw { code: "connection.failed" };
+        if (url.endsWith("/settings") && pendingSave) {
+          const answer = pendingSave;
+          pendingSave = undefined;
+          return answer;
+        }
+        return url.endsWith("/settings") ? structuredClone(value) : { id: "new" };
       }
-      return url.endsWith("/settings") ? structuredClone(value) : { id: "new" };
-    }
-    if (url === "/management-api/venue-service") {
-      if (pendingRead) {
-        const pending = pendingRead;
-        pendingRead = undefined;
-        return pending;
+      if (url === "/management-api/venue-service") {
+        if (pendingRead) {
+          const pending = pendingRead;
+          pendingRead = undefined;
+          return pending;
+        }
+        if (failRead) throw new Error("offline");
+        return structuredClone(value);
       }
-      if (failRead) throw new Error("offline");
-      return structuredClone(value);
-    }
-    if (url === "/management-api/zones") return value.floorZones;
-    return [];
-  });
+      if (url === "/management-api/zones") return value.floorZones;
+      return [];
+    },
+  );
   const app = document.createElement("a10-load-ownership-app") as App;
   hosts.push(app);
   applyTokens(app);
@@ -666,7 +668,13 @@ it("an older live copy cannot remove a saved Coffee step from the next save", as
     serviceSteps: unknown[];
   };
   expect(second.serviceSteps).toEqual([
-    ...initial.serviceSteps.map(({ departmentId: _departmentId, ...step }) => step),
+    ...initial.serviceSteps.map(({ id, name, start, courseId, minutes }) => ({
+      id,
+      name,
+      start,
+      courseId,
+      minutes,
+    })),
     { id: "coffee-saved", name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
     { name: "Tea", start: "after_previous", courseId: null, minutes: 0 },
   ]);
