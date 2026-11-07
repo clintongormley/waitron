@@ -142,6 +142,35 @@ describe("a name needs a second clock within 30 seconds of the box", () => {
     );
   });
 
+  it.each([
+    { finished: 999, allowed: true },
+    { finished: 1000, allowed: true },
+    { finished: 1001, allowed: false },
+  ])(
+    "a browser finishing at $finished beside a box finishing at 1000 is usable: $allowed",
+    ({ finished, allowed }) => {
+      const browser = {
+        ...sample("browser"),
+        monotonicStartedMs: finished,
+        monotonicFinishedMs: finished,
+      };
+      const decision = compareHourClocks([sample("box"), browser], RELEASE);
+
+      expect(canSelectHour(decision)).toBe(allowed);
+      expect(decision.secondClock).toBe(allowed);
+      if (allowed) {
+        expect(decision.unavailable).toEqual([]);
+        expect(decision.usable.map((entry) => entry.source)).toEqual(["box", "browser"]);
+      } else {
+        expect(clockRefusal(decision)).toBe("second_clock_missing");
+        expect(decision.unavailable).toEqual([
+          { source: "browser", result: "unavailable", reason: "stale" },
+        ]);
+        expect(decision.usable.map((entry) => entry.source)).toEqual(["box"]);
+      }
+    },
+  );
+
   it("uses a fresh earlier observation at the box's current monotonic instant", () => {
     const browser = {
       ...sample("browser", NOW - 4000),
