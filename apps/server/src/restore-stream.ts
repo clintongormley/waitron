@@ -211,6 +211,7 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
     .select({ legalName: tenants.legalName, taxId: tenants.taxId })
     .from(tenants)
     .where(eq(tenants.id, 1));
+  if (tenant === undefined) throw new AppError("restore.identity_unknown", { nodeId });
   let venue;
   try {
     venue = await readVenue(store.venue);
@@ -224,8 +225,8 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
     throw error;
   }
   return {
-    legalName: tenant?.legalName ?? "",
-    taxId: tenant?.taxId ?? "",
+    legalName: tenant.legalName,
+    taxId: tenant.taxId,
     venueName: venue.name,
   };
 }
