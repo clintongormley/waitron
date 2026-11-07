@@ -6373,6 +6373,13 @@ describe("a presented counter bill from Find a bill, on a device with no counter
   const noCounterTill = {
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["z1"])),
   };
+  const tableStartTill = {
+    getDeviceZones: vi.fn().mockResolvedValue({
+      ...deviceZonesFixture(["bar"], ["z1"]),
+      startingZoneId: "z1",
+      saved: true,
+    }),
+  };
 
   async function openRow(
     row: BillRow,
@@ -6436,25 +6443,32 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     },
   );
 
-  it.each([...devices, ["a till with counter zones", {}]] as const)(
-    "on %s, Find a bill's back button names where it goes",
-    async (name, device) => {
-      const { el } = await mountApp({
-        ...device,
-        findBillOptions: vi.fn().mockResolvedValue(billOptions),
-        listBills: vi.fn().mockResolvedValue(listPage([])),
-      });
-      await flush(el);
-      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
-      await flush(el);
-      emit(shell(el), "find-bill");
-      await flush(el);
-      const back = el
-        .shadowRoot!.querySelector("till-find-bill-screen")!
-        .shadowRoot!.querySelector("header wt-button");
-      expect(text(back)).toBe(name === "a till with counter zones" ? "Back to counter" : "Back");
-    },
-  );
+  it.each([
+    ...devices,
+    ["a till with counter zones whose starting zone is a table zone", tableStartTill],
+    ["a till with counter zones", {}],
+  ] as const)("on %s, Find a bill's back button names where it goes", async (name, device) => {
+    const { el } = await mountApp({
+      ...device,
+      findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listBills: vi.fn().mockResolvedValue(listPage([])),
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    emit(shell(el), "find-bill");
+    await flush(el);
+    const back = el
+      .shadowRoot!.querySelector("till-find-bill-screen")!
+      .shadowRoot!.querySelector<HTMLElement>("header wt-button")!;
+    const toCounter = name === "a till with counter zones";
+    expect(text(back)).toBe(toCounter ? "Back to counter" : "Back");
+    back.click();
+    await flush(el);
+    expect((el as unknown as { activeTabKey?: string }).activeTabKey).toBe(
+      toCounter ? "counter" : "floor",
+    );
+  });
 
   const screens = ["show-station", "show-expo", "show-schedule"] as CapabilityFlag[];
   const onTill = (capabilities: CapabilityFlag[]) => ({
@@ -6470,13 +6484,27 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     ["a till with no counter zones", "show-expo", "till-pass-screen", "[data-back]"],
     ["a till with counter zones", "show-schedule", "till-schedule-screen", "wt-button.back"],
     ["a till with counter zones", "show-expo", "till-pass-screen", "[data-back]"],
+    [
+      "a till with counter zones whose starting zone is a table zone",
+      "show-schedule",
+      "till-schedule-screen",
+      "wt-button.back",
+    ],
+    [
+      "a till with counter zones whose starting zone is a table zone",
+      "show-expo",
+      "till-pass-screen",
+      "[data-back]",
+    ],
   ] as const)("on %s, %s's back button names where it goes", async (name, open, tag, button) => {
     const device =
       name === "a handheld"
         ? onPhone({}, { capabilities: [...phoneCapabilities, ...screens] })
         : name === "a till with no counter zones"
           ? { ...noCounterTill, ...onTill(screens) }
-          : onTill(screens);
+          : name === "a till with counter zones"
+            ? onTill(screens)
+            : { ...tableStartTill, ...onTill(screens) };
     const { el } = await mountApp(device);
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
