@@ -2963,10 +2963,14 @@ Printer identity is separate from the till route inventory.
   zone, and the warning names it only once such a dish is waiting at the pass. Reasoned, not
   measured ([plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md), D101).
 
-- **Request-device proof on profile-gated till actions, payments, refunds and printing (A941,
+- **Request-device proof on till writes (A941, A1393,
   device enrolment design).** Authenticate the enrolled device and match it to the PIN session. Keep management order reprints and invoice delivery
   available through their management session without a device cookie. Request-device proof is
-  passive; session resolution owns whether the request records activity.
+  passive; session resolution owns whether the request records activity. The watcher approved
+  extending proof to the fourteen session-only writes on 2026-11-07 at 06:11: receipt handover,
+  table clearing, service-day choices, device preferences, box-clock confirmation, staff schedule
+  writes, locale and simulator cancellation. Their selling-action exceptions remain; reads,
+  public bootstrap and logout retain their existing admission.
 
 - **Splitting sent dishes (owner, 2026-09-26).** A partial split gives the moved row its own
   ticket item and reduces the original ticket quantity by that part. A dish the kitchen has

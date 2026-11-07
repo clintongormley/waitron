@@ -15,6 +15,7 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixtures.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
+import { deviceCookieForTest } from "./testing/enrol.js";
 import { SESSION_COOKIE } from "./till-session.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -207,7 +208,7 @@ describe("boot's clock watch", () => {
         loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "5555" }),
       );
       till = {
-        cookie: `${SESSION_COOKIE}=${session.token}`,
+        cookie: `${SESSION_COOKIE}=${session.token}; ${await deviceCookieForTest(suite.db, device.deviceId)}`,
         personId: person!.id,
         deviceId: device.deviceId,
       };

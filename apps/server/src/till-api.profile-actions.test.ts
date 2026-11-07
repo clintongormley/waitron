@@ -405,7 +405,7 @@ type RouteGroup = {
   routes: readonly string[];
 };
 
-// The action cases below name their behavioral receipt. Device-proof labels remain source readings.
+// Action cases name their behavioral receipt; the inventory walk checks the declared device proof.
 const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
   {
     proof: "matching request (source)",
@@ -646,23 +646,58 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "matching request (tested)",
     actions: [],
     basis:
-      "till-api.request-device.test.ts: absent, invalid and foreign proof is refused before body/business checks; matching cookies and development headers retain exact later outcomes without a selling action. Existing permissions, zones and admission still apply.",
+      "Request proof: till-api.request-device.test.ts. Receipt handover and clearing record completion; neither orders food, takes payment nor opens the drawer.",
+    routes: ["POST /api/sales/:id/receipt/handover", "POST /api/tables/:id/cleared"],
+  },
+  {
+    proof: "matching request (tested)",
+    actions: [],
+    basis:
+      "Request proof: till-api.request-device.test.ts. Station and zone-extension choices govern the venue day; they require venue_service.manage or a permitted PIN, not an ordering or preparation action.",
+    routes: ["PUT /api/service-zones/:zoneId/zone-extension", "PUT /api/stations/:stationId/today"],
+  },
+  {
+    proof: "matching request (tested)",
+    actions: [],
+    basis:
+      "Request proof: till-api.request-device.test.ts. Choosing display zones, approved profiles or equipment does not use that equipment to print, pay or open the drawer.",
     routes: [
-      "POST /api/sales/:id/receipt/handover",
-      "POST /api/tables/:id/cleared",
-      "PUT /api/service-zones/:zoneId/zone-extension",
-      "PUT /api/stations/:stationId/today",
       "PUT /api/device/zones",
       "PUT /api/device/equipment",
       "POST /api/device/active-profile",
-      "POST /api/box-clock/challenge",
-      "POST /api/box-clock/confirm",
+    ],
+  },
+  {
+    proof: "matching request (tested)",
+    actions: [],
+    basis:
+      "Request proof: till-api.request-device.test.ts. Confirming the box time uses profile admission and the clock-specific staff/admin rules; it is not a selling action.",
+    routes: ["POST /api/box-clock/challenge", "POST /api/box-clock/confirm"],
+  },
+  {
+    proof: "matching request (tested)",
+    actions: [],
+    basis:
+      "Request proof: till-api.request-device.test.ts. Staff manage their own schedule requests through their session; no selling action applies.",
+    routes: [
       "POST /api/schedule/absences",
       "POST /api/schedule/swaps",
       "POST /api/schedule/swaps/:swapId/accept",
-      "PUT /api/session/locale",
-      "POST /api/demo-reader/cancel",
     ],
+  },
+  {
+    proof: "matching request (tested)",
+    actions: [],
+    basis:
+      "Request proof: till-api.request-device.test.ts. A person changes only their own screen language; no selling action applies.",
+    routes: ["PUT /api/session/locale"],
+  },
+  {
+    proof: "matching request (tested)",
+    actions: [],
+    basis:
+      "Request proof: till-api.request-device.test.ts. Registered only for the simulator; cancellation requires sale.take_payment permission and moves no real money.",
+    routes: ["POST /api/demo-reader/cancel"],
   },
 ];
 
@@ -673,7 +708,7 @@ function routeKey(method: string, path: string): string {
     .replace(/\/lines\/1(?=\/|$)/g, "/lines/:param")}`;
 }
 
-it("classifies every mounted till, device and schedule route", () => {
+it("classifies every mounted till, device and schedule route and checks its declared device proof", async () => {
   const inventory = new Hono();
   mountTillApi(
     inventory,
@@ -702,6 +737,7 @@ it("classifies every mounted till, device and schedule route", () => {
         readBoot: () => ({ id: "inventory", ms: 0 }),
         steady: () => 0,
         filesRecords: () => true,
+        requestFromBox: () => false,
       },
     },
     noopLog,
@@ -731,7 +767,7 @@ it("classifies every mounted till, device and schedule route", () => {
         ? "device cookie (source)"
         : "matching request (source)",
       basis:
-        "Own ROUTES refusal; device proof is a source reading of the handler and till-session.ts",
+        "Own ROUTES action refusal; inventory walk checks absent proof and, for matching requests, foreign proof",
     })),
     ...[...EXTERNAL_ACTION_ROUTES, ...ACTIONLESS_ROUTES].flatMap(({ routes, ...entry }) =>
       routes.map((route) => {
@@ -748,6 +784,55 @@ it("classifies every mounted till, device and schedule route", () => {
   }
   const classified = new Set(rows.map(({ key }) => key));
   expect([...mounted].sort()).toEqual([...classified].sort());
+
+  const full = await signIn([...CAPABILITY_FLAGS]);
+  const other = await signIn([...CAPABILITY_FLAGS]);
+  const sessionCookie = full.cookie.split(";")[0]!;
+  const foreignDeviceCookie = other.cookie
+    .split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(`${DEVICE_COOKIE}=`))!;
+  const checked = new Set<string>();
+  for (const { method, path } of inventory.routes) {
+    const key = routeKey(method, path);
+    if (checked.has(key)) continue;
+    checked.add(key);
+    const row = rows.find((entry) => entry.key === key);
+    if (row === undefined) continue;
+    const matchesSession = row.proof.startsWith("matching request");
+    if (!matchesSession && row.proof !== "device cookie (source)") continue;
+    for (const proof of matchesSession ? ["absent", "foreign"] : ["absent"]) {
+      const controller = new AbortController();
+      const response = await inventory.request(
+        path.replace(/:([^/]+)/g, (_, name: string) => (name === "lineNo" ? "1" : id)),
+        {
+          method,
+          headers: {
+            "content-type": "application/json",
+            cookie: proof === "absent" ? sessionCookie : `${sessionCookie}; ${foreignDeviceCookie}`,
+          },
+          ...(method === "GET"
+            ? {}
+            : {
+                body:
+                  key === "POST /api/session"
+                    ? JSON.stringify({ personId: id, pin: "1234" })
+                    : "{}",
+              }),
+          signal: controller.signal,
+        },
+      );
+      try {
+        expect([401, 403], `${key}: ${proof} device proof`).toContain(response.status);
+        expect(await response.json(), `${key}: ${proof} device proof`).toEqual({
+          error: { code: "device.unauthorized", params: {} },
+        });
+      } finally {
+        controller.abort();
+        if (!response.bodyUsed) await response.body?.cancel();
+      }
+    }
+  }
 });
 
 describe("each till route checks the profile action it needs", () => {

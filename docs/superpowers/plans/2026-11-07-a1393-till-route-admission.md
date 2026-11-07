@@ -16,7 +16,10 @@ A760 forbids database table changes and landing until its freeze ends.
    `/api/` method/path sets with classifications, normalising parameters and sample UUID/line ids.
    Observe missing classifications fail, then fill them. Prove missing/new/stale rows once in an
    installed disposable clone. The guard excludes middleware/management routes and sees only its
-   mounted APIs, not theme/node or newly introduced APIs; it does not prove every gate executes.
+   mounted APIs, not other APIs or every action/zone gate. Per the whole-branch Claude review,
+   also send a full-action session with absent device proof to each proof-labelled route and
+   foreign proof to each matching-session route; require device.unauthorized. Qualify a falsely
+   labelled unprotected route in the disposable copy before and after this guard repair.
 3. In `till-api.request-device.test.ts`, reproduce missing/invalid/foreign proof and production
    ignoring development headers on all fourteen writes. Keep matching-cookie and header-only
    controls with exact outcomes and no selling action. Then add `assertRequestDevice` after session

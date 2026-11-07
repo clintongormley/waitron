@@ -420,7 +420,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── The device's equipment (DEVICE-GUARDED read, SESSION-GUARDED choice) ────────────────────────
   app.get("/api/device/equipment", (c) =>
     run(c, log, async () => {
       // Read before `requireDevice`, so a wait behind the write lock is not counted as the device's
@@ -481,7 +480,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── Switch the session's device to another approved profile (SESSION-GUARDED) ──────────────────
   // A signed-in person is required, so a shared display with nobody signed in cannot switch.
   app.post("/api/device/active-profile", (c) =>
     run(c, log, async () => {
