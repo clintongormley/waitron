@@ -137,8 +137,8 @@ hook, or how tests are scheduled:
 - **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server reads
   intercepted**; PRs whose scope is `documentation` or `root` skip it, as do runs reusing verified CI.
   A blank dashboard or till still passes, and setup's server routes are not tested. Guard:
-  `scripts/bundle-smoke.test.mjs`, weaker than its name: executes build commands with a pnpm stub,
-  not the builds or browser check. [Detail](docs/developers/ci-and-gates.md#built-applications-in-bundle-smoke).
+  `scripts/bundle-smoke.test.mjs`, weaker than its name: reads workflow steps and real build-script
+  declarations, not the builds or browser check. [Detail](docs/developers/ci-and-gates.md#built-applications-in-bundle-smoke).
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image
   copies sharp into `/app/node_modules`.** Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke
   (weaker than their names: read text; bundle-smoke reads only `dist/server.js`), and image-smoke's sharp step.
