@@ -387,7 +387,7 @@ export class TillPresentedPayDialog extends LitElement {
       .open=${this.open}
       .heading=${
         this.tableName === ""
-          ? t("bill_pay.title")
+          ? t("action.pay")
           : t("bill_pay.title_table").replace("{table}", () => this.tableName)
       }
       .dismissible=${!this.busy}

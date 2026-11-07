@@ -97,10 +97,10 @@ describe("till-presented-pay-dialog: what it shows", () => {
     expect(root(el).querySelector<HTMLElement & { open: boolean }>("wt-dialog")!.open).toBe(false);
   });
 
-  it("titles itself with the pay title alone without a table name", async () => {
+  it("titles itself Pay, naming no part, without a table name", async () => {
     const el = await mount({ tableName: "" });
     expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
-      t("bill_pay.title"),
+      t("action.pay"),
     );
   });
 
