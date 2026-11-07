@@ -23,6 +23,7 @@ import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { isPlainWebAddress } from "./backup-destination-model.js";
 
 type Field = keyof StreamBucketBody;
 
@@ -305,7 +306,12 @@ export class StreamSettingsPanel extends LitElement {
       (code === "backup.stream_config_unsafe" || code === "backup.request_invalid") &&
       isField(named)
     ) {
-      const key = code === "backup.stream_config_unsafe" ? UNSAFE_FIELD_KEYS[named] : undefined;
+      const key =
+        code === "backup.stream_config_unsafe"
+          ? UNSAFE_FIELD_KEYS[named]
+          : named === "endpoint"
+            ? "stream.form.endpoint_invalid"
+            : undefined;
       this.refused = { [named]: t(key ?? "stream.field.check") };
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
@@ -326,7 +332,7 @@ export class StreamSettingsPanel extends LitElement {
         errors[f.field] = t(f.requiredKey);
     }
     const endpoint = this.draft.endpoint.trim();
-    if (endpoint !== "" && !/^https?:\/\/\S+$/.test(endpoint)) {
+    if (endpoint !== "" && !isPlainWebAddress(endpoint)) {
       errors.endpoint = t("stream.form.endpoint_invalid");
     }
     return errors;

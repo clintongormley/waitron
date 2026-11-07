@@ -286,10 +286,19 @@ export class BackupSupervisor {
         return;
       }
       const venue = db;
+      // Unlike a venue that will not open, this rethrows, so a save answers `reloadErrorCode`.
+      const backends: StorageBackend[] = [];
+      try {
+        for (const dest of cfg.destinations) backends.push(this.#buildBackend(dest));
+      } catch (err) {
+        this.#closeBackends(backends);
+        await venue.close().catch(() => {});
+        throw err;
+      }
       this.#db = venue;
       const controller = new AbortController();
       this.#controller = controller;
-      this.#backends = cfg.destinations.map((dest) => this.#buildBackend(dest));
+      this.#backends = backends;
       this.#worker = runBackupSweep({
         backends: this.#backends,
         db: venue.venue,
