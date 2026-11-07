@@ -1072,8 +1072,11 @@ Remaining work, following the owner's certificate-first order:
   `@waitron/tunnel`, its boot worker and its four relay settings. The staff listener is the
   remote entrance; it supplies no relay for standby adoption.
 - Qualify the managed demo across a physical reboot.
-- Complete public renewal, revocation, a sale through the managed server with the internet disabled,
-  and separation from another allocated venue. The managed public check rejected foreign Host
+- Complete public renewal, revocation and separation from another allocated venue.
+  A fresh unpaired preproduction venue completed a real €2.50 cash sale and replay through the
+  managed bundle in its own offline network namespace. The paired registration was retained;
+  the new fixture's invalid tax number was fixed test-first before that successful run.
+  [Offline sale and limits](../operations/a951-host-evidence.md#managed-bundle-cash-sale-without-internet-7-november-2026). The managed public check rejected foreign Host
   headers and eight authenticated non-staff paths, and password guessing reached its wait window.
   A controlled Compose LAN forwarding probe and one existing cash/F1 route case in a network
   namespace with no external route passed; their scope is recorded in the

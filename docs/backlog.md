@@ -2108,8 +2108,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   A bounded run of the normal bundled server under systemd also retained Settings off across
   an app restart and Cloud refresh; on restored trusted public access. Managed process and peer
   recovery passed with the same keys and certificate. Left: publication and installation of the
-  combined build, physical reboot, public renewal, revocation, a bundled-server offline sale and
-  separation from another allocated venue. The later bounded check rejected foreign Host headers,
+  combined build, physical reboot, public renewal, revocation and separation from another allocated
+  venue. A fresh unpaired preproduction venue completed a real €2.50 cash sale and replay through the
+  managed bundle with no external network route; the paired remote-access registration was retained.
+  [Offline sale and limits](operations/a951-host-evidence.md#managed-bundle-cash-sale-without-internet-7-november-2026). The later bounded check rejected foreign Host headers,
   eight authenticated non-staff paths and repeated password guesses. A controlled Compose LAN
   forwarding probe and one cash/F1 route case without an external network route also passed.
   [Receipt and limits](operations/a951-host-evidence.md#staff-hostname-and-network-isolation-7-november-2026).

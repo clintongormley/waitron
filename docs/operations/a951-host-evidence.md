@@ -200,6 +200,42 @@ owner's three containers were healthy. No certificate was issued, registration r
 rebooted. Public renewal, revocation, a bundled-server offline sale, another allocated venue,
 physical reboot and publication/installation remain open.
 
+## Managed bundle cash sale without internet, 7 November 2026
+
+The normal server bundle from source `01772954f3` ran under a temporary systemd unit with
+`PrivateNetwork=yes`. Inside its network namespace, both external IPv4 and IPv6 route lookups
+returned **Network is unreachable**. A real enrolled till signed in with its PIN and submitted a
+€2.50 cash sale through the loopback HTTP API. The receipt returned `A-0DMCN/1` and €2.50 change
+from €5 tendered. Repeating the same request returned the same invoice.
+
+After the unit stopped, a read-only database check found exactly one new sale, one cash tender
+for 250 cents and one fiscal record with total `2.50` and a 64-character uppercase hash. The stored
+invoice matched the HTTP receipt, and the operator matched the real PIN login. No network or fiscal
+method was mocked. This was a synthetic preproduction venue with no Cloud pairing and no till
+browser; it proves this offline managed-server sale, not every sale or paired/offline combination.
+
+The first attempt on the paired remote-access fixture correctly refused its invalid issuer number
+`73000001K`. That venue still has zero fiscal records and retains its registration. Fixture fix
+`11162108a6` changes future disposable venues to `73000001W`. Its existing test first failed the
+Spanish tax-identifier check, then passed both cases; the prior provisioning assertions remain.
+The unedited golden write-path and immutability suites passed all 20 cases. The successful sale
+used a separate fresh venue, leaving the existing paired allocation unchanged.
+
+The first successful sale preceded a probe-only series-format correction: throwaway setup had
+created `A-0DMCN`, while the probe expected plain `A`. The later HTTP calls replayed that first sale,
+and the database check confirmed no duplicate. A subsequent result-file permission error was
+corrected only on the file the probe had created; the independent database read then passed.
+These were harness corrections, not application repairs.
+
+Commands and raw results are in Lane E's local `receipts/a951s-isolation-20261107/`:
+`run-managed-offline.sh`, `managed-offline.sh`, `managed-offline-client.mjs`,
+`managed-offline.log`, `managed-offline-readback.mjs`, `managed-offline-readback.log`,
+`managed-offline-result.json`, `fixture-taxid-red.log`, `fixture-taxid-green.log` and
+`fiscal-unedited.log`. Cleanup removed the temporary unit, helper and disposable venue. The paired
+registration and earlier demo remain available; the owner's three containers stayed healthy.
+Physical reboot, public renewal, revocation, another allocated venue and publication/installation
+remain open. The watcher reserved reboot coordination and the remaining gateway checks with D.
+
 # Current addendum: returned Debian box, 5 November 2026
 
 > 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol
