@@ -1,1 +1,0 @@
-CREATE INDEX `working_orders_opened_at_idx` ON `working_orders` (`opened_at`);

@@ -1,1 +1,0 @@
-ALTER TABLE `webauthn_challenges` ADD `purpose` text NOT NULL;

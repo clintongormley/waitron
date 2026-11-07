@@ -1,1 +1,0 @@
-DROP TABLE `menu_item_variants`;

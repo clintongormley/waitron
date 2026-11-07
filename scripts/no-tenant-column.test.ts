@@ -17,7 +17,7 @@ import {
  * prefix and a plural as well as the bare name, and `tenantID` alongside `tenantId`; `negative
  * controls` below pins that in both directions.
  *
- * Three more gaps:
+ * Two more gaps:
  *
  * 1. **It does not read `*.test.ts`.** A tenant column reintroduced for real has to be declared in
  *    non-test source to reach a database, so the column itself is still covered — but a stale claim
@@ -26,8 +26,6 @@ import {
  *    cannot see a column added by hand-written SQL; the checks over migration `.sql` files and over
  *    the column spelling in non-test TypeScript cover that path. What none of the three sees is SQL
  *    assembled from pieces that never spell the column out.
- * 3. **`HISTORICAL_TENANT_SQL` exempts whole FILES.** It is empty, so nothing is exempt; a name
- *    added back is a file in which a re-added column is seen by nothing here.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -50,12 +48,6 @@ const SQL_COLUMN = /tenant_ids?\b/;
  * (`packages/provisioning/src/tenant-guard.ts`), the taxpayer row's `(country, taxId)` pair, out.
  */
 const TS_IDENTIFIER = /[tT]enant[Ii][Dd]s?\b/;
-
-/**
- * Migration files allowed to name the column, exempted whole. EMPTY: an entry here is a hole in the
- * SQL check below, one whole file wide.
- */
-const HISTORICAL_TENANT_SQL: ReadonlySet<string> = new Set<string>();
 
 /**
  * Every `.ts` file under `dir`. The DIRECTORY branch is taken first: a failing browser test writes
@@ -113,10 +105,9 @@ describe("no tenant column", () => {
     expect(read.length).toBeGreaterThan(5);
   });
 
-  it("names no tenant column in any migration SQL outside the recorded history", () => {
+  it("names no tenant column in any migration SQL", () => {
     const offenders = sets
       .flatMap((set) => migrationSqlFiles(repoRoot, set))
-      .filter((file) => !HISTORICAL_TENANT_SQL.has(file))
       .filter((file) => SQL_COLUMN.test(readFileSync(join(repoRoot, file), "utf8")));
 
     expect(offenders).toEqual([]);

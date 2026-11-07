@@ -1,7 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readMigrationFiles } from "drizzle-orm/migrator";
 import { sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { openVenueDatabase, type Database } from "@waitron/db";
@@ -12,7 +11,6 @@ import {
   migrationOptionsFor,
   type MigrationSetSource,
 } from "@waitron/migrations";
-import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { assertNotAhead } from "./schema-ahead.js";
 
 const scratch: string[] = [];
@@ -28,6 +26,46 @@ async function migratedDirectory(
   scratch.push(directory);
   await applyMigrations(directory, sets);
   return directory;
+}
+
+const CORE = manifestSets().find((set) => set.name === "core")!;
+
+/**
+ * Gives a freshly migrated file what a pre-squash one carried: `core` journal rows this image does
+ * not ship, and the journal of `catalogue`, a set this image no longer has.
+ */
+async function withForeignCoreJournal(directory: string, hashes: readonly string[]): Promise<void> {
+  const store = await openVenueDatabase(directory);
+  try {
+    await store.venue.execute(
+      sql`create table "__drizzle_migrations_catalogue" (id integer primary key, hash text not null, created_at numeric)`,
+    );
+    await store.venue.execute(sql`delete from ${sql.identifier(CORE.table)}`);
+    for (const [index, hash] of hashes.entries())
+      await store.venue.execute(
+        sql`insert into ${sql.identifier(CORE.table)} ("hash", "created_at") values (${hash}, ${index + 1})`,
+      );
+  } finally {
+    await store.close();
+  }
+}
+
+/** A `core` migrations folder holding one migration this image does not ship. */
+async function foreignCoreFolder(): Promise<string> {
+  const folder = await mkdtemp(join(tmpdir(), "wt-epoch-old-image-"));
+  scratch.push(folder);
+  await mkdir(join(folder, "meta"));
+  const tag = "0000_foreign";
+  await writeFile(join(folder, `${tag}.sql`), "CREATE TABLE `foreign_only` (`id` text);\n");
+  await writeFile(
+    join(folder, "meta", "_journal.json"),
+    JSON.stringify({
+      version: "7",
+      dialect: "sqlite",
+      entries: [{ idx: 0, version: "6", when: 1, tag, breakpoints: true }],
+    }),
+  );
+  return folder;
 }
 
 /** Every schema object and every migration journal row in one file, as text to compare. */
@@ -50,11 +88,12 @@ async function fileState(db: Database): Promise<string> {
 
 describe("the migration epoch", () => {
   it("an old database is refused by this image before anything is written", async () => {
-    const directory = await migratedDirectory("wt-epoch-old-db-", historicalSets());
-    const oldCore = historicalSets().find((set) => set.name === "core")!;
-    const oldCoreHashes = readMigrationFiles({ migrationsFolder: oldCore.migrationsFolder }).map(
-      (migration) => migration.hash,
+    const directory = await migratedDirectory(
+      "wt-epoch-old-db-",
+      migrationOptionsFor(manifestSets(), null),
     );
+    const oldCoreHashes = ["a".repeat(64), "b".repeat(64)];
+    await withForeignCoreJournal(directory, oldCoreHashes);
 
     const store = await openVenueDatabase(directory);
     try {
@@ -84,14 +123,8 @@ describe("the migration epoch", () => {
       "wt-epoch-new-db-",
       migrationOptionsFor(manifestSets(), null),
     );
-    // `assertNotAhead` is unchanged by A760, so the old image is modelled by its migration files alone.
-    const oldImage: MigrationSetSource[] = historicalSets().map((set) => ({
-      name: set.name,
-      table: set.migrationsTable,
-      from: set.migrationsFolder,
-      ...(set.database === undefined ? {} : { database: set.database }),
-    }));
-    const newCore = manifestSets().find((set) => set.name === "core")!;
+    const oldImage: MigrationSetSource[] = [{ ...CORE, from: await foreignCoreFolder() }];
+    const newCore = CORE;
 
     const store = await openVenueDatabase(directory);
     try {

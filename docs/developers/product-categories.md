@@ -564,8 +564,9 @@ the catalogue module's, holds the parent and, since W92, the colour (`category_d
 tables and the category image and colour columns of the old schema were dropped by the folder
 migrations. In that old history, catalogue dropped media's category-image triggers before dropping
 the column, and media dropped them again after its baseline on a fresh database. Since A760 the
-section-image triggers are in core's set (`packages/db/drizzle/0000_baseline.sql`), and the old
-migrations are frozen in `scripts/fixtures/a760-history/`.
+section-image triggers are in core's set (`packages/db/drizzle/0000_baseline.sql`). The old
+migrations were frozen at A760 and deleted on 2026-11-07 (A1422); read one with
+`git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.
 
 Before opening a development venue on this branch, run `wa-wt reset demo <worktree-name>`.
 The folder migration does not convert old JSON names or preserve the removed fields. A venue

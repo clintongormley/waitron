@@ -504,7 +504,9 @@ change required a venue reset.
 
 Public holidays come only from the shipped country calendar; the venue is not a holiday source
 (`readHolidays`, `holidays.ts`; see [public-holidays.md](public-holidays.md)).
-`scripts/fixtures/a760-history/venue-service/0038_clammy_klaw.sql` dropped `local_holidays`. The earlier A261
+Venue-service's old `venue-service/0038_clammy_klaw.sql` dropped `local_holidays`; that file was
+deleted with the frozen history on 2026-11-07 (A1422), and
+`git show f519799de0:scripts/fixtures/a760-history/venue-service/0038_clammy_klaw.sql` reads it. The earlier A261
 storage account below is historical.
 
 The upgrade guard's reset list describes losses in its synthetic rows, rather than every table
@@ -1654,9 +1656,10 @@ FK `REFERENCES`, and a `CREATE TRIGGER … ON <table>` where the TABLE is owned 
 migration set. Since A760 (November 2026) only the first exists in the tree: every trigger a
 migration creates is in core's set (`packages/db/drizzle/0000_baseline.sql`) and names only tables core's set creates.
 
-Until A760 the live instance of the trigger edge was `packages/media`, whose migrations are now
-frozen in `scripts/fixtures/a760-history/media/`; the account below describes that old set in the
-present tense of its day. Its
+Until A760 the live instance of the trigger edge was `packages/media`; the account below describes
+that old set in the present tense of its day. Its old migration files were deleted with the frozen
+history on 2026-11-07 (A1422); read one with
+`git show f519799de0:scripts/fixtures/a760-history/media/<file>`. Its
 `drizzle/0001_image_references.sql` carries eight triggers standing in for two foreign keys, and four
 of them sit on tables another set owns: `products`, created by core in
 `packages/db/drizzle/0000_baseline.sql` and rebuilt by core's
@@ -1721,11 +1724,13 @@ that sequence on a parent holding one row and a child holding one row that point
 with no `ON DELETE` action, and separately one with `ON DELETE RESTRICT`, failed the drop itself with
 `FOREIGN KEY constraint failed`. The control, the same sequence outside a transaction, kept the
 child row in all three cases and raised nothing. Two rebuilds in
-the variants-as-products work hit it. Task 1's rebuild of `products` (core's
-`scripts/fixtures/a760-history/core/0003_variant_inherited_nullable.sql`, #511) cascade-deleted `product_categories`
+the variants-as-products work hit it. (2026-11-07, A1422: both old migration files named below
+were deleted with the frozen history; read one with
+`git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.) Task 1's rebuild of `products` (core's
+`core/0003_variant_inherited_nullable.sql`, #511) cascade-deleted `product_categories`
 on a venue without the media triggers (measured 2026-09-23 by a review of #511's plan, through
 `applyMigrations` on a scratch copy of `packages/db`). Task 4's rebuild of `menu_items`
-(`scripts/fixtures/a760-history/catalogue/0003_menu_price_nullable.sql`, #532), measured 2026-09-23 through
+(`catalogue/0003_menu_price_nullable.sql`, #532), measured 2026-09-23 through
 `applyMigrations`, emptied `menu_item_extra_lists`, `menu_item_extra_items` and
 `menu_item_variant_overrides` while reporting success, and failed with
 `FOREIGN KEY constraint failed` when a `working_line_contexts` row named the offer. A paid order
@@ -2293,8 +2298,8 @@ handle. The only trigger whose SQL names `dining_tables` is `parties_clear_table
 > Added 2026-10-13 by A503 part 3: two more incoming keys, `floor_today_split_parts.joined_table_id`
 > and `.part_table_id`, both `no action`.
 
-A504's `0169_floor_tables_keep_no_place.sql` (core's old history, now
-`scripts/fixtures/a760-history/core/`) rebuilt `floor_plan_tables`,
+A504's `0169_floor_tables_keep_no_place.sql` (core's old history, deleted with the frozen history on 2026-11-07, A1422; read a file with
+`git show f519799de0:scripts/fixtures/a760-history/core/<file>`) rebuilt `floor_plan_tables`,
 `floor_plan_table_sizes` and `floor_plans`; every venue needed a reset for it
 (`scripts/migration-upgrade.test.ts` listed it under `RESETS` until A760 left that list empty). Measured on 2026-10-18, Node
 v26.11.1, after applying every manifest migration through `useVenueDb`, by reading
@@ -2308,7 +2313,7 @@ tables; it holds no change feed, which `bootServer` installs.
 
 Slice 5's rebuild uses `0137_floor_retire_drop_table_triggers.sql`,
 `0138_floor_retire_old_table_columns.sql` and `0139_floor_retire_recreate_table_triggers.sql` in
-core's old history (`scripts/fixtures/a760-history/core/`). Every venue needed a reset for that change. Running
+core's old history. Every venue needed a reset for that change. Running
 `pnpm exec vitest run scripts/migration-upgrade.test.ts` before adding its declared reset failed
 with `NOT NULL constraint failed: __new_dining_tables.zone_id`; the same guard then passed with
 that reset declared. In a disposable checkout, replacing the trigger drop with `SELECT 1;`
@@ -3641,78 +3646,78 @@ notices one dropped), `scripts/migrations-match-schema.test.ts` and
 `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
 Paid for on #165.
 
-**Since A760 (November 2026)** every set starts from one `0000_baseline.sql`, and the migration
-files named in the rest of this section are frozen in `scripts/fixtures/a760-history/`; what
-follows is the account of the old history.
+**Since A760 (November 2026)** every set starts from one `0000_baseline.sql`; what follows is the
+account of the old history. (2026-11-07, A1422) The old migration files it names were deleted with
+the frozen history; read one with `git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.
 
 The justification this used to carry — "works because the snapshot chain deliberately lags the DB,
 custom migrations being snapshot-less" — is half right. The hand-written `--custom` migrations in
-the old history (`scripts/fixtures/a760-history/core/0001_behavioural_triggers.sql`,
-`scripts/fixtures/a760-history/core/0004_variant_one_level.sql`,
-`scripts/fixtures/a760-history/core/0015_settled_order_freeze_new_columns.sql`,
-`scripts/fixtures/a760-history/core/0019_settled_order_freeze_visit_id.sql`,
-`scripts/fixtures/a760-history/core/0020_visit_clears_table_status.sql`,
-`scripts/fixtures/a760-history/core/0024_bill_payment_triggers.sql`,
-`scripts/fixtures/a760-history/core/0027_line_vat_class_triggers.sql`,
-`scripts/fixtures/a760-history/core/0033_line_served_exception.sql`,
-`scripts/fixtures/a760-history/core/0038_main_bill_release.sql` (two triggers on `working_orders` that clear
+the old history (`core/0001_behavioural_triggers.sql`,
+`core/0004_variant_one_level.sql`,
+`core/0015_settled_order_freeze_new_columns.sql`,
+`core/0019_settled_order_freeze_visit_id.sql`,
+`core/0020_visit_clears_table_status.sql`,
+`core/0024_bill_payment_triggers.sql`,
+`core/0027_line_vat_class_triggers.sql`,
+`core/0033_line_served_exception.sql`,
+`core/0038_main_bill_release.sql` (two triggers on `working_orders` that clear
 `parties.main_bill_id`),
-`scripts/fixtures/a760-history/core/0137_floor_retire_drop_table_triggers.sql` and
-`scripts/fixtures/a760-history/core/0139_floor_retire_recreate_table_triggers.sql` (drop and restore
+`core/0137_floor_retire_drop_table_triggers.sql` and
+`core/0139_floor_retire_recreate_table_triggers.sql` (drop and restore
 `parties_clear_table_status` around the `dining_tables` rebuild),
-`scripts/fixtures/a760-history/core/0042_placed_bill_moves.sql` (a presented bill changing party),
-`scripts/fixtures/a760-history/core/0043_drop_triggers_before_rebuild.sql` and
-`scripts/fixtures/a760-history/core/0045_recreate_triggers_after_rebuild.sql` (the three triggers around `0044`'s
+`core/0042_placed_bill_moves.sql` (a presented bill changing party),
+`core/0043_drop_triggers_before_rebuild.sql` and
+`core/0045_recreate_triggers_after_rebuild.sql` (the three triggers around `0044`'s
 rebuild of `dining_tables`, `parties` and `service_commands`),
-`scripts/fixtures/a760-history/core/0047_product_ordering_check.sql`,
-`scripts/fixtures/a760-history/core/0050_line_list_price_frozen.sql` (re-creates
+`core/0047_product_ordering_check.sql`,
+`core/0050_line_list_price_frozen.sql` (re-creates
 `working_order_lines_require_open_parent_update` with `list_unit_price_gross` in both
 unchanged-column lists),
-`scripts/fixtures/a760-history/core/0053_line_sent_after_close.sql` (re-creates
+`core/0053_line_sent_after_close.sql` (re-creates
 `working_order_lines_require_open_parent_update` with an exception for a line's first sent stamp),
-`scripts/fixtures/a760-history/core/0056_placed_order_handover.sql` (re-creates
+`core/0056_placed_order_handover.sql` (re-creates
 `working_orders_enforce_transition` with an exception for a sent, unpaid order's handover stamp),
-`scripts/fixtures/a760-history/core/0059_drop_product_triggers_before_rebuild.sql` and
-`scripts/fixtures/a760-history/core/0061_recreate_product_triggers.sql` (the triggers on `products` around
+`core/0059_drop_product_triggers_before_rebuild.sql` and
+`core/0061_recreate_product_triggers.sql` (the triggers on `products` around
 `0060`'s rebuild),
-`scripts/fixtures/a760-history/core/0064_line_locale_triggers_text_only.sql` (re-creates the two locale update
+`core/0064_line_locale_triggers_text_only.sql` (re-creates the two locale update
 triggers on `working_order_lines` to fire only when an update changes the name map each checks or
 moves the line),
-`scripts/fixtures/a760-history/core/0066_line_make_at_station_trigger.sql` (re-creates
+`core/0066_line_make_at_station_trigger.sql` (re-creates
 `working_order_lines_require_open_parent_update` with `make_at_station_id` in each of its three
 unchanged-column lists),
-`scripts/fixtures/a760-history/core/0072_device_binding_watcher_sql.sql` (re-creates the two device binding
+`core/0072_device_binding_watcher_sql.sql` (re-creates the two device binding
 triggers so a kitchen display binds a station or a watcher; dropped by `0119`),
-`scripts/fixtures/a760-history/core/0080_money_records_drop_triggers.sql` and
-`scripts/fixtures/a760-history/core/0082_money_records_recreate_triggers.sql` (the triggers around `0081`'s rebuild
+`core/0080_money_records_drop_triggers.sql` and
+`core/0082_money_records_recreate_triggers.sql` (the triggers around `0081`'s rebuild
 of `sales`, `bill_payments`, `bill_payment_refunds` and `unpaid_departures`),
-`scripts/fixtures/a760-history/core/0083_working_orders_drop_triggers.sql` and
-`scripts/fixtures/a760-history/core/0086_working_orders_recreate_triggers.sql` (the triggers around `0085`'s
+`core/0083_working_orders_drop_triggers.sql` and
+`core/0086_working_orders_recreate_triggers.sql` (the triggers around `0085`'s
 rebuild of `working_orders`),
-`scripts/fixtures/a760-history/core/0089_devices_drop_triggers.sql` and
-`scripts/fixtures/a760-history/core/0091_devices_recreate_triggers.sql` (the triggers around `0090`'s rebuild of
+`core/0089_devices_drop_triggers.sql` and
+`core/0091_devices_recreate_triggers.sql` (the triggers around `0090`'s rebuild of
 `devices`),
-`scripts/fixtures/a760-history/core/0119_drop_device_binding_triggers.sql` (drops the device binding trigger),
-`scripts/fixtures/a760-history/core/0122_devices_drop_form_factor_trigger.sql` and
-`scripts/fixtures/a760-history/core/0124_devices_recreate_form_factor_trigger.sql` (the trigger around `0123`'s
+`core/0119_drop_device_binding_triggers.sql` (drops the device binding trigger),
+`core/0122_devices_drop_form_factor_trigger.sql` and
+`core/0124_devices_recreate_form_factor_trigger.sql` (the trigger around `0123`'s
 rebuild of `devices`),
-`scripts/fixtures/a760-history/core/0128_delivery_table_release.sql` (re-creates
+`core/0128_delivery_table_release.sql` (re-creates
 `working_orders_enforce_transition` with `delivery_table_label` in the presented-bill and handover
 unchanged-column lists, and an exception letting an order past `open` drop its delivery table and
 keep its name),
-`scripts/fixtures/a760-history/core/0201_retire_main_bill_triggers.sql` (drops `0038`'s two triggers before
+`core/0201_retire_main_bill_triggers.sql` (drops `0038`'s two triggers before
 `0202`'s rebuild of `parties`),
-`scripts/fixtures/a760-history/media/0001_image_references.sql`,
-`scripts/fixtures/a760-history/media/0002_section_image_references.sql`,
-`scripts/fixtures/a760-history/media/0003_published_image_references.sql`,
-`scripts/fixtures/a760-history/media/0004_drop_category_image_triggers.sql`,
-`scripts/fixtures/a760-history/media/0006_recreate_section_image_triggers.sql`,
-`scripts/fixtures/a760-history/media/0007_recreate_product_image_triggers.sql`,
-`scripts/fixtures/a760-history/media/0008_queued_edition_image_references.sql`,
-`scripts/fixtures/a760-history/media/0009_include_folder_image_references.sql`,
-`scripts/fixtures/a760-history/catalogue/0013_drop_category_image_triggers.sql`,
-`scripts/fixtures/a760-history/catalogue/0018_sections_owned_prepare.sql` and
-`scripts/fixtures/a760-history/catalogue/0021_sections_owned_restore.sql`) each carry their own
+`media/0001_image_references.sql`,
+`media/0002_section_image_references.sql`,
+`media/0003_published_image_references.sql`,
+`media/0004_drop_category_image_triggers.sql`,
+`media/0006_recreate_section_image_triggers.sql`,
+`media/0007_recreate_product_image_triggers.sql`,
+`media/0008_queued_edition_image_references.sql`,
+`media/0009_include_folder_image_references.sql`,
+`catalogue/0013_drop_category_image_triggers.sql`,
+`catalogue/0018_sections_owned_prepare.sql` and
+`catalogue/0021_sections_owned_restore.sql`) each carry their own
 `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-26 (2026-09-27 for
 `0024_bill_payment_triggers.sql`, 2026-09-28 for `0027_line_vat_class_triggers.sql`,
 `0033_line_served_exception.sql` and `0038_main_bill_release.sql`, 2026-09-29 for
@@ -3735,13 +3740,12 @@ each of those files equalled the one before it once `id` and
 does not reproduce it.
 
 Three generated migrations also carry hand-written SQL:
-`scripts/fixtures/a760-history/media/0005_photo_name_only.sql`, `scripts/fixtures/a760-history/core/0036_party_rename.sql` and
-`scripts/fixtures/a760-history/core/0194_sale_receipt_guest_count.sql`. In `0194` only the copy line's `SELECT` is
+`media/0005_photo_name_only.sql`, `core/0036_party_rename.sql` and
+`core/0194_sale_receipt_guest_count.sql`. In `0194` only the copy line's `SELECT` is
 hand-written: drizzle's rebuild for the `guests` → `guest_count` rename selects the NEW column name
 from the old table and fails with `no such column` on every database, a fresh one included (the
 earlier migrations create the table with `guests` before `0194` runs), so a regeneration
-must paste `"sale_id", "guests", "created_at"` back (`sale-receipt-guests-upgrade.test.ts` fails
-without it).
+must paste `"sale_id", "guests", "created_at"` back.
 In `0036` the whole file is hand-written: its header says drizzle-kit's generated SQL for the rename
 rebuilt every table the rename touches and failed on a fresh database, so a regeneration must paste
 the file back rather than keep drizzle's. In `0005`, Drizzle generated its rebuild of `media_images`;
@@ -3776,7 +3780,7 @@ Drizzle records a hash of each migration file's whole text in the database's jou
 `packages/migrations/src/journal-hashes.test.ts` pins how drizzle computes the hash. Measured
 2026-10-02 with drizzle's own `readMigrationFiles` (`drizzle-orm@0.45.3`): editing only comment
 lines in core's `0001_behavioural_triggers.sql` and media's `0001_image_references.sql` (then in
-each package's `drizzle/` folder, frozen since A760 in `scripts/fixtures/a760-history/`) changed
+each package's `drizzle/` folder; frozen at A760 and deleted with that frozen history in A1422) changed
 exactly those two files' hashes, index 1 of 68 and index 1
 of 8. So such an edit ships only with a reset of every venue already migrated,
 said in the pull request's first line. Cost: #1036 had to restore both files byte for byte; the
@@ -4599,10 +4603,12 @@ demoted while running the watch's looks, which stop off the primary, no longer c
 read of the stop fails, the window stays as it was. Until slice 9c, a clock wrong forward at a
 start, or wrong backward by less than the gap to the last sale, raises no stop, so nobody is asked.
 
-**The `staff` source and its one migration** (Task 8-0). A staff member's confirmation or step is
+**The `staff` source and its one migration** (Task 8-0). (2026-11-07, A1422: the two old
+migration files named here were deleted with the frozen history; read one with
+`git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.) A staff member's confirmation or step is
 `source = 'staff'` with their `person_id`, and the till is under `proof.device` (fiscal code never
 names a till, `scripts/no-till-as-issuer.test.ts`).
-`scripts/fixtures/a760-history/fiscal-verifactu/0012_clock_confirmations_staff.sql` adds `staff` to
+`fiscal-verifactu/0012_clock_confirmations_staff.sql` adds `staff` to
 `clock_confirmations_source_ck` and makes `clock_confirmations_person_ck` read "a person exactly
 when the source is `admin` or `staff`". A CHECK change makes drizzle-kit rebuild the table (copy
 into `__new_clock_confirmations`, drop, rename). Nothing references the table and no trigger body
@@ -4610,9 +4616,8 @@ in any set names it, so the drop deletes nothing else and is refused by nothing;
 triggers go with it and `applyMigrations` puts them back after the set (`installAppendOnlyTriggers`,
 `packages/migrations/src/apply.ts`). Boot counts only triggers missing before the migration
 (`missingBeforeMigration`, `apps/server/src/boot.ts`), so the rebuild raises no
-`append_only.triggers_restored`. Guard: `packages/fiscal-verifactu/src/clock-confirmations-upgrade.test.ts`,
-an upgrade from the shipped table. Pre-live, nothing else carries old rows forward (CLAUDE.md §3).
-Task 15a's read adds one index, `scripts/fixtures/a760-history/workforce/0011_person_chain_index.sql`.
+`append_only.triggers_restored`.
+Task 15a's read adds one index, `workforce/0011_person_chain_index.sql`.
 
 **Measured** (Tasks 1 and 4, on GitHub `ubuntu-24.04` runners with systemd 255 and chrony as the
 time service; every printed line is in the plan's "Measured for 9b" table):

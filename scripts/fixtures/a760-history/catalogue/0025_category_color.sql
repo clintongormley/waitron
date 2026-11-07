@@ -1,1 +1,0 @@
-ALTER TABLE `category_details` ADD `color` text;

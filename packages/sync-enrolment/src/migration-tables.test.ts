@@ -190,11 +190,8 @@ describe("dropLineComments", () => {
   // migration correctly holding a Windows line ending and a `--` comment must not fail this.
   it("drops what the old pattern dropped from every migration file in the repository", () => {
     const repoRoot = join(import.meta.dirname, "..", "..", "..");
-    // The frozen pre-A760 history keeps the comment shapes of every migration ever shipped.
-    const files = [...migrationSets(repoRoot), "scripts/fixtures/a760-history"].flatMap((set) =>
-      migrationSqlFiles(repoRoot, set),
-    );
-    expect(files.length, "guards against a vacuous pass over an empty listing").toBeGreaterThan(10);
+    const files = migrationSets(repoRoot).flatMap((set) => migrationSqlFiles(repoRoot, set));
+    expect(files.length, "guards against a vacuous pass over an empty listing").toBeGreaterThan(5);
     let compared = 0;
     let commented = 0;
     for (const file of files) {

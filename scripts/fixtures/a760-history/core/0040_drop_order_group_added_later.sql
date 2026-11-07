@@ -1,1 +1,0 @@
-ALTER TABLE `order_groups` DROP COLUMN `added_later`;

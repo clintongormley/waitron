@@ -1,1 +1,0 @@
-CREATE INDEX `time_entries_person_chain_idx` ON `time_entries` (`person_id`,`node_id`,`location_id`,`sequence_no`);

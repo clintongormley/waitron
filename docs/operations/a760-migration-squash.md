@@ -1,5 +1,8 @@
 # A760 migration squash operator plan
 
+> **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
+> deleted on the owner's word; the files are readable at commit f519799de0.
+
 > **2026-11-04:** the [eight-set plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md)
 > replaces this procedure where the two differ: its opening table lists each change. Everything else
 > here still governs. The freeze, reset roster and owner decisions are recorded in
@@ -796,6 +799,9 @@ roster above.
 **The base.** Part 3 branched from `main` at `59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. The old
 history, every SQL file and journal of every populated set the base shipped, is kept byte for byte under
 `scripts/fixtures/a760-history/`.
+
+> **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
+> deleted on the owner's word; the files are readable at commit f519799de0.
 
 **The epoch.** Each populated set starts again from one migration, `0000_baseline`. The tag, date
 and SQL hash of each are committed in `scripts/migration-baseline-epoch.json`, which the upgrade

@@ -1,9 +1,6 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { expectedSchemaVersion } from "@waitron/migrations";
 import { modulesWithSets } from "@waitron/module";
-import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { ALL_MODULES } from "./modules.js";
 import { checkRestoreCompatibility } from "./restore-gate.js";
 
@@ -91,14 +88,25 @@ describe("checkRestoreCompatibility", () => {
   // The gate skips a module name this image lacks, so an old backup is refused on a set this image
   // still has; core's comes first.
   it("refuses a backup made before the migration squash, on core's count", () => {
-    const oldCounts = Object.fromEntries(
-      historicalSets().map((set) => {
-        const journal = JSON.parse(
-          readFileSync(join(set.migrationsFolder, "meta", "_journal.json"), "utf8"),
-        ) as { entries: unknown[] };
-        return [set.name, journal.entries.length];
-      }),
-    );
+    // Each set's migration count just before the squash.
+    const oldCounts: Record<string, number> = {
+      core: 207,
+      node: 2,
+      handover: 1,
+      catalogue: 36,
+      "venue-service": 74,
+      media: 11,
+      identity: 11,
+      workforce: 14,
+      "workforce-es": 1,
+      payments: 11,
+      scheduler: 1,
+      credentials: 1,
+      "fiscal-verifactu": 18,
+      bookings: 2,
+      adjustments: 11,
+      staffing: 4,
+    };
     const expectedVersions = Object.fromEntries(
       modulesWithSets(ALL_MODULES).map((m) => [m.name, expectedSchemaVersion(m.migrations, null)]),
     );

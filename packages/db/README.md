@@ -73,10 +73,9 @@ which includes this helper's reset and its close.
 
 Core's set is one migration, `0000_baseline.sql`: the schema drizzle-kit generates from the barrel,
 plus the triggers a schema cannot declare, for core's own tables and for those of the modules whose
-tables live in core's set. The migrations before the A760 squash are kept, frozen and test-only, in
-`scripts/fixtures/a760-history/core/`. No migration
-contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
-and file permissions on the venue directory are the access control.
+tables live in core's set. No migration contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is
+no database role to grant anything to, and file permissions on the venue directory are the access
+control.
 
 A paid (`settled`) line may change only its kitchen group;
 all other columns must stay unchanged in that write. The existing served-mark and first-sent-stamp

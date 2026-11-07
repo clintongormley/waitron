@@ -1,1 +1,0 @@
-DROP TABLE `pass_item_marks`;

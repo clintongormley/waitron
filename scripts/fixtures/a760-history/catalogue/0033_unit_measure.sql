@@ -1,1 +1,0 @@
-ALTER TABLE `units` ADD `measure` integer DEFAULT false NOT NULL;

@@ -1,2 +1,0 @@
-ALTER TABLE `device_kitchen_screens` ADD `show_non_pass_stations` integer;--> statement-breakpoint
-ALTER TABLE `device_profile_kitchen_screens` ADD `show_non_pass_stations` integer DEFAULT true NOT NULL;

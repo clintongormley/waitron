@@ -3020,7 +3020,8 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
 The database's freeze on a paid (settled) bill has one exception, added by the core migration
-`0185_settled_order_to_counter` (frozen in `scripts/fixtures/a760-history/core/` since A760), which
+`0185_settled_order_to_counter` (frozen at A760 and deleted with that history on 2026-11-07, A1422;
+`git show f519799de0:scripts/fixtures/a760-history/core/0185_settled_order_to_counter.sql` reads it), which
 re-created `working_orders_enforce_transition`, now in `packages/db/drizzle/0000_baseline.sql`: a
 paid bill not yet handed over may leave its party, once,
 with every other column of its row unchanged — its `revision` and `label` included. Nothing else

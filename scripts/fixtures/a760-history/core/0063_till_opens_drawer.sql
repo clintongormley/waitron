@@ -1,1 +1,0 @@
-ALTER TABLE `tills` ADD `opens_drawer` integer DEFAULT true NOT NULL;

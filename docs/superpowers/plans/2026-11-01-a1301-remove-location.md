@@ -1,5 +1,11 @@
 # A1301 — Remove the location concept: code and fixture slices — Implementation Plan
 
+> **2026-11-07 (A1422):** the upgrade and migration tests this plan names (among them
+> `kitchen-timing-upgrade`, `drawer-refund-upgrade`, `sale-receipt-guests-upgrade`,
+> `role-retirement-upgrade`, `fiscal-allocation-migration` and `fiscal-certificate-migration`) were
+> deleted with the frozen migration history on the owner's word. A slice that would have changed one
+> has nothing to change there. They are readable at commit f519799de0.
+
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
 > Their unused `script-device.ts` helper is retired too.
 > Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and

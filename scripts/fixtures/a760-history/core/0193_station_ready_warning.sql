@@ -1,1 +1,0 @@
-ALTER TABLE `kitchen_stations` ADD `ready_warning_after_minutes` integer DEFAULT 3 NOT NULL;

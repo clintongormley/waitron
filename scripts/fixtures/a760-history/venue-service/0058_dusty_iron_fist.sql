@@ -1,1 +1,0 @@
-ALTER TABLE `seasons` ADD `colour` text DEFAULT 'grey' NOT NULL;

@@ -1972,6 +1972,9 @@ coverage remain open. The existing synthetic walk stays complementary and unchan
 below records the gap that prompted the design, not a new runtime measurement.
 
 - **Upgrade testing — blocking before go-live (owner, 2026-09-26).**
+  (2026-11-07, A1422) Since A760 the walk starts at the squash epoch and `RESETS` is empty; the old
+  steps named below are history, readable with
+  `git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.
   `scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
   order, with the change feed installed between steps, and since A164 (#970) carries two synthetic
   rows per table through every step. The steps that cannot carry those rows are listed in the test's
@@ -1991,8 +1994,10 @@ below records the gap that prompted the design, not a new runtime measurement.
   - **A rebuild of a table another set's trigger BODY reads is still refused** on a box that has
     the trigger — core `0003` on `products`, recorded in
     [conventions-data.md](../developers/conventions-data.md) → _A migration set depends on another
-    through a foreign key, a trigger on its table, or a trigger body naming its table_. The guard steps over it by applying
-    everything up to `0003` in one go, so the next such rebuild fails the guard. Decide the fix.
+    through a foreign key, a trigger on its table, or a trigger body naming its table_. The walk now
+    fails a later rebuild of a table an earlier trigger's body reads (measured 2026-11-07,
+    [ci-and-gates.md](../developers/ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them)).
+    Decide the fix.
   - **A real old database.** Every step here is built by this image's own migrator from today's
     change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the
     new image, is the test that matches what a box does.

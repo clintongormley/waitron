@@ -460,7 +460,8 @@ Receipts in lane B's campaign folder,
 
 The retained failures name `scripts/fiscal-allocation-migration.test.ts`,
 `scripts/guarded-teardowns.test.ts`, `scripts/menu-sections-upgrade.test.ts`,
-`scripts/mutation-shard.test.mjs` and `scripts/pre-push.test.mjs`.
+`scripts/mutation-shard.test.mjs` and `scripts/pre-push.test.mjs`. (2026-11-07, A1422: the first and
+third were deleted with the frozen migration history, so three remain.)
 Each needs the same treatment A751 gave its own four files: what the bound waits for, its worst case under
 this load with the bound lifted, and whether the case can be made cheaper.
 
