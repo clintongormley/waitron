@@ -847,7 +847,7 @@ describe("BackupSupervisor when a destination fails to build", () => {
       },
       buildBackend: (dest) => {
         if (failing && dest.id === throwFor) {
-          throw new AppError("backup.reload_in_progress", {});
+          throw new AppError("backup.destination_key_invalid", { field: "prefix" });
         }
         if (dest.kind !== "local-fs") throw new Error("local-fs destinations only");
         built.push(dest.id);
@@ -874,7 +874,9 @@ describe("BackupSupervisor when a destination fails to build", () => {
     const [a, b] = [await makeDestDir(), await makeDestDir()];
     const run = await failingBuild("d1", () => localFsConfig([a, b], STRONG_KEY_1));
 
-    await expect(run.sup.reload()).rejects.toMatchObject({ code: "backup.reload_in_progress" });
+    await expect(run.sup.reload()).rejects.toMatchObject({
+      code: "backup.destination_key_invalid",
+    });
 
     expect(run.sup.current().enabled).toBe(false);
     expect(run.built).toEqual(["primary"]);
@@ -891,7 +893,9 @@ describe("BackupSupervisor when a destination fails to build", () => {
     const [a, b] = [await makeDestDir(), await makeDestDir()];
     const run = await failingBuild("primary", () => localFsConfig([a, b], STRONG_KEY_1));
 
-    await expect(run.sup.reload()).rejects.toMatchObject({ code: "backup.reload_in_progress" });
+    await expect(run.sup.reload()).rejects.toMatchObject({
+      code: "backup.destination_key_invalid",
+    });
 
     expect(run.sup.current().enabled).toBe(false);
     expect(run.built).toEqual([]);
@@ -908,7 +912,9 @@ describe("BackupSupervisor when a destination fails to build", () => {
   it("a later reload with buildable destinations starts the sweep", async () => {
     const [a, b] = [await makeDestDir(), await makeDestDir()];
     const run = await failingBuild("d1", () => localFsConfig([a, b], STRONG_KEY_1));
-    await expect(run.sup.reload()).rejects.toMatchObject({ code: "backup.reload_in_progress" });
+    await expect(run.sup.reload()).rejects.toMatchObject({
+      code: "backup.destination_key_invalid",
+    });
 
     run.buildable();
     try {

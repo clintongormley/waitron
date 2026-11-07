@@ -1,4 +1,5 @@
 import { isValidEmail } from "./email.js";
+import { WEB_ADDRESS_START } from "./web-address.js";
 
 export const PRIVACY_CONTACT_FIELDS = ["privacyNoticeUrl", "privacyEmail"] as const;
 export type PrivacyContactField = (typeof PRIVACY_CONTACT_FIELDS)[number];
@@ -10,7 +11,6 @@ export const PRIVACY_CONTACT_MAX_LENGTH: Readonly<Record<PrivacyContactField, nu
 };
 
 const INVISIBLE = /[\s\u00ad\u200b-\u200d\u2060]/;
-const WEB_PREFIX = /^https?:\/\/[^/\\]/i;
 
 /** NFC, trimmed; an empty result is null (unset). */
 export function privacyContactValue(raw: string): string | null {
@@ -28,7 +28,7 @@ export function privacyContactProblem(
   if (field === "privacyEmail") {
     return INVISIBLE.test(value) || !isValidEmail(value) ? "email" : undefined;
   }
-  if (INVISIBLE.test(value) || !WEB_PREFIX.test(value)) return "web_address";
+  if (INVISIBLE.test(value) || !WEB_ADDRESS_START.test(value)) return "web_address";
   const parsed = URL.parse(value);
   if (parsed === null || parsed.username !== "" || parsed.password !== "") return "web_address";
   return undefined;

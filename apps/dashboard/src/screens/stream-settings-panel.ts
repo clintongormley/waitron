@@ -1,5 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { isPlainWebAddress } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -23,7 +24,6 @@ import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { isPlainWebAddress } from "./backup-destination-model.js";
 
 type Field = keyof StreamBucketBody;
 

@@ -1034,7 +1034,7 @@ describe("another S3-compatible bucket", () => {
     expect(customField(el, "endpoint").error).toBe("");
   });
 
-  it.each(["https://user:secret@s3.example.test", "ftp://s3.example.test"])(
+  it.each(["https://user:secret@s3.example.test", "https://s3.example.test#"])(
     "a save with the address %s marks the address, no request goes, and Save waits until it is fixed",
     async (endpoint) => {
       const { el, api } = await openConfigure();

@@ -567,7 +567,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     }
   }, 60_000);
 
-  it("closes each destination it built for a status read once the read has settled", async () => {
+  it("after a stop, closes each destination it built for a status read once the read has settled", async () => {
     const closed: string[] = [];
     const realList = LocalFsBackend.prototype.list;
     vi.spyOn(LocalFsBackend.prototype, "list").mockImplementation(function (
@@ -586,7 +586,6 @@ describe("BackupSupervisor status, one destination at a time", () => {
       { id: "local", dir: await tempDir("waitron-bsupnet-local-") },
       { id: "remote", dir: await tempDir("waitron-bsupnet-remote-") },
     ]);
-    // Stopped before the read, so every close seen after it is the status read's.
     const sup = await supervisor(() => cfg, logs, 100);
     await sup.reload();
     await sup.stop();
@@ -601,7 +600,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     });
   }, 60_000);
 
-  it("answers at the read limit but closes a destination only once its late listing has settled", async () => {
+  it("after a stop, answers at the read limit but closes a destination only once its late listing has settled", async () => {
     const events: string[] = [];
     const realList = LocalFsBackend.prototype.list;
     vi.spyOn(LocalFsBackend.prototype, "list").mockImplementation(function (
@@ -632,7 +631,6 @@ describe("BackupSupervisor status, one destination at a time", () => {
       { id: "local", dir: await tempDir("waitron-bsupnet-local-") },
       { id: "remote", dir: await tempDir("waitron-bsupnet-remote-") },
     ]);
-    // Stopped before the read, so every close seen after it is the status read's.
     const sup = await supervisor(() => cfg, logs, 100);
     await sup.reload();
     await sup.stop();
@@ -656,7 +654,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     expect(events).toContain("local closed");
   }, 60_000);
 
-  it("a destination whose listing throws before it returns a promise reads with that code, beside a healthy sibling, and is closed", async () => {
+  it("after a stop, a destination whose listing throws before it returns a promise reads with that code, beside a healthy sibling, and is closed", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown) => unhandled.push(reason);
     process.on("unhandledRejection", onUnhandled);
@@ -681,7 +679,6 @@ describe("BackupSupervisor status, one destination at a time", () => {
       },
     });
     try {
-      // Stopped before the read, so every close seen after it is the status read's.
       await sup.reload();
       await sup.stop();
       closed.length = 0;
@@ -792,7 +789,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     }
   }, 60_000);
 
-  it("a destination that cannot be built reads stale with its code beside the others, and every one that was built is closed", async () => {
+  it("after a stop, a destination that cannot be built reads stale with its code beside the others, and every one that was built is closed", async () => {
     const closed: string[] = [];
     vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (this: LocalFsBackend) {
       closed.push(this.id);
@@ -811,7 +808,6 @@ describe("BackupSupervisor status, one destination at a time", () => {
         return buildBackupBackend(dest);
       },
     });
-    // Stopped before the read, so every close seen after it is the status read's.
     await sup.reload();
     await sup.stop();
     closed.length = 0;
@@ -900,6 +896,34 @@ describe("BackupSupervisor keeps one status client per destination", () => {
     }
   }, 60_000);
 
+  it("keeps the status client on a box that is not the primary, whose status still reads the destinations", async () => {
+    const { built, buildBackend } = recording();
+    const cfg = config([{ id: "usb", dir: await tempDir("waitron-bsupnet-a-") }]);
+    const logs: LogLine[] = [];
+    let role: ReturnType<BackupSupervisorDeps["readSingletonRole"]> = "primary";
+    const sup = await supervisor(() => cfg, logs, undefined, undefined, {
+      buildBackend,
+      readSingletonRole: () => role,
+    });
+    try {
+      await sup.reload();
+      const sweepBuilds = built.length;
+      await destinations(sup);
+      const statusClient = built[sweepBuilds]!;
+
+      role = "secondary";
+      await sup.reload();
+      expect(sup.current().enabled).toBe(false);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(statusClient.closed).toBe(false);
+
+      await destinations(sup);
+      expect(built).toHaveLength(sweepBuilds + 1);
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+
   it("closes the status client when a reload cannot open the venue and so leaves backups off", async () => {
     const { built, buildBackend } = recording();
     const cfg = config([{ id: "usb", dir: await tempDir("waitron-bsupnet-a-") }]);
@@ -909,7 +933,7 @@ describe("BackupSupervisor keeps one status client per destination", () => {
       buildBackend,
       openVenue: async (dir) => {
         opens += 1;
-        if (opens > 1) throw new AppError("backup.reload_in_progress", {});
+        if (opens > 1) throw new Error("venue will not open");
         return openVenueDatabase(dir);
       },
     });

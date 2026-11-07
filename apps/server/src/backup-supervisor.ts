@@ -218,7 +218,7 @@ export class BackupSupervisor {
     this.#buildBackend = deps.buildBackend ?? buildBackupBackend;
     this.#statusClients = new StatusClients(
       (dest) => this.#buildBackend(dest),
-      (backend, err) => this.#logCloseFailed(backend, err),
+      (backend) => this.#closeBackends([backend]),
     );
   }
 
@@ -522,16 +522,12 @@ export class BackupSupervisor {
       try {
         backend.close();
       } catch (err) {
-        this.#logCloseFailed(backend, err);
+        this.#deps.log("warn", "backup.destination_close_failed", {
+          destination: backend.id,
+          errorCode: codeOf(err),
+        });
       }
     }
-  }
-
-  #logCloseFailed(backend: StorageBackend, err: unknown): void {
-    this.#deps.log("warn", "backup.destination_close_failed", {
-      destination: backend.id,
-      errorCode: codeOf(err),
-    });
   }
 
   #now(): Date {

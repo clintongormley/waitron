@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BackupDestinationView, BackupStatusView } from "../api/client.js";
-import {
-  EMPTY_CUSTOM,
-  destinationsBody,
-  isPlainWebAddress,
-  openingDestinations,
-} from "./backup-destination-model.js";
+import { EMPTY_CUSTOM, destinationsBody, openingDestinations } from "./backup-destination-model.js";
 
 const stream = {
   endpoint: "https://s3.example.test",
@@ -173,32 +168,5 @@ describe("destinationsBody", () => {
     ).toEqual([
       { kind: "custom-s3", region: "us-east-1", bucket: "other", accessKeyId: "AKOTHER" },
     ]);
-  });
-});
-
-describe("isPlainWebAddress", () => {
-  it.each([
-    "https://user:secret@s3.example.test",
-    "https://user@s3.example.test",
-    "https://:secret@s3.example.test",
-    "https://s3.example.test/?x",
-    "https://s3.example.test/#x",
-    "https:s3.example.test",
-    "https:///s3.example.test",
-    "https://\\s3.example.test",
-    "ftp://s3.example.test",
-    "https://s3.exa\tmple.test",
-    "https://s3.example.test\x7f",
-  ])("refuses %j", (endpoint) => {
-    expect(isPlainWebAddress(endpoint)).toBe(false);
-  });
-
-  it.each([
-    "https://s3.example.test:9000/path",
-    "http://s3.example.test",
-    "HTTPS://S3.EXAMPLE.TEST",
-    "https://@s3.example.test",
-  ])("accepts %j", (endpoint) => {
-    expect(isPlainWebAddress(endpoint)).toBe(true);
   });
 });

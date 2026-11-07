@@ -16,7 +16,6 @@ type Built = { id: string; serial: number; closed: boolean };
 /** Each built client lists from `answers` in turn; an unset answer lists empty at once. */
 function harness() {
   const built: Built[] = [];
-  const closeFailures: string[] = [];
   let pending: ((objects: StoredObject[]) => void) | undefined;
   let hold = false;
   const clients = new StatusClients(
@@ -40,18 +39,16 @@ function harness() {
         },
         close: () => {
           record.closed = true;
-          if (dest.id === "fails-to-close") throw new Error("close failed");
         },
       };
     },
-    (backend, err) => closeFailures.push(`${backend.id}: ${(err as Error).message}`),
+    (backend) => backend.close(),
   );
   const read = (dest: BackupDestination) =>
     clients.read(dest, (backend) => readDestinationStatus(backend, DAY, NOW, 60_000));
   return {
     clients,
     built,
-    closeFailures,
     read,
     holdNextListing: () => (hold = true),
     answerHeldListing: (objects: StoredObject[]) => pending!(objects),
@@ -159,6 +156,31 @@ describe("StatusClients", () => {
     expect(h.built[2]!.closed).toBe(true);
   });
 
+  it("after closeAll, closes the client a read built when the read throws before it returns, and the caller still sees the throw", async () => {
+    const h = harness();
+    h.clients.closeAll();
+    expect(() =>
+      h.clients.read(folder("usb", "/a"), () => {
+        throw new Error("read failed");
+      }),
+    ).toThrow("read failed");
+    await settle();
+    expect(h.built.map(({ closed }) => closed)).toEqual([true]);
+  });
+
+  it("keeps a client whose read throws before it returns, open, and lends it to the next read", async () => {
+    const h = harness();
+    expect(() =>
+      h.clients.read(folder("usb", "/a"), () => {
+        throw new Error("read failed");
+      }),
+    ).toThrow("read failed");
+    await settle();
+    expect(h.built.map(({ closed }) => closed)).toEqual([false]);
+    await h.read(folder("usb", "/a"));
+    expect(h.built).toHaveLength(1);
+  });
+
   it("answers a destination that will not build with the build's code, and keeps nothing for it", async () => {
     const h = harness();
     const status = await h.read(folder("usb", "/unbuildable"));
@@ -172,16 +194,6 @@ describe("StatusClients", () => {
     await h.read(folder("usb", "/a"));
     expect(h.built).toHaveLength(1);
   });
-
-  it("reports a close that throws and still closes the rest", async () => {
-    const h = harness();
-    await h.read(folder("fails-to-close", "/a"));
-    await h.read(folder("usb", "/b"));
-    h.clients.closeAll();
-    await settle();
-    expect(h.built.every(({ closed }) => closed)).toBe(true);
-    expect(h.closeFailures).toEqual(["fails-to-close: close failed"]);
-  });
 });
 
 describe("StatusClients against an HTTPS bucket", () => {
@@ -190,32 +202,39 @@ describe("StatusClients against an HTTPS bucket", () => {
     ipAddresses: ["127.0.0.1"],
     now: new Date(),
   });
-  let server: Server;
+  let server: Server | undefined;
   let port: number;
   let connections = 0;
   let listings = 0;
 
   beforeAll(async () => {
-    server = createServer({ key: tls.serverKeyPem, cert: tls.serverCertPem }, (req, res) => {
-      req.resume();
-      req.on("end", () => {
-        if (req.url?.includes("list-type=2")) listings += 1;
-        res.writeHead(200, { "content-type": "application/xml" });
-        res.end(
-          '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>b</Name>' +
-            "<KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>" +
-            "</ListBucketResult>",
-        );
-      });
-    });
-    server.on("secureConnection", () => (connections += 1));
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    port = (server.address() as { port: number }).port;
+    const listening = createServer(
+      { key: tls.serverKeyPem, cert: tls.serverCertPem },
+      (req, res) => {
+        req.resume();
+        req.on("end", () => {
+          if (req.url?.includes("list-type=2")) listings += 1;
+          res.writeHead(200, { "content-type": "application/xml" });
+          res.end(
+            '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>b</Name>' +
+              "<KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>" +
+              "</ListBucketResult>",
+          );
+        });
+      },
+    );
+    server = listening;
+    listening.on("secureConnection", () => (connections += 1));
+    await new Promise<void>((resolve) => listening.listen(0, "127.0.0.1", resolve));
+    port = (listening.address() as { port: number }).port;
   });
 
   afterAll(async () => {
-    server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (server !== undefined) {
+      const open = server;
+      open.closeAllConnections();
+      await new Promise<void>((resolve) => open.close(() => resolve()));
+    }
   });
 
   const dest = (): BackupDestination => ({
@@ -239,7 +258,7 @@ describe("StatusClients against an HTTPS bucket", () => {
         buildBackupBackend(d, {
           requestHandler: { socketTimeout: 30_000, httpsAgent: { ca: tls.caCertPem } },
         }),
-      () => {},
+      (backend) => backend.close(),
     );
 
   /** Connections opened by two reads in a row, and the listings the server answered. */

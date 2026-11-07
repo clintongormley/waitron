@@ -33,6 +33,7 @@ import {
   isValidEmail,
   isValidGuestCount,
   isValidTelephone,
+  isPlainWebAddress,
   isZeroDecimal,
   jobOrigin,
   locationId,
@@ -200,6 +201,11 @@ describe("package public surface (./index.js)", () => {
     expect(PRIVACY_CONTACT_MAX_LENGTH.privacyEmail).toBe(254);
     expect(privacyContactValue(" privacy@example.com ")).toBe("privacy@example.com");
     expect(privacyContactProblem("privacyEmail", "privacy")).toBe("email");
+  });
+
+  it("re-exports the plain web address rule", () => {
+    expect(isPlainWebAddress("https://h.test")).toBe(true);
+    expect(isPlainWebAddress("https://h.test?")).toBe(false);
   });
 
   it("re-exports the media library filename pattern", () => {

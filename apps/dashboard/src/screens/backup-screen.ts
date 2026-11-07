@@ -3,6 +3,7 @@ import { dashboardQuery } from "../api/live-queries.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { isPlainWebAddress } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -40,7 +41,6 @@ import {
   destinationsBody,
   hasUnusableFolder,
   heldBucket,
-  isPlainWebAddress,
   keepsHeldSecret,
   openingDestinations,
   sameStreamBucket,
