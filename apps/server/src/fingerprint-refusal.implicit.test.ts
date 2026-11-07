@@ -319,15 +319,15 @@ describe("late issuance rolls back its initiating command", () => {
       );
       expect(carved.status, JSON.stringify(carved.json)).toBe(200);
       const bill2 = carved.json.billId as string;
-      const lastCaña = async (billId: string) => {
+      const lastBeer = async (billId: string) => {
         const lines = await suite.db
           .select()
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, billId));
         return lines.sort((a, b) => b.lineNo - a.lineNo)[0]!;
       };
-      const [cañaOfBill1, cañaOfBill2] = [await lastCaña(bill1), await lastCaña(bill2)];
-      await paid(bill1, cañaOfBill1.unitPriceGross);
+      const [beerOfBill1, beerOfBill2] = [await lastBeer(bill1), await lastBeer(bill2)];
+      await paid(bill1, beerOfBill1.unitPriceGross);
       await paid(bill2, 3500);
       const path = `/api/parties/${partyId}/split-table`;
       const body = await observedTableActionBody(suite.db, path, {
@@ -335,8 +335,8 @@ describe("late issuance rolls back its initiating command", () => {
         selection: {
           wholeBillIds: [],
           loose: [
-            { billId: bill2, lineIds: [cañaOfBill2.id] },
-            { billId: bill1, lineIds: [cañaOfBill1.id] },
+            { billId: bill2, lineIds: [beerOfBill2.id] },
+            { billId: bill1, lineIds: [beerOfBill1.id] },
           ],
         },
         expectedPartyRevision: await partyRevision(partyId),

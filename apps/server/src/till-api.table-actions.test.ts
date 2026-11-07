@@ -190,7 +190,7 @@ describe("the table action routes", () => {
       ],
     });
     expect(placed.status).toBe(200);
-    const [tarta] = venue.db.all<{ id: string }>(
+    const [cake] = venue.db.all<{ id: string }>(
       sql`select id from working_order_lines where working_order_id = ${ana.tabId} and name = 'Tarta'`,
     );
     const second = await freeTable();
@@ -218,7 +218,7 @@ describe("the table action routes", () => {
     expect(read.status).toBe(200);
     const groups = read.json.groups as { state: string; rows: { lineId: string }[] }[];
     expect(
-      groups.filter((group) => group.rows.some((row) => row.lineId === tarta!.id)),
+      groups.filter((group) => group.rows.some((row) => row.lineId === cake!.id)),
     ).toMatchObject([{ state: "held" }]);
   });
 
@@ -1067,7 +1067,7 @@ describe("A803 split: the route", () => {
       }),
     );
     expect(split.status).toBe(200);
-    return { ana, second, pulpoBill: split.json.billId as string };
+    return { ana, second, octopusBill: split.json.billId as string };
   }
 
   function lineIdsOf(billId: string): string[] {
@@ -1096,14 +1096,14 @@ describe("A803 split: the route", () => {
   }
 
   it("a selection answers the new party and its bills, whole first and the new bill last, and no source", async () => {
-    const { ana, second, pulpoBill } = await anaWith("Tarta", "Caña");
-    const [, caña] = lineIdsOf(ana.tabId);
+    const { ana, second, octopusBill } = await anaWith("Tarta", "Caña");
+    const [, beer] = lineIdsOf(ana.tabId);
 
     const answer = await post(
       `/api/parties/${ana.partyId}/split-table`,
       splitting(ana.partyId, second, {
-        wholeBillIds: [pulpoBill],
-        loose: [{ billId: ana.tabId, lineIds: [caña] }],
+        wholeBillIds: [octopusBill],
+        loose: [{ billId: ana.tabId, lineIds: [beer] }],
       }),
     );
 
@@ -1111,29 +1111,29 @@ describe("A803 split: the route", () => {
     const billIds = answer.json.billIds as string[];
     expect(answer.json).toEqual({ partyId: answer.json.partyId, billIds });
     expect(billIds).toHaveLength(2);
-    expect(billIds[0]).toBe(pulpoBill);
-    expect(lineIdsOf(billIds[1]!)).toEqual([caña]);
+    expect(billIds[0]).toBe(octopusBill);
+    expect(lineIdsOf(billIds[1]!)).toEqual([beer]);
     expect(lineIdsOf(ana.tabId)).toHaveLength(1);
     expect(tablesOf(answer.json.partyId as string)).toEqual([second]);
     expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
   });
 
   it("upper-case ids name the same bills and dishes, and are answered lower-cased", async () => {
-    const { ana, second, pulpoBill } = await anaWith("Tarta", "Caña");
-    const [, caña] = lineIdsOf(ana.tabId);
+    const { ana, second, octopusBill } = await anaWith("Tarta", "Caña");
+    const [, beer] = lineIdsOf(ana.tabId);
 
     const answer = await post(
       `/api/parties/${ana.partyId.toUpperCase()}/split-table`,
       splitting(ana.partyId, second.toUpperCase(), {
-        wholeBillIds: [pulpoBill.toUpperCase()],
-        loose: [{ billId: ana.tabId.toUpperCase(), lineIds: [caña!.toUpperCase()] }],
+        wholeBillIds: [octopusBill.toUpperCase()],
+        loose: [{ billId: ana.tabId.toUpperCase(), lineIds: [beer!.toUpperCase()] }],
       }),
     );
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const billIds = answer.json.billIds as string[];
-    expect(billIds[0]).toBe(pulpoBill);
-    expect(lineIdsOf(billIds[1]!)).toEqual([caña]);
+    expect(billIds[0]).toBe(octopusBill);
+    expect(lineIdsOf(billIds[1]!)).toEqual([beer]);
   });
 
   it("an empty selection opens a new empty bill at the leaving table", async () => {
@@ -1224,12 +1224,12 @@ describe("A803 split: the route", () => {
     ["a whole id twice", (billId) => ({ wholeBillIds: [billId, billId], loose: [] })],
   ])("%s is refused management.request_invalid on selection, changing nothing", async (_, make) => {
     const { ana, second } = await anaWith("Tarta", "Caña");
-    const [tarta] = lineIdsOf(ana.tabId);
+    const [cake] = lineIdsOf(ana.tabId);
     const revision = revisionOf(ana.partyId);
 
     const answer = await post(
       `/api/parties/${ana.partyId}/split-table`,
-      splitting(ana.partyId, second, make(ana.tabId, tarta!)),
+      splitting(ana.partyId, second, make(ana.tabId, cake!)),
     );
 
     expect(answer.status).toBe(400);
@@ -1245,13 +1245,13 @@ describe("A803 split: the route", () => {
     ["a bill id", (bill: string) => bill],
     ["null", () => null],
   ])("a body with %s as billId and no selection refuses, moving nothing", async (_, billOf) => {
-    const { ana, second, pulpoBill } = await anaWith("Tarta");
+    const { ana, second, octopusBill } = await anaWith("Tarta");
     const revision = revisionOf(ana.partyId);
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       expectedEdits: [],
       tableId: second,
-      billId: billOf(pulpoBill),
+      billId: billOf(octopusBill),
       expectedPartyRevision: revision,
     });
 
@@ -1265,19 +1265,19 @@ describe("A803 split: the route", () => {
   });
 
   it("a body naming both goes by its selection", async () => {
-    const { ana, second, pulpoBill } = await anaWith("Tarta");
+    const { ana, second, octopusBill } = await anaWith("Tarta");
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       expectedEdits: [],
       tableId: second,
-      billId: pulpoBill,
+      billId: octopusBill,
       selection: { wholeBillIds: [], loose: [] },
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const billIds = answer.json.billIds as string[];
-    expect(billIds).not.toContain(pulpoBill);
+    expect(billIds).not.toContain(octopusBill);
     expect(lineIdsOf(billIds[0]!)).toEqual([]);
   });
 
@@ -1368,12 +1368,10 @@ describe("A803 split: the route", () => {
 
     it("an extra's id: 400 tab.transfer_modifier_line", async () => {
       const { ana, second } = await anaWith("Tarta", "Caña");
-      const [tarta, caña] = lineIdsOf(ana.tabId);
-      venue.db.run(
-        sql`update working_order_lines set parent_line_id = ${tarta} where id = ${caña}`,
-      );
+      const [cake, beer] = lineIdsOf(ana.tabId);
+      venue.db.run(sql`update working_order_lines set parent_line_id = ${cake} where id = ${beer}`);
 
-      const answer = await refusal(ana, second, caña!);
+      const answer = await refusal(ana, second, beer!);
 
       expect(answer.status).toBe(400);
       expect(answer.json).toMatchObject({ code: "tab.transfer_modifier_line" });
@@ -1810,7 +1808,7 @@ describe("A803 split: the panel's read", () => {
       ],
     });
     expect(placed.status, JSON.stringify(placed.json)).toBe(200);
-    const [tarta] = venue.db.all<{ groupId: string }>(
+    const [cake] = venue.db.all<{ groupId: string }>(
       sql`select group_id as groupId from working_order_lines where working_order_id = ${ana.tabId} and name = 'Tarta'`,
     );
     const marks = async () => {
@@ -1837,7 +1835,7 @@ describe("A803 split: the panel's read", () => {
     ];
     expect(await marks()).toEqual({ sources: waiting, bill: waiting });
 
-    const fired = await post(`/api/parties/${ana.partyId}/groups/${tarta!.groupId}/fire`, {
+    const fired = await post(`/api/parties/${ana.partyId}/groups/${cake!.groupId}/fire`, {
       submissionId: randomUUID(),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
@@ -1887,11 +1885,11 @@ describe("A803 split: the panel's read", () => {
         expectedPartyRevision: revisionOf(ana.partyId),
       });
       expect(joined.status, JSON.stringify(joined.json)).toBe(200);
-      const pulpoBill = await splitOff(ana.tabId, ana.partyId, 2);
-      const [tarta] = venue.db.all<{ id: string }>(
+      const octopusBill = await splitOff(ana.tabId, ana.partyId, 2);
+      const [cake] = venue.db.all<{ id: string }>(
         sql`select id from working_order_lines where working_order_id = ${ana.tabId}`,
       );
-      return { ana, second, pulpoBill, tarta: tarta!.id };
+      return { ana, second, octopusBill, cake: cake!.id };
     }
 
     function moveDish(from: string, to: string, partyId: string, lineId: string) {
@@ -1916,10 +1914,10 @@ describe("A803 split: the panel's read", () => {
     });
 
     it("a press at it after another till moved a dish is refused 409; the next read shows the dish, and a press at that read's revision takes it", async () => {
-      const { ana, second, pulpoBill, tarta } = await twoBillsOnTwoTables();
+      const { ana, second, octopusBill, cake } = await twoBillsOnTwoTables();
       const shown = (await read(ana.partyId)).json as Rows;
-      expect(dishesOn(shown, pulpoBill)).toBe(1);
-      const moved = await moveDish(ana.tabId, pulpoBill, ana.partyId, tarta);
+      expect(dishesOn(shown, octopusBill)).toBe(1);
+      const moved = await moveDish(ana.tabId, octopusBill, ana.partyId, cake);
       expect(moved.status, JSON.stringify(moved.json)).toBe(200);
       const path = `/api/parties/${ana.partyId}/split-table`;
       const press = async (rows: Rows) =>
@@ -1930,7 +1928,7 @@ describe("A803 split: the panel's read", () => {
           path,
           await observedTableActionBody(venue.db, path, {
             tableId: second,
-            selection: { wholeBillIds: [pulpoBill], loose: [] },
+            selection: { wholeBillIds: [octopusBill], loose: [] },
             expectedPartyRevision: rows.partyRevision,
           }),
         );
@@ -1941,18 +1939,18 @@ describe("A803 split: the panel's read", () => {
 
       const fresh = (await read(ana.partyId)).json as Rows;
       expect(fresh.partyRevision).toBeGreaterThan(shown.partyRevision);
-      expect(dishesOn(fresh, pulpoBill)).toBe(2);
+      expect(dishesOn(fresh, octopusBill)).toBe(2);
 
       const accepted = await press(fresh);
       expect(accepted.status, JSON.stringify(accepted.json)).toBe(200);
       const [{ dishes }] = venue.db.all<{ dishes: number }>(
-        sql`select count(*) as dishes from working_order_lines where working_order_id = ${pulpoBill}`,
+        sql`select count(*) as dishes from working_order_lines where working_order_id = ${octopusBill}`,
       ) as [{ dishes: number }];
       expect(dishes).toBe(2);
       const onNewParty = venue.db.all<{ id: string }>(
         sql`select id from working_orders where party_id = ${accepted.json.partyId as string}`,
       );
-      expect(onNewParty).toEqual([{ id: pulpoBill }]);
+      expect(onNewParty).toEqual([{ id: octopusBill }]);
     });
 
     it("a press that knows no edit state names an untouched bill's: taken on one, and refused on an edited one with the state, which the next press names", async () => {
@@ -1974,39 +1972,39 @@ describe("A803 split: the panel's read", () => {
       const taken = await pressNaming(
         untouched.ana.partyId,
         untouched.second,
-        untouched.pulpoBill,
-        blank(untouched.pulpoBill),
+        untouched.octopusBill,
+        blank(untouched.octopusBill),
       );
       expect(taken.status, JSON.stringify(taken.json)).toBe(200);
 
-      const { ana, second, pulpoBill } = await twoBillsOnTwoTables();
-      const [pulpo] = venue.db.all<{ id: string }>(
-        sql`select id from working_order_lines where working_order_id = ${pulpoBill}`,
+      const { ana, second, octopusBill } = await twoBillsOnTwoTables();
+      const [octopus] = venue.db.all<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${octopusBill}`,
       );
       const recalled = await send(
         venue.app,
         venue.cookie,
         "POST",
-        `/api/parties/${ana.partyId}/lines/${pulpo!.id}/recall`,
+        `/api/parties/${ana.partyId}/lines/${octopus!.id}/recall`,
         {
           submissionId: randomUUID(),
           expectedPartyRevision: revisionOf(ana.partyId),
-          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, pulpoBill)),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, octopusBill)),
         },
       );
       expect(recalled.status, JSON.stringify(recalled.json)).toBe(200);
 
-      const refused = await pressNaming(ana.partyId, second, pulpoBill, blank(pulpoBill));
+      const refused = await pressNaming(ana.partyId, second, octopusBill, blank(octopusBill));
       expect(refused.status, JSON.stringify(refused.json)).toBe(409);
       expect(refused.json).toMatchObject({
         code: "draft.out_of_date",
-        params: { billId: pulpoBill },
+        params: { billId: octopusBill },
       });
       const { edit } = refused.json.params as { edit: Record<string, unknown> };
-      expect(edit).toMatchObject({ billId: pulpoBill });
+      expect(edit).toMatchObject({ billId: octopusBill });
       expect(edit.editorVersion).not.toBe(0);
 
-      const retried = await pressNaming(ana.partyId, second, pulpoBill, {
+      const retried = await pressNaming(ana.partyId, second, octopusBill, {
         billId: edit.billId,
         editorVersion: edit.editorVersion,
         draftId: edit.draftId,
@@ -2016,10 +2014,10 @@ describe("A803 split: the panel's read", () => {
     });
 
     it("a press that knows no edit state, on a whole bill another person's unsent dish holds: refused draft.out_of_date, and told who holds it", async () => {
-      const { ana, second, pulpoBill } = await twoBillsOnTwoTables();
+      const { ana, second, octopusBill } = await twoBillsOnTwoTables();
       await withTransaction(venue.db, (tx) =>
         saveDraftForTest(tx, venue.cfg, ana.partyId, venue.adminId, {
-          billId: pulpoBill,
+          billId: octopusBill,
           draftId: null,
           revision: 0,
           lines: [
@@ -2048,10 +2046,10 @@ describe("A803 split: the panel's read", () => {
         `/api/parties/${ana.partyId}/split-table`,
         {
           tableId: second,
-          selection: { wholeBillIds: [pulpoBill], loose: [] },
+          selection: { wholeBillIds: [octopusBill], loose: [] },
           expectedPartyRevision: revisionOf(ana.partyId),
           expectedEdits: [
-            { billId: pulpoBill, editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: octopusBill, editorVersion: 0, draftId: null, draftRevision: null },
           ],
           guestCounts: { staying: null, leaving: null },
         },
@@ -2061,8 +2059,8 @@ describe("A803 split: the panel's read", () => {
       expect(refused.json).toMatchObject({
         code: "draft.out_of_date",
         params: {
-          billId: pulpoBill,
-          edit: { billId: pulpoBill, editorId: venue.adminId, editorName: "Administradora" },
+          billId: octopusBill,
+          edit: { billId: octopusBill, editorId: venue.adminId, editorName: "Administradora" },
         },
       });
       const { edit } = refused.json.params as { edit: Record<string, unknown> };
@@ -2071,19 +2069,19 @@ describe("A803 split: the panel's read", () => {
     });
 
     it("an order sent on a bill moves it too, so rows from before are refused whatever edit state the press carries", async () => {
-      const { ana, second, pulpoBill } = await twoBillsOnTwoTables();
-      const [pulpo] = venue.db.all<{ id: string }>(
-        sql`select id from working_order_lines where working_order_id = ${pulpoBill}`,
+      const { ana, second, octopusBill } = await twoBillsOnTwoTables();
+      const [octopus] = venue.db.all<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${octopusBill}`,
       );
       const recalled = await send(
         venue.app,
         venue.cookie,
         "POST",
-        `/api/parties/${ana.partyId}/lines/${pulpo!.id}/recall`,
+        `/api/parties/${ana.partyId}/lines/${octopus!.id}/recall`,
         {
           submissionId: randomUUID(),
           expectedPartyRevision: revisionOf(ana.partyId),
-          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, pulpoBill)),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, octopusBill)),
         },
       );
       expect(recalled.status, JSON.stringify(recalled.json)).toBe(200);
@@ -2104,7 +2102,7 @@ describe("A803 split: the panel's read", () => {
           expectedPartyRevision: revisionOf(ana.partyId),
           draftRevision: draft.revision,
           groups: [{ lineIds: [draft.lines[0]!.id], release: "fire" }],
-          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, pulpoBill)),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, octopusBill)),
         },
       );
       expect(submitted.status, JSON.stringify(submitted.json)).toBe(200);
@@ -2118,7 +2116,7 @@ describe("A803 split: the panel's read", () => {
         path,
         await observedTableActionBody(venue.db, path, {
           tableId: second,
-          selection: { wholeBillIds: [pulpoBill], loose: [] },
+          selection: { wholeBillIds: [octopusBill], loose: [] },
           expectedPartyRevision: shown.partyRevision,
         }),
       );
@@ -2128,13 +2126,13 @@ describe("A803 split: the panel's read", () => {
     });
 
     it("reads taken while another till moves a dish back and forth never pair a revision with rows from another", async () => {
-      const { ana, pulpoBill, tarta } = await twoBillsOnTwoTables();
+      const { ana, octopusBill, cake } = await twoBillsOnTwoTables();
       const start = revisionOf(ana.partyId);
       let moving = true;
       const mover = (async () => {
         for (let turn = 0; turn < 8; turn++) {
-          const [from, to] = turn % 2 === 0 ? [ana.tabId, pulpoBill] : [pulpoBill, ana.tabId];
-          const moved = await moveDish(from, to, ana.partyId, tarta);
+          const [from, to] = turn % 2 === 0 ? [ana.tabId, octopusBill] : [octopusBill, ana.tabId];
+          const moved = await moveDish(from, to, ana.partyId, cake);
           expect(moved.status, JSON.stringify(moved.json)).toBe(200);
         }
         moving = false;
@@ -2148,7 +2146,7 @@ describe("A803 split: the panel's read", () => {
       expect(new Set(answers.map((rows) => rows.partyRevision)).size).toBeGreaterThan(2);
       for (const rows of answers) {
         const moved = (rows.partyRevision - start) % 2 === 1;
-        expect([rows.partyRevision, dishesOn(rows, pulpoBill)]).toEqual([
+        expect([rows.partyRevision, dishesOn(rows, octopusBill)]).toEqual([
           rows.partyRevision,
           moved ? 2 : 1,
         ]);
