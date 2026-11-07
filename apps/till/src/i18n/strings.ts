@@ -1328,7 +1328,7 @@ export const en = {
   "line.quantity_invalid": "Enter a positive quantity that fits this dish’s unit.",
   "table.split_quantity_whole_error": "Choose a whole quantity from 1 up to the amount ordered",
   "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
-  "table.move_dish_gone": "A dish you picked has left this bill, so nothing moved.",
+  "table.move_dish_gone": "A dish you picked is no longer on this bill, so nothing moved.",
   "table.move_bill_gone": "That bill is no longer open, so nothing moved.",
   "table.round_sending": "Sending the order…",
   "table.draft_actions": "Send the order",

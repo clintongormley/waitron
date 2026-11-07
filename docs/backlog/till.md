@@ -2124,10 +2124,11 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 
 ## A till request refused for naming someone not signed in locks the screen with no sentence
 
-Left open by A1382. On main an order save does this; #2534 adds take-over, recall and split. The
-owner chooses words on the lock screen or a recorded exception (question in `questions.md`).
+Left open by A1382. On main an order save does this; #2534, if it lands, adds take-over, recall and
+split. The owner chooses words on the lock screen or a recorded exception (question in Lane C's
+`questions.md`, 7 November).
 
-## Other till sentences still send the person to a manager, against the refusal rule
+## Other till sentences still send the person to somebody else, against the refusal rule
 
 Left open by A1382, which changed only `device.forbidden_action`. By code:
 
@@ -2142,14 +2143,17 @@ Left open by A1382, which changed only `device.forbidden_action`. By code:
   `clock.behind_chain`.
 - `apps/till/src/i18n/strings.ts`: `venue.time_zone_confirm`, `tender_refund.storage`,
   `kitchen_screen.none`, `kitchen_screen.choose_again`, `station.printer_down`,
-  `device.join_name_hint`, `device.join_approval_guide`, `device.join_refused_hint`,
-  `card.pending_check`, `adjust.no_reasons`, `sale.clock_unusable`, `sale.clock_behind_chain`,
-  `bill_pay.reader_not_held_unknown`, `bill_pay.card_pending`, `bill_pay.pending_where`,
-  `bill_refund.pending`.
+  `device.join_refused_hint`, `card.pending_check`, `adjust.no_reasons`, `sale.clock_unusable`,
+  `sale.clock_behind_chain`, `bill_pay.reader_not_held_unknown`, `bill_pay.card_pending`,
+  `bill_pay.pending_where`, `bill_refund.pending`, `sale.refused`, `place.refused`.
+- `apps/till/src/i18n/staff-notices.ts`, whose hint `staff_notice.tell_manager` also shows on these
+  notices: `clock.unusable`, `clock.behind_chain`, `storage.space_low`, `clock.check_time`,
+  `fiscal.records_unsent` with a held record, and a notice the till has no words for.
 
-Not listed: the owner's full-disk strip (`staff_notice.tell_manager`); the till's other full-disk
-words, which _Other full-disk words still send the person elsewhere_ in `setup.md` holds; sentences
-that take a manager's PIN or choice on the spot; and labels such as `approval.title_manager`.
+Not listed: the owner's full-disk strip (`storage.disk_full` in `staff-notices.ts`); the till's other
+full-disk words, which _Other full-disk words still send the person elsewhere_ in `setup.md` holds;
+sentences that take a manager's PIN or choice on the spot; labels such as `approval.title_manager`;
+and the joining steps `device.join_name_hint` and `device.join_approval_guide`, which are no refusal.
 
 ## Bundle A1386: Blank or misleading Floor pages
 

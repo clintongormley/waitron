@@ -533,7 +533,7 @@ describe("A803 move dishes app:", () => {
       tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bill-gone]");
 
     it.each([
-      ["en", "A dish you picked has left this bill, so nothing moved."],
+      ["en", "A dish you picked is no longer on this bill, so nothing moved."],
       ["es", "Un plato que has elegido ya no está en esta cuenta, así que no se ha movido nada."],
     ] as const)(
       "tab.line_not_found says the dish has left, in %s, and shows the bill's current dishes",
