@@ -2809,18 +2809,24 @@ describe("a handheld's zones", () => {
       },
     );
 
+    // A zone with no tables draws a sentence in place of either view, so each zone needs one.
+    const tablesInBoth = () => ({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([tableIn("t-room", "room"), tableIn("t-garden", "garden")]),
+    });
     it.each(handhelds)(
       "List or Map survives a reload on this device, per zone (%s)",
       async (formFactor) => {
         const chosen = selection(["room", "garden"], "room");
-        const first = await mountHandheld(chosen, formFactor);
+        const first = await mountHandheld(chosen, formFactor, tablesInBoth());
         await showZone(first.el, "room");
         expect(viewOf(first.el)).toBe("list");
         await toggleFloorView(floor(first.el));
         expect(viewOf(first.el)).toBe("map");
         cleanupWidgets();
 
-        const { el } = await mountHandheld(chosen, formFactor);
+        const { el } = await mountHandheld(chosen, formFactor, tablesInBoth());
         await showZone(el, "room");
         expect(viewOf(el)).toBe("map");
         await showZone(el, "garden");
@@ -2834,13 +2840,14 @@ describe("a handheld's zones", () => {
 
     it("another device id in the same browser starts from the default", async () => {
       const chosen = selection(["room", "garden"], "room");
-      const first = await mountHandheld(chosen);
+      const first = await mountHandheld(chosen, "phone-portrait", tablesInBoth());
       await showZone(first.el, "room");
       await toggleFloorView(floor(first.el));
       expect(viewOf(first.el)).toBe("map");
       cleanupWidgets();
 
       const { el } = await mountHandheld(chosen, "phone-portrait", {
+        ...tablesInBoth(),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "other",
           name: "Phone",
@@ -2856,7 +2863,11 @@ describe("a handheld's zones", () => {
       vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
         throw new DOMException("refused", "QuotaExceededError");
       });
-      const { el } = await mountHandheld(selection(["room", "garden"], "room"));
+      const { el } = await mountHandheld(
+        selection(["room", "garden"], "room"),
+        "phone-portrait",
+        tablesInBoth(),
+      );
       await showZone(el, "room");
       await toggleFloorView(floor(el));
       expect(viewOf(el)).toBe("map");

@@ -2168,6 +2168,12 @@ export class TillApp extends LitElement {
   #tablesRead = 0;
   /** When the read whose answer `tables` holds started, numbered by `nextFloorMoment`. */
   @state() private tablesReadAt = 0;
+  /** Whether the list in `tables` is one the box answered, not the empty one a failed
+   * {@link #reloadTables} leaves. */
+  @state() private tablesAnswered = false;
+  @state() private floorReadFailed = false;
+  /** Whether a zones read has answered, so a tables answer alone can end `floorReadFailed`. */
+  #zonesAnswered = false;
   /** What a change this app sent answered about its rooms, which a handheld's floor may not be
    * mounted to be told. */
   @state() private floorCarried: ReadonlyMap<string, CarriedRevision> = new Map();
@@ -10826,10 +10832,11 @@ export class TillApp extends LitElement {
       const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
       if (replaced()) return;
       this.#applyTables(tablesRead, tables);
-      if (zonesRead === this.#floorZonesRead) this.zones = zones;
+      if (zonesRead === this.#floorZonesRead) this.#applyZones(zones);
       this.#floorLoaded = true;
     } catch {
       // Non-fatal: the last-known floor stays.
+      if (!replaced()) this.floorReadFailed = true;
     }
   }
 
@@ -10887,10 +10894,18 @@ export class TillApp extends LitElement {
     const read = ++this.#floorZonesRead;
     try {
       const zones = await this.api.listZones();
-      if (session === this.#operatorSession && read === this.#floorZonesRead) this.zones = zones;
+      if (session === this.#operatorSession && read === this.#floorZonesRead)
+        this.#applyZones(zones);
     } catch {
       // A failed read must not erase the last known closure.
+      if (session === this.#operatorSession) this.floorReadFailed = true;
     }
+  }
+
+  #applyZones(zones: FloorZone[]): void {
+    this.zones = zones;
+    this.#zonesAnswered = true;
+    if (this.tablesAnswered) this.floorReadFailed = false;
   }
 
   #onFloorRefresh({ poll, zones }: FloorRefreshDetail = {}): void {
@@ -10910,8 +10925,16 @@ export class TillApp extends LitElement {
     const poll = new AbortController();
     this.#floorPoll = poll;
     const limit = limited(FLOOR_POLL_LIMIT_MS, poll.signal);
+    const session = this.#operatorSession;
     try {
-      await this.#refreshFloor({ signal: limit.signal });
+      const applied = await this.#refreshFloor({ signal: limit.signal });
+      if (
+        !applied &&
+        limit.signal.aborted &&
+        !poll.signal.aborted &&
+        session === this.#operatorSession
+      )
+        this.floorReadFailed = true;
     } finally {
       limit.done();
       if (this.#floorPoll === poll) this.#floorPoll = undefined;
@@ -10929,11 +10952,14 @@ export class TillApp extends LitElement {
    * equal to it. */
   async #refreshFloor(...options: [] | [ReadOptions]): Promise<boolean> {
     const read = this.#startTablesRead();
+    const session = this.#operatorSession;
     try {
       const tables = await this.api.getTablesState(...options);
       if (options[0]?.signal?.aborted !== true) this.#applyTables(read, tables);
     } catch {
-      // The last-known floor stays.
+      // The last-known floor stays. An aborted poll is judged by #pollFloor, which knows why.
+      if (options[0]?.signal?.aborted !== true && session === this.#operatorSession)
+        this.floorReadFailed = true;
     }
     return this.#tablesApplied >= read.number;
   }
@@ -10950,6 +10976,8 @@ export class TillApp extends LitElement {
     if (read.number <= this.#tablesApplied) return;
     this.#tablesApplied = read.number;
     this.tablesReadAt = read.startedAt;
+    this.tablesAnswered = answered;
+    if (answered && this.#zonesAnswered) this.floorReadFailed = false;
     if (answered) this.#forgetReleased((each) => (each.savedBefore ?? read.number) < read.number);
     const json = JSON.stringify(tables);
     const changed = json !== this.#tablesJson;
@@ -15263,8 +15291,10 @@ export class TillApp extends LitElement {
         this.#splitPanel === undefined &&
         refusal === undefined &&
         this.#splitRefusalReading === undefined
-      )
+      ) {
         this.#applyTables(read, [], false);
+        this.floorReadFailed = true;
+      }
     }
   }
 
@@ -19811,6 +19841,7 @@ export class TillApp extends LitElement {
     this.#setActiveTab(this.#homeScreen(), true);
     this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
+    this.floorReadFailed = false;
     this.errorKey = undefined;
     this.#stationsRead++;
     this.stations = [];
@@ -20018,6 +20049,8 @@ export class TillApp extends LitElement {
         }
         .tables=${this.tables}
         .tablesReadAt=${this.tablesReadAt}
+        .tablesAnswered=${this.tablesAnswered}
+        .floorReadFailed=${this.floorReadFailed}
         .carriedRevisions=${this.floorCarried}
         .api=${this.api}
         .operatorSession=${this.#operatorSession}
