@@ -91,9 +91,11 @@ A mark is saved on the box's own disk and read at the next start.
 - A mark that cannot be written, on a full disk for example, is logged and the stop carries on. The
   next start then treats it as an unplanned stop, which only costs the wait in §3.
 - `restart` is removed at the next start. `shutdown` stays until an admin answers (§5).
-- **Left to the builder:** where it lives. It belongs to this one box, so it must not travel in a
-  backup or a handover copy: a restored box inheriting `shutdown` would wait for an admin for no
-  reason. `node.db` holds `node_handover_restriction` for the same kind of fact.
+- **(default)** It is a file in the box's state folder, beside `spare-space.released`, never a row in
+  `venue.db` or `node.db`. It belongs to this one box and must not travel: `node.db` is copied whole
+  into every archive as `node.dump` (`apps/server/src/backup-sweep.ts:73`, read) and put back by a
+  restore (`apps/server/src/restore.ts`), so a restored box would inherit `shutdown` and wait for an
+  admin for no reason. Written to a temporary name, flushed to disk, then renamed.
 
 ## 3. Every start
 
@@ -101,11 +103,22 @@ The box asks everything configured that could know it was replaced:
 
 - **The other box**, if its chart lists one that finished joining. Built (`boot-peer-check.ts`, read;
   rule in `CLAUDE.md` §5). That box says which role this one has.
-- **The bucket.** A restored box takes a term one higher (`rebuild-first-start.ts`,
-  `packages/membership/src/build.ts`, read). An older box that starts with the bucket reachable reads
-  the higher term and refuses with `pointer_newer_term` (`packages/stream/src/supervisor.ts`, read,
-  not run end to end). Today that stops backups and raises `backup.stream_refused`; nothing found
-  stops selling.
+- **A Cloud mirror**, if the box has a mirror link: built. `reconcileMembershipOnBoot`
+  (`apps/server/src/boot.ts:1932-1956`, read) fetches the mirror's signed chart, can only stop the box,
+  and carries on if the mirror does not answer. It counts as an answer for the wait below.
+- **The bucket.** A restored box takes a term above its own copy's chart and above the bucket's
+  pointer (`apps/server/src/rebuild-first-start.ts:124-137`, read), but not necessarily above the old
+  box's own term: a rebuild reuses the dead box's node id. An older box starting with the bucket
+  reachable refuses on `pointer_newer_term` (`packages/stream/src/supervisor.ts:428-430`, read, not run
+  end to end). Today that stops only the bucket stream and raises `backup.stream_refused`; scheduled
+  archives carry on, and nothing found stops selling. `readPointer` does not check the pointer's
+  signature (`packages/stream/src/pointer.ts`).
+  - **(default)** "Replaced" means a pointer this box can verify that names a newer term than its own,
+    or a different box's generation at an equal term. A pointer it cannot verify is no answer.
+  - A restored box skips this check on its own first start, while its restore marker
+    (`REBUILD_MARKER`) is still present, or it would find itself replaced.
+  - The pointer moves only after the new box's first full copy lands
+    (`packages/stream/src/supervisor.ts:444-465`), so until then the old box hears nothing.
 - **Cloud**, for a box with a Cloud account: A1188 §6 and answer 15, approved 2026-10-29, not built.
 
 What the box does with the answers:
@@ -133,9 +146,16 @@ An action on the dashboard's box status screen, for someone holding the permissi
 
 1. **(default)** The screen says what will happen, and what is needed to restore: the backup and the
    recovery key. If the venue has two boxes and this is the main one, the action is not offered and
-   the screen points to handover.
-2. New sales stop, by the same route a handover uses (`readHandoverRestriction`, `boot.ts`, read).
-   Work already admitted finishes as A1018 §2 sets out.
+   the screen points to handover. It is offered only on a box that is the venue's only box:
+   backups and the stream run only on the main box (`apps/server/src/boot.ts`, around 2905, read).
+2. Work stops, and this stop must be one that can be lifted. Handover's stop cannot: `stepDown`
+   answers only three requests and stops background work, including backups and the stream, and its
+   record is never cleared (`apps/server/src/handover-stepdown.ts:20-27`,
+   `apps/server/src/background-duties.ts`, read). The one gate found that can be lifted is
+   `TradingAdmission` (`apps/server/src/trading-admission.ts`, read), used today only for the time-zone
+   check. **(default)** Everything A1018 §2 lists stops, filing and staff clocking included, so the
+   backup is the final state. Before this step the screen lists anyone still clocked in, so they can
+   clock out first. Work already admitted finishes as A1018 §2 sets out.
 3. It takes one full backup to the venue's saved destinations, using `runOnce`
    (`apps/server/src/backup-sweep.ts`, read: today only the schedule calls it, and no "back up now"
    route was found). **(default)** With no destination set up, the admin downloads it as a file.
@@ -143,7 +163,10 @@ An action on the dashboard's box status screen, for someone holding the permissi
    applies. The screen shows progress, using the lag the box status already shows.
 5. It checks the backup opens, with `verifyBackupArtifact`
    (`apps/server/src/backup-verification.ts`, read: exported for Cloud recovery; not yet traced whether
-   a box can run it on its own backup, which the builder must establish first).
+   a box can run it on its own backup, which the builder must establish first). It refuses a check
+   that runs past 30 seconds or needs more than 256 MiB of scratch space
+   (`apps/server/src/backup-verification.ts:64, 158`, read); a large venue's backup may need more,
+   and the plan must cover it.
 6. It writes `shutdown` and says it is safe to unplug. It does not power the machine off.
 
 If step 3, 4 or 5 cannot finish, the screen says what happened and offers: keep waiting, shut down
@@ -155,7 +178,8 @@ The box sells nothing and files nothing until an admin signs in over HTTPS and c
 
 - **Carry on selling on this box**, for a move. The mark clears and work resumes.
 - **Keep it stopped**, for a box that has been replaced. The screen explains that using both boxes
-  would leave sales, cash and fiscal records disagreeing.
+  would leave sales, cash and fiscal records disagreeing. **(default)** The `shutdown` mark stays, so
+  this page shows at every start until someone chooses to carry on, or the box is wiped.
 
 The waiting page (`apps/server/src/waiting-start.ts`, `carry-on.ts`, read) already does this for a box
 waiting on another box, and is the place to start. The owner accepted the cost: a moved box needs one
@@ -187,9 +211,14 @@ already handles (read, not run for this case).
 2. **Replaced while selling.** What happens to orders in progress follows A1018 §2 and A1342 (a selling
    box told of a newer main box must stop).
 
-## 8. Earlier designs this changes
+## 8. Earlier designs and rules this changes
 
-Both need a dated note when this is approved. Neither is rewritten.
+Each needs a dated note when this is approved. None is rewritten.
+
+- **`CLAUDE.md` §5, "The bucket stream never waits on the bucket to sell", and "Nothing EXTERNAL may
+  block a sale".** After an unplanned stop, a box with one box waits up to 60 seconds for the bucket
+  and Cloud before it sells, and an answer from either can stop it. The owner chose the wait (see
+  "What the owner decided"); both rule lines are amended with this design.
 
 - **A1188 §6 and answer 15:** "With no internet and no till or peer to ask, it waits for a person."
   Narrowed: for a box with no other machine in its chart, that wait is the 60 seconds of §3, unless
