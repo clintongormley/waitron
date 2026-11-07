@@ -3704,12 +3704,12 @@ describe("restore from my bucket", () => {
     [
       "provisioning.database_ahead",
       undefined,
-      "The copy in the bucket was made by newer Waitron software than this server has. Update this server, then try again.",
+      "The copy in the bucket was made by a different version of Waitron than this server's, so this server cannot restore it. Restore it on a server running the version that made it.",
     ],
     [
       "restore.schema_too_new",
       { module: "core", backup: 9, target: 8 },
-      "The copy in the bucket was made by newer Waitron software than this server has. Update this server, then try again.",
+      "The copy in the bucket was made by a different version of Waitron than this server's, so this server cannot restore it. Restore it on a server running the version that made it.",
     ],
     [
       "setup.already_provisioning",
@@ -4443,12 +4443,12 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     },
   );
 
-  const cloudNewerSoftware =
-    "This snapshot was made by newer Waitron software than this server has. Update this server, then try again.";
+  const cloudOtherVersion =
+    "This snapshot was made by a different version of Waitron than this server's, so this server cannot restore it. Restore it on a server running the version that made it.";
   const cloudUnopenable =
     "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.";
   it.each([
-    ["restore.schema_too_new", 409, cloudNewerSoftware],
+    ["restore.schema_too_new", 409, cloudOtherVersion],
     ["recovery.passphrase_invalid", 422, cloudUnopenable],
     ["backup.artifact_invalid", 422, cloudUnopenable],
     ["backup.archive_invalid", 422, cloudUnopenable],

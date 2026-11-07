@@ -98,8 +98,8 @@ export const shellEn = {
     "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
   "shell.bucket.key_does_not_open":
     "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
-  "shell.bucket.newer_software":
-    "The copy in the bucket was made by newer Waitron software than this server has. Update this server, then try again.",
+  "shell.bucket.other_version":
+    "The copy in the bucket was made by a different version of Waitron than this server's, so this server cannot restore it. Restore it on a server running the version that made it.",
   "shell.bucket.pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
   "shell.bucket.pointer_unverified":
     "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
@@ -126,8 +126,8 @@ export const shellEn = {
   "shell.bucket.request_invalid":
     "The server rejected the details. Check your entries, then try again.",
 
-  "shell.cloud.newer_software":
-    "This snapshot was made by newer Waitron software than this server has. Update this server, then try again.",
+  "shell.cloud.other_version":
+    "This snapshot was made by a different version of Waitron than this server's, so this server cannot restore it. Restore it on a server running the version that made it.",
   "shell.cloud.unopenable":
     "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.",
   "shell.cloud.environment_mismatch":
@@ -262,8 +262,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esto no es un kit de recuperación de Waitron. Elige tu paquete de recuperación o el archivo del kit, o pega el kit completo.",
   "shell.bucket.key_does_not_open":
     "La clave de recuperación de este kit no abre la copia más reciente. Si se cambió la clave de recuperación, usa el último paquete de recuperación o el último kit.",
-  "shell.bucket.newer_software":
-    "La copia del bucket la hizo una versión de Waitron más nueva que la de este servidor. Actualiza este servidor e inténtalo de nuevo.",
+  "shell.bucket.other_version":
+    "La copia del bucket la hizo una versión de Waitron distinta de la de este servidor, así que este servidor no puede restaurarla. Restáurala en un servidor con la versión que la hizo.",
   "shell.bucket.pointer_missing":
     "El bucket de este kit no guarda ninguna copia de este restaurante.",
   "shell.bucket.pointer_unverified":
@@ -291,8 +291,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.bucket.request_invalid":
     "El servidor ha rechazado los datos. Revisa lo que has introducido e inténtalo de nuevo.",
 
-  "shell.cloud.newer_software":
-    "Esta instantánea la hizo una versión de Waitron más nueva que la de este servidor. Actualiza este servidor e inténtalo de nuevo.",
+  "shell.cloud.other_version":
+    "Esta instantánea la hizo una versión de Waitron distinta de la de este servidor, así que este servidor no puede restaurarla. Restáurala en un servidor con la versión que la hizo.",
   "shell.cloud.unopenable":
     "No se ha podido abrir esta instantánea. Está dañada, o la clave de recuperación que Waitron Cloud guarda para ella no la abre.",
   "shell.cloud.environment_mismatch":

@@ -88,7 +88,8 @@ describe("checkRestoreCompatibility", () => {
     );
   });
 
-  // The gate skips a module name this image lacks, so an old backup is refused on core's count.
+  // The gate skips a module name this image lacks, so an old backup is refused on a set this image
+  // still has; core's comes first.
   it("refuses a backup made before the migration squash, on core's count", () => {
     const oldCounts = Object.fromEntries(
       historicalSets().map((set) => {

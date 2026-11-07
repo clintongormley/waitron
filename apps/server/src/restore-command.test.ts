@@ -593,7 +593,7 @@ describe("waitron-restore restore --from-bucket", () => {
     ],
     [
       new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["0009"] }),
-      "restore failed: provisioning.database_ahead — the copy in the bucket was made by newer Waitron software than this server has; update this server first",
+      "restore failed: provisioning.database_ahead — the copy in the bucket was made by a different version of Waitron than this server's, so this server cannot restore it; restore it on a server running the version that made it",
     ],
     [
       new AppError("backup.stream_restore_failed", { exitCode: 1, diskFull: false }),

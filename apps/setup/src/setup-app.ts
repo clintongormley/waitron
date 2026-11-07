@@ -402,8 +402,8 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "backup.stream_request_failed": "shell.bucket.request_failed",
   "restore.stream_disk_full": "shell.bucket.disk_full",
   "restore.environment_mismatch": "shell.bucket.environment_mismatch",
-  "provisioning.database_ahead": "shell.bucket.newer_software",
-  "restore.schema_too_new": "shell.bucket.newer_software",
+  "provisioning.database_ahead": "shell.bucket.other_version",
+  "restore.schema_too_new": "shell.bucket.other_version",
   "setup.already_provisioning": "shell.bucket.already_provisioning",
   "setup.not_ready": "shell.not_ready",
   "setup.operation_conflict": "shell.operation_conflict",
@@ -418,7 +418,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
  */
 const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
-  "restore.schema_too_new": "shell.cloud.newer_software",
+  "restore.schema_too_new": "shell.cloud.other_version",
   "recovery.passphrase_invalid": "shell.cloud.unopenable",
   "backup.artifact_invalid": "shell.cloud.unopenable",
   "backup.archive_invalid": "shell.cloud.unopenable",

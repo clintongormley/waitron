@@ -1,5 +1,3 @@
-// A760 replaced every set's history with one starting migration, so a database from before it and
-// an image from after it (or the reverse) must meet as "ahead", never as an upgrade.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
