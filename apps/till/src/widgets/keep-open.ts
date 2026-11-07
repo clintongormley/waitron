@@ -126,7 +126,8 @@ export class TillKeepOpen extends LitElement {
     } catch (error) {
       if (!this.#current(generation, zone, subjectId)) return;
       const code = this.#code(error);
-      if (this.authorizers && (code === "pin.invalid" || code === "pin.throttled"))
+      if (override !== undefined && this.authorizers === null) this.refusal = code;
+      else if (this.authorizers && (code === "pin.invalid" || code === "pin.throttled"))
         this.pinError = code;
       else if (code === "authorization.not_permitted") {
         try {
@@ -195,10 +196,8 @@ export class TillKeepOpen extends LitElement {
               .error=${this.pinError}
               @override-cancel=${(e: Event) => {
                 e.stopPropagation();
-                if (!this.busy) {
-                  this.authorizers = null;
-                  this.pinError = null;
-                }
+                this.authorizers = null;
+                this.pinError = null;
               }}
               @override-confirm=${(e: CustomEvent<OverrideConfirmDetail>) => {
                 e.stopPropagation();

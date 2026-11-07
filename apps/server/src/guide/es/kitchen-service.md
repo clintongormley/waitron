@@ -347,6 +347,9 @@ la cocina. **La cocina acepta — enviar** los envía y **Quitarlos** los quita 
 el botón dice **La cocina acepta — guardar**. La misma ventana se abre cuando el servidor encuentra un
 plato así antes de que el terminal lo haya marcado.
 
+Si el terminal dice que ha terminado el periodo de un plato sin mostrar una lista, vuelve a abrir
+el pedido para revisar sus platos o quita el plato antes de volver a enviarlo.
+
 Un plato que también vende el periodo en curso no se marca y se envía como siempre. Un plato que
 quedó de un día de servicio anterior muestra **Ya no se admiten pedidos** y no se puede enviar: en
 una mesa, **Quitar** lo quita y **Dejar** lo deja en el pedido sin enviar, y en el mostrador solo

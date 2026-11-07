@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import { codeMessage } from "../i18n/codes.js";
 import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
@@ -186,3 +188,57 @@ it("uses Spanish zone wording for a closed zone", async () => {
     "Terraza está cerrada ahora.",
   );
 });
+
+it.each(["pin.invalid", "pin.throttled", "authorization.not_permitted"])(
+  "releases Keep open after a dismissed PIN answers %s",
+  async (code) => {
+    let writes = 0;
+    let answer!: (response: Response) => void;
+    const held = new Promise<Response>((resolve) => (answer = resolve));
+    const { el } = await mount((path, init) =>
+      path.endsWith("authorizers")
+        ? json([{ personId: "manager", displayName: "Manager" }])
+        : init.method === "PUT"
+          ? ++writes === 1
+            ? json({ error: { code: "authorization.not_permitted", params: {} } }, 403)
+            : held
+          : json({ zone }),
+    );
+    const parent = await open(el);
+    await save(parent);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog"))
+      .not.toBeNull();
+    const pin = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
+    await pin.updateComplete;
+    await userEvent.click(pin.shadowRoot!.querySelector<HTMLElement>("[data-person]")!);
+    await pin.updateComplete;
+    await userEvent.click(
+      pin
+        .shadowRoot!.querySelector("till-numeric-pad")!
+        .shadowRoot!.querySelector<HTMLElement>('[data-key="1"]')!,
+    );
+    await pin.updateComplete;
+    await userEvent.click(pin.shadowRoot!.querySelector<HTMLElement>(".authorize")!);
+    await expect.poll(() => writes).toBe(2);
+    const closed = new Promise<void>((resolve) =>
+      pin.addEventListener("override-cancel", () => resolve(), { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    answer(json({ error: { code, params: {} } }, 403));
+    await expect.poll(() => parent.busy).toBe(false);
+    await parent.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(parent.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(codeMessage(code));
+    expect(
+      parent.shadowRoot!.querySelector("wt-combobox")!.shadowRoot!.querySelector("button")!
+        .disabled,
+    ).toBe(false);
+    expect(
+      parent
+        .shadowRoot!.querySelector<WtButton>("[data-cancel]")!
+        .shadowRoot!.querySelector("button")!.disabled,
+    ).toBe(false);
+  },
+);
