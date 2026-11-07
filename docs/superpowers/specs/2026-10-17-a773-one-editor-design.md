@@ -101,7 +101,8 @@ one transaction. It uses passive session activity. Save input adds required `exp
 existing `billId`, `draftId` and `revision` must agree with it (`revision=0` for no draft).
 Save returns `BillDraftSnapshot`. Takeover retains
 `POST /api/parties/:id/drafts/:did/take-over`, taking `{revision,expectedEdit,submissionId}` and
-returning `BillDraftSnapshot`. Its server signature becomes
+returning `BillDraftSnapshot`. (2026-11-07: a save's and a take-over's body now also name their
+`personId`; `docs/backlog/till.md`, "One editor per bill".) Its server signature becomes
 `takeOverDraft(tx:Transaction,cfg:TillConfig,partyId:string,draftId:string,operatorId:string,
 ask:{revision:number,expectedEdit:BillEditExpected,submissionId:string},
 attendance?:AttendanceRecorder):Promise<BillDraftSnapshot>`. Recall returns its existing `{revision,draft}` plus `edit`;

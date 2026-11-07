@@ -3141,8 +3141,8 @@ Each order save names the person whose order it is, and the server refuses
 A791). A take-over (`POST /api/parties/:id/drafts/:did/take-over`), a recall
 (`POST /api/parties/:id/lines/:lineId/recall`) and a line split
 (`POST /api/parties/:id/groups/split-line`) also name their person and are refused the same way.
-When the till meets that refusal while that person is still the one signed in on it, it locks to
-the sign-in screen and keeps their unsaved lines for their next sign-in, without signing out the
+When the till meets that refusal while someone is signed in on it, it locks to the sign-in screen
+and keeps the refused person's unsaved lines for their next sign-in, without signing out the
 device's session, which belongs to someone else. The server cases are in
 `apps/server/src/till-api.drafts.test.ts`, `draft-recall.test.ts` and `till-api.groups.test.ts`; the app
 cases are in `apps/till/src/till-app-drafts.test.ts`, `till-app-parties.test.ts` and
@@ -4350,7 +4350,7 @@ landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill
 main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1264–A1267 and A1269. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1286–A1294 and A1298–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which
+dishes in one panel, has landed; it leaves open A1347–A1356 and A1358–A1366. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval
