@@ -28,6 +28,7 @@ import {
   writeConfig,
 } from "../litestream.ts";
 import { openNode, recordSale } from "../model.ts";
+import type { NodeDb } from "../model.ts";
 import { startStore } from "../store.ts";
 import type { Store } from "../store.ts";
 import { createSilentStore } from "../unreachable-store.ts";
@@ -198,15 +199,16 @@ async function main(): Promise<void> {
       configPath: join(dir, "reachable.yml"),
     });
     const offline = await createSilentStore();
-    const unreachable = writeConfig({
-      dbPath,
-      store: offline.store,
-      prefix: PREFIX,
-      configPath: join(dir, "unreachable.yml"),
-    });
-    const node = openNode("box-a", dbPath);
+    let node: NodeDb | undefined;
     let daemon: ReturnType<typeof replicate> | undefined;
     try {
+      const unreachable = writeConfig({
+        dbPath,
+        store: offline.store,
+        prefix: PREFIX,
+        configPath: join(dir, "unreachable.yml"),
+      });
+      node = openNode("box-a", dbPath);
       const journalMode = node.get<{ journal_mode: string }>("PRAGMA journal_mode = WAL");
       assert.equal(journalMode?.journal_mode, "wal", "precondition: the database is in WAL mode");
 
@@ -432,12 +434,18 @@ async function main(): Promise<void> {
         "offline-log-problems": problemLines(offlineLog).length,
       });
     } finally {
-      if (daemon) {
-        daemon.kill();
-        await daemon.exited;
+      try {
+        if (daemon) {
+          daemon.kill();
+          await daemon.exited;
+        }
+      } finally {
+        try {
+          node?.close();
+        } finally {
+          await offline.store.stop();
+        }
       }
-      node.close();
-      await offline.store.stop();
     }
   } finally {
     try {

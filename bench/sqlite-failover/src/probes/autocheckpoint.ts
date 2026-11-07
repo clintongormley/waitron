@@ -152,14 +152,17 @@ async function runArm(bin: string, arm: Arm, store: Store, dir: string): Promise
       problems: problemLines(log),
     };
   } finally {
-    if (daemon) {
-      daemon.kill();
-      await daemon.exited;
-    }
     try {
-      if (offline) await offline.store.stop();
+      if (daemon) {
+        daemon.kill();
+        await daemon.exited;
+      }
     } finally {
-      node.close();
+      try {
+        if (offline) await offline.store.stop();
+      } finally {
+        node.close();
+      }
     }
   }
 }

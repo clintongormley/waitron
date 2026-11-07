@@ -16,6 +16,7 @@ import {
   replicaUrl,
 } from "./litestream.js";
 import {
+  KILL_GRACE_MS,
   readCommandLine,
   spawnLitestream,
   type ChildHandle,
@@ -162,8 +163,6 @@ export const READ_DEADLINE_MS = 5 * 60_000;
 /** Beside the configuration: the PID of the Litestream this supervisor started. */
 const PID_FILE = "litestream.pid";
 const CONFIG_FILE = "litestream.yml";
-/** How long a leftover Litestream has between SIGTERM and SIGKILL. */
-const LEFTOVER_GRACE_MS = 5_000;
 
 /**
  * The side file size at which Litestream is stopped and the file folded back: below the
@@ -914,7 +913,7 @@ export class StreamSupervisor {
     this.#deps.log("warn", "stream.leftover_stopped", { pid });
     // Not cut short by stop(): the PID record is already removed, so no later start would find it.
     const grace = new AbortController().signal;
-    for (let waited = 0; waited < LEFTOVER_GRACE_MS && sendSignal(pid, 0); waited += 100) {
+    for (let waited = 0; waited < KILL_GRACE_MS && sendSignal(pid, 0); waited += 100) {
       await this.#sleep(100, grace);
     }
     // The PID may have been reused during the grace: signal it only if it is still ours.
