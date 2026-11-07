@@ -12229,8 +12229,11 @@ export class TillApp extends LitElement {
     this.activeTabId = next;
     this.#billAfterSplit = undefined;
     if (gone !== undefined) {
-      const was = [...bills, ...before].find((bill) => bill.workingOrderId === gone);
-      const numbered = was !== undefined && was.billNumber !== null;
+      // A bill merged away is still listed, without its number; the earlier read holds the number.
+      const was = [...bills, ...before].find(
+        (bill) => bill.workingOrderId === gone && bill.billNumber !== null,
+      );
+      const numbered = was !== undefined;
       const shown = bills.find((bill) => bill.workingOrderId === next);
       const key =
         shown === undefined

@@ -594,7 +594,10 @@ describe("A803 move dishes app:", () => {
         .mockRejectedValueOnce({ code: "tab.not_open", status: 409 })
         .mockResolvedValue({ billId: "wo-new" });
       const { el, order } = await open({ getPartyBills, getTabLines, moveDishes });
-      getPartyBills.mockResolvedValue([bill("bill-1", 2)]);
+      getPartyBills.mockResolvedValue([
+        { ...bill("wo-4", 1), billNumber: null, status: "abandoned" },
+        bill("bill-1", 2),
+      ]);
       getTabLines.mockResolvedValue({
         lines: [{ ...OTHER_DISH, id: "line-3" }],
         revision: 1,
