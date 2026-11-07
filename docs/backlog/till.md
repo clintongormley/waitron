@@ -2090,12 +2090,10 @@ both saved. A counter order sent with Send did not reach it: once placed, a save
 
 **What the person sees.**
 
-- A customer or kitchen name changed: on main, "Could not park the order, try again", and "Could not
-  send the order, try again" or "Could not complete the sale, try again" from Send or Pay, with the
-  added dish left in an unsaved basket that hides Cancel. With #2542, "The kitchen has already
-  started a dish on this order, and a started dish can no longer be changed. The order has been
-  reloaded", the added dish gone and Cancel on screen, although nobody touched the started dish.
-  Adding the dish again gets the same answer.
+- A customer or kitchen name changed: "Could not park the order, try again", and "Could not send
+  the order, try again" or "Could not complete the sale, try again" from Send or Pay. The basket
+  keeps its unsaved changes, the added dish among them, and hides Cancel. Each later save gets the
+  same answer. A1426 replaces this path with a separate action for changing a sent dish.
 - A staff name changed: "An item's choices have changed — open the line and choose again". The line's
   window is read-only on a dish already sent (run on a started dish; the check reads only whether it
   was sent), so nobody can. The box refuses each save `options.label_required`, started or not, and

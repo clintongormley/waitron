@@ -1412,8 +1412,7 @@ describe("till-app: comping a stored counter order", () => {
     expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
   });
 
-  describe("a save refused because the kitchen has started the dish since the till read it", () => {
-    const refused = { code: "ticket.already_started", status: 409 };
+  describe("a dish the kitchen has started since the till read it", () => {
     const startedListing = (revision = 5) => {
       const lines = listing(revision);
       lines.lines[0] = { ...lines.lines[0]!, state: "preparing" };
@@ -1427,117 +1426,32 @@ describe("till-app: comping a stored counter order", () => {
       getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(startedListing()),
     });
     const raise = (el: TillApp) => press(el, inBasket(el, ".line .step-inc")!);
-    const stepInc = (el: TillApp) => inBasket(el, ".line .step-inc");
-    const leaveBy: Record<string, (el: TillApp) => void> = {
-      Park: (el) => emit(counter(el), "park-order", {}),
-      Send: (el) => emit(counter(el), "place-order"),
-      "Pay in cash": (el) => emit(counter(el), "confirm-payment", { method: "cash", amount: "20" }),
-      "Pay by card": (el) => emit(counter(el), "collect-card", {}),
-    };
 
-    const sentence = {
-      en: "The kitchen has already started a dish on this order, and a started dish can no longer be changed. The order has been reloaded",
-      es: "La cocina ya ha empezado un plato de este pedido, y un plato empezado ya no se puede cambiar. Se ha vuelto a cargar el pedido",
-    };
-
-    describe.each(["en", "es"] as const)("in %s", (language) => {
-      let previous: ReturnType<typeof currentLocale>;
-      beforeEach(() => {
-        previous = currentLocale();
-      });
-      afterEach(() => setLocale(previous));
-
-      it.each(Object.keys(leaveBy))(
-        "%s reloads the order and says so, with the raise gone and Cancel on screen",
-        async (action) => {
-          const updateWorkingOrder = vi.fn().mockRejectedValue(refused);
-          const placeOrder = vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" });
-          const recordSale = vi.fn();
-          const pay = vi.fn();
-          const el = await placeCounter({
-            ...startsMeanwhile(),
-            updateWorkingOrder,
-            placeOrder,
-            recordSale,
-            pay,
-          });
-          setLocale(language);
-          await raise(el);
-          expect(counter(el).store.dirty).toBe(true);
-
-          leaveBy[action]!(el);
-          await flush(el);
-
-          expect(updateWorkingOrder).toHaveBeenCalledOnce();
-          expect(placeOrder).not.toHaveBeenCalled();
-          expect(recordSale).not.toHaveBeenCalled();
-          expect(pay).not.toHaveBeenCalled();
-          expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
-          expect(banner(el)!.textContent!.trim()).toBe(sentence[language]);
-          expect(counter(el).store.revision).toBe(5);
-          expect(counter(el).store.dirty).toBe(false);
-          expect(counter(el).store.lines[0]!.quantity).toBe("1");
-          expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
-          expect(counter(el).stage).toBe("order");
-          expect(el as unknown as Record<string, boolean>).toMatchObject({
-            placing: false,
-            parking: false,
-            submitting: false,
-          });
-        },
-      );
-    });
-
-    it("keeps + after the reload, and the Cancel on screen opens the dish's cancellation", async () => {
-      const el = await retrieved({
-        ...startsMeanwhile(),
-        updateWorkingOrder: vi.fn().mockRejectedValue(refused),
-      });
-      await raise(el);
-      emit(counter(el), "park-order", {});
-      await flush(el);
-
-      expect(
-        basket(el).shadowRoot!.querySelectorAll(".line")[0]!.querySelector(".step-inc"),
-      ).not.toBeNull();
-
-      await press(el, inBasket(el, '[data-cancel-line="0"]')!);
-      await chooseReason(el, "Mistake");
-      await press(el, inDialog(el, "[data-adjust-continue]"));
-
-      expect(api.previewAdjustment).toHaveBeenCalledWith(
-        "wo-9",
-        expect.objectContaining({ expectedRevision: 5, lineId: "l-1", action: "cancel" }),
-      );
-    });
-
-    it("saves more of the started dish as a new line beside it, the started one as stored", async () => {
+    it("keeps the basket and says the park failed, reading nothing again, when a save is refused for a dish the kitchen has started", async () => {
       const updateWorkingOrder = vi
         .fn()
-        .mockRejectedValueOnce(refused)
-        .mockResolvedValue({ revision: 6 });
+        .mockRejectedValue({ code: "ticket.already_started", status: 409 });
       const el = await retrieved({ ...startsMeanwhile(), updateWorkingOrder });
+      const reads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
       await raise(el);
+      counter(el).store.addProduct(product("bravas", "Bravas", "5.00"), "1");
+
       emit(counter(el), "park-order", {});
       await flush(el);
 
+      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(reads);
+      expect(banner(el)!.textContent!.trim()).toBe(t("held.park_error"));
       const store = counter(el).store;
-      store.addProduct(store.lines[0]!.product, "1");
-      emit(counter(el), "park-order", {});
-      await flush(el);
-
-      expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
-      const saved = vi.mocked(updateWorkingOrder).mock.calls[1]![1] as {
-        lines: { workingOrderLineId?: string; quantity: string; productId?: string }[];
-        revision: number;
-      };
-      expect(saved.revision).toBe(5);
-      expect(saved.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
-        ["l-1", "1"],
-        ["l-2", "1"],
-        [undefined, "1"],
+      expect(store.dirty).toBe(true);
+      expect(store.revision).toBe(4);
+      expect(
+        store.lines.map((line) => [line.workingOrderLineId, line.product.id, line.quantity]),
+      ).toEqual([
+        ["l-1", "croquetas", "2"],
+        ["l-2", "cana", "1"],
+        [undefined, "bravas", "1"],
       ]);
-      expect(banner(el)).toBeNull();
     });
 
     const extraStarted = (lines: TabLines): TabLines => {
@@ -1662,61 +1576,7 @@ describe("till-app: comping a stored counter order", () => {
       },
     );
 
-    it("still says the started dish and the reload, with no Cancel on screen, when the lines cannot be read", async () => {
-      const el = await retrieved({
-        retrieveWorkingOrder: vi
-          .fn()
-          .mockResolvedValueOnce(heldOrder(4))
-          .mockResolvedValue(heldOrder(5)),
-        getTabLines: vi
-          .fn()
-          .mockResolvedValueOnce(listing(4))
-          .mockRejectedValue(new TypeError("Failed to fetch")),
-        updateWorkingOrder: vi.fn().mockRejectedValue(refused),
-      });
-      await raise(el);
-      expect(stepInc(el)).not.toBeNull();
-
-      emit(counter(el), "park-order", {});
-      await flush(el);
-
-      expect(inBasket(el, '[data-cancel-line="0"]')).toBeNull();
-      expect(banner(el)!.textContent!.trim()).toBe(t("held.started_reloaded"));
-    });
-
-    it("still says the started dish and the reload when another write lands between its two reads, and parking and retrieving it brings Cancel back", async () => {
-      const el = await retrieved({
-        retrieveWorkingOrder: vi
-          .fn()
-          .mockResolvedValueOnce(heldOrder(4))
-          .mockResolvedValue(heldOrder(5)),
-        getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(startedListing(6)),
-        updateWorkingOrder: vi.fn().mockRejectedValue(refused),
-      });
-      await raise(el);
-
-      emit(counter(el), "park-order", {});
-      await flush(el);
-
-      expect(counter(el).store.revision).toBe(5);
-      expect(inBasket(el, '[data-cancel-line="0"]')).toBeNull();
-      expect(banner(el)!.textContent!.trim()).toBe(t("held.started_reloaded"));
-
-      vi.mocked(api.retrieveWorkingOrder).mockResolvedValue(heldOrder(6));
-      emit(counter(el), "park-order", {});
-      await flush(el);
-      expect(counter(el).store.lines).toEqual([]);
-
-      emit(counter(el), "retrieve-order", { id: "wo-9" });
-      await flush(el);
-      expect(counter(el).store.revision).toBe(6);
-      expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
-    });
-
-    it.each([
-      ["ticket.already_started", "held.started_reloaded"],
-      ["working_order.out_of_date", "held.changed_elsewhere"],
-    ] as const)(
+    it.each([["working_order.out_of_date", "held.changed_elsewhere"]] as const)(
       "keeps the sentence for %s when the held list cannot be read after the reload",
       async (code, key) => {
         const el = await retrieved({
@@ -1736,33 +1596,30 @@ describe("till-app: comping a stored counter order", () => {
       },
     );
 
-    describe.each(["ticket.already_started", "working_order.out_of_date"])(
-      "when the reload after %s fails",
-      (code) => {
-        it.each([
-          ["a network error", new TypeError("Failed to fetch"), "held.reread_failed"],
-          ["a server fault", { code: "server.internal", status: 500 }, "held.reread_failed"],
-          ["the order gone", { code: "working_order.not_found", status: 404 }, "held.stale"],
-        ] as const)("%s keeps the basket and shows its own sentence", async (_, failure, key) => {
-          const el = await retrieved({
-            retrieveWorkingOrder: vi
-              .fn()
-              .mockResolvedValueOnce(heldOrder(4))
-              .mockRejectedValue(failure),
-            updateWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
-          });
-          await raise(el);
-
-          emit(counter(el), "park-order", {});
-          await flush(el);
-
-          expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
-          expect(counter(el).store.revision).toBe(4);
-          expect(counter(el).store.dirty).toBe(true);
-          expect(banner(el)!.textContent!.trim()).toBe(t(key));
+    describe.each(["working_order.out_of_date"])("when the reload after %s fails", (code) => {
+      it.each([
+        ["a network error", new TypeError("Failed to fetch"), "held.reread_failed"],
+        ["a server fault", { code: "server.internal", status: 500 }, "held.reread_failed"],
+        ["the order gone", { code: "working_order.not_found", status: 404 }, "held.stale"],
+      ] as const)("%s keeps the basket and shows its own sentence", async (_, failure, key) => {
+        const el = await retrieved({
+          retrieveWorkingOrder: vi
+            .fn()
+            .mockResolvedValueOnce(heldOrder(4))
+            .mockRejectedValue(failure),
+          updateWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
         });
-      },
-    );
+        await raise(el);
+
+        emit(counter(el), "park-order", {});
+        await flush(el);
+
+        expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+        expect(counter(el).store.revision).toBe(4);
+        expect(counter(el).store.dirty).toBe(true);
+        expect(banner(el)!.textContent!.trim()).toBe(t(key));
+      });
+    });
   });
 
   it("cancels a dish the kitchen has with a reason", async () => {

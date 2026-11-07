@@ -1501,8 +1501,6 @@ export const en = {
     "This order was changed on another device. It has been reloaded: check it and make your change again",
   "station.no_default_named":
     "No prep station can make {dishes}. Fix this in the dashboard, on the Prep stations page.",
-  "held.started_reloaded":
-    "The kitchen has already started a dish on this order, and a started dish can no longer be changed. The order has been reloaded",
   "place.error": "Could not send the order, try again",
   "place.unconfirmed":
     "The server did not answer. Send again: the kitchen will not get the order twice.",
@@ -3397,8 +3395,6 @@ export const es: Record<StringKey, string> = {
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
   "station.no_default_named":
     "Ninguna estación de preparación puede preparar {dishes}. Corrígelo en el panel, en la página Estaciones de preparación.",
-  "held.started_reloaded":
-    "La cocina ya ha empezado un plato de este pedido, y un plato empezado ya no se puede cambiar. Se ha vuelto a cargar el pedido",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "place.unconfirmed":
     "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",

@@ -7657,10 +7657,6 @@ export class TillApp extends LitElement {
         await this.#reloadChangedOrder(id);
         return false;
       }
-      if (code === "ticket.already_started") {
-        await this.#reloadChangedOrder(id, true);
-        return false;
-      }
       if (code !== "working_order.not_open") throw error;
       return true;
     }
@@ -9038,14 +9034,14 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders();
   }
 
-  /** Loads the order again after a save was refused for an out-of-date copy or, with `started`,
-   * for a dish the kitchen has started. A failed read of the held list keeps the sentence. */
-  async #reloadChangedOrder(id: string, started = false): Promise<void> {
+  /** Loads the order again after a save was refused for an out-of-date copy. A failed read of the
+   * held list keeps the sentence. */
+  async #reloadChangedOrder(id: string): Promise<void> {
     const session = this.#operatorSession;
     try {
       await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
       if (session !== this.#operatorSession) return;
-      this.errorKey = started ? "held.started_reloaded" : "held.changed_elsewhere";
+      this.errorKey = "held.changed_elsewhere";
     } catch (error) {
       if (session !== this.#operatorSession) return;
       const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";

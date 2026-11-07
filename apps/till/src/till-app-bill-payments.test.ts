@@ -4222,42 +4222,6 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(dialog(el)!.lines.map((row) => row.lineNo)).toEqual([1, 2, 3, 4]);
   });
 
-  it("opens no payment when the save is refused for a dish the kitchen has started, and reloads the order", async () => {
-    const el = await retrieved({
-      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 3 }),
-      updateWorkingOrder: vi
-        .fn()
-        .mockRejectedValue({ code: "ticket.already_started", status: 409 }),
-    });
-    const retrieveWorkingOrder = vi.mocked(api.retrieveWorkingOrder);
-    const c = counter(el);
-    const reads = retrieveWorkingOrder.mock.calls.length;
-    c.store.addProduct(
-      {
-        id: "beer",
-        menuItemId: "offer-beer",
-        catalogueId: "cat-default",
-        name: "Beer",
-        pricingUnit: "each",
-        unitPrice: "5.00",
-        vatClass: "general",
-        category: null,
-        allergens: null,
-      },
-      "1",
-    );
-
-    emit(c, "counter-bill-pay", { amount: "70.00" });
-    await flush(el);
-
-    expect(dialog(el)).toBeNull();
-    expect(retrieveWorkingOrder.mock.calls.length).toBe(reads + 1);
-    expect(c.store.dirty).toBe(false);
-    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
-      t("held.started_reloaded"),
-    );
-  });
-
   it("offers to take the rest as a bill payment in place of the single payment, and files the invoice when it is paid", async () => {
     const takeBillPayment = vi
       .fn()
