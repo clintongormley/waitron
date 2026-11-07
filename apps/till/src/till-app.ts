@@ -20277,13 +20277,19 @@ export class TillApp extends LitElement {
     </section>`;
   }
 
+  #deviceZonesRetry = 0;
+
+  // A newer Retry's sign-in replaces an older one's, so only the newest may clear the flag.
   #retryDeviceZones(): void {
+    const retry = ++this.#deviceZonesRetry;
     this.deviceZonesRetrying = true;
     void this.#enterSignedIn({
       personId: this.operatorPersonId,
       displayName: this.operatorName,
       permissions: this.permissions,
-    }).finally(() => (this.deviceZonesRetrying = false));
+    }).finally(() => {
+      if (retry === this.#deviceZonesRetry) this.deviceZonesRetrying = false;
+    });
   }
 
   /** Drill-ins mount non-embedded, so each keeps its own Back or Close; an `embedded` mount would trap

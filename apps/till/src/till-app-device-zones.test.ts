@@ -1804,6 +1804,37 @@ describe("a handheld's zones", () => {
       expect(api.listDefaultZoneOffers).not.toHaveBeenCalled();
     });
 
+    it("a second Retry keeps the section while its read is out, even when the first read answers first", async () => {
+      const reads: ((value: DeviceZoneSelection) => void)[] = [];
+      const { el, api } = await mountHandheld(noZones, "phone-portrait", {
+        listDefaultZoneOffers: refusedOffers(),
+      });
+      await vi.waitFor(() => expect(empty(el)).not.toBeNull());
+      api.getDeviceZones.mockImplementation(
+        () => new Promise<DeviceZoneSelection>((resolve) => reads.push(resolve)),
+      );
+      let floorMounted = false;
+      const watch = new MutationObserver(() => {
+        if (el.shadowRoot!.querySelector("till-floor-screen") !== null) floorMounted = true;
+      });
+      watch.observe(el.shadowRoot!, { childList: true, subtree: true });
+      await userEvent.click(empty(el)!.querySelector<HTMLElement>("[data-retry-device-zones]")!);
+      await vi.waitFor(() => expect(api.getDeviceZones).toHaveBeenCalledTimes(2));
+      await userEvent.click(empty(el)!.querySelector<HTMLElement>("[data-retry-device-zones]")!);
+      await vi.waitFor(() => expect(api.getDeviceZones).toHaveBeenCalledTimes(3));
+      reads[0]!({ ...noZones, snapshot: "first-retry" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await el.updateComplete;
+      expect(floorMounted).toBe(false);
+      expect(empty(el)).not.toBeNull();
+      reads[1]!({ ...noZones, snapshot: "second-retry" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await el.updateComplete;
+      watch.disconnect();
+      expect(floorMounted).toBe(false);
+      expect(empty(el)?.textContent).toContain(codeMessage("device_profile.no_service_zone"));
+    });
+
     it("Retry with the zones back draws the Floor and leaves no banner", async () => {
       const { el, api } = await mountHandheld(noZones, "phone-portrait", {
         listDefaultZoneOffers: refusedOffers(),
