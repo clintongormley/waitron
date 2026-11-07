@@ -8,6 +8,7 @@ import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import * as schema from "@waitron/db/schema/adjustments.js";
+import { ADJUSTMENTS_TABLES } from "./classification.js";
 
 // Copied from apps/server/src/personal-data-actions.coverage.test.ts, which a package cannot import.
 const ACTOR_COLUMN =
@@ -60,8 +61,9 @@ const tables = Object.values(schema as Record<string, unknown>).flatMap((value) 
   is(value, SQLiteTable) ? [getTableConfig(value)] : [],
 );
 
+/** Every table in the newest snapshot of core's set, which holds this module's tables. */
 function newestSnapshotTables(): string[] {
-  const meta = new URL("../drizzle/meta/", import.meta.url);
+  const meta = new URL("../../db/drizzle/meta/", import.meta.url);
   const newest = readdirSync(meta)
     .filter((name) => /^\d+_snapshot\.json$/.test(name))
     .sort()
@@ -84,8 +86,12 @@ describe("adjustments personal-data classification", () => {
     expect(actorColumns.sort()).toEqual(classified.sort());
   });
 
-  it("walks every table of the newest adjustments snapshot", () => {
-    expect(tables.map((config) => config.name).sort()).toEqual(newestSnapshotTables().sort());
+  it("walks every adjustments table of core's newest snapshot", () => {
+    const owned = newestSnapshotTables().filter((table) =>
+      (ADJUSTMENTS_TABLES as readonly string[]).includes(table),
+    );
+    expect(owned.sort()).toEqual([...ADJUSTMENTS_TABLES].sort());
+    expect(tables.map((config) => config.name).sort()).toEqual(owned);
   });
 
   it("classifies every column of adjustments exactly once", () => {
