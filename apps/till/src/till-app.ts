@@ -696,6 +696,8 @@ const TABLE_REFUSALS = new Set([
   "clock.behind_chain",
   "menu_period.ended",
   "station.no_default",
+  "department.operation_description_required",
+  "sale.department_missing",
 ]);
 
 /** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
