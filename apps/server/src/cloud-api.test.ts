@@ -1,5 +1,7 @@
 import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
@@ -20,8 +22,6 @@ import type { ReplacementView } from "./cloud-replacement.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { randomBytes } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60000,
@@ -74,6 +74,50 @@ it("distinguishes a local tunnel refusal from a Cloud outage in the actual manag
     await f.close();
   }
 });
+it.each([
+  ["cloud.tunnel_unavailable", 422],
+  ["cloud.tunnel_conflict", 409],
+] as const)(
+  "returns the real tunnel refusal %s without changing the installation's control status",
+  async (code, status) => {
+    const f = await installationFixture(undefined, {
+      tunnel: async (_values, _saved, _req, res) => {
+        res.writeHead(409);
+        res.end(JSON.stringify({ error: "placement_conflict" }));
+      },
+    });
+    try {
+      const manager = await person("manager"),
+        tunnelDir = join(f.stateDir, "tunnel");
+      await mkdir(tunnelDir);
+      await writeFile(
+        join(tunnelDir, "public-key"),
+        code === "cloud.tunnel_unavailable" ? "invalid" : Buffer.alloc(32).toString("base64"),
+      );
+      const connection = createCloudConnection({ ...f.options, tunnelDir });
+      const app = new Hono();
+      mountCloudApi(
+        app,
+        { db: suite.db, connection, managementOrigin: "https://venue.test", isPrimary: () => true },
+        () => {},
+      );
+      const answer = await app.request("/management-api/cloud/refresh", {
+        method: "POST",
+        headers: {
+          cookie: manager.cookie,
+          origin: "https://venue.test",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      });
+      expect(answer.status).toBe(status);
+      expect(await answer.json()).toEqual({ error: { code, params: {} } });
+      expect((await connection.status()).installation?.state).toBe("active");
+    } finally {
+      await f.close();
+    }
+  },
+);
 it("requires a live manager, correct Origin and serving primary; status reads are passive", async () => {
   const f = await cloudFixture();
   try {

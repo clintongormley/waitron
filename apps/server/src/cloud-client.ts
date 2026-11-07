@@ -31,6 +31,7 @@ import {
   sign,
 } from "node:crypto";
 import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { constants } from "node:fs";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { writeTunnelConfiguration } from "./cloud-tunnel.js";
@@ -69,8 +70,8 @@ export interface CloudChoice {
   legalBusinessId: string;
 }
 export interface CloudConnectionOptions {
-  stateDir: string;
   tunnelDir?: string;
+  stateDir: string;
   origin: string;
   localVenueId: string;
   environment: "test" | "production";
@@ -599,7 +600,41 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         try {
           state = await read();
           if (!state?.view?.registration) return project(state);
-          await installationClient(state, save).refresh(signal);
+          const client = installationClient(state, save);
+          await client.refresh(signal);
+          if (options.tunnelDir && state.environment === "test" && !state.lifecycle?.revoked) {
+            let peerPublicKey: string;
+            try {
+              const file = await open(
+                join(options.tunnelDir, "public-key"),
+                constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+              );
+              try {
+                const info = await file.stat();
+                if (!info.isFile()) throw new Error();
+                const bytes = Buffer.alloc(46),
+                  { bytesRead } = await file.read(bytes, 0, 46, 0);
+                peerPublicKey = bytes.subarray(0, bytesRead).toString("utf8").trim();
+                if (
+                  bytesRead > 45 ||
+                  !/^[A-Za-z0-9+/]{43}=$/.test(peerPublicKey) ||
+                  Buffer.from(peerPublicKey, "base64").toString("base64") !== peerPublicKey
+                )
+                  throw new Error();
+              } finally {
+                await file.close();
+              }
+            } catch (error) {
+              if (error instanceof Error && "code" in error && error.code === "ENOENT")
+                return project(state);
+              throw new AppError("cloud.tunnel_unavailable", {});
+            }
+            const remote = state.lifecycle?.view?.services.find(
+              (s) => s.service === "remote_access",
+            );
+            if (remote?.configuration.peerPublicKey !== peerPublicKey)
+              await client.provisionTunnel(peerPublicKey, signal);
+          }
           return project(state);
         } finally {
           await writeTunnelConfiguration(options.tunnelDir, state);
