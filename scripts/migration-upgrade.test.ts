@@ -14,6 +14,7 @@ import {
 import { orderedMigrationSets } from "../packages/module/src/module.js";
 import { historicalSets } from "./fixtures/a760-history/historical-set.mjs";
 import { migrationUpgradeBudget } from "./migration-upgrade-budget.mjs";
+import { appendOnlyTriggers } from "../packages/store/src/append-only.js";
 import { scratchParent } from "./scratch-dir.mjs";
 import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
 
@@ -23,7 +24,10 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * does what boot does after migrating (the change feed) and fills every table. It then repeats
  * `applyMigrations` and the change feed on the filled database, and every row must be unchanged.
  * Every later migration, in any set, including one the epoch does not name, runs at its own date,
- * with the change feed installed between steps and rows carried through.
+ * with the change feed installed between steps and rows carried through. At every step the walk
+ * migrates, installs the change feed, then runs `applyMigrations` once more so the append-only
+ * triggers go on the tables the step created, and installs the change feed again, before any row
+ * is written.
  *
  * After each step every table is topped up to two rows, read from that step's own schema (its
  * columns, foreign keys, unique indexes and CHECK constraints) and written with the file's foreign
@@ -34,8 +38,9 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * naming the step.
  *
  * Weaker than its name in these ways. The change feed at each step is TODAY's list, less whatever
- * that step's schema lacks, and the append-only tables are TODAY's list filtered to the tables the
- * PREVIOUS step left. The rows are synthetic, not the product's: a few generic values per declared
+ * that step's schema lacks, and the append-only tables are TODAY's list filtered to the tables that
+ * exist: a step's own migration runs with only the tables the PREVIOUS step left protected, so a
+ * table the step creates gets its triggers at the second pass, not while that step migrates. The rows are synthetic, not the product's: a few generic values per declared
  * type, a CHECK's own literals, a column's default and {@link CANDIDATES}. A nullable column outside
  * every unique index is null wherever its constraints allow, except that a second row points a
  * self-reference at the first. So a migration that fails only on values the product writes and
@@ -43,7 +48,8 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * one row. Steps a walk's resets list names cannot carry the rows, and the walk restarts from an
  * empty database at each. Between steps rows are counted, not compared, so a migration that
  * rewrites a value passes; only the epoch's repeat compares values. After the final step it also
- * pins the nine product triggers; other triggers dropped by a rebuild are not checked here.
+ * pins the nine product triggers and the append-only triggers of every table the sets declare;
+ * other triggers dropped by a rebuild are not checked here.
  */
 
 type ChangeSource = NonNullable<(typeof ALL_MODULES)[number]["changes"]>[number];
@@ -217,9 +223,6 @@ async function walkUpgrade(input: WalkInput) {
       journal.entries.filter((entry) => at(name, entry)).map((entry) => `${name}/${entry.tag}`),
     );
     const label = cut === INITIAL ? `epoch (${tags.join(", ")})` : tags.join(", ");
-    // Only tables the step before already had: a set's declared list is today's, and some of its
-    // tables are created by later migrations.
-    const options = stagedSets.map((set) => optionsOf(set, existing));
     for (const [name, journal] of journals) {
       const entries = journal.entries.filter(
         (entry) => isEpoch(name, entry) || (cut !== INITIAL && entry.when <= cut),
@@ -229,15 +232,24 @@ async function walkUpgrade(input: WalkInput) {
         JSON.stringify({ ...journal, entries }),
       );
     }
-    const migrate = () =>
-      watch.phase(`${label}: migrate`, () => applyMigrations(venueDir, options));
+    // Only tables that exist when it runs: a set's declared list is today's, and some of its tables
+    // are created by later migrations.
+    const migrate = (phase: string) =>
+      watch.phase(`${label}: ${phase}`, () =>
+        applyMigrations(
+          venueDir,
+          stagedSets.map((set) => optionsOf(set, existing)),
+        ),
+      );
     const feed = async () => {
       existing = await installPresentChangeFeed(venueDir, sources, (phase, run) =>
         watch.phase(`${label}: ${phase}`, run),
       );
     };
     const step = async () => {
-      await migrate();
+      await migrate("migrate");
+      await feed();
+      await migrate("protect");
       await feed();
       held = await watch.phase(`${label}: rows`, () =>
         carryRows(venueDir, label, held, bookkeeping),
@@ -274,7 +286,7 @@ async function walkUpgrade(input: WalkInput) {
 
     if (cut === INITIAL) {
       const repeat = async () => {
-        await migrate();
+        await migrate("repeat");
         await feed();
       };
       const around = input.aroundRepeat ?? ((_dir, run) => run());
@@ -491,6 +503,18 @@ describe("the squash epoch", () => {
       "an unknown empty set",
       (e: Epoch) => ({ ...e, emptySets: [...e.emptySets, "fiscal-elsewhere"] }),
       "fiscal-elsewhere: the epoch names an unknown empty set",
+    ],
+    ["another version", (e: Epoch) => ({ ...e, version: 2 }), "epoch version 2, expected 1"],
+    ["no entries", (e: Epoch) => ({ ...e, entries: [] }), "epoch names no migration"],
+    [
+      "a set named twice",
+      (e: Epoch) => ({ ...e, entries: [...e.entries, e.entries[1]] }),
+      "node/0000_baseline: the epoch names its set twice",
+    ],
+    [
+      "a set both empty and populated",
+      (e: Epoch) => ({ ...e, emptySets: [...e.emptySets, "workforce"] }),
+      "workforce: the epoch names it both empty and populated",
     ],
   ])("refuses an epoch with %s, naming it", (_case, change, message) => {
     expect(() => verifyEpoch(change(structuredClone(epoch)), sets)).toThrow(message);
@@ -718,12 +742,16 @@ describe("upgrading a venue one migration at a time", () => {
       );
     };
     const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
+    reached.candidates.clear();
+    // Every old migration before the step, onto an empty database in one run, set by set in the old
+    // manifest's order: neither date order nor step by step.
     await migrateTo((when) => when < target!.when, new Set());
     let existing = await installPresentChangeFeed(venueDir, sources);
     await migrateTo((when) => when < target!.when, existing);
     existing = await installPresentChangeFeed(venueDir, sources);
     const bookkeeping = new Set(staged.map((set) => set.migrationsTable));
     carryRows(venueDir, `before ${KITCHEN_STEP.tag}`, new Map(), bookkeeping);
+    expect(FROZEN_CANDIDATES.filter((entry) => !reached.candidates.has(entry))).toEqual([]);
 
     const coreTable = staged.find((set) => set.name === KITCHEN_STEP.set)!.migrationsTable;
     const applied = () => {
@@ -747,6 +775,8 @@ describe("upgrading a venue one migration at a time", () => {
     "applies every shipped migration from the epoch on top of the change feed the step before installed",
     async () => {
       const watch = createStepWatch();
+      reached.candidates.clear();
+      reached.oneRow.clear();
       const wallStartedAt = performance.now();
       const cpuStartedAt = process.threadCpuUsage();
       let comparedKitchenRows = false;
@@ -776,6 +806,14 @@ describe("upgrading a venue one migration at a time", () => {
       expect(comparedKitchenRows, "the epoch repeat compared course and station rows").toBe(true);
       // The control: a fill that wrote nothing would pass every row-count comparison.
       expect([...held].filter(([, rows]) => rows === 0).map(([table]) => table)).toEqual([]);
+      const unreached = (list: object, seen: Set<string>) =>
+        Object.keys(list).filter((entry) => !seen.has(entry));
+      expect({
+        CANDIDATES: unreached(CANDIDATES, reached.candidates).filter(
+          (entry) => !FROZEN_CANDIDATES.includes(entry),
+        ),
+        ONE_ROW: unreached(ONE_ROW, reached.oneRow),
+      }).toEqual({ CANDIDATES: [], ONE_ROW: [] });
       const connection = openRaw(venueDir);
       try {
         const names = connection
@@ -785,6 +823,17 @@ describe("upgrading a venue one migration at a time", () => {
           .all()
           .map((row) => String(row.name));
         expect(names).toEqual(expect.arrayContaining(PRODUCT_TRIGGERS));
+        const declared = sets.flatMap((set) =>
+          set.database === "node" ? [] : (set.appendOnlyTables ?? []),
+        );
+        expect(declared.length, "the sets declare append-only tables").toBeGreaterThan(0);
+        const installed = connection
+          .prepare("select name from sqlite_master where type = 'trigger'")
+          .all()
+          .map((row) => String(row.name));
+        expect(installed).toEqual(
+          expect.arrayContaining(appendOnlyTriggers(declared).map((trigger) => trigger.name)),
+        );
       } finally {
         connection.close();
       }
@@ -797,16 +846,6 @@ describe("upgrading a venue one migration at a time", () => {
     },
     TEST_BOUND_MS,
   );
-
-  // Last, and after the frozen-history case: some entries are for tables only that case fills.
-  it("reached every CANDIDATES and ONE_ROW entry in this file's fills", () => {
-    const unreached = (list: object, seen: Set<string>) =>
-      Object.keys(list).filter((entry) => !seen.has(entry));
-    expect({
-      CANDIDATES: unreached(CANDIDATES, reached.candidates),
-      ONE_ROW: unreached(ONE_ROW, reached.oneRow),
-    }).toEqual({ CANDIDATES: [], ONE_ROW: [] });
-  });
 });
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */
@@ -877,6 +916,9 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   // Its CHECK wants a bare `MM-DD` that is not `02-29`.
   "seasons.starts_on": ["03-01", "06-01"],
 };
+
+/** {@link CANDIDATES} entries for tables only the frozen-history case's fill meets. */
+const FROZEN_CANDIDATES: readonly string[] = ["special_dates.date"];
 
 /** Tables filled with one row rather than two, each with its reason. */
 const ONE_ROW: Record<string, string> = {
