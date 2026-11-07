@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { lstat, open, readFile, rename, rm } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { SavedCloudState } from "./cloud-client.js";
@@ -13,6 +14,9 @@ const key = (value: unknown): value is string =>
   Buffer.from(value, "base64").toString("base64") === value;
 const missing = (error: unknown) =>
   error instanceof Error && "code" in error && error.code === "ENOENT";
+function refused(cause: unknown): never {
+  throw Object.assign(new AppError("cloud.tunnel_unavailable", {}), { cause });
+}
 
 export async function writeTunnelConfiguration(
   directory: string | undefined,
@@ -23,7 +27,7 @@ export async function writeTunnelConfiguration(
     if (!(await lstat(directory)).isDirectory()) throw new Error();
   } catch (error) {
     if (missing(error)) return;
-    throw new AppError("cloud.unavailable", {});
+    refused(error);
   }
   const path = join(directory, "peer.json");
   const service = state?.lifecycle?.view?.services.find((s) => s.service === "remote_access");
@@ -34,17 +38,40 @@ export async function writeTunnelConfiguration(
     !service ||
     !["provisioning", "ready"].includes(service.state)
   ) {
-    await rm(path, { force: true });
+    try {
+      await rm(path, { force: true });
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        if (
+          entry.isFile() &&
+          /^peer\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/.test(
+            entry.name,
+          )
+        )
+          await rm(join(directory, entry.name), { force: true });
+      }
+    } catch (error) {
+      refused(error);
+    }
     return;
   }
-  const temporary = join(directory, "peer." + randomUUID() + ".tmp");
+  let peer: { address: string; gatewayPublicKey: string; endpoint: string };
   try {
     let publicKey: string;
     try {
-      const publicPath = join(directory, "public-key"),
-        info = await lstat(publicPath);
-      if (!info.isFile() || info.size > 45) throw new Error();
-      publicKey = (await readFile(publicPath, "utf8")).trim();
+      const file = await open(
+        join(directory, "public-key"),
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+      try {
+        const info = await file.stat();
+        if (!info.isFile() || info.size > 45) throw new Error();
+        const bytes = Buffer.alloc(46),
+          { bytesRead } = await file.read(bytes, 0, 46, 0);
+        if (bytesRead > 45) throw new Error();
+        publicKey = bytes.subarray(0, bytesRead).toString("utf8").trim();
+      } finally {
+        await file.close();
+      }
     } catch (error) {
       if (!missing(error)) throw error;
       await rm(path, { force: true });
@@ -74,25 +101,33 @@ export async function writeTunnelConfiguration(
         .every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
     )
       throw new Error();
+    peer = { address: p.address, gatewayPublicKey: p.gatewayPublicKey, endpoint: p.endpoint };
+  } catch (error) {
+    try {
+      await rm(path, { force: true });
+    } catch (removeError) {
+      refused(removeError);
+    }
+    refused(error);
+  }
+  const temporary = join(directory, "peer." + randomUUID() + ".tmp");
+  try {
     const file = await open(temporary, "wx", 0o644);
     try {
-      await file.writeFile(
-        JSON.stringify({
-          address: p.address,
-          gatewayPublicKey: p.gatewayPublicKey,
-          endpoint: p.endpoint,
-        }),
-      );
+      await file.writeFile(JSON.stringify(peer));
       await file.chmod(0o644);
       await file.sync();
     } finally {
       await file.close();
     }
     await rename(temporary, path);
-  } catch {
-    await rm(path, { force: true });
-    throw new AppError("cloud.unavailable", {});
+  } catch (error) {
+    refused(error);
   } finally {
-    await rm(temporary, { force: true });
+    try {
+      await rm(temporary, { force: true });
+    } catch (error) {
+      refused(error);
+    }
   }
 }
