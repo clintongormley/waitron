@@ -1576,6 +1576,133 @@ describe("till-app: comping a stored counter order", () => {
       },
     );
 
+    it("reads nothing back when a started dish of two is saved as it was beside an unsent dish raised in place", async () => {
+      const ofTwo = (order: HeldOrder): HeldOrder =>
+        ({
+          ...order,
+          lines: [{ ...order.lines[0]!, quantity: "2.000" }, order.lines[1]!],
+        }) as HeldOrder;
+      const listedOfTwo = (lines: TabLines): TabLines => ({
+        ...lines,
+        lines: [{ ...lines.lines[0]!, quantity: "2.000" }, lines.lines[1]!],
+      });
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 5 });
+      const el = await retrieved({
+        retrieveWorkingOrder: vi
+          .fn()
+          .mockResolvedValueOnce(ofTwo(heldOrder(4)))
+          .mockResolvedValue(ofTwo(heldOrder(5))),
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce(listedOfTwo(startedListing(4)))
+          .mockResolvedValue(listedOfTwo(startedListing(5))),
+        updateWorkingOrder,
+      });
+      const reads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+      counter(el).store.setLineQuantity(1, "2");
+
+      emit(counter(el), "park-order", {});
+      await flush(el);
+
+      const saved = vi.mocked(updateWorkingOrder).mock.calls[0]![1] as {
+        lines: { workingOrderLineId?: string; quantity: string }[];
+      };
+      expect(saved.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+        ["l-1", "2"],
+        ["l-2", "2"],
+      ]);
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(reads);
+    });
+
+    it("reads a started weighed dish back after a raise to exactly one, as the two lines the server keeps", async () => {
+      const jamon: TillProduct = { ...product("jamon", "Jamón", "10.00"), pricingUnit: "weight" };
+      const weighed = (revision: number, extra: HeldOrder["lines"] = []): HeldOrder => {
+        const order = heldOrder(revision);
+        const dish = { ...order.lines[0]!, productId: "jamon", quantity: "0.500", product: jamon };
+        return { ...order, lines: [dish, order.lines[1]!, ...extra] } as HeldOrder;
+      };
+      const weighedListing = (revision: number): TabLines => {
+        const lines = startedListing(revision);
+        lines.lines[0] = {
+          ...lines.lines[0]!,
+          name: "Jamón",
+          productId: "jamon",
+          quantity: "0.500",
+          unitPrecision: 3,
+          unitPriceGross: "10.00",
+        };
+        return lines;
+      };
+      const raisedListing = (): TabLines => {
+        const lines = weighedListing(5);
+        lines.lines.push({ ...lines.lines[0]!, id: "l-3", lineNo: 3, state: "queued" });
+        return lines;
+      };
+      const raisedOrder = weighed(5, [
+        { ...weighed(5).lines[0]!, workingOrderLineId: "l-3", quantity: "0.500" },
+      ]);
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 5 });
+      const el = await retrieved({
+        listWorkingOrders: vi.fn().mockResolvedValue([
+          {
+            items: [],
+            id: "wo-9",
+            orderNumber: 12,
+            label: "Mesa 4",
+            counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
+            total: "7.50",
+            outstanding: "3.50",
+            hasPayments: true,
+            partyId: null,
+            billNumber: null,
+            billName: null,
+            openedAt: "2026-09-30T09:00:00.000Z",
+            signals: [],
+          },
+        ]),
+        getBillBalance: vi.fn().mockResolvedValue({
+          workingOrderId: "wo-9",
+          status: "open",
+          total: "7.50",
+          received: "4.00",
+          reserved: "0.00",
+          outstanding: "3.50",
+          tips: "0.00",
+          payments: [],
+          paidLines: [],
+        }),
+        retrieveWorkingOrder: vi
+          .fn()
+          .mockResolvedValueOnce(weighed(4))
+          .mockResolvedValue(raisedOrder),
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce(weighedListing(4))
+          .mockResolvedValue(raisedListing()),
+        updateWorkingOrder,
+      });
+      const store = counter(el).store;
+      expect(store.lines[0]!.quantity).toBe("0.500");
+      store.setLineQuantity(0, "1.000");
+      emit(counter(el), "counter-bill-pay", { amount: "3.50" });
+      await flush(el);
+
+      const saved = vi.mocked(updateWorkingOrder).mock.calls[0]![1] as {
+        lines: { workingOrderLineId?: string; quantity: string }[];
+      };
+      expect(saved.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+        ["l-1", "1.000"],
+        ["l-2", "1"],
+      ]);
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+      expect(api.getTabLines).toHaveBeenCalledTimes(2);
+      expect(store.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+        ["l-1", "0.500"],
+        ["l-2", "1"],
+        ["l-3", "0.500"],
+      ]);
+    });
+
     it.each([["working_order.out_of_date", "held.changed_elsewhere"]] as const)(
       "keeps the sentence for %s when the held list cannot be read after the reload",
       async (code, key) => {

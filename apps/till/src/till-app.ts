@@ -7677,11 +7677,17 @@ export class TillApp extends LitElement {
       );
     const movesIds =
       rows.some((row) => row.portionLineIds !== undefined) ||
-      sent.some(
-        (wire) =>
-          wire.workingOrderLineId === undefined ||
-          (Number(wire.quantity) !== 1 && !risesInPlace(wire.workingOrderLineId)),
-      );
+      sent.some((wire) => {
+        const lineId = wire.workingOrderLineId;
+        if (lineId === undefined) return true;
+        const stored = listed.find((line) => line.id === lineId);
+        // A line the till has not read is taken as unchanged when saved at one.
+        if (stored === undefined) return Number(wire.quantity) !== 1;
+        return (
+          compareDecimal(decimal(wire.quantity), decimal(stored.quantity)) > 0 &&
+          !risesInPlace(lineId)
+        );
+      });
     return !movesIds || (await this.#readBackSaved(id, session, visit));
   }
 
@@ -16934,9 +16940,16 @@ export class TillApp extends LitElement {
       const code = (error as { code?: string } | undefined)?.code;
       if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
       else if (code === "tab.line_not_found" || code === "tab.not_open") {
-        this.errorKey =
-          code === "tab.line_not_found" ? "table.move_dish_gone" : "table.move_bill_gone";
         await this.#loadLinesAndBills();
+        // The read may have moved the screen off a bill that has gone; a bill the waiter chose
+        // meanwhile clears what the screen said.
+        if (
+          this.api === asked.api &&
+          !this.#hasLeftParty(asked.partyId, asked.sent) &&
+          (this.activeTabId === asked.billId || this.billGone !== null)
+        )
+          this.errorKey =
+            code === "tab.line_not_found" ? "table.move_dish_gone" : "table.move_bill_gone";
       } else {
         const destination = this.#refusedBill(
           error,
