@@ -1508,9 +1508,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Idempotent: a missing, malformed or closed session still clears the cookie and answers 200. A
-  // request naming a person whose session this is not ends nothing: that person is not signed in
-  // here, and the cookie is what keeps the person who is.
+  // A request naming a person whose session this is not ends nothing: the cookie is what keeps the
+  // person who is signed in here. A request naming a person never clears the cookie, because its
+  // answer can reach the browser after the next person's sign-in. One naming nobody does clear it.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
       const { personId } = await readJsonBody<{ personId?: unknown }>(c);
@@ -1526,7 +1526,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           await endSession(tx, token);
         });
       }
-      clearSessionCookie(c);
+      if (named === undefined) clearSessionCookie(c);
       return c.json({ ok: true });
     }),
   );

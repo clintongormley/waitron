@@ -3151,9 +3151,11 @@ cases are in `apps/till/src/till-app-drafts.test.ts`, `till-app-parties.test.ts`
 A sign-out (`DELETE /api/session`) from the till names its person too, the one signed in on that tab
 when the sign-out began. When the session behind the device's cookie is someone else's, the server
 ends nothing, keeps the cookie and answers `{ ok: true }`, not a refusal; a malformed name answers
-`management.request_invalid` on `personId`. A sign-out naming nobody ends whichever session the
-cookie holds. The server cases are in `apps/server/src/till-api.test.ts`; the app cases, which use a
-controlled API, are in `till-app-drafts.test.ts`.
+`management.request_invalid` on `personId`. A sign-out naming its person ends the session and leaves
+the now dead cookie in place, because the answer can reach the browser after the next person's
+sign-in. A sign-out naming nobody ends whichever session the cookie holds and clears the cookie. The
+server cases are in `apps/server/src/till-api.test.ts`; the app cases, which use a controlled API,
+are in `till-app-drafts.test.ts`.
 
 ### Permanent group numbers (A773)
 
