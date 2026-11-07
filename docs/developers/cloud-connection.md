@@ -204,13 +204,21 @@ through the normal signed configuration request; it makes no new Cloud request.
 
 A Cloud outage retains the last usable placement. A missing registration, revoked installation,
 unconfigured or failed service, missing peer key or invalid placement removes the peer file.
-An authorised **Stop Cloud access** removes it before sending the revoke request, even if that
-request's reply is lost. The container notices removal on its next poll; this gives no instant
-shutdown guarantee. Local sales use neither the writer nor Cloud.
+A rejected saved connection also removes the peer. Startup clears a stale peer even without a
+Cloud origin. When the worker is secondary, it reconciles locally recorded state without calling Cloud.
+An authorised **Stop Cloud access** tries local removal before sending the revoke request. A local
+removal error does not block saving and sending the Cloud stop, and is still reported afterwards.
+An already-revoked installation retries local removal. Stop and startup also remove abandoned
+writer temporary files, leaving other control files alone.
 
-The owner approved this simpler A951-S path on 6 November and the operator-provisioned writer
-on 7 November at 03:06 through the watcher. The native-protocol plan and host-custody material
-below describe the earlier parked branch and add no steps to this build.
+A failed replacement write preserves the previous complete file. Local configuration and file
+errors use `cloud.tunnel_unavailable`; a refused placement can therefore leave the Cloud connection
+active while its tunnel is off. The container notices removal on its next poll; this gives no
+instant shutdown guarantee. The writer runs in Cloud's background refresh.
+
+The owner approved this simpler A951-S path on 6 November. The watcher explicitly approved
+the operator-provisioned writer on 7 November at 03:06 in Lane E’s local `questions.md`. The
+native-protocol plan and host-custody material below describe the earlier parked branch and add no steps to this build.
 
 ## Local remote-access integration
 

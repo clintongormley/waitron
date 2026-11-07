@@ -28,7 +28,7 @@ export async function runCloudWorker(options: {
           if (ready && !options.signal.aborted && options.isPrimary())
             await options.onStaffCertificate?.();
         }
-      }
+      } else await options.connection.syncTunnel();
     } catch (error) {
       if (!options.signal.aborted) options.onError?.(error);
     }

@@ -146,6 +146,17 @@ describe("image source labels", () => {
 });
 
 describe("the container image's environment", () => {
+  it("passes the app's tunnel control directory through the server configuration", () => {
+    const app = only(COMPOSE, /\n {2}app:\n([\s\S]*?)(?=\n {2}[a-z])/, "app service");
+    const directory = only(
+      app,
+      /^\s+WAITRON_TUNNEL_CONTROL_DIR:\s*(\S+)/m,
+      "tunnel control directory",
+    );
+    expect(load({ ...IMAGE_ENV, WAITRON_TUNNEL_CONTROL_DIR: directory }).tunnelControlDir).toBe(
+      "/var/lib/waitron/tunnel",
+    );
+  });
   it("parses as a non-empty ENV block", () => {
     // A parser that silently returned {} would make every assertion below vacuous.
     expect(IMAGE_ENV.WAITRON_STATE_DIR).toBe("/var/lib/waitron/state");
