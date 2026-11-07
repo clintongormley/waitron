@@ -1059,7 +1059,10 @@ Remaining work, following the owner's certificate-first order:
   submit/status exchange, resumes pending requests after restart and renews before expiry. A local
   TLS handshake observed the renewed chain without restarting the listener; no new public
   certificate was issued for that synthetic test.
-- Provide managed deployment and Settings on/off/status, and retire `@waitron/tunnel`.
+- Qualify the Settings remote-access choice on the managed deployment. The private integration
+  branch can persist on/off without revoking Cloud pairing; off removes the peer configuration
+  without contacting Cloud. The screen labels its saved choice separately from connection health.
+  Managed deployment and retiring `@waitron/tunnel` remain.
 - Qualify the managed demo across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.

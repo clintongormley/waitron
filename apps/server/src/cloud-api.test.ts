@@ -36,6 +36,59 @@ async function person(role: "manager" | "staff") {
     return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }
+it("lets a manager toggle only remote access, with the same origin and primary checks as other Cloud writes", async () => {
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager"),
+      staff = await person("staff"),
+      app = new Hono();
+    const connection = createCloudConnection(f.options);
+    let primary = true;
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => primary,
+      },
+      () => {},
+    );
+    const send = (body: unknown, cookie = manager.cookie, origin = "https://venue.test") =>
+      app.request("/management-api/cloud/remote-access", {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    for (const [cookie, origin, code] of [
+      ["", "https://venue.test", "management_session.required"],
+      [staff.cookie, "https://venue.test", "authorization.not_permitted"],
+      [manager.cookie, "https://other.test", "authorization.not_permitted"],
+    ]) {
+      const reply = await send({ enabled: false }, cookie, origin);
+      expect(reply.status).toBe(cookie === "" ? 401 : 403);
+      expect((await reply.json()).error.code).toBe(code);
+    }
+    primary = false;
+    expect((await (await send({ enabled: false })).json()).error.code).toBe("cloud.not_primary");
+    primary = true;
+    for (const body of [
+      {},
+      { enabled: "false" },
+      { enabled: null },
+      { enabled: true, extra: true },
+    ]) {
+      const reply = await send(body);
+      expect(reply.status).toBe(400);
+      expect((await reply.json()).error.code).toBe("cloud.request_invalid");
+    }
+    expect((await (await send({ enabled: false })).json()).remoteAccessEnabled).toBe(false);
+    expect((await connection.status()).state).toBe("complete");
+    expect((await (await send({ enabled: true })).json()).remoteAccessEnabled).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
 it("distinguishes a local tunnel refusal from a Cloud outage in the actual management route", async () => {
   const f = await installationFixture();
   try {

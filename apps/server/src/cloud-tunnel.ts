@@ -33,6 +33,7 @@ export async function writeTunnelConfiguration(
   const service = state?.lifecycle?.view?.services.find((s) => s.service === "remote_access");
   if (
     !state?.view?.registration ||
+    state.remoteAccessEnabled === false ||
     state.lifecycle?.revoked ||
     state.lifecycle?.pending?.action === "revoke" ||
     !service ||

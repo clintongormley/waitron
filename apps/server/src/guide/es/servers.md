@@ -32,3 +32,16 @@ a preguntar al otro equipo.
 
 Si el otro equipo responde antes, manda su respuesta. Un equipo que ya ha pasado el local no puede
 seguir; su página lo indica en lugar de mostrar el formulario.
+
+## Activar o desactivar el acceso remoto del personal {#remote-access}
+
+Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Ajustes**
+en el equipo principal y elige **Desactivar el acceso remoto**. Si usas la dirección del personal,
+también te desconecta a ti, así que ten a mano la dirección local del equipo. La vinculación con
+Cloud y los demás servicios de Cloud se mantienen. Elige **Activar el acceso remoto** para que el
+equipo vuelva a conectarse.
+
+El estado junto al botón es la opción que has guardado. Abre la dirección del personal para
+comprobar si puedes conectarte; esta página no prueba esa conexión. Si no se guarda la opción,
+mantén abierta la página y vuelve a intentarlo. **Detener el acceso a Cloud** es la opción aparte
+que detiene permanentemente todos los servicios de Cloud.
