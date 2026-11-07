@@ -43,6 +43,7 @@ services:
       - state:/var/lib/waitron/state
       - logs:/var/lib/waitron/logs
       - backups:/var/lib/waitron/backups
+      - tunnel_control:/var/lib/waitron/tunnel
       # The box's clock service (deploy/box/). waitron.sh install names /run/waitron-box in .env only
       # once the socket has started there; otherwise this is an empty volume and the app answers that
       # it cannot set the clock.
@@ -172,7 +173,30 @@ services:
         max-size: 10m
         max-file: "5"
 
+  tunnel:
+    image: ${WAITRON_TUNNEL_IMAGE:-waitron-tunnel:dev}
+    profiles: [staff-tunnel]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    sysctls:
+      net.ipv4.ip_forward: "0"
+    volumes:
+      - tunnel_control:/control
+      - tunnel_keys:/keys
+    networks: [tunnel]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 networks:
+  tunnel:
   internal:
 
 volumes:
@@ -182,3 +206,5 @@ volumes:
   mailpit:
   print_agent:
   box_socket:
+  tunnel_control:
+  tunnel_keys:

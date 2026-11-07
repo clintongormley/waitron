@@ -154,6 +154,7 @@ export function isRootScopePath(path) {
  * decision (ci.yml's `image` job comment): an edit to it is left to image-nightly.yml.
  */
 const IMAGE_SMOKE_FILES = [
+  "scripts/tunnel-container-smoke.sh",
   "scripts/bundle-node.mjs",
   "scripts/generate-hour-release.mjs",
   "scripts/npm-bundle-notices.mjs",
