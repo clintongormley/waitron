@@ -64,7 +64,7 @@ change what deleting a person does.
 
 ## Roles the admin can edit (A7)
 
-**A1002, proposed design revised 2026-10-28; full approval, plan and build remain open.**
+**A1002, proposed design revised 2026-11-07; full approval, plan and build remain open.**
 The [custom-role design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) incorporates
 the owner's accepted catalog/defaults, attendance self-approval, restrictive context lists,
 several roles per person and removal-only custom-role deletion. All four built-ins keep fixed
@@ -76,9 +76,13 @@ The driver's union-of-grants and any-held-role list matching are proposed interp
 owner quotations. Policy matching and action privileges are independent gates; a copied/new role
 joins no device/reason list. Deletion removes memberships and all live device/reason/bill-limit
 references with one confirmation, no replacements, and never turns an empty list into all roles.
-**Only open sub-decision:** a sole-role holder becomes roleless or receives Staff. Recommend no
-role to avoid unchosen grants. Publish that question first, then request complete revised design
-approval separately; do not ask both at once.
+**Accepted owner answers, incorporated 2026-11-07:** deleting a sole role leaves the person with
+no role (2026-10-28 ~11:40), preserving identity/status/credentials and own-identity/security/data
+self-service for otherwise eligible authentication, with no operational or list rights. Pending
+people stay pending and gain no session; multi-role holders retain their other roles.
+`node.promote` is Admin-only by default and a normal editable privilege assignable to other roles
+(2026-10-29 ~09:25, A1188); its recovery operation and every other promotion condition stay required.
+§11 quotes the Lane K WATCHER relay. Seek ONE separate full-design approval; reask neither decision.
 
 The historical source audit remains pinned and reading-only, with bounded current-source additions
 for the existing `personal_data.export` and whole-person consumers. Storage, live authority,
@@ -316,17 +320,20 @@ After A760, decide whether to remove the redundant column and read the provider 
 
 ## Review every permission: fewer, coarser, and consistently named
 
-**A1002 revision, 2026-10-28:** the
+**A1002 revision, 2026-11-07:** the
 [design's permission inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
 now records the owner's accepted non-fiscal merges and ordinary default sets. Keep `sale.void`,
 `sale.refund` and `sale.rectify` as three identifiers; no fiscal merge/gate is queued.
 `workforce.self_approve` is Admin by default and requires `workforce.correct`, independently of
 `person.admin`. A980 S2c's `personal_data.export` already exists and remains the one privacy-export
-entry. Admin's every-current-and-future-grant rule stays accepted.
+entry. Admin's every-current-and-future-grant rule stays accepted. `node.promote` remains a separate,
+normal editable privilege: Admin-only by default and assignable to other roles (owner, 2026-10-29
+~09:25, A1188), retaining its recovery operation and every other promotion condition.
 
 This supersedes the earlier current-status claims that those catalog/default choices still awaited
 answers. Their implementation remains open and precedes enabling editable roles. The complete design
-remains PROPOSED: sole-role deletion outcome first, then separate full approval under §11.
+remains PROPOSED: sole-role deletion leaves no role (owner, 2026-10-28 ~11:40), and ONE separate
+full-design approval is still required under §11. Neither settled answer is reasked.
 Preserve the dated discussion below as the background to this now-answered catalog review.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
@@ -377,10 +384,15 @@ custom names are literal. Copying any preset produces an ordinary custom role wi
 identity, future grants or context-list entries. Deleting a custom role removes it from everyone
 and every live policy list, with one impact confirmation and no reassignment workflow.
 
-The only open owner sub-decision is the sole-role holder's outcome: no role (recommended), or Staff.
-After that answer is incorporated, seek complete revised design approval separately. No plan/build
-is authorized. The audit and consumer replacements cover storage, sessions, proofs, domain policies,
-imports, clients and whole-person consumers; A1113 owns mirror dashboard/viewer retirement.
+**2026-11-07 revision:** the accepted sole-role outcome is no role (owner, 2026-10-28 ~11:40).
+Keep identity/status/credentials and own-identity/security/data self-service for otherwise eligible
+authentication, with no operational or list rights. Pending people stay pending and gain no session;
+multi-role holders retain their other roles. `node.promote` is Admin-only by default and normally
+editable/assignable to other roles (owner, 2026-10-29 ~09:25, A1188), preserving its recovery operation
+and every other promotion condition. §11 quotes the Lane K WATCHER provenance for both answers.
+Seek ONE separate full-design approval without reasking either answer. No plan/build is authorized.
+The audit and consumer replacements cover storage, sessions, proofs, domain policies, imports, clients
+and whole-person consumers; A1113 owns mirror dashboard/viewer retirement.
 See [A7](#roles-the-admin-can-edit-a7) and §11 of the design for the approval order.
 
 ## Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order says so

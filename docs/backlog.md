@@ -1516,8 +1516,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
 - **A1002: several roles per person, fixed built-in names and editable ordinary grants.** Design
-  revised 2026-10-28; accepted catalog, attendance, context and removal-only deletion decisions
-  incorporated. Sole-role deletion outcome first, then complete revised design approval; no plan/build.
+  revised 2026-11-07; accepted sole-role deletion leaves no role, and `node.promote` is Admin-only
+  by default but editable/assignable to other roles. ONE separate full-design approval remains
+  required; no plan/build authority. §11 records the relayed owner answers; neither is reasked.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
