@@ -510,7 +510,7 @@ export class TillPassScreen extends LitElement {
   }
 
   /** The pass offers no other area to choose, so this refusal skips the code's general sentence. */
-  #leverSentence(code: string): string {
+  #refusalSentence(code: string): string {
     return code === "service_zone.not_allowed" ? t("expo.zone_not_allowed") : codeMessage(code);
   }
 
@@ -695,14 +695,14 @@ export class TillPassScreen extends LitElement {
       ${
         this.reprintErrorCode
           ? html`<p class="error" role="alert" slot="status" data-reprint-error>
-              ${codeMessage(this.reprintErrorCode)}
+              ${this.#refusalSentence(this.reprintErrorCode)}
             </p>`
           : nothing
       }
       ${
         this.leverError
           ? html`<p class="error" role="alert" slot="status" data-lever-error>
-              ${this.leverError.card}: ${this.#leverSentence(this.leverError.code)}
+              ${this.leverError.card}: ${this.#refusalSentence(this.leverError.code)}
             </p>`
           : nothing
       }

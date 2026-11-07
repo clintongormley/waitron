@@ -365,6 +365,30 @@ describe("A773 pass screen: levers", () => {
     expect(el.shadowRoot!.querySelector("[data-reprint-error]")).toBeNull();
   });
 
+  it("a Reprint refused service_zone.not_allowed says the profile can be changed, in both languages", async () => {
+    const api = fakeApi({
+      reprintOrder: vi.fn().mockRejectedValue(refused("service_zone.not_allowed", 403)),
+    });
+    const reprintError = (el: TillPassScreen) =>
+      el.shadowRoot!.querySelector("[data-reprint-error]");
+    const el = await mountTill(api);
+    await press(el, reprintOn("bill:order-1", "order-1"));
+    expect(text(reprintError(el))).toBe(
+      "This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
+    );
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const inSpanish = await mountTill(api);
+      await press(inSpanish, reprintOn("bill:order-1", "order-1"));
+      expect(text(reprintError(inSpanish))).toBe(
+        "El perfil de este dispositivo no trabaja en esa zona. Se puede cambiar en el panel, en Perfiles de dispositivo.",
+      );
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("the next Reprint press clears a failed reprint's error", async () => {
     const api = fakeApi({
       reprintOrder: vi
