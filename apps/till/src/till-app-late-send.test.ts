@@ -2497,13 +2497,11 @@ it.each(["late-send window", "manager PIN"])(
   async (kind) => {
     const el = await lateTable({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait" }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          deviceId: "till-dev",
-          name: "Handheld",
-          formFactor: "phone-portrait",
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "till-dev",
+        name: "Handheld",
+        formFactor: "phone-portrait",
+      }),
       submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(MANAGER_NEEDED),
       serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
     });
