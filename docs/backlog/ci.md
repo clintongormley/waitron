@@ -304,9 +304,9 @@ It demonstrates a gap in the scanner, not a failing download in the current work
   `WAITRON_BUILD_ID`, and one built from a commit GitHub's comparison cannot place against the
   commit being published. Both wedge every later publish, the `sha-` tags included (read from
   `.github/workflows/ci.yml`, not run: the guard's step fails and the publish steps after it have
-  no `if:`). A rewritten history reaches the second state only when the old and new tips share no
-  commit; a commit that merely sits on no branch compares as `diverged` and moves the tag
-  ([receipts](../developers/ci-and-gates.md#separated-pushes-overlap-so-publishing-asks-before-it-takes-main)). The repair is
+  no `if:`). A rewritten history reaches the second state whenever GitHub refuses the comparison:
+  no common ancestor, or an old tip it no longer holds
+  ([dated probes](../developers/ci-and-gates.md#separated-pushes-overlap-so-publishing-asks-before-it-takes-main)). The repair is
   to delete or retag `:main` by hand. Nothing alerts on it.
 - **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
   for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
@@ -537,8 +537,8 @@ infer either from the missing outcome alone.
 
 ## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-The owner kept A1306 as the last step of A1308 (2026-11-06), so Task 19 of
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+except A1306's timing and the guard's corrected sentences (2026-11-07). The owner kept A1306 as the last step of A1308 (2026-11-06), so Task 19 of
 [A760's plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) did not run in A760's
 freeze. A760 part 3 corrected the guard's two wrong sentences.
 
@@ -574,12 +574,10 @@ except the last, added on 2026-11-07.
   sent, and asks afresh next time". **Next action:** reproduce it under load, keep the failure
   output, and fix at the root. [Detail](ci.md#a-till-late-send-pin-test-failed-once-twice-in-two-days-a1126)
 - **`apps/server/src/fiscal-certificate-diagnosis-process.test.ts`, "resolves only after its exact
-  child exits…", failed once in 15 runs on a busy machine during A760 part 3's review** (2026-11-07;
-  it received `{ outcome: "interrupted", reason: "unavailable" }`). Cause located, not fixed: the
-  test gives every runner `cleanupMs = 200`, so a child that takes over 150 ms to exit after sending
-  its result is sent SIGTERM; production allows 1,500 ms. Fix in the test (a larger cleanup budget
-  for this case, or a child that exits once its result is flushed), proved by a reproduction that
-  delays the child's exit; 75 later runs, quiet and with CPU load, all passed and did not reproduce it.
+  child exits…", failed once in 15 runs on a busy machine** (2026-11-07). The test's
+  `cleanupMs = 200` gives a child 150 ms to exit after its result. Fix in the test (a larger budget,
+  or a child that exits once its result is flushed), to be proved by a reproduction that delays the
+  child's exit.
 
 ## Bundle: Replace 15 "if it happens again" entries with one table in `docs/backlog/ci
 

@@ -761,7 +761,7 @@ This records what part 3 built. It does not record a reset: those happen after l
 roster above.
 
 **The base.** Part 3 branched from `main` at `59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. The old
-history, every migration file the base shipped, is kept byte for byte under
+history, every SQL file and journal the base shipped, is kept byte for byte under
 `scripts/fixtures/a760-history/`.
 
 **The epoch.** Each populated set starts again from one migration, `0000_baseline`. The tag, date
@@ -788,12 +788,17 @@ lands; the operator adds it here, with its own CI and image-publish run, when la
 **Old backups need the old image.** Anything made before the squash is refused by the new image,
 and nothing in it is changed by the refusal:
 
-- A backup is refused with `restore.schema_too_new`, by core's count: a backup lists the old
-  applied count for each set, core's is far above the new image's 1, and the gate skips names this
-  image has no set for. The setup screens say, for a backup file, "This backup file was made by a
-  different version of Waitron. This server's version cannot restore it. Install that version on
-  this server and try again, or choose another file." (the bucket and Cloud copies say "choose
-  another copy"). Case: `apps/server/src/restore-gate.test.ts`.
+- A backup file or Cloud snapshot (an archive restore, `apps/server/src/restore.ts:356`) is
+  refused with `restore.schema_too_new`, by core's count: the backup lists the old applied count
+  for each set, core's is far above the new image's 1, and the gate skips names this image has no
+  set for. Case: `apps/server/src/restore-gate.test.ts`. For a backup file the setup screen says
+  "This backup file was made by a different version of Waitron. This server's version cannot
+  restore it. Install that version on this server and try again, or choose another file."; the
+  Cloud screen says the same of "the snapshot", ending "or choose another copy".
+- A copy in a bucket (a stream restore) is refused with `provisioning.database_ahead`, by
+  `assertNotAhead` on the restored database (`apps/server/src/restore-stream.ts:252`). The setup
+  screen says "The copy in the bucket was made by a different version of Waitron. … or choose
+  another copy."
 - A database made by the old image meets `provisioning.database_ahead`, naming core. `waitron.sh`
   says "the database was made by a different version of Waitron from this image
   (provisioning.database_ahead)". Case: `packages/provisioning/src/schema-ahead.epoch.test.ts`.

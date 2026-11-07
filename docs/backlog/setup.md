@@ -383,8 +383,8 @@ Not a full-disk text, but the same class, found by A760 part 3's review:
   installed this box for help" or a sentence like it. `apps/server/src/recovery-surface.test.ts`
   requires that sentence beside any restore action ("The reader has no terminal and often no
   backup, so a restore action must name who can help", #310, 2026-09-11), which conflicts with
-  CLAUDE.md §3's first rule. The owner decides which wins. After A760 every box that was not reset
-  shows `provisioning.database_ahead`'s page.
+  CLAUDE.md §3's first rule. The owner decides which wins. After A760 a box moved to the new image
+  without a reset shows `provisioning.database_ahead`'s page.
 
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 

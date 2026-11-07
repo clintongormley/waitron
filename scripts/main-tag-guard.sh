@@ -23,13 +23,13 @@
 #
 # It fails rather than guessing. For a transient registry error the next merge repairs it. Two
 # states are NOT self-repairing and need a person: a `:main` carrying no `WAITRON_BUILD_ID`, and one
-# built from a commit GitHub's comparison cannot place against the commit being published. A commit
-# no branch holds but which shares history with `main` compares as `diverged`, so the answer is
-# `move`; two commits with no history in common get a 404, "No common ancestor". So a rewritten
-# history stops publishing only when its old and new tips share no commit. Either state wedges every
-# later publish until `:main` is deleted or retagged by hand. This script runs inside ci.yml's "Work
-# out the tags to publish" step, and the steps after it carry no `if:`, so while it fails nothing is
-# published, `sha-` tag included. Receipts: docs/developers/ci-and-gates.md.
+# built from a commit GitHub's comparison cannot place against the commit being published: any
+# comparison GitHub refuses fails the script, including one against an old tip GitHub no longer
+# holds. A rewritten history that keeps a commit in common with the old tip can still compare and
+# move. Either state wedges every later publish until `:main` is deleted or retagged by hand. Read
+# from ci.yml, not run: this script runs inside its "Work out the tags to publish" step and the steps
+# after it carry no `if:`, so while it fails nothing is published, `sha-` tag included. The dated
+# probes are in docs/developers/ci-and-gates.md.
 set -eu
 
 IMAGE=${1:-}
