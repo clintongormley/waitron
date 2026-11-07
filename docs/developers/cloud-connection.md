@@ -1,5 +1,10 @@
 # Connect a venue to Waitron Cloud
 
+> 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol
+> build and its admission gates below belong to the parked branch. Use the [simple staff tunnel
+> runtime](../../deploy/tunnel/README.md) for A951-S; this historical material adds no build steps to it.
+
+
 The Cloud services screen in Settings connects this installation to a Cloud
 organisation and legal business. You need a local manager with `system.manage` and
 a Cloud account with permission to register venues for that business.

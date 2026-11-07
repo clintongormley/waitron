@@ -20,14 +20,16 @@ and key). Only `venue.db`
 streams to a bucket; a backup file carries both.
 There is no database server in the app's path, no connection string and no database password.
 
-| volume        | mounted at                     | holds                                                                                                                                                                                       |
-| ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state`       | `/var/lib/waitron/state`       | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, `stream/` (Litestream's configuration and process-id file), the CA and leaf PEMs |
-| `logs`        | `/var/lib/waitron/logs`        | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                                                                            |
-| `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                                                                                                                  |
-| `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account and invoice email captured when no SMTP credential exists; a demo's invoice email always)                                                         |
-| `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                                         |
-| `box_socket`  | `/run/waitron-box`             | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                                              |
+| volume           | mounted at                                                              | holds                                                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`          | `/var/lib/waitron/state`                                                | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, `stream/` (Litestream's configuration and process-id file), the CA and leaf PEMs |
+| `logs`           | `/var/lib/waitron/logs`                                                 | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                                                                            |
+| `backups`        | `/var/lib/waitron/backups`                                              | local encrypted backup archives, when they are switched on                                                                                                                                  |
+| `mailpit`        | `/data`                                                                 | the local dev/prepare mail inbox (account and invoice email captured when no SMTP credential exists; a demo's invoice email always)                                                         |
+| `print_agent`    | `/var/lib/waitron-print-agent`                                          | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                                         |
+| `tunnel_control` | `/var/lib/waitron/tunnel` in the app, `/control` in the optional tunnel | the peer public key and the non-secret connection configuration                                                                                                                             |
+| `tunnel_keys`    | `/keys` in the optional tunnel only                                     | the box's private WireGuard key                                                                                                                                                             |
+| `box_socket`     | `/run/waitron-box`                                                      | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                                              |
 
 A box installed before the box ran its own database server was retired also carries a `waitron_db`
 volume holding that old database. Nothing reads it and nothing on the box removes it, including
@@ -182,6 +184,9 @@ If HTTP is disabled, use the installer's **Secure help** address, `https://waitr
 The main listener serves this guide during setup, trading, pending adoption and boot recovery.
 While the listener presents your own TLS certificate, the guide directs you to whoever installed
 it. It does not offer the box's fallback CA, which cannot certify that connection.
+
+The optional [staff tunnel runtime](tunnel/README.md) is a separate container. It is not started
+by the default installation; automatic connection and Settings wiring remain open in A951-S.
 
 ## Updating and operating
 
@@ -404,7 +409,8 @@ sudo bash waitron.sh reset          # wipe the database and settings, keep the c
 sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
-Both forms wipe every volume in the table above. Plain `reset` keeps four things inside the box's
+Both forms stop the optional staff tunnel and remove its control and key volumes. A reset box
+re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue databases and wizard settings, logs, local backups, the captured mail inbox and print-agent settings. Plain `reset` keeps four things inside the box's
 `state` volume:
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own

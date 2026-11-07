@@ -156,7 +156,7 @@ case "$1" in
           *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
         esac ;;
       up) : > "\${WT_LOG}.up" ;;
-      down) : > "\${WT_LOG}.down" ;;
+      down) printf '%s\\n' "\${COMPOSE_PROFILES:-}" >> "\${WT_LOG}.profiles"; : > "\${WT_LOG}.down" ;;
       *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
     esac ;;
   inspect)
@@ -1600,6 +1600,30 @@ function installedBox(sb) {
 }
 
 describe("waitron.sh reset", () => {
+  it.each([
+    ["reset", "--yes"],
+    ["--reset", "--yes", "install", "my-branch"],
+  ])("stops the optional tunnel profile before resetting: %j", (...args) => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, args);
+    expect(r.status).toBe(0);
+    expect(readFileSync(sb.log + ".profiles", "utf8").trim()).toBe("staff-tunnel");
+  });
+  it.each([
+    ["reset", "--yes"],
+    ["reset", "--all", "--yes"],
+    ["--reset", "--yes", "install", "my-branch"],
+    ["--reset", "--all", "--yes", "install", "my-branch"],
+  ])("removes both old tunnel connection volumes on reset: %j", (...args) => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, args);
+    expect(r.status).toBe(0);
+    const calls = readFileSync(sb.log, "utf8");
+    expect(calls).toMatch(/docker volume rm .*waitron_tunnel_control\b/);
+    expect(calls).toMatch(/docker volume rm .*waitron_tunnel_keys\b/);
+  });
   it("refuses when the box was never installed", () => {
     const sb = sandbox();
     const r = run(sb, ["reset", "--yes"]);
