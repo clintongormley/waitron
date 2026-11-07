@@ -213,10 +213,10 @@ With a keyboard, Tab reaches the selected button. Left and Right open the previo
 wrapping between **Floor** and your tables. Home opens **Floor** and End opens the last table.
 
 Tapping **Floor** after a table opens that table's zone, if this device shows it. Everything else is
-in **More** (☰): your name and clock actions when the bar has no room for them, which on a phone is
-always, the screens your profile allows, **Settings** (**Zones on this device**, **Equipment**,
-**Language** and **Theme**) and **Log out** and, while the venue has a logo, **Powered by Waitron**
-under it.
+in **More** (☰): your name, with your clock actions if you clock in on this device, when the bar
+has no room for it, which on a phone is always; the screens your profile allows; **Zones on this
+device**, **Equipment**, **Language** and **Theme** under a **Settings** heading; **Log out**; and,
+while the venue has a logo, **Powered by Waitron** under it.
 
 ## Give a table a short name {#short-names}
 
