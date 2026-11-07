@@ -195,7 +195,11 @@ export async function deferFirstStart(stateDir: string, log: Logger): Promise<Fi
   return { mayStream: false, failedSince: null };
 }
 
-/** How long a first start waits for the bucket's pointer. */
+/**
+ * Bounds the one bucket read that holds a restored box's first start; at the bound that start
+ * leaves the rebuild unfinished ({@link runFirstStart}) and the next start tries again. A
+ * restore's own bucket calls have their own bound (`BUCKET_CALL_TIMEOUT_MS`).
+ */
 export const POINTER_READ_TIMEOUT_MS = 15_000;
 
 const TIMED_OUT = Symbol("timed out");

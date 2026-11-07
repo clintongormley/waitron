@@ -382,30 +382,6 @@ Live path has it today;
 A987's design does not change the route
 ([§7](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md#7-security)).
 
-## Loose ends left by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
-
-- `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process
-  after 120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on
-  NVMe; box storage has not been measured.
-- A copy with no `tenants` row reads an empty tax id, which neither the command line nor the
-  setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code
-  names that case.
-- An interrupted bucket rebuild, archive check or archive download leaves its scratch folder —
-  a full copy of the venue database, or the encrypted archive (`archive-download-`, inside
-  `restore-staging`) — under the state folder; the next run makes a new one and does not remove
-  it. Also left open by A538-5. The same holds for the `archive-validate-` folders (a decrypted
-  `venue.db`) and `restore-admission-` folders made directly in `restore-staging`
-  (`apps/server/src/restore.ts`) when the process is killed partway, the setup wizard's preview
-  included; neither boot nor the start's clean-up removes them, and the restore command uses the
-  same names from another process. Found by reading (A1038's review), not run.
-- A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start
-  (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other
-  way (the dev stack) does not.
-- Open question: the first start's pointer read and the bucket rebuild's calls (the command
-  line's `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15
-  seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and
-  `backup.stream_request_failed`). The code does not say why they differ.
-
 ## A backup destination that fails to build leaves archives reported as on.
 
 In
@@ -1364,19 +1340,6 @@ once released. Belongs with A1016.
 - **A clock that jumps before 28-10-2024 while a card is charged answers `clock.unusable`, and the
   till never says the card was charged.** Left open by A798-B slice 8 (#2012).
 
-## Bundle A1390: A restore is all or nothing, and its key always opens
-
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A recovery kit can carry a recovery key its own restore refuses.**
-  [Detail](box.md#a-recovery-kit-can-carry-a-recovery-key-its-own-restore-refuses)
-- **A restore that fails while writing the secrets has already replaced the venue database.**
-  [Detail](box.md#a-restore-that-fails-while-writing-the-secrets-has-already-replaced-the-venue-database)
-- **Loose ends left by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).**
-  `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process
-  after 120 seconds without a timer turn.
-  [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-9b-642-waitron-restore-restore---from-bucket)
-
 ## Bundle A1391: Backup status tells the truth and leaks nothing
 
 3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -1754,6 +1717,23 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   screen, nor normally on the recovery page; the code and which database was kept are only in the
   server's own output and in `waitron.log`. **Owner decision 2026-09-25: leave it as it is.**
 
+- **A server started outside the box's entry does not clear `.venue.db-replaced-` folders. Default
+  taken pending the owner (A1390 question 1, 2026-11-07).** Only the box's entry clears them, before
+  the server opens `venue.db`; the dev stack starts `src/bin.ts` and leaves them. Boot cannot clear
+  them instead, because its first open creates `venue.db` (`clearReplacedDatabases`,
+  `apps/server/src/restore.ts`).
+- **The first start's bucket pointer read and an operator's restore keep their own time limits and
+  codes. Default taken pending the owner (A1390 question 2, 2026-11-07).** 15 seconds and
+  `restore.pointer_unreadable` for the read that holds a restored box's first start (it is tried
+  again at the next start); 60 seconds and `backup.stream_request_failed` for each bucket call of a
+  restore an operator starts. Neither number was measured (`POINTER_READ_TIMEOUT_MS`,
+  `apps/server/src/rebuild-first-start.ts`; `BUCKET_CALL_TIMEOUT_MS`,
+  `apps/server/src/bounded-store.ts`).
+- **A restore that fails at the migration or module step, after the database is placed, keeps the
+  restored database with the old identity set aside. Default taken pending the owner (A1390
+  question 3, 2026-11-07).** Only a failure to move the database into place puts the identity back
+  (`placeValidated`, `apps/server/src/restore.ts`).
+
 - **A managed Cloud restore keeps both sealed bucket records (owner answer 2026-10-13, A538-4).**
   A restored or replacement box inherits both `backup.archive` and `backup.stream` (bucket keys
   included); `docs/developers/cloud-connection.md` says so. Owner: "Keep as built: a replacement
@@ -1809,27 +1789,6 @@ S3-compatible bucket" is dropped, so the next Save asks again. Neither was repro
 reviewer's run. Separately, an entry of the Save's `destinations` list with an unknown kind is
 refused under field `destination`, a name the request no longer has; the dashboard never sends one
 (`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`).
-
-## A recovery kit can carry a recovery key its own restore refuses
-
-`parseRecoveryKit`
-(`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
-the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key prints a bucket copy code
-in its recovery pack whose restore calls it damaged. Predates A538-5 (kit.ts
-last changed in #627). `bench/sqlite-failover/src/probes/restore-time.ts` still computes free
-space as `bavail * bsize`, where the server multiplies by `frsize` (`free-bytes.ts`).
-
-## A restore that fails while writing the secrets has already replaced the venue database
-
-`placeValidated` (`apps/server/src/restore.ts`) puts the database in place and runs the restore
-hooks before `restoreSecrets`, so a full disk or a write error there leaves the archive's
-database with the old box's secrets. Measured in A538-5's review with a throwaway case that made
-the secrets write fail: the command exited 1 and the live venue's name was already the archive's.
-Predates A538-5. Write the secrets into staging before placement, or put the previous database
-back on failure. The same step sets `trading.env` aside (as `trading.env.replaced`) before it
-moves the database into place, so a full disk at that move leaves the old database without its
-active identity file; found by the finish-branch review's run-it seat with an injected ENOSPC,
-and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
 ## 2026-10-23 A799 build authority and history selection
 

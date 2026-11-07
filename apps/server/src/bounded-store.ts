@@ -5,7 +5,10 @@ import "@waitron/stream";
 
 type BucketOperation = ErrorParams["backup.stream_request_failed"]["operation"];
 
-/** A bound on each bucket call a restore makes; a `list` is one call however many pages it reads. */
+/**
+ * A bound on each bucket call of a restore an operator starts; a `list` is one call however many
+ * pages it reads. A restored box's first start has its own bound (`POINTER_READ_TIMEOUT_MS`).
+ */
 export const BUCKET_CALL_TIMEOUT_MS = 60_000;
 
 /**
