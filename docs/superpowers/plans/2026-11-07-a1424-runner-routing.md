@@ -1,6 +1,6 @@
 # A1424: server shard routing implementation plan
 
-Authority: Lane F A1424, watcher 2026-11-07 13:36. After Claude reads this plan, build inline now; only activation waits for Lane I. Preserve branch workflow. Add no infrastructure, controller, approval step, record system, or location/schema/fiscal change.
+Authority: Lane F A1424; watcher in questions.md, 2026-11-07 13:36: “Do not wait for lane I: write the one-page plan, get its Claude read, and build the `runs-on` change with its GitHub fallback now”. After Claude reads this plan, build inline now; only activation waits for Lane I. Preserve branch workflow. Add no infrastructure, controller, approval step, record system, or location/schema/fiscal change.
 
 Start with server shards. Local campaign receipts (not repository evidence) sampled 36 CI runs created 09:02–12:59 UTC: 525 assigned server jobs waited a median 1,481s; pending jobs are censored. Slow checkouts exclude that aggregate as a performance baseline. Qualified run [42370934080](https://github.com/clintongormley/waitron/actions/runs/42370934080) has 24 server jobs, median queue 552s/execution 182s, checkout maximum 9s and no download HTTP 5xx in its retained log. GitHub incident history has no overlapping incident. These observations select the first family; they claim no speedup. Dashboard/heavy remain Lane I capacity probes.
 
