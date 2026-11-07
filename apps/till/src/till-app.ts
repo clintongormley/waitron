@@ -993,6 +993,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "device.unauthorized",
   "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
+  "fiscal.chain_handed_over",
   "bill.unsent_dishes",
   "service_zone.closed",
   "device.forbidden_action",
@@ -1085,6 +1086,7 @@ function discardError(error: unknown): CounterError {
   if (code === "draft.taken_over") return "held.discard_editing";
   if (code === "bill.unsent_dishes") return "held.discard_unsent";
   return code === "fiscal.fingerprint_mismatch" ||
+    code === "fiscal.chain_handed_over" ||
     code === "order.payment_in_flight" ||
     code === "bill.refund_in_progress" ||
     code === "storage.disk_full" ||
@@ -1805,6 +1807,7 @@ function saleRefusalOf(
       StringKey,
       | "sale.disk_full"
       | "sale.disk_full_manual_card"
+      | "sale.chain_handed_over_manual_card"
       | "sale.charged_disk_full"
       | "sale.charged_clock_behind"
       | "sale.charged_clock_unusable"
@@ -1829,8 +1832,9 @@ function saleRefusalOf(
   switch (refusal?.code) {
     case "sale.full_invoice_unavailable":
     case "fiscal.fingerprint_mismatch":
-    case "fiscal.chain_handed_over":
       return { code: refusal.code };
+    case "fiscal.chain_handed_over":
+      return tender.manualCard ? "sale.chain_handed_over_manual_card" : { code: refusal.code };
     case "storage.disk_full":
       return tender.manualCard ? "sale.disk_full_manual_card" : "sale.disk_full";
     case "sale.charged_not_recorded":

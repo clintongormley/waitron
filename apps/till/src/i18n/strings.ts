@@ -1463,6 +1463,8 @@ export const en = {
     "Sale not recorded: the server is out of disk space. Don't take payment until it is fixed; tell a manager.",
   "sale.disk_full_manual_card":
     "Sale not recorded: the server is out of disk space. Don't take payment until it is fixed; tell a manager. If you already charged a card on the terminal, refund it there.",
+  "sale.chain_handed_over_manual_card":
+    "This server is no longer the main server, so it cannot record this payment. If you already charged a card on the terminal, refund it there.",
   "sale.charged_disk_full":
     "Card charged, but the sale is not recorded: the server is out of space. Do not charge again; tell a manager.",
   "sale.clock_unusable":
@@ -3377,6 +3379,8 @@ export const es: Record<StringKey, string> = {
     "Venta no registrada: el servidor no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado.",
   "sale.disk_full_manual_card":
     "Venta no registrada: el servidor no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+  "sale.chain_handed_over_manual_card":
+    "Este servidor ya no es el servidor principal, así que no puede registrar este pago. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.charged_disk_full":
     "Cobrado con tarjeta, pero la venta no se ha registrado: el servidor no tiene espacio. No vuelvas a cobrar; avisa al encargado.",
   "sale.clock_unusable":

@@ -4537,6 +4537,22 @@ describe("till-app: a partly paid order at the counter", () => {
       expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toBe(t("sale.error"));
     });
 
+    it("refused because this is no longer the main server says so, in that refusal's words", async () => {
+      const el = await edited({
+        updateWorkingOrder: vi
+          .fn()
+          .mockRejectedValue({ code: "fiscal.chain_handed_over", status: 409, nodeId: "this-box" }),
+      });
+
+      payRest(el)!.click();
+      await flush(el);
+
+      expect(dialog(el)).toBeNull();
+      const shown = text(el.shadowRoot!.querySelector('p.error[role="alert"]'));
+      expect(shown).toBe(codeMessage("fiscal.chain_handed_over"));
+      expect(shown).not.toBe(t("sale.error"));
+    });
+
     it("saved from a copy another till changed opens no dialog", async () => {
       const el = await edited({
         updateWorkingOrder: vi
@@ -6137,6 +6153,31 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(sent()[0]!.entry).toBe("manual");
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full_manual_card"));
     expect(dialog(el)!.confirmationLocked).toBe(false);
+  });
+
+  it("a contribution on a terminal the box does not talk to, refused because this is no longer the main server, adds the card advice", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: ["print-receipt"] as CapabilityFlag[],
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: readers[0]!.id,
+      }),
+      previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
+      takeBillPayment: vi
+        .fn()
+        .mockRejectedValue({ code: "fiscal.chain_handed_over", status: 409, nodeId: "this-box" }),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()[0]!.entry).toBe("manual");
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.chain_handed_over_manual_card"));
   });
 
   /** A handheld whose profile declares the integrated reader, taking a card on the second reader. */

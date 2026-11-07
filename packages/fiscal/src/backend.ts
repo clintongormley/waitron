@@ -393,7 +393,7 @@ export interface FiscalBackend {
   readonly recipientNameMaxLength: number | null;
 
   /** Throws an `IssuanceRefusedError` when `nodeId` may not issue a new fiscal record: a sale, a
-   * payment that leads to one, a void or a correction. Called before money moves. */
+   * payment that leads to one, a void or a correction. */
   refuseNewIssuance(tx: Transaction, nodeId: NodeId): Promise<void>;
 
   /** Throws an `IssuanceRefusedError` when `nodeId` may not give money back. A refund issues no

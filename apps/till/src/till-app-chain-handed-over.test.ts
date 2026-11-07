@@ -19,7 +19,7 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillProduct } from "./api/client.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 
 const refusal = { code: "fiscal.chain_handed_over", status: 409, nodeId: "this-box" };
@@ -121,6 +121,28 @@ it.each(
     expect(write).toHaveBeenCalledOnce();
   },
 );
+
+it.each(["en-GB", "es-ES"])(
+  "adds the terminal refund advice to a hand-keyed card counter sale, and only there, in %s",
+  async (locale) => {
+    const write = vi.fn().mockRejectedValue(refusal);
+    const { el } = await mount(locale, { recordSale: write });
+    const screen = await openCounter(el);
+    emit(screen, "confirm-payment", { method: "card", amount: "3.00" });
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(t("sale.chain_handed_over_manual_card"));
+    expect(banner(el)?.textContent).toMatch(locale === "es-ES" ? /datáfono/ : /terminal/);
+    expect(write).toHaveBeenCalledOnce();
+  },
+);
+
+it("says nothing of a terminal when no card was taken", async () => {
+  const { el } = await mount("en-GB", { recordSale: vi.fn().mockRejectedValue(refusal) });
+  const screen = await openCounter(el);
+  emit(screen, "confirm-payment", { method: "cash", amount: "5.00" });
+  await flush(el);
+  expect(banner(el)?.textContent).not.toMatch(/terminal/);
+});
 
 it.each(["en-GB", "es-ES"])("says a whole table payment was refused in %s", async (locale) => {
   const write = vi.fn().mockRejectedValue(refusal);

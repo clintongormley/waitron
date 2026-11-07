@@ -17,8 +17,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ha fallado la comprobación de la huella; avisa a un responsable.",
   },
   "fiscal.chain_handed_over": {
-    en: "This server is no longer the main server, so it cannot record sales.",
-    es: "Este servidor ya no es el servidor principal, así que no puede registrar ventas.",
+    en: "This server is no longer the main server, so it cannot add new records for the tax agency.",
+    es: "Este servidor ya no es el servidor principal, así que no puede añadir registros nuevos para Hacienda.",
   },
   "invoice_customer.not_found": {
     en: "No full invoice names that tax number.",
