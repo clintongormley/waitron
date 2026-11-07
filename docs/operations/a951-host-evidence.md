@@ -1,3 +1,35 @@
+# A951-S automatic staff connection, 7 November 2026
+
+The five reviewed cuts combined at `7f64f5a54ae04b0878888ec725cc8240ac48493b` ran against
+a fresh disposable venue on the Debian test box. After Cloud approved its signed pairing,
+the real boot worker submitted the container's retained public key and wrote the assigned
+`10.77.17.3` placement. The restricted peer completed WireGuard handshakes with the gateway.
+The certificate worker installed the staff chain and opened its listener without a server restart.
+
+A fresh Chromium session, with normal certificate trust, reached `2.29.248.230:443`, signed in
+with the fixture administrator's password and opened `/manage/overview`. Its TLS chain named
+issuer `YR2` and the assigned staff hostname. Requests to `/setup`, `/recovery`, `/api/session`,
+`/api/devices` and `/print-agent` returned 404. A separate `curl` from the rented server returned
+HTTP 200 with certificate verification result 0. Restarting this peer container recovered the
+trusted public page. These checks cover those requests and one restart.
+
+Cloud's existing trial worker issued this chain on its production directory after the earlier
+demo's staging proof. This fresh CSR had no separate staging issue; no second issue was requested.
+
+You can find the commands and raw results in Lane E's local
+`receipts/a951s-integration-20261107/`: `run-first-issuance.sh` and its log,
+`run-connected.sh` and its log, `public-browser.mjs`, `public-browser.json`, `outside-trust.log`
+and `peer-restart.json`. The browser capture stays there too. The probe's first direct listener
+request omitted the hostname header and returned 404; the corrected request returned 200.
+The resumed fixture also needed its dashboard rebuilt after a source sync, and its temporary
+bind directories needed the ownership used by the Compose volumes.
+
+The bounded run stopped its own fixture and peer and removed its network. It left the existing
+managed demo and the owner's containers running. Managed deployment of these combined cuts,
+physical reboot, public certificate renewal, wrong-venue refusal, revocation, offline sale and
+the remaining cross-venue and LAN isolation checks are still open. Nothing landed during the
+A760 freeze. The earlier native-protocol evidence below belongs to the parked A951 build.
+
 # Current addendum: returned Debian box, 5 November 2026
 
 > 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol

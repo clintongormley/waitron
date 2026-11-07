@@ -2103,7 +2103,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   and tunnel returned automatically and normal-trust browser sign-in passed. The connection file's
   changed hash is still being investigated. The certificate worker now resumes pending requests,
   renews before expiry and opens the listener after first issuance; its automated public-demo
-  deployment is not yet qualified. The optional tunnel runtime now has its own container and box
+  deployment is not yet qualified. A fresh isolated venue completed automatic key submission,
+  tunnel configuration, certificate installation and trusted public browser sign-in on 7 November;
+  its peer restart recovered. The optional tunnel runtime now has its own container and box
   key. The signed Cloud refresh now submits that key and feeds the tunnel's control file through
   one public-key reader. Left: automatic startup, image publication, Settings on/off/status, remaining isolation
   qualification, final combined installation and reboot, and retirement of `@waitron/tunnel`.

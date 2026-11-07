@@ -1040,6 +1040,14 @@ under investigation; the other retained file hashes matched. The final combined 
 remains unqualified. The owner's three containers returned healthy.
 [Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
 
+On 7 November the five reviewed cuts on private `feat/a951s-integration` completed the fresh
+test-box path. After pairing, the boot worker submitted the container's saved public key, wrote
+its assigned placement, requested and installed the staff certificate, and opened the staff
+listener without restarting. Chromium signed in through the public gateway with normal certificate
+trust. A peer-container restart recovered the trusted public page. The bounded test stopped its
+own fixture and peer afterwards; the earlier managed demo remains separate and running.
+[Receipt and limits](../operations/a951-host-evidence.md#a951-s-automatic-staff-connection-7-november-2026).
+
 Remaining work, following the owner's certificate-first order:
 
 - Qualify the certificate worker on the managed public demo. The worker uses the existing signed
