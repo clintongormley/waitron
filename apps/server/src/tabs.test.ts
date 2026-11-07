@@ -783,11 +783,11 @@ describe("readTabLines", () => {
     const entrantes = await asApp(cfg, (tx) =>
       createCourse(tx, { name: "Entrantes", displayOrder: 0 }),
     );
-    const postres = await asApp(cfg, (tx) =>
+    const desserts = await asApp(cfg, (tx) =>
       createCourse(tx, { name: "Postres", displayOrder: 1 }),
     );
     await asApp(cfg, (tx) => setProductCourse(tx, coffeeId, entrantes.id));
-    await asApp(cfg, (tx) => setProductCourse(tx, waterId, postres.id));
+    await asApp(cfg, (tx) => setProductCourse(tx, waterId, desserts.id));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -796,15 +796,15 @@ describe("readTabLines", () => {
       ]),
     );
 
-    await asApp(cfg, (tx) => deleteCourse(tx, postres.id));
+    await asApp(cfg, (tx) => deleteCourse(tx, desserts.id));
     const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     const coffeeLine = lines.find((l) => l.productId === coffeeId)!;
     const waterLine = lines.find((l) => l.productId === waterId)!;
     // The earliest course fires on send; a later one is held.
     expect(coffeeLine.courseId).toBe(entrantes.id);
     expect(coffeeLine.firedAt).not.toBeNull();
-    expect(waterLine.courseId).toBe(postres.id);
-    expect(waterLine.course).toEqual({ id: postres.id, name: "Postres", displayOrder: 1 });
+    expect(waterLine.courseId).toBe(desserts.id);
+    expect(waterLine.course).toEqual({ id: desserts.id, name: "Postres", displayOrder: 1 });
     expect(waterLine.firedAt).toBeNull();
     // Held versus fired is `firedAt`: a held line has a ticket item too, still "queued".
     expect(coffeeLine.state).toBe("queued");

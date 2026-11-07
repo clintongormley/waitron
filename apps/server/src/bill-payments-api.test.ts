@@ -1435,7 +1435,7 @@ describe("an item already paid for (design §8 test 5)", () => {
       ],
     });
     expect(round.status).toBe(200);
-    const tartaLine = async () =>
+    const cakeLine = async () =>
       (
         (await request("GET", `/api/working-orders/${billId}/lines`)).json.lines as {
           lineNo: number;
@@ -1444,10 +1444,10 @@ describe("an item already paid for (design §8 test 5)", () => {
           firedAt: string | null;
         }[]
       ).find((line) => line.name === "Tarta")!;
-    const tarta = await tartaLine();
+    const cake = await cakeLine();
     const leaving = await pay(billId, {
       kind: "items",
-      lines: [{ lineNo: tarta.lineNo }],
+      lines: [{ lineNo: cake.lineNo }],
       method: "cash",
       tendered: "18.00",
       applied: "18.00",
@@ -1465,7 +1465,7 @@ describe("an item already paid for (design §8 test 5)", () => {
     });
     const again = await pay(billId, {
       kind: "items",
-      lines: [{ lineNo: tarta.lineNo }],
+      lines: [{ lineNo: cake.lineNo }],
       method: "cash",
       tendered: "18.00",
       applied: "18.00",
@@ -1478,16 +1478,16 @@ describe("an item already paid for (design §8 test 5)", () => {
     });
 
     expect(fired.status).toBe(200);
-    const sent = await tartaLine();
+    const sent = await cakeLine();
     expect(sent.sentAt).not.toBeNull();
     expect(sent.firedAt).not.toBeNull();
     expect(again.status).toBe(409);
-    expect(again.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: tarta.lineNo } });
+    expect(again.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: cake.lineNo } });
     expect((await balance(billId)).json).toMatchObject({
       total: "53.00",
       received: "18.00",
       outstanding: "35.00",
-      paidLines: [{ lineNo: tarta.lineNo, paidQuantity: "1.000" }],
+      paidLines: [{ lineNo: cake.lineNo, paidQuantity: "1.000" }],
     });
     expect(rest.json).toMatchObject({ kind: "allocated", applied: "35.00", tip: "0.00" });
   });

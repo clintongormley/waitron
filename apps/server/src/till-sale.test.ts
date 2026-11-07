@@ -2479,7 +2479,9 @@ describe("ordering extras and options — parent + child lines", () => {
     const deps = { db: suite.db, backend, clock };
     const burger = v.offerFor(v.burgerId);
     const tender = { method: "cash" as const, amount: "3000.00" };
-    const bread = [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }];
+    const breadExtras = [
+      { listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] },
+    ];
     const refused = {
       code: "extras.unsupported_product",
       params: { productId: v.burgerId, soldBy: "measure" },
@@ -2515,7 +2517,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const tabId = await tabWith(v, { menuItemId: burger, quantity: "250" });
     await expect(
       withTransaction(suite.db, async (tx) =>
-        updateOrderLine(tx, v.cfg, tabId, 1, { extras: bread }, await revisionOf(tabId)),
+        updateOrderLine(tx, v.cfg, tabId, 1, { extras: breadExtras }, await revisionOf(tabId)),
       ),
     ).rejects.toMatchObject(refused);
     await withTransaction(suite.db, async (tx) =>
@@ -2551,7 +2553,7 @@ describe("ordering extras and options — parent + child lines", () => {
     await expect(
       recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
-        lines: [{ menuItemId: burger, quantity: "250", extras: bread }],
+        lines: [{ menuItemId: burger, quantity: "250", extras: breadExtras }],
         tender,
       }),
     ).rejects.toMatchObject(refused);

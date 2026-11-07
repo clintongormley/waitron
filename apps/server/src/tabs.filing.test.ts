@@ -353,22 +353,22 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const depsA = { db: suite.db, backend, clock: clockFixed };
     const depsB = { db: suiteB.db, backend: backendB, clock: clockFixed };
 
-    const { cfg: cfgA, coffee: cafeA, counter: counterA } = await setupVenue();
+    const { cfg: cfgA, coffee: coffeeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const walkUpId = randomUUID();
     await payWorkingOrder({ ...depsA, admission: testTradingAdmission() }, cfgA, {
       id: walkUpId,
       zoneId: counterA.zoneId,
-      lines: [{ menuItemId: counterA.offerFor(cafeA.id), quantity: "1" }],
+      lines: [{ menuItemId: counterA.offerFor(coffeeA.id), quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
-    const { cfg: cfgB, coffee: cafeB, tables: tablesB } = await secondVenueSharingNif(nifA);
+    const { cfg: cfgB, coffee: coffeeB, tables: tablesB } = await secondVenueSharingNif(nifA);
     const tableId = await seedTable(cfgB, "H2-tab", suiteB.db, tablesB.zoneId);
     const { tabId } = await withTransaction(suiteB.db, async (tx) => {
       return openPartyTab(tx, cfgB, {
         tableId,
-        lines: [{ menuItemId: tablesB.offerFor(cafeB.id), quantity: "1" }],
+        lines: [{ menuItemId: tablesB.offerFor(coffeeB.id), quantity: "1" }],
       });
     });
     await payWorkingOrder({ ...depsB, admission: testTradingAdmission() }, cfgB, {
@@ -460,24 +460,24 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
     const depsA = { db: suite.db, backend, clock: clockFixed };
     const depsB = { db: suiteB.db, backend: backendB, clock: clockFixed };
 
-    const { cfg: cfgA, coffee: cafeA, counter: counterA } = await setupVenue();
+    const { cfg: cfgA, coffee: coffeeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const tableA = await seedTable(cfgA, "H2col-A");
     const deliveredId = randomUUID();
     await recordTillSale({ ...depsA, admission: testTradingAdmission() }, cfgA, {
       workingOrderId: deliveredId,
       zoneId: counterA.zoneId,
-      lines: [{ menuItemId: counterA.offerFor(cafeA.id), quantity: "1" }],
+      lines: [{ menuItemId: counterA.offerFor(coffeeA.id), quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
       deliveryTableId: tableA,
     });
 
-    const { cfg: cfgB, coffee: cafeB, counter: counterB } = await secondVenueSharingNif(nifA);
+    const { cfg: cfgB, coffee: coffeeB, counter: counterB } = await secondVenueSharingNif(nifA);
     const walkUpId = randomUUID();
     await recordTillSale({ ...depsB, admission: testTradingAdmission() }, cfgB, {
       workingOrderId: walkUpId,
       zoneId: counterB.zoneId,
-      lines: [{ menuItemId: counterB.offerFor(cafeB.id), quantity: "1" }],
+      lines: [{ menuItemId: counterB.offerFor(coffeeB.id), quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
