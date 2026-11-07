@@ -1645,6 +1645,8 @@ export const en = {
     "This phone no longer has that card reader. Choose the reader in your hand. The first payment may have gone through: look at the bill’s payments before taking it again.",
   "bill_pay.not_checked":
     "The server could not check this payment. The first payment may have gone through: look at the bill's payments before taking it again.",
+  "bill_pay.ticket_unread":
+    "Payment recorded. The receipt could not be loaded. You can continue serving.",
   "bill_pay.card_recovery":
     "Open Card payments and sign in to finish recording this payment. Do not take it again.",
   "bill_pay.card_recovery_open": "Card payments / sign in",
@@ -3528,6 +3530,8 @@ export const es: Record<StringKey, string> = {
     "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. El primer cobro puede haberse realizado: mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.not_checked":
     "El servidor no ha podido comprobar este cobro. El primer cobro puede haberse realizado: mira los pagos de la cuenta antes de volver a cobrarlo.",
+  "bill_pay.ticket_unread":
+    "Pago registrado. No se ha podido cargar el recibo. Puedes seguir atendiendo.",
   "bill_pay.card_recovery":
     "Abre Pagos con tarjeta e inicia sesión para terminar de registrar este pago. No vuelvas a cobrarlo.",
   "bill_pay.card_recovery_open": "Pagos con tarjeta / acceder",
