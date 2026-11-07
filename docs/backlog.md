@@ -2110,6 +2110,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   recovery passed with the same keys and certificate. Left: publication and installation of the
   combined build, physical reboot, public renewal and remaining isolation qualification.
   The private combined build removes the old `@waitron/tunnel` TCP relay and its settings.
+  Its repaired remote-only dialog passed a fresh public browser run: Stop retained access,
+  confirmed off disconnected it and local on restored it.
   Translate all and address completion remain
   test-box trials.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)

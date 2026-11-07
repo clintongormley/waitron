@@ -1065,8 +1065,10 @@ Remaining work, following the owner's certificate-first order:
   key and certificate. Systemd app recovery and a peer-container restart also passed. The temporary
   unit, peer and network were removed; the earlier persistent demo is unchanged.
   [Receipt and limits](../operations/a951-host-evidence.md#bounded-managed-server-restart-7-november-2026).
-  The Settings review repairs have local checks, including the remote-only confirmation, but
-  their fresh managed/public run remains unrun. The private combined build removes
+  The Settings review repairs passed a fresh managed/public run: the remote-only dialog's
+  Stop retained access, confirmed off disconnected it and local on restored it.
+  [Receipt and limits](../operations/a951-host-evidence.md#managed-review-repairs-and-relay-retirement-7-november-2026).
+  The private combined build removes
   `@waitron/tunnel`, its boot worker and its four relay settings. The staff listener is the
   remote entrance; it supplies no relay for standby adoption.
 - Qualify the managed demo across a physical reboot.
