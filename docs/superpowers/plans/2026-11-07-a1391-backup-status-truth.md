@@ -10,6 +10,7 @@ built: the watcher decided 2026-11-07 08:58 (questions.md); the review said it s
 Risk triggers: none, with Task 3 not built (a secret's exposure is close to one, so the review stays
 FULL). A review after every task, and `/finish-branch`
 FULL with two Codex angles.
+_2026-11-07, 11:36: a smaller form of Task 3 was built instead; see D4's last note._
 
 ## What is wrong today (read on main 59be31e3b7)
 
@@ -160,6 +161,7 @@ Files: `apps/server/src/backup-supervisor.ts`, `apps/server/src/backup-superviso
 ### Task 3 — not built (D4)
 
 Not built: the watcher decided 2026-11-07 08:58 (questions.md). Task 4 records the decision.
+_2026-11-07, 11:36: a smaller form was built instead; see D4's last note._
 
 ### Task 4 — backlog and words that describe the old behaviour
 

@@ -1667,20 +1667,30 @@ The owner's four answers: no reserved
   [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies)
   and [the backup room note](../developers/conventions-data.md#the-backup-room-note).
 
-- **Backup status reads keep their own storage client per destination (watcher, 2026-11-07,
-  A1391).** The status read holds one client per destination (`StatusClients`,
-  `apps/server/src/backup-status-clients.ts`, owned by `BackupSupervisor`), built on the first read
-  and lent to every later one; it shares nothing with the running backup's clients. A destination
-  whose settings differ by value from the client's (any field, the secret included) gets a new
-  client at its next read; a destination no longer configured, or every one when a reload leaves
-  backups off, loses its client at the reload; all are closed when the supervisor stops, and reads
-  after that build a client each and close it. A replaced or removed client is closed only once
+- **Backup status reads keep their own storage client per destination (the watcher's decision of
+  2026-11-07, A1391, open to the owner).** The status read holds one client per destination
+  (`StatusClients`, `apps/server/src/backup-status-clients.ts`, owned by `BackupSupervisor`), built
+  on the first read and lent to every later one; it shares nothing with the running backup's
+  clients. A destination whose settings differ by value from the client's (any field, the secret
+  included) gets a new client at its next read. A destination no longer configured loses its
+  client at the reload, and every destination does when a reload finds the settings unusable or
+  switched off, or cannot open the venue: then status reads no destination. While status still
+  reads one (on a box that is not the primary, without a recovery key, or after a destination
+  failed to build) its client is kept. All are closed when the supervisor stops, and reads after
+  that build a client each and close it. A replaced or removed client is closed only once
   every listing lent from it has settled, so a read under way on it still answers. Measured in
   `apps/server/src/backup-status-clients.test.ts` against a local HTTPS server: two reads in a row
   on the kept client opened one connection, and two reads each on a new client opened two. That
   test trusts its certificate through the client's own keep-alive agent, and its reads are back to
   back; whether a real bucket keeps the connection open across the Backups screen's 10-second
   reads was not measured.
+
+- **A stored bucket-copy record is not re-checked for a user name, password, query or fragment in
+  its address (A1391, plan D1).** Every save path refuses one (`readBucketConfig`,
+  `packages/stream/src/bucket-config.ts`), but the stored record is read field by field
+  (`readStreamSettingsIn`, `apps/server/src/stream-host.ts`), so a record written by
+  `waitron-credentials set`, which checks no shape, is sent back by `GET /api/backup/stream` as
+  stored.
 
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and
