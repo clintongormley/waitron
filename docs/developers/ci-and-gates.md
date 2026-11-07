@@ -345,31 +345,34 @@ that way. A push that creates `main` (its previous tip is all zeros), and one wh
 the checkout does not have, name no range the job can list, and each fails rather than passing
 unchecked; `scripts/check-signoff.test.mjs` runs the step against both.
 
-### What `bundle-smoke` does NOT cover: the three front-end bundles
+### Built applications in `bundle-smoke`
 
-`bundle-smoke` runs the build scripts of two packages, `@waitron/credentials` and `@waitron/server`,
-and every bundle they produce is an esbuild bundle. **Nothing in that job, or in any other job a
-front-end-only pull request runs, executes `vite build`.** In CI, the dashboard, setup and till
-bundles are built only inside `deploy/Dockerfile` — and on a pull request the `image` job carries
-`needs.changes.outputs.deploy == 'true'`, so it runs only when the pull request changed an image
-input: a path under `deploy/`, or a file `IMAGE_SMOKE_FILES` names (`scripts/changed-scope.mjs`),
-which `isImageInputPath` in the same file reads. A change under
-`apps/till/src` therefore reaches a main push before anything in CI builds its bundle. Locally the
-root `build` script does run all three, which is how this branch got its evidence.
+A source test cannot catch a shipped bundle that builds but fails when opened.
+The code-gated `bundle-smoke` job builds credentials, server, print-agent and
+provisioning with their existing Node build scripts, plus dashboard, setup and
+till with their Vite build scripts. This includes code pull requests that change
+no image input. Verified equal-tree PR CI can still supply the main push's result.
 
-Three hedges, because the gap is both narrower and wider than it first reads. Narrower on the
-trigger: `image` builds all three on a pull request that happens to change an image input, and on
-full nightly/manual verification. Narrower again: the Dockerfile is also built by `publish` after full verification and by manual
-`image-nightly.yml` dispatches, which exists precisely as the safety net for this scoping and says so in its
-own header — so all three SPAs are built daily against the default branch. Wider, and this is the
-part a reader is most likely to assume away: every one of those paths only BUILDS them. Nothing
-opens one, so a bundle that compiles and then renders nothing passes everywhere.
+The job opens the built setup page in headless Chromium and presses Continue to
+setup. It expects the setup choices to appear and refuses browser exceptions or
+HTTP error responses. The three setup reads use fixed browser-intercepted answers;
+this checks the built page and its event handlers, not the server's setup routes.
+Dashboard and till are built but are not opened by this check. The existing
+credentials refusal and server-start smoke checks remain separate.
 
-This was first recorded on 2026-08-27, in the plan behind #146 (its item R6), which called a
-cross-front-end build-smoke "a separate later cleanup". It was still uncleaned when the vite 6 → 8
-upgrade replaced the bundler underneath all three apps (Rolldown and Oxc for Rollup and esbuild),
-which is the change it would most have been wanted for; that upgrade's build evidence had to be
-taken locally instead. `docs/backlog.md` carries the work item.
+You can run the page check after building setup:
+
+```bash
+pnpm --filter @waitron/setup build
+pnpm --filter @waitron/setup exec node test/bundle-smoke.mjs
+```
+
+A successful check prints `Built setup bundle rendered and advanced to the setup choices.`
+Chromium must be installed for the setup package's Playwright version.
+
+On 2026-11-07 A1402 replaced the earlier gap recorded here: that job built only
+credentials and server, while front-end builds depended on an image build and
+none was opened. The image build keeps its own input gate.
 
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
 guards — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which

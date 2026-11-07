@@ -134,8 +134,11 @@ hook, or how tests are scheduled:
   runs all packages. PR evidence is not reused. Container publication, including `:main`, follows
   full scheduled/manual main verification or a fully checked release tag, never an ordinary main
   push. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
-- **No front-end bundle is built by a pull request that changed no image input**, and wherever one
-  is built nothing opens it, so a bundle that renders nothing passes anyway.
+- **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server reads
+  intercepted**; PRs whose scope is `documentation` or `root` skip it, as do runs reusing verified CI.
+  A blank dashboard or till still passes, and setup's server routes are not tested. Guard:
+  `scripts/bundle-smoke.test.mjs`, weaker than its name: executes build commands with a pnpm stub,
+  not the builds or browser check. [Detail](docs/developers/ci-and-gates.md#built-applications-in-bundle-smoke).
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image
   copies sharp into `/app/node_modules`.** Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke
   (weaker than their names: read text; bundle-smoke reads only `dist/server.js`), and image-smoke's sharp step.

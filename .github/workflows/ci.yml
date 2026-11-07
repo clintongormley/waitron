@@ -523,6 +523,25 @@ jobs:
       # coverage, and typecheck/test both run against TypeScript source, never the bundle operators
       # actually run.
       - run: pnpm --filter @waitron/server build
+      - run: pnpm --filter @waitron/print-agent build
+      - run: pnpm --filter @waitron/provisioning build
+      - run: pnpm --filter @waitron/dashboard build
+      - run: pnpm --filter @waitron/setup build
+      - run: pnpm --filter @waitron/till build
+
+      - name: Install bundle-smoke Chromium
+        timeout-minutes: 7
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 120 pnpm --filter @waitron/setup exec playwright install chromium --only-shell; then
+              exit 0
+            fi
+          done
+          exit 1
+
+      - name: Open the built setup page
+        timeout-minutes: 2
+        run: timeout 90 pnpm --filter @waitron/setup exec node test/bundle-smoke.mjs
 
       # sharp's native addon cannot be bundled and esbuild does not refuse to try: without
       # `--external:sharp` the build passes and the bundle is a syntax error (bundled sharp declares
