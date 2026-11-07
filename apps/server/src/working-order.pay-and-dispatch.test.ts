@@ -1302,16 +1302,29 @@ describe("an order another box opened", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    const [stamped] = await suite.db
-      .select({ nodeId: workingOrders.nodeId })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, orderId));
-    expect(stamped!.nodeId).toBe(otherBox.nodeId);
+    const stored = async () =>
+      (
+        await suite.db
+          .select({
+            nodeId: workingOrders.nodeId,
+            receiptLocale: workingOrders.receiptLocale,
+            revision: workingOrders.revision,
+          })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, orderId))
+      )[0]!;
+    const before = await stored();
+    expect(before.nodeId).toBe(otherBox.nodeId);
+    expect(before.receiptLocale).not.toBe(LOCALE);
 
-    const revision = await revisionOf(orderId);
     await expect(
-      setOrderReceiptLanguage(suite.db, orderId, { revision, language: LOCALE }),
-    ).resolves.toBe(revision + 1);
+      setOrderReceiptLanguage(suite.db, orderId, { revision: before.revision, language: LOCALE }),
+    ).resolves.toBe(before.revision + 1);
+    expect(await stored()).toEqual({
+      nodeId: otherBox.nodeId,
+      receiptLocale: LOCALE,
+      revision: before.revision + 1,
+    });
 
     const res = await payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },

@@ -3366,7 +3366,8 @@ Away/Done. The kitchen capture, lifecycle, reads and atomic suites give the inte
 
 ### An order's number is never reset (owner, 2026-10-16)
 
-A working order's number comes from one counter per node that starts at 1 and only climbs
+Order numbers are one venue-wide sequence that starts at 1 and only climbs; each box stores its own
+high-water mark, and a box's next number is one above the highest any box holds
 (`allocateOrderNumber`, `packages/db/src/allocate-order-number.ts`). It does not restart each
 business day: staff search for orders by number, so a number must stay unique.
 

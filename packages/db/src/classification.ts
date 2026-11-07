@@ -97,7 +97,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify(
     "working_order_counters",
     "state",
-    "per-node order-number high-water mark; copied to a standby, never drained back",
+    "each row is one box's high-water mark of the venue-wide order-number sequence; copied to a standby, never drained back",
   ),
   classify("tenants", "state", STATE),
   classify("locations", "state", STATE),

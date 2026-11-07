@@ -191,7 +191,7 @@ describe("invoice-choice email contact selection", () => {
       setOrderInvoiceChoice(
         suite.db,
         { recipientNameMaxLength: 120 },
-        f,
+        {},
         f.orderId,
         request,
         context,
@@ -212,7 +212,7 @@ describe("invoice-choice email contact selection", () => {
       setOrderInvoiceChoice(
         suite.db,
         { recipientNameMaxLength: 120 },
-        f,
+        {},
         f.orderId,
         { ...request, revision: 1 },
         context,

@@ -4627,7 +4627,7 @@ async function readChoiceChangeableOrder(
 export async function setOrderInvoiceChoice(
   db: Database,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
-  cfg: Pick<TradingContext, "nodeId"> & Partial<Pick<OriginConfig, "origin">>,
+  cfg: Partial<Pick<OriginConfig, "origin">>,
   orderId: string,
   request: InvoiceChoiceRequest,
   deliveryContext?: InvoiceChoiceDeliveryContext,

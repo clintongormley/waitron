@@ -455,10 +455,9 @@ describe("invoice selection before reserving new bill money", () => {
     "takes a %s payment for a bill another box opened, filing it on this box's series and SIF",
     async (method) => {
       const billId = await tabWith("Beer");
-      const otherBox = await inTx(async (tx) => {
+      await inTx(async (tx) => {
         const nodeId = await seedNode(tx);
         await tx.update(workingOrders).set({ nodeId }).where(eq(workingOrders.id, billId));
-        return nodeId;
       });
       const result = await pay(billId, venue.cfg, method, "3.00");
       expect(result.payment).toMatchObject({ state: "received", applied: "3.00" });
@@ -479,7 +478,6 @@ describe("invoice selection before reserving new bill money", () => {
       const here = venue.cfg.nodeId;
       expect(filed.saleRows).toEqual([{ id: expect.any(String), nodeId: here, seriesNode: here }]);
       expect(filed.records).toEqual([{ nodeId: here, sifNode: here }]);
-      expect(here).not.toBe(otherBox);
     },
   );
 
