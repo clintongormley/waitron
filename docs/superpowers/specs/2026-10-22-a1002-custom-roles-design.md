@@ -58,8 +58,8 @@ it. Her previous refunds keep their recorded authorizer.
 - **2026-10-28 membership and deletion:** a person may hold several roles. Delete a custom role
   by removing it from everyone and every device/reason/bill-limit list, with one impact confirmation,
   no replacement choices. The owner answered on 2026-10-28 ~11:40: a sole-role holder is left
-  **with no role**. Keep identity, status and credentials; otherwise eligible authentication retains
-  own-identity/security/data self-service only, with no operational or list rights (§6).
+  **with no role**. §6 preserves identity, status and credentials, including pending/suspended status,
+  and defines the permitted own-person self-service and refused operational access.
 - **2026-10-29 ~09:25, promotion (A1188):** `node.promote` is administrators-only by default
   and is a normal editable privilege assignable to other roles. Keep its recovery operation and
   every other promotion condition. This changes no fiscal, mirror, promotion implementation or
@@ -391,7 +391,7 @@ The superseded mirror-principal row is removed; A1113 owns its retirement, as st
 | Adjustment client seniority, `packages/adjustments/src/dashboard/reasons-screen.ts:43`, `:94`, `:1251`; client union `packages/adjustments/src/dashboard/client.ts:9`; till text `apps/till/src/widgets/adjustment-dialog.ts:112` | Replace hardcoded role lists/order with catalog IDs, localized label sorting and set equality. Edit role-list restrictions and preview complete person unions; selected current IDs never mean future roles. |
 | PIN prompt wording, `apps/till/src/widgets/supervisor-override-dialog.ts:76`, `:115` | Describe required action/policy and actual eligible people, each once. Remove the default supervisor authority claim; custom role names are literal, never translation keys. |
 | Device admission, `packages/identity/src/profile-admission.ts:15`, `:50`, `:181`; schema `packages/identity/src/schema/profile-admission.ts:9` | Any held role may match the explicit set, with status/eligibility checks; per-person exceptions are deleted (owner, 2026-11-04). Profile actions/zones AND union privileges still bound actions. Replace empty/every sentinel; deletion cannot open admission. No-role outcome follows §6. |
-| Dashboard forms/filter/labels, `apps/dashboard/src/widgets/person-form.ts:291`, `widgets/person-edit.ts:332`, `screens/staff-screen.ts:376`, `i18n/domain.ts:147`; unions `apps/dashboard/src/api/client.ts:336`, `apps/till/src/api/client.ts:904` | Multi-select roleIds, display every membership, sort translated built-ins/literal customs by locale and filter by held ID (any selected match). Include an explicit No role filter. No hardcoded Staff fallback. |
+| Dashboard forms/filter/labels, `apps/dashboard/src/widgets/person-form.ts:291`, `widgets/person-edit.ts:332`, `screens/staff-screen.ts:376`, `i18n/domain.ts:147`; unions `apps/dashboard/src/api/client.ts:336`, `apps/till/src/api/client.ts:904` | Multi-select roleIds, display every membership, sort translated built-ins/literal customs by locale and filter by held ID (any selected match). Propose an explicit No role filter for the pending full-design approval. No hardcoded Staff fallback. |
 | Shell and permission projections, `apps/dashboard/src/dashboard-app.ts:1178`, `apps/server/src/me-api.ts:331`, `apps/server/src/till-api.ts:1426`, `apps/server/src/alerts-api.ts:46` | Return roleIds, whole-person privilege union and membership/catalog revisions. Refresh passively on changes/refusals; navigation is presentation. Delayed updates cannot retain server authority. |
 | Scheduling/workforce/reporting, `apps/server/src/workforce-api.ts:35`, `packages/staffing/src/routes.ts:194`, `apps/server/src/attendance-export-api.ts:45`, `apps/server/src/orders-api.ts:145` | Use accepted catalog names and whole unions. Preserve own-person exports and Orders non-report scope. Staffing's job roles join the one role list (§3). |
 | Other direct lookups, `packages/venue-service/src/routes.ts:703`, `apps/server/src/email-settings-api.ts:50`, `apps/server/src/email-inbox-api.ts:39` | Replace roleHasPermission with current whole-person grants, retaining default-setting and sign-in-mail conditions under accepted catalog names. |
@@ -556,8 +556,7 @@ later implementation must be inspected in light/dark, EN/ES, phone/desktop.
 
 ## 9. Boundaries before any plan or build
 
-Obtain ONE separate approval of the complete revised design under §11. The sole-role outcome and
-`node.promote` default/assignability are accepted sub-decisions, not full-design approval.
+Obtain ONE separate approval of the complete revised design under §11. The accepted sub-decisions are recorded in §1 and §11; deletion behavior is in §6 and promotion defaults in §2. Those decisions do not approve the whole design.
 The A760 table hold has lifted (RUNNER top: main `eed41cc3c0`, #2539); this revision grants no
 plan or build authority.
 Catalog defaults are settled; union semantics, schema, transactions, proof mechanics, import behavior
@@ -605,7 +604,7 @@ These are future acceptance requirements, not results from this documentation re
   replacement allowed only when another usable active human containing canonical Admin remains.
   Read committed rows; deletion of the shared check must fail the retained behavioral assertions.
 - Delete a populated custom role across active/pending/suspended people and every device/reason/
-  bill-limit reference. Assert only that membership is removed from multi-role holders, history
+  bill-limit reference. Assert that only the deleted role's membership is removed from multi-role holders, history
   stays, empty lists do not become all, blocked approvals are refused and proofs are invalidated.
   Force a final refusal and read back complete rollback. Retire a role a shift has used: it leaves
   every membership, list and picker, its name can be reused, and past shifts and past rota weeks still
@@ -651,8 +650,8 @@ The receipts below record owner decisions, not approval of the driver's complete
 The earlier permission-review and custom-role decisions remain recorded in the dated discussion at
 `docs/backlog/dashboard.md`. No settled choice is queued again.
 
-**2026-11-07 provenance for the two incorporated approvals:** the exact Lane K queue A1002
-**WATCHER 2026-10-31 ~14:35** note, copied there by the watcher on **2026-11-07 21:19**, says:
+**2026-11-07 provenance for the two incorporated approvals:** this excerpt is from Lane K queue A1002's
+**WATCHER 2026-10-31 ~14:35** note, relayed from F when the queue items moved on **2026-11-07 21:19**:
 
 > the owner answered the sole-role question on 2026-10-28 ~11:40 (questions.md: the person is LEFT WITH NO ROLE) and on 2026-10-29 ~09:25 said node.promote is administrators-only by default but assignable to other roles (A1188). Fold BOTH into the design's affected sections (fresh check as usual), then post ONE full-design approval request in questions.md for the owner.
 
@@ -669,7 +668,7 @@ audits pinned. The later implementation audit remains required; neither settled 
 | `workforce.self_approve` plus `workforce.correct`, Admin default | F Attendance, 2026-10-28 ~10:52. No `person.admin` tie or extra Supervisor grant. |
 | Lists restrict actions; new/copied roles join none | F Context policies, 2026-10-28 ~10:54. No inherited context memberships or future-role bypass. |
 | Several roles per person; removal-only deletion | F Deletion and membership, 2026-10-28 ~11:00: “Just delete the role, no need to replace things” and “Users can have more than one role.” Union/any-role matching remains the driver's inference. Sole-role outcome is accepted in the separate row below. |
-| Sole-role deletion leaves the person with no role | OWNER 2026-10-28 ~11:40, relayed in the exact Lane K WATCHER note quoted above. Preserve identity/status/credentials and eligible own-identity/security/data self-service; no operational/list rights. Pending people gain no session. Multi-role holders retain their other roles. |
+| Sole-role deletion leaves the person with no role | OWNER 2026-10-28 ~11:40, relayed in the exact Lane K WATCHER note quoted above. §6 defines preserved identity/status/credentials, including pending/suspended status, eligible own-person self-service and no operational/list rights; multi-role holders keep their other roles. |
 | `node.promote` is Admin-only by default and assignable to other roles | OWNER 2026-10-29 ~09:25 (A1188), relayed in the same quoted note. Keep it as a normal editable privilege; preserve the recovery operation and every other promotion condition. |
 | All four built-ins never renamed/deleted; other built-in grants editable | F Names, 2026-10-28 ~11:05: “Built in roles should not be renamed or deleted.” Supersedes the earlier rename allowance; built-in labels always translate. |
 | No mirror dashboard; built-in viewer retirement belongs to A1113 | F OWNER DECISION A1111 withdrawn, 2026-10-26 ~04:25; restated under F Names, 2026-10-28. Retirement remains blocked; no new mirror role is proposed. |

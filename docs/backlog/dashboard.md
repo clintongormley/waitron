@@ -76,13 +76,7 @@ The driver's union-of-grants and any-held-role list matching are proposed interp
 owner quotations. Policy matching and action privileges are independent gates; a copied/new role
 joins no device/reason list. Deletion removes memberships and all live device/reason/bill-limit
 references with one confirmation, no replacements, and never turns an empty list into all roles.
-**Accepted owner answers, incorporated 2026-11-07:** deleting a sole role leaves the person with
-no role (2026-10-28 ~11:40), preserving identity/status/credentials and own-identity/security/data
-self-service for otherwise eligible authentication, with no operational or list rights. Pending
-people stay pending and gain no session; multi-role holders retain their other roles.
-`node.promote` is Admin-only by default and a normal editable privilege assignable to other roles
-(2026-10-29 ~09:25, A1188); its recovery operation and every other promotion condition stay required.
-§11 quotes the Lane K WATCHER relay. Seek ONE separate full-design approval; reask neither decision.
+**Owner answers incorporated 2026-11-07:** sole-role deletion leaves no role (§6), preserving pending/suspended status; `node.promote` is Admin-only by default and assignable (§2). The design's §11 records both dated answers and their relay. Seek ONE separate full-design approval; reask neither decision.
 
 The historical source audit remains pinned and reading-only, with bounded current-source additions
 for the existing `personal_data.export` and whole-person consumers. Storage, live authority,
@@ -326,14 +320,11 @@ now records the owner's accepted non-fiscal merges and ordinary default sets. Ke
 `sale.refund` and `sale.rectify` as three identifiers; no fiscal merge/gate is queued.
 `workforce.self_approve` is Admin by default and requires `workforce.correct`, independently of
 `person.admin`. A980 S2c's `personal_data.export` already exists and remains the one privacy-export
-entry. Admin's every-current-and-future-grant rule stays accepted. `node.promote` remains a separate,
-normal editable privilege: Admin-only by default and assignable to other roles (owner, 2026-10-29
-~09:25, A1188), retaining its recovery operation and every other promotion condition.
+entry. Admin's every-current-and-future-grant rule stays accepted. See §2 for the accepted `node.promote` default/assignability and unchanged promotion conditions.
 
 This supersedes the earlier current-status claims that those catalog/default choices still awaited
 answers. Their implementation remains open and precedes enabling editable roles. The complete design
-remains PROPOSED: sole-role deletion leaves no role (owner, 2026-10-28 ~11:40), and ONE separate
-full-design approval is still required under §11. Neither settled answer is reasked.
+remains PROPOSED; ONE separate full-design approval is still required under §11. The accepted deletion outcome is in §6, and neither settled answer is reasked.
 Preserve the dated discussion below as the background to this now-answered catalog review.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
@@ -384,13 +375,7 @@ custom names are literal. Copying any preset produces an ordinary custom role wi
 identity, future grants or context-list entries. Deleting a custom role removes it from everyone
 and every live policy list, with one impact confirmation and no reassignment workflow.
 
-**2026-11-07 revision:** the accepted sole-role outcome is no role (owner, 2026-10-28 ~11:40).
-Keep identity/status/credentials and own-identity/security/data self-service for otherwise eligible
-authentication, with no operational or list rights. Pending people stay pending and gain no session;
-multi-role holders retain their other roles. `node.promote` is Admin-only by default and normally
-editable/assignable to other roles (owner, 2026-10-29 ~09:25, A1188), preserving its recovery operation
-and every other promotion condition. §11 quotes the Lane K WATCHER provenance for both answers.
-Seek ONE separate full-design approval without reasking either answer. No plan/build is authorized.
+**2026-11-07 revision:** the design incorporates both accepted answers: sole-role deletion leaves no role (§6), preserving pending/suspended status, and `node.promote` is Admin-only by default but assignable (§2). §11 records provenance and the ONE remaining full-design approval request. No plan/build is authorized.
 The audit and consumer replacements cover storage, sessions, proofs, domain policies, imports, clients
 and whole-person consumers; A1113 owns mirror dashboard/viewer retirement.
 See [A7](#roles-the-admin-can-edit-a7) and §11 of the design for the approval order.
