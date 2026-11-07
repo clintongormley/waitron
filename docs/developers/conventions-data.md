@@ -5153,7 +5153,7 @@ by `since` even when it missed the run that cleared it.
   deleted, and stays "the newest" in its folder until a later one exists, so the real latest backup
   can be deleted. A step the box made puts it last and stops it counting as the newest, but only
   while the hold lasts; a clock that runs ahead with no step the box made changes nothing.
-- On one box a restore cannot overlap these deletions: the restore command takes the venue
+- On one box the restore command cannot overlap these deletions: the restore command takes the venue
   folder before it reads an archive and holds it to its exit (`resolveRestoreTarget`,
   `apps/server/src/restore-command.ts`), so it is refused while the server runs and the server
   cannot start under it, and the start's own deletion (`deleteOldBackupsAtStart`) skips while the
