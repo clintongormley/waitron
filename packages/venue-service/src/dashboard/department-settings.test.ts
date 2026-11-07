@@ -2252,6 +2252,32 @@ function holdSaves(el: DepartmentSettings) {
   }) as DashboardRequest);
   return { sent, finish: () => finishes.shift()!() };
 }
+it("the save reply attaches a new step's id without discarding edits made while it waited", async () => {
+  const { el } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  const { sent, finish } = holdSaves(el);
+  await addStep(el);
+  await editStep(el, 3, "Name", "Coffee");
+  save(el).click();
+  await expect.poll(() => sent.length).toBe(1);
+  await editStep(el, 3, "Minutes", "5");
+  await change(el, "name", "Restaurant revised");
+  finish();
+  await expect.poll(() => cancelButton(el).disabled).toBe(false);
+  await settled(el);
+  expect(field(el, "name").value).toBe("Restaurant revised");
+  expect(stepControl(el, 3, "Minutes").value).toBe("5");
+  expect(stepList(el).steps[3]!.id).toBe("s4");
+  expect(el.hasUnsavedChanges).toBe(true);
+  save(el).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toMatchObject({
+    name: "Restaurant revised",
+    serviceSteps: [...SENT_STEPS, { id: "s4", ...COFFEE, minutes: 5 }],
+  });
+  finish();
+});
 const cancelButton = (el: DepartmentSettings) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=cancel-editor]")!;
 for (const other of ["renamed the first step", "renamed the first step and the trading name"]) {

@@ -328,7 +328,14 @@ it("a second change holds back the first follow-up's answer", async () => {
     }),
   );
   await expect.poll(() => card(el)!.list).toEqual(latest);
-  answerFirst(new Response(JSON.stringify(listOf(BLUE))));
+  let consumed = false;
+  const old = new Response();
+  vi.spyOn(old, "text").mockImplementation(async () => {
+    consumed = true;
+    return JSON.stringify(listOf(BLUE));
+  });
+  answerFirst(old);
+  await expect.poll(() => consumed).toBe(true);
   await flush(el);
   expect(card(el)!.list).toEqual(latest);
 });
