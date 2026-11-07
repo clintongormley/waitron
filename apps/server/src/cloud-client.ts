@@ -630,7 +630,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           if (!state?.view?.registration) return project(state);
           const client = installationClient(state, save);
           await client.refresh(signal);
-          if (options.tunnelDir && state.environment === "test" && !state.lifecycle?.revoked && state.remoteAccessEnabled !== false) {
+          if (
+            options.tunnelDir &&
+            state.environment === "test" &&
+            !state.lifecycle?.revoked &&
+            state.remoteAccessEnabled !== false
+          ) {
             const peerPublicKey = await readTunnelPublicKey(options.tunnelDir);
             if (peerPublicKey === undefined) return project(state);
             const remote = state.lifecycle?.view?.services.find(
