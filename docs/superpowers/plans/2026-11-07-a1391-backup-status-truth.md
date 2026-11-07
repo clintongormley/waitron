@@ -53,8 +53,14 @@ FULL with two Codex angles.
   (`archive-settings.ts:175`). A stored STREAM record is not re-read through it
   (`readStreamSettingsIn`, `stream-host.ts:66-89`), so a stream record written before this change
   could still hold one and be sent by `GET /api/backup/stream` (`stream-api.ts:194`). Before go-live
-  no compatibility code is owed for records written earlier (CLAUDE.md §3, last rule); the claim is
-  "no new record can hold one", and Task 1 checks that list of writers is complete.
+  no compatibility code is owed for records written earlier (CLAUDE.md §3, last rule). Task 1's
+  writer check found one more writer that checks nothing: `waitron-credentials set`
+  (`packages/credentials/src/cli.ts:131`) stores whatever JSON object it is given, for any purpose,
+  with no shape check at all, and the stored stream record is not re-checked when read. Checking it
+  there would change how every reader of a malformed stream record behaves, which is a design of its
+  own, so it is left as it is. The claim is therefore: no bucket address saved from the dashboard,
+  the environment, a kit, a recovery pack or Cloud can hold a user name, password, query or
+  fragment.
   `destinationView` is left as it is.
 - **D2 — the refusal's words reach both forms.** `stream.form.endpoint_invalid` ("Enter the full
   address, starting with https:// or http://") gains "with no user name or password in it" (English
