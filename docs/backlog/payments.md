@@ -571,8 +571,9 @@ and shows a clear message.
   2026-11-07 00:29 clarification keeps a known charge held through every refusal until its row
   reaches a recorded end. Its warning links to Card payments, including dashboard sign-in,
   where the existing bill-payment recovery records the provider’s confirmed outcome. If the
-  recorded payment settles the bill, reopening reads its stored receipt without resending to
-  the reader; a receipt-read failure leaves the payment recorded and the hold ended.
+  retained payment is read as received and settles the bill, reopening reads its stored receipt
+  without resending to the reader; a receipt-read failure leaves it recorded and its hold ended.
+  Every held pending row offers the existing Card payments sign-in, including after a coded refusal.
 
 - **Handheld reader selection** (owner decisions 2026-09-18)
   ([2026-09-18-handheld-and-till-hardware-decisions.md](../superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
