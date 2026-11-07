@@ -9025,24 +9025,27 @@ export class TillApp extends LitElement {
    * A save refused `working_order.out_of_date` was made from a copy another till has since
    * changed: the order is loaded again as it now stands, and staff are told, so they make their
    * change again on it. An order closed meanwhile reads as a stale retrieve. `started`: the save was
-   * refused for a dish the kitchen has started, so staff are told that instead, and the way out names
-   * Cancel, which is on screen only once the order's lines are read.
+   * refused for a dish the kitchen has started, so staff are told that instead. That sentence names
+   * Cancel, so it is said only when the reload leaves Cancel on screen: the lines were read, and at
+   * the order's own revision, since the two are read apart. In flight is passed as false because
+   * the caller's save still counts as in flight here, and Cancel appears once it returns. A failed
+   * read of the held list leaves the list, and the sentence.
    */
   async #reloadChangedOrder(id: string, started = false): Promise<void> {
     const session = this.#operatorSession;
     try {
-      const listed = await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
+      await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
       if (session !== this.#operatorSession) return;
       this.errorKey = !started
         ? "held.changed_elsewhere"
-        : listed
+        : adjustableListing(this.#store, this.counterLines, false) !== null
           ? "held.started_reloaded"
           : "held.reread_failed";
     } catch {
       if (session !== this.#operatorSession) return;
       this.errorKey = "held.stale";
     }
-    await this.#refreshHeldOrders();
+    await this.#refreshHeldOrders().catch(() => undefined);
   }
 
   /** Replaces the basket with the open order `id` as stored, with its lines as the server lists

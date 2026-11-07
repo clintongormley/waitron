@@ -4224,6 +4224,7 @@ describe("till-app: a partly paid order at the counter", () => {
 
   it("opens no payment when the save is refused for a dish the kitchen has started, and reloads the order", async () => {
     const el = await retrieved({
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 3 }),
       updateWorkingOrder: vi
         .fn()
         .mockRejectedValue({ code: "ticket.already_started", status: 409 }),
