@@ -11945,8 +11945,7 @@ export class TillApp extends LitElement {
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
     if (refusal.refused === DRAFT_PERSON_REFUSAL) {
       // The device's session belongs to someone else now, so this person has none to end.
-      if (sync.personId === this.#sessionPersonId && this.operatorName !== "")
-        void this.#onLogout(false);
+      if (this.operatorName !== "") void this.#onLogout(false);
       return;
     }
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
