@@ -2018,6 +2018,14 @@ Not in any track until the standalone primary is done.
   at the next start, a power cut waits a minute, a restart does not wait.
   [A1418 design](superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md), approved 2026-11-07; plan next.
 
+- **A1425. Every restore takes its own identity, and the box that takes over can finish what it
+  inherited (owner, 2026-11-07).** After a handover the selling box cannot take payment for
+  inherited tables, repeats order numbers, chains a cancellation of an old sale on the old box's
+  chain, and leaves the old box's sales out of the day's cash-up (measured). Part 1 fixes those for
+  every takeover; part 3 makes a restore a takeover, after Cloud agrees to change the rule that a restore keeps the old box's identity.
+  [Design](superpowers/specs/2026-11-07-restore-takes-new-identity-design.md), approved 2026-11-07;
+  [part 1 plan](superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md).
+
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
   2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. Building waits for
   A947's strip and Cloud's half:

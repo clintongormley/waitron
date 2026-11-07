@@ -1,6 +1,6 @@
-# Every restore takes its own identity, and a restore is a takeover
+# A1425: every restore takes its own identity, and a restore is a takeover
 
-Status: for the owner's approval, 2026-11-07. Grew out of A1418
+Status: approved by the owner, 2026-11-07 ("go"). Backlog A1425. Grew out of A1418
 (`docs/superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md`) and serves A1188 part 0
 (`docs/superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md` §5, §11).
 
