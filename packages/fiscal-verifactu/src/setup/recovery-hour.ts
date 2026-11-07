@@ -37,6 +37,7 @@ interface Selected {
 const strings = {
   en: {
     ...clockWaitStrings.en,
+    inUse: `${clockWaitStrings.en.inUse} Reload this page and start the restore again: a new restore chooses a new series name.`,
     heading: "Recover this box",
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
@@ -67,6 +68,7 @@ const strings = {
   },
   es: {
     ...clockWaitStrings.es,
+    inUse: `${clockWaitStrings.es.inUse} Recarga esta página y vuelve a empezar la restauración: una restauración nueva elige otro nombre de serie.`,
     heading: "Recuperar esta caja",
     deviceInvoices: "Facturas vistas en este dispositivo",
     deviceInvoicesHint:
