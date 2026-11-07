@@ -308,6 +308,30 @@ export class CloudServicesScreen extends LitElement {
         )}
       </dl>
       ${
+        typeof s.remoteAccessEnabled === "boolean" && installation?.state !== "revoked"
+          ? html`<section aria-labelledby="remote-access-heading">
+              <h2 id="remote-access-heading">${t("cloud.remote_local")}</h2>
+              <p data-test="remote-access-status" role="status">
+                ${t(s.remoteAccessEnabled ? "cloud.remote_on" : "cloud.remote_off")}
+              </p>
+              <p>${t("cloud.remote_help")}</p>
+              ${
+                s.isPrimary
+                  ? html`<wt-button
+                      id="remote-access"
+                      variant="primary"
+                      .disabled=${this.busy}
+                      @click=${() => {
+                        void this.#run(() => this.api.setCloudRemoteAccess(!s.remoteAccessEnabled));
+                      }}
+                      >${t(s.remoteAccessEnabled ? "cloud.remote_turn_off" : "cloud.remote_turn_on")}</wt-button
+                    >`
+                  : nothing
+              }
+            </section>`
+          : nothing
+      }
+      ${
         installation?.state === "revoked"
           ? nothing
           : html`

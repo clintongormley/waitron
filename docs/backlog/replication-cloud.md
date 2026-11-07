@@ -1054,16 +1054,11 @@ Remaining work, following the owner's certificate-first order:
   submit/status exchange, resumes pending requests after restart and renews before expiry. A local
   TLS handshake observed the renewed chain without restarting the listener; no new public
   certificate was issued for that synthetic test.
-- The existing signed Cloud refresh submits the saved public key through `tunnel-provision`
-  and writes the returned placement to the optional tunnel's control file, sharing one key reader.
-  Automatic provisioning on the managed public demo, image publication, Settings on/off/status
-  and automatic startup remain, followed by retirement of `@waitron/tunnel`. The
-  [runtime](../../deploy/tunnel/README.md) stays off without its control file; its private
-  WireGuard key is held in a separate container volume. The Linux container check covers
-  traffic to the fixed staff upstream, refused source/port, disconnect, reconnect and restart.
-  Final combined installation and physical reboot qualification remain open.
-- Explain the manual demo's changed connection-file hash and qualify the final combined
-  installation across a physical reboot.
+- Qualify the Settings remote-access choice on the managed deployment. The private integration
+  branch can persist on/off without revoking Cloud pairing; off removes the peer configuration
+  without contacting Cloud. The screen labels its saved choice separately from connection health.
+  Managed deployment and retiring `@waitron/tunnel` remain.
+- Qualify the final combined installation across a physical reboot and explain the manual demo's changed connection-file hash.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.
 - Translate all returned one real editable English menu suggestion on the test box on
