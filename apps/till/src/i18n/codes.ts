@@ -132,8 +132,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa carta no está disponible en el periodo actual.",
   },
   "menu_period.ended": {
-    en: "A dish's period has ended. Reopen the order to review its dishes, or remove the dish before sending again.",
-    es: "Ha terminado el periodo de un plato. Vuelve a abrir el pedido para revisar sus platos o quita el plato antes de volver a enviarlo.",
+    en: "A dish's period has ended. Review the order and remove dishes from ended periods before sending again.",
+    es: "Ha terminado el periodo de un plato. Revisa el pedido y quita los platos de periodos terminados antes de volver a enviarlo.",
   },
   "department_transfer.desk_unavailable": {
     en: "That department has no usable receiving desk. Ask a manager to check its transfer settings.",

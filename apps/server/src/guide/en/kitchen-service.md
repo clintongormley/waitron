@@ -312,8 +312,8 @@ counter, the till first lists such dishes and asks you to check with the kitchen
 button reads **Kitchen agreed — save**. The same window opens when the server finds such a dish before
 the till has marked it.
 
-If the till says a dish's period has ended without listing dishes, reopen the order to review
-its dishes, or remove the dish before sending again.
+If the till says a dish's period has ended without listing dishes, review the order and remove
+dishes from ended periods before sending again.
 
 A dish that the period now running also sells is not marked and is sent as usual. A dish left from
 an earlier business day shows **Last orders have ended** and cannot be sent: at a table, **Remove**

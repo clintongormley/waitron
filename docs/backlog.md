@@ -2172,7 +2172,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **One repeated-run rig, then each named test** (bundle of 8, 2 important, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
+- **One repeated-run rig, then each named test** (bundle of 7, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 

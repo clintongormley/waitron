@@ -836,10 +836,10 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
 
 it("words a dish whose period has ended, in both languages", () => {
   expect(codeMessage("menu_period.ended", "en")).toBe(
-    "A dish's period has ended. Reopen the order to review its dishes, or remove the dish before sending again.",
+    "A dish's period has ended. Review the order and remove dishes from ended periods before sending again.",
   );
   expect(codeMessage("menu_period.ended", "es")).toBe(
-    "Ha terminado el periodo de un plato. Vuelve a abrir el pedido para revisar sus platos o quita el plato antes de volver a enviarlo.",
+    "Ha terminado el periodo de un plato. Revisa el pedido y quita los platos de periodos terminados antes de volver a enviarlo.",
   );
 });
 

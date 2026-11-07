@@ -126,7 +126,12 @@ export class TillKeepOpen extends LitElement {
     } catch (error) {
       if (!this.#current(generation, zone, subjectId)) return;
       const code = this.#code(error);
-      if (override !== undefined && this.authorizers === null) this.refusal = code;
+      if (
+        override !== undefined &&
+        this.authorizers === null &&
+        code === "authorization.not_permitted"
+      )
+        this.refusal = code;
       else if (this.authorizers && (code === "pin.invalid" || code === "pin.throttled"))
         this.pinError = code;
       else if (code === "authorization.not_permitted") {

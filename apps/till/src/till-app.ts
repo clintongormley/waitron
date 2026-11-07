@@ -3102,7 +3102,6 @@ export class TillApp extends LitElement {
   get #orderVisit(): number {
     return this.#orderVisitNumber;
   }
-  /** A refused press's reads end with the visit they were for: {@link #splitRefusalReads}. */
   set #orderVisit(visit: number) {
     this.#orderVisitNumber = visit;
     this.#endSplitRefusalReads();

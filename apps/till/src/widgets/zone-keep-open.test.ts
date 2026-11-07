@@ -189,58 +189,87 @@ it("uses Spanish zone wording for a closed zone", async () => {
   );
 });
 
-it.each(["pin.invalid", "pin.throttled", "authorization.not_permitted"])(
-  "releases Keep open after a dismissed PIN answers %s",
-  async (code) => {
-    let writes = 0;
-    let answer!: (response: Response) => void;
-    const held = new Promise<Response>((resolve) => (answer = resolve));
-    const { el } = await mount((path, init) =>
-      path.endsWith("authorizers")
-        ? json([{ personId: "manager", displayName: "Manager" }])
-        : init.method === "PUT"
-          ? ++writes === 1
-            ? json({ error: { code: "authorization.not_permitted", params: {} } }, 403)
-            : held
-          : json({ zone }),
-    );
-    const parent = await open(el);
-    await save(parent);
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog"))
-      .not.toBeNull();
-    const pin = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
-    await pin.updateComplete;
-    await userEvent.click(pin.shadowRoot!.querySelector<HTMLElement>("[data-person]")!);
-    await pin.updateComplete;
-    await userEvent.click(
-      pin
-        .shadowRoot!.querySelector("till-numeric-pad")!
-        .shadowRoot!.querySelector<HTMLElement>('[data-key="1"]')!,
-    );
-    await pin.updateComplete;
-    await userEvent.click(pin.shadowRoot!.querySelector<HTMLElement>(".authorize")!);
-    await expect.poll(() => writes).toBe(2);
-    const closed = new Promise<void>((resolve) =>
-      pin.addEventListener("override-cancel", () => resolve(), { once: true }),
-    );
-    await userEvent.keyboard("{Escape}");
-    await closed;
-    answer(json({ error: { code, params: {} } }, 403));
-    await expect.poll(() => parent.busy).toBe(false);
-    await parent.updateComplete;
+it.each([
+  "pin.invalid",
+  "pin.throttled",
+  "authorization.not_permitted",
+  "zone_extension.invalid",
+  "success",
+])("releases Keep open after a dismissed PIN answers %s", async (code) => {
+  let writes = 0;
+  let reads = 0;
+  let answer!: (response: Response) => void;
+  const held = new Promise<Response>((resolve) => (answer = resolve));
+  const { el } = await mount((path, init) =>
+    path.endsWith("authorizers")
+      ? json([{ personId: "manager", displayName: "Manager" }])
+      : init.method === "PUT"
+        ? ++writes === 1
+          ? json({ error: { code: "authorization.not_permitted", params: {} } }, 403)
+          : held
+        : json({ zone: ++reads === 1 ? zone : { ...zone, choices: ["22:15"] } }),
+  );
+  const parent = await open(el);
+  await save(parent);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog"))
+    .not.toBeNull();
+  const pin = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
+  await pin.updateComplete;
+  await userEvent.click(pin.shadowRoot!.querySelector<HTMLElement>("[data-person]")!);
+  await pin.updateComplete;
+  await userEvent.click(
+    pin
+      .shadowRoot!.querySelector("till-numeric-pad")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-key="1"]')!,
+  );
+  await pin.updateComplete;
+  await userEvent.click(pin.shadowRoot!.querySelector<HTMLElement>(".authorize")!);
+  await expect.poll(() => writes).toBe(2);
+  const closed = new Promise<void>((resolve) =>
+    pin.addEventListener("override-cancel", () => resolve(), { once: true }),
+  );
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  answer(
+    code === "success"
+      ? new Response(null, { status: 204 })
+      : json(
+          { error: { code, params: code === "zone_extension.invalid" ? { field: "until" } : {} } },
+          code === "pin.invalid"
+            ? 401
+            : code === "pin.throttled"
+              ? 429
+              : code === "zone_extension.invalid"
+                ? 400
+                : 403,
+        ),
+  );
+  if (code === "success") {
+    await expect.poll(() => el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
-    expect(parent.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
-      code === "pin.invalid" || code === "pin.throttled" ? t(code) : codeMessage(code),
-    );
-    expect(
-      parent.shadowRoot!.querySelector("wt-combobox")!.shadowRoot!.querySelector("button")!
-        .disabled,
-    ).toBe(false);
-    expect(
-      parent
-        .shadowRoot!.querySelector<WtButton>("[data-cancel]")!
-        .shadowRoot!.querySelector("button")!.disabled,
-    ).toBe(false);
-  },
-);
+    expect(writes).toBe(2);
+    return;
+  }
+  await expect.poll(() => parent.busy).toBe(false);
+  await parent.updateComplete;
+  expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+  if (code === "zone_extension.invalid") {
+    expect(reads).toBe(2);
+    expect(parent.refusalField).toBe("until");
+    expect(parent.shadowRoot!.querySelector("wt-combobox")!.error).toBe(codeMessage(code));
+    expect(parent.selected).toBe("");
+    return;
+  }
+  expect(parent.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
+    code === "pin.invalid" || code === "pin.throttled" ? t(code) : codeMessage(code),
+  );
+  expect(
+    parent.shadowRoot!.querySelector("wt-combobox")!.shadowRoot!.querySelector("button")!.disabled,
+  ).toBe(false);
+  expect(
+    parent
+      .shadowRoot!.querySelector<WtButton>("[data-cancel]")!
+      .shadowRoot!.querySelector("button")!.disabled,
+  ).toBe(false);
+});
