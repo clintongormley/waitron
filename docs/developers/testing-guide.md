@@ -1558,6 +1558,14 @@ start's own full-disk check to name the failure. It calls
 `openSmallDisk("WAITRON_FULL_DISK_DIR_PLACEMENT", 64)`, and CI mounts a sixth tmpfs, 64 MiB, at
 `$RUNNER_TEMP/full-disk-placement` in the same step.
 
+**A seventh real-disk file checks that a restore which runs out of room changes nothing.**
+`apps/server/src/restore-full-disk.e2e.test.ts` runs `restoreFromArtifact` with the box's state and
+venue folders on a small disk and its staging folder on the normal one. With too little room for a
+2 MiB secret the restore fails `ENOSPC` while staging that secret; with room for the secrets but not
+a 4 MiB database it fails `ENOSPC` copying the database. Both times the box's database, identity and
+secrets are left as they were. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_RESTORE", 32)`, and CI
+mounts a seventh 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-restore` in the same step.
+
 **A test that runs a backup through the supervisor or boot depends on the machine's free disk.**
 The supervisor passes the run no floor or aim, so the product's defaults apply: below the need plus
 2 GiB free, a run deletes old archives in local folders on that disk (only where an installation
