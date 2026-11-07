@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
@@ -25,7 +25,13 @@ const name=path.basename(process.argv[1]), args=process.argv.slice(2);
 fs.appendFileSync(process.env.TRACE, JSON.stringify([name,...args])+"\\n");
 if(name==="wg"&&args[0]==="genkey") process.stdout.write("${key}\\n");
 if(name==="wg"&&args[0]==="pubkey") {process.stdin.resume();process.stdin.on("end",()=>process.stdout.write("public-key\\n"));}
+if(name==="wg"&&["setconf","set"].includes(args[0])&&process.env.WG_GATE&&!fs.existsSync(process.env.WG_GATE)) process.exit(1);
 if(name==="wg"&&args[0]==="setconf") fs.copyFileSync(args[2], process.env.SNAPSHOT);
+if(name==="wg"&&args[0]==="set") {
+ const values={}; for(let i=2;i<args.length;i+=2) values[args[i]]=args[i+1];
+ fs.writeFileSync(process.env.SNAPSHOT, "[Interface]\\nPrivateKey = "+fs.readFileSync(values["private-key"],"utf8").trim()+"\\n\\n[Peer]\\nPublicKey = "+values.peer+"\\nEndpoint = "+values.endpoint+"\\nAllowedIPs = "+values["allowed-ips"]+"\\nPersistentKeepalive = "+values["persistent-keepalive"]+"\\n");
+}
+if(name==="socat"&&process.env.SOCAT_EXIT==="1") process.exit(1);
 if(name==="socat") {process.on("SIGTERM",()=>{fs.appendFileSync(process.env.TRACE,'["closed"]\\n');process.exit();});setInterval(()=>{},1000);}
 `;
   for (const name of ["wg", "ip", "iptables", "socat"]) {
@@ -36,7 +42,7 @@ if(name==="socat") {process.on("SIGTERM",()=>{fs.appendFileSync(process.env.TRAC
   const setsid = join(bin, "setsid");
   await writeFile(
     setsid,
-    `#!/bin/sh\nexec python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1],sys.argv[1:])' "$@"\n`,
+    `#!/bin/sh\nexec python3 -c 'import os,sys,time; gate=os.getenv("SETSID_GATE"); gate and open(gate,"w").close(); gate and time.sleep(60); os.setsid(); os.execvp(sys.argv[1],sys.argv[1:])' "$@"\n`,
   );
   await chmod(setsid, 0o755);
 });
@@ -50,17 +56,32 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-async function start(config) {
+async function start(
+  config,
+  { unavailable = false, deadProxy = false, delayedProxy = false } = {},
+) {
   const dir = await mkdtemp(join(root, "run-"));
   const control = join(dir, "control"),
     keys = join(dir, "keys");
   await mkdir(control);
-  if (config !== undefined) await writeFile(join(control, "peer.json"), JSON.stringify(config));
+  if (config !== undefined)
+    await writeFile(
+      join(control, "peer.json"),
+      typeof config === "string" ? config : JSON.stringify(config),
+    );
   const trace = join(dir, "trace"),
     snapshot = join(dir, "snapshot");
   await writeFile(trace, "");
   const child = spawn("sh", [script, control, keys], {
-    env: { ...process.env, PATH: bin + ":" + process.env.PATH, TRACE: trace, SNAPSHOT: snapshot },
+    env: {
+      ...process.env,
+      PATH: bin + ":" + process.env.PATH,
+      TRACE: trace,
+      SNAPSHOT: snapshot,
+      ...(unavailable ? { WG_GATE: trace + ".gate" } : {}),
+      SOCAT_EXIT: deadProxy ? "1" : "0",
+      ...(delayedProxy ? { SETSID_GATE: trace + ".setsid" } : {}),
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const run = {
@@ -99,6 +120,7 @@ it("makes and retains a private box key while staying off without configuration"
   expect((await events(run)).some((e) => e[0] === "ip")).toBe(false);
   run.child.kill("SIGTERM");
   await run.exit;
+  await symlink(join(run.keys, "private-key"), join(run.control, "public-key.new"));
   const child = spawn("sh", [script, run.control, run.keys], {
     env: {
       ...process.env,
@@ -114,11 +136,13 @@ it("makes and retains a private box key while staying off without configuration"
     .poll(async () => (await events(run)).filter((e) => e[1] === "pubkey").length)
     .toBe(2);
   expect((await events(run)).filter((e) => e[1] === "genkey")).toHaveLength(1);
+  expect(await readFile(join(run.keys, "private-key"), "utf8")).toBe(key + "\n");
+  expect((await stat(join(run.keys, "private-key"))).mode & 0o777).toBe(0o600);
 });
 
 it("routes only its gateway and fixes the proxy destination to the staff entrance", async () => {
   const run = await start(configuration);
-  expect(run.output).toContain("tunnel.ready");
+  expect(run.output).toContain("tunnel.configured");
   const calls = await events(run);
   expect(calls).toContainEqual(["ip", "route", "add", "10.77.17.1/32", "dev", "wg-cloud"]);
   expect(calls).toContainEqual([
@@ -174,6 +198,9 @@ it("closes the proxy and interface when configuration is removed, then reconnect
   await expect
     .poll(async () => (await events(run)).some((e) => e.join(" ") === "ip link del wg-cloud"))
     .toBe(true);
+  await expect
+    .poll(async () => (await events(run)).some((e) => e.join(" ") === "iptables -F INPUT"))
+    .toBe(true);
   await writeFile(join(run.control, "peer.json"), JSON.stringify(configuration));
   await expect
     .poll(async () => (await events(run)).filter((e) => e[0] === "socat").length, {
@@ -181,4 +208,44 @@ it("closes the proxy and interface when configuration is removed, then reconnect
     })
     .toBe(2);
   expect((await events(run)).filter((e) => e[1] === "genkey")).toHaveLength(1);
-});
+}, 45000);
+
+it("rejects two complete JSON documents and an oversized valid document", async () => {
+  for (const raw of [
+    JSON.stringify(configuration) + "\n" + JSON.stringify(configuration),
+    " ".repeat(2100) + JSON.stringify(configuration),
+  ]) {
+    const run = await start(raw);
+    expect(run.output).toContain("tunnel.off");
+    expect((await events(run)).some((e) => e[0] === "ip")).toBe(false);
+  }
+}, 30000);
+
+it("stays running with no copied key on configuration failure and retries with the same key", async () => {
+  const run = await start(configuration, { unavailable: true });
+  expect(run.output).toContain("tunnel.off");
+  expect(run.child.exitCode).toBeNull();
+  await expect(readFile(join(run.keys, "wg.conf"))).rejects.toMatchObject({ code: "ENOENT" });
+  await writeFile(run.trace + ".gate", "available");
+  await expect.poll(() => run.output, { timeout: 10000 }).toContain("tunnel.configured");
+  expect((await events(run)).filter((e) => e[1] === "genkey")).toHaveLength(1);
+}, 30000);
+
+it("exits when the proxy dies so the container supervisor can restart it", async () => {
+  const run = await start(configuration, { deadProxy: true });
+  await expect.poll(() => run.child.exitCode, { timeout: 10000 }).toBe(1);
+}, 30000);
+
+it("stops a proxy that has not made its process group yet", async () => {
+  const run = await start(configuration, { delayedProxy: true });
+  await expect
+    .poll(async () =>
+      readFile(run.trace + ".setsid").then(
+        () => true,
+        () => false,
+      ),
+    )
+    .toBe(true);
+  run.child.kill("SIGTERM");
+  await expect.poll(() => run.child.exitCode, { timeout: 5000 }).toBe(0);
+}, 30000);

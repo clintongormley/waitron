@@ -16,16 +16,33 @@ docker build -f deploy/tunnel/Dockerfile -t waitron-tunnel:dev .
 sh scripts/tunnel-container-smoke.sh
 ```
 
-The check creates an isolated gateway, peer and staff echo service, then removes its own
+The check renders the real Compose configuration, starts its tunnel profile beside an isolated
+gateway and staff echo service, then removes its own
 containers, volumes, network and tagged image. It checks the fixed staff destination, refusal of
 another source and port, disconnection, reconnection and a container restart. It does not reboot
 the host, issue a certificate or touch a running Waitron installation.
 
-After configuring the separate staff listener, you can start this runtime with:
+After the entrance and certificate-worker cuts land and the staff certificate is installed,
+set `WAITRON_STAFF_ORIGIN` to the exact HTTPS staff address Cloud assigned. On a Linux box,
+bind the staff listener to Docker's bridge address so this container can reach it:
 
 ```sh
-docker compose -f deploy/compose.yml --profile staff-tunnel up -d tunnel
+export WAITRON_STAFF_ORIGIN=https://staff-v-your-assigned-venue.test.waitron.io
+export WAITRON_STAFF_HOST=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+cat > /tmp/waitron-staff-listener.yml <<'YAML'
+services:
+  app:
+    environment:
+      WAITRON_STAFF_ORIGIN: ${WAITRON_STAFF_ORIGIN:?Set the assigned staff origin}
+      WAITRON_STAFF_HOST: ${WAITRON_STAFF_HOST:?Set Docker's bridge address}
+      WAITRON_STAFF_PORT: "8443"
+YAML
+docker compose -f deploy/compose.yml -f /tmp/waitron-staff-listener.yml --profile staff-tunnel up -d app tunnel
 ```
+
+Replace the example origin with your assigned address. The default `127.0.0.1` cannot be reached
+from the peer. Keep the bridge bind: choosing `0.0.0.0` would also listen on the venue interfaces.
+The runtime's configured message reports local configuration, not a successful gateway handshake.
 
 Until the connection writer is wired in, the container stays off: `tunnel.off` in its logs means
 there is no valid `peer.json` in the shared `tunnel_control` volume. The app sees this volume at
@@ -43,6 +60,9 @@ Replace the example values with the placement assigned to your box. Write the co
 temporary sibling with mode 0644 and rename it to `peer.json`. These fields are not secrets;
 the directory is restricted to the app (uid 10001) and the peer’s root group. Removing it disconnects the tunnel on the next
 poll, normally within two seconds. This is not an instant shutdown guarantee.
+
+Both reset forms stop the profile and clear its connection settings and key, because the box
+will pair with Cloud again. An ordinary container restart retains them.
 
 The peer creates its key in `tunnel_keys`, which the app does not mount, and publishes only
 `public-key` in the control volume. Restarting retains that key. The only tunnel route is to the
