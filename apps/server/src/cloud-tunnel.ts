@@ -18,6 +18,29 @@ function refused(cause: unknown): never {
   throw Object.assign(new AppError("cloud.tunnel_unavailable", {}), { cause });
 }
 
+export async function readTunnelPublicKey(directory: string): Promise<string | undefined> {
+  try {
+    const file = await open(
+      join(directory, "public-key"),
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    try {
+      const info = await file.stat();
+      if (!info.isFile() || info.size > 45) throw new Error();
+      const bytes = Buffer.alloc(46),
+        { bytesRead } = await file.read(bytes, 0, 46, 0);
+      const publicKey = bytes.subarray(0, bytesRead).toString("utf8").trim();
+      if (bytesRead > 45 || !key(publicKey)) throw new Error();
+      return publicKey;
+    } finally {
+      await file.close();
+    }
+  } catch (error) {
+    if (missing(error)) return undefined;
+    refused(error);
+  }
+}
+
 export async function writeTunnelConfiguration(
   directory: string | undefined,
   state?: SavedCloudState,
@@ -56,24 +79,8 @@ export async function writeTunnelConfiguration(
   }
   let peer: { address: string; gatewayPublicKey: string; endpoint: string };
   try {
-    let publicKey: string;
-    try {
-      const file = await open(
-        join(directory, "public-key"),
-        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-      );
-      try {
-        const info = await file.stat();
-        if (!info.isFile() || info.size > 45) throw new Error();
-        const bytes = Buffer.alloc(46),
-          { bytesRead } = await file.read(bytes, 0, 46, 0);
-        if (bytesRead > 45) throw new Error();
-        publicKey = bytes.subarray(0, bytesRead).toString("utf8").trim();
-      } finally {
-        await file.close();
-      }
-    } catch (error) {
-      if (!missing(error)) throw error;
+    const publicKey = await readTunnelPublicKey(directory);
+    if (publicKey === undefined) {
       await rm(path, { force: true });
       return;
     }
@@ -83,7 +90,6 @@ export async function writeTunnelConfiguration(
       p.version !== 1 ||
       p.installationId !== state.view.registration.installationId ||
       p.venueId !== state.view.registration.venueId ||
-      !key(publicKey) ||
       p.peerPublicKey !== publicKey ||
       !key(p.gatewayPublicKey) ||
       p.port !== 443 ||

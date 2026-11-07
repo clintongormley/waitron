@@ -55,8 +55,12 @@ export async function installationFixture(
   ];
   const f = await cloudFixture(async (values, saved, req, res, sent) => {
     requests.push(values);
-    if (values[2] === "tunnel-provision" && options.tunnel) {
-      await options.tunnel(values, saved, req, res, sent);
+    if (values[2] === "tunnel-provision") {
+      if (options.tunnel) await options.tunnel(values, saved, req, res, sent);
+      else {
+        res.writeHead(503);
+        res.end(JSON.stringify({ error: "unavailable" }));
+      }
       return;
     }
     if (String(values[2]).startsWith("backup-") && capture) {

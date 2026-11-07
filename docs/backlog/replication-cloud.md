@@ -1055,8 +1055,9 @@ Remaining work, following the owner's certificate-first order:
   submit/status exchange, resumes pending requests after restart and renews before expiry. A local
   TLS handshake observed the renewed chain without restarting the listener; no new public
   certificate was issued for that synthetic test.
-- The configuration writer now connects the existing signed Cloud refresh to the optional
-  tunnel's control file. Automatic public-key submission, image publication, Settings on/off/status
+- The existing signed Cloud refresh submits the saved public key through `tunnel-provision`
+  and writes the returned placement to the optional tunnel's control file, sharing one key reader.
+  Automatic provisioning on the managed public demo, image publication, Settings on/off/status
   and automatic startup remain, followed by retirement of `@waitron/tunnel`. The
   [runtime](../../deploy/tunnel/README.md) stays off without its control file; its private
   WireGuard key is held in a separate container volume. The Linux container check covers

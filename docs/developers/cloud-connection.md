@@ -222,9 +222,9 @@ and peer key to this box, then replaces `peer.json` with the address, gateway pu
 endpoint. The private WireGuard key stays in the container's separate key volume. The writer
 accepts only the runtime's staff port 443 and gateway UDP port 51820.
 
-Until Cloud exposes signed key submission, read the container's `public-key` file and use
-Cloud's existing operator provisioning command. The writer consumes the resulting placement
-through the normal signed configuration request; it makes no new Cloud request.
+For the test-box trial, use the signed key submission described above. Cloud's existing operator
+provisioning command remains available for manual setup. The writer consumes the resulting
+placement from the signed response without another Cloud request.
 
 A Cloud outage retains the last usable placement. A missing registration, revoked installation,
 unconfigured or failed service, missing peer key or invalid placement removes the peer file.
