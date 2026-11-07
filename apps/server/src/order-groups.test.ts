@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -248,7 +249,7 @@ interface Seated {
 async function seated(v: Venue): Promise<Seated> {
   return inTx(async (tx) => {
     const { id: tableId } = await createTable(tx, v.cfg, {
-      label: `T-${randomUUID().slice(0, 6)}`,
+      label: `T-${floorLabelSuffix().padStart(6, "0")}`,
       zoneId: v.zoneId,
     });
     const { partyId, tabId } = await seatTable(tx, v.cfg, {
@@ -2264,7 +2265,7 @@ async function billOfNoParty(
 ): Promise<string> {
   const { tabId, partyId } = await inTx(async (tx) => {
     const { id: tableId } = await createTable(tx, v.cfg, {
-      label: `N-${randomUUID().slice(0, 6)}`,
+      label: `N-${floorLabelSuffix().padStart(6, "0")}`,
       zoneId: v.zoneId,
     });
     const opened = await openPartyTab(tx, v.cfg, { tableId });
@@ -3588,7 +3589,7 @@ describe("credit (D5)", () => {
     const v = await setupVenue();
     const { tabId } = await inTx(async (tx) => {
       const { id: tableId } = await createTable(tx, v.cfg, {
-        label: `O-${randomUUID().slice(0, 6)}`,
+        label: `O-${floorLabelSuffix().padStart(6, "0")}`,
         zoneId: v.zoneId,
       });
       return openPartyTab(tx, v.cfg, {

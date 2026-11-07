@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -98,7 +99,7 @@ async function fixture() {
     .returning({ id: persons.id });
   /** A seated party with one Burger held in a group of its own. */
   const heldBurger = async () => {
-    const seated = await seat(v, await v.table(`T${randomUUID().slice(0, 4)}`));
+    const seated = await seat(v, await v.table(`T${floorLabelSuffix().padStart(4, "0")}`));
     await inTx(v, (tx) =>
       VENUE_SERVICE.writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, OPERATOR),
     );

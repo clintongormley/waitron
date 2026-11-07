@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
 import { observedGroupSubmitBody, placeGroupedRound } from "./testing/group-submit-fixture.js";
@@ -270,7 +271,7 @@ async function seatWithOneLine(id: string): Promise<string> {
 
 describe("table + tab routes", () => {
   it("a signed-in staff session's POST, PATCH and DELETE on /api/tables answer 404 and leave the table unchanged", async () => {
-    const label = `K-${randomUUID().slice(0, 6)}`;
+    const label = `K-${floorLabelSuffix().padStart(6, "0")}`;
     const { id } = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label, zoneId: seededZoneId }),
     );
@@ -307,7 +308,7 @@ describe("table + tab routes", () => {
   });
 
   it("GET /api/tables/state names each table by its short name, or by its full name when it has none", async () => {
-    const label = `Short ${randomUUID().slice(0, 6)}`;
+    const label = `Short ${floorLabelSuffix().padStart(6, "0")}`;
     const [withShort, without] = await withTransaction(suite.db, async (tx) => [
       await createTable(tx, cfg, { label: `${label} a`, zoneId: seededZoneId, shortName: "Rt1" }),
       await createTable(tx, cfg, { label: `${label} b`, zoneId: seededZoneId }),
@@ -399,7 +400,10 @@ describe("table + tab routes", () => {
 
   it("a cancel of a quantity voids that part of the line, and refuses a quantity it cannot void", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: `V-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      createTable(tx, cfg, {
+        label: `V-${floorLabelSuffix().padStart(6, "0")}`,
+        zoneId: tablesZoneId,
+      }),
     );
     const { tabId, partyId } = await seat(id);
     await withTransaction(suite.db, (tx) =>
@@ -434,7 +438,10 @@ describe("table + tab routes", () => {
 
   it("POST .../lines/send answers 409 product.unavailable for a recalled line whose product sold out", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: `S-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      createTable(tx, cfg, {
+        label: `S-${floorLabelSuffix().padStart(6, "0")}`,
+        zoneId: tablesZoneId,
+      }),
     );
     const { tabId, partyId } = await seat(id);
     await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
@@ -514,7 +521,10 @@ describe("table + tab routes", () => {
 
   it("the tab-lines read carries no venue switch", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: `C-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      createTable(tx, cfg, {
+        label: `C-${floorLabelSuffix().padStart(6, "0")}`,
+        zoneId: tablesZoneId,
+      }),
     );
     const tabId = await seatWithOneLine(id);
     const body = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as object;
@@ -538,7 +548,10 @@ describe("table + tab routes", () => {
       await setChangesAfterSending(tx, "never", [bar]);
     });
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: `K-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      createTable(tx, cfg, {
+        label: `K-${floorLabelSuffix().padStart(6, "0")}`,
+        zoneId: tablesZoneId,
+      }),
     );
     const { tabId, partyId } = await seat(id);
     const sent = await request(`/api/parties/${partyId}/groups`, {
@@ -609,7 +622,10 @@ describe("table + tab routes", () => {
   /** A tab on a fresh table with one line fired to the kitchen, and the revision a copy reads. */
   async function firedTab(): Promise<{ tabId: string; partyId: string; revision: number }> {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: `E-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      createTable(tx, cfg, {
+        label: `E-${floorLabelSuffix().padStart(6, "0")}`,
+        zoneId: tablesZoneId,
+      }),
     );
     const { tabId, partyId } = await seat(id);
     await sendRound(partyId, [{ menuItemId, quantity: "1" }]);

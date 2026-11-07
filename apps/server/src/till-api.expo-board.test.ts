@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
@@ -107,11 +108,11 @@ async function itemsOf(f: Fixture, workingOrderId: string): Promise<string[]> {
 
 /** Every dish of the three orders, each fired. */
 async function threeOrders(f: Fixture) {
-  const inside = await seat(f.v, await f.v.table(`Inside ${randomUUID().slice(0, 4)}`));
+  const inside = await seat(f.v, await f.v.table(`Inside ${floorLabelSuffix().padStart(4, "0")}`));
   await orderForParty(f.v, inside.partyId, ["Burger"], inside.tabId);
   const terrace = await seat(
     f.v,
-    await f.v.table(`Terrace ${randomUUID().slice(0, 4)}`, f.terraceWine.zoneId),
+    await f.v.table(`Terrace ${floorLabelSuffix().padStart(4, "0")}`, f.terraceWine.zoneId),
   );
   await inTx(f.v, async (tx) => {
     await VENUE_SERVICE.writePartyAllergy(
