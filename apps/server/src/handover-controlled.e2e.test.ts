@@ -2178,8 +2178,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     });
   });
 
-  // Task 4b flips this
-  it.fails("the day's cash-up on M2 includes M1's sales", () => {
+  it("the day's cash-up on M2 includes M1's sales", () => {
     const { w } = inheritedRun();
     const allSales = w.salesByNode.reduce((sum, row) => sum + row.n, 0);
     expect(w.overview.status, JSON.stringify(w.overview.body)).toBe(200);

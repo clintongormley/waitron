@@ -1,10 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  handoverActivations,
   invoiceSeries,
   purchaseInvoiceVat,
   purchaseInvoices,
+  saleLines,
   sales,
   withTransaction,
 } from "@waitron/db";
@@ -18,6 +21,7 @@ import {
   decimalToCents,
   stringToBasisPoints,
   stringToCents,
+  stringToThousandths,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -293,5 +297,107 @@ describe("mountReportApi — request screens + auth", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
+  });
+});
+
+describe("mountReportApi — boxes taken over from", () => {
+  // A year no other case here reads, so these sales leave the modelo 303 figures alone.
+  const DAY = "2025-06-10";
+
+  /** One sale of one "Bread" line on `box`, net `net` at 10%. */
+  async function seedBoxSale(box: string, net: string, tax: string): Promise<void> {
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: box, code: "H" })
+      .returning({ id: invoiceSeries.id });
+    const [sale] = await suite.db
+      .insert(sales)
+      .values({
+        source: "device",
+        deviceId,
+        nodeId: box,
+        seriesId: series!.id,
+        invoiceNumber: 1,
+        issuedAt: `${DAY}T12:00:00Z`,
+        issuedOffsetMinutes: 0,
+        total: decimalToCents(addDecimal(decimal(net), decimal(tax))),
+        vatBreakdown: [{ rate: "10.00", base: net, tax }],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "fake",
+        fiscalState: "recorded",
+      })
+      .returning({ id: sales.id });
+    await suite.db.insert(saleLines).values({
+      saleId: sale!.id,
+      lineNo: 1,
+      name: "Bread",
+      descriptions: { "es-ES": "Pan" },
+      quantity: stringToThousandths("1.000"),
+      unitPrice: stringToCents(net),
+      vatRate: stringToBasisPoints("10.00"),
+      lineTotal: stringToCents(net),
+    });
+  }
+
+  async function handover(source: string, destination: string, activatedAt: string) {
+    await suite.db.insert(handoverActivations).values({
+      operationId: randomUUID(),
+      scenario: "controlled",
+      sourceNodeId: source,
+      destinationNodeId: destination,
+      evidence: {} as never,
+      personId: randomUUID(),
+      activatedAt,
+    });
+  }
+
+  it("a box's reports include the boxes it took over from, two handovers back", async () => {
+    const m1 = await seedNode(suite.db);
+    const m2 = await seedNode(suite.db);
+    const m3 = await seedNode(suite.db);
+    const m4 = await seedNode(suite.db);
+    // Whole venue 15.00, this box alone 4.00, the right answer 7.00.
+    await seedBoxSale(m1, "1.00", "0.10");
+    await seedBoxSale(m2, "2.00", "0.20");
+    await seedBoxSale(m3, "4.00", "0.40");
+    await seedBoxSale(m4, "8.00", "0.80");
+    await handover(m1, m2, "2025-06-01T10:00:00.000Z");
+    await handover(m2, m3, "2025-06-02T10:00:00.000Z");
+
+    const app = new Hono();
+    mountReportApi(app, { db: suite.db, cfg: { nodeId: m3 }, venueLocale: "es-ES" }, noopLog);
+    const read = async <T>(path: string): Promise<T> => {
+      const res = await send(app, "GET", path);
+      expect(res.status).toBe(200);
+      return (await res.json()) as T;
+    };
+    interface Vat {
+      baseTotal: string;
+      grossTotal: string;
+    }
+    interface Seller {
+      name: string;
+      quantity: string;
+      total: string;
+    }
+
+    const close = await read<{ vat: Vat; counts: { sales: number }; topSellers: Seller[] }>(
+      `/management-api/reports/daily-close?businessDay=${DAY}`,
+    );
+    expect(close.counts.sales).toBe(3);
+    expect(close.vat).toMatchObject({ baseTotal: "7.00", grossTotal: "7.70" });
+    expect(close.topSellers).toMatchObject([{ name: "Bread", quantity: "3.000", total: "7.00" }]);
+
+    const period = await read<{ vat: Vat; topSellers: Seller[] }>(
+      `/management-api/reports/period?from=${DAY}&to=${DAY}`,
+    );
+    expect(period.vat).toMatchObject({ baseTotal: "7.00", grossTotal: "7.70" });
+    expect(period.topSellers).toMatchObject([{ name: "Bread", quantity: "3.000", total: "7.00" }]);
+
+    const categories = await read<{ net: string }>(
+      `/management-api/reports/categories?from=${DAY}&to=${DAY}&mode=at_time_of_sale`,
+    );
+    expect(categories.net).toBe("7.00");
   });
 });
