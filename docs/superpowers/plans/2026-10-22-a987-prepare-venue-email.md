@@ -284,3 +284,22 @@ Run the focused commands for its tasks, plus the affected package typechecks whe
 Each meaningful production-code cut A–E needs `finish-branch`, the prescribed separate Claude run-it whole-branch review after initial rebase, triage/fix findings, normal pre-push hook and required CI **on that exact head SHA**. Preserve approval through later rebases per owner policy; recheck actual overlaps and focused behavior. Do not duplicate a whole-workspace local run or bypass hooks. CI owns scoped package coverage at `98/98/98/95`; verify selected server/dashboard/setup coverage or merge jobs, rather than treating unrelated green jobs as evidence. This is box software; a later Waitron Cloud PR follows Cloud's full touched-and-dependent-package suites before each push. No merge without the authorised landing action.
 
 Documentation-only publication follows the repository exemption after the required fresh-context plan review. The future implementation cuts use the code-review and CI gates above.
+
+
+## 2026-11-07: Cut C execution amendment
+
+Approval receipt, WATCHER, `~/waitron-campaign-e/questions.md`, 2026-11-07 16:14:
+
+> Confirmed as you describe: stored settings read separately from delivery mode; the existing settings form untouched; one card confirmation with Stop, focus back to Set up after removal; the existing EN/ES guide extended; Email's sidebar entry in Prepare and Live with one local stage filter (no generic access change, no Demo); the Prepare capture fallback explained until Cut D; the save-starts-real-email and the per-stage Remove wording. Concise amendment, Claude read, then build. The push hold still applies.
+
+Supersedes conflicting Tasks 5/6/13 instructions at `dab26de7fd`. Preserve private DELETE-only edits. Claude reads this before building; push hold remains.
+
+- GET: retain runtime invoice `mode`; independently return nullable, redacted stored `settings`, including in development capture. Adjust client type; never expose user/password/URL. Preserve permissions; Remove requires editable AND stored settings. Managers remain read-only; proposed-test API permission stays, with no manager editor.
+- Leave the settings form unchanged; no new unsaved-confirmation suite. Add one card-owned `wt-dialog`: Stop cancels; guarded active DELETE clears stored summary, closes confirmation and focuses Set up before separate reload. Preserve read/action error ownership and reject late lifecycle results using existing patterns.
+- Headings become Email/Mail server. Status explains first save starts real email, including Prepare. Remove explains current Prepare capture fallback, Live unavailable mail without stopping trading, and development invoice capture separately from account mail. Trace `email-delivery.ts`, both account wrappers/inbox in `boot.ts`, invoice/reminder/box-alert callers before wording; policy stays unchanged until Cut D. Controls follow stored presence; explanations follow actual mode/stage.
+- Settings entry: Prepare/Live managers/admins only, one local navigation stage filter; preserve direct-route access.
+- Extend existing EN/ES email guides; retain diagnostic section/link/catalogue. Add matching section IDs and `guideHref` keys only where linked; no catalogue work or unused keys.
+
+**Changed test checks** (owner's 5 October exception): `email-settings-api.test.ts:235–280,393–400`: Prepare save/test refusal and noneditable become admin save/read/remove, manager proposed-test, editable-admin checks; retain capture. `dashboard-app.test.ts:2527,3781–3792`: absent-sidebar becomes strict stage/role matrix; retain direct-route assertions. Preserve Demo refusals, secrecy, permissions, existing draft tests; add dev-stored/removal/focus/late-result/a11y checks.
+
+No policy/wizard switch, schema, Cloud activation or sender-envelope change. Uncertainty: execution-time source drift; recheck callers.

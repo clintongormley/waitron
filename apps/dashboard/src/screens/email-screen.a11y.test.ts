@@ -49,7 +49,7 @@ describe.each(["light", "dark"] as const)("email-screen a11y (%s theme)", (theme
   ])("renders the $mode state accessibly", async (inbox) => {
     const { el, host } = await mountWidget<EmailScreen>(
       "dashboard-email-screen",
-      { api: stubApi(inbox) },
+      { api: stubApi(inbox), canReadCaptured: true },
       theme,
     );
     await flush(el);
@@ -59,7 +59,7 @@ describe.each(["light", "dark"] as const)("email-screen a11y (%s theme)", (theme
   it("renders an opened captured message accessibly", async () => {
     const { el, host } = await mountWidget<EmailScreen>(
       "dashboard-email-screen",
-      { api: stubApi(LOCAL) },
+      { api: stubApi(LOCAL), canReadCaptured: true },
       theme,
     );
     await flush(el);

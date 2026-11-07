@@ -35,6 +35,16 @@ function client(response: unknown, status = 200) {
 }
 
 describe("dashboard email settings wire contract", () => {
+  it("removes the saved relay as active session activity, without sending any credentials", async () => {
+    const { api, requests } = client({ removed: true });
+    expect(await api.background.removeEmailSettings()).toEqual({ removed: true });
+    expect(requests).toEqual([
+      {
+        path: "/box/management-api/email/settings",
+        init: { method: "DELETE", credentials: "include" },
+      },
+    ]);
+  });
   it("reads redacted settings with cookies without sending proposed credentials", async () => {
     const { api, requests } = client(settings);
     expect(await api.getEmailSettings()).toEqual(settings);

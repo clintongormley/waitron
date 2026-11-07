@@ -1,5 +1,5 @@
 import { DashboardQueries } from "../api/query-controller.js";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -7,6 +7,8 @@ import "./email-settings-panel.js";
 import type { DashboardApi, EmailInbox, TestEmail, TestEmailAddress } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
 
 const displayAddress = (address: TestEmailAddress): string =>
   address.name === "" ? address.address : `${address.name} <${address.address}>`;
@@ -70,6 +72,9 @@ export class EmailScreen extends LitElement {
       .message a {
         color: var(--wt-color-primary-text);
       }
+      .guide {
+        color: var(--wt-color-primary-text);
+      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -78,6 +83,9 @@ export class EmailScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ type: Boolean }) canManage = false;
+  @property({ type: Boolean }) canReadCaptured = false;
+  @property() intent?: "demo" | "prepare" | "live";
+  #messageGeneration = 0;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -89,9 +97,26 @@ export class EmailScreen extends LitElement {
   @state() private message?: TestEmail;
   @state() private errorKey: string | null = null;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+  }
+
+  override disconnectedCallback(): void {
+    ++this.#messageGeneration;
+    super.disconnectedCallback();
+  }
+
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("canReadCaptured") || changed.has("api")) {
+      ++this.#messageGeneration;
+      this.message = undefined;
+    }
   }
 
   async #load(): Promise<void> {
@@ -106,11 +131,17 @@ export class EmailScreen extends LitElement {
   }
 
   async #open(id: string): Promise<void> {
+    if (!this.isConnected || !this.canReadCaptured) return;
+    const generation = ++this.#messageGeneration;
+    const current = () =>
+      this.isConnected && this.canReadCaptured && generation === this.#messageGeneration;
     try {
-      this.message = await this.api.getTestEmail(id);
+      const message = await this.api.getTestEmail(id);
+      if (!current()) return;
+      this.message = message;
       this.errorKey = null;
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (current()) this.errorKey = codeOf(error);
     }
   }
 
@@ -175,10 +206,13 @@ export class EmailScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("email.title")}</h1>
-      ${this.canManage ? html`<dashboard-email-settings-panel .api=${this.api}></dashboard-email-settings-panel>` : nothing}
+      ${this.canManage ? html`<p><a class="guide" href=${guideHref("email.set-up")}>${t("email.settings.guide")}</a></p>` : nothing}
+      ${this.canManage ? html`<dashboard-email-settings-panel .api=${this.api} .intent=${this.intent}></dashboard-email-settings-panel>` : nothing}
       ${
         this.inbox?.mode === "local_capture"
-          ? this.#renderLocal(this.inbox)
+          ? this.canReadCaptured
+            ? this.#renderLocal(this.inbox)
+            : html`<p class="status" data-test="local-capture">${t("email.local_capture")}</p>`
           : this.inbox?.mode === "smtp"
             ? html`<p class="status" data-test="smtp">${t("email.smtp")}</p>`
             : this.inbox?.mode === "unconfigured"

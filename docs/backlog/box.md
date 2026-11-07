@@ -364,7 +364,9 @@ venue's name. Keep current invoice documents, outbox outcomes and public reset p
 Cut A supplies the structured failure classifier, bounded account sends and reminder adapters;
 its diagnostics preserve rejected versus unknown outcomes. Cut B shows those diagnostics beside
 the relevant field or at the bottom of both SMTP forms, with the matching English and Spanish
-guide. Continue with Prepare settings, then the atomic Prepare wizard/routing cut.
+guide. Cut C opens Prepare settings, adds admin removal and Settings navigation, and shows stored
+settings separately from invoice capture on development boxes. Continue with the atomic Prepare
+wizard/routing cut, then invoice sender naming. Prepare still captures mail when no relay is saved.
 Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
 joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
 The setup-test network-target issue below remains separate open work.

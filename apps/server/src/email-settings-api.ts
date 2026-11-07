@@ -1,11 +1,11 @@
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import { putCredential, type KeyRing } from "@waitron/credentials";
+import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
 import { authorizeManager, persons, roleHasPermission, type Permission } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
-import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import { resolveEmailDeliveryIn } from "./email-delivery.js";
 import type { Logger } from "./logger.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { OnboardingIntent } from "./trading-config.js";
@@ -42,34 +42,40 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       permission,
     });
   };
-  const editable =
-    deps.config.onboardingIntent !== "demo" && deps.config.onboardingIntent !== "prepare";
+  const editable = deps.config.onboardingIntent !== "demo";
   app.get("/management-api/email/settings", (c) =>
-    run(c, log, async () => {
-      const actor = await withTransaction(deps.db, (tx) => authorize(tx, c));
-      const canEdit = editable && roleHasPermission(actor.role, "person.admin");
-      const delivery = await resolveInvoiceEmailDelivery(deps.db, deps.ring, deps.config);
-      if (delivery.mode !== "smtp")
-        return c.json({ mode: delivery.mode, editable: canEdit, settings: null });
-      let url: URL;
-      try {
-        url = new URL(delivery.smtp.url);
-        if (!["smtp:", "smtps:"].includes(url.protocol) || !url.hostname) throw new Error();
-      } catch {
-        throw new AppError("server.credential_unusable", { purpose: "email.smtp", field: "url" });
-      }
-      return c.json({
-        mode: "smtp",
-        editable: canEdit,
-        settings: {
-          server: url.hostname,
-          port: Number(url.port || (url.protocol === "smtps:" ? 465 : 587)),
-          encryption: url.protocol === "smtps:" ? "tls" : "starttls",
-          from: delivery.smtp.from,
-          hasAuthentication: url.username !== "",
-        },
-      });
-    }),
+    run(c, log, () =>
+      withTransaction(deps.db, async (tx) => {
+        const actor = await authorize(tx, c);
+        const canEdit = editable && roleHasPermission(actor.role, "person.admin");
+        if (!editable) return c.json({ mode: "local_capture", editable: false, settings: null });
+        const delivery = await resolveEmailDeliveryIn(
+          tx,
+          deps.ring,
+          deps.config.onboardingIntent === "prepare",
+        );
+        const mode = deps.config.devMode ? "local_capture" : delivery.mode;
+        if (delivery.mode !== "smtp") return c.json({ mode, editable: canEdit, settings: null });
+        let url: URL;
+        try {
+          url = new URL(delivery.smtp.url);
+          if (!["smtp:", "smtps:"].includes(url.protocol) || !url.hostname) throw new Error();
+        } catch {
+          throw new AppError("server.credential_unusable", { purpose: "email.smtp", field: "url" });
+        }
+        return c.json({
+          mode,
+          editable: canEdit,
+          settings: {
+            server: url.hostname,
+            port: Number(url.port || (url.protocol === "smtps:" ? 465 : 587)),
+            encryption: url.protocol === "smtps:" ? "tls" : "starttls",
+            from: delivery.smtp.from,
+            hasAuthentication: url.username !== "",
+          },
+        });
+      }),
+    ),
   );
   app.put("/management-api/email/settings", (c) =>
     run(c, log, async () => {
@@ -83,6 +89,16 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
         await putCredential(tx, deps.ring, { purpose: "email.smtp", value });
       });
       return c.json({ saved: true });
+    }),
+  );
+  app.delete("/management-api/email/settings", (c) =>
+    run(c, log, async () => {
+      await withTransaction(deps.db, async (tx) => {
+        await authorize(tx, c, "person.admin");
+        if (!editable) throw new AppError("email.settings_not_allowed", {});
+        await deleteCredential(tx, { purpose: "email.smtp" });
+      });
+      return c.json({ removed: true });
     }),
   );
   app.post("/management-api/email/settings/test", (c) =>
