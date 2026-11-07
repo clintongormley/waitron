@@ -130,7 +130,12 @@ it("stops retrying a placement conflict across refreshes and restarts", async ()
       code: "cloud.binding_conflict",
     });
     expect(f.submissions()).toHaveLength(1);
+    expect((await f.client.status()).installation?.state).toBe("active");
+    f.offline();
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
     expect((await f.client.status()).installation?.state).toBe("unavailable");
+    f.online();
+    expect((await f.client.revoke(async () => {})).installation?.state).toBe("revoked");
   } finally {
     await f.close();
   }
