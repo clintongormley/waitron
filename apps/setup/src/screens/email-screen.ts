@@ -11,7 +11,12 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { SetupApi, type EmailSettingsDraft } from "../api/client.js";
+import {
+  SetupApi,
+  SMTP_TEST_CODES,
+  type SmtpTestCode,
+  type EmailSettingsDraft,
+} from "../api/client.js";
 import { initialOwnerStrings } from "./initial-owner-strings.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import { t, format, currentLocale } from "../i18n/t.js";
@@ -56,7 +61,7 @@ export class SetupEmailScreen extends LitElement {
   @state() private passwordVisible = false;
   @state() private attempted = false;
   @state() private running = false;
-  @state() private outcome?: "accepted" | "refused" | "timeout" | "failed";
+  @state() private outcome?: "accepted" | "failed" | SmtpTestCode;
   @state() private refusedField?: Field;
   #seeded = false;
   #generation = 0;
@@ -76,11 +81,13 @@ export class SetupEmailScreen extends LitElement {
   override disconnectedCallback(): void {
     ++this.#generation;
     this.running = false;
+    this.#invalidate();
     this.#scope?.dispose();
     this.#scope = undefined;
     super.disconnectedCallback();
   }
-  override willUpdate(): void {
+  override willUpdate(changed: Map<string, unknown>): void {
+    if (changed.has("adminEmail")) this.#invalidate();
     if (!this.#seeded) {
       this.#seeded = true;
       if (this.email) this.values = { ...this.email, port: String(this.email.port) };
@@ -164,7 +171,16 @@ export class SetupEmailScreen extends LitElement {
       if (result.accepted) {
         this.#accepted = { revision, recipient };
         this.outcome = "accepted";
-      } else this.outcome = result.code === "email.test_timeout" ? "timeout" : "refused";
+      } else {
+        const code = SMTP_TEST_CODES.includes(result.code) ? result.code : "email.test_refused";
+        this.outcome = code;
+        this.refusedField =
+          code === "email.test_host_not_found" || code === "email.test_certificate_untrusted"
+            ? "server"
+            : code === "email.test_connection_refused"
+              ? "port"
+              : undefined;
+      }
     } catch (error) {
       if (
         !this.isConnected ||
@@ -210,14 +226,14 @@ export class SetupEmailScreen extends LitElement {
       name=${`smtp-${field}`}
       data-test=${field}
       label=${t(`email.${field}.label`)}
-      hint=${t(`email.${field}.hint`)}
+      hint=${field === "port" ? (this.values.encryption === "tls" ? "465" : "587") : t(`email.${field}.hint`)}
       .value=${this.values[field]}
       type=${field === "password" ? (this.passwordVisible ? "text" : "password") : field === "from" ? "email" : "text"}
       inputmode=${field === "port" ? "numeric" : "text"}
       autocomplete="off"
       ?required=${["server", "port", "from"].includes(field)}
       ?invalid=${invalid}
-      error=${invalid ? t(`email.${field}.error`) : ""}
+      error=${this.refusedField === field && this.outcome && this.outcome !== "accepted" && this.outcome !== "failed" ? t(this.outcome) : invalid ? t(`email.${field}.error`) : ""}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(this.publicationOnly ? "[data-test=next]" : "[data-test=test]"))}
       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
     >
@@ -243,7 +259,7 @@ export class SetupEmailScreen extends LitElement {
       errors.size || this.refusedField
         ? t("email.fix_fields")
         : this.outcome && this.outcome !== "accepted"
-          ? t(`email.${this.outcome}`)
+          ? t(this.outcome === "failed" ? "email.failed" : this.outcome)
           : (this.errorMessage ?? "");
     return html`<h1>${t("email.heading")}</h1>
       <p class="intro">
@@ -271,6 +287,14 @@ export class SetupEmailScreen extends LitElement {
       <div class="pair">${this.#field("user", errors)}${this.#field("password", errors)}</div>
       ${this.#field("from", errors)}
       ${!this.publicationOnly && this.#canContinue() ? html`<p class="success" role="status">${t("email.accepted")}</p>` : nothing}
+      <p>
+        <a
+          href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/email#test-results`}
+          target="_blank"
+          rel="noopener"
+          >${t("email.test_help")}</a
+        >
+      </p>
       <wt-form-actions error=${error}>
         <wt-button
           slot="cancel"

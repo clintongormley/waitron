@@ -563,8 +563,15 @@ describe("setup email test", () => {
   };
   it.each([
     { accepted: true },
-    { accepted: false, code: "email.test_refused" },
+    { accepted: false, code: "email.test_host_not_found" },
+    { accepted: false, code: "email.test_connection_refused" },
+    { accepted: false, code: "email.test_starttls_refused" },
+    { accepted: false, code: "email.test_tls_refused" },
+    { accepted: false, code: "email.test_certificate_untrusted" },
+    { accepted: false, code: "email.test_login_refused" },
+    { accepted: false, code: "email.test_login_required" },
     { accepted: false, code: "email.test_timeout" },
+    { accepted: false, code: "email.test_refused" },
   ])("returns %j without replacing the server outcome", async (result) => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
     const api = new SetupApi("https://box.test", fetchImpl);

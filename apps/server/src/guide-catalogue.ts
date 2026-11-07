@@ -21,6 +21,7 @@ export const GUIDE_PAGES = [
   "opening-hours",
   "servers",
   "printers",
+  "email",
 ] as const;
 
 export function guideRoot(): string {

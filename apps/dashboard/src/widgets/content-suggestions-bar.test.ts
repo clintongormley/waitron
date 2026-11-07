@@ -94,6 +94,12 @@ const STATES: {
     es: () => "Traduciendo… 180 de 358",
   },
   {
+    name: "one suggestion waiting",
+    props: { run: run({ total: 1, progress: 1, done: 1, waiting: 1 }) },
+    en: () => "1 suggestion is waiting for review.",
+    es: () => "1 sugerencia pendiente de revisar.",
+  },
+  {
     name: "done",
     props: { run: run() },
     en: () => "358 suggestions are waiting for review.",

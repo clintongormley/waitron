@@ -637,6 +637,10 @@ Changing an authenticated server asks for the user and password again, as today 
 
 ### 6.5 Send a test: what it reports
 
+**Implementation note, 7 November 2026:** the setup screen has no authentication switch. Its
+login-required result asks for both username and password. The dashboard alone says to turn on
+**Use authentication**; the historical table below names that dashboard control.
+
 The test sends one short message to the signed-in manager's own address (dashboard,
 `email-settings-api.ts:84-97`) or to the admin address the wizard was given (§7). "Accepted" means the
 mail server took the message; whether it arrived is for the person to check, and the screen says so.
