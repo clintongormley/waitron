@@ -25461,10 +25461,7 @@ describe("retrieved table bills paid at Counter", () => {
 
 describe("request-device refusals keep their recovery instruction", () => {
   afterEach(() => setLocale("es-ES"));
-  const nextStep = {
-    "en-GB": "Reload or reopen Waitron on this device, then try again.",
-    "es-ES": "Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",
-  };
+
   it.each(["en-GB", "es-ES"] as const)(
     "shows the device instruction for receipt handover in %s",
     async (locale) => {
@@ -25483,7 +25480,7 @@ describe("request-device refusals keep their recovery instruction", () => {
       emit(ticket(el)!, "confirm-handover");
       await flush(el);
       expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
-        nextStep[locale],
+        codeMessage("device.unauthorized", locale),
       );
     },
   );
@@ -25499,7 +25496,7 @@ describe("request-device refusals keep their recovery instruction", () => {
       await flush(el);
       expect(currentLocale()).toBe(locale);
       expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
-        nextStep[locale],
+        codeMessage("device.unauthorized", locale),
       );
     },
   );
@@ -25542,7 +25539,7 @@ describe("request-device refusals keep their recovery instruction", () => {
         emit(el.shadowRoot!.querySelector("till-counter-screen")!, "cancel-demo-reader");
         await flush(el);
         expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
-          nextStep[locale],
+          codeMessage("device.unauthorized", locale),
         );
       } finally {
         finish({ outcome: "declined" });

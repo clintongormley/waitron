@@ -13967,11 +13967,7 @@ it.each(["en-GB", "es-ES"] as const)(
     try {
       emit(screen, "mark-cleared", { tableId: "t4" });
       await flush(el);
-      expect(banner(el)!.textContent).toContain(
-        locale === "en-GB"
-          ? "Reload or reopen Waitron on this device, then try again."
-          : "Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",
-      );
+      expect(banner(el)!.textContent).toContain(codeMessage("device.unauthorized", locale));
     } finally {
       setLocale("en");
     }
