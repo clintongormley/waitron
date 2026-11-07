@@ -44,7 +44,7 @@ const SALE_EVERY_MS = 250;
 const SAMPLE_EVERY_MS = 5_000;
 /** Candidates tried per level, spread evenly by age, so the run's restores stay bounded. */
 const PER_LEVEL = 4;
-/** The key shape the README's S3 section recorded on the pin: `<prefix>/0000/<min>-<max>.ltx`. */
+/** The key shape the README's S3 section recorded on 0.5.17: `<prefix>/0000/<min>-<max>.ltx`. */
 const LTX = /\/(\d{4})\/([0-9a-f]{16})-([0-9a-f]{16})\.ltx$/;
 
 type LevelFile = { key: string; level: number; maxTxid: string; createdAt: number };

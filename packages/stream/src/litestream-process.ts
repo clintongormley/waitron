@@ -41,7 +41,7 @@ export type SpawnFn = (
   env: Readonly<Record<string, string>>,
 ) => ChildHandle;
 
-const KILL_GRACE_MS = 5_000;
+export const KILL_GRACE_MS = 5_000;
 
 /** Litestream logs to stdout unless told otherwise, so both streams are kept. */
 const OUTPUT_KEEP = 8_192;

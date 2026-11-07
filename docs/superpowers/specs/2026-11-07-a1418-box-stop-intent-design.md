@@ -70,6 +70,9 @@ venues.
 | 2 MB backlog, 64 KB/s, left alone | 30 seconds, exit 1 | 335 of 405 | all |
 | The same, killed at 5 seconds | killed | 55 of 405 | all |
 
+**2026-11-07, #2529:** the box now gives Litestream `shutdown-timeout: 4500ms`, which caps its own
+stop at 4.5 seconds, before the 5-second kill. These rows were measured without that setting.
+
 Ten forced kills while rows were being written left the local database complete and intact each
 time. A restore straight after each kill was 6,800 to 19,350 rows short, and after restarting
 Litestream every row restored. So a stop loses nothing unless the box never starts again. The same

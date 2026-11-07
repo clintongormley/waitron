@@ -540,8 +540,8 @@ up. When the venue has a bucket, the spare copies its store up to it.
 
 Three reasons for this shape, each checked:
 
-1. **Litestream 0.5 streams a database to one place only.** At the pinned tag,
-   `cmd/litestream/main.go:794-795` refuses a second replica: "multiple replicas on a single
+1. **Litestream 0.5 streams a database to one place only.** At tag v0.5.17,
+   `cmd/litestream/main.go:794-795` (`776-777` at v0.5.18) refuses a second replica: "multiple replicas on a single
    database are no longer supported" (read 2026-10-21 with `curl` from
    `raw.githubusercontent.com/benbjohnson/litestream/v0.5.17`). So the main box cannot stream to
    the spare and to the bucket at once; the spare has to receive it and pass it on. This is the
@@ -602,7 +602,7 @@ which `apps/setup` currently marks as not working; backlog, "should the setup wi
    and no installation code (§2); its name is chosen when it is switched on (§6.5). This design adds nothing to
    that.
 4. **The main box starts streaming to the spare.** A new place starts with a full copy of the
-   database (to be measured on 0.5.17 in slice 3b — the backlog has asked for this receipt since
+   database (to be measured on the pinned Litestream in slice 3b — the backlog has asked for this receipt since
    2026-10-02). The spare's `nodes` row is written by the main box and arrives in the stream, so
    the adoption-pending latch, which today waits for the spare to insert that row itself against a
    `locations` row it never receives, can finally close (`finish-adoption.ts`).
@@ -1765,11 +1765,11 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
 - **3b. The spare hosts the store, and joining brings the data.** versitygw in the box image, its
   licence notices, TLS under the venue authority, the pair's access key; each box's own name in its
   chart row and its certificate, and only the selling box answering the venue's name (§4, item 5);
-  the main box's stream targets the spare; the first full copy over the LAN, measured on 0.5.17
+  the main box's stream targets the spare; the first full copy over the LAN, measured on the pinned Litestream
   with the internet unplugged; the main box writes the spare's `nodes` row and adoption-pending
   closes; joining refuses while the venue streams to a bucket (until 5e). Not fiscal.
 - **3c. The spare follows.** The waiting start mode; `restore -f` into the follower copy (follow mode
-  exists at the pin, `cmd/litestream/restore.go:39`, but has never been run in this repository —
+  exists at tag v0.5.18, `cmd/litestream/restore.go:38`, but has never been run in this repository —
   measure lag and a byte-identical restore against a direct one); the three alerts; the "Spare box"
   row on the Box status page and the Servers screen (mock-up 3). Not fiscal.
 
@@ -1996,7 +1996,7 @@ the code depends. _(2026-10-22: slice 4a added that test, `packages/fiscal-verif
 | The owner's four answers and their follow-ups | owner, watcher session 2026-10-21 ~09:25–11:45 | quoted from the campaign's questions file |
 | Approval of the second revision; the typed time on the box's own screen proposed (~03:05) and withdrawn (~03:10); every wait explained with a countdown (~03:12) | owner, watcher session 2026-10-22 | quoted from the campaign's owner-answers file in the brief for the amendment |
 | Litestream 0.5.17 refuses a second replica | `cmd/litestream/main.go:794-795` at tag v0.5.17 | `curl` of the raw file, 2026-10-21 |
-| Follow mode exists at the pin | `cmd/litestream/restore.go:39` at tag v0.5.17 (`fs.BoolVar(&opt.Follow, "f", …)`) | `curl` of the raw file, 2026-10-21; never run in this repository |
+| Follow mode exists at tag v0.5.17 | `cmd/litestream/restore.go:39` at tag v0.5.17 (`fs.BoolVar(&opt.Follow, "f", …)`) | `curl` of the raw file, 2026-10-21; never run in this repository |
 | versitygw is Apache-2.0 and maintained | GitHub API `repos/versity/versitygw` | `curl`, 2026-10-21 |
 | The conditional write holds on versitygw 1.8.0 | `apps/server/src/stream-loop.e2e.test.ts`; results note, "Standing obligations" | read |
 | The bundle carries the authority's public certificate only, no series under hour codes, and no data | `apps/server/src/mirror-bundle.ts` (`readFile(caCertPath(…))`, the `on-activation` refusal), `finish-adoption.ts` | read 2026-10-21 |

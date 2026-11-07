@@ -5,12 +5,11 @@ import type { BucketConfig } from "./s3-store.js";
 import "./errors.js";
 
 /**
- * The one Litestream version this package runs: every measurement the design rests on was taken on
- * it. `scripts/litestream-pin.test.ts` holds it equal to the box image's, the setup script's and the
- * bench's. Moving it also means regenerating the image's Litestream notice file
- * (`deploy/third-party/README.md`).
+ * The one Litestream version this package runs. `scripts/litestream-pin.test.ts` holds it equal to
+ * the box image's, the setup script's and the bench's. Moving it also means regenerating the image's
+ * Litestream notice file (`deploy/third-party/README.md`).
  */
-export const LITESTREAM_VERSION = "0.5.17";
+export const LITESTREAM_VERSION = "0.5.18";
 
 /** Found on PATH, where the box image puts it. */
 export const DEFAULT_LITESTREAM_BIN = "litestream";
@@ -57,7 +56,7 @@ export function litestreamEnv(
  * Litestream's configuration for one database streaming into one generation.
  *
  * - Litestream expands variables over the whole file's text before parsing it
- *   (`cmd/litestream/main.go:640-641` at the pinned tag), so the key is named, never written, and a
+ *   (`cmd/litestream/main.go:608-609` at the pinned tag), so the key is named, never written, and a
  *   `$` in any other value is refused. The references are single-quoted because the key's own
  *   characters are parsed as YAML after substitution; {@link litestreamEnv} refuses what a quote
  *   cannot hold. A `$` inside a value the environment supplies is not expanded again
@@ -65,6 +64,10 @@ export function litestreamEnv(
  * - One full copy a day and a week of history; `retention` takes hours only.
  * - `l0-retention` is Litestream's default, written out because the freshness reader relies on a
  *   level-0 file staying listed at least that long after it is created.
+ * - `shutdown-timeout` replaces Litestream's 30 seconds (`cmd/litestream/main.go:361` at the pinned
+ *   tag), so a stop against a bucket that never answers ends in Litestream's own exit before the
+ *   forced stop in `litestream-process.ts`. A value it cannot parse is only logged and the 30
+ *   seconds kept (`main.go:682-689`).
  * - The path and the address are double-quoted YAML scalars (JSON's escaping is valid there), so a
  *   `:` or `#` in either cannot change the structure.
  */
@@ -80,6 +83,7 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
     "  retention: 168h",
     "l0-retention: 5m",
     "l0-retention-check-interval: 5m",
+    "shutdown-timeout: 4500ms",
     "",
     "dbs:",
     `  - path: ${JSON.stringify(input.dbPath)}`,
@@ -93,7 +97,7 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
  * Litestream's `s3://` address for one generation, and the only place it is built: the same key
  * {@link bucketKey} gives the object store, so the supervisor, its listings and the restore all name
  * one folder. With an endpoint Litestream defaults to path-style addressing
- * (`s3/replica_client.go:175-183` at the pinned tag), which non-Amazon stores need.
+ * (`s3/replica_client.go:179-187` at the pinned tag), which non-Amazon stores need.
  *
  * Litestream reads the path through Go's `url.Parse` and then `path.Clean`
  * (`replica_url.go:106` at the pinned tag). Each segment is percent-encoded so `#` and `?` stay in
@@ -133,7 +137,7 @@ export function checkLitestreamSettings(bucket: BucketConfig): void {
   litestreamEnv(bucket);
 }
 
-/** Litestream's own state for `dbPath`: `.<file>-litestream` beside it (`db.go:312` at the pinned tag). */
+/** Litestream's own state for `dbPath`: `.<file>-litestream` beside it (`db.go:342` at the pinned tag). */
 export function litestreamMetaDir(dbPath: string): string {
   return join(dirname(dbPath), `.${basename(dbPath)}-litestream`);
 }

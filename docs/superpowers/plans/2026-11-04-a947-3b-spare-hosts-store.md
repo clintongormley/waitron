@@ -74,7 +74,7 @@ the slice table (`:776-796`) and "Slice 3 as built" (`:1731-1760`, Rulings R12 a
   spare and receives the main box's stream. S3 is the file-storage protocol Amazon defined; slice 2
   built the stream on it.
 - **The stream**: **Litestream**, the program that copies every change to `venue.db` into a store,
-  about a second behind. Version 0.5.17 is pinned.
+  about a second behind. Version 0.5.18 is pinned.
 - **The first full copy**: the whole database, which Litestream sends first to a new store, before
   the stream of changes.
 - **Copy-up**: the spare passing its store on to the venue's own storage bucket (design §8). It is
@@ -649,7 +649,7 @@ can refuse any of them.
 | 7 | (not in the design) a lost `node.db` | the box refuses to start, with recovery words (Task G.3, in the owner-landed 3b-G) | 3b makes a selling spare reachable (fact 16) | no |
 | 8 | §4 item 1: a rotation's previous key travels in the bundle | rotation is refused while a spare holds the ring; a spare that finished joining cannot be removed in this version, so its venue does not rotate (D7) | nothing sends a new ring to a spare | no |
 | 9 | (not in the design) resets | a box that joined another empties `tls/` and `secrets.env` on reset (D13) | otherwise a reused box keeps the old venue's authority and key ring | no |
-| 10 | §11: the first full copy "measured on 0.5.17 with the internet unplugged" in 3b | the owner measures it after 3b-6 lands; 3b's PRs land without it; the backlog entry stays open until then (D14) | the measurement needs two real boxes, which no implementer has | no |
+| 10 | §11: the first full copy "measured on the pinned Litestream with the internet unplugged" in 3b | the owner measures it after 3b-6 lands; 3b's PRs land without it; the backlog entry stays open until then (D14) | the measurement needs two real boxes, which no implementer has | no |
 | 11 | §11: "every slice adds its step to the stream loop test" | 3b-6's two-box steps run in a new file, `spare-join.e2e.test.ts`, on a main box with the Veri*Factu module switched off; the stream loop's box B gains its spare steps in 3b-F (Task F.2b) | the loop's box B files with Veri*Factu, so its join is refused until 3b-F (probe P24); a test that cannot pass when its PR lands is not planned | no |
 | 12 | (not in the design) how many spares | one spare per venue in 3b: a second join is refused while one is joined (D17) | the pair link holds one row per box | no |
 

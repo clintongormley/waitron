@@ -39,7 +39,7 @@ measurements".
 ```bash
 export TESTCONTAINERS_RYUK_DISABLED=true
 pnpm --filter @waitron/bench-sqlite-failover probe:restart          # 1: restart after an outside fold-back
-pnpm --filter @waitron/bench-sqlite-failover probe:restart-at-limit # 1b (2026-09-24): the same at the 256 MiB side-file limit; add `--no-restart` for its failing case
+pnpm --filter @waitron/bench-sqlite-failover probe:restart-at-limit # 1b (2026-09-24): the same at the 256 MiB side-file limit, since 2026-11-06 against a bucket that never answers; add `--no-restart` for its failing case
 pnpm --filter @waitron/bench-sqlite-failover probe:autocheckpoint   # 2 and 2b: automatic fold-back; offline past truncate-page-n
 pnpm --filter @waitron/bench-sqlite-failover probe:restore-points   # 3: surviving restore points (compressed schedule, ~11 min)
 pnpm --filter @waitron/bench-sqlite-failover probe:restore-time     # 4: restore time; add `--image-kib 330` (no `--`: pnpm passes it on; measured 2026-09-23: with `--`, the probe printed `reason="bad option -- --image-kib; …"`, and without it `pnpm` ran `node src/probes/restore-time.ts "--image-kib" …`) for the largest measured photo
@@ -67,9 +67,9 @@ alone and says so in its row.
 host's platform. Nothing else installs it, so the scenarios that drive litestream report SKIPPED
 until it has been run — every one of them but S4, which degrades to its SQLite half instead ("What S4
 measures, and what it does not", below). `resolveLitestream()` (`src/litestream.ts`) also accepts `$LITESTREAM_BIN` or
-a `litestream` on `PATH`, and takes **only** the pinned version from any of the three — every result
-this rig records about litestream is a measurement on that pin, so a different build answering the
-same calls would be a result attributed to a version that never ran.
+a `litestream` on `PATH`, and takes **only** the pinned version from any of the three — each recorded
+result is a measurement on the version its row names, so a different build answering the same calls
+would be a result attributed to a version that never ran.
 
 ### What the `LS` foundation check does and does not drive
 
@@ -236,17 +236,17 @@ spawning the runner, which would run the whole suite.
   The registry is quay.io because Docker Hub refuses this image anonymously:
   `docker pull minio/minio:RELEASE.2025-09-07T16-13-09Z` →
   `Error response from daemon: pull access denied for minio/minio, repository does not exist or may require 'docker login'`.
-- **Litestream:** `v0.5.17`, downloaded by `setup:litestream` from the GitHub release for that tag.
+- **Litestream:** `v0.5.18` since 2026-11-06, downloaded by `setup:litestream` from the GitHub release for that tag.
   The asset is matched on its full name, never a substring: the release lists both
-  `litestream-0.5.17-darwin-arm64.tar.gz` (the CLI) and `litestream-vfs-v0.5.17-darwin-arm64.tar.gz`
-  (a different artefact), so `includes("darwin-arm64")` matches two. Only darwin/arm64 has been
+  `litestream-0.5.18-darwin-arm64.tar.gz` (the CLI) and `litestream-vfs-v0.5.18-darwin-arm64.tar.gz`
+  (a different artefact), so `includes("darwin-arm64")` matches four (two more are a `.sbom.json` and a `.sha256`). Only darwin/arm64 has been
   downloaded and run. **2026-09-23:** `setup:litestream` itself has still run only on darwin/arm64;
   `probe:linux` downloaded and ran the two Linux archives in Docker (results note, Slice 2
   measurements §5).
 
 The rig **establishes** external behaviour by observing it rather than asserting it: what MinIO's
 conditional write does (S6, plan Task 2) and how Litestream lays out and restores a replica (plan
-Task 6) are each measured on these exact versions. S6's half has been run —
+Task 6) are each measured on the version its receipt names. S6's half has been run —
 `pnpm --filter @waitron/bench-sqlite-failover scenarios`, 2026-09-17, →
 `create-only=true if-match=refuses-stale race=1/8 unfenced=8/8`. The Litestream half has been run too
 — `pnpm --filter @waitron/bench-sqlite-failover setup:litestream` first, without which the row is
@@ -257,7 +257,7 @@ That is the foundation check only (find the binary, config, stream, restore); it
 the failover loop, which is what S0, S3 and S4 are for — all three are in, and each recorded run is
 in its own section below. A different
 version is a different measurement, so a version bump will re-run the scenarios rather than inherit
-their verdicts. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
+their verdicts. **2026-11-06:** re-run on 0.5.18, in the research note's section of that date. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
 — so the conditional-write result is a fact about the mechanism, and re-running it against the real
 store is a standing obligation, recorded as one in
 [the results note](../../docs/research/2026-09-16-sqlite-failover-prototype.md) (spec §5).

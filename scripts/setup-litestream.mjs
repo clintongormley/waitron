@@ -11,17 +11,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const VERSION = "0.5.17";
+export const VERSION = "0.5.18";
 
 /**
  * From the release's own `checksums.txt` for the tag. The asset names use `x86_64`; the only `amd64`
  * names in the release belong to a different artefact, `litestream-vfs-…`.
  */
 export const SHA256 = {
-  "darwin-arm64": "e211f68ff7658d19f193f2914417afdf8f89a053ff8f263e5d6b3b1d3bbc7b08",
-  "darwin-x86_64": "891875af09db152e93a4b31a8a79f538ce7ce702c132803cfe0a831e7cb1b7db",
-  "linux-arm64": "f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5",
-  "linux-x86_64": "cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d",
+  "darwin-arm64": "6d3e0875e5416628ef3d274e8f7bb0ecc2a19cbbe76b9ba43efe9901d82a5c84",
+  "darwin-x86_64": "25846be4fc4a4e0b4fd9ac5d0e019c10ec70a4dc12fe84255f5607b8b9a520e0",
+  "linux-arm64": "922a09e6a7ac67f2095571894dc6382e94e1dd4cdd9674883ddf1a8e74ab982d",
+  "linux-x86_64": "d3687b9fd0f2e9426bbd3da828429ff3f1dfc5c9b74d54fdf028e4ee510e7dea",
 };
 
 /**

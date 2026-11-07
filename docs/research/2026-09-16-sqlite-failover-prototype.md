@@ -87,7 +87,7 @@ Three rules, each of which cost something on the way:
 - **A scenario is a MEASUREMENT, not a build gate.** A FAIL is a recorded outcome. Where a part's
   outcome *is* the finding, it measures and feeds the verdict instead of asserting.
 
-### The pins — every result below holds on these and no others
+### The pins
 
 | | pinned to | how it is pinned |
 | --- | --- | --- |
@@ -100,7 +100,8 @@ Three rules, each of which cost something on the way:
 | Litestream archives | linux-x86_64 sha256:cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d, linux-arm64 sha256:f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5 | recomputed from the downloaded bytes, equal to the release API's digest |
 
 A different version is a different measurement. A version bump re-runs the scenarios rather than
-inheriting their verdicts.
+inheriting their verdicts. **2026-11-06:** Litestream moved to 0.5.18;
+[the re-run](#re-run-on-litestream-0518-2026-11-06) is below.
 
 ### The recorded run
 
@@ -509,7 +510,8 @@ Stated together, because each is something a reader would otherwise assume the g
   full-schema loop is proven. This gate de-risks the mechanism, not the port.
 - **The production object store.** Every store result is MinIO's.
 - **Litestream beyond 0.5.17 on darwin/arm64.** **2026-09-23:** slice 2's measurement 5 ran 0.5.17's
-  Linux archives in Docker — [Slice 2 measurements §5](#slice-2-measurements).
+  Linux archives in Docker — [Slice 2 measurements §5](#slice-2-measurements). **2026-11-06:**
+  [0.5.18 was re-run](#re-run-on-litestream-0518-2026-11-06) on the same rig.
 - **The cloud's own generation, and the store pointer.** Nothing streams the cloud's generation and no
   node restores by following `current.json`. S0 handed that case to S3; **S3 did not take it, and neither
   did S4, so it is unowned.** **2026-09-25 (slice 2):** a rebuilt box's generation, and a restore
@@ -660,6 +662,9 @@ directory beside the database (`.venue.db-litestream/`) held or grew to — it w
 
 Measurement 1 repeated at the side-file limit spec §4.5 sets, at the owner's request, before the
 supervisor is built. Reproducer: `probe:restart-at-limit` (`src/probes/restart-at-limit.ts`).
+
+> 2026-11-06: this reproducer now uses a bucket that never answers;
+> [the re-run](#re-run-on-litestream-0518-2026-11-06) says why.
 
 **Failing would print:** `RESTART_AT_LIMIT_COMPLETE=false … missing=21-<total>` (sales made after the
 first batch absent from the restore) or `daemon-alive=false`; and, as a finding printed beside the
@@ -945,7 +950,7 @@ first native amd64 confirmation is the first CI job that runs the pinned binary.
 
 ## S2 re-run with A1018's return batch (2026-11-03)
 
-**Pins:** [the pins table](#the-pins--every-result-below-holds-on-these-and-no-others), except Node
+**Pins:** [the pins table](#the-pins), except Node
 v26.13.0 and SQLite 3.54.1.
 
 A947 §7.1, as A1018 amends it, made a re-run of S2 the gate for building the return batch: model
@@ -1076,6 +1081,89 @@ it more frequent is not settled by those counts. Run alone twice, it passed both
 throws is not investigated here; it is a backlog entry under _Replication, failover and the cloud_.
 
 ---
+
+## Re-run on Litestream 0.5.18 (2026-11-06)
+
+Everything above stays a record of the version its row names. This section is the re-run the
+standing obligation asks for. One run each on the owner's Mac; the rows for 2 and 4 ran beside other
+probes, so their times are not comparable with the 0.5.17 rows.
+
+`--no-restart` on row 1b's silent bucket, its failing case: `RESTART_AT_LIMIT_COMPLETE=false …
+offline=silent … missing=21-6573`.
+
+Row 2's `true` is the peak comparison alone: arm A's peak was 32,960 bytes (0.16%) above arm B's. The
+run before it, with both arms the same and a refused bucket for C and D, read `false` with A at
+20,950,232 and B at 21,127,392. That comparison was already called close on 0.5.17. Nothing here
+changes the store's setting: arm A restored completely and logged no problem in both runs.
+
+| Run | Command | Result on 0.5.18 |
+| --- | ---------------- | -------------- |
+| Scenarios | `node src/scenarios.ts` | as the moving commit records: S0, S1, S2, S3, S5, S6, LS, RUNNER, smoke passed; S4 measured; exit 0 |
+| 1 | `probe:restart` | as the moving commit records: `RESTART_RESYNCS=true` |
+| 1b | `probe:restart-at-limit` | `RESTART_AT_LIMIT_COMPLETE=true … offline=silent sales-offline=6484 wal-at-stop=268508672 offline-stop-ms=5002 offline-exit=null restored-rows=6564 expected=6564 missing=none integrity=ok full-copy=true` |
+| 2 | `probe:autocheckpoint` | `AUTOCHECKPOINT_OFF_NEEDED=true … A-peak-wal=21234512 A-restore-complete=true A-integrity=ok A-log-problems=0 B-peak-wal=21201552 D-peak-wal=620282512 D-crossed-threshold=true D-shrank-after-threshold=false D-max-commit-ms=33.323 D-log-problems=0` |
+| 3 | `probe:restore-points` | as the moving commit records: measured, no unmatched keys |
+| 4 | `probe:restore-time` | `restore-ms=4866,4533,4404 verified=true`; with `--image-kib 330`, `restore-ms=13202,8041,10471 verified=true` |
+| 5 | `probe:linux` | `LINUX_BINARIES_RUN=true amd64-pass=true arm64-pass=true`, with `tls-control=indistinguishable` on both, so the TLS half is not established |
+
+**With SQLite's automatic fold-back on, a Litestream started during a refused-connection outage did
+not bring the side file to the limit.** It gives up its start-up check after about 7 seconds
+(`replicate -once` against a closed port: exit 1 after 7,045 ms, "exceeded maximum number of
+attempts, 8"), where 0.5.17 logged its first error after about two minutes (S4, above). `init` in
+`db.go` is the same in both versions: a failed check drops the read transaction before the next try,
+so SQLite's automatic fold-back can run, and what changed is how soon the check fails. S4, which
+turns automatic fold-back off, still reached `peak-wal-bytes=309309032` on 0.5.18. A copy of
+`probe:restart-at-limit` as it then stood, with a line added to print the log problems, run side by
+side on both versions from a throwaway worktree of the base commit:
+
+```
+0.5.17  RESTART_AT_LIMIT_COMPLETE=true … offline=ECONNREFUSED sales-offline=6488 wal-at-stop=268442752 offline-stop-ms=2 offline-exit=0
+0.5.18  VOID reason="side file 87220432 bytes after 40000 sales; the limit was never reached"
+```
+
+The unchanged probe on 0.5.18, run beside others, ended at 133,916,512 bytes. Selling flat out in a
+shorter run reached 236 MB (the outage table below).
+
+Probe 2's refused run also stopped short: `D-peak-wal=188477672 D-crossed-threshold=false
+D-max-commit-ms=99.649 D-log-problems=5`, beside other probes.
+
+So the offline phases of probes 1b and 2 now use a bucket that accepts connections and never answers
+(`createSilentStore`), which is what the 1b and 2 rows above ran. On a connection like that a
+Litestream gave no error in 200 seconds on either version, and the side file kept growing, to 380 MB.
+Past `truncate-page-n` it did not shrink in the last three rounds of row 2 (`D-shrank-after-threshold=false`),
+as on 0.5.17, so what Litestream's emergency checkpoint does there is still not established.
+
+**Without a `shutdown-timeout`, a stop against a bucket that does not answer ends in the forced kill.** Row 1b:
+`offline-stop-ms=5002 offline-exit=null`, and every sale was restored afterwards. The 5 seconds are
+the grace in `bench/sqlite-failover/src/litestream.ts`, the same as `KILL_GRACE_MS` in
+`packages/stream/src/litestream-process.ts`; through the real `spawnLitestream`, two stops took 5,000
+and 5,002 ms. Left alone, 0.5.18 exited 1 after 30 seconds ("shutdown timed out after 30s", 6 stops);
+0.5.17 on the same silent port exited 0 in 4 to 9 ms (6 stops). A second SIGTERM a second later ended
+0.5.18 at once (exit 1, 2 stops). Against a refused bucket, a review's 28 stops in the first 10
+seconds after start took up to 6,035 ms, 5 of them past that grace, against 2 to 11 ms on 0.5.17
+(its own script, not kept).
+
+**Since 2026-11-07 the box gives Litestream `shutdown-timeout: 4500ms`, so that stop ends in
+Litestream's own exit instead (owner's choice).** Through the real `litestreamConfig` and
+`spawnLitestream` against a silent port, three stops took 4,503 to 4,509 ms, each exit 1 with
+"shutdown timed out after 4.5s"; the same config without that line, three stops, 5,001 to 5,002 ms,
+exit null (the forced kill). Earlier the same day, a script writing its own config measured
+`shutdown-sync-timeout: 4s` alone at 30 seconds (3 stops), and both settings together at 4.5 seconds
+(3 stops). Against a refused port, 14 stops spread over the first 10 seconds after start, one run
+each way: with the line, two took 4,503 ms and exited 1 by themselves; without it, the same two took
+5,002 and 5,003 ms and ended in the forced kill. The other twelve matched, from 1 to 4,478 ms.
+
+**Every sale came back after a short outage, on both versions: 11 to 17 seconds of selling, one run
+each.** A throwaway probe put a forwarding port in front of the store, closed it, sold 12,000 sales,
+opened it again and restored without restarting Litestream:
+
+```
+version mode                     peak side file  sales restored  integrity
+0.5.17  started during outage    496723712       12020/12020     ok
+0.5.18  started during outage    236080152       12020/12020     ok
+0.5.17  running when it began     66723432       12020/12020     ok
+0.5.18  running when it began     58429872       12020/12020     ok
+```
 
 ## Reproducing this
 
