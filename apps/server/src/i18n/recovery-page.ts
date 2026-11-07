@@ -283,6 +283,20 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Instala una versión de Waitron que indique el mismo productor que las facturas de este equipo. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
     },
   },
+  "sif.allocation_invalid": {
+    // Chosen by code alone, so it covers every reason the code carries at start, a clock
+    // disagreement included.
+    "en-GB": {
+      title: "The box could not make its new invoice series.",
+      action:
+        "It checks its time against the internet first. Connect the box to the internet, then press “Retry a normal boot”. If the box is connected and this page comes back, this is a fault in Waitron.",
+    },
+    "es-ES": {
+      title: "El equipo no pudo crear sus nuevas series de facturas.",
+      action:
+        "Primero comprueba su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal». Si el equipo está conectado y esta página vuelve a aparecer, es un fallo de Waitron.",
+    },
+  },
   "server.config_missing": {
     "en-GB": {
       title: "The box's configuration is incomplete.",
