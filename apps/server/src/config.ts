@@ -57,6 +57,7 @@ export interface ServerConfig {
    * falls back to it via `isUnset`, never `resolve("")`, which is the cwd (CLAUDE.md §3).
    */
   stateDir: string;
+  tunnelControlDir?: string;
   /**
    * Where `openVenueStore` creates `venue.db` and `node.db`. Defaults to `join(stateDir, "venue")`;
    * `WAITRON_VENUE_DIR` overrides it. An unset OR EMPTY value falls back to the default via
@@ -516,6 +517,9 @@ export function loadConfig(
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
     litestreamBin: resolveLitestreamBin(env),
     stateDir: resolvedStateDir,
+    ...(isUnset(env.WAITRON_TUNNEL_CONTROL_DIR)
+      ? {}
+      : { tunnelControlDir: resolve(env.WAITRON_TUNNEL_CONTROL_DIR) }),
     venueDir: resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, "venue")),
     // Validated at load so a typo fails boot rather than minting a certificate for it.
     boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
