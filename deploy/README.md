@@ -183,6 +183,9 @@ The main listener serves this guide during setup, trading, pending adoption and 
 While the listener presents your own TLS certificate, the guide directs you to whoever installed
 it. It does not offer the box's fallback CA, which cannot certify that connection.
 
+The optional [staff tunnel runtime](tunnel/README.md) is a separate container. It is not started
+by the default installation; automatic connection and Settings wiring remain open in A951-S.
+
 ## Updating and operating
 
 Run `sudo bash waitron.sh status` to see the commit, requested ref, local build time and GitHub

@@ -2105,8 +2105,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   and tunnel returned automatically and normal-trust browser sign-in passed. The connection file's
   changed hash is still being investigated. The certificate worker now resumes pending requests,
   renews before expiry and opens the listener after first issuance; its automated public-demo
-  deployment is not yet qualified. Left: the managed tunnel container, signed connection details,
-  Settings on/off/status, remaining isolation qualification, final combined installation and reboot,
+  deployment is not yet qualified. The optional tunnel runtime now has its own container and box
+  key. Left: signed connection details and automatic startup, image publication, Settings
+  on/off/status, remaining isolation qualification, final combined installation and reboot,
   and retirement of `@waitron/tunnel`. Translate all and address completion remain
   test-box trials.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
