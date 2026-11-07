@@ -135,6 +135,37 @@ it("exposes an hour only after its complete bound intent is persisted", async ()
 });
 
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
+
+it.each([
+  { action: "setup", allowed: false, identity: "0CNNY" },
+  { action: "promote", allowed: false, identity: "0CNNW" },
+  { action: "restore", allowed: true, identity: "0CNNY" },
+  { action: "conflict-switch", allowed: true, identity: "0CNNY" },
+])(
+  "a committed $action preparation can be read: $allowed",
+  async ({ action, allowed, identity }) => {
+    const f = fixture();
+    const operation = { ...binding, action };
+    await f.run(operation);
+    f.at(instant + 120_000, 120_000);
+    expect(await f.run(operation)).toMatchObject({ status: "selected", identity });
+    const writes = structuredClone(f.writes);
+
+    const committed = withOperationAuthority(operation, "administrator", (authority) =>
+      f.create().committed({ binding: operation, authority }),
+    );
+    if (allowed) {
+      await expect(committed).resolves.toMatchObject({
+        status: "selected",
+        identity,
+        binding: operation,
+      });
+    } else {
+      await expect(committed).rejects.toMatchObject(refusal("event_mismatch"));
+    }
+    expect(f.writes).toEqual(writes);
+  },
+);
 const historyRow = (identity = "0CNPG", change: Record<string, unknown> = {}) => ({
   ...scope,
   reference: "retired-other-node",

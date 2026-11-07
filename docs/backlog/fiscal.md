@@ -355,45 +355,6 @@ a redirect to another site and no `Date` header, and the reading follows only sa
 redirects (A798-B slice 9 plan, P1 and P2; production not tried). Found while planning A798-B
 slice 9.
 
-## Pin the clock's future-finished sample refusal
-
-A679's first final installed review replaced
-`sample.monotonicFinishedMs > box.monotonicFinishedMs` with false in `hour-clock.ts`.
-The 548 hour cases still passed. Add a meaningful refusal case for a sample completed after
-its box observation, with the corresponding valid-order positive. Preserve the current
-clock policy. This is a test gap, not a reproduced product defect or a claim that an actual
-host supplies that ordering.
-
-## Pin committed hour preparation's action boundary
-
-A679's first final installed review removed the restore-only check in
-`hour-selection.ts`'s committed path. The 548 hour cases and 165 promotion/recovery server
-cases still passed. Test the internal accepted/refused action boundary without changing it.
-
-Public promotion retry is a separate path: the existing real-mirror HTTPS case in
-`hour-promotion.test.ts` promotes once, restarts, retries with later time and checks the same
-rows, counters and hour journal.
-`promoteMirrorToPrimary` returns already-primary before invoking its preparation runner.
-Do not change that public outcome to make the internal check execute.
-
-## Pin the early recovery-source refusal
-
-A679's second installed review removed `input.binding.sourceId !== copy.sourceId` from
-`createInteractiveRecoveryPreparation` in `apps/server/src/recovery-preparation.ts:271`.
-All 15 API and 129 host cases still passed. Removing the later source comparison at line118
-failed the assertion rejecting a different artifact; a restored driver selection passes.
-The earlier refusal lacks a distinguishing case. Add that qualification without changing either
-guard or claiming the two checks are equivalent for every input. No combined-fault probe was run.
-
-## Pin key rotation between recovery preparation reads
-
-W41s-7's first installed run-it review on 1 November 2026 deleted the three preparation-time
-`authorize(binding)` calls in `apps/server/src/node-operation-preparation.ts` together. The selected
-293 server cases passed, including the case named for a key replaced while comparing clocks.
-Deleting the commit-time key check failed three cases. Add a case whose result distinguishes an
-early refusal from that later activation refusal, without deleting either guard or broadening the
-current-key authority. This was a minor qualification gap, separate from the tested commit fence.
-
 ## Protected write-path test policy quotation
 
 W41s-7's two run-it reviews found the header of
@@ -1050,26 +1011,6 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 - **A679's internet time reading came back unavailable against pre-production in each of four runs
   on 2026-10-23.** Found while planning A798-B slice 9.
   [Detail](fiscal.md#a679s-internet-time-reading-came-back-unavailable-against-pre-production-in-each-of-four-runs-on-2026-10-23)
-
-## Bundle A1383: Tests for four guards a review deleted with nothing failing
-
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
-  bypassing that internal stale-reading check survived the hour suites. Add both the refusal
-  and its legitimate-order positive without changing clock policy.
-  [Detail](fiscal.md#pin-the-clocks-future-finished-sample-refusal).
-- **A679 follow-up: pin committed hour preparation's action boundary.** A serial review fault
-  removing its restore-only check survived the owning suites. Test that internal
-  boundary separately from the real public promotion retry, which already preserves its result.
-  [Detail](fiscal.md#pin-committed-hour-preparations-action-boundary).
-- **A679 follow-up: pin the early recovery-source refusal.** The later selected-source guard
-  catches the review fault; the earlier refusal at `recovery-preparation.ts:271` lacks its own
-  distinguishing case. Preserve both guards while adding that qualification.
-  [Detail](fiscal.md#pin-the-early-recovery-source-refusal).
-- **Pin key rotation between the live recovery preparation reads.** Keep the existing commit-time
-  check and add a case that specifically fails when an earlier preparation recheck is deleted.
-  [Detail](fiscal.md#pin-key-rotation-between-recovery-preparation-reads).
 
 ## Bundle: Settle the hold and the brake once
 

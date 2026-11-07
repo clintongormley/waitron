@@ -43,6 +43,7 @@ import {
   validateArtifact,
 } from "./restore.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import * as recoveryPreview from "./recovery-backup-preview.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { writeStreamRestore } from "./restore-stream.js";
@@ -852,5 +853,26 @@ describe("selected-hour admission before archive placement", () => {
       code: "sif.allocation_invalid",
       params: { reason: "clock_stale" },
     });
+  });
+
+  it("refuses a mismatched interactive binding before reading the recovery copy", async () => {
+    const f = await interactiveHost();
+    const preview = vi.spyOn(recoveryPreview, "readRecoveryCopyPreview");
+
+    await expect(
+      f.invoke(
+        { action: "clock-challenge" },
+        { binding: { ...f.request.binding, sourceId: "another-copy" } },
+      ),
+    ).rejects.toMatchObject({
+      code: "module.operation_invalid",
+      params: { module: "fiscal-verifactu" },
+    });
+    expect(preview).not.toHaveBeenCalled();
+
+    await expect(f.invoke({ action: "clock-challenge" })).resolves.toMatchObject({
+      id: expect.any(String),
+    });
+    expect(preview).toHaveBeenCalledTimes(1);
   });
 });
