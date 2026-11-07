@@ -5,6 +5,9 @@ import type { BucketConfig } from "./s3-store.js";
 // eslint-disable-next-line no-control-regex
 export const CONTROL_CHARACTER = /[\x00-\x1f\x7f]/;
 
+/** `https://` or `http://` in any letter case, then the host: no third slash or a backslash. */
+const WEB_ADDRESS_START = /^https?:\/\/[^/\\]/i;
+
 /**
  * Bucket settings from untrusted input. A shape problem goes to `refuse` with the field's name,
  * never its value: one of them is the secret key. A setting Litestream could not use throws
@@ -25,6 +28,9 @@ export function readBucketConfig(
   };
   const endpoint = field("endpoint", false);
   if (endpoint !== "") {
+    // `new URL` reads `https:host` and `https:///host` as `https://host/`; only the raw text shows
+    // they do not start as the refusal's words say.
+    if (!WEB_ADDRESS_START.test(endpoint)) refuse("endpoint");
     let url: URL;
     try {
       url = new URL(endpoint);
@@ -32,14 +38,8 @@ export function readBucketConfig(
       return refuse("endpoint");
     }
     // A user name, password, query or fragment is where a secret could sit, and status reports the
-    // address as stored; S3 requests are signed with the access key, so none is needed.
-    if (
-      (url.protocol !== "https:" && url.protocol !== "http:") ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    ) {
+    // address as stored.
+    if (url.username || url.password || url.search || url.hash) {
       refuse("endpoint");
     }
   }
