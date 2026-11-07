@@ -5853,7 +5853,14 @@ describe("the banner's email inbox link", () => {
       ?.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/email"]') ?? null;
   const withIntent = (signedIn: boolean, intent: string | undefined) =>
     signedIn
-      ? stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, onboardingIntent: intent }) })
+      ? stubApi({
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role: "admin",
+            permissions: ["person.admin"],
+            onboardingIntent: intent,
+          }),
+        })
       : stubApi({
           getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
           getLocales: vi.fn().mockResolvedValue({
@@ -5868,8 +5875,6 @@ describe("the banner's email inbox link", () => {
   it.each([
     ["signed in", "demo", true],
     ["signed out", "demo", false],
-    ["signed in", "prepare", true],
-    ["signed out", "prepare", false],
   ] as const)(
     "%s, when the intent is %s, links to the inbox from the shared bar",
     async (_state, intent, signedIn) => {
@@ -6004,6 +6009,8 @@ describe("the banner's email inbox link", () => {
     ["signed in", undefined, true],
     ["signed out", "live", false],
     ["signed out", undefined, false],
+    ["signed in", "prepare", true],
+    ["signed out", "prepare", false],
   ] as const)("shows no inbox link %s when the intent is %s", async (_state, intent, signedIn) => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: withIntent(signedIn, intent),
@@ -6017,18 +6024,23 @@ describe("the banner's email inbox link", () => {
   it.each([
     ["demo", "staff", false],
     ["demo", "supervisor", false],
-    ["demo", "manager", true],
+    ["demo", "manager", false],
     ["demo", "admin", true],
     ["prepare", "staff", false],
     ["prepare", "supervisor", false],
-    ["prepare", "manager", true],
-    ["prepare", "admin", true],
+    ["prepare", "manager", false],
+    ["prepare", "admin", false],
   ] as const)(
     "when the intent is %s, signed in as %s, shows the inbox link only to a session that may open the inbox",
     async (intent, role, shown) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, onboardingIntent: intent }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: role === "admin" ? ["person.admin"] : [],
+            onboardingIntent: intent,
+          }),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -6280,12 +6292,16 @@ describe("alerts in the shell", () => {
     ["prepare", "en-GB"],
     ["prepare", "es-ES"],
   ] as const)(
-    "when the intent is %s, in %s at 1280px, puts the email inbox link in the shared bar above the banner",
+    "when the intent is %s, in %s at 1280px, puts the stage links in the shared bar above the banner",
     async (intent, locale) => {
       const api = alertsApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: intent }),
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          role: "admin",
+          permissions: ["person.admin"],
+          sessionDefault: locale,
+          onboardingIntent: intent,
+        }),
         listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
       });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -6296,7 +6312,7 @@ describe("alerts in the shell", () => {
       await atViewport(host, 1280, async () => {
         const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
         const link = bar
-          .shadowRoot!.querySelector('a[href="/manage/email"]')!
+          .shadowRoot!.querySelector(intent === "demo" ? 'a[href="/manage/email"]' : 'a[href="/"]')!
           .getBoundingClientRect();
         const current = bar
           .shadowRoot!.querySelector('[aria-current="page"]')!
@@ -6320,9 +6336,13 @@ describe("alerts in the shell", () => {
     "when the intent is %s, in %s, fits banner items and the shared bar at %ipx",
     async (intent, locale, width) => {
       const api = alertsApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: intent }),
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          role: "admin",
+          permissions: ["person.admin"],
+          sessionDefault: locale,
+          onboardingIntent: intent,
+        }),
         listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1", "error")] }),
       });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -6364,18 +6384,18 @@ describe("alerts in the shell", () => {
         const logo = items[1]!.box;
         const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
         const link = bar
-          .shadowRoot!.querySelector('a[href="/manage/email"]')!
+          .shadowRoot!.querySelector(intent === "demo" ? 'a[href="/manage/email"]' : 'a[href="/"]')!
           .getBoundingClientRect();
         const current = bar
           .shadowRoot!.querySelector('[aria-current="page"]')!
           .getBoundingClientRect();
         expect(logo.width, "the lockup keeps a readable width").toBeGreaterThanOrEqual(60);
-        expect(link.width, "the inbox link is visible").toBeGreaterThan(0);
+        expect(link.width, "the stage link is visible").toBeGreaterThan(0);
         const overlapX = Math.min(link.right, current.right) - Math.max(link.left, current.left);
         const overlapY = Math.min(link.bottom, current.bottom) - Math.max(link.top, current.top);
         expect(overlapX > 0.5 && overlapY > 0.5, "the bar links do not overlap").toBe(false);
         expect(link.bottom, "the bar stays above the banner").toBeLessThanOrEqual(outer.top);
-        expect(link.height, "the inbox link meets the minimum tap size").toBeGreaterThanOrEqual(
+        expect(link.height, "the stage link meets the minimum tap size").toBeGreaterThanOrEqual(
           tapMin(el),
         );
         expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);

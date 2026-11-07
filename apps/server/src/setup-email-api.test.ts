@@ -73,6 +73,28 @@ describe("setup wizard email test", () => {
       }
     },
   );
+  it("tests Prepare SMTP only to its administrator without storing proposed settings", async () => {
+    const rig = await smtpRig("accepted", true);
+    try {
+      const { app, logs } = mount((config, recipient) =>
+        sendSmtpTestMessage(config, recipient, { ca: smtpTestTls.caCertPem, timeoutMs: 5000 }),
+      );
+      const res = await request(app, {
+        ...body({ ...email, port: Number(new URL(rig.config.url).port) }),
+        mode: "prepare",
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ accepted: true });
+      expect(rig.messages).toHaveLength(1);
+      expect(rig.messages[0]).toContain("To: admin@example.test");
+      expect(rig.messages[0]).not.toContain("attacker@example.test");
+      expect(JSON.stringify(logs)).not.toMatch(/127\.0\.0\.1|admin@example|venue@example/);
+      await rig.connectionClosed;
+      expect(rig.sockets.size).toBe(0);
+    } finally {
+      await rig.close();
+    }
+  });
   it("uses the real default sender and refuses a plaintext server before any mail", async () => {
     const rig = await smtpRig("accepted");
     try {
@@ -93,7 +115,6 @@ describe("setup wizard email test", () => {
     [[], "body"],
     ["secret-input", "body"],
     [{ ...body(), mode: "demo" }, "mode"],
-    [{ ...body(), mode: "prepare" }, "mode"],
     [{ ...body(), mode: null }, "mode"],
     [{ ...body(), email: undefined }, "email"],
     [{ ...body(), email: null }, "email"],

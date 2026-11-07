@@ -5250,7 +5250,7 @@ it("routes an internal description refusal to the venue action message", async (
   ).toBe(false);
 });
 
-describe("live email setup journey", () => {
+describe("Prepare and Live email setup journey", () => {
   const email = {
     server: "smtp.example.com",
     port: 587,
@@ -5268,6 +5268,47 @@ describe("live email setup journey", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).toBeNull();
   });
+  it.each(["ES-common", "ES-other"])(
+    "Prepare visits Email and returns to venue in %s",
+    async (fiscalTerritory) => {
+      const el = await mountSetupApp();
+      goto(el, "venue");
+      patch(el, { mode: "prepare", venue: { fiscalTerritory } } as DeepPartial<ProvisionBody>);
+      advance(el);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();
+      const screen = await screenHost(el, "email");
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
+      goto(el, "review");
+      await flush(el);
+      const review = await screenHost(el, "review");
+      review.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();
+    },
+  );
+  it("development Prepare goes directly to review without an SMTP draft", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi
+          .fn()
+          .mockResolvedValue({
+            provisioned: false,
+            environment: "preproduction",
+            developmentMode: true,
+            needs: ["venue"],
+          }),
+      }),
+    );
+    goto(el, "venue");
+    patch(el, { mode: "prepare" });
+    advance(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+    expect(assembleBody({ mode: "prepare" }).email).toBeUndefined();
+  });
   it("collects email after the accepted fiscal test", async () => {
     const el = await mountSetupApp();
     patch(el, { mode: "live" });
@@ -5280,25 +5321,28 @@ describe("live email setup journey", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();
   });
-  it("tests the current draft and includes it in final live provisioning", async () => {
-    const runEmailTest = vi.fn().mockResolvedValue({ accepted: true }),
-      provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
-    const el = await mountSetupApp(stubApi({ runEmailTest, provision }));
-    patch(el, { mode: "live", email, venue: { admin: { email: "admin@example.com" } } });
-    goto(el, "email" as Screen);
-    await flush(el);
-    const screen = await screenHost(el, "email" as Screen);
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=test]")!.click();
-    await flush(el);
-    expect(runEmailTest).toHaveBeenCalledWith(email, "admin@example.com");
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
-    provisionRequest(el);
-    await flush(el);
-    expect(provision.mock.calls[0]![0].email).toEqual(email);
-  });
-  it.each(["demo", "prepare"] as const)("omits stale SMTP settings in %s", (mode) => {
+  it.each(["live", "prepare"] as const)(
+    "tests the current draft and includes it in final %s provisioning",
+    async (mode) => {
+      const runEmailTest = vi.fn().mockResolvedValue({ accepted: true }),
+        provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+      const el = await mountSetupApp(stubApi({ runEmailTest, provision }));
+      patch(el, { mode, email, venue: { admin: { email: "admin@example.com" } } });
+      goto(el, "email" as Screen);
+      await flush(el);
+      const screen = await screenHost(el, "email" as Screen);
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=test]")!.click();
+      await flush(el);
+      expect(runEmailTest).toHaveBeenCalledWith(email, "admin@example.com", mode);
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+      provisionRequest(el);
+      await flush(el);
+      expect(provision.mock.calls[0]![0].email).toEqual(email);
+    },
+  );
+  it.each(["demo"] as const)("omits stale SMTP settings in %s", (mode) => {
     expect(assembleBody({ mode, email }).email).toBeUndefined();
   });
   it("routes a final required-email refusal back to Email", async () => {

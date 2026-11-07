@@ -93,7 +93,7 @@ function body(mode: Mode): Record<string, unknown> {
         email: "admin@waitron.dev",
       },
     },
-    ...(mode === "live"
+    ...(mode !== "demo"
       ? {
           email: {
             server: "smtp.example.test",

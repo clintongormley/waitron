@@ -54,12 +54,23 @@ describe("wizard Email step", () => {
     button(el, "next").click();
     expect(goto).not.toHaveBeenCalled();
     await test(el);
-    expect(runEmailTest).toHaveBeenCalledWith(email, "admin@example.com");
+    expect(runEmailTest).toHaveBeenCalledWith(email, "admin@example.com", "live");
     expect(button(el, "next").disabled).toBe(false);
     button(el, "next").click();
     expect(patch.mock.calls[0]![0].detail.patch).toEqual({ email });
     expect(goto.mock.calls[0]![0].detail.screen).toBe("review");
     await change(el, "server", "other.example.com");
+    expect(button(el, "next").disabled).toBe(true);
+  });
+  it("tests Prepare mode and invalidates acceptance if the mode changes", async () => {
+    const { el, runEmailTest } = await mount();
+    Object.assign(el, { mode: "prepare" });
+    await el.updateComplete;
+    await test(el);
+    expect(runEmailTest).toHaveBeenCalledWith(email, "admin@example.com", "prepare");
+    expect(button(el, "next").disabled).toBe(false);
+    Object.assign(el, { mode: "live" });
+    await el.updateComplete;
     expect(button(el, "next").disabled).toBe(true);
   });
   it.each(["email.test_refused", "email.test_timeout"])(
@@ -176,6 +187,7 @@ it("accepts a server without authentication and a TLS selection", async () => {
   expect(runEmailTest).toHaveBeenCalledWith(
     { ...email, user: "", password: "", encryption: "tls" },
     "admin@example.com",
+    "live",
   );
   expect(button(el, "next").disabled).toBe(false);
 });
@@ -243,7 +255,7 @@ it("sends the test from the native field with Enter", async () => {
   await userEvent.click(input);
   await userEvent.keyboard("{Enter}");
   await vi.waitFor(() => expect(runEmailTest).toHaveBeenCalledOnce());
-  expect(runEmailTest).toHaveBeenCalledWith(email, "admin@example.com");
+  expect(runEmailTest).toHaveBeenCalledWith(email, "admin@example.com", "live");
 });
 it.each(["edit", "recipient", "removed"])("ignores a stale refusal after %s", async (mode) => {
   let reject!: (error: Error) => void;

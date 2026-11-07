@@ -887,10 +887,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         throw new AppError("setup.owner_required", {});
       const { environment, venue } = request;
       const rawEmail = (parsed as Record<string, unknown>).email;
-      if (environment === "production" && rawEmail === undefined) {
+      if (
+        (mode === "prepare" || mode === "live") &&
+        deps.devMode !== true &&
+        rawEmail === undefined
+      ) {
         throw new AppError("setup.email_required", { field: "email" });
       }
-      if (mode !== "live" && rawEmail !== undefined) invalidRequest("email");
+      if (mode === "demo" && rawEmail !== undefined) invalidRequest("email");
       const email =
         rawEmail === undefined ? undefined : parseEmailSettings(asObject(rawEmail, "email"));
       if (environment === "production") {

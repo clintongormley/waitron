@@ -397,12 +397,12 @@ including when no relay is saved. `POST /management-api/email/settings/test` req
 `system.manage` and sends a test to the signed-in person's address without saving the proposal.
 The read omits authentication secrets and shows saved settings even when development invoice email
 is captured locally. Demo refuses settings changes, including removal.
-The live setup test endpoint is `POST /setup-api/email-test`. A production Live provision also requires an `email` object with
+The Prepare and Live setup test endpoint is `POST /setup-api/email-test`. Outside development, Prepare and Live provisioning require an `email` object with
 `server`, numeric `port`, `encryption` (`starttls` or `tls`), `from`, and optional `user` and
 `password`. Use the same values you tested. The server seals them under `email.smtp` before
 publishing the trading configuration. Missing settings answer `setup.email_required`, naming
-`email`; malformed settings name the offending field. Demo and Prepare refuse supplied settings,
-and development Live provisioning may omit them. You can enter these settings in the live wizard
+`email`; malformed settings name the offending field. Demo refuses supplied settings,
+and development provisioning may omit them. You can enter these settings in the Prepare or Live wizard
 or, as an admin, on the dashboard's **Settings → Email** page (`/manage/email`). Managers can view
 the redacted settings there. The dashboard shows the server and sender
 without returning the saved password; you enter fresh credentials to change an authenticated
@@ -481,9 +481,10 @@ skipped and makes no network call.
 
 ### Account email
 
-Demo and Prepare capture invitation and password-reset email in Mailpit when you have not configured
-SMTP. Sign in as an admin and open the **Email inbox** link in the dashboard's top bar to read a
-message and follow its account link. The inbox is served through Waitron's authenticated API;
+Demo captures invitation and password-reset email in Mailpit when no SMTP relay is saved. Sign in as an admin and open the
+**Email inbox** link in the dashboard's top bar to read a message and follow its account link.
+Prepare and Live use the saved SMTP relay; without one, account email is unavailable. Development
+boxes use the saved relay for account email when present and capture it otherwise. The inbox is served through Waitron's authenticated API;
 Mailpit's own ports bind to the box loopback only.
 
 Captured account email is visible only to admins because it carries password-reset and invitation
@@ -504,7 +505,7 @@ Fresh developer venues use English administrator and device names. Reusing a sav
 recorded names, while the terminal lists the names from the current seed. To rebuild that demo's
 practice data with the current names, run `wa-wt reset demo <worktree-name>`.
 
-For a new production Live venue, the setup wizard asks for the mail server settings and sends a
+For a new Prepare or Live venue outside development, the setup wizard asks for the mail server settings and sends a
 test message to your administrator address. Continue becomes available when the server accepts a
 test of the current settings. Final setup seals them in the credential vault.
 
@@ -524,7 +525,8 @@ waitron-credentials set --purpose email.smtp --file /secure/path/smtp.json
 ```
 
 The server reads this credential when it sends, so rotating it does not require a restart. Configured
-SMTP takes precedence over local capture. A live installation never falls back to Mailpit: if SMTP
+SMTP takes precedence over local account-email capture in development. Ordinary Prepare and Live
+installations never fall back to Mailpit: if SMTP
 is missing or the relay is unavailable, creating a person still succeeds and reports that the
 invitation was not sent; password-reset requests continue to return their generic accepted response.
 Once SMTP is restored, request another reset or resend the invitation from Users.

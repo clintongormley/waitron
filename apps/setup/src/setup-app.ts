@@ -165,7 +165,7 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   if (!includeCert) {
     delete body.aeatCert;
   }
-  if (draft.mode !== "live") delete body.email;
+  if (draft.mode === "demo") delete body.email;
   if (draft.mode !== "demo") delete body.demoVenueNameSource;
   return body as ProvisionBody;
 }
@@ -1071,7 +1071,9 @@ export class SetupApp extends LitElement {
         ? this.draft.venue?.fiscalTerritory === "ES-common"
           ? "cert"
           : "email"
-        : "review";
+        : this.draft.mode === "prepare" && !this.developmentMode
+          ? "email"
+          : "review";
   }
 
   @state() private firstOwnerBusy = false;
@@ -2518,11 +2520,12 @@ export class SetupApp extends LitElement {
         return html`<setup-email-screen
           data-test="screen-email"
           .email=${this.draft.email}
+          .mode=${this.draft.mode === "prepare" ? "prepare" : "live"}
           .publicationOnly=${this.firstFinishing}
           .adminEmail=${this.draft.venue?.admin?.email ?? ""}
           .api=${firstSession === undefined ? this.api : { runEmailTest: (email: EmailSettingsDraft) => firstSession.runEmailTest(email) }}
           .errorMessage=${this.emailError?.()}
-          .backScreen=${this.firstFinishing ? (this.draft.venue?.fiscalTerritory === "ES-common" ? "cert" : "first-owner") : this.draft.venue?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
+          .backScreen=${this.firstFinishing ? (this.draft.venue?.fiscalTerritory === "ES-common" ? "cert" : "first-owner") : this.draft.mode === "live" && this.draft.venue?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
         ></setup-email-screen>`;
       case "mode":
         return html`<setup-mode-screen
@@ -2567,7 +2570,7 @@ export class SetupApp extends LitElement {
           data-test="screen-review"
           .usesAllocation=${this.#firstSession !== undefined}
           .finishing=${this.firstFinishing}
-          .backScreen=${this.draft.mode === "live" && !this.developmentMode ? "email" : "venue"}
+          .backScreen=${(this.draft.mode === "live" || this.draft.mode === "prepare") && !this.developmentMode ? "email" : "venue"}
           .draft=${this.draft}
           .errorMessage=${this.reviewError?.()}
         ></setup-review-screen>`;

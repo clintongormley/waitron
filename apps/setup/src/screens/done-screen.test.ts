@@ -114,7 +114,7 @@ describe("setup-done-screen", () => {
         [
           "Email inbox",
           "/manage/email",
-          "Read account emails captured locally, such as invitations and password resets.",
+          "Read Demo account emails, such as invitations and password resets.",
         ],
       ],
     ],
@@ -130,7 +130,7 @@ describe("setup-done-screen", () => {
         [
           "Bandeja de correo",
           "/manage/email",
-          "Lee los correos de cuentas capturados localmente, como invitaciones y restablecimientos de contraseña.",
+          "Lee los correos de cuentas de demostración, como invitaciones y restablecimientos de contraseña.",
         ],
       ],
     ],
@@ -138,7 +138,7 @@ describe("setup-done-screen", () => {
     "describes each destination under its heading in %s, dashboard first",
     async (locale, expected) => {
       setLocale(locale);
-      const el = await mountDone(() => new Promise(() => {}));
+      const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "demo" });
       const rows = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")];
       await Promise.all(rows.map((row) => row.updateComplete));
       expect(
@@ -400,7 +400,7 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}));
     const links = el.shadowRoot!.querySelector("[data-test=links]")!;
     const hrefs = [...links.querySelectorAll("wt-choice-row")].map((row) => row.href);
-    expect(hrefs).toEqual(["/manage", "/", "/manage/email"]);
+    expect(hrefs).toEqual(["/manage", "/"]);
   });
 
   it("does not promise trading mode on the mirror path", async () => {
@@ -489,7 +489,7 @@ describe("setup-done-screen", () => {
     const links = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")].map(
       (row) => row.heading,
     );
-    expect(links).toEqual(["Panel", "Caja", "Bandeja de correo"]);
+    expect(links).toEqual(["Panel", "Caja"]);
     expect(q(el, "[data-test=backup-nudge] a")!.textContent!.trim()).toBe(
       "Configura ahora las copias de seguridad",
     );
@@ -595,8 +595,17 @@ const pillLook = (pill: HTMLElement) => {
 };
 
 describe("setup-done-screen layout", () => {
+  it.each(["demo", "prepare", "live", undefined] as const)(
+    "offers the captured inbox only for Demo after %s setup",
+    async (intent) => {
+      const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: intent });
+      expect(q(el, "[data-test=link-dashboard]")).not.toBeNull();
+      expect(q(el, "[data-test=link-till]")).not.toBeNull();
+      expect(q(el, "[data-test=link-email]") !== null).toBe(intent === "demo");
+    },
+  );
   it("offers dashboard, till and email inbox as choice rows with descriptions", async () => {
-    const el = await mountDone(() => new Promise(() => {}));
+    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "demo" });
     const rows = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")];
     expect(q(el, "[data-test=links]")!.classList.contains("choices")).toBe(true);
     expect(rows.map((row) => [row.heading, row.href])).toEqual([
@@ -609,7 +618,7 @@ describe("setup-done-screen layout", () => {
   });
 
   it("names each choice row for tests, as the mode screen does", async () => {
-    const el = await mountDone(() => new Promise(() => {}));
+    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "demo" });
     const hrefOf = (test: string) =>
       el.shadowRoot!.querySelector<HTMLElement & { href: string }>(`[data-test=${test}]`)?.href;
     expect(["link-till", "link-dashboard", "link-email"].map(hrefOf)).toEqual([

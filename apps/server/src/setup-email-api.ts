@@ -28,7 +28,8 @@ export function mountSetupEmailTest(
       testing = true;
       try {
         const body = object(await readRawJsonBody<unknown>(c), "body");
-        if (body.mode !== "live") throw new AppError("setup.request_invalid", { field: "mode" });
+        if (body.mode !== "live" && body.mode !== "prepare")
+          throw new AppError("setup.request_invalid", { field: "mode" });
         const settings = parseEmailSettings(object(body.email, "email"));
         const admin = object(object(body.venue, "admin.email").admin, "admin.email");
         if (typeof admin.email !== "string") {

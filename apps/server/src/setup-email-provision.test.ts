@@ -132,40 +132,48 @@ beforeEach(async () => {
 });
 
 describe("setup provision email credential", () => {
-  it("seals live SMTP settings before publishing and resolves the same sender", async () => {
-    const made = mount({
-      persistTrading: async () => {
-        expect(await resolveEmailDelivery(suite.db, ring, false)).toEqual({
-          mode: "smtp",
-          smtp: {
-            url: "smtp://venue-user:smtp-secret-231q@smtp.example.test:587?requireTLS=true",
-            from: "venue@example.test",
-          },
-        });
-      },
-    });
-    const response = await post(made.app, { ...body(), email });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ provisioned: true, restarting: true });
-    expect(JSON.stringify(made.logs)).not.toContain(email.password);
-    const stored = await suite.db.select().from(tenantCredentials);
-    expect(stored.map((row) => row.purpose).sort()).toEqual(["email.smtp", "fiscal.aeat"]);
-    expect(
-      Buffer.from(stored.find((row) => row.purpose === "email.smtp")!.ciphertext).includes(
-        Buffer.from(email.password),
-      ),
-    ).toBe(false);
-  });
-  it("refuses a live provision without email settings before any writes", async () => {
-    const made = mount();
-    const response = await post(made.app, body());
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: { code: "setup.email_required", params: { field: "email" } },
-    });
-    expect(made.calls).toEqual([]);
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
-  });
+  it.each(["live", "prepare"] as const)(
+    "seals %s SMTP settings before publishing and resolves the same sender",
+    async (mode) => {
+      const made = mount({
+        persistTrading: async () => {
+          expect(await resolveEmailDelivery(suite.db, ring, false)).toEqual({
+            mode: "smtp",
+            smtp: {
+              url: "smtp://venue-user:smtp-secret-231q@smtp.example.test:587?requireTLS=true",
+              from: "venue@example.test",
+            },
+          });
+        },
+      });
+      const response = await post(made.app, { ...body(mode), email });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+      expect(JSON.stringify(made.logs)).not.toContain(email.password);
+      const stored = await suite.db.select().from(tenantCredentials);
+      expect(stored.map((row) => row.purpose).sort()).toEqual(
+        mode === "live" ? ["email.smtp", "fiscal.aeat"] : ["email.smtp"],
+      );
+      expect(
+        Buffer.from(stored.find((row) => row.purpose === "email.smtp")!.ciphertext).includes(
+          Buffer.from(email.password),
+        ),
+      ).toBe(false);
+    },
+  );
+  it.each(["live", "prepare"] as const)(
+    "refuses a %s provision without email settings before any writes",
+    async (mode) => {
+      const made = mount();
+      const response = await post(made.app, body(mode));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "setup.email_required", params: { field: "email" } },
+      });
+      expect(made.calls).toEqual([]);
+      expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    },
+  );
   it("allows development live provisioning without SMTP or a production certificate", async () => {
     const made = mount({ devMode: true });
     const value = body();
@@ -174,36 +182,53 @@ describe("setup provision email credential", () => {
     expect(response.status).toBe(200);
     expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
   });
-  it.each(["demo", "prepare"] as const)(
-    "refuses %s email settings before provisioning",
+  it.each(["demo", "prepare"] as const)("allows development %s without SMTP", async (mode) => {
+    const made = mount({ devMode: true });
+    const response = await post(made.app, body(mode));
+    expect(response.status).toBe(200);
+    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+  });
+  it("allows ordinary Demo without SMTP", async () => {
+    const made = mount();
+    const response = await post(made.app, body("demo"));
+    expect(response.status).toBe(200);
+    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+  });
+  it.each(["demo"] as const)("refuses %s email settings before provisioning", async (mode) => {
+    const made = mount();
+    const response = await post(made.app, { ...body(mode), email });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "email" } },
+    });
+    expect(made.calls).toEqual([]);
+    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+  });
+  it.each(["live", "prepare"] as const)(
+    "rejects malformed %s email without writing credentials",
     async (mode) => {
-      const made = mount();
-      const response = await post(made.app, { ...body(mode), email });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: { code: "setup.request_invalid", params: { field: "email" } },
-      });
-      expect(made.calls).toEqual([]);
-      expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
-    },
-  );
-  it.each([null, [], "smtp://secret", { ...email, port: null }, { ...email, password: null }])(
-    "refuses malformed settings before provisioning",
-    async (value) => {
-      const made = mount();
-      const response = await post(made.app, { ...body(), email: value });
-      expect(response.status).toBe(400);
-      const json = (await response.json()) as {
-        error: { code: string; params: { field: string } };
-      };
-      expect(json.error.code).toBe(
-        value === null || Array.isArray(value) || typeof value === "string"
-          ? "setup.request_invalid"
-          : "email.settings_invalid",
-      );
-      expect(made.calls).toEqual([]);
-      expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
-      expect(JSON.stringify(made.logs)).not.toContain(email.password);
+      for (const value of [
+        null,
+        [],
+        "smtp://secret",
+        { ...email, port: null },
+        { ...email, password: null },
+      ]) {
+        const made = mount();
+        const response = await post(made.app, { ...body(mode), email: value });
+        expect(response.status).toBe(400);
+        const json = (await response.json()) as {
+          error: { code: string; params: { field: string } };
+        };
+        expect(json.error.code).toBe(
+          value === null || Array.isArray(value) || typeof value === "string"
+            ? "setup.request_invalid"
+            : "email.settings_invalid",
+        );
+        expect(made.calls).toEqual([]);
+        expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+        expect(JSON.stringify(made.logs)).not.toContain(email.password);
+      }
     },
   );
   it("reuses sealed email after a publishing failure without retaining settings in the resume file", async () => {

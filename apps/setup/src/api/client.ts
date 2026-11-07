@@ -504,9 +504,13 @@ export class SetupApi {
     return JSON.parse(await res.text()) as ConfigurationPreview;
   }
 
-  runEmailTest(email: EmailSettingsDraft, adminEmail: string): Promise<EmailTestResult> {
+  runEmailTest(
+    email: EmailSettingsDraft,
+    adminEmail: string,
+    mode: "live" | "prepare" = "live",
+  ): Promise<EmailTestResult> {
     return this.#request<EmailTestResult>("/setup-api/email-test", "POST", {
-      mode: "live",
+      mode,
       email,
       venue: { admin: { email: adminEmail } },
     });

@@ -1920,9 +1920,10 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
   boundary and a domain refusal, then test invalid values before they reach storage.
 
-- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare still
-  refuses email in setup. Settings now lets admins save and remove the relay, with manager reads
-  and actionable SMTP tests. Left: the Prepare wizard and routing cut, then invoice sender naming.
+- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare now
+  requires SMTP outside development and uses it for account and invoice email. Settings lets admins
+  save and remove the relay, with manager reads and actionable SMTP tests. Left: account delivery
+  details and sender naming; Cloud delivery stays gated on D102.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987
