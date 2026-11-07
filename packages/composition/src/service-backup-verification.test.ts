@@ -13,8 +13,18 @@ describe("service and adjustment backup registration", () => {
     const inventory = backupVerificationInventory(
       ALL_MODULES.filter((m) => ["core", "catalogue", name].includes(m.name)),
     );
-    expect(inventory.find((entry) => entry.module.name === name)?.verification.data).toEqual(
-      contribution.data,
-    );
+    // A module without a set of its own is covered by the entry of the set holding its tables.
+    const entry = inventory.find(
+      (item) => item.module.name === name || item.hosted.some((m) => m.name === name),
+    )!;
+    const covered =
+      entry.module.name === name ? entry.module : entry.hosted.find((m) => m.name === name);
+    expect(covered?.backup?.verification).toBe(contribution);
+    for (const table of contribution.data.tables)
+      expect(entry.verification.data.tables).toContain(table);
+    for (const table of contribution.data.immutableTables)
+      expect(entry.verification.data.immutableTables).toContain(table);
+    for (const check of contribution.data.checks)
+      expect(entry.verification.data.checks).toContain(check);
   });
 });

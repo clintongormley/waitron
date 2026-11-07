@@ -20,11 +20,21 @@ const suite = useVenueDb({
 it("covers the actual composition and every migrated data table, including disabled owners", () => {
   const inventory = backupVerificationInventory(ALL_MODULES);
   expect(inventory.map((entry) => entry.module.name)).toEqual(
-    ALL_MODULES.map((module) => module.name),
+    ALL_MODULES.filter((module) => module.migrations !== undefined).map((module) => module.name),
   );
+  expect(
+    inventory.flatMap((entry) => [entry.module.name, ...entry.hosted.map((m) => m.name)]).sort(),
+  ).toEqual(ALL_MODULES.map((module) => module.name).sort());
   const declared: string[] = [];
-  for (const { module, verification } of inventory) {
-    expect(verification.verifyRestoredData).toBe(module.backup!.verification!.verifyRestoredData);
+  for (const { module, hosted, verification } of inventory) {
+    expect(hosted.map((m) => m.name)).toEqual(
+      ALL_MODULES.filter((m) => m.tablesIn === module.name)
+        .map((m) => m.name)
+        .sort(),
+    );
+    // A set holding other modules' tables checks them through one combined verification.
+    if (hosted.length === 0)
+      expect(verification.verifyRestoredData).toBe(module.backup!.verification!.verifyRestoredData);
     expect([...verification.data.tables].sort()).toEqual(
       (module.classification ?? []).map((row) => row.table).sort(),
     );
@@ -43,9 +53,14 @@ it("covers the actual composition and every migrated data table, including disab
     .map((row) => row.name)
     .filter((name) => !journals.has(name) && name !== "sqlite_sequence");
   expect([...declared].sort()).toEqual(actual.sort());
-  expect(inventory.find(({ module }) => module.name === "media")!.verification.data.tables).toEqual(
-    ["media_images", "media_image_data", "media_image_blobs", "media_image_edits"],
-  );
+  const media = ALL_MODULES.find((module) => module.name === "media")!;
+  expect(media.tablesIn).toBe("core");
+  expect(media.backup!.verification!.data.tables).toEqual([
+    "media_images",
+    "media_image_data",
+    "media_image_blobs",
+    "media_image_edits",
+  ]);
 });
 
 it.each(ALL_MODULES.map((module) => module.name))(
@@ -81,10 +96,10 @@ it("accounts for every non-database source without inventing a media directory",
   expect(entries.map((entry) => entry.name).sort()).toEqual(sources.sort());
   expect(new Set(sources).size).toBe(sources.length);
   expect(sources).toEqual(["secrets/module-evidence/fiscal-verifactu/hour-history.json"]);
-  const media = inventory.find(({ module }) => module.name === "media")!;
-  expect(media.verification.entries).toEqual([]);
-  expect(media.verification.secrets).toEqual([]);
-  expect(media.verification.effects).toEqual([]);
+  const media = ALL_MODULES.find(({ name }) => name === "media")!.backup!.verification!;
+  expect(media.entries).toEqual([]);
+  expect(media.secrets).toEqual([]);
+  expect(media.effects).toEqual([]);
 });
 
 it("names an independent check for each declared data effect and leaves activation unattempted", () => {
