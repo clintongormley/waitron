@@ -13,6 +13,8 @@ import type { TillApp } from "./till-app.js";
 import "./till-app.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
+import { es } from "./i18n/strings.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillBasket } from "./widgets/basket.js";
@@ -956,7 +958,7 @@ describe("till-app: discarding a parked table bill", () => {
     {
       code: "draft.taken_over",
       locale: "es",
-      message: "Otra persona está editando esta cuenta. Ábrela desde Sala para revisarla.",
+      message: es["held.discard_editing"],
     },
     {
       code: "draft.out_of_date",
@@ -966,7 +968,7 @@ describe("till-app: discarding a parked table bill", () => {
     {
       code: "draft.out_of_date",
       locale: "es",
-      message: "Este pedido ha cambiado desde que lo abriste. Vuelve a cargarlo y repite el cambio",
+      message: codeMessage("draft.out_of_date", "es"),
     },
     {
       code: "bill.unsent_dishes",
@@ -976,8 +978,7 @@ describe("till-app: discarding a parked table bill", () => {
     {
       code: "bill.unsent_dishes",
       locale: "es",
-      message:
-        "Abre la cuenta de la mesa y envía o quita los platos sin enviar antes de descartarla.",
+      message: es["held.discard_unsent"],
     },
   ])("explains $code for a still-listed bill in $locale", async ({ code, locale, message }) => {
     const { el } = await parked({
