@@ -3348,14 +3348,19 @@ describe("till-app: signing out while a save is out", () => {
       expect(api.logout).toHaveBeenCalledOnce();
     });
 
-    it("lets the next person in at once, and never sends the old sign-out, which would sign them out", async () => {
+    // The same person is the case that matters: the old sign-out names them, so it would end their
+    // new session.
+    it.each([
+      ["the next person", "p2", "Sam"],
+      ["the same person", "p1", "Ana"],
+    ])("lets %s in at once, and never sends the old sign-out", async (_who, id, name) => {
       const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
       await signOutWithSaveUnanswered(el);
 
       await settleTimers(el, 1_000);
-      server.personId = "p2";
-      server.personName = "Sam";
-      emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+      server.personId = id;
+      server.personName = name;
+      emit(lock(el), "logged-in", { personId: id, displayName: name, permissions: [] });
       await settleTimers(el, 0);
       expect(lock(el)).toBeNull();
       expect(shell(el)).not.toBeNull();
