@@ -7,8 +7,12 @@ import { createCloudConnection } from "./cloud-client.js";
 
 async function fixture() {
   let mode = "ok";
+  const urls: string[] = [],
+    envelopeFields: string[][] = [];
   const f = await installationFixture(undefined, {
-    tunnel: async (_values, saved, req, res) => {
+    tunnel: async (_values, saved, req, res, sent) => {
+      urls.push(req.url ?? "");
+      envelopeFields.push(Object.keys(sent).sort());
       if (mode === "lost") {
         mode = "ok";
         req.socket.destroy();
@@ -61,6 +65,8 @@ async function fixture() {
     options,
     directory,
     publicKey,
+    urls,
+    envelopeFields,
     client: createCloudConnection(options),
     mode: (value: string) => {
       mode = value;
@@ -79,6 +85,8 @@ it("submits only the persisted public key with the live lease and retains the fo
     await withoutTunnel.refresh();
     const status = await f.client.refresh();
     expect(f.submissions()).toHaveLength(1);
+    expect(f.urls).toEqual(["/api/installations/tunnel-provision"]);
+    expect(f.envelopeFields).toEqual([["payload", "signature"]]);
     const request = f.submissions()[0]!;
     expect(request.slice(0, 4)).toEqual([
       "waitron-cloud-machine-v1",
