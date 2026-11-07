@@ -216,6 +216,38 @@ describe("stream-settings-panel: the bucket form", () => {
     expect(focusedName(el)).toBe("bucket-endpoint");
   });
 
+  it.each([
+    "https://user:secret@s3.example.net",
+    "https://user@s3.example.net",
+    "https://:secret@s3.example.net",
+    "https://s3.example.net/?password=x",
+    "https://s3.example.net/#x",
+  ])("refuses %s beside the field, as the server would, and sends nothing", async (endpoint) => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    type(el, "bucket-endpoint", endpoint);
+    await press(el, "test");
+    await press(el, "save");
+    expect(api.testStreamBucket).not.toHaveBeenCalled();
+    expect(api.saveStreamSettings).not.toHaveBeenCalled();
+    expect(field(el, "bucket-endpoint").error).toBe(t("stream.form.endpoint_invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(focusedName(el)).toBe("bucket-endpoint");
+  });
+
+  it("accepts an address with a port and a path", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    type(el, "bucket-endpoint", "https://s3.example.net:9000/path");
+    await press(el, "test");
+    expect(field(el, "bucket-endpoint").error).toBe("");
+    expect(api.testStreamBucket).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "https://s3.example.net:9000/path" }),
+    );
+  });
+
   it("Test sends the typed bucket and says it passed", async () => {
     const api = stubApi();
     const { el } = await mount(api);

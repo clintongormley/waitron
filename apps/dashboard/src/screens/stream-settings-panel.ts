@@ -92,6 +92,23 @@ const PANEL_CODE_KEYS: Readonly<Record<string, StringKey>> = {
   "backup.recovery_key_too_short": "stream.error.recovery_key_too_short",
 };
 
+/** The server's `readBucketConfig` refuses the same addresses. */
+function isPlainWebAddress(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  return (
+    (url.protocol === "https:" || url.protocol === "http:") &&
+    url.username === "" &&
+    url.password === "" &&
+    url.search === "" &&
+    url.hash === ""
+  );
+}
+
 function isField(value: unknown): value is Field {
   return typeof value === "string" && Object.hasOwn(EMPTY, value);
 }
@@ -326,7 +343,7 @@ export class StreamSettingsPanel extends LitElement {
         errors[f.field] = t(f.requiredKey);
     }
     const endpoint = this.draft.endpoint.trim();
-    if (endpoint !== "" && !/^https?:\/\/\S+$/.test(endpoint)) {
+    if (endpoint !== "" && !isPlainWebAddress(endpoint)) {
       errors.endpoint = t("stream.form.endpoint_invalid");
     }
     return errors;
