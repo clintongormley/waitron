@@ -69,6 +69,24 @@ describe("readBucketConfig", () => {
     expect(refusedField({ ...INPUT, ...change })).toBe(field);
   });
 
+  it.each(["https://user:secret@s3.example.net", "https://s3.example.net?"])(
+    "refuses %s as endpoint",
+    (endpoint) => {
+      expect(refusedField({ ...INPUT, endpoint })).toBe("endpoint");
+    },
+  );
+
+  it("refuses an endpoint with a tab inside, which `new URL` would drop", () => {
+    expect(refusedField({ ...INPUT, endpoint: "https://s3.exa\tmple.net" })).toBe("endpoint");
+  });
+
+  it.each(["https://s3.example.net:9000/path", "HTTPS://s3.example.net"])(
+    "accepts %s",
+    (endpoint) => {
+      expect(readBucketConfig({ ...INPUT, endpoint }, refuse).endpoint).toBe(endpoint);
+    },
+  );
+
   it("refuses input that is not an object by its first required field", () => {
     expect(refusedField(null)).toBe("region");
   });

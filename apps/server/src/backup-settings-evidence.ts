@@ -15,7 +15,6 @@ import {
   type BackupRuntimeStatus,
 } from "./backup-supervisor.js";
 import { errnoOf } from "./errno.js";
-import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
 
 /** Every `reason` `parseArchiveSettings` and its helpers throw; `settingsInvalid` takes only these. */
@@ -203,7 +202,7 @@ function evidenceDestinations(
       }
       return {
         kind: "bucket",
-        endpoint: d.bucket.endpoint === undefined ? null : redactSecrets(d.bucket.endpoint),
+        endpoint: d.bucket.endpoint ?? null,
         region: d.bucket.region,
         bucket: d.bucket.bucket,
         accessKeyId: d.bucket.accessKeyId,

@@ -815,6 +815,119 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
   }, 60_000);
 });
 
+describe("BackupSupervisor when a destination fails to build", () => {
+  async function failingBuild(throwFor: string, config: () => BackupConfig) {
+    const built: string[] = [];
+    const closedBackends: string[] = [];
+    const scheduled: Array<number | null> = [];
+    let venueCloses = 0;
+    let failing = true;
+    const sup = new BackupSupervisor({
+      buildConfig: async () => config(),
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir: await makeVenueDir(),
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      log: () => {},
+      onScheduled: (at) => scheduled.push(at),
+      openVenue: async (dir) => {
+        const store = await openVenueDatabase(dir);
+        return {
+          venue: store.venue,
+          node: store.node,
+          close: async () => {
+            venueCloses += 1;
+            await store.close();
+          },
+        };
+      },
+      buildBackend: (dest) => {
+        if (failing && dest.id === throwFor) {
+          throw new AppError("backup.destination_key_invalid", { field: "prefix" });
+        }
+        if (dest.kind !== "local-fs") throw new Error("local-fs destinations only");
+        built.push(dest.id);
+        const backend = new LocalFsBackend(dest.id, dest.dir);
+        backend.close = () => {
+          closedBackends.push(dest.id);
+        };
+        return backend;
+      },
+    });
+    return {
+      sup,
+      built,
+      closedBackends,
+      scheduled,
+      venueCloses: () => venueCloses,
+      buildable: () => {
+        failing = false;
+      },
+    };
+  }
+
+  it("rethrows, closes the destination already built and the venue, and runs no sweep when the second throws", async () => {
+    const [a, b] = [await makeDestDir(), await makeDestDir()];
+    const run = await failingBuild("d1", () => localFsConfig([a, b], STRONG_KEY_1));
+
+    await expect(run.sup.reload()).rejects.toMatchObject({
+      code: "backup.destination_key_invalid",
+    });
+
+    expect(run.sup.current().enabled).toBe(false);
+    expect(run.built).toEqual(["primary"]);
+    expect(run.closedBackends).toEqual(["primary"]);
+    expect(run.venueCloses()).toBe(1);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(run.scheduled).toEqual([]);
+    expect(await listArchives(a)).toEqual([]);
+    await run.sup.stop();
+    expect(run.venueCloses()).toBe(1);
+  });
+
+  it("rethrows and closes the venue when the first destination throws, with nothing built", async () => {
+    const [a, b] = [await makeDestDir(), await makeDestDir()];
+    const run = await failingBuild("primary", () => localFsConfig([a, b], STRONG_KEY_1));
+
+    await expect(run.sup.reload()).rejects.toMatchObject({
+      code: "backup.destination_key_invalid",
+    });
+
+    expect(run.sup.current().enabled).toBe(false);
+    expect(run.built).toEqual([]);
+    expect(run.closedBackends).toEqual([]);
+    expect(run.venueCloses()).toBe(1);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(run.scheduled).toEqual([]);
+    expect(await listArchives(a)).toEqual([]);
+    expect(await listArchives(b)).toEqual([]);
+    await run.sup.stop();
+    expect(run.venueCloses()).toBe(1);
+  });
+
+  it("a later reload with buildable destinations starts the sweep", async () => {
+    const [a, b] = [await makeDestDir(), await makeDestDir()];
+    const run = await failingBuild("d1", () => localFsConfig([a, b], STRONG_KEY_1));
+    await expect(run.sup.reload()).rejects.toMatchObject({
+      code: "backup.destination_key_invalid",
+    });
+
+    run.buildable();
+    try {
+      await run.sup.reload();
+      expect(run.sup.current().enabled).toBe(true);
+      await waitForArchive(b);
+    } finally {
+      await run.sup.stop();
+    }
+    expect(run.venueCloses()).toBe(2);
+  });
+});
+
 describe("BackupSupervisor closes the sweep's destinations", () => {
   it("closes each destination once, after the sweep has settled, on stop", async () => {
     const order: string[] = [];

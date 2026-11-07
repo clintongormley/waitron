@@ -1,5 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { isPlainWebAddress } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -305,7 +306,12 @@ export class StreamSettingsPanel extends LitElement {
       (code === "backup.stream_config_unsafe" || code === "backup.request_invalid") &&
       isField(named)
     ) {
-      const key = code === "backup.stream_config_unsafe" ? UNSAFE_FIELD_KEYS[named] : undefined;
+      const key =
+        code === "backup.stream_config_unsafe"
+          ? UNSAFE_FIELD_KEYS[named]
+          : named === "endpoint"
+            ? "stream.form.endpoint_invalid"
+            : undefined;
       this.refused = { [named]: t(key ?? "stream.field.check") };
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
@@ -326,7 +332,7 @@ export class StreamSettingsPanel extends LitElement {
         errors[f.field] = t(f.requiredKey);
     }
     const endpoint = this.draft.endpoint.trim();
-    if (endpoint !== "" && !/^https?:\/\/\S+$/.test(endpoint)) {
+    if (endpoint !== "" && !isPlainWebAddress(endpoint)) {
       errors.endpoint = t("stream.form.endpoint_invalid");
     }
     return errors;

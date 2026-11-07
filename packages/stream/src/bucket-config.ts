@@ -1,3 +1,4 @@
+import { isPlainWebAddress } from "@waitron/shared";
 import { checkLitestreamSettings } from "./litestream.js";
 import type { BucketConfig } from "./s3-store.js";
 
@@ -24,15 +25,8 @@ export function readBucketConfig(
     return value;
   };
   const endpoint = field("endpoint", false);
-  if (endpoint !== "") {
-    let protocol: string;
-    try {
-      protocol = new URL(endpoint).protocol;
-    } catch {
-      return refuse("endpoint");
-    }
-    if (protocol !== "https:" && protocol !== "http:") refuse("endpoint");
-  }
+  // Status reports the address as stored, so it may carry nothing that could be a secret.
+  if (endpoint !== "" && !isPlainWebAddress(endpoint)) refuse("endpoint");
   const bucket: BucketConfig = {
     ...(endpoint === "" ? {} : { endpoint }),
     prefix: field("prefix", false),

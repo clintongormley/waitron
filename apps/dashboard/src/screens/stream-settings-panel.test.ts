@@ -216,6 +216,47 @@ describe("stream-settings-panel: the bucket form", () => {
     expect(focusedName(el)).toBe("bucket-endpoint");
   });
 
+  it.each(["https://user:secret@s3.example.net", "https://s3.example.net?"])(
+    "refuses %s beside the field, as the server would, and sends nothing",
+    async (endpoint) => {
+      const api = stubApi();
+      const { el } = await mount(api);
+      fillRequired(el);
+      type(el, "bucket-endpoint", endpoint);
+      await press(el, "test");
+      await press(el, "save");
+      expect(api.testStreamBucket).not.toHaveBeenCalled();
+      expect(api.saveStreamSettings).not.toHaveBeenCalled();
+      expect(field(el, "bucket-endpoint").error).toBe(t("stream.form.endpoint_invalid"));
+      expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+      expect(focusedName(el)).toBe("bucket-endpoint");
+    },
+  );
+
+  it("accepts an address whose scheme is in capitals, as the server does", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    type(el, "bucket-endpoint", "HTTPS://s3.example.net");
+    await press(el, "test");
+    expect(field(el, "bucket-endpoint").error).toBe("");
+    expect(api.testStreamBucket).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "HTTPS://s3.example.net" }),
+    );
+  });
+
+  it("accepts an address with a port and a path", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    type(el, "bucket-endpoint", "https://s3.example.net:9000/path");
+    await press(el, "test");
+    expect(field(el, "bucket-endpoint").error).toBe("");
+    expect(api.testStreamBucket).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "https://s3.example.net:9000/path" }),
+    );
+  });
+
   it("Test sends the typed bucket and says it passed", async () => {
     const api = stubApi();
     const { el } = await mount(api);
@@ -313,7 +354,7 @@ describe("stream-settings-panel: the bucket form", () => {
     ],
     ["backup.stream_config_unsafe", "region", "bucket-region", "stream.field.check"],
     ["backup.request_invalid", "prefix", "bucket-prefix", "stream.field.check"],
-    ["backup.request_invalid", "endpoint", "bucket-endpoint", "stream.field.check"],
+    ["backup.request_invalid", "endpoint", "bucket-endpoint", "stream.form.endpoint_invalid"],
   ] as const)("puts %s naming %s beside its field", async (code, named, name, key) => {
     const api = stubApi({
       testStreamBucket: vi.fn().mockRejectedValue({ code, params: { field: named } }),
