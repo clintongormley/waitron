@@ -1769,7 +1769,7 @@ describe("a handheld's zones", () => {
         ...over,
       });
       await vi.waitFor(() => expect(floor(mounted.el)?.tables).toHaveLength(2));
-      return mounted;
+      return { ...mounted, drafts };
     }
     const orderScreen = (el: TillApp) => el.shadowRoot!.querySelector("till-table-order-screen");
     async function showZone(el: TillApp, zoneId: string) {
@@ -1876,6 +1876,102 @@ describe("a handheld's zones", () => {
       expect(await activeTab(el)).toBe("room");
       await signOut(el);
       await signIn(el, "person", "Ana");
+      expect(await activeTab(el)).toBe("room");
+    });
+
+    const allergyNone = {
+      previewPartyAllergy: vi.fn(async (partyId: string) => ({
+        partyId,
+        snapshot: {
+          answer: "none",
+          guests: [],
+          ticks: [],
+          changedAt: null,
+          changedBy: null,
+          revision: 1,
+        },
+        dishes: [],
+      })),
+    };
+    async function openFromFloor(el: TillApp, tableId: string) {
+      floor(el).dispatchEvent(
+        new CustomEvent("open-table", {
+          detail: { tableId, seated: true },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await vi.waitFor(() => expect(orderScreen(el)?.draftStore).toBeTruthy());
+      await el.updateComplete;
+    }
+    async function sendFromTable(el: TillApp, drafts: ReturnType<typeof draftServer>) {
+      const screen = orderScreen(el)!;
+      const store = screen.draftStore!;
+      const sent = drafts.submitDraft.mock.calls.length;
+      drafts.personId = "person";
+      store.addProduct(screen.products[0]!, "1");
+      await vi.waitFor(() => expect(store.lines).toHaveLength(1));
+      await vi.waitFor(() => expect(drafts.drafts.flatMap((draft) => draft.lines)).toHaveLength(1));
+      await screen.updateComplete;
+      const sendAll = () =>
+        screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          '[data-draft-action="send-all"]',
+        )!;
+      await vi.waitFor(() => expect(sendAll().disabled).toBe(false));
+      sendAll().click();
+      await vi.waitFor(() => expect(drafts.submitDraft.mock.calls.length).toBe(sent + 1));
+      await vi.waitFor(() => expect(orderScreen(el)).toBeNull());
+      await vi.waitFor(() => expect(floor(el)).not.toBeNull());
+    }
+
+    it("a send after signing in again comes back to the zone of the same table", async () => {
+      const { el, drafts } = await mountTables(
+        selection(all, "room"),
+        "phone-portrait",
+        allergyNone,
+      );
+      await openFromBar(el, "table-garden");
+      await sendFromTable(el, drafts);
+      expect(await activeTab(el)).toBe("garden");
+      await signOut(el);
+      await signIn(el, "person", "Ana");
+      expect(await activeTab(el)).toBe("room");
+      await openFromFloor(el, "table-garden");
+      await sendFromTable(el, drafts);
+      expect(await activeTab(el)).toBe("garden");
+    });
+
+    it("a send after signing in again comes back to the zone of a different table", async () => {
+      const { el, drafts } = await mountTables(
+        selection(["bar", "room", "garden"], "bar"),
+        "phone-portrait",
+        allergyNone,
+      );
+      drafts.bills.add("bill-table-room");
+      await openFromBar(el, "table-garden");
+      await sendFromTable(el, drafts);
+      expect(await activeTab(el)).toBe("garden");
+      await signOut(el);
+      await signIn(el, "person", "Ana");
+      expect(await activeTab(el)).toBe("bar");
+      await openFromFloor(el, "table-room");
+      await sendFromTable(el, drafts);
+      expect(await activeTab(el)).toBe("room");
+    });
+
+    it("signing in again after a table, with no table opened, opens on the starting zone", async () => {
+      const { el, drafts } = await mountTables(
+        selection(all, "room"),
+        "phone-portrait",
+        allergyNone,
+      );
+      await openFromBar(el, "table-garden");
+      await sendFromTable(el, drafts);
+      expect(await activeTab(el)).toBe("garden");
+      await signOut(el);
+      await signIn(el, "person", "Ana");
+      expect(await activeTab(el)).toBe("room");
+      await tapFloor(el);
       expect(await activeTab(el)).toBe("room");
     });
 

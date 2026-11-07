@@ -632,6 +632,24 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(arrays.has(shell(el).barTables)).toBe(true);
   });
 
+  it.each([
+    ["unsaved", vi.fn().mockRejectedValue(new TypeError("Failed to fetch"))],
+    ["saved", undefined],
+  ])("keeps ✎ T4 for the same person after signing in again (%s draft)", async (_, saveDraft) => {
+    const { el } = await mountApp(saveDraft === undefined ? {} : { saveDraft });
+    await openTable(el);
+    await tap(el, "Beer");
+    await waitForSave();
+    await flush(el);
+    await toFloor(el);
+    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    emit(shell(el), "logout");
+    await flush(el);
+    await signIn(el);
+    await toFloor(el);
+    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+  });
+
   it("rebuilds the buttons for the next person", async () => {
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([table4With("p1"), table9]),

@@ -3791,6 +3791,14 @@ export class TillApp extends LitElement {
       );
   }
 
+  /** Also called where a table is opened: reopening the table still held across a sign-in changes
+   * no `activeTableId`, and sign-out clears the return zone. */
+  #rememberFloorReturnZone(): void {
+    if (this.activeTableId === undefined || this.formFactor === "till") return;
+    this.floorReturnZoneId =
+      this.barFloor.find((table) => table.id === this.activeTableId)?.zoneId ?? undefined;
+  }
+
   /** D12: {@link floorReturnZoneId} while the Floor shows that zone. */
   #floorReturnZone(): string | undefined {
     const zoneId = this.floorReturnZoneId;
@@ -4442,14 +4450,7 @@ export class TillApp extends LitElement {
       this.#syncDepartmentTransfers();
     if (changed.has("formFactor") || changed.has("capabilities") || changed.has("onboardingIntent"))
       this.#affordanceList = this.#affordances();
-    if (
-      changed.has("activeTableId") &&
-      this.activeTableId !== undefined &&
-      this.formFactor !== "till"
-    ) {
-      this.floorReturnZoneId =
-        this.barFloor.find((table) => table.id === this.activeTableId)?.zoneId ?? undefined;
-    }
+    if (changed.has("activeTableId")) this.#rememberFloorReturnZone();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
     if (changed.has("frontDoor")) this.#decideReload();
@@ -11259,6 +11260,7 @@ export class TillApp extends LitElement {
         this.tableSelectedCatalogueId = "";
       }
       this.activeTableId = tableId;
+      this.#rememberFloorReturnZone();
       this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
       this.finishRefused = false;
       this.nameRefusal = null;
@@ -11298,6 +11300,7 @@ export class TillApp extends LitElement {
           // only here.
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           this.activeTableId = tableId;
+          this.#rememberFloorReturnZone();
           this.#chooseBill(tabId);
           this.orderParty = {
             id: partyId,
