@@ -1080,11 +1080,14 @@ function discardError(error: unknown): CounterError {
   if (recovery !== undefined) return recovery;
   if (isPaymentsReceived(error)) return "held.discard_holds_money";
   const code = (error as { code?: string } | undefined)?.code;
+  if (code === "draft.taken_over") return "held.discard_editing";
+  if (code === "bill.unsent_dishes") return "held.discard_unsent";
   return code === "fiscal.fingerprint_mismatch" ||
     code === "order.payment_in_flight" ||
     code === "bill.refund_in_progress" ||
     code === "storage.disk_full" ||
-    code === "clock.behind_chain"
+    code === "clock.behind_chain" ||
+    code === "draft.out_of_date"
     ? { code }
     : "held.stale";
 }
@@ -8934,7 +8937,7 @@ export class TillApp extends LitElement {
         if (!(await this.#flushCounterKitchenNote()) || session !== this.#operatorSession) return;
         if (!this.#store.dirty && label !== undefined && label !== this.#store.label) {
           const saved = await this.api.setWorkingOrderLabel(id, {
-            expectedEdit: null,
+            expectedEdit: this.#counterExpectedEdit(id),
             label,
             revision: this.#store.revision,
           });
@@ -8991,7 +8994,13 @@ export class TillApp extends LitElement {
       } else if ((error as { code?: string }).code === "working_order.out_of_date") {
         await this.#reloadChangedOrder(id);
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
-      else this.errorKey = counterError(error, "held.park_error");
+      else {
+        const code = (error as { code?: string } | undefined)?.code;
+        this.errorKey =
+          code !== undefined && DRAFT_REFUSALS.has(code)
+            ? { code }
+            : counterError(error, "held.park_error");
+      }
     } finally {
       this.parking = false;
     }
@@ -9269,6 +9278,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     let refused = false;
     try {
+      // The list carries no editing observation; this read does not compare its dishes.
       const expectedEdit =
         held?.partyId == null ? null : (await api.retrieveWorkingOrder(id)).expectedEdit;
       if (!current()) return;
@@ -9444,7 +9454,7 @@ export class TillApp extends LitElement {
       const saved = await this.api.setOrderReceiptLanguage(id, {
         revision: this.#store.revision,
         language,
-        expectedEdit: null,
+        expectedEdit: this.#counterExpectedEdit(id),
       });
       if (this.#hasLeftCounterOrder(id, session)) return;
       this.#store.markSaved(saved.revision);
@@ -9452,7 +9462,13 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (this.#hasLeftCounterOrder(id, session)) return;
       if ((error as { code?: string }).code === "working_order.out_of_date") outOfDate = true;
-      else this.errorKey = counterError(error, "receipt_language.save_error");
+      else {
+        const code = (error as { code?: string } | undefined)?.code;
+        this.errorKey =
+          code !== undefined && DRAFT_REFUSALS.has(code)
+            ? { code }
+            : counterError(error, "receipt_language.save_error");
+      }
     } finally {
       this.submitting = false;
     }
@@ -9543,7 +9559,7 @@ export class TillApp extends LitElement {
     const saved = await this.api.setOrderReceiptLanguage(id, {
       revision: this.#store.revision,
       language: choice.language,
-      expectedEdit: null,
+      expectedEdit: this.#counterExpectedEdit(id),
     });
     if (this.receiptLanguageChoice === choice)
       this.receiptLanguageChoice = { ...choice, saved: true };

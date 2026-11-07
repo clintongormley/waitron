@@ -939,12 +939,58 @@ describe("till-app: discarding a parked table bill", () => {
     await flush(el);
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Staff", permissions: [] });
     await flush(el);
-    counter(el).orderList = "parked";
+    const shell = el.shadowRoot!.querySelector("till-shell")!;
+    await userEvent.click(shell.shadowRoot!.querySelector('[data-counter-orders="parked"]')!);
     await flush(el);
     const list = counter(el).shadowRoot!.querySelector("till-held-orders")!;
     const discard = list.shadowRoot!.querySelector<HTMLElement>(".discard")!;
     return { el, discard };
   }
+
+  it.each([
+    {
+      code: "draft.taken_over",
+      locale: "en",
+      message: "Someone else is editing this bill. Open it from Floor to review it.",
+    },
+    {
+      code: "draft.taken_over",
+      locale: "es",
+      message: "Otra persona está editando esta cuenta. Ábrela desde Sala para revisarla.",
+    },
+    {
+      code: "draft.out_of_date",
+      locale: "en",
+      message: "This order has changed since you opened it. Reload it and make your change again",
+    },
+    {
+      code: "draft.out_of_date",
+      locale: "es",
+      message: "Este pedido ha cambiado desde que lo abriste. Vuelve a cargarlo y repite el cambio",
+    },
+    {
+      code: "bill.unsent_dishes",
+      locale: "en",
+      message: "Open the table's bill and send or remove its unsent dishes before discarding it.",
+    },
+    {
+      code: "bill.unsent_dishes",
+      locale: "es",
+      message:
+        "Abre la cuenta de la mesa y envía o quita los platos sin enviar antes de descartarla.",
+    },
+  ])("explains $code for a still-listed bill in $locale", async ({ code, locale, message }) => {
+    const { el } = await parked({
+      abandonWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
+    });
+    setLocale(locale);
+    await flush(el);
+    const list = counter(el).shadowRoot!.querySelector("till-held-orders")!;
+    await userEvent.click(list.shadowRoot!.querySelector<HTMLElement>(".discard")!);
+    await flush(el);
+    expect(banner(el)!.textContent).toBe(message);
+    expect(counter(el).heldOrders.map((row) => row.id)).toEqual(["wo-9"]);
+  });
 
   it("sends the table bill's current editor expectation from Discard", async () => {
     const { el, discard } = await parked();
@@ -986,6 +1032,108 @@ describe("till-app: discarding a parked table bill", () => {
 });
 
 describe("till-app: comping a stored counter order", () => {
+  it.each([
+    [
+      "rename",
+      "draft.taken_over",
+      "This order belongs to someone else. Reload the table to see it",
+    ],
+    [
+      "rename",
+      "draft.out_of_date",
+      "This order has changed since you opened it. Reload it and make your change again",
+    ],
+    [
+      "language",
+      "draft.taken_over",
+      "This order belongs to someone else. Reload the table to see it",
+    ],
+    [
+      "language",
+      "draft.out_of_date",
+      "This order has changed since you opened it. Reload it and make your change again",
+    ],
+  ])("explains %s refused by %s on the retrieved table bill", async (action, code, message) => {
+    const refused = vi.fn().mockRejectedValue({ code, status: 409 });
+    const el = await retrieved({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        ...heldOrder(4),
+        expectedEdit: {
+          billId: "wo-9",
+          editorVersion: 7,
+          draftId: null,
+          draftRevision: null,
+        },
+      }),
+      setWorkingOrderLabel: refused,
+      setOrderReceiptLanguage: refused,
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["en", "es-ES"] }),
+    });
+    if (action === "rename") emit(counter(el), "park-order", { label: "Dinner bill" });
+    else {
+      emit(counter(el), "choose-receipt-language");
+      await flush(el);
+      const picker = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+      await userEvent.click(picker.shadowRoot!.querySelector('input[value="es-ES"]')!);
+      await userEvent.click(picker.shadowRoot!.querySelector("[data-reprint-confirm]")!);
+    }
+    await flush(el);
+    expect(refused).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toBe(message);
+  });
+
+  it.each([false, true])(
+    "keeps the table bill's editor expectation when Park changes dishes=%s",
+    async (changed) => {
+      const expectedEdit = { billId: "wo-9", editorVersion: 7, draftId: null, draftRevision: null };
+      const setWorkingOrderLabel = vi.fn().mockResolvedValue({ revision: 5 });
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 5 });
+      const el = await retrieved({
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({ ...heldOrder(4), expectedEdit }),
+        setWorkingOrderLabel,
+        updateWorkingOrder,
+      });
+      if (changed) counter(el).store.addProduct(product("cana", "Draught beer", "2.50"), "1");
+      emit(counter(el), "park-order", { label: "Dinner bill" });
+      await flush(el);
+      expect(changed ? updateWorkingOrder : setWorkingOrderLabel).toHaveBeenCalledWith(
+        "wo-9",
+        expect.objectContaining({
+          expectedEdit: { billId: "wo-9", editorVersion: 7, draftId: null, draftRevision: null },
+        }),
+      );
+    },
+  );
+
+  it("keeps the table bill's editor expectation when saving its receipt language", async () => {
+    const setOrderReceiptLanguage = vi.fn().mockResolvedValue({ revision: 5 });
+    const el = await retrieved({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        ...heldOrder(4),
+        expectedEdit: {
+          billId: "wo-9",
+          editorVersion: 7,
+          draftId: null,
+          draftRevision: null,
+        },
+      }),
+      setOrderReceiptLanguage,
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["en", "es-ES"] }),
+    });
+    emit(counter(el), "choose-receipt-language");
+    await flush(el);
+    const picker = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+    await userEvent.click(picker.shadowRoot!.querySelector('input[value="es-ES"]')!);
+    await userEvent.click(picker.shadowRoot!.querySelector("[data-reprint-confirm]")!);
+    await flush(el);
+    expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-9", {
+      revision: 4,
+      language: "es-ES",
+      expectedEdit: { billId: "wo-9", editorVersion: 7, draftId: null, draftRevision: null },
+    });
+    expect(counter(el).store.revision).toBe(5);
+  });
+
   it.each(["cancel", "comp"] as const)(
     "carries a retrieved table bill's editor expectation when %s adjusts an extra",
     async (kind) => {
@@ -1059,6 +1207,12 @@ describe("till-app: comping a stored counter order", () => {
       const el = await retrieved({
         retrieveWorkingOrder: vi.fn().mockResolvedValue(held),
         getTabLines: vi.fn().mockResolvedValue(listed),
+        previewAdjustment: vi.fn().mockResolvedValue(
+          preview({
+            reduction: kind === "comp" ? "0.50" : "1.00",
+            nominalValue: "1.00",
+          }),
+        ),
       });
 
       await press(el, inBasket(el, `[data-${kind}-extra]`)!);
