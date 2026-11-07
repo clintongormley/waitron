@@ -9263,29 +9263,31 @@ export class TillApp extends LitElement {
   async #onDiscardOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
     const session = this.#operatorSession;
+    const api = this.api;
+    const current = () => session === this.#operatorSession && api === this.api;
+    const held = this.heldOrders.find((order) => order.id === id);
     this.errorKey = undefined;
     let refused = false;
     try {
-      await this.api.abandonWorkingOrder(id, null);
+      const expectedEdit =
+        held?.partyId == null ? null : (await api.retrieveWorkingOrder(id)).expectedEdit;
+      if (!current()) return;
+      await api.abandonWorkingOrder(id, expectedEdit);
     } catch (error) {
-      if (session !== this.#operatorSession) return;
+      if (!current()) return;
       refused = true;
       this.errorKey = discardError(error);
     }
-    if (session !== this.#operatorSession) return;
+    if (!current()) return;
     const refresh = this.#refreshGeneration.held + 1;
     try {
       await this.#refreshHeldOrders();
     } catch {
-      if (
-        session === this.#operatorSession &&
-        refresh === this.#refreshGeneration.held &&
-        this.errorKey === undefined
-      )
+      if (current() && refresh === this.#refreshGeneration.held && this.errorKey === undefined)
         this.errorKey = "refresh.held";
       return;
     }
-    if (session !== this.#operatorSession) return;
+    if (!current()) return;
     if (refused && !this.heldOrders.some((order) => order.id === id)) this.errorKey = "held.stale";
   }
 
@@ -14685,7 +14687,12 @@ export class TillApp extends LitElement {
 
   #adjustAsk(open: Adjusting, choice: AdjustmentChoice): AdjustmentAsk {
     return {
-      expectedEdit: open.bill === undefined ? null : open.bill.expectedEdits[0]!,
+      expectedEdit:
+        open.surface === "counter"
+          ? this.#counterExpectedEdit(open.orderId)
+          : open.bill === undefined
+            ? null
+            : open.bill.expectedEdits[0]!,
       expectedRevision: open.revision,
       lineId: open.target.lineId,
       ...choice,

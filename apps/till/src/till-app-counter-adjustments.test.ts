@@ -1,7 +1,7 @@
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { offer as menuOffer } from "../test/allergy-app-fixture.js";
+import { offer as menuOffer, unit } from "../test/allergy-app-fixture.js";
 import { productUnit } from "./widgets/product-name.js";
 import {
   floorPartyBills,
@@ -120,6 +120,7 @@ function heldOrder(
       ownerRevision: revision,
     },
     id: "wo-9",
+    expectedEdit: null,
     orderNumber: 12,
     label: "Mesa 4",
     revision,
@@ -137,7 +138,7 @@ function heldOrder(
         product: product("cana", "Caña", draughtBeerPrice),
       },
     ],
-  } as HeldOrder;
+  };
 }
 
 function listing(
@@ -907,7 +908,195 @@ describe("till-app: counter station choice", () => {
   });
 });
 
+describe("till-app: discarding a parked table bill", () => {
+  async function parked(overrides: Record<string, unknown> = {}) {
+    const expectedEdit = { billId: "wo-9", editorVersion: 7, draftId: null, draftRevision: null };
+    const held = { ...heldOrder(4), expectedEdit };
+    api = stubApi({
+      listWorkingOrders: vi.fn().mockResolvedValue([
+        {
+          id: "wo-9",
+          orderNumber: 12,
+          items: [],
+          label: "Table 4",
+          tableLabel: "4",
+          counts: { ordered: 0, unsent: 0, held: 0, waiting: 0, ready: 0 },
+          total: "0.00",
+          outstanding: "0.00",
+          hasPayments: false,
+          partyId: "party-4",
+          billNumber: 1,
+          billName: null,
+          openedAt: "2026-11-07T12:00:00.000Z",
+          signals: [],
+        },
+      ]),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(held),
+      abandonWorkingOrder: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Staff", permissions: [] });
+    await flush(el);
+    counter(el).orderList = "parked";
+    await flush(el);
+    const list = counter(el).shadowRoot!.querySelector("till-held-orders")!;
+    const discard = list.shadowRoot!.querySelector<HTMLElement>(".discard")!;
+    return { el, discard };
+  }
+
+  it("sends the table bill's current editor expectation from Discard", async () => {
+    const { el, discard } = await parked();
+    await userEvent.click(discard);
+    await flush(el);
+    expect(api.abandonWorkingOrder).toHaveBeenCalledWith("wo-9", {
+      billId: "wo-9",
+      editorVersion: 7,
+      draftId: null,
+      draftRevision: null,
+    });
+    expect(counter(el).store.lineCount).toBe(0);
+  });
+
+  it.each(["sign-out", "server change"])(
+    "does not discard after its editor read outlives %s",
+    async (change) => {
+      const read = deferred<HeldOrder>();
+      const { el, discard } = await parked({ retrieveWorkingOrder: vi.fn(() => read.promise) });
+      await userEvent.click(discard);
+      await flush(el);
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
+      if (change === "sign-out") emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
+      else el.api = stubApi();
+      await flush(el);
+      read.resolve({
+        ...heldOrder(4),
+        expectedEdit: {
+          billId: "wo-9",
+          editorVersion: 7,
+          draftId: null,
+          draftRevision: null,
+        },
+      });
+      await flush(el);
+      expect(api.abandonWorkingOrder).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe("till-app: comping a stored counter order", () => {
+  it.each(["cancel", "comp"] as const)(
+    "carries a retrieved table bill's editor expectation when %s adjusts an extra",
+    async (kind) => {
+      const expectedEdit = {
+        billId: "wo-9",
+        editorVersion: 7,
+        draftId: null,
+        draftRevision: null,
+      };
+      const held = heldOrder(4);
+      held.expectedEdit = expectedEdit;
+      held.lines[0]!.product!.offeredModifiers = [
+        {
+          kind: "extras",
+          id: "extras",
+          name: "Extras",
+          customerName: { en: "Customer extras" },
+          kitchenName: "Kitchen extras",
+          minPicks: 0,
+          maxPicks: null,
+          items: [
+            {
+              productId: "cheese",
+              name: "Cheese",
+              customerName: { en: "Customer cheese" },
+              kitchenName: "Kitchen cheese",
+              presentation: {
+                name: "Cheese",
+                customerName: { en: "Customer cheese" },
+                kitchenName: "Kitchen cheese",
+                variantName: null,
+                variantCustomerName: null,
+                variantKitchenName: null,
+              },
+              portion: "1",
+              unit,
+              price: "1.00",
+              vatClass: "general",
+              maxQuantity: null,
+              preselected: false,
+              addAllergens: null,
+              suitableFor: [],
+            },
+          ],
+        },
+      ];
+      held.lines[0]!.extras = [
+        {
+          productId: "cheese",
+          name: "Cheese",
+          descriptions: { en: "Customer cheese" },
+          kitchenName: "Kitchen cheese",
+          price: "1.00",
+          quantity: 1,
+          listId: "extras",
+        },
+      ];
+      const listed = listing(4);
+      listed.lines[0]!.sentAt = "2026-11-07T12:00:00.000Z";
+      listed.lines[0]!.state = "queued";
+      listed.lines.push(
+        tabLine({
+          id: "l-extra",
+          lineNo: 3,
+          parentLineNo: 1,
+          listId: "extras",
+          name: "Cheese",
+          productId: "cheese",
+        }),
+      );
+      const el = await retrieved({
+        retrieveWorkingOrder: vi.fn().mockResolvedValue(held),
+        getTabLines: vi.fn().mockResolvedValue(listed),
+      });
+
+      await press(el, inBasket(el, `[data-${kind}-extra]`)!);
+      await chooseReason(el, kind === "comp" ? "Complaint" : "Mistake");
+      if (kind === "comp") {
+        await press(el, inDialog(el, 'input[name="discountKind"][value="percent"]'));
+        const field = inDialog(el, 'wt-input[name="percent"]');
+        const input = field.shadowRoot!.querySelector("input")!;
+        input.value = "50";
+        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await flush(el);
+      }
+      await press(el, inDialog(el, "[data-adjust-continue]"));
+      expect(api.previewAdjustment).toHaveBeenCalledWith(
+        "wo-9",
+        expect.objectContaining({
+          expectedEdit: { billId: "wo-9", editorVersion: 7, draftId: null, draftRevision: null },
+          lineId: "l-extra",
+          ...(kind === "comp"
+            ? { action: "discount_percent", percentBp: 5000 }
+            : { action: "cancel" }),
+        }),
+      );
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+      expect(api.applyAdjustment).toHaveBeenCalledWith(
+        "wo-9",
+        expect.objectContaining({
+          expectedEdit: { billId: "wo-9", editorVersion: 7, draftId: null, draftRevision: null },
+          lineId: "l-extra",
+          ...(kind === "comp"
+            ? { action: "discount_percent", percentBp: 5000 }
+            : { action: "cancel" }),
+        }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    },
+  );
+
   it.each([false, true])(
     "identifies a counter Hold as having no table editor, changed lines=%s",
     async (changed) => {
