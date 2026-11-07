@@ -1382,6 +1382,27 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     });
     await expect(stageStreamRestore(deps)).rejects.toMatchObject({
       code: "restore.identity_unknown",
+      params: { nodeId: T.nodeId },
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("refuses a copy whose taxpayer has no tax id as unconfirmed, staging nothing", async () => {
+    const deps = await stageDeps({
+      venueConfirmed: "",
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const copy = new DatabaseSync(args.outPath);
+        try {
+          copy.exec("update tenants set tax_id = ''");
+        } finally {
+          copy.close();
+        }
+      },
+    });
+    await expect(stageStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_venue_unconfirmed",
+      params: { ...VENUE, taxId: "" },
     });
     await expectStateUntouched(deps.stateDir);
   });
