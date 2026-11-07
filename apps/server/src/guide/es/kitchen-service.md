@@ -10,7 +10,7 @@ junto con su trabajo.
 Si el terminal no puede confirmar un envío de mostrador, reinténtalo sin cambiar la cesta. Si el
 primer envío ya llegó al servidor, el reintento devuelve su resultado original y el terminal
 continúa con el pedido enviado. No añade otra comanda de cocina ni otro resguardo con el número
-de recogida. Si el equipo no tiene espacio en disco, el reintento se rechaza y el terminal dice
+de recogida. Si el servidor no tiene espacio en disco, el reintento se rechaza y el terminal dice
 que no se ha guardado, aunque el primer envío ya llegara al servidor.
 
 Si cambias la cesta después del primer envío, el terminal debe guardar esos cambios antes de
@@ -344,7 +344,7 @@ En el terminal, un plato sin enviar cuyo periodo acabó antes en el mismo día d
 signo de aviso y **Ha terminado Almuerzo**. Cuando lo envías desde una mesa, o cobras, envías o
 aparcas el pedido en el mostrador, el terminal primero lista esos platos y te pide que lo consultes con
 la cocina. **La cocina acepta — enviar** los envía y **Quitarlos** los quita del pedido. Al aparcar,
-el botón dice **La cocina acepta — guardar**. La misma ventana se abre cuando el equipo encuentra un
+el botón dice **La cocina acepta — guardar**. La misma ventana se abre cuando el servidor encuentra un
 plato así antes de que el terminal lo haya marcado.
 
 Un plato que también vende el periodo en curso no se marca y se envía como siempre. Un plato que
@@ -375,7 +375,7 @@ Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estaci�
 [estación espera al pase](kitchen-service.md#station-waits) va en cambio a la columna
 **Por marchar** del pase: consulta
 [Trabaja en el pase](kitchen-service.md#pass-screen).
-Si el equipo no tiene espacio en disco, no se puede avanzar un plato. La estación dice
+Si el servidor no tiene espacio en disco, no se puede avanzar un plato. La estación dice
 **No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.** y el plato se
 queda donde estaba.
 
