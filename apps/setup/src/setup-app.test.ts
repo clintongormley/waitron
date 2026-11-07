@@ -3672,6 +3672,11 @@ describe("restore from my bucket", () => {
       "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
     ],
     [
+      "restore.identity_unknown",
+      { nodeId: "n1" },
+      "The copy in the bucket does not say which business it belongs to, so it cannot be restored. Nothing on this server was changed.",
+    ],
+    [
       "recovery.passphrase_invalid",
       undefined,
       "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",

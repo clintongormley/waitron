@@ -437,6 +437,8 @@ function bucketRefusal(err: AppError): string | null {
     "restore.stream_integrity_failed": "the copy downloaded from the bucket is damaged",
     "restore.stream_state_missing":
       "the copy in the bucket does not hold the old server's locked secrets, so it cannot be restored",
+    "restore.identity_unknown":
+      "the copy in the bucket does not say which business it belongs to, so it cannot be restored",
     "provisioning.database_ahead":
       "the copy in the bucket was made by newer Waitron software than this server has; update this server first",
     "backup.stream_restore_failed":

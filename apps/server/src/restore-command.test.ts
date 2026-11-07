@@ -584,6 +584,10 @@ describe("waitron-restore restore --from-bucket", () => {
       "restore failed: restore.stream_state_missing — the copy in the bucket does not hold the old server's locked secrets, so it cannot be restored",
     ],
     [
+      new AppError("restore.identity_unknown", { nodeId: "n1" }),
+      "restore failed: restore.identity_unknown — the copy in the bucket does not say which business it belongs to, so it cannot be restored",
+    ],
+    [
       new AppError("recovery.passphrase_invalid", {}),
       "restore failed: the recovery key in this kit does not open the copy's locked secrets, or they are damaged",
     ],

@@ -48,11 +48,11 @@ declare module "@waitron/shared" {
     "backup.stream_config_unsafe": { field: string };
     /** Text offered as a recovery kit is not one: `not_found` (no kit token in it), `encoding` (the
      * token does not decode to JSON) or `shape` (the decoded kit is not an object, is not version 1,
-     * has a text field that is missing, empty, not a string or holds a control character, has no bucket
-     * object, or carries bucket settings refused by the kit's own check in `kit.ts` — no prefix field, a prefix of "-",
-     * an empty endpoint — by the shared reader in `bucket-config.ts`, or by Litestream's settings
-     * check). Never carries any of the text: a kit holds the recovery key and the bucket's
-     * secret key. */
+     * has a text field that is missing, empty or not a string, has a venue id or signer's key holding a
+     * control character, has no bucket object, or carries bucket settings refused by the kit's own
+     * check in `kit.ts` — no prefix field, a prefix of "-", an empty endpoint — by the shared reader
+     * in `bucket-config.ts`, or by Litestream's settings check). Never carries any of the text: a kit
+     * holds the recovery key and the bucket's secret key. */
     "backup.stream_kit_invalid": { reason: "not_found" | "encoding" | "shape" };
     /** `litestream restore` did not produce the database: its exit code, or `null` when it gave
      * none — abandoned, never started, or ended by a signal; `diskFull` when its output carries the

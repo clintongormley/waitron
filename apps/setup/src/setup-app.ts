@@ -393,6 +393,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "backup.stream_pointer_invalid": "shell.bucket.pointer_invalid",
   "restore.stream_integrity_failed": "shell.bucket.integrity_failed",
   "restore.stream_state_missing": "shell.bucket.state_missing",
+  "restore.identity_unknown": "shell.bucket.identity_unknown",
   // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
   // apps/server/src/restore-command.ts).
   "recovery.passphrase_invalid": "shell.bucket.key_does_not_open",
