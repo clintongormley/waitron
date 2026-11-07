@@ -163,7 +163,6 @@ export default tseslint.config(
     // and typed structurally, so it must never import a duty's own code, the rest of payments
     // included, though it lives in that package. `scheduled_runs` is declared in payments' schema,
     // which is the one payments file outside this folder the runner may import (`except` below).
-    // Any other import would typecheck and pass every test; only this rule refuses it.
     //
     // Test files are exempt: the fit test and the AppError-code augmentation both name payments
     // deliberately, and neither ships in the runtime path.
@@ -185,7 +184,7 @@ export default tseslint.config(
             {
               target: "./packages/payments/src/reconciliation-schedule/**/*",
               from: ["./packages/payments/**"],
-              // Absolute globs: a `./` form never matched here when tried.
+              // Absolute globs: a `./` form does not match.
               except: [
                 import.meta.dirname + "/packages/payments/src/reconciliation-schedule/**",
                 import.meta.dirname + "/packages/payments/src/schema/scheduled-runs.*",
