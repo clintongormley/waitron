@@ -19,6 +19,14 @@ Preserve signed `8b2f940f4a`’s tip/free-sale fixes. No table, migration, payme
 - Gate automatic calls before Stripe’s resolve loop and SumUp’s lookup; test repeated host ticks, reconstruction, handled alerts and mixed ordinary rows. Recheck evidence inside every resolving write transaction so an answer already in flight cannot bypass it. Known mismatches stay unknown on manual checking too; later automatic passes return `nextDueAt: null`.
 - Show every amount pair in English/Spanish with the smallest necessary formatter; arrays currently render JSON. Preserve a second payment’s evidence and readable figures. Promise no release action.
 
+## Review repairs approved 2026-11-07 04:10
+
+Watcher, Lane F questions: “Yes: refuse further payment on that order while its mismatch is unresolved, refuse new payments through that reader from any till, and show a distinct mismatch result on the existing payment screen.” Other orders and readers keep working. The screen offers A1399's Card payments sign-in link. This adds no database state or release action.
+
+- Test partial bills and every till before adding order/reader gates. Keep other orders/readers usable; trace every gate consumer.
+- Distinguish a known mismatch from an ordinary timeout through whole-order and bill responses and the existing payment screen; preserve ordinary checking. Trace result consumers and replays, including manual checks. Reuse the sign-in link, without its unrelated retry changes.
+- Check SumUp's row is still attempting before recording evidence. Pin collect-time races in both adapters. Inline the error parameter shape without a guard allowlist change. Show the processor reference and order number with provider names. Correct stale claims and remove the redundant Stripe precheck. Keep all repairs in this PR, test-first.
+
 ## Verify and finish
 
 - Test a bill payment remaining pending/locked, unpaid order/mark, occupied reader, stuck visibility and no second payment, sale/tender/fiscal write or refund. Cover placed-order cancellation on the combined A1381/A1395/release candidate before landing.
