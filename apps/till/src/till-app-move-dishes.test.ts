@@ -406,6 +406,22 @@ describe("A803 move dishes app:", () => {
     expect(bannerText(el)).toContain(t("table.bills_served_differently"));
   });
 
+  it.each(["department.operation_description_required", "sale.department_missing"])(
+    "%s, from issuing the part-paid bill, shows that code's own sentence",
+    async (code) => {
+      const { el, order } = await open({
+        getPartyBills: vi.fn().mockResolvedValue(partPaid()),
+        moveDishes: vi.fn().mockRejectedValue({ code, status: 400 }),
+      });
+
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+      await flush(el, 6);
+
+      expect(bannerText(el)).toContain(codeMessage(code));
+      expect(bannerText(el)).not.toContain(t("table.error"));
+    },
+  );
+
   it("a refusal leaves the source bill on screen with the panel closed, and opening Move dishes… again starts with nothing picked over the re-read balance", async () => {
     const getBillBalance = vi
       .fn()
