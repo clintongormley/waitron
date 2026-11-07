@@ -48,5 +48,5 @@ export async function resolveInvoiceEmailDelivery(
   if (config.devMode || config.onboardingIntent === "demo") {
     return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
   }
-  return resolveEmailDelivery(db, ring, config.onboardingIntent === "prepare");
+  return resolveEmailDelivery(db, ring, false);
 }
