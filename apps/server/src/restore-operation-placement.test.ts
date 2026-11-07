@@ -564,7 +564,11 @@ it.each(["archive", "bucket"] as const)(
     expect(
       await runRestore({
         argv: kind === "archive" ? ["restore", file] : ["restore", "--from-bucket", file],
-        env: { WAITRON_BACKUP_RECOVERY_KEY: "backup-key" },
+        env: {
+          WAITRON_BACKUP_RECOVERY_KEY: "backup-key",
+          WAITRON_STATE_DIR: f.deps.stateDir,
+          WAITRON_VENUE_DIR: f.deps.venueDir,
+        },
         out: (line) => {
           lines.push(line);
         },

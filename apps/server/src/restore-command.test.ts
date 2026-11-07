@@ -32,6 +32,9 @@ import type { restoreFromStream, RestoredVenue } from "./restore-stream.js";
 
 const RECOVERY_KEY = "s3cr3t-recovery-key-value";
 
+/** For the cases that keep the state folder at its default, inside the source tree. */
+const unlockedVenue = async () => ({ release: () => {} });
+
 const COLD_RESTORE_NOTICE =
   "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten";
 
@@ -142,6 +145,7 @@ describe("waitron-restore restore", () => {
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
       },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restore: async (args) => {
         received = args;
@@ -206,6 +210,7 @@ describe("waitron-restore restore", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ENV: "production",
       },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
     });
     expect(code).toBe(1);
@@ -267,6 +272,7 @@ describe("waitron-restore restore", () => {
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
       },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restore: async () => {
         throw new AppError("recovery.passphrase_invalid", {});
@@ -288,6 +294,7 @@ describe("waitron-restore restore", () => {
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
       },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restore: async () => {
         throw new AppError("restore.environment_mismatch", {
@@ -310,6 +317,7 @@ describe("waitron-restore restore", () => {
     const code = await runRestore({
       argv: ["restore", artifactPath],
       env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restore: async () => {
         throw new AppError("provisioning.database_in_use", { database: "/var/lib/waitron/venue" });
@@ -331,6 +339,7 @@ describe("waitron-restore restore", () => {
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
       },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restore: async () => {
         throw new AppError("server.config_invalid", {
@@ -355,6 +364,7 @@ describe("waitron-restore restore", () => {
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
       },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restore: async () => {
         throw new Error(`EACCES: permission denied, open '/var/lib/waitron/${secretish}'`);
@@ -375,6 +385,7 @@ describe("waitron-restore restore", () => {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
         WAITRON_ENV: "preproduction",
       },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restore: async () => {
         throw new AppError("restore.hook_failed", {
@@ -491,6 +502,7 @@ describe("waitron-restore restore --from-bucket", () => {
       await runRestore({
         argv: ["restore", "--from-bucket", kitPath, ...flags],
         env: { WAITRON_ENV: "preproduction" },
+        lockVenue: unlockedVenue,
         out: (line) => out.push(line),
         restoreStream: async (d) => {
           answer = d.confirmVenue(VENUE);
@@ -507,6 +519,7 @@ describe("waitron-restore restore --from-bucket", () => {
     await runRestore({
       argv: ["restore", "--from-bucket", kitPath, "--confirm-venue", ""],
       env: { WAITRON_ENV: "preproduction" },
+      lockVenue: unlockedVenue,
       out: () => {},
       restoreStream: async (d) => {
         answer = d.confirmVenue({ legalName: "", taxId: "", venueName: "" });
@@ -544,6 +557,7 @@ describe("waitron-restore restore --from-bucket", () => {
     await runRestore({
       argv: ["restore", "--from-bucket", kitPath, "--confirm-old-box-gone"],
       env: { WAITRON_ENV: "preproduction" },
+      lockVenue: unlockedVenue,
       out: () => {},
       restoreStream,
     });
@@ -719,6 +733,7 @@ describe("waitron-restore restore --from-bucket", () => {
         kitPath,
       ],
       env: { WAITRON_ENV: "preproduction" },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restoreStream: async (d) => {
         received = d;
@@ -776,6 +791,7 @@ describe("waitron-restore restore --from-bucket", () => {
     const code = await runRestore({
       argv: ["restore", "--from-bucket", kitPath],
       env: { WAITRON_ENV: "preproduction" },
+      lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       openStore: () => ({
         get: () => new Promise<never>(() => {}),
@@ -824,6 +840,7 @@ describe("waitron-restore restore --from-bucket, where things live", () => {
     await runRestore({
       argv: ["restore", "--from-bucket", kitPath],
       env: { WAITRON_ENV: "preproduction" },
+      lockVenue: unlockedVenue,
       out: () => {},
       restoreStream: async (d) => {
         opened = d.openStore!(KIT.bucket);
@@ -956,6 +973,7 @@ describe("waitron-restore restore <artifact> and the old server", () => {
     const code = await runRestore({
       argv: ["restore", artifactPath],
       env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      lockVenue: unlockedVenue,
       out: (l) => out.push(l),
       restore: async () => {
         throw error;
@@ -1056,6 +1074,7 @@ describe("waitron-restore restore, when the restored database could not be put i
         const code = await runRestore({
           argv: ["restore", await makeArtifact(dir)],
           env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY, WAITRON_ENV: "preproduction" },
+          lockVenue: unlockedVenue,
           out: (line) => out.push(line),
           restore: async () => {
             throw error;
