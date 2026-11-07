@@ -34,6 +34,7 @@ import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
+import { refreshStaffCertificate } from "./cloud-staff-certificate.js";
 
 export interface CloudRegistration {
   venueId: string;
@@ -406,6 +407,27 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ? `${state.publicKey} ${state.view.registration.installationId}`
       : undefined;
   return {
+    async staffCertificate(hostname: string, signal?: AbortSignal): Promise<boolean> {
+      const deadline = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+        : AbortSignal.timeout(8000);
+      const state = await leaseState(deadline);
+      const registration = registrationOf(state);
+      return refreshStaffCertificate(
+        state,
+        options.stateDir,
+        hostname,
+        deadline,
+        recordRefusal,
+        async () => {
+          const current = await read();
+          return (
+            registrationOf(current) === registration &&
+            current?.lifecycle?.pending?.action !== "revoke"
+          );
+        },
+      );
+    },
     async billing(signal?: AbortSignal): Promise<BillingDisplay> {
       const registration = registrationOf(await read());
       if (!registration) throw new AppError("cloud.not_configured", {});

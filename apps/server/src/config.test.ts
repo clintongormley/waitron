@@ -1014,3 +1014,57 @@ describe("loadTunnelConfig", () => {
     });
   });
 });
+
+it("starts no remote staff entrance until an HTTPS origin is explicitly configured", () => {
+  expect(loadConfig({}, ROOT, STATE_ROOT)).not.toHaveProperty("staff");
+  expect(loadConfig({ WAITRON_STAFF_ORIGIN: "" }, ROOT, STATE_ROOT)).not.toHaveProperty("staff");
+  expect(
+    loadConfig({ WAITRON_STAFF_ORIGIN: "https://staff.example.test" }, ROOT, STATE_ROOT).staff,
+  ).toEqual({
+    origin: "https://staff.example.test",
+    host: "127.0.0.1",
+    port: 8443,
+  });
+});
+it.each([
+  "http://staff.example.test",
+  "https://staff.example.test/path",
+  "https://staff.example.test/",
+])("refuses a non-bare HTTPS staff origin %s", (origin) => {
+  expect(() => loadConfig({ WAITRON_STAFF_ORIGIN: origin }, ROOT, STATE_ROOT)).toThrow();
+});
+it("takes the explicit tunnel bind and port without changing the LAN listener", () => {
+  const config = loadConfig(
+    {
+      WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+      WAITRON_STAFF_HOST: "10.77.0.2",
+      WAITRON_STAFF_PORT: "9443",
+    },
+    ROOT,
+    STATE_ROOT,
+  );
+  expect(config.staff).toEqual({
+    origin: "https://staff.example.test",
+    host: "10.77.0.2",
+    port: 9443,
+  });
+  expect([config.httpHost, config.httpPort]).toEqual(["127.0.0.1", 8080]);
+});
+it.each(["8080", "80"])(
+  "refuses staff port %s when the local or landing listener uses it",
+  (port) => {
+    try {
+      loadConfig(
+        { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: port },
+        ROOT,
+        STATE_ROOT,
+      );
+      expect.unreachable("colliding listener port accepted");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_STAFF_PORT", reason: "listener_port_conflict" },
+      });
+    }
+  },
+);

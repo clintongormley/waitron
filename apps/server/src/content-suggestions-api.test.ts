@@ -1,3 +1,4 @@
+import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
@@ -497,4 +498,14 @@ it.each([
   "?extra=1",
 ])("refuses malformed all-language query %s", async (query) => {
   await refused(await send(mount(), "GET", `${LIST}${query}`), 400, "content.translation_invalid");
+});
+
+it("uses the staff origin for a remote suggestion run and refuses another origin", async () => {
+  await bread();
+  const staff = createStaffApp(mount(), "https://staff.example.test");
+  const sendRemote = (origin: string) =>
+    send(staff, "POST", "https://staff.example.test" + JOBS, { origin, body: "{}" });
+  expect((await sendRemote("https://attacker.test")).status).toBe(403);
+  expect((await sendRemote("https://staff.example.test")).status).toBe(200);
+  expect(await inTx((tx) => readActiveSuggestionJob(tx))).toMatchObject({ state: "submitting" });
 });

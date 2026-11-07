@@ -10,6 +10,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
+import { createStaffApp } from "./cloud-remote.js";
 import { mountMeApi } from "./me-api.js";
 
 // Pins the route wiring around the passkey ceremonies — gating, body screening, the login cookie and
@@ -678,4 +679,38 @@ describe("what the browser's password manager is told", () => {
       error: { code: "passkey.verification_failed", params: {} },
     });
   });
+});
+
+it("offers staff-host passkey registration and authentication separately from the LAN hostname", async () => {
+  await setupTenant();
+  const local = mountApp(),
+    staff = createStaffApp(local, "https://staff.example.test");
+  const signed = await staff.request("https://staff.example.test/management-api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: MANAGER_EMAIL, password: PASSWORD }),
+  });
+  expect(signed.status).toBe(200);
+  const cookie = signed.headers.get("set-cookie")!.split(";")[0]!;
+  const options = await staff.request(
+    "https://staff.example.test/management-api/passkey/register/options",
+    {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: PASSWORD }),
+    },
+  );
+  expect(options.status).toBe(200);
+  const registered = (await options.json()) as { options: { rp: { id: string } } };
+  expect(registered.options.rp.id).toBe("staff.example.test");
+  const remoteOptions = (await (
+    await staff.request("https://staff.example.test/management-api/passkey/auth/options", {
+      method: "POST",
+    })
+  ).json()) as { options: { rpId: string } };
+  expect(remoteOptions.options.rpId).toBe("staff.example.test");
+  const localOptions = (await (
+    await local.request("/management-api/passkey/auth/options", { method: "POST" })
+  ).json()) as { options: { rpId: string } };
+  expect(localOptions.options.rpId).toBe("localhost");
 });

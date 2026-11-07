@@ -1,3 +1,4 @@
+import { createStaffApp } from "./cloud-remote.js";
 import { chromium, type BrowserServer, type Browser } from "playwright";
 import { freePorts } from "./testing/free-ports.js";
 import { IncomingMessage, ServerResponse } from "node:http";
@@ -567,3 +568,29 @@ it.each([
     expect(restart).not.toHaveBeenCalled();
   },
 );
+
+it("uses the staff origin for remote time-zone repair and refuses another origin", async () => {
+  const staff = createStaffApp(app, "https://staff.example.test");
+  const requestRemote = (method: string, origin?: string) =>
+    staff.request(
+      "https://staff.example.test" + PATH,
+      {
+        method,
+        headers: {
+          cookie: `waitron_management_session=${token}`,
+          "content-type": "application/json",
+          ...(origin ? { origin } : { "sec-fetch-site": "same-origin" }),
+        },
+        ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
+      },
+      { outgoing },
+    );
+  await refusal(
+    await requestRemote("POST", "https://attacker.test"),
+    403,
+    "authorization.not_permitted",
+  );
+  expect((await requestRemote("GET")).status).toBe(200);
+  expect((await requestRemote("POST", "https://staff.example.test")).status).toBe(200);
+  expect(admission.snapshot()).toEqual({ state: "restart_required" });
+});

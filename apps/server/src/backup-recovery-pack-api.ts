@@ -1,4 +1,5 @@
 import { TLSSocket } from "node:tls";
+import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
 import { eq, inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
@@ -96,7 +97,10 @@ export function mountBackupRecoveryPackApi(
       const managementSessionId = requireManagementSession(c);
       const out = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, { managementSessionId, permission: "system.manage" });
-        return beginOwnPasskeyCheck(tx, { managementSessionId, rpId: deps.rpId });
+        return beginOwnPasskeyCheck(tx, {
+          managementSessionId,
+          rpId: isRemoteStaffRequest(c) ? new URL(c.req.url).hostname : deps.rpId,
+        });
       });
       return c.json(out);
     });
@@ -380,7 +384,7 @@ export function mountBackupRecoveryPackMakeApi(
       });
       const request = makeRequest(await readRawJsonBody<unknown>(c));
       const personId = await confirmFreshSignIn(
-        { db: deps.db, throttle, keyRing: deps.keyRing, rpId: deps.rpId, origin: deps.origin },
+        { db: deps.db, throttle, keyRing: deps.keyRing, ...managementSite(c, deps) },
         token,
         request.signIn,
       );

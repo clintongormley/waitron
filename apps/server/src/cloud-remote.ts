@@ -1,9 +1,18 @@
-import type { Hono } from "hono";
-import { generateKeyPairSync, X509Certificate, randomUUID } from "node:crypto";
-import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { serve } from "@hono/node-server";
+import { Server as HttpsServer } from "node:https";
+import { buildServeOptions, watchTlsFiles } from "./tls.js";
+import { closeListener } from "./close-listener.js";
+import type { ServerConfig } from "./config.js";
+import type { Logger } from "./logger.js";
+import { generateKeyPair, X509Certificate, randomUUID } from "node:crypto";
+import { lstat, mkdir, open, readFile, rename, rm, link } from "node:fs/promises";
 import { join } from "node:path";
 import forge from "node-forge";
 import { createSecureContext } from "node:tls";
+import { promisify } from "node:util";
+const generateStaffKeyPair = promisify(generateKeyPair);
 
 export function mountCloudPublic(app: Hono, serving: () => boolean): void {
   app.get("/public/availability", (c) => {
@@ -36,14 +45,20 @@ export async function createStaffCsr(stateDir: string, hostname: string): Promis
     await lstat(path);
   } catch (error) {
     if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
-    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const { privateKey } = await generateStaffKeyPair("rsa", { modulusLength: 2048 });
+    const temporary = path + "." + randomUUID();
     try {
-      const file = await open(path, "wx", 0o600);
+      const file = await open(temporary, "wx", 0o600);
       try {
         await file.writeFile(privateKey.export({ type: "pkcs8", format: "pem" }));
         await file.sync();
       } finally {
         await file.close();
+      }
+      try {
+        await link(temporary, path);
+      } catch (error) {
+        if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
       }
       const directory = await open(stateDir, "r");
       try {
@@ -51,8 +66,8 @@ export async function createStaffCsr(stateDir: string, hostname: string): Promis
       } finally {
         await directory.close();
       }
-    } catch (error) {
-      if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+    } finally {
+      await rm(temporary, { force: true });
     }
   }
   const key = forge.pki.privateKeyFromPem(await readStaffKey(stateDir));
@@ -103,5 +118,100 @@ export async function installStaffCertificate(
     }
   } finally {
     await rm(temporary, { force: true });
+  }
+}
+
+/** The remote listener forwards only the dashboard surface; a header cannot grant a local source. */
+export function createStaffApp(app: Hono, origin: string): Hono {
+  const staff = new Hono();
+  const limit = bodyLimit({ maxSize: 65536 });
+  staff.use("/management-api/*", (c, next) =>
+    /^\/management-api\/(?:session$|passkey\/|password-reset$|account-actions\/|google\/)/.test(
+      c.req.path,
+    )
+      ? limit(c, next)
+      : next(),
+  );
+  let challengeWindowEnd = 0;
+  let challenges = 0;
+  staff.all("*", (c) => {
+    const url = new URL(c.req.url);
+    const path = url.pathname;
+    if (url.origin !== origin || /%2f|%5c|%00/i.test(path)) return c.notFound();
+    // These machine operations check a password outside the dashboard sign-in throttle.
+    if (
+      ["membership", "mirror-bundle", "promote"].some(
+        (name) => path === `/management-api/${name}` || path.startsWith(`/management-api/${name}/`),
+      )
+    )
+      return c.notFound();
+    const read = c.req.method === "GET" || c.req.method === "HEAD";
+    const allowed =
+      path.startsWith("/management-api/") ||
+      path.startsWith("/api/box/") ||
+      path.startsWith("/api/backup/") ||
+      (read &&
+        (path === "/manage" ||
+          path.startsWith("/manage/") ||
+          path === "/api/theme" ||
+          path === "/api/content-languages" ||
+          path.startsWith("/media/") ||
+          path.startsWith("/help/")));
+    if (!allowed) return c.notFound();
+    if (path === "/management-api/passkey/auth/options" && c.req.method === "POST") {
+      const now = Date.now();
+      if (now >= challengeWindowEnd) {
+        challengeWindowEnd = now + 60000;
+        challenges = 0;
+      }
+      if (challenges >= 20) {
+        const retryAfterSeconds = Math.ceil((challengeWindowEnd - now) / 1000);
+        c.header("Retry-After", String(retryAfterSeconds));
+        return c.json(
+          { error: { code: "password.throttled", params: { retryAfterSeconds } } },
+          429,
+        );
+      }
+      challenges++;
+    }
+    return app.fetch(c.req.raw, { ...(c.env as object), remoteStaff: true });
+  });
+  return staff;
+}
+
+export function startStaffListener(
+  config: Pick<ServerConfig, "staff" | "stateDir">,
+  app: Hono,
+  log: Logger,
+): { close(): Promise<void>; isListening(): boolean } | undefined {
+  const staff = config.staff;
+  if (staff === undefined) return undefined;
+  const failure = (error: unknown) =>
+    log("warn", "server.listen_failed", {
+      listener: "staff",
+      port: staff.port,
+      code: (error as NodeJS.ErrnoException)?.code ?? "unknown",
+    });
+  try {
+    const tls = {
+      keyFile: join(config.stateDir, "cloud-staff.key"),
+      certFile: join(config.stateDir, "cloud-staff.crt"),
+    };
+    const server = serve(
+      buildServeOptions(
+        { fetch: createStaffApp(app, staff.origin).fetch, hostname: staff.host, port: staff.port },
+        tls,
+      ),
+      (info) => log("info", "server.listening", { listener: "staff", port: info.port }),
+    );
+    server.on("error", failure);
+    if (server instanceof HttpsServer)
+      watchTlsFiles(server, tls, new URL(staff.origin).hostname, () =>
+        log("error", "cloud.certificate_reload_failed"),
+      );
+    return { close: () => closeListener(server), isListening: () => server.listening };
+  } catch (error) {
+    failure(error);
+    return undefined;
   }
 }

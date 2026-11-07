@@ -36,7 +36,7 @@ import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
-import { mountCloudPublic } from "./cloud-remote.js";
+import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
@@ -46,7 +46,7 @@ import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
@@ -3561,6 +3561,18 @@ async function bootServer(
   });
   undoOnFailure.push(async () => appendOnlyWatch.stop());
 
+  // A mirror's ambient administrator session must stay off the staff entrance.
+  const waitingForStaffCertificate =
+    cloudConnection &&
+    config.staff &&
+    config.environment !== "production" &&
+    !existsSync(join(config.stateDir, "cloud-staff.crt"));
+  let staffListener =
+    isMirror || waitingForStaffCertificate ? undefined : startStaffListener(config, app, log);
+  undoOnFailure.push(async () => {
+    await staffListener?.close();
+  });
+
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
   undoOnFailure.push(() => closeListener(server));
@@ -3774,6 +3786,22 @@ async function bootServer(
         connection: cloudConnection,
         signal: cloudController.signal,
         isPrimary: cloudPrimary,
+        ...(config.staff && config.environment !== "production"
+          ? {
+              staffHostname: new URL(config.staff.origin).hostname,
+              onStaffCertificate: async () => {
+                if (
+                  cloudController.signal.aborted ||
+                  !cloudPrimary() ||
+                  staffListener?.isListening()
+                )
+                  return;
+                await staffListener?.close();
+                if (!cloudController.signal.aborted && cloudPrimary())
+                  staffListener = startStaffListener(config, app, log);
+              },
+            }
+          : {}),
         onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
       })
     : undefined;
@@ -3868,7 +3896,18 @@ async function bootServer(
     health,
     log,
     {
-      stopWork: () => stopBackgroundDuties(duties),
+      stopWork: () =>
+        closeAll([
+          async () => {
+            cloudController.abort();
+            try {
+              await cloudWorker;
+            } finally {
+              await staffListener?.close();
+            }
+          },
+          () => stopBackgroundDuties(duties),
+        ]),
       settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },

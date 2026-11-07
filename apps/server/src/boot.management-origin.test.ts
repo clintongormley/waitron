@@ -1,3 +1,4 @@
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
@@ -18,6 +19,10 @@ import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 
 const served = vi.hoisted(() => ({
+  listeners: [] as {
+    fetch: (request: Request, env?: unknown) => Promise<Response>;
+    server: ReturnType<typeof serve>;
+  }[],
   fetch: undefined as
     ((request: Request, env: { incoming: { socket: unknown } }) => Promise<Response>) | undefined,
 }));
@@ -29,7 +34,9 @@ vi.mock("@hono/node-server", async () => {
     ...mocked,
     serve: (options: Parameters<typeof serve>[0], onListen: Parameters<typeof serve>[1]) => {
       served.fetch = options.fetch as typeof served.fetch;
-      return mocked.serve(options, onListen);
+      const server = mocked.serve(options, onListen);
+      served.listeners.push({ fetch: options.fetch as never, server });
+      return server;
     },
   };
 });
@@ -72,6 +79,7 @@ async function withServer(
   env: Record<string, string>,
   body: (started: Started) => Promise<void>,
 ): Promise<void> {
+  served.listeners = [];
   const venue = await setupVenue(suite.db);
   const host = fakeHost();
   let seen: Hono | undefined;
@@ -107,6 +115,15 @@ async function withServer(
       WAITRON_ADVERTISED_ORIGIN: TRUSTED,
       ...env,
     };
+    if (env.WAITRON_STAFF_ORIGIN) {
+      const material = mintSelfSignedServerCert({
+        now: new Date(),
+        hostnames: [new URL(env.WAITRON_STAFF_ORIGIN).hostname],
+        ipAddresses: [],
+      });
+      await writeFile(join(scratch, "cloud-staff.key"), material.serverKeyPem);
+      await writeFile(join(scratch, "cloud-staff.crt"), material.serverCertPem);
+    }
     server = await startServer(full, full, seams);
     await vi.waitFor(async () => {
       expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
@@ -276,4 +293,43 @@ describe("a management change in the running server", () => {
       expect(uncovered).toEqual([]);
     });
   });
+});
+
+it("boots and closes a separate staff entrance over the real dashboard API", async () => {
+  const [port] = await freePorts(1);
+  await withServer(
+    { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: String(port) },
+    async ({ venue }) => {
+      expect(served.listeners).toHaveLength(2);
+      const remote = served.listeners[0]!;
+      const response = await remote.fetch(
+        new Request("https://staff.example.test/management-api/session/me", {
+          headers: { cookie: venue.managerCookie },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const local = await served.listeners[1]!.fetch(
+        new Request("http://localhost/management-api/session/me", {
+          headers: { cookie: venue.managerCookie },
+        }),
+      );
+      const localBody = (await local.json()) as { personId: string };
+      expect(await response.json()).toMatchObject({
+        personId: localBody.personId,
+        role: "manager",
+      });
+      for (const path of [
+        "/setup-api/status",
+        "/api/session",
+        "/print-api/agent/jobs",
+        "/device-api/start",
+      ]) {
+        expect(
+          (await remote.fetch(new Request(`https://staff.example.test${path}`))).status,
+          path,
+        ).toBe(404);
+      }
+    },
+  );
+  expect(served.listeners.every(({ server }) => !server.listening)).toBe(true);
 });

@@ -36,7 +36,23 @@ export function requestAddress(c: Context): string | undefined {
   return address === undefined ? undefined : plainAddress(address);
 }
 
-/** A request with no connection to read, as from `app.request` with no socket, counts as the box's. */
+export function isRemoteStaffRequest(c: Context): boolean {
+  return c.env?.remoteStaff === true;
+}
+
+export function managementOriginFor(c: Context, localOrigin: string): string {
+  return isRemoteStaffRequest(c) ? new URL(c.req.url).origin : localOrigin;
+}
+
+export function managementSite(
+  c: Context,
+  local: { rpId: string; origin: string },
+): { rpId: string; origin: string } {
+  const url = new URL(c.req.url);
+  return isRemoteStaffRequest(c) ? { rpId: url.hostname, origin: url.origin } : local;
+}
+
+/** A missing socket is local unless the staff listener marked the request remote. */
 export function requestFromBox(c: Context, deps: RequestSourceDeps = {}): boolean {
-  return addressIsBox(requestAddress(c), deps);
+  return !isRemoteStaffRequest(c) && addressIsBox(requestAddress(c), deps);
 }
