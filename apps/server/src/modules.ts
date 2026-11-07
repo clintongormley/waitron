@@ -54,13 +54,13 @@ export const ALL_ALERT_CLAIMS: readonly AlertEventClaim[] = ALL_MODULES.flatMap(
 );
 
 /** The ongoing checks of the modules given — boot passes the enabled set, because a disabled
- * module's tables are not migrated. */
+ * module with a set of its own is not migrated. */
 export function enabledAlertSources(modules: readonly WaitronModule[]): readonly AlertSource[] {
   return modules.flatMap((m) => m.alerts?.sources ?? []);
 }
 
 /** Every staff-notice check of the modules given, named by its module. Give it the enabled set:
- * a disabled module's tables are not migrated. */
+ * a disabled module with a set of its own is not migrated. */
 export function enabledStaffNoticeSources(
   modules: readonly WaitronModule[],
 ): readonly OwnedStaffNoticeSource[] {

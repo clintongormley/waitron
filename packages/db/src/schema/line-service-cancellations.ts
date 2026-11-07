@@ -10,7 +10,8 @@ export const lineServiceCancellations = table(
     quantity: quantity("quantity").notNull(),
     cancelledAt: tsString("cancelled_at").notNull(),
     wasStarted: flag("was_started").notNull(),
-    // No key: persons belongs to identity's migration set, not core.
+    // No key: none was added when A760 moved `persons` into core's set, which changed no table's
+    // shape.
     actorId: id("actor_id").notNull(),
   },
   (t) => [

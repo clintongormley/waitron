@@ -49,7 +49,7 @@ export interface SchemaConformanceOptions {
   /** The migration set whose tables are under test. */
   readonly subject: VenueMigrationSet;
   /**
-   * The set's name as the suite's own case names say it — `core`, `catalogue`. It names the SET,
+   * The set's name as the suite's own case names say it — `core`, `workforce`. It names the SET,
    * not the package, and it is read by whoever reads a failure.
    */
   readonly subjectName: string;

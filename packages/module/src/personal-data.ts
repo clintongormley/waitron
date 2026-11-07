@@ -43,7 +43,7 @@ export interface PersonalDataPart {
  * needs the ZIP's UTF-8 flag. */
 const FILE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*\.(?:json|csv|pdf)$/;
 
-/** Give it the enabled set: a disabled module's tables are not migrated. */
+/** Give it the enabled set: a disabled module with a set of its own is not migrated. */
 export function personalDataParts(modules: readonly WaitronModule[]): PersonalDataPart[] {
   return modules.flatMap((m) =>
     m.personalData === undefined ? [] : [{ owner: m.name, part: m.personalData }],

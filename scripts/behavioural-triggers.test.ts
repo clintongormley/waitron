@@ -29,41 +29,18 @@ import {
 } from "../packages/db/src/trigger-refusals.js";
 
 /**
- * The BEHAVIOURAL rules of `packages/db/drizzle/0001_behavioural_triggers.sql` still refuse
+ * The BEHAVIOURAL triggers of core's set (`packages/db/drizzle/0000_baseline.sql`) still refuse
  * against a database the PRODUCT migrated: a settlement's tender coverage, a tender
  * after settlement, a working order's status transitions, lines written against an order that is
  * not open, a line's description maps matching the venue's invoice locales, and a device profile's
  * form factor while an active device uses it. A trigger cannot be declared in the TypeScript schema,
  * so a regenerated migration set does not carry it.
  *
- * It also holds `packages/db/drizzle/0004_variant_one_level.sql`'s three triggers on `products`: a
- * variant is one level deep, keeps the parent it was created with, and no product's id changes.
- * And `packages/db/drizzle/0047_product_ordering_check.sql`'s two: `products.ordering` holds one of
- * its three values.
- * `working_orders_enforce_transition` is re-created, with the same name, by
- * `packages/db/drizzle/0015_settled_order_freeze_new_columns.sql` and again by
- * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`, and
- * `working_order_lines_require_open_parent_update` by `0027_line_vat_class_triggers.sql` and again,
- * with its served exception and a refusal to move a line off an order that is not open, by
- * `packages/db/drizzle/0033_line_served_exception.sql`. Both are re-created by
- * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill.
- * `working_orders_enforce_transition` is re-created again by
- * `packages/db/drizzle/0056_placed_order_handover.sql`, which lets a sent, unpaid counter order take
- * its handover stamp, and again by `packages/db/drizzle/0128_delivery_table_release.sql`, with
- * `delivery_table_label` in the presented-bill and handover unchanged-column lists and an exception
- * letting an order past `open` drop its delivery table and keep its name.
- * `working_order_lines_require_open_parent_update` is re-created again by
- * `packages/db/drizzle/0050_line_list_price_frozen.sql`, with `list_unit_price_gross` in its
- * unchanged-column lists, and by `packages/db/drizzle/0053_line_sent_after_close.sql`, which lets a
- * presented or paid bill's line take a first `sent_at`.
- * `device_profile_form_factor_locked` is re-created after each rebuild of `devices`, by
- * `packages/db/drizzle/0091_devices_recreate_triggers.sql` and
- * `packages/db/drizzle/0124_devices_recreate_form_factor_trigger.sql`.
- * `packages/db/drizzle/0064_line_locale_triggers_text_only.sql` re-creates the two locale update
- * triggers to fire only when an update changes the name map each one checks or moves the line.
- * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
- * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
- * whatever the row, so they have no accepting control here.
+ * It also holds three triggers on `products` — a variant is one level deep, keeps the parent it
+ * was created with, and no product's id changes — and two more holding `products.ordering` to one
+ * of its three values; and the state guards on `bill_payments` and `bill_payment_refunds`, with a
+ * trigger on each refusing every delete — those two refuse by design whatever the row, so they
+ * have no accepting control here.
  *
  * **It migrates through `applyMigrations`**: a guard that installs the thing under test cannot see
  * the product failing to install it.
@@ -85,14 +62,11 @@ import {
 
 /**
  * The other triggers a fully migrated venue carries: they stand in for the two foreign keys
- * `products.image` and `sections.image`
- * (`packages/media/drizzle/0001_image_references.sql` carries the reasoning, and
- * `packages/media/drizzle/0002_section_image_references.sql` adds the four on `sections.image`),
- * and for `menu_version_images.filename`, keeping a photo a live menu version or a queued edition
- * names (`packages/media/drizzle/0003_published_image_references.sql`, and `0008` for a queued
- * edition). Media's `0005_photo_name_only.sql` drops and re-creates all eleven around its rebuild
- * of `media_images`. `0009_include_folder_image_references.sql` adds four more, holding the photo an
- * include's folder names in `section_members.folder_overrides`.
+ * `products.image` and `sections.image`, for `menu_version_images.filename`, keeping a photo a live
+ * menu version or a queued edition names, and for the photo an include's folder names in
+ * `section_members.folder_overrides`. Why they are triggers and not foreign keys is in the header
+ * of the old migration that first made them,
+ * `scripts/fixtures/a760-history/media/0001_image_references.sql`.
  * Named here only because the assertion below is an EQUALITY over every non-append-only trigger.
  */
 const IMAGE_REFERENCE_TRIGGERS = [
@@ -114,12 +88,9 @@ const IMAGE_REFERENCE_TRIGGERS = [
 ];
 
 /**
- * Every behavioural trigger the migrations create, pinned by name: those of
- * `0001_behavioural_triggers.sql` (SQLite has no `BEFORE INSERT OR UPDATE`, so a rule covering more
- * than one event is split and the suffix names the event), the `products_*` names of
- * `0004_variant_one_level.sql` and `0047_product_ordering_check.sql`, and the `bill_payment*`
- * names of `0024_bill_payment_triggers.sql`. A later migration that RECREATES a table drops its triggers
- * silently — the `products_*` ones on `products` — and
+ * Every behavioural trigger the migrations create, pinned by name. SQLite has no
+ * `BEFORE INSERT OR UPDATE`, so a rule covering more than one event is split and the suffix names
+ * the event. A later migration that RECREATES a table drops its triggers silently, and
  * this list is what notices.
  */
 const EXPECTED_TRIGGERS = [

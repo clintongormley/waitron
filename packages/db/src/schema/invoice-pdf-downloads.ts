@@ -8,7 +8,7 @@ export const invoicePdfDownloads = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     saleId: id("sale_id").notNull(),
-    // Persons belong to identity's migration set; a removed person must not erase this audit row.
+    // No key: a removed person must not erase this audit row.
     personId: id("person_id").notNull(),
     requestedAt: tsString("requested_at").notNull().$defaultFn(nowIso),
   },

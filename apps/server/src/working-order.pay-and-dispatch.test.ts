@@ -147,7 +147,7 @@ function systemClock(): TrustedClock {
   };
 }
 
-// `tenants_country_tax_id_key` is unique (`packages/db/drizzle/0000_baseline.sql:38`), so each
+// `tenants_country_tax_id_key` is unique (`packages/db/drizzle/0000_baseline.sql`), so each
 // provisioned venue takes its own NIF.
 let nifCounter = 0;
 function nextNif(): string {

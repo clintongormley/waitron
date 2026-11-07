@@ -141,8 +141,10 @@ const CORE_TRANSFER: ModuleConfigurationTransfer = {
  *
  * Each `migrations` object carries the exact `{ name, table, from }`, and `database` where set, from
  * `packages/migrations/migrations.manifest.json`; `composition.test.ts` pins the two byte-for-byte
- * while both exist. `requires` must name every set whose table this set's SQL `REFERENCES`, puts a
- * trigger `ON`, or names inside a trigger body. Two modules fill the `fiscal` slot —
+ * while both exist. A module with a set of its own names in `requires` every other set whose table
+ * its SQL `REFERENCES`, puts a trigger `ON`, or names inside a trigger body; a module whose tables
+ * live in another module's set (`tablesIn`) has no SQL of its own. Two modules fill the `fiscal`
+ * slot —
  * `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly one is enabled per deployment
  * (`fiscalSlot`); provisioning selects it from the venue's territory.
  */

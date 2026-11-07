@@ -11,8 +11,7 @@ import { sales } from "./sales.js";
  * A bill whose party left without paying it: the invoice it is owed against and the amount that
  * invoice still owed when the party left. Append-only, and one row per bill.
  *
- * `recorded_by` and `authorized_by` are plain person ids with no key, as on `bill_payment_refunds`:
- * `persons` is in @waitron/identity's migration set.
+ * `recorded_by` and `authorized_by` are plain person ids with no key, as on `bill_payment_refunds`.
  */
 export const unpaidDepartures = table(
   "unpaid_departures",

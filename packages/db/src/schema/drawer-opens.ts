@@ -16,8 +16,8 @@ import { tenderRefunds } from "./tender-refunds.js";
  * No trigger refuses an update or a delete: the table is declared with `classify()`, not
  * `appendOnly()`, in `../classification.ts`.
  *
- * `person_id` and `authorized_by` are plain ids with no FK: `persons` is in @waitron/identity's
- * migration set, not the core one.
+ * `person_id` and `authorized_by` are plain ids with no FK: none was added when A760 moved
+ * `persons` into core's set, which changed no table's shape.
  */
 export const drawerOpens = table(
   "drawer_opens",

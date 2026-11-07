@@ -68,8 +68,7 @@ export const ticketItems = table(
     // Explicit "leave to finish" survives disabling; an earlier manual station choice does not.
     stationRetainedAtRelease: flag("station_retained_at_release").notNull().default(false),
     note: label("note"),
-    // The quantity fired. Null where an insert does not state it, and on every row older than
-    // `0014_order_edit_columns.sql`.
+    // The quantity fired. Null where an insert does not state it.
     quantity: quantity("quantity"),
     madeHere: flag("made_here").notNull().default(false),
     // The number of the order this kitchen work was first sent under, once it has moved to another

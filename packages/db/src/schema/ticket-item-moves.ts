@@ -16,7 +16,8 @@ export const ticketItemMoves = table(
     toStationId: id("to_station_id").notNull(),
     movedAt: tsString("moved_at").notNull(),
     movedByDeviceId: id("moved_by_device_id"),
-    // People live in identity's migration set, which core cannot reference.
+    // No key: none was added when A760 moved `persons` into core's set, which changed no table's
+    // shape.
     movedByPersonId: id("moved_by_person_id"),
   },
   (t) => [

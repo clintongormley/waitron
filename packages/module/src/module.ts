@@ -1549,7 +1549,7 @@ export interface WaitronModule {
   readonly handover?: ModuleHandoverContribution;
   readonly routes?: ModuleRoutes;
   readonly timeRecordExport?: ModuleTimeRecordExport;
-  /** Read only from enabled modules: a disabled module's tables are not migrated. */
+  /** Read only from enabled modules: a disabled module with a set of its own is not migrated. */
   readonly personalData?: ModulePersonalData;
   readonly describeShifts?: (
     tx: Transaction,
@@ -1559,11 +1559,11 @@ export interface WaitronModule {
   readonly tableRemoval?: TableRemoval;
   readonly venueService?: VenueServiceContribution;
   /** Incident codes this module claims for the dashboard alerts, and its ongoing checks. Claims are
-   * read from every module; sources only from enabled modules, since a disabled module's tables are
-   * not migrated. */
+   * read from every module; sources only from enabled modules, since a disabled module with a set
+   * of its own is not migrated. */
   readonly alerts?: ModuleAlerts;
   /** Checks whose notices are for the staff on every device that sells. Ask only enabled
-   * modules' sources: a disabled module's tables are not migrated. */
+   * modules' sources: a disabled module with a set of its own is not migrated. */
   readonly staffNotices?: readonly StaffNoticeSource[];
   readonly backup?: ModuleBackupContribution;
   readonly configurationTransfer?: ModuleConfigurationTransfer;

@@ -36,7 +36,7 @@ export const products = table(
     /* v8 ignore stop */
     // Set only on a VARIANT: the product it is a variant of. One level only, fixed when the row is
     // created, and the row's `id` never changes either — all enforced by triggers, which cannot be
-    // declared here (0004_variant_one_level.sql). Same catalogue as the parent: the composite key
+    // declared here (`drizzle/0000_baseline.sql`). Same catalogue as the parent: the composite key
     // below.
     parentId: id("parent_id"),
     // A variant's position among its parent's variants; unused with no parent.
@@ -70,7 +70,7 @@ export const products = table(
     available: flag("available").notNull().default(true),
     // Who may order the product on its own: `public`, `staff_only` or `not_sold_separately`. No
     // CHECK, because adding one makes drizzle rebuild this table, whose children a rebuild deletes
-    // or refuses; the `products_ordering_check_*` triggers (0047_product_ordering_check.sql) refuse
+    // or refuses; the `products_ordering_check_*` triggers (`drizzle/0000_baseline.sql`) refuse
     // any other value. Being offered as an extra does not read it.
     ordering: label("ordering").$type<ProductOrdering>().notNull().default("public"),
     // The photo's original hash filename is its stable reference; media resolves its current picture.

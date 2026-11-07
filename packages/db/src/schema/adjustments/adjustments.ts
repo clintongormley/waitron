@@ -54,8 +54,8 @@ export const adjustments = table(
     lineQuantity: quantity("line_quantity"),
     /** The line's unit price before any adjustment touched it. */
     lineListUnitPrice: money("line_list_unit_price"),
-    // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require. The same holds for `requested_by` and `approved_by`.
+    // No foreign key: none was added when A760 moved `persons` into core's set, which changed no
+    // table's shape. The same holds for `requested_by` and `approved_by`.
     creditedTo: id("credited_to"),
     // No foreign key: the configuration import deletes every reason; `reason_name` and
     // `policy_snapshot` keep the history, and this id only groups rows.

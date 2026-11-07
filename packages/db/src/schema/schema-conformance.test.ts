@@ -13,8 +13,8 @@ describeSchemaConformance({
   subject: CORE_MIGRATIONS,
   declarations: barrel,
   declaresClosedVocabularies: true,
-  // Media's and credentials' tables, whose own sets declared none: `tenant_credentials.purpose` is
-  // a plain `label()`, and `PURPOSES` in `packages/credentials/src/purposes.ts` holds its values.
+  // Media's and credentials' tables declare none: `tenant_credentials.purpose` is a plain
+  // `label()`, and `PURPOSES` in `packages/credentials/src/purposes.ts` holds its values.
   tablesWithoutClosedVocabularies: [
     "media_images",
     "media_image_data",

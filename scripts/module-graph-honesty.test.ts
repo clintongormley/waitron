@@ -5,16 +5,16 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
 
 /**
- * Every module descriptor's `requires` must NAME every cross-module dependency its migrations
- * create in SQL. A module depends on another when its `drizzle/*.sql` names a table the other
- * module owns in an FK, a trigger's ON clause, a trigger's body, or a top-level write.
+ * The `requires` of every module that owns a migration set must NAME every other set its
+ * migrations depend on in SQL. A set depends on another when its `drizzle/*.sql` names a table the
+ * other set creates in an FK, a trigger's ON clause, a trigger's body, or a top-level write.
  *
- * It reads SQL as TEXT, never executing it: it maps every `CREATE TABLE <name>` to its owning
- * module, resolves each edge's target table to its owner, drops same-module targets, and asserts
- * the surviving cross-module set is a subset of the descriptor's declared `requires`. Every regex
- * accepts a backtick (drizzle-kit's SQLite spelling), a double quote or nothing, and the
- * optionally `public.`-qualified spelling; each spelling has a control test, because a spelling the
- * detector misses makes every edge written that way invisible.
+ * It reads SQL as TEXT, never executing it: it maps every `CREATE TABLE <name>` to the module
+ * whose set creates it, resolves each edge's target table to that module, drops same-set targets,
+ * and asserts the surviving cross-module set is a subset of the descriptor's declared `requires`.
+ * Every regex accepts a backtick (drizzle-kit's SQLite spelling), a double quote or nothing, and
+ * the optionally `public.`-qualified spelling; each spelling has a control test, because a spelling
+ * the detector misses makes every edge written that way invisible.
  *
  * KNOWN LIMITATIONS:
  * - ONLY A MODULE THAT OWNS A MIGRATION SET IS SCANNED. The `requires` of a module without its own

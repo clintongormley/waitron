@@ -8,8 +8,7 @@ import * as barrel from "./index.js";
 
 describeSchemaConformance({
   subjectName: "workforce",
-  // The database the set's foreign keys resolve in (core's `locations`, `devices`, `nodes` and
-  // `persons`), not a migration prerequisite.
+  // The database the set's foreign keys resolve in (core's tables), not a migration prerequisite.
   prerequisites: [CORE_MIGRATIONS],
   subject: WORKFORCE_MIGRATIONS,
   declarations: barrel,
