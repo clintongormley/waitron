@@ -1755,8 +1755,8 @@ declare module "@waitron/shared" {
     /** The restored copy is a venue the operator has not confirmed: its legal name, tax id and
      * venue name, which the operator must recognise before anything is staged. */
     "restore.stream_venue_unconfirmed": { legalName: string; taxId: string; venueName: string };
-    /** SQLite's `integrity_check` found the restored copy damaged, or could not open it. Carries no
-     * SQLite text, which can name paths. */
+    /** SQLite's integrity or foreign-key check found the restored copy damaged, or the copy could
+     * not be opened. Carries no SQLite text, which can name paths. */
     "restore.stream_integrity_failed": Record<string, never>;
     /** The restored copy holds no sealed state row for the node the pointer names, so the box's
      * vault key and certificate authority cannot come back with it. */

@@ -343,17 +343,18 @@ each).
   `isCopyIntact`) and `PrepareStreamDeps.checkIntegrity?: (databasePath: string) => Promise<boolean>`.
 
 - [ ] **Step 1: Write the failing test**
-  `it("keeps the main thread's timers turning while it checks a large copy, where a check on the main thread stops them")`:
+  `it("keeps the main thread's timers turning while it checks a copy that takes the main thread over one timer period")`:
   build a plain SQLite file in a fresh folder (`create table t(x blob)`, 15,000 rows of
-  `randomblob(4000)`, about 60 MB, one transaction). Control first: count a 10 ms interval's ticks
-  while `new DatabaseSync(file).prepare("pragma integrity_check").all()` runs on the main thread —
-  expect 0. Then count while awaiting `checkIntegrity(file)` — expect the answer `true` and more than
-  0 ticks.
+  `randomblob(4000)`, about 60 MB, one transaction). Control first: time
+  `new DatabaseSync(file).prepare("pragma integrity_check").all()` on the main thread with
+  `performance.now()` — expect at least 10 ms, one period of the interval below (it measured
+  22–47 ms over 15 runs). Then count a 10 ms interval's ticks while awaiting `checkIntegrity(file)` —
+  expect the answer `true` and more than 0 ticks.
 - [ ] **Step 2: Run it**:
   `pnpm --filter @waitron/server exec vitest run src/restore-stream.test.ts -t "timers turning"`.
   On today's code it fails before reaching the tick count (the old `checkIntegrity` takes an open
-  store, not a path); the control is what shows the file is large enough for the property to be
-  measured. Record both counts in the commit message.
+  store, not a path); the control's time is what shows the file is large enough for the property to be
+  measured. Record the control's time and the tick count in the commit message.
 - [ ] **Step 3: Implement.** `checkIntegrity(databasePath)` returns `isCopyIntact(databasePath)`
   (`./handover-integrity.js`). `readRestoredCopy` calls
   `args.checkIntegrity(join(args.directory, VENUE_FILE))` before `openVenueDatabase`; `false` →

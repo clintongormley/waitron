@@ -226,7 +226,7 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
   };
 }
 
-/** From the restored copy alone, opened once: refuse a damaged file, then a schema ahead of this
+/** From the restored copy alone: refuse a damaged file, then a schema ahead of this
  * software, then read the node's locked row and whose copy it is. */
 async function readRestoredCopy(args: {
   directory: string;
