@@ -299,11 +299,6 @@ screens' reads are not limited, and it was not measured in a real browser agains
 provider. Left open by A260 (several card readers' status reads at once can use up the browser's
 connections to the box; W18c #1145 and W48 #1162).
 
-## Two concurrent passes of the SumUp provider's `resolvePending` over `listAttempting` (`packages/payments/src/store.ts`) do not both succeed
-
-The second pass throws partway instead of skipping the rows the first resolved. The Stripe
-provider's `resolvePending` also reads `listAttempting` (`packages/payments-stripe/src/provider.ts:258`)
-but skips a row another pass resolved first (`payment.not_found`, `:269`).
 
 ## Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991)
 
@@ -396,14 +391,6 @@ Once no card payment of the order runs in this process, a collect is accepted
 review measured it with `FakePaymentProvider.forward`; of the adapters, only
 `StripeOnDeviceProvider`, which no app builds, settles forwarded rows.
 
-## Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive
-
-SumUp's
-older `refund` call still parses a 2xx or 4xx body as JSON
-(`packages/payments-sumup/src/sumup-client.ts`, `refund` through `call`), so a 404 answered with
-an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
-reversal primitive.
-
 ## A placed order with no invoice is not checked against stored card payments when it is cancelled
 
 Its cancel sees a card running at the reader in this process, but not a stored
@@ -465,18 +452,6 @@ and shows a clear message.
   A793's design, read). Next: compare the captured amount at capture time, as the bill payment
   loop does (`payment.bill_capture_mismatch`).
   [Detail](payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
-
-## Bundle A1394: SumUp's sweep and refund call stop throwing
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Two concurrent passes of the SumUp provider's `resolvePending` over `listAttempting`
-  (`packages/payments/src/store.ts`) do not both succeed**: the second pass throws partway instead
-  of skipping the rows the first resolved.
-  [Detail](payments.md#two-concurrent-passes-of-the-sumup-providers-resolvepending-over-listattempting-packagespaymentssrcstorets-do-not-both-succeed)
-- **Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.**
-  Left open by A632.
-  [Detail](payments.md#lift-reverseviastripe-and-reverseviasumup-into-one-neutral-reversal-primitive)
 
 ## Bundle A1395: Cancelling or settling a placed order respects stored card payments
 

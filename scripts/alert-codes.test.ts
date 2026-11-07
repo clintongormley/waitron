@@ -52,6 +52,7 @@ const NOT_RECORDED = new Set([
   "fiscal.remedy_request_invalid",
   "filing_case.action_mismatch",
   "filing_case.not_found",
+  "payment.not_found",
   "sale.already_substituted",
   "sale.already_voided",
   "sale.correction_exceeds_total",

@@ -157,3 +157,5 @@ export { runDue } from "./reconciliation-schedule/run.js";
 export type { RunRecord, SchedulerDeps, TickResult } from "./reconciliation-schedule/run.js";
 export { SCHEDULER_TABLES } from "./reconciliation-schedule/tables.js";
 export { SCHEDULER_BACKUP_VERIFICATION } from "./reconciliation-schedule/backup-verification.js";
+
+export { reversePayment } from "./reverse.js";
