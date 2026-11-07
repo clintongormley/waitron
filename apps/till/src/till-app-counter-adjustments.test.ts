@@ -1436,8 +1436,8 @@ describe("till-app: comping a stored counter order", () => {
     };
 
     const sentence = {
-      en: "The kitchen has already started a dish on this order, and a started dish can no longer be changed. The order has been reloaded: cancel that dish if needed",
-      es: "La cocina ya ha empezado un plato de este pedido, y un plato empezado ya no se puede cambiar. Se ha vuelto a cargar el pedido: cancela ese plato si hace falta",
+      en: "The kitchen has already started a dish on this order, and a started dish can no longer be changed. The order has been reloaded",
+      es: "La cocina ya ha empezado un plato de este pedido, y un plato empezado ya no se puede cambiar. Se ha vuelto a cargar el pedido",
     };
 
     describe.each(["en", "es"] as const)("in %s", (language) => {
@@ -1540,7 +1540,7 @@ describe("till-app: comping a stored counter order", () => {
       expect(banner(el)).toBeNull();
     });
 
-    it("says the order could not be read again, not to cancel the item, when its lines cannot be", async () => {
+    it("still says the started dish and the reload, with no Cancel on screen, when the lines cannot be read", async () => {
       const el = await retrieved({
         retrieveWorkingOrder: vi
           .fn()
@@ -1559,10 +1559,10 @@ describe("till-app: comping a stored counter order", () => {
       await flush(el);
 
       expect(inBasket(el, '[data-cancel-line="0"]')).toBeNull();
-      expect(banner(el)!.textContent!.trim()).toBe(t("held.reread_failed"));
+      expect(banner(el)!.textContent!.trim()).toBe(t("held.started_reloaded"));
     });
 
-    it("says the order could not be read again, not to cancel the item, when another write lands between its two reads, and parking and retrieving it brings Cancel back", async () => {
+    it("still says the started dish and the reload when another write lands between its two reads, and parking and retrieving it brings Cancel back", async () => {
       const el = await retrieved({
         retrieveWorkingOrder: vi
           .fn()
@@ -1578,7 +1578,7 @@ describe("till-app: comping a stored counter order", () => {
 
       expect(counter(el).store.revision).toBe(5);
       expect(inBasket(el, '[data-cancel-line="0"]')).toBeNull();
-      expect(banner(el)!.textContent!.trim()).toBe(t("held.reread_failed"));
+      expect(banner(el)!.textContent!.trim()).toBe(t("held.started_reloaded"));
 
       vi.mocked(api.retrieveWorkingOrder).mockResolvedValue(heldOrder(6));
       emit(counter(el), "park-order", {});
@@ -1611,6 +1611,34 @@ describe("till-app: comping a stored counter order", () => {
         expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
         expect(counter(el).store.revision).toBe(5);
         expect(banner(el)!.textContent!.trim()).toBe(t(key));
+      },
+    );
+
+    describe.each(["ticket.already_started", "working_order.out_of_date"])(
+      "when the reload after %s fails",
+      (code) => {
+        it.each([
+          ["a network error", new TypeError("Failed to fetch"), "held.reread_failed"],
+          ["a server fault", { code: "server.internal", status: 500 }, "held.reread_failed"],
+          ["the order gone", { code: "working_order.not_found", status: 404 }, "held.stale"],
+        ] as const)("%s keeps the basket and shows its own sentence", async (_, failure, key) => {
+          const el = await retrieved({
+            retrieveWorkingOrder: vi
+              .fn()
+              .mockResolvedValueOnce(heldOrder(4))
+              .mockRejectedValue(failure),
+            updateWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
+          });
+          await raise(el);
+
+          emit(counter(el), "park-order", {});
+          await flush(el);
+
+          expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+          expect(counter(el).store.revision).toBe(4);
+          expect(counter(el).store.dirty).toBe(true);
+          expect(banner(el)!.textContent!.trim()).toBe(t(key));
+        });
       },
     );
   });
