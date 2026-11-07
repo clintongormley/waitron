@@ -20,10 +20,11 @@ room note (`backup-room-note.json`), deleted before anything changes and written
 supervisor (`apps/server/src/backup-supervisor.ts:359`); a failure after the database is placed but
 before the fiscal step commits (a migration or a hook), which keeps today's behaviour (owner
 question 3); a placement that fails after it removed the replaced database's `.venue.db-litestream/`
-folder (`apps/server/src/restore.ts:656`), which puts the old database back without it, as today;
-and, reported by the plan review and to be confirmed in Task 7 before any sentence names it, an
-installation name a staged restore's preparation already recorded in
-`<state>/module-preparation-state.json`.
+folder (`apps/server/src/restore.ts:656`), which puts the old database back without it, as today.
+(Dropped in Task 7, 2026-11-07: an installation name in `<state>/module-preparation-state.json` is
+written by the preparation before the restore runs; a throwaway run of the archive fixture in
+`restore-emergency-crash.e2e.test.ts` with staging failed left that file byte-identical, and the
+next run took the same name, `0CNQR`.)
 
 **Architecture:** In `placeValidated` (`apps/server/src/restore.ts`), the secrets are written first,
 beside their targets under a staged name, so a full disk or a write error is met before anything is

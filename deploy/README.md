@@ -614,6 +614,17 @@ command against it treat that entrypoint differently:
   names the paper you need. The node key authenticates recovery; the separate backup encryption
   key opens the backup file.
 
+  A restore that fails while it writes the backup's secrets or moves its database into place
+  leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that
+  fails after its fiscal step has committed keeps the restored database and the box's old secrets,
+  with no `trading.env`; a restore staged for the next start is finished by that start. One that
+  fails in between (while migrating the restored database, or in a module's restore step) keeps the
+  restored database, with the box's old identity set aside as `trading.env.replaced`. Outside "as
+  they were": a restore that is killed; a folder made to hold a secret (such as `tls/`) on a box
+  that had none; the backup room note, deleted before anything changes and written again by the
+  next backup; and Litestream's `.venue.db-litestream/` folder beside the old database, which is
+  not put back if the move fails after removing it.
+
   A restore moves the old database into a hidden folder in the venue folder
   (`/var/lib/waitron/state/venue/` inside the container), named `.venue.db-replaced-` and six
   random characters, and deletes that folder once the restored database is in place. If the command

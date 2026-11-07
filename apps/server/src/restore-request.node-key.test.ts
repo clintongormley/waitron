@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { stageRestoreRequest, runStagedRestore, type RestoreRequest } from "./restore-request.js";
+import { ALL_MODULES } from "./modules.js";
+import { writeValidated } from "./restore.js";
 
 const dirs: string[] = [];
 const NODE_KEY_FILE = "restore-request.node-key";
@@ -163,6 +165,48 @@ it.each(["success", "refusal"])(
     expect(JSON.stringify(context.log.mock.calls)).not.toContain(secret);
   },
 );
+
+it("a started request whose placement changed nothing gets its marker back", async () => {
+  const stateDir = await fresh();
+  await stageRestoreRequest(stateDir, archive());
+  const before = await readFile(join(stateDir, "restore-request.json"), "utf8");
+  const failure = Object.assign(new Error("injected secrets write failure"), { code: "ENOSPC" });
+  const originalOpen = nativeFs.open;
+  vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
+    if (String(args[0]) === join(stateDir, "secrets.env.incoming.tmp")) throw failure;
+    return originalOpen(...args);
+  });
+  syncBuiltinESMExports();
+  const restore = async (args: Parameters<typeof writeValidated>[1]) => {
+    // The real placement, from a copy already validated: the fake archive above cannot be opened.
+    const databasePath = join(stateDir, "validated.db");
+    await writeFile(databasePath, "database", { mode: 0o600 });
+    await writeValidated(
+      {
+        manifest: {
+          manifestVersion: 1,
+          createdAt: "2026-11-07T00:00:00.000Z",
+          environment: "preproduction",
+          modules: {},
+        },
+        databasePath,
+        nodeDump: Buffer.from("node"),
+        discard: async () => {},
+        secretEntries: [
+          { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_VAULT_MASTER_KEY=1\n") },
+          {
+            name: "secrets/trading.env",
+            bytes: Buffer.from(`WAITRON_NODE_ID=${operation.binding.targetNodeId}\n`),
+          },
+        ],
+      },
+      { ...args, modules: ALL_MODULES, withModuleOperations: undefined },
+    );
+  };
+  await expect(runStagedRestore(deps(stateDir), restore)).rejects.toBe(failure);
+  expect(await readFile(join(stateDir, "restore-request.json"), "utf8")).toBe(before);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+});
 
 it("keeps the node credential when the venue lock refuses before placement", async () => {
   const stateDir = await fresh();
