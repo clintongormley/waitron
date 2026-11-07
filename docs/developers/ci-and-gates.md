@@ -1568,9 +1568,11 @@ What a rewritten history does depends on what GitHub's comparison answers. Three
   holds it, but it shares history with `main`.
 - `gh api repos/clintongormley/ha-fado/compare/v0.0.2...main --jq .status` answered HTTP 404, "No
   common ancestor between v0.0.2 and main." The guard fails on that.
-- `gh api repos/clintongormley/waitron/compare/main...0123456789abcdef0123456789abcdef01234567 --jq .status`,
-  a commit GitHub does not hold, answered HTTP 404, "Not Found". The guard fails on that too (a
-  review ran the script with stand-in `docker` and `gh` on this answer: exit 1, "cannot place").
+- `gh api repos/clintongormley/waitron/compare/0123456789abcdef0123456789abcdef01234567...main --jq .status`,
+  with a commit GitHub does not hold in the published (first) place, as an old `:main` would be,
+  answered HTTP 404, "Not Found". The script, run on 7 November with a stand-in `docker` reporting
+  that commit as `:main`'s build id and the real `gh`, printed "cannot place … against the published
+  0123456789abcdef0123456789abcdef01234567" and exited 1.
 
 So any comparison GitHub refuses stops publishing, including one against an old `:main` commit
 GitHub no longer holds after a rewrite.

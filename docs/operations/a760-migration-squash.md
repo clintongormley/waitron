@@ -761,7 +761,7 @@ This records what part 3 built. It does not record a reset: those happen after l
 roster above.
 
 **The base.** Part 3 branched from `main` at `59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. The old
-history, every SQL file and journal the base shipped, is kept byte for byte under
+history, every SQL file and journal of every populated set the base shipped, is kept byte for byte under
 `scripts/fixtures/a760-history/`.
 
 **The epoch.** Each populated set starts again from one migration, `0000_baseline`. The tag, date
