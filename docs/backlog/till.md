@@ -1256,7 +1256,7 @@ server's check; "Madrid" passed both). The address search writes a comma-free pr
 provider's locality could still hold one. Left open by A1171 part 3.
 
 
-## A1421. Three till oddities seen once while fixing A1386, not looked into
+## A1421. Three till oddities seen once and not looked into
 
 Each was seen once on `59be31e3b7` during A1386's investigation, in the demo venue (screenshots
 in `~/waitron-campaign-c/a1386-shots/`), and none was investigated:

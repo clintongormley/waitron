@@ -2942,7 +2942,7 @@ export const es: Record<StringKey, string> = {
   "floor.no_spares": "No hay mesas de reserva",
   "floor.no_tables": "Esta zona no tiene mesas",
   "floor.no_tables_today": "Ninguna mesa de esta zona está en el plano de hoy",
-  "floor.read_failed": "No se han podido leer las mesas. Inténtalo de nuevo.",
+  "floor.read_failed": "No se han podido consultar las mesas. Inténtalo de nuevo.",
   "floor.taken_off": "Quitadas hoy",
   "floor.none_taken_off": "Ninguna",
   "floor.put_back": "Volver a poner",

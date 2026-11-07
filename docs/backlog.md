@@ -821,10 +821,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Small till test renames** (bundle of 5, size S). Holds A1053, A1054, A1128. [Detail](backlog/till.md#bundle-small-till-test-renames)
 
-- **A1421. Three till oddities seen once while fixing A1386, not looked into.** At phone width the
-  Downstairs bar's map is drawn tiny; a reload on a table's order lands on an empty order page; and
-  a slow first read at sign-in leaves the PIN pad up with no sign of waiting.
-  [Detail](backlog/till.md#a1421-three-till-oddities-seen-once-while-fixing-a1386-not-looked-into)
+- **A1421. Three till oddities seen once and not looked into.** At phone width the Downstairs
+  bar's map is drawn tiny; a reload on a table's order lands on an empty order page; and a slow
+  first read at sign-in leaves the PIN pad up with no sign of waiting.
+  [Detail](backlog/till.md#a1421-three-till-oddities-seen-once-and-not-looked-into)
 
 - **The till top bar fits at phone width, 1024 and 1280** (bundle of 9, 1 important, size M). Holds A1082, A921, A1219. [Detail](backlog/till.md#bundle-the-till-top-bar-fits-at-phone-width-1024-and-1280)
 

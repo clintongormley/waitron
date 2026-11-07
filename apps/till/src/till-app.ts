@@ -1837,7 +1837,7 @@ function saleRefusalOf(
   }
 }
 
-/** A tender the device's profile does not take, which no retry from this device will change. */
+/** A tender the device's profile does not take. */
 function profileRefusalOf(
   error: unknown,
 ): { code: "device.cash_not_allowed" | "device.forbidden_action" } | undefined {
