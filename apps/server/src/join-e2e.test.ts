@@ -553,17 +553,17 @@ describe("a disabled device comes back as the same device", () => {
   }
 
   /** A staff member with PIN 4321, signed in on each device given: one session cookie per device. */
-  async function signedInOn(deviceIds: string[]): Promise<string[]> {
+  async function signedInOn(devices: { deviceId: string; jar: string }[]): Promise<string[]> {
     const [person] = await suite.db
       .insert(persons)
       .values({ displayName: `Camarera ${randomUUID()}`, pinHash: hashPin("4321"), role: "staff" })
       .returning({ id: persons.id });
     const cookies: string[] = [];
-    for (const deviceId of deviceIds) {
+    for (const { deviceId, jar } of devices) {
       const session = await withTransaction(suite.db, (tx) =>
         loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
       );
-      cookies.push(`waitron_till_session=${session.token}`);
+      cookies.push(`waitron_till_session=${session.token}; ${jar}`);
     }
     return cookies;
   }
@@ -714,7 +714,7 @@ describe("a disabled device comes back as the same device", () => {
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
     );
-    const sessionCookie = `waitron_till_session=${session.token}`;
+    const sessionCookie = `waitron_till_session=${session.token}; ${jar}`;
     const live = await send(app, "PUT", "/api/device/equipment", {
       cookie: sessionCookie,
       body: USE_DEFAULT_RECEIPT,
@@ -742,7 +742,11 @@ describe("a disabled device comes back as the same device", () => {
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const other = await addDevice(app, venue, holdId, "Terrace till", profileId);
-    const [first, second, elsewhere] = await signedInOn([deviceId, deviceId, other.deviceId]);
+    const [first, second, elsewhere] = await signedInOn([
+      { deviceId, jar },
+      { deviceId, jar },
+      other,
+    ]);
     expect((await sessionRead(app, first!)).status).toBe(200);
     expect(await openSessionsOn(deviceId)).toBe(2);
 
@@ -774,7 +778,7 @@ describe("a disabled device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    const [cookie] = await signedInOn([deviceId]);
+    const [cookie] = await signedInOn([{ deviceId, jar }]);
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
     expect(await openSessionsOn(deviceId)).toBe(1);
 
@@ -840,7 +844,7 @@ describe("a disabled device comes back as the same device", () => {
     const fresh = await signIn(app, enabledJar, person!.id);
     expect(fresh.status).toBe(200);
     expect(await openSessionsOn(deviceId)).toBe(1);
-    expect((await sessionRead(app, deviceCookieFrom(fresh))).status).toBe(200);
+    expect((await sessionRead(app, `${enabledJar}; ${deviceCookieFrom(fresh)}`)).status).toBe(200);
   });
 
   it("a sign-in overtaken by a move onto a kitchen-screen profile is refused, and opens no session", async () => {

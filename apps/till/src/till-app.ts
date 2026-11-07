@@ -659,6 +659,7 @@ const PERMANENT_SALE_REFUSALS = new Set([
 
 /** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
+  "device.unauthorized",
   "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
   "service_zone.closed",
@@ -987,6 +988,7 @@ function lineWriteError(error: unknown): CounterError {
  * generic "try again" does not: what to do next, or, for `device.profile_changed`, that no card was
  * charged. */
 const ACTIONABLE_REFUSALS = new Set([
+  "device.unauthorized",
   "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
   "bill.unsent_dishes",
@@ -9660,8 +9662,9 @@ export class TillApp extends LitElement {
       const confirmed = await this.api.confirmReceiptHandover(id);
       if (!this.#ticketIsCurrent(id, session, visit)) return;
       this.originalReceiptPrint = confirmed;
-    } catch {
-      if (this.#ticketIsCurrent(id, session, visit)) this.errorKey = "invoice.handover_failed";
+    } catch (error) {
+      if (this.#ticketIsCurrent(id, session, visit))
+        this.errorKey = counterError(error, "invoice.handover_failed");
     } finally {
       if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
     }
@@ -19865,8 +19868,8 @@ export class TillApp extends LitElement {
       if (!this.isConnected) return;
       if (session === this.#operatorSession) this.#dropSplitRefusalForLanguage(refusalAsked);
       setLocale(code);
-    } catch {
-      this.errorKey = "locale.save_failed";
+    } catch (error) {
+      this.errorKey = counterError(error, "locale.save_failed");
     }
   }
 

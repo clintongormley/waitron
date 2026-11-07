@@ -584,14 +584,20 @@ the server checks each at the route, never trusting the till's copy:
 - **Actions are checked at the route, beside the person's permission.** A till route that orders,
   takes a payment, prepares, hands over, prints or opens the drawer checks the profile's action
   (`assertProfileAction` or `assertDeviceCapability`, `apps/server/src/device-session.ts`) as well
-  as any permission it already asked of the person, except the routes the action map named below
-  lists as left unchecked by decision. Showing or hiding a screen (`show-*`) decides only what the
+  as any permission it already asked of the person, except the actionless rows whose reasons are
+  recorded in the inventory below. Showing or hiding a screen (`show-*`) decides only what the
   till draws; a hidden screen's route is still refused by its action. Which route
-  needs which action, and the case that fails without each check, is the map at the top of
+  needs which action, and the case that fails without each check, is the data in
   `apps/server/src/till-api.profile-actions.test.ts`; the zone each route acts in is the map at the
-  top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds a row to each and a
-  refusing case. Weaker than that sounds: both maps are comments, and nothing fails when a new
-  route has no row.
+  top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds an inventory
+  row, a zone-map row and a refusing case. The inventory walks the till, device and schedule
+  mounts, including their optional routes, and rejects missing/stale classifications. It sends
+  a full-action session without device proof to rows declaring device-cookie or matching-request
+  proof, and
+  also sends another device's cookie where the row requires a matching session. This checks
+  those refusals, not every action label, successful path or zone rule. It ignores `ALL`
+  registrations and does not walk other APIs, including theme, node, box and backup routes.
+  The independent zone map remains a comment.
 - **A kitchen display's preparation and movement use device authority.** A `kds` profile is a shared display
   with nobody signed in: `profileAllows` (`packages/layouts/src/device-profile.ts`) refuses it
   every action but `prepare-orders`, `take-orders` and `hand-over-orders`, even one its stored
@@ -611,8 +617,9 @@ the server checks each at the route, never trusting the till's copy:
   `venue_service.manage`; they also check the device's `prepare-orders` action and that its
   station screen shows that station now (`assertScreenShowsStation`,
   `apps/server/src/station-today-api.ts`).
-  A till's station close/open and zone-extension writes require a session, plus either that
-  permission or a manager's PIN override. The PIN checks share the till's wrong-PIN limit.
+  A till's station close/open and zone-extension writes require a session and matching device
+  proof, plus either that permission or a manager's PIN override. The PIN checks share the till's
+  wrong-PIN limit.
   Cases: `apps/server/src/till-api.station-today.test.ts`,
   `apps/server/src/till-api.keep-open.test.ts`.
 - **Where a profile serves.** A profile that takes orders has one department, a set of that
@@ -2200,11 +2207,13 @@ suites [conventions-ui.md](conventions-ui.md) names, weaker than the set looks â
 
 **A device's profile and the signed-in person must both allow what a till does.** A till route
 that orders, takes a payment, prepares, hands over, prints or opens the drawer checks the
-profile's action beside the person's permission, except the routes the map atop
-`apps/server/src/till-api.profile-actions.test.ts` leaves unchecked by decision; the profile's
-zones bound where it serves, and its admission list who may sign in. A new till route adds a row
-to that map and to the zone map atop `apps/server/src/till-api.profile-zones.test.ts`, and a
-refusing case â€” weaker than that sounds: both route maps are comments.
+profile's action beside the person's permission, except the actionless routes classified in
+`apps/server/src/till-api.profile-actions.test.ts`; the profile's
+zones bound where it serves, and its admission list who may sign in. A new till route adds an inventory row, a zone-map row in
+`apps/server/src/till-api.profile-zones.test.ts`, and a refusing case. The inventory checks missing
+and foreign proof where declared; it does not verify every action label, successful path or zone
+rule. It covers only its till/device/schedule mounts and ignores `ALL` registrations; other APIs,
+including theme, node, box and backup, are outside it. The zone map remains a comment.
 
 ### A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`
 

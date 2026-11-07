@@ -775,33 +775,10 @@ which resizes the outer page and leaves the components' own iframe alone
   inside the card; in the menus Task 9 screenshots opened at 390 and 1280 px no name or price
   crossed a border. Looked at, not measured: close once someone measures it.
 
-## Till route-to-profile checks and printer identity
+## Printer identity at enrolment
 
-Keep a maintained route-to-profile-action table with a guard that walks the routes. Printer
-identity remains sub-project C of the
+Printer identity remains sub-project C of the
 [device enrolment design](../superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md).
-Handheld actions follow the profile: placing, collecting, cancelling, cash, the drawer, integrated
-card payment and printing need their respective current profile actions.
-
-## Session-only writes without a profile-action gate
-
-The A941 whole-branch review found three writes without a profile-action gate, outside its
-profile/capability-route audit: `POST /api/sales/:id/receipt/handover`,
-`POST /api/tables/:id/cleared` and `PUT /api/service-zones/:zoneId/zone-extension`.
-A separate loopback HTTP probe on A941 head `d70bfe71cb` returned, respectively,
-`404 working_order.not_found`, `404 table.not_found` and `403 authorization.not_permitted`
-with only a real staff-session cookie. Adding its enrolled-device cookie gave the same answers;
-removing the staff cookie gave `401 session.required`. This proves admission to the later checks,
-not a successful write. The candidate probe's three expected `401 device.unauthorized` checks
-failed. These handlers are unchanged from the captured main `fe080412c5`; their admission calls
-trace to October commits in `git blame`.
-
-Next, decide and test request-device admission for those routes without weakening their existing
-permission, zone or business checks. Also probe device active-profile/zones/equipment writes,
-box-clock challenge/confirmation and schedule writes through their real mounts. The review's
-harness did not mount the device and clock APIs; their request-device admission is unverified.
-These are pending audits, not deliberate session-only exceptions. A941 changes neither these
-handlers nor their contracts.
 
 ## Malformed sale and cancellation bodies
 
@@ -2207,17 +2184,12 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   on `expectedEdit`; staff see "Check the form and try again". Same cause as A922.
   [Detail](till.md#a1199-on-the-counter-cancel-and-comp-of-one-extra-on-a-retrieved-table-bill-are-refused)
 
-## Bundle A1393: A table of every till route's device check, with a guard
+## Bundle: Printer identity at enrolment
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Printer identity is separate from the till route inventory.
 
-- **Maintain a route-to-profile-action table and qualify printer identity.** A guard that walks
-  every route's profile action and the enrolment design's printer-identity work remain separate.
-  [Detail](till.md#till-route-to-profile-checks-and-printer-identity).
-- **Audit session-only writes without a profile-action gate.** Receipt handover, table clearing
-  and zone extension reach their own lookup or permission refusal without a device cookie.
-  Check the device-settings, clock-confirmation and schedule routes too; A941 did not qualify them.
-  [Detail](till.md#session-only-writes-without-a-profile-action-gate).
+- **Qualify printer identity at enrolment.** Complete the device enrolment design's printer track.
+  [Detail](till.md#printer-identity-at-enrolment).
 
 ## Bundle: The pay window, after A739
 
@@ -2991,10 +2963,14 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   zone, and the warning names it only once such a dish is waiting at the pass. Reasoned, not
   measured ([plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md), D101).
 
-- **Request-device proof on profile-gated till actions, payments, refunds and printing (A941,
+- **Request-device proof on till writes (A941, A1393,
   device enrolment design).** Authenticate the enrolled device and match it to the PIN session. Keep management order reprints and invoice delivery
   available through their management session without a device cookie. Request-device proof is
-  passive; session resolution owns whether the request records activity.
+  passive; session resolution owns whether the request records activity. The watcher approved
+  extending proof to the fourteen session-only writes on 2026-11-07 at 06:11: receipt handover,
+  table clearing, service-day choices, device preferences, box-clock confirmation, staff schedule
+  writes, locale and simulator cancellation. Their selling-action exceptions remain; reads,
+  public bootstrap and logout retain their existing admission.
 
 - **Splitting sent dishes (owner, 2026-09-26).** A partial split gives the moved row its own
   ticket item and reduces the original ticket quantity by that part. A dish the kitchen has

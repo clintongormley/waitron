@@ -16,7 +16,7 @@ import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead
 import { assertProfileAction, requireDevice } from "./device-session.js";
 import { requestCfg } from "./request-config.js";
 import { overridePinAttempts, parseOverrideField, type Run, type TillApiDeps } from "./till-api.js";
-import { requireSession } from "./till-session.js";
+import { assertRequestDevice, requireSession } from "./till-session.js";
 import { openDishCount, openDishesChoice, withStationDishes } from "./station-closing.js";
 import { requireLiveStation } from "./kitchen.js";
 import "./errors.js";
@@ -140,6 +140,7 @@ export function mountStationTodayApi(
   app.put("/api/stations/:stationId/today", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
       const id = stationId(c.req.param("stationId"));
       const cfg = requestCfg(deps.cfg, session);
       const body = asObject(await readRawJsonBody<unknown>(c));

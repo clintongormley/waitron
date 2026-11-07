@@ -701,8 +701,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
   },
   "device.unauthorized": {
-    en: "This device isn't set up — ask to join this venue",
-    es: "Este dispositivo no está configurado. Solicita el alta en este local",
+    en: "This device could not be verified for this action. Reload or reopen Waitron on this device, then try again.",
+    es: "No se ha podido verificar este dispositivo para esta acción. Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",
   },
   "device.binding_invalid": {
     en: "That printer or card reader is not available to this device. Choose another",

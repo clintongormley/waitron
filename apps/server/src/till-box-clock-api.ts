@@ -35,7 +35,7 @@ import type { Logger } from "./logger.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestAddress, requestFromBox } from "./request-from-box.js";
 import { parseOverrideField } from "./till-api.js";
-import { assertStillSignedIn, requireSession } from "./till-session.js";
+import { assertRequestDevice, assertStillSignedIn, requireSession } from "./till-session.js";
 
 export interface TillBoxClockDeps {
   correction: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "set" | "steps">;
@@ -173,6 +173,7 @@ export function mountTillBoxClockApi(
     run(c, log, async () => {
       refuseOnTheBox(c);
       const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
       // The PIN is checked by the confirm; here an override only says an administrator is asking.
       const override = overrideOf(await readJsonBody<unknown>(c));
       await withTransaction(db, async (tx) => {
@@ -196,6 +197,7 @@ export function mountTillBoxClockApi(
     run(c, log, async () => {
       refuseOnTheBox(c);
       const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
       const raw = await readRawJsonBody<unknown>(c);
       const { challengeId, deviceAt } = confirmBody(raw);
       const override = overrideOf(raw);

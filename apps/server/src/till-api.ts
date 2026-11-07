@@ -1382,6 +1382,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     app.post("/api/demo-reader/cancel", (c) =>
       run(c, log, async () => {
         const session = await requireSession(deps, c, { permission: "sale.take_payment" });
+        await assertRequestDevice(deps, c, session);
         const body = await readJsonBody<{ workingOrderId: string; attemptId?: string }>(c);
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
         if (body.attemptId !== undefined) requireUuidParam(body.attemptId, "DemoAttemptId");
@@ -1519,7 +1520,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   // missing or non-string `locale` becomes "", refused as `locale.unsupported`.
   app.put("/api/session/locale", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
+      const { personId } = session;
       const body = await readJsonBody<{ locale?: unknown }>(c);
       const locale = typeof body.locale === "string" ? body.locale : "";
       await withTransaction(deps.db, async (tx) => {
@@ -2437,6 +2440,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales/:id/receipt/handover", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const status = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ orderId: id }]);
@@ -3022,6 +3026,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/tables/:id/cleared", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       await withTransaction(deps.db, async (tx) => {

@@ -2813,7 +2813,7 @@ async function bootServer(
     }
     return descriptions;
   };
-  mountScheduleApi(app, { db, describeShifts, disk: diskFull }, log);
+  mountScheduleApi(app, { db, describeShifts, disk: diskFull, devMode: config.devMode }, log);
   mountMeApi(
     app,
     {

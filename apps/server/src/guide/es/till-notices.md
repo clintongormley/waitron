@@ -6,6 +6,8 @@ terminal de camarero muestran una línea bajo su barra superior si el equipo nec
 línea no aparece en las pantallas de inicio de sesión, de fichaje ni de preguntas de asistencia.
 Dice qué ocurre y qué hacer. Nunca tapa tu trabajo y nunca tienes que cerrarla.
 
+Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.
+
 ## Lee la línea de avisos {#notice-line}
 
 La línea muestra primero el aviso más grave, con su texto principal y, tras " · ", su indicación.
