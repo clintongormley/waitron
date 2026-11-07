@@ -29,7 +29,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.packages }}
   cancel-in-progress: true
 
 jobs:
@@ -562,7 +562,7 @@ jobs:
   # on 2026-09-19. It refuses to score at all when a shard's report is missing, because a shard
   # that crashed takes its own survivors with it and the remaining twelve read higher than the truth.
   # `if: always()` so a red shard still gets its slice counted rather than skipping the gate; it is
-  # skipped only when its shards were, because a hand-started run did not name db.
+  # skipped only when its shards were.
   mutation-db-aggregate:
     needs: mutation-db
     if: always() && needs.mutation-db.result != 'skipped'

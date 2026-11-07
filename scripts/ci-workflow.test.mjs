@@ -29,7 +29,7 @@ import {
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
-// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one case
+// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except the cases
 // reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
 // two apt cases, a `--with-deps` case, the pnpm-setup, checkout and artifact-transfer cases reading every
 // .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
@@ -2746,7 +2746,7 @@ describe("the test shards", () => {
     const pick = (requested) => {
       const output = join(scratch, `output-${++runs}`);
       writeFileSync(output, "");
-      const result = spawnSync("bash", ["-c", pickScript()], {
+      const result = spawnSync("bash", ["-e", "-c", pickScript()], {
         cwd: scratch,
         encoding: "utf8",
         timeout: 10_000,
@@ -2767,6 +2767,11 @@ describe("the test shards", () => {
         Object.entries(PACKAGES).map(([name, key]) => [key, String(names.includes(name))]),
       );
     const every = only(...Object.keys(PACKAGES));
+    const concurrency = () => {
+      const block = /^concurrency:\n((?: {2}.*\n)+)/m.exec(workflow)?.[0];
+      expect(block, "no top-level `concurrency:` block in mutation.yml").toBeDefined();
+      return block;
+    };
 
     it.each([
       ["", every],
@@ -2815,9 +2820,17 @@ describe("the test shards", () => {
       expect(select).toContain("timeout-minutes: 5");
       expect(select).toContain("REQUESTED: ${{ inputs.packages }}");
       expect(pickScript(), "the script interpolates the input itself").not.toContain("${{");
-      expect(workflow.match(/inputs\.packages/g)).toHaveLength(1);
+      expect(workflow.replace(concurrency(), "").match(/inputs\.packages/g)).toHaveLength(1);
       for (const key of Object.values(PACKAGES))
         expect(select).toContain(`${key}: \${{ steps.pick.outputs.${key} }}`);
+    });
+
+    it("puts the packages text in the run's concurrency group, cancelling in progress", () => {
+      const block = concurrency();
+      expect(block).toContain(
+        "  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.packages }}\n",
+      );
+      expect(block).toContain("  cancel-in-progress: true\n");
     });
 
     it.each(Object.entries(PACKAGES))(

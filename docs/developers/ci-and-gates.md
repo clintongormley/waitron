@@ -683,7 +683,10 @@ To rerun by hand, `gh workflow run mutation.yml --ref main` runs every package, 
 does. Add `-f packages=db`, or `-f packages="ui,ui-core"`, to run only those (names are ui-core, ui,
 db, node-db and handover, separated by commas or spaces). A name it does not know fails the `select`
 job at once, and nothing else runs. The packages left out show as skipped: that run does not check
-their floors.
+their floors. A run started by hand cancels a mutation run already going on the same branch only
+when both were given the same `packages` text. Guard: the "mutation.yml's package choice" cases in `scripts/ci-workflow.test.mjs`,
+weaker than their name: they run the `select` step's script, but read the jobs' `needs`/`if` lines
+and the concurrency group as text.
 
 ### Reading `packages/db`'s score by hand
 
