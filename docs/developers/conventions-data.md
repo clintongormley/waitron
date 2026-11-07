@@ -5269,8 +5269,6 @@ only the rejoin's wipe, through `db-wipe.ts`, is guarded.
 - `venue.db`'s device number and birth time are not measured on Linux or in Docker; a mismatch
   skips, which is safe. The in-place-write control in `apps/server/src/backup-room-note.test.ts`, run
   by CI on Linux, is the only receipt that ordinary writes keep them.
-- A `waitron-restore` run reading a folder archive while the app restarts can race its deletion, as
-  above. Not measured.
 - A backup stamped by a clock that ran ahead, and a folder two boxes share, are the run's own limits
   above.
 - A restore that crashes between placing the file and writing its new installation leaves the

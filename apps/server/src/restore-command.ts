@@ -3,8 +3,8 @@ import {
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "@waitron/provisioning";
-import { lockVenueDatabase, type VenueLock } from "@waitron/db";
-import { mkdir, open, readFile } from "node:fs/promises";
+import type { VenueLock } from "@waitron/db";
+import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   looksLikePdf,
@@ -33,6 +33,7 @@ import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
+  lockRestoreTarget,
   restoreFromArtifactFile,
   validateArtifactFile,
   type RestoreFileDeps,
@@ -66,14 +67,8 @@ interface CommandDeps {
   /** How long the `--from-archive` download may take. Default {@link DEFAULT_DESTINATION_TIMEOUT_MS}. */
   archiveTimeoutMs?: number;
   withModuleOperations?: RestoreOperationRunner;
-  /** Holds the venue folder from resolving the target to exit. Default {@link lockRestoreVenue}. */
+  /** Holds the venue folder from resolving the target to exit. Default {@link lockRestoreTarget}. */
   lockVenue?: (venueDir: string) => Promise<VenueLock>;
-}
-
-/** The lock makes the folder on a fresh box, so it is made here first, for the operator alone. */
-async function lockRestoreVenue(venueDir: string): Promise<VenueLock> {
-  await mkdir(venueDir, { recursive: true, mode: 0o700 });
-  return lockVenueDatabase(venueDir);
 }
 
 const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
@@ -319,25 +314,27 @@ async function resolveRestoreTarget(
   const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+  const setupRefusal = (error: unknown) =>
+    deps.out(error instanceof AppError ? `restore failed: ${error.code}` : "restore failed");
   try {
     await assertNoStartAgainDeletion(venueDir);
-    if ((await inspectFirstSetupMarker(venueDir)) !== null) {
-      const hold = await lockVenueDatabase(venueDir);
-      try {
-        await assertVenueFirstSetupAllowed(venueDir);
-      } finally {
-        hold.release();
-      }
-    }
   } catch (error) {
-    deps.out(error instanceof AppError ? `restore failed: ${error.code}` : "restore failed");
+    setupRefusal(error);
     return 1;
   }
   let hold: VenueLock;
   try {
-    hold = await (deps.lockVenue ?? lockRestoreVenue)(venueDir);
+    hold = await (deps.lockVenue ?? lockRestoreTarget)(venueDir);
   } catch (error) {
     deps.out(sharedRefusal(error));
+    return 1;
+  }
+  try {
+    if ((await inspectFirstSetupMarker(venueDir)) !== null)
+      await assertVenueFirstSetupAllowed(venueDir);
+  } catch (error) {
+    hold.release();
+    setupRefusal(error);
     return 1;
   }
   const target: RestoreTarget = {
