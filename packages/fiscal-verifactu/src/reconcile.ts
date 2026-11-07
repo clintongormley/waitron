@@ -62,9 +62,8 @@ type PeriodRow = {
   sale_id: string;
   /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
   anulacion_id: string | null;
-  known_huellas: string;
-  /** Every installation that wrote a record of this invoice, on any box `known_huellas` reads. */
-  known_installations: string;
+  /** `[huella, NumeroInstalacion]` of every stored record of this invoice, oldest first. */
+  known_records: string;
   huella: string;
   tipo_registro: string;
   sistema_informatico: string;
@@ -315,17 +314,14 @@ async function rowsForPeriod(
         limit 1
       ) end as anulacion_id,
       (
-        select json_group_array(known.huella order by known.secuencia)
-        from registros_facturacion known
-        where ${sameInvoice}
-      ) as known_huellas,
-      (
         select json_group_array(
-          json_extract(known.sistema_informatico, '$.NumeroInstalacion') order by known.secuencia
+          json_array(
+            known.huella, json_extract(known.sistema_informatico, '$.NumeroInstalacion')
+          ) order by known.secuencia
         )
         from registros_facturacion known
         where ${sameInvoice}
-      ) as known_installations,
+      ) as known_records,
       r.huella, r.tipo_registro, r.sistema_informatico,
       e.estado, e.intentos, e.csv, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
@@ -452,8 +448,14 @@ async function fetchAuthority(
         const data = record.DatosRegistroFacturacion;
         const system = lookupSystem(data.SistemaInformatico);
         const local = JSON.parse(row.sistema_informatico) as Record<string, unknown>;
-        const fingerprints = JSON.parse(row.known_huellas) as string[];
-        const installations = JSON.parse(row.known_installations) as unknown[];
+        const reportedHuella =
+          typeof data.Huella === "string" && data.Huella.length > 0 ? data.Huella : null;
+        const reportedInstallation = system?.installation ?? null;
+        const known = (JSON.parse(row.known_records) as [string, unknown][]).some(
+          ([huella, installation]) =>
+            (reportedHuella === null || huella === reportedHuella) &&
+            (reportedInstallation === null || installation === reportedInstallation),
+        );
         const externalCancellation =
           record.EstadoRegistro === "Anulado" &&
           row.tipo_registro === "alta" &&
@@ -461,15 +463,11 @@ async function fetchAuthority(
         const different =
           record.IDFactura.FechaExpedicionFactura !== row.fecha_expedicion_factura ||
           (!externalCancellation &&
-            ((typeof data.Huella === "string" &&
-              data.Huella.length > 0 &&
-              !fingerprints.includes(data.Huella)) ||
+            (!known ||
               (system !== null &&
                 ((system.taxId !== null && system.taxId !== local.NIF) ||
                   (system.softwareId !== null &&
-                    system.softwareId !== local.IdSistemaInformatico) ||
-                  (system.installation !== null &&
-                    !installations.includes(system.installation))))));
+                    system.softwareId !== local.IdSistemaInformatico)))));
         if (different) {
           conflicts.set(row.id, {
             source: "consulta",

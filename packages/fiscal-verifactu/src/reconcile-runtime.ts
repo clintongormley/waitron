@@ -1,4 +1,10 @@
-import { readHistoryNodes, readTenant, withTransaction } from "@waitron/db";
+import {
+  readHistoryNodes,
+  readTenant,
+  withTransaction,
+  type Database,
+  type DeploymentEnvironment,
+} from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalContribution } from "@waitron/fiscal";
 import {
@@ -8,6 +14,18 @@ import {
   type ClientResolver,
 } from "./aeat-transport.js";
 import { createReconciliationSweep, type ReconciliationSweepResult } from "./reconcile-sweep.js";
+import type { ReconcileScope } from "./reconcile.js";
+
+/** Read once per sweep: a promotion restarts the box, so the boxes it took over from are fixed. */
+export async function reconciliationScope(
+  db: Database,
+  identity: { nodeId: string; taxpayerId: string; environment: DeploymentEnvironment },
+): Promise<ReconcileScope> {
+  return {
+    ...identity,
+    historyNodeIds: await readHistoryNodes(db, brandNodeId(identity.nodeId)),
+  };
+}
 
 export const createRuntimeReconciliation: NonNullable<
   FiscalContribution["createReconciliation"]
@@ -31,11 +49,14 @@ export const createRuntimeReconciliation: NonNullable<
       if (tenant === null) throw new Error("reconciliation requires the venue taxpayer");
       if (sweep === undefined || taxpayerId !== tenant.taxId) {
         taxpayerId = tenant.taxId;
-        const historyNodeIds = await readHistoryNodes(deps.db, brandNodeId(deps.nodeId));
         sweep = createReconciliationSweep({
           db: deps.db,
           clock: deps.clock,
-          scope: { nodeId: deps.nodeId, historyNodeIds, taxpayerId, environment: deps.environment },
+          scope: await reconciliationScope(deps.db, {
+            nodeId: deps.nodeId,
+            taxpayerId,
+            environment: deps.environment,
+          }),
           retryMs: deps.skipRetryMs,
           includeCurrentPeriod: true,
           now: () => deps.clock.now().instant,

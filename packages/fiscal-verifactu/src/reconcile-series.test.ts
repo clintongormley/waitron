@@ -1,10 +1,11 @@
 import { expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { randomUUID } from "node:crypto";
+import { invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { RegistroConsultado } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { seedPendingEnvios, seedPinnedChain } from "../test/drain-fixtures.js";
 import { retainUnheldSeriesConflicts } from "./reconcile-series.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -50,4 +51,48 @@ it("reads local invoice identities once while checking a complete returned month
   expect(
     (await suite.db.execute(sql`select count(*) as count from registros_facturacion`)).rows,
   ).toEqual([{ count: 12 }]);
+});
+
+it("an invoice the old box holds is not outside this box's series of the same code", async () => {
+  const old = await seedPendingEnvios(suite.db, { count: 1 });
+  const { chain: spare } = await seedPinnedChain(suite.db, old, {
+    sifId: randomUUID(),
+    firstSecuencia: 50,
+    rows: [{ nombreRazonEmisor: "Waitron SL", generadoEn: "2026-07-20T19:20:30+01:00" }],
+  });
+  // Series codes are unique per box only, so the spare box can run a live series with the code
+  // of a series the old box issued under.
+  await suite.db.insert(invoiceSeries).values({ nodeId: spare.nodeId, code: "S1" });
+  const observed: RegistroConsultado[] = [
+    {
+      IDFactura: {
+        IDEmisorFactura: old.nif,
+        NumSerieFactura: "S1/1",
+        FechaExpedicionFactura: "20-07-2026",
+      },
+      DatosRegistroFacturacion: {},
+      TimestampUltimaModificacion: "2026-07-21T00:01:00Z",
+      EstadoRegistro: "Correcto",
+    },
+  ];
+  const retain = (historyNodeIds: readonly string[]) =>
+    withTransaction(suite.db, (tx) =>
+      retainUnheldSeriesConflicts(
+        tx,
+        { nodeId: spare.nodeId, historyNodeIds, taxpayerId: old.nif, environment: "production" },
+        observed,
+        new Set(),
+        new Date("2026-07-21T00:01:00Z"),
+        { year: "2026", month: "07" },
+      ),
+    );
+  const conflicts = async () =>
+    (await suite.db.execute(sql`select invoice_identity from fiscal_series_conflicts`)).rows;
+
+  await retain([spare.nodeId, old.nodeId]);
+  expect(await conflicts()).toEqual([]);
+
+  // The control: read as the spare box's own records alone, the same invoice is outside.
+  await retain([spare.nodeId]);
+  expect(await conflicts()).toEqual([{ invoice_identity: "S1/1" }]);
 });

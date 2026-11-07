@@ -1,0 +1,46 @@
+import { randomUUID } from "node:crypto";
+import { expect, it } from "vitest";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { createFakeAeat } from "@waitron/verifactu/testing";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { seedPendingEnvios, seedPinnedChain } from "../test/drain-fixtures.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
+import { staticResolver } from "../test/write-path-fixtures.js";
+import { createReconciliationSweep } from "./reconcile-sweep.js";
+import { reconciliationScope } from "./reconcile-runtime.js";
+
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
+const START = new Date("2027-02-01T12:00:00Z");
+
+it("the runtime sweep's scope covers the box this one took over from", async () => {
+  const old = await seedPendingEnvios(suite.db, { count: 1 });
+  const { chain: spare } = await seedPinnedChain(suite.db, old, {
+    sifId: randomUUID(),
+    firstSecuencia: 50,
+    rows: [],
+  });
+  await recordTakeover(suite.db, old.nodeId, spare.nodeId);
+
+  const scope = await reconciliationScope(suite.db, {
+    nodeId: spare.nodeId,
+    taxpayerId: old.nif,
+    environment: "production",
+  });
+
+  expect(scope).toEqual({
+    nodeId: spare.nodeId,
+    historyNodeIds: [spare.nodeId, old.nodeId],
+    taxpayerId: old.nif,
+    environment: "production",
+  });
+  const sweep = createReconciliationSweep({
+    db: suite.db,
+    clock: old.clock,
+    retryMs: 300_000,
+    scope,
+    resolveClient: staticResolver(createFakeAeat({ serverNow: START }).client()),
+  });
+  expect((await sweep(START)).periods.map(({ year, month }) => `${year}-${month}`)).toEqual([
+    "2026-07",
+  ]);
+});
