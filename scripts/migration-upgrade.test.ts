@@ -59,10 +59,11 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * at the first. So a migration that fails only on values the product writes and these rows lack
  * passes. The reference check reads the SQL as text, with comments removed: a reference is to the
  * latest migration in run order, at or before it, whose `CREATE TABLE` or `RENAME TO` names the
- * table; a table named only in a trigger body or a view is not checked, and a set's requirements
- * count through other sets. A lost trigger is judged by name alone: one recreated with another
- * body passes. A change-feed trigger counts as lost only when today's change-feed source names a
- * column the step drops, since the feed then leaves it out. The tables {@link ONE_ROW} names, and
+ * table; drops are not followed, so a key to a table dropped before it is caught only when the
+ * fill writes rows; a table named only in a trigger body or a view is not checked, and a set's
+ * requirements count through other sets. A lost trigger is judged by name alone: one recreated
+ * with another body passes. A change-feed trigger counts as lost only when today's change-feed
+ * source names a column the step drops, since the feed then leaves it out. The tables {@link ONE_ROW} names, and
  * a singleton (`CHECK (id = 1)`), hold one row. Steps a walk's resets list names cannot carry the
  * rows, and the walk restarts from an empty database at each. Between steps rows are counted, not
  * compared, so a migration that rewrites a value passes; only the epoch's repeat compares values.
@@ -400,7 +401,10 @@ function namesAfter(sql: string, before: RegExp): string[] {
     `${before.source}(?:${quote}main${quote}\\s*\\.\\s*)?${quote}(\\w+)`,
     before.flags,
   );
-  const code = sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+  // One pass, so a quoted string is skipped whole and a `--` inside it starts no comment.
+  const code = sql.replace(/'(?:[^']|'')*'|\/\*[\s\S]*?\*\/|--[^\n]*/g, (match) =>
+    match.startsWith("'") ? match : " ",
+  );
   return [...code.matchAll(pattern)].map((match) => match[1].toLowerCase());
 }
 
@@ -502,7 +506,10 @@ function checkReferences(
       if (made > place) {
         throw new Error(
           `${at}, dated ${migration.entry.when}, refers to ${table}, which ` +
-            `${creator.set}/${creator.entry.tag} creates only at ${creator.entry.when}`,
+            `${creator.set}/${creator.entry.tag} ` +
+            (creator.entry.when === migration.entry.when
+              ? "creates on the same date but runs after it"
+              : `creates only at ${creator.entry.when}`),
         );
       }
     }
@@ -1172,6 +1179,27 @@ describe("the walk past the epoch", () => {
     });
     expect(held.get("kept")).toBe(2);
     expect(held.get("kept_child")).toBe(2);
+  });
+
+  it("reads a REFERENCES after a quoted '--' as a foreign key", async () => {
+    const walkSets: WalkSet[] = [
+      syntheticSet("base", [BASE]),
+      syntheticSet("loose", [
+        {
+          tag: "0000_kchild",
+          when: 2_000,
+          sql: [
+            "CREATE TABLE `kchild` (`id` integer PRIMARY KEY NOT NULL, `note` text DEFAULT '--', " +
+              "`kept_id` integer REFERENCES `kept`(`id`))",
+          ],
+        },
+      ]),
+    ];
+    await expect(
+      walkUpgrade({ sets: walkSets, epoch: epochOf(walkSets.slice(0, 1)), resets: {} }),
+    ).rejects.toThrow(
+      "loose/0000_kchild refers to kept, a table of base, which loose does not require",
+    );
   });
 
   it("does not read a REFERENCES inside a comment as a foreign key", async () => {
