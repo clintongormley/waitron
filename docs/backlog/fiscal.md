@@ -414,8 +414,8 @@ immutable fiscal rows and chain head after release and filing.
 
 The other cases retain those accounting effects while refusing record-producing remedies for
 unknown outcomes, conflicting invoice identities and an already generated ordinary cancellation.
-An accepted correction from another issuing chain does not release the old chain's cancellation.
-That boundary remains a refusal, not a qualified cross-chain remedy. The original rejection in
+Since 7 November 2026 a held cancellation is released once its original's correction is accepted,
+whichever issuing chain the correction is on. The original rejection in
 these cases is synthetic stored evidence; they do not send a real refund or establish a legal
 remedy. The public permitted-remedy set stays empty. The completed implementation still needs the
 owner's fiscal review before landing and separate legal authority before production enablement.
@@ -541,9 +541,10 @@ staff cancellation/refund integration remains unfinished; this HTTP milestone do
 **2 November 2026, Task 8 synthetic held-cancellation release.** A cancellation already set
 aside has its own immutable identity, so this operation submits that existing record. With a test
 policy allowing `release-held-cancellation`, you name the held cancellation, its case and the
-accepted current invoice version. The operation requires the same sale, invoice identity, node,
-environment and issuing chain, an ordinary cancellation still set aside, and its matching
-`fiscal.anulacion_retenida` case. A pending, unknown, rejected, accepted-with-errors or superseded
+accepted current invoice version. The operation requires the same sale, invoice identity and
+environment, a cancellation written by this box or one it took over from (since 7 November 2026
+the accepted version may be on any issuing chain), an ordinary cancellation still set aside, and
+its matching `fiscal.anulacion_retenida` case. A pending, unknown, rejected, accepted-with-errors or superseded
 invoice version is refused. Production policy remains empty.
 
 The delivery becomes pending and due at the action's clock reading, its held acknowledgement is
@@ -556,8 +557,8 @@ different resolution rolls the delivery and acknowledgement changes back.
 `record-remedy-held.test.ts` sends a correction through the real client to the fake tax service,
 releases the held cancellation, and then submits that same cancellation. Its fiscal rows, chain
 head and sales stay unchanged by the release. This synthetic exercise does not qualify the actual
-staff cancellation/refund path, other issuing chains or a production legal
-remedy. Those remain before whole-item review and publication.
+staff cancellation/refund path or a production legal remedy. Those remain before whole-item review
+and publication.
 
 **2 November 2026, Task 8 synthetic absent-original cancellation.** An administrator explicitly
 selects the operation for a current rejected alta with matching case evidence. Unknown outcomes,

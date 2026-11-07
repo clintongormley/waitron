@@ -303,8 +303,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   witnesses and fencing (W41s-10b), and the complete old-backup/new-hardware exercise (W41s-11)
   remain queued. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
   restored server, and history before the oldest known month. Task 8's disputed production remedies
-  remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision; a held cancellation
-  from another issuing chain has no qualified release here.
+  remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision. A held cancellation
+  is released once its original's correction is accepted, on any issuing chain.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
