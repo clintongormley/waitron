@@ -189,7 +189,7 @@ carry none.
   (`box-secrets.ts`, A52) leaves a linked `tls/` and the folder it points to as found, by the
   owner's choice, and a link swapped in for the state folder or a folder above it is followed; a
   folder its owner cannot read is changed by path after an `lstat`, and a link swapped in between
-  the two would be followed. The restore itself (`restoreSecrets`) keeps none of `waitron-recovery
+  the two would be followed. The restore itself (`stageSecrets`, `restore-secrets.ts`) keeps none of `waitron-recovery
 unpack`'s destination refusals (a symbolic link, another user's folder, not a folder) on the
   state folder it is given. The lock-file measurement kept in `db-wipe.ts` names no engine version
   or platform.

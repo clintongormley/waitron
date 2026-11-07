@@ -1187,8 +1187,8 @@ async function bootServer(
         log,
       });
     }
-    // Only once this process holds the venue folder: a second process must not delete the running
-    // one's staged copy.
+    // Only once this process holds the venue folder: a second process must not delete a running
+    // process's restore working folders.
     await clearRestoreLeftovers(config.stateDir, log);
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(

@@ -726,8 +726,9 @@ open by A1018 Slice 4 (Slice 4's Ruling R5).
 Only an answer, an exit or a stop ends the
 wait, so the duty would wait with no reason recorded, and the frozen-process watchdog does not see
 it (read, not run). A stop asks the thread to end and answers when it has, or after `STOP_WAIT_MS` with the file
-possibly still open: a running `integrity_check` does not stop for it. Left open by
-A1018 Slice 5 (Ruling R53).
+possibly still open: a running `integrity_check` does not stop for it. The bucket restore's check
+(`isCopyIntact`, called from `restore-stream.ts`) has no time limit either and is given no stop
+signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (Ruling R53).
 
 
 ## Bundle A1401: Find out why the failover bench reports a corrupt database
