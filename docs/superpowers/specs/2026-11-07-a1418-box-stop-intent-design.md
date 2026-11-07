@@ -167,6 +167,12 @@ An action on the dashboard's box status screen, for someone holding the permissi
      already does when the spare stops answering (A947 §6.2, "the spare is not answering"). The spare
      then finishes copying its store up to the bucket, and says it is safe to unplug. The main box
      keeps selling throughout. Steps 2, 3 and 5 do not apply.
+   - **When the spare comes back (default, the owner agreed 2026-11-07):** once it answers again, the
+     main box moves its stream back to the spare by itself, with no admin. The move opens a new
+     generation, so the spare's stale copy is replaced by a full copy sent over the venue's network.
+     The main box keeps selling, and the "one copy" warning stays until the spare is current. The
+     topology design says the same for a replacement spare ("until a replacement box B is enrolled,
+     then retargets to the LAN again", topology §4.4, read); neither switch is built (none found).
 2. Work stops, and this stop must be one that can be lifted. Handover's stop cannot: `stepDown`
    answers only three requests and stops background work, including backups and the stream, and its
    record is never cleared (`apps/server/src/handover-stepdown.ts:20-27`,
