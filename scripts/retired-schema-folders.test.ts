@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { filesUnder } from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
 /**
  * A package whose tables moved into another package's migration set keeps no `drizzle/` folder and
@@ -33,12 +34,9 @@ function packagesWithSets(manifestPath: string): Set<string> {
   return new Set(sets.map((set) => basename(dirname(resolve(dirname(manifestPath), set.from)))));
 }
 
-function filesUnder(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) return filesUnder(full);
-    return statSync(full).isFile() ? [full] : [];
-  });
+/** Every file under `dir`, as a full path. */
+function filesIn(dir: string): string[] {
+  return filesUnder(dir).map((path) => join(dir, path));
 }
 
 /** Every file that brings schema into a package with no set, as a path relative to `root`. */
@@ -50,12 +48,12 @@ function offenders(root: string, withSets: ReadonlySet<string>): string[] {
     if (withSets.has(name) || !statSync(packageDir).isDirectory()) continue;
     const drizzle = join(packageDir, "drizzle");
     if (existsSync(drizzle)) {
-      const files = filesUnder(drizzle);
+      const files = filesIn(drizzle);
       found.push(...(files.length > 0 ? files : [drizzle]).map((path) => relative(root, path)));
     }
     const schema = join(packageDir, "src", "schema");
     if (existsSync(schema)) {
-      for (const file of filesUnder(schema)) {
+      for (const file of filesIn(schema)) {
         if (!TEST_FILE.test(basename(file))) found.push(relative(root, file));
       }
     }

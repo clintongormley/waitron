@@ -99,6 +99,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
       "packages/fiscal-verifactu",
       "packages/media",
       "packages/migrations",
+      "packages/provisioning",
       "packages/staffing",
       "packages/venue-service",
       "packages/workforce",
