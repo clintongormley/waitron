@@ -1,4 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { expectedSchemaVersion } from "@waitron/migrations";
+import { modulesWithSets } from "@waitron/module";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
+import { ALL_MODULES } from "./modules.js";
 import { checkRestoreCompatibility } from "./restore-gate.js";
 
 const target = {
@@ -78,6 +84,39 @@ describe("checkRestoreCompatibility", () => {
       expect.objectContaining({
         code: "restore.schema_too_new",
         params: { module: "fiscal-verifactu", backup: 13, target: 12 },
+      }),
+    );
+  });
+
+  // The gate skips a module name this image lacks, so an old backup is refused on core's count.
+  it("refuses a backup made before the migration squash, on core's count", () => {
+    const oldCounts = Object.fromEntries(
+      historicalSets().map((set) => {
+        const journal = JSON.parse(
+          readFileSync(join(set.migrationsFolder, "meta", "_journal.json"), "utf8"),
+        ) as { entries: unknown[] };
+        return [set.name, journal.entries.length];
+      }),
+    );
+    const expectedVersions = Object.fromEntries(
+      modulesWithSets(ALL_MODULES).map((m) => [m.name, expectedSchemaVersion(m.migrations, null)]),
+    );
+    expect(expectedVersions.core).toBe(1);
+
+    expect(() =>
+      checkRestoreCompatibility(
+        {
+          manifestVersion: 1,
+          createdAt: "x",
+          environment: "preproduction",
+          modules: oldCounts,
+        },
+        { environment: "preproduction", expectedVersions },
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "restore.schema_too_new",
+        params: { module: "core", backup: oldCounts.core, target: 1 },
       }),
     );
   });
