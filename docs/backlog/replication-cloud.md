@@ -1041,8 +1041,11 @@ client on the home network using the public Internet path. A fresh Chromium sess
 repeated the password sign-in through the rented server's outside-home exit with normal trust.
 The bounded test app and peer were stopped afterwards. At the owner's request a separate
 managed demo then replaced them: the unprivileged app and its separate tunnel recovered from
-controlled process exits, and the public page returned 200. Both are enabled for startup; a
-physical box reboot remains untested. The owner's containers were untouched.
+controlled process exits, and the public page returned 200. After the shared physical reboot on
+7 November, its enabled service and same tunnel container returned automatically; normal-trust
+Chromium signed in as administrator. The connection JSON's hash changed and its cause remains
+under investigation; the other retained file hashes matched. The final combined installation
+remains unqualified. The owner's three containers returned healthy.
 [Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
 
 Remaining work, following the owner's certificate-first order:
@@ -1050,7 +1053,8 @@ Remaining work, following the owner's certificate-first order:
 - Add the box certificate worker over the existing signed exchange, including renewal.
 - Add the managed outbound tunnel container, send box details over the existing signed connection,
   provide Settings on/off/status, and retire `@waitron/tunnel`.
-- Qualify the managed demo across a physical reboot.
+- Explain the manual demo's changed connection-file hash and qualify the final combined
+  installation across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.
 - Once the browser path works, try Translate all and the existing address fields with a Cloud
@@ -1059,7 +1063,7 @@ Remaining work, following the owner's certificate-first order:
 The owner accepts that a compromised Cloud could obtain a staff certificate and intercept logins,
 that the sign-in page and a bug in the remote entrance face the internet, and that this version
 has no protected owner service, strict instant shutdown or independent protection against a
-compromised box server. The A760 landing freeze and no-new-tables hold remain in force.
+compromised box server. The watcher lifted the A760 landing freeze and table hold on 7 November.
 
 The [old plan](../superpowers/plans/2026-10-22-a951-connection.md) and its linked protocol and host
 artifacts describe the parked implementation. They do not add work or gates to A951-S.
