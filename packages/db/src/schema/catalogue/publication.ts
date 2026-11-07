@@ -17,8 +17,7 @@ export const menuVersions = table(
     document: json<MenuDocument>("document").notNull(),
     contentHash: label("content_hash").notNull(),
     publishedAt: ts("published_at").notNull(),
-    // The management session's person id, as plain text with no key: none was added when A760
-    // moved `persons` into core's set, which changed no table's shape.
+    // The management session's person id, as plain text. No key yet.
     publishedBy: id("published_by").notNull(),
   },
   (t) => [

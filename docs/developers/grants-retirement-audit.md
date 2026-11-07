@@ -117,7 +117,7 @@ changing enforcement, keeping each legitimate mutation path.
 | `locations`              | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `management_sessions`    | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `menu_items`             | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
-| `media_image_data`       | `UPDATE`, `DELETE`   | [packages/media/src/module.ts](../../packages/media/src/module.ts)                                       |
+| `media_image_data`       | `UPDATE`, `DELETE`   | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `node_membership`        | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `payment_policy`         | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |
 | `payment_refunds`        | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |

@@ -24,10 +24,8 @@ import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js"
  *
  * TWO KEYS ARE ABSENT from the foreign-key list: `products(image)` and `sections(image)`, both
  * naming a `media_images` filename, are held by triggers instead. The package-dependency reason
- * the triggers were first written for is gone: all three tables are declared in `packages/db`. The
- * other reason recorded then, in the header of
- * `scripts/fixtures/a760-history/media/0001_image_references.sql`, still holds for a later
- * migration: adding a key to an existing table means rebuilding it. No other reason is recorded.
+ * the triggers were first written for is gone: all three tables are declared in `packages/db`. No
+ * other reason is recorded.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");

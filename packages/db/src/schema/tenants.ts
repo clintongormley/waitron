@@ -19,8 +19,7 @@ import { catalogues } from "./catalogue.js";
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
 
 /**
- * Read by nothing: each station has its own `bump_mode`. Dropping this column rebuilds
- * `locations`, so A760's squash removes it.
+ * Read by nothing: each station has its own `bump_mode`.
  */
 export const bumpMode = enumType(["line", "ticket"]);
 
