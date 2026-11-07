@@ -1714,7 +1714,7 @@ describe("setup-app", () => {
   });
 
   it.each([
-    ["mirror.bundle_fetch_failed", 502, "its reply couldn't be used"],
+    ["mirror.bundle_fetch_failed", 502, "Adding a mirror is unavailable in this version"],
     ["setup.request_invalid", 400, "rejected the details"],
     ["setup.not_ready", 503, "isn't ready"],
     ["server.internal", 500, "Couldn't connect"],
@@ -1731,19 +1731,17 @@ describe("setup-app", () => {
     },
   );
 
-  // A primary of this version answers every refused login with `password.invalid`, which the fetcher
-  // in `apps/server/src/mirror-bundle-fetch.ts` passes on, so this sentence must not name one (A153).
   it.each([
     [
       "en-GB",
-      "Couldn't join the primary server: it couldn't be reached, it refused the request, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server, then try again.",
+      "The primary couldn't supply a mirror setup. Adding a mirror is unavailable in this version. Go back and choose Restore a backup or Restore from my bucket.",
     ],
     [
       "es-ES",
-      "No se ha podido unir al servidor principal: no se ha podido contactar con él, ha rechazado la solicitud o su respuesta no se ha podido usar. Comprueba que la dirección es la del servidor principal de Waitron de tu restaurante e inténtalo de nuevo.",
+      "El servidor principal no ha podido proporcionar la configuración de una réplica. Añadir una réplica no está disponible en esta versión. Vuelve y elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
     ],
   ] as const)(
-    "says a failed join covers an unreachable primary, a refused request or an unusable reply, naming no refused login (%s)",
+    "says a mirror join is unavailable and offers backup restore, naming no refused login (%s)",
     async (locale, sentence) => {
       try {
         const adopt = vi
@@ -2155,7 +2153,7 @@ describe("setup-app", () => {
       const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
       await typeAndConnect(el);
       const connect = await screenHost(el, "connect");
-      expect(await bottomOf(connect)).toContain("Check that the address is");
+      expect(await bottomOf(connect)).toContain("Adding a mirror is unavailable in this version");
       expect(button(connect, "check-address")!.textContent!.trim()).toBe("Check the address");
 
       button(connect, "check-address")!.click();
