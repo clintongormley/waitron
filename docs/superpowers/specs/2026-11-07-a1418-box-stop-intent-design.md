@@ -38,8 +38,10 @@ Every start knows how the last stop ended. A box that learns it has been replace
 
 **Non-goals.**
 
-- No change to how long a stop may take. `SHUTDOWN_DEADLINE_MS` (8 seconds) and `KILL_GRACE_MS` (5
-  seconds) stay.
+- No change to how long the final stop of the server may take. `SHUTDOWN_DEADLINE_MS` (8 seconds) and
+  `KILL_GRACE_MS` (5 seconds) stay. In "Shut down this box" (§4) the backup, the catch-up and the check
+  all run while the server is up, so no stop limit applies to them. The limits apply only to the stop
+  that follows, when Litestream has nothing left to send.
 - No second bucket, and no switching bucket during a stop. Litestream streams a database to one place
   only (A947 §3), and a new bucket needs a full copy, far more than a backlog.
 - No change to controlled or forced handover. A controlled handover sends the final state directly
@@ -88,6 +90,11 @@ A mark is saved on the box's own disk and read at the next start.
   (`installShutdownHandlers`, `apps/server/src/run-server.ts`, read), so the server cannot tell them
   apart. That is safe because every start still asks whether the box was replaced (§3).
 - The mark is written before anything else in the stop, so it does not depend on the 8 seconds.
+  Measured on 7 November 2026, one run each, with a `node:26` container started as Waitron's is
+  (`node` as process 1, `deploy/Dockerfile`): `docker stop` let a stop handler write its file and the
+  container exited 0 in 0.35 seconds; `docker kill`, the control, left no file (exit 137). A machine
+  powered off from its command line, which stops Docker's containers through the host's service
+  manager, was not tested.
 - A mark that cannot be written, on a full disk for example, is logged and the stop carries on. The
   next start then treats it as an unplanned stop, which only costs the wait in §3.
 - `restart` is removed at the next start. `shutdown` stays until an admin answers (§5).
@@ -122,7 +129,12 @@ The box asks everything configured that could know it was replaced:
   - A restored box skips this check on its own first start, while its restore marker
     (`REBUILD_MARKER`) is still present, or it would find itself replaced.
   - The pointer moves only after the new box's first full copy lands
-    (`packages/stream/src/supervisor.ts:444-465`), so until then the old box hears nothing.
+    (`packages/stream/src/supervisor.ts:444-465`), so that a restore never meets a generation with no
+    full copy. But a box writes a claim for its generation at the start, before the copy
+    (`claimGeneration`, `packages/stream/src/generations.ts:31-49`, read), naming its term and node.
+    The claim is not signed today. **(default)** The box signs its claim as it signs its pointer, and
+    a verified claim with a newer term counts as "replaced". The old box then learns within moments
+    of the new box's start, not after its full copy.
 - **Cloud**, for a box with a Cloud account: A1188 §6 and answer 15, approved 2026-10-29, not built.
   The box asks Cloud's service with its own installation credential, so it gets an answer whether or
   not a copy is running.
@@ -136,7 +148,7 @@ What the box does with the answers:
 | `shutdown` | The existing check; **(default)** the other box's answer stands in for the admin's, since it knows whether a handover happened | Waits for the admin (§5) |
 
 - **Replaced means stopped, on every row.** Sells nothing, files nothing, and says why. Trusting the
-  answer is safe in the sense that it can only stop a box. The cost is in §7, question 1.
+  answer is safe in the sense that it can only stop a box. The cost is in §8, question 1.
 - **Carrying on after "replaced".** An admin may choose to carry on selling on this box, but must first
   confirm the other box has been shut down **(owner)**: "they need to confirm that the other box has
   been shut down first". **(default)** The box then claims the bucket at a higher term, as a restore
@@ -155,7 +167,9 @@ An action on the dashboard's box status screen, for someone holding the permissi
 (`node.promote`), signing in afresh over HTTPS.
 
 1. **(default)** The screen says what will happen, and what is needed to restore: the backup and the
-   recovery key.
+   recovery key. It offers the recovery pack for download there and then: the box holds the key while
+   it runs, and the pack is made by the existing `POST /api/backup/recovery-pack`
+   (`apps/server/src/backup-recovery-pack-api.ts`, read: `system.manage`, over HTTPS).
    On a two-box venue it is offered on both boxes **(owner)**: "either on the primary or the mirror".
    Backups and the stream run only on the main box (`apps/server/src/boot.ts`, around 2905, read),
    and the spare hosts the store the main box streams to (A947 §3):
@@ -193,10 +207,15 @@ An action on the dashboard's box status screen, for someone holding the permissi
    (`apps/server/src/backup-verification.ts:64, 158`, read). The owner: "30s may not be enough".
    **(default)** For this check the time limit is set by progress, not a fixed number: it stops only
    when the check has made no progress for a while, and the scratch space is sized to the backup.
-6. It writes `shutdown` and says it is safe to unplug. It does not power the machine off.
+6. It writes `shutdown`, then powers the machine off **(owner)**: "a shutdown usually does". The box's
+   host service (`deploy/box/waitron-box.sh`, read) answers only `clock.status` and `clock.set` today;
+   it gains one request to power off. Where there is no host service (development, or a hosted copy),
+   the screen says it is safe to unplug instead.
 
-If step 3, 4 or 5 cannot finish, the screen says what happened and offers: keep waiting, shut down
-anyway, or cancel and go back to selling. Cancel lifts the stop, and writes no mark.
+If step 3, 4 or 5 cannot finish, or stops making progress, the shutdown pauses and the admin is told,
+on the screen and by email (§6): it never carries on by itself **(owner)**. The screen says what
+happened and offers: keep waiting, shut down anyway, or cancel and go back to selling. Cancel lifts the
+stop, and writes no mark.
 
 ## 5. Starting after a shutdown
 
@@ -211,7 +230,20 @@ The waiting page (`apps/server/src/waiting-start.ts`, `carry-on.ts`, read) alrea
 waiting on another box, and is the place to start. The owner accepted the cost: a moved box needs one
 admin sign-in before staff can sell.
 
-## 6. Scenarios
+## 6. Email alerts
+
+**(owner)** "any unexpected shutdowns or starting selling again without having confirmation that we're
+the right box should trigger an email alert to the admin". Each is an alert, and is emailed to the
+venue's managers through the existing box alert email (`apps/server/src/box-alert-email.ts`, read):
+
+- a start with no mark: the box stopped without warning, with the time it was last running;
+- a box that starts selling and filing after the wait in §3 without an answer from anything it asked;
+- a box told it was replaced, which stays stopped;
+- a shutdown paused because a step stopped making progress (§4).
+
+Each is a recorded incident code with an area and English and Spanish wording (`CLAUDE.md` §3).
+
+## 7. Scenarios
 
 | What happened | What the box does when it next starts |
 | --- | --- |
@@ -227,7 +259,7 @@ admin sign-in before staff can sell.
 holds. AEAT refuses a duplicate with error 3000, which `packages/fiscal-verifactu/src/drain.ts`
 already handles (read, not run for this case).
 
-## 7. Questions for the builder and for review
+## 8. Questions for the builder and for review
 
 1. **A running box stopping on the bucket's word.** A restore of the live venue onto another machine,
    done by mistake, would now stop the real box mid-service. Restore already refuses a generation
@@ -240,7 +272,7 @@ already handles (read, not run for this case).
 3. **Replaced while selling.** What happens to orders in progress follows A1018 §2 and A1342 (a selling
    box told of a newer main box must stop).
 
-## 8. Earlier designs and rules this changes
+## 9. Earlier designs and rules this changes
 
 Each needs a dated note when this is approved. None is rewritten.
 
@@ -255,7 +287,7 @@ Each needs a dated note when this is approved. None is rewritten.
 - **A1018 §4 point 1:** "No reachable peer or till means wait for an authorised human, not assume
   primary." Narrowed the same way. A box with another machine in its chart still waits.
 
-## 9. Order of work and what it waits for
+## 10. Order of work and what it waits for
 
 Touches fiscal filing, start-up and concurrency, so it takes the full review path.
 
