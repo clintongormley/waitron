@@ -4024,7 +4024,7 @@ again"), and the restore page waits that out with one countdown and checks again
 countdown, checks again quietly and keeps saying why"; owner, 2026-10-30, A1207); one that already recorded a wait moves to the next free
 minute when that starts within 150 seconds, and is otherwise refused with that time (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a restore's recorded wait meeting
 %s, in use, at %s waits for the next free minute"; a refusal past 150 seconds is tested for a promotion and for a restore's first choice, D1 above, but not after a recorded wait: the same file's "waits for a next minute exactly 150 000 ms ahead and refuses one 150 001 ms ahead"). A later name, the backup's newest record and its creation
-time do not refuse or move the minute: the choice reads neither (A1385) (the same file's "selected although a later name is
+time do not refuse or move the minute (the same file's "selected although a later name is
 known" cases; `apps/server/src/hour-recovery-host.test.ts`, "selects at the ordinary wait although
 the backup's newest record is later"; owner, 2026-10-29, A1207). The minute is
 taken 90 to 150 seconds after the clock check (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore
