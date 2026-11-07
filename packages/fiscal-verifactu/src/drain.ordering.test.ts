@@ -497,7 +497,7 @@ describe("drain chain ordering", () => {
     expect(aeat.stored()).toHaveLength(0);
   });
 
-  it("does not borrow another chain's accepted original to release a cancellation", async () => {
+  it("releases a cancellation on another chain once its original, found by its invoice, is accepted", async () => {
     const first = await seedPendingEnvios(suite.db, { count: 1 });
     const other = await seedSecondChain(suite.db, first, 3);
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
@@ -537,13 +537,13 @@ describe("drain chain ordering", () => {
 
     const retry = await drain(deps, new Date("2026-07-21T00:02:00Z"));
 
-    expect(retry.recordsSubmitted).toBe(0);
-    expect(retry.nextDueAt).toEqual(new Date("2026-07-21T00:07:00Z"));
+    expect(retry.recordsSubmitted).toBe(1);
+    expect(retry.recordsAccepted).toBe(1);
     const state = await suite.db.execute<{ estado: string }>(sql`
       select estado from envios where registro_id = ${cancellationId}
     `);
-    expect(state.rows[0]?.estado).toBe("pendiente");
-    expect(aeat.stored().find((row) => row.key === first.facturaKeys[0])?.estado).toBe("Correcto");
+    expect(state.rows[0]?.estado).toBe("aceptado");
+    expect(aeat.stored().find((row) => row.key === first.facturaKeys[0])?.estado).toBe("Anulado");
   });
 
   it("sends a successor created after its predecessor was refused for a conflicting fingerprint", async () => {

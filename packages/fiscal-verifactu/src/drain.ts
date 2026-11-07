@@ -658,7 +658,6 @@ async function claimBatch(
           select 1 from registros_facturacion original
           join envios original_envio on original_envio.registro_id = original.id
           where original.tipo_registro = 'alta'
-            and original.sif_id = r.sif_id
             and original.id_emisor_factura = r.id_emisor_factura
             and original.num_serie_factura = r.num_serie_factura
             and original.fecha_expedicion_factura = r.fecha_expedicion_factura
@@ -679,7 +678,6 @@ async function claimBatch(
                   select 1 from registros_facturacion prior_original
                   join envios prior_original_envio on prior_original_envio.registro_id = prior_original.id
                   where prior_original.tipo_registro = 'alta'
-                    and prior_original.sif_id = prior.sif_id
                     and prior_original.id_emisor_factura = prior.id_emisor_factura
                     and prior_original.num_serie_factura = prior.num_serie_factura
                     and prior_original.fecha_expedicion_factura = prior.fecha_expedicion_factura
@@ -817,7 +815,7 @@ async function pendingWasSendable(
  * `rechazado` with one and the same code. A held row becomes `detenido` with `incidencia`, so
  * every later claimed row of its chain is held with it.
  *
- * An ordinary cancellation whose current alta (same chain, same invoice identity) is `rechazado` is set aside
+ * An ordinary cancellation whose current alta (same invoice identity, on any chain) is `rechazado` is set aside
  * instead (`setAside`): `retenido`, with an incident and a filing case of its own
  * (`fiscal.anulacion_retenida`) for a person to resolve, never sent, and holding nothing behind it.
  *
@@ -911,7 +909,6 @@ function cancelsRefusedOriginal(record: "r"): SQL {
     select 1 from registros_facturacion original
     join envios original_envio on original_envio.registro_id = original.id
     where original.tipo_registro = 'alta'
-      and original.sif_id = ${alias}.sif_id
       and original.id_emisor_factura = ${alias}.id_emisor_factura
       and original.num_serie_factura = ${alias}.num_serie_factura
       and original.fecha_expedicion_factura = ${alias}.fecha_expedicion_factura

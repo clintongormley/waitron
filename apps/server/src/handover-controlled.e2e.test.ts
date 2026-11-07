@@ -77,6 +77,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { sealAeatSecret } from "@waitron/fiscal-verifactu";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
+import { toAeatDate } from "@waitron/fiscal-verifactu/src/registro-row.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { withOperationAuthority } from "@waitron/module";
 import { readHandoverOperation, setNodeMode, writeMirrorLink } from "@waitron/node-db";
@@ -1373,7 +1374,7 @@ function editOf(file: string, billId: string) {
 }
 
 interface InheritedSeen {
-  tab: { partyId: string | null; linesBefore: number };
+  tab: { linesBefore: number };
   readOne: Attempt;
   change: Attempt;
   linesAfterChange: number;
@@ -1394,7 +1395,6 @@ interface InheritedSeen {
   refund: Attempt | null;
   refundRows: { node_id: string; state: string }[];
   m1RecordsAroundRefund: { before: number; after: number };
-  voidSaleId: string | null;
   voidedInvoice: { serie: string; emisor: string; fecha: string } | null;
   m2SifId: string | null;
   voidSaleNode: string | null;
@@ -1753,7 +1753,7 @@ async function inheritedWork(
   }
 
   return {
-    tab: { partyId, linesBefore },
+    tab: { linesBefore },
     readOne,
     change,
     linesAfterChange,
@@ -1774,7 +1774,6 @@ async function inheritedWork(
     refund,
     refundRows,
     m1RecordsAroundRefund,
-    voidSaleId: voidTarget?.sale_id ?? null,
     voidedInvoice:
       voidTarget === undefined
         ? null
@@ -2162,8 +2161,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(w.m1RecordsAroundRefund.after).toBe(w.m1RecordsAroundRefund.before);
   });
 
-  // Task 5b flips this
-  it.fails("M2 cancels one of M1's filed sales on its own chain, and files it", () => {
+  it("M2 cancels one of M1's filed sales on its own chain, and files it", () => {
     const { b, on, w } = inheritedRun();
     expect(w.voidSaleNode).toBe(b.m1.nodeId);
     expect(w.voided, JSON.stringify(w.voided)).toMatchObject({ ok: true });
@@ -2178,7 +2176,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
       IDFactura: {
         IDEmisorFacturaAnulada: w.voidedInvoice?.emisor,
         NumSerieFacturaAnulada: w.voidedInvoice?.serie,
-        FechaExpedicionFacturaAnulada: w.voidedInvoice?.fecha.split("-").reverse().join("-"),
+        FechaExpedicionFacturaAnulada: w.voidedInvoice && toAeatDate(w.voidedInvoice.fecha),
       },
     });
   });
