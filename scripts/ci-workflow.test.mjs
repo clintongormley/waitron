@@ -47,6 +47,205 @@ const { AbortController, structuredClone } = globalThis;
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
+const DISPOSABLE_FAMILIES = [
+  "server",
+  "heavy",
+  "fiscal-verifactu",
+  "ui",
+  "till",
+  "dashboard",
+  "setup",
+  "venue-service",
+  "adjustments",
+  "staffing",
+  "bookings",
+  "media",
+  "payments-stripe",
+  "payments-sumup",
+];
+const familyCap = (family) => `DISPOSABLE_TESTS_${family.replaceAll("-", "_").toUpperCase()}_JOBS`;
+function routingContext(family = "server") {
+  return {
+    github: {
+      run_attempt: 1,
+      event_name: "pull_request",
+      repository_id: 42,
+      repository: "o/r",
+      run_id: 1234,
+      event: {
+        pull_request: { head: { sha: "a".repeat(40), repo: { id: 42, full_name: "o/r" } } },
+      },
+    },
+    vars: {
+      ...Object.fromEntries(DISPOSABLE_FAMILIES.map((name) => [familyCap(name), "0"])),
+      DISPOSABLE_TESTS_MODE: "server",
+      DISPOSABLE_TESTS_HEAD: "",
+      DISPOSABLE_TESTS_LABEL_PREFIX: "dt",
+      [familyCap(family)]: "1",
+    },
+    needs: {
+      changes: {
+        outputs: {
+          code: "true",
+          reuse: "false",
+          ...Object.fromEntries(
+            DISPOSABLE_FAMILIES.map((name) => [
+              name.replaceAll("-", "_"),
+              name === family ? "true" : "false",
+            ]),
+          ),
+        },
+      },
+    },
+    matrix: { shard: 1 },
+    fromJSON: JSON.parse,
+    toJSON: JSON.stringify,
+    format: (template, ...values) => template.replace(/\{(\d+)\}/g, (_, at) => values[Number(at)]),
+  };
+}
+function expressionValue(line, context) {
+  const start = line.indexOf("${{ ");
+  expect(start, line).toBeGreaterThan(-1);
+  return runInNewContext(line.slice(start + 4, line.lastIndexOf(" }}")), context);
+}
+function watchFamilies(context) {
+  const body = job("server-queue-watchdog").body;
+  const at = body.indexOf("          FAMILIES: >-");
+  expect(at).toBeGreaterThan(-1);
+  const rows = [];
+  for (const line of body.slice(at + 1)) {
+    if (!line.startsWith("            ")) break;
+    rows.push(line.trim());
+  }
+  return JSON.parse(
+    rows
+      .join(" ")
+      .replace(/\$\{\{ (.*?) \}\}/g, (_, source) =>
+        JSON.stringify(runInNewContext(source, context)),
+      ),
+  );
+}
+
+describe("disposable family routing", () => {
+  it.each(DISPOSABLE_FAMILIES)("routes only admitted %s jobs within their own cap", (family) => {
+    const routing = job(`test-${family}`).body.find((line) => /^ {4}runs-on:/.test(line));
+    const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
+    const context = routingContext(family);
+    if (matrixShards(job(`test-${family}`).body) === undefined) {
+      delete context.matrix;
+      expect(routing).not.toContain("matrix.");
+      expect(routing).toContain("1 <=");
+    }
+    expect(expressionValue(routing, context)).toEqual([
+      "self-hosted",
+      `dt-42-1234-1-test-${family}-1`,
+    ]);
+    for (const change of [
+      (c) => {
+        c.github.event_name = "push";
+      },
+      (c) => {
+        c.github.event_name = "workflow_dispatch";
+      },
+      (c) => {
+        c.github.event_name = "schedule";
+      },
+      (c) => {
+        c.github.event.pull_request.head.repo.id = 9;
+      },
+      (c) => {
+        c.github.event.pull_request.head.repo.full_name = "other/repo";
+      },
+      (c) => {
+        c.github.run_attempt = 2;
+      },
+      (c) => {
+        c.vars.DISPOSABLE_TESTS_MODE = "";
+      },
+      (c) => {
+        c.vars.DISPOSABLE_TESTS_MODE = "hosted";
+      },
+      (c) => {
+        c.vars.DISPOSABLE_TESTS_HEAD = "b".repeat(40);
+      },
+      (c) => {
+        c.vars[familyCap(family)] = "";
+      },
+      (c) => {
+        c.vars[familyCap(family)] = "0";
+      },
+      (c) => {
+        c.vars[familyCap(family)] = "invalid";
+      },
+    ]) {
+      const rejected = routingContext(family);
+      if (context.matrix === undefined) delete rejected.matrix;
+      change(rejected);
+      expect(expressionValue(routing, rejected)).toBe("ubuntu-latest");
+      expect(expressionValue(watch, rejected)).toBe(false);
+    }
+    context.vars.DISPOSABLE_TESTS_HEAD = "a".repeat(40);
+    expect(expressionValue(routing, context)).toEqual([
+      "self-hosted",
+      `dt-42-1234-1-test-${family}-1`,
+    ]);
+    if (context.matrix !== undefined) {
+      context.matrix.shard = 2;
+      expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+    }
+  });
+
+  it("ties every watched family to its actual job gate, cap, label and inventory", () => {
+    const context = routingContext();
+    const watchdog = job("server-queue-watchdog").body;
+    const rows = watchFamilies(context);
+    expect(rows.map((row) => row.id).sort()).toEqual(
+      DISPOSABLE_FAMILIES.map((f) => `test-${f}`).sort(),
+    );
+    const gates = [];
+    for (const family of DISPOSABLE_FAMILIES) {
+      const body = job(`test-${family}`).body;
+      const gate = body.find((line) => /^ {4}if:/.test(line)).slice(8);
+      gates.push(`(${gate})`);
+      const row = rows.find((entry) => entry.id === `test-${family}`);
+      expect(row.count).toBe(matrixShards(body)?.length ?? 1);
+      expect(row.matrix).toBe(matrixShards(body) !== undefined);
+      const selected = routingContext(family);
+      expect(
+        watchFamilies(selected)
+          .filter((entry) => entry.enabled)
+          .map((entry) => entry.id),
+      ).toEqual([`test-${family}`]);
+      selected.needs.changes.outputs[family.replaceAll("-", "_")] = "false";
+      expect(watchFamilies(selected).filter((entry) => entry.enabled)).toEqual([]);
+      const routing = body.find((line) => /^ {4}runs-on:/.test(line));
+      expect(routing).toContain(`vars.${familyCap(family)} || '0'`);
+      expect(routing).toContain(`-test-${family}-`);
+    }
+    expect(watchdog.find((line) => /^ {4}if:/.test(line))).toBe(`    if: ${gates.join(" || ")}`);
+  });
+
+  it("watches scope and cap together and keeps other families hosted", () => {
+    const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
+    const context = routingContext("ui");
+    context.vars.DISPOSABLE_TESTS_UI_JOBS = "0";
+    context.vars.DISPOSABLE_TESTS_SERVER_JOBS = "1";
+    expect(expressionValue(watch, context)).toBe(false);
+    context.vars.DISPOSABLE_TESTS_UI_JOBS = "1";
+    context.vars.DISPOSABLE_TESTS_HEAVY_JOBS = "1";
+    context.needs.changes.outputs.heavy = "true";
+    expect(expressionValue(watch, context)).toBe(true);
+    expect(
+      watchFamilies(context)
+        .filter((entry) => entry.enabled)
+        .map((entry) => entry.id)
+        .sort(),
+    ).toEqual(["test-heavy", "test-ui"]);
+    const till = job("test-till").body.find((line) => /^ {4}runs-on:/.test(line));
+    expect(expressionValue(till, context)).toBe("ubuntu-latest");
+  });
+});
+
 describe("disposable server routing", () => {
   // GitHub supplies an unset vars key as ""; see the CI guide's contexts provenance.
   it.each([
@@ -58,23 +257,8 @@ describe("disposable server routing", () => {
     const condition = routing.slice(routing.indexOf("${{ ") + 4, routing.indexOf(" && fromJSON("));
     const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
     const watchCondition = watch.slice(watch.indexOf("${{ ") + 4, watch.lastIndexOf(" }}"));
-    const context = {
-      github: {
-        run_attempt: 1,
-        event_name: "pull_request",
-        repository_id: 42,
-        repository: "o/r",
-        event: {
-          pull_request: { head: { sha: "a".repeat(40), repo: { id: 42, full_name: "o/r" } } },
-        },
-      },
-      vars: {
-        DISPOSABLE_TESTS_MODE: "server",
-        DISPOSABLE_TESTS_SERVER_JOBS: "1",
-        DISPOSABLE_TESTS_HEAD: selectedHead,
-      },
-      matrix: { shard: 1 },
-    };
+    const context = routingContext();
+    context.vars.DISPOSABLE_TESTS_HEAD = selectedHead;
     expect(runInNewContext(condition, context)).toBe(admitted);
     expect(runInNewContext(watchCondition, context)).toBe(admitted);
   });
@@ -83,28 +267,32 @@ describe("disposable server routing", () => {
     expect(job("test-server").body).toContain(
       "    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('[\"self-hosted\",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}",
     );
-    for (const entry of jobs.filter(({ id }) => id !== "test-server")) {
+    for (const entry of jobs.filter(
+      ({ id }) => !DISPOSABLE_FAMILIES.some((family) => id === `test-${family}`),
+    )) {
       const runner = entry.body.find((line) => /^ {4}runs-on:/.test(line));
       if (runner !== undefined) expect(runner, entry.id).toBe("    runs-on: ubuntu-latest");
     }
   });
 
-  it("watches exactly the routing condition for shard one with the same prefix and shard count", () => {
+  it("keeps server admission, prefix and shard count in the shared watch", () => {
     const server = job("test-server").body;
     const watchdog = job("server-queue-watchdog").body;
-    expect(watchdog.find((line) => /^ {4}if:/.test(line))).toBe(
-      server.find((line) => /^ {4}if:/.test(line)),
+    expect(watchdog.find((line) => /^ {4}if:/.test(line))).toContain(
+      `(${server.find((line) => /^ {4}if:/.test(line)).slice(8)})`,
     );
     const routing = server.find((line) => /^ {4}runs-on:/.test(line));
     const condition = routing.slice(routing.indexOf("${{ ") + 4, routing.indexOf(" && fromJSON("));
-    expect(watchdog).toContain(
-      `          SHOULD_WATCH: \u0024{{ ${condition.replace("matrix.shard <=", "1 <=")} }}`,
-    );
+    const watch = watchdog.find((line) => line.includes("SHOULD_WATCH:"));
+    expect(expressionValue(watch, routingContext())).toBe(true);
+    expect(condition).toContain("matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0')");
     const prefix = /vars\.DISPOSABLE_TESTS_LABEL_PREFIX \|\| 'dt'/.exec(routing)?.[0];
     expect(prefix).toBeDefined();
     expect(watchdog).toContain(`          LABEL_PREFIX: \u0024{{ ${prefix} }}`);
-    const count = watchdog.find((line) => line.includes("SHARD_COUNT:"));
-    expect(count).toBe(`          SHARD_COUNT: "${matrixShards(server).length}"`);
+    const count = watchFamilies(routingContext()).find(
+      (family) => family.id === "test-server",
+    ).count;
+    expect(count).toBe(matrixShards(server).length);
     expect(needsOf(job("ci").body)).toContain("server-queue-watchdog");
     expect(jobPermissions(watchdog)).toEqual(["actions: write"]);
     expect(watchdog).toContain("    timeout-minutes: 22");
@@ -255,6 +443,7 @@ exit "$status"
         HEAD_SHA: "a".repeat(40),
         LABEL_PREFIX: "dt",
         SHARD_COUNT: "24",
+        FAMILIES: JSON.stringify([{ id: "test-server", count: 24, matrix: true, enabled: true }]),
         ...env,
       },
     });
@@ -282,6 +471,90 @@ exit "$status"
     };
   }
   const cancellations = (result) => result.calls.filter((args) => args.includes("POST"));
+
+  const familyRows = (id, count, matrix, firstId) =>
+    Array.from({ length: count }, (_, at) => ({
+      id: firstId + at,
+      name: matrix ? `${id} (${at + 1})` : id,
+      run_id: 1234,
+      run_attempt: 1,
+      head_sha: "a".repeat(40),
+      status: "queued",
+      runner_id: 0,
+      labels: at === 0 ? ["self-hosted", `dt-42-1234-1-${id}-1`] : ["ubuntu-latest"],
+    }));
+  const familyEnvironment = (...families) => ({ FAMILIES: JSON.stringify(families) });
+  it.each([false, true])(
+    "requires heavy and unsharded browser jobs to leave their queues (both: %s)",
+    (both) => {
+      const heavy = familyRows("test-heavy", 3, true, 100);
+      const ui = familyRows("test-ui", 1, false, 200);
+      Object.assign(heavy[0], { status: "in_progress", runner_id: 9 });
+      if (both) Object.assign(ui[0], { status: "in_progress", runner_id: 10 });
+      const result = runWatch(
+        { polls: [pages([...heavy, ...ui])] },
+        familyEnvironment(
+          { id: "test-heavy", count: 3, matrix: true, enabled: true },
+          { id: "test-ui", count: 1, matrix: false, enabled: true },
+          { id: "test-server", count: 24, matrix: true, enabled: false },
+        ),
+      );
+      expect(result.status === 0, result.output).toBe(both);
+      expect(cancellations(result)).toHaveLength(both ? 0 : 1);
+      if (!both) expect(result.output).toContain("test-ui");
+    },
+  );
+  it("fails an enabled all-hosted family even when another family is assigned", () => {
+    const server = inventory((rows) =>
+      Object.assign(rows[0], { status: "in_progress", runner_id: 9 }),
+    );
+    const heavy = familyRows("test-heavy", 3, true, 100);
+    heavy[0].labels = ["ubuntu-latest"];
+    const result = runWatch(
+      { polls: [pages([...server, ...heavy])] },
+      familyEnvironment(
+        { id: "test-server", count: 24, matrix: true, enabled: true },
+        { id: "test-heavy", count: 3, matrix: true, enabled: true },
+      ),
+    );
+    expect(result.status, result.output).not.toBe(0);
+    expect(result.calls).toHaveLength(1);
+    expect(cancellations(result)).toEqual([]);
+  });
+  it("matches an unsharded API name exactly while excluding its merge job", () => {
+    const ui = familyRows("test-ui", 1, false, 100);
+    Object.assign(ui[0], { status: "in_progress", runner_id: 9 });
+    const result = runWatch(
+      { polls: [pages([...ui, { id: 200, name: "test-ui-merge" }])] },
+      familyEnvironment({ id: "test-ui", count: 1, matrix: false, enabled: true }),
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(cancellations(result)).toEqual([]);
+  });
+  it.each(["name", "head", "attempt", "label", "missing"])(
+    "does not hide a browser %s fault behind assigned server jobs",
+    (fault) => {
+      const server = inventory((rows) =>
+        Object.assign(rows[0], { status: "in_progress", runner_id: 9 }),
+      );
+      const ui = familyRows("test-ui", 1, false, 100);
+      Object.assign(ui[0], { status: "in_progress", runner_id: 10 });
+      if (fault === "name") ui[0].name = "test-ui (1)";
+      if (fault === "head") ui[0].head_sha = "b".repeat(40);
+      if (fault === "attempt") ui[0].run_attempt = 2;
+      if (fault === "label") ui[0].labels[1] = "dt-42-1234-1-test-heavy-1";
+      if (fault === "missing") ui.pop();
+      const result = runWatch(
+        { polls: [pages([...server, ...ui])] },
+        familyEnvironment(
+          { id: "test-server", count: 24, matrix: true, enabled: true },
+          { id: "test-ui", count: 1, matrix: false, enabled: true },
+        ),
+      );
+      expect(result.status, result.output).not.toBe(0);
+      expect(cancellations(result)).toHaveLength(1);
+    },
+  );
 
   it("is a successful zero-API no-op when routing is disabled for this attempt", () => {
     const result = runWatch({}, { SHOULD_WATCH: "false" });

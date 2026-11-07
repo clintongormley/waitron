@@ -2136,7 +2136,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **Replace 15 "if it happens again" entries with one table in `docs/backlog/ci** (bundle of 15, size M). Holds A891, A999, A1230, A1305, A1027, A419. [Detail](backlog/ci.md#bundle-replace-15-if-it-happens-again-entries-with-one-table-in-docsbacklogci)
 
-- **Finish the time limits on CI's network steps** (bundle of 6, size M). Holds A1251 and A1424's remaining runner capacity and hosted-fallback qualification. [Detail](backlog/ci.md#bundle-finish-the-time-limits-on-cis-network-steps)
+- **Finish the time limits on CI's network steps** (bundle of 6, size M). Holds A1251 and A1424's remaining server/browser/heavy capacity and hosted-fallback qualification. [Detail](backlog/ci.md#bundle-finish-the-time-limits-on-cis-network-steps)
 
 - **Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)** (bundle of 2, 1 important, size M, waits for another entry). Holds A1306. [Detail](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 

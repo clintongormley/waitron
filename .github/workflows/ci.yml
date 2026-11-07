@@ -867,7 +867,7 @@ jobs:
     # longer uses at all — misses db when one of db's own dependencies changed. The `changes` job
     # resolves membership properly and answers here with a boolean.
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_HEAVY_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-heavy-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1458,7 +1458,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-fiscal-verifactu-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1671,7 +1671,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_UI_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-ui-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -1790,7 +1790,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_TILL_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-till-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1992,7 +1992,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_DASHBOARD_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-dashboard-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -2200,7 +2200,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_SETUP_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-setup-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -2286,7 +2286,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_VENUE_SERVICE_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-venue-service-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -2534,7 +2534,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_ADJUSTMENTS_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-adjustments-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -2613,7 +2613,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_STAFFING_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-staffing-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -2692,7 +2692,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_BOOKINGS_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-bookings-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -2775,7 +2775,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_MEDIA_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-media-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -2859,7 +2859,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-payments-stripe-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -2942,7 +2942,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-payments-sumup-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -3736,16 +3736,32 @@ jobs:
   server-queue-watchdog:
     timeout-minutes: 22
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
+    if: ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true')
     runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
-      - name: Bound the disposable server queue
+      - name: Bound the disposable test queues
         env:
-          SHOULD_WATCH: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') }}
+          SHOULD_WATCH: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && ((((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_HEAVY_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_UI_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_TILL_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_DASHBOARD_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_SETUP_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_VENUE_SERVICE_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_ADJUSTMENTS_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_STAFFING_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_BOOKINGS_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_MEDIA_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0'))) }}
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
-          SHARD_COUNT: "24"
+          FAMILIES: >-
+            [
+            {"id":"test-server","count":24,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') }}},
+            {"id":"test-heavy","count":3,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_HEAVY_JOBS || '0') }}},
+            {"id":"test-fiscal-verifactu","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS || '0') }}},
+            {"id":"test-ui","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_UI_JOBS || '0') }}},
+            {"id":"test-till","count":7,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_TILL_JOBS || '0') }}},
+            {"id":"test-dashboard","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_DASHBOARD_JOBS || '0') }}},
+            {"id":"test-setup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_SETUP_JOBS || '0') }}},
+            {"id":"test-venue-service","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_VENUE_SERVICE_JOBS || '0') }}},
+            {"id":"test-adjustments","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_ADJUSTMENTS_JOBS || '0') }}},
+            {"id":"test-staffing","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_STAFFING_JOBS || '0') }}},
+            {"id":"test-bookings","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_BOOKINGS_JOBS || '0') }}},
+            {"id":"test-media","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_MEDIA_JOBS || '0') }}},
+            {"id":"test-payments-stripe","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS || '0') }}},
+            {"id":"test-payments-sumup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0') }}}
+            ]
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           REPO_ID: ${{ github.repository_id }}
@@ -3763,6 +3779,7 @@ jobs:
           queue_end=$((start + 1200))
           end=$((start + 1260))
           calls=0
+          waiting=$(printf '%s' "$FAMILIES" | jq -r '[.[] | select(.enabled) | .id] | join(", ")')
           request() {
             local deadline=$1
             shift
@@ -3801,26 +3818,39 @@ jobs:
                    ($jobs | map(.id) | unique | length) != ($jobs | length) or
                    any($jobs[]; (.id | type) != "number" or .id <= 0 or (.id | floor) != .id)
                 then error("incomplete or duplicate job inventory") else . end
-              | [$jobs[] | select(.name | test("^test-server \\([0-9]+\\)$"))] as $server
-              | if ($server | map(.name | capture("\\((?<n>[0-9]+)\\)$").n | tonumber) | sort) !=
-                   [range(1; ($ENV.SHARD_COUNT | tonumber) + 1)] or
-                   any($server[]; .run_id != ($ENV.RUN_ID | tonumber) or
-                       .run_attempt != ($ENV.RUN_ATTEMPT | tonumber) or .head_sha != $ENV.HEAD_SHA or
-                       (.labels | type) != "array")
-                then error("missing or foreign server shard") else . end
-              | [$server[] | select(.labels | index("self-hosted"))] as $routed
-              | if any($routed[]; . as $job |
-                   ($ENV.LABEL_PREFIX + "-" + $ENV.REPO_ID + "-" + $ENV.RUN_ID + "-" + $ENV.RUN_ATTEMPT +
-                    "-test-server-" + (.name | capture("\\((?<n>[0-9]+)\\)$").n)) as $label |
-                   ($job.labels | index($label)) == null)
-                then error("unexpected server routing label")
-                elif ($routed | length) == 0 then "empty"
-                elif all($routed[]; .status == "completed" or
-                     (.status == "in_progress" and (.runner_id | type) == "number" and .runner_id > 0))
-                then "assigned" else "waiting" end
+              | ($ENV.FAMILIES | fromjson | map(select(.enabled))) as $families
+              | if ($families | length) == 0 then error("no enabled test families") else . end
+              | [$families[] as $family
+                 | [$jobs[] | select(if $family.matrix then
+                     (.name | test("^" + $family.id + " \\([0-9]+\\)$"))
+                     else .name == $family.id end)] as $members
+                 | if (if $family.matrix then
+                       ($members | map(.name | capture("\\((?<n>[0-9]+)\\)$").n | tonumber) | sort) !=
+                         [range(1; $family.count + 1)]
+                       else ($members | length) != 1 end) or
+                       any($members[]; .run_id != ($ENV.RUN_ID | tonumber) or
+                           .run_attempt != ($ENV.RUN_ATTEMPT | tonumber) or .head_sha != $ENV.HEAD_SHA or
+                           (.labels | type) != "array")
+                   then error("missing or foreign " + $family.id + " job") else . end
+                 | [$members[] | select(.labels | index("self-hosted"))] as $routed
+                 | if any($routed[]; . as $job |
+                     ($ENV.LABEL_PREFIX + "-" + $ENV.REPO_ID + "-" + $ENV.RUN_ID + "-" + $ENV.RUN_ATTEMPT +
+                      "-" + $family.id + "-" + (if $family.matrix then
+                        (.name | capture("\\((?<n>[0-9]+)\\)$").n) else "1" end)) as $label |
+                     ($job.labels | index($label)) == null)
+                   then error("unexpected " + $family.id + " routing label") else . end
+                 | {id: $family.id, state: (if ($routed | length) == 0 then "empty"
+                     elif all($routed[]; .status == "completed" or
+                       (.status == "in_progress" and (.runner_id | type) == "number" and .runner_id > 0))
+                     then "assigned" else "waiting" end)}] as $states
+              | if any($states[]; .state == "empty") then
+                  "empty:" + ([$states[] | select(.state == "empty") | .id] | join(", "))
+                elif all($states[]; .state == "assigned") then "assigned"
+                else "waiting:" + ([$states[] | select(.state == "waiting") | .id] | join(", ")) end
             '); then
               if [ "$state" = assigned ]; then exit 0; fi
-              if [ "$state" = empty ]; then echo 'No disposable server jobs in the complete inventory' >&2; exit 1; fi
+              if [[ "$state" == empty:* ]]; then echo "No disposable jobs in enabled families: ${state#empty:}" >&2; exit 1; fi
+              waiting=${state#waiting:}
             fi
             remaining=$((queue_end - $(date +%s)))
             if [ "$remaining" -gt 30 ]; then remaining=30; fi
@@ -3833,7 +3863,7 @@ jobs:
           if jq -e '.status == "completed"' "$scratch/response" > /dev/null; then exit 0; fi
           for attempt in 1 2; do
             if request "$end" --method POST "repos/$REPO/actions/runs/$RUN_ID/cancel"; then
-              echo "Cancellation requested for run $RUN_ID because server shards are still queued; rerun this head on GitHub" >&2
+              echo "Cancellation requested for run $RUN_ID because $waiting jobs are still queued; rerun this head on GitHub" >&2
               exit 1
             fi
             if grep -q 'HTTP 409' "$scratch/error" && request "$end" "repos/$REPO/actions/runs/$RUN_ID" &&

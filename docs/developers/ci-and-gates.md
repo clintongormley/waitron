@@ -76,73 +76,104 @@ External provenance, read 2026-11-06:
 
 ## Disposable server-test runners
 
-When hosted jobs spend longer waiting than testing, you can move selected server shards
-to Lane I's disposable Linux runners. Routing is disabled by default. After the runner
-qualification below, set `DISPOSABLE_TESTS_MODE=server` and
+When hosted jobs spend longer waiting than testing, you can move selected server, heavy and
+browser test jobs to Lane I's disposable Linux runners. Routing is disabled by default.
+After the runner qualification below, set `DISPOSABLE_TESTS_MODE=server` and
 `DISPOSABLE_TESTS_SERVER_JOBS=1` for the first measured slot. Increase the job count only
-from measured capacity; one runner slot does not make several shards run in parallel.
-Choose a budget whose shards can all start within twenty minutes. Otherwise the watchdog
-requests cancellation of the entire workflow run even when another shard is already running.
+from measured capacity; one runner slot does not make several shards run in parallel. Count
+the routed jobs across every selected family against that measured capacity. Choose caps
+whose combined jobs can all start within twenty minutes. Otherwise the watchdog requests
+cancellation of the entire workflow run even when another shard is already running.
 
 Set `DISPOSABLE_TESTS_HEAD` to the chosen pull request's full head SHA to route only that
-commit. Unset it to admit every otherwise eligible head. The queue watchdog uses
-the same selection, so other commits stay on hosted runners without a queue watch.
+commit. Unset it to admit every otherwise eligible head. Every family and the queue watchdog
+use the same selection, so other commits stay on hosted runners and the watchdog makes no
+API calls for them.
 
-Only the first attempt of a same-repository pull request uses this route. Main pushes,
-tags, manual runs, forks and every retry use GitHub-hosted runners. This includes retries
-that retain the successful `changes` job's outputs: routing reads the current attempt
-directly. Same-repository bot branches also satisfy the routing condition; confirm their
-admission with the controller before enabling it.
+`DISPOSABLE_TESTS_MODE=server` also enables the following families when their own cap is
+positive. Each cap defaults to zero. Set only the families Lane I has qualified; each cap
+limits that job family independently. `test-ui` includes both ui and ui-core.
 
-`DISPOSABLE_TESTS_LABEL_PREFIX` defaults to `dt`. Each selected shard requests
-`self-hosted` and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-test-server-N`, where N is its shard
-number from 1 through 24. I currently provisions the `dt` prefix. Use a deliberately
-unavailable prefix only for the fallback drill; do not register a runner for that prefix.
-The settings affect the existing server job, without changing its check name, test
-command, coverage merge, setup retries or ten-minute execution limit.
+| Cap variable | Existing job family |
+| --- | --- |
+| `DISPOSABLE_TESTS_SERVER_JOBS` | `test-server` |
+| `DISPOSABLE_TESTS_HEAVY_JOBS` | `test-heavy` |
+| `DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS` | `test-fiscal-verifactu` |
+| `DISPOSABLE_TESTS_UI_JOBS` | `test-ui` |
+| `DISPOSABLE_TESTS_TILL_JOBS` | `test-till` |
+| `DISPOSABLE_TESTS_DASHBOARD_JOBS` | `test-dashboard` |
+| `DISPOSABLE_TESTS_SETUP_JOBS` | `test-setup` |
+| `DISPOSABLE_TESTS_VENUE_SERVICE_JOBS` | `test-venue-service` |
+| `DISPOSABLE_TESTS_ADJUSTMENTS_JOBS` | `test-adjustments` |
+| `DISPOSABLE_TESTS_STAFFING_JOBS` | `test-staffing` |
+| `DISPOSABLE_TESTS_BOOKINGS_JOBS` | `test-bookings` |
+| `DISPOSABLE_TESTS_MEDIA_JOBS` | `test-media` |
+| `DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS` | `test-payments-stripe` |
+| `DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS` | `test-payments-sumup` |
 
-The hosted `server-queue-watchdog` checks the actual attempt's job assignments. It reads
-30 records per API page, retaining the smaller page size qualified after A1340's HTTP
-502 failures. Each complete paginated read has ten seconds. It polls at thirty-second
-intervals for up to twenty minutes, at most forty polls and 200 API calls including
-pagination and cancellation. It requires all server shards, unique job IDs, consistent
-totals within that read and matching run, attempt, head and routing labels. Totals may
-grow between reads. A routed job is assigned when it is in progress with a positive
-runner ID; a completed job also ends its queue wait. The aggregate still checks its result.
+Only the first attempt of a same-repository pull request uses this route. Main pushes, tags,
+manual runs, forks and every retry use GitHub-hosted runners. This includes retries that
+retain the successful `changes` job's outputs: routing reads the current attempt directly.
+Same-repository bot branches also satisfy the routing condition; confirm their admission
+with the controller before enabling it.
+
+`DISPOSABLE_TESTS_LABEL_PREFIX` defaults to `dt`. Each selected shard requests `self-hosted`
+and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-test-FAMILY-N`, where FAMILY is the job suffix in the
+table and N is its existing shard number, or 1 for an unsharded job. Lane I currently
+provisions the `dt` prefix. Use a deliberately unavailable prefix only for the fallback
+drill; do not register a runner for that prefix. The settings affect the existing jobs,
+including any Node projects in a browser package. Their check names, test commands, coverage
+merges, setup retries and execution limits stay the same.
+
+The hosted `server-queue-watchdog` checks the actual attempt's job assignments. It reads 30
+records per API page, retaining the smaller page size qualified after A1340's HTTP 502
+failures. Each complete paginated read has ten seconds. It polls at thirty-second intervals
+for up to twenty minutes, at most forty polls and 200 API calls including pagination and
+cancellation. It requires every member of each enabled family, unique job IDs, consistent
+totals within that read and matching run, attempt, head and routing labels. Totals may grow
+between reads. A family is enabled only when its package is in scope and its cap is
+positive. Unsharded jobs match their exact API name; sharded jobs match their numbered
+names. Each enabled family must contain a routed job; an entirely hosted enabled family
+fails immediately without cancellation, even when another family is assigned. A routed job
+is assigned when it is in progress with a positive runner ID; a completed job also ends its
+queue wait. The aggregate still checks its result.
 
 If jobs remain unassigned, the watchdog verifies the current run's identity and requests
-normal cancellation, with one retry. An accepted cancellation request still fails the
-watchdog. A 409 response passes only after completion of the same run attempt is read
-back. The shell has a 1,260-second deadline inside a 22-minute job, reserving a minute
-for cancellation. A complete inventory with no routed jobs fails immediately without
-cancelling. Exhausted API calls, unreadable metadata and refused cancellation end red.
-If cancellation cannot reach GitHub, the aggregate can remain pending until queued jobs
-expire. The watchdog itself must also obtain a hosted runner, so this is not a bound on
-total elapsed time during a GitHub outage.
-Both deadlines prefer `gnutimeout`, then `gtimeout`, then `timeout`. Run the root shell
-checks with one of these commands installed; the selection test wraps the actual timeout
-command and checks which executable the workflow chooses.
+normal cancellation, with one retry. The cancellation message names the waiting families. An
+accepted cancellation request still fails the watchdog. A 409 response passes only after
+completion of the same run attempt is read back. The shell has a 1,260-second deadline
+inside a 22-minute job, reserving a minute for cancellation. A complete inventory with no
+routed jobs fails immediately without cancelling. Exhausted API calls, unreadable metadata
+and refused cancellation end red. If cancellation cannot reach GitHub, the aggregate can
+remain pending until queued jobs expire. The watchdog itself must also obtain a hosted
+runner, so this is not a bound on total elapsed time during a GitHub outage. Both deadlines
+prefer `gnutimeout`, then `gtimeout`, then `timeout`. Run the root shell checks with one of
+these commands installed; the selection test wraps the actual timeout command and checks
+which executable the workflow chooses.
 
-The watchdog shares the server job's code, package and reuse gate. Outside a routed
-attempt it exits successfully without an API call. This costs one small hosted job on
-selected server runs and preserves the reuse verifier's requirement that every job in
-the previous full main run succeeded. The first merge adding this job cannot reuse a
-parent run that did not contain it. The verifier and existing reuse assertions are unchanged.
+The watchdog covers the code, package and reuse gates of every family in the table. Outside
+a routed attempt it exits successfully without an API call. This costs one small hosted job
+on selected server, browser or heavy runs, including a zero-API no-op when all caps are
+zero, and preserves the reuse verifier's requirement that every job in the previous full
+main run succeeded. The verifier and existing reuse assertions are unchanged.
 
-Before activation, have I confirm Linux tools, `/proc`, `/dev/shm`, Node/pnpm/cache
-support, Chromium's headless-shell libraries, measured global capacity and ordinary PR
-admission. Read back `all_external_contributors`. Qualify an actual server-scoped PR on
-the rented runner, retaining its runner ID/name/labels, source head and coverage/aggregate
-results. Then take the label away and stop the server for the requested fallback drills.
-Read the visible first-attempt failure or cancellation and an unchanged-head second
-attempt finishing on GitHub. I owns automatic retry of attempts it admitted; an unowned
-label requires an explicit rerun. These live qualifications remain open; local shell
-tests do not establish GitHub scheduling, VM isolation or a speed improvement.
+Before activation, have I confirm Linux tools, `/proc`, Node/pnpm/cache support, measured
+global capacity and ordinary PR admission. Server jobs need Chromium headless-shell
+libraries; all browser families need full Chromium and its system libraries. Venue-service
+also uses `TMPDIR=/dev/shm` and `sudo dmesg`. Qualify an actual till browser-family job,
+including its existing deadline, before enabling that family. Read back
+`all_external_contributors`. Qualify an actual server-scoped PR on the rented runner,
+retaining its runner ID/name/labels, source head and coverage/aggregate results. Then take
+the label away and stop the server for the requested fallback drills. Read the visible
+first-attempt failure or cancellation and an unchanged-head second attempt finishing on
+GitHub. Lane I owns automatic retry of attempts it admitted; an unowned label requires an
+explicit rerun. These live qualifications remain open; local shell tests do not establish
+GitHub scheduling, VM isolation or a speed improvement.
 
-The public repository still exposes the runner VM, host and reachable network to code
-that obtains admission. Labels are routing information, not isolation. I owns disposable
-VMs and keeps durable credentials on its Mac controller. Follow the linked hardening
-guidance before enabling a slot.
+The public repository still exposes the runner VM, host and reachable network to code that
+obtains admission. Labels are routing information, not isolation. Lane I owns disposable VMs
+and keeps durable credentials on its Mac controller. Follow the linked hardening guidance
+before enabling a slot.
 
 | Source, checked 7 November 2026 | Source's words | Application |
 | --- | --- | --- |
