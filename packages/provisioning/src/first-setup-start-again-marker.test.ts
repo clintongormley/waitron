@@ -908,8 +908,7 @@ async function pendingDeletion(abandon: boolean) {
       reference: "b".repeat(64),
       consultedAt: "2026-10-16T02:00:00.000Z",
     },
-    action: "retire" as const,
-    nextWorkspace: null,
+    action: "marker-repair" as const,
   };
   const originals = [{ name: "venue.db", bytes: null }];
   const prepared = await records.prepare(input, originals);

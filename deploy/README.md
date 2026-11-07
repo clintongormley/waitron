@@ -354,7 +354,7 @@ the tills stay stopped, as on a full disk, also across restarts. A start with at
 the running box's free-space check (once a minute) or Box status's **Free** button writes the spare
 back whole and deletes the marker, and the tills can save again. The running box writes the spare
 back only while the marker exists. `waitron.sh reset` deletes the marker with the rest of the state
-folder. A repair-stage start never shows the full-disk page; the repair page itself says when the
+folder. A repair-stage start that releases the spare serves the repair page, which itself says when the
 disk is full.
 
 ### Trying a branch before it merges

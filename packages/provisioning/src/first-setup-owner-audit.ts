@@ -52,7 +52,6 @@ export function createFirstSetupOwnerAudit(
       }
       if (
         last.register !== null ||
-        last.authority !== "original-password" ||
         last.attemptId !== before.frozen.attemptId ||
         !["marker-repair", "ownership-rebind"].includes(last.action)
       )
@@ -146,7 +145,6 @@ export function createFirstSetupOwnerAudit(
           authority: "original-password",
           register: null,
           action,
-          nextWorkspace: null,
         },
         snapshot.originals,
       );

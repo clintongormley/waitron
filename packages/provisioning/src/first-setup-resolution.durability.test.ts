@@ -43,8 +43,7 @@ async function fixture() {
       reference: "b".repeat(64),
       consultedAt: "2026-10-16T02:00:00.000Z",
     },
-    action: "retire" as const,
-    nextWorkspace: null,
+    action: "marker-repair" as const,
   };
   const originals = [
     { name: "state/first-setup.json", bytes: Buffer.from("retained malformed state") },
@@ -110,7 +109,7 @@ it.each(
           ["000001.json", "000002.json"].map((name) => filesystem.readFile(join(f.folder, name))),
         )
       : [];
-    const input = later ? { ...f.input, action: "select-workspace" as const } : f.input;
+    const input = later ? { ...f.input, action: "ownership-rebind" as const } : f.input;
     const sequence = later ? 3 : 1;
     const evidence = later ? join(f.folder, "step-000003") : f.folder;
     const path =
@@ -172,14 +171,14 @@ it.each(
     ).toEqual(
       later
         ? [
-            { sequence: 1, action: "retire", phase: "prepared" },
-            { sequence: 2, action: "retire", phase: "applied" },
-            { sequence: 3, action: "select-workspace", phase: "prepared" },
-            { sequence: 4, action: "select-workspace", phase: "applied" },
+            { sequence: 1, action: "marker-repair", phase: "prepared" },
+            { sequence: 2, action: "marker-repair", phase: "applied" },
+            { sequence: 3, action: "ownership-rebind", phase: "prepared" },
+            { sequence: 4, action: "ownership-rebind", phase: "applied" },
           ]
         : [
-            { sequence: 1, action: "retire", phase: "prepared" },
-            { sequence: 2, action: "retire", phase: "applied" },
+            { sequence: 1, action: "marker-repair", phase: "prepared" },
+            { sequence: 2, action: "marker-repair", phase: "applied" },
           ],
     );
     expect(applied.sequence).toBe(later ? 4 : 2);

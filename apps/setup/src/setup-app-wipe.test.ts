@@ -153,10 +153,9 @@ it("where the setup password cannot be checked, Start again is not offered and n
   expect(summaryReads(requests)).toEqual([]);
 });
 
-it("where the setup record pair is only repairable, Start again is not offered and no summary is read", async () => {
-  const { app, requests } = await wipeFixture({ inspection: { pair: "repairable" } });
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-  expect(summaryReads(requests)).toEqual([]);
+it("where the setup record pair is repairable, Start again is offered", async () => {
+  const { app } = await wipeFixture({ inspection: { pair: "repairable" } });
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
 });
 
 it("pressing Start again reads the setup again before reading the summary", async () => {
@@ -365,7 +364,8 @@ it("Start again reads and sends with the setup as read on pressing, not as first
 
 it("where the setup as read on pressing can no longer be deleted, no summary is read and the page says so", async () => {
   const { app, requests } = await wipeFixture({
-    inspectionAt: (read) => (read === 0 ? {} : { pair: "repairable" }),
+    inspectionAt: (read) =>
+      read === 0 ? {} : { password: "uncheckable", revision: null, ownerGeneration: null },
   });
   await click(app, "start-again");
   await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();

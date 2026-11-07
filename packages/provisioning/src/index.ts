@@ -72,7 +72,6 @@ export {
 } from "./first-setup-resolution.js";
 export type {
   RegisterAnswer,
-  WorkspaceBinding,
   ResolutionRecord,
   ResolutionInput,
   FirstSetupOriginal,

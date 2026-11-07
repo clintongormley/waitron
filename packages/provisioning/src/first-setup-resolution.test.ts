@@ -36,8 +36,7 @@ async function fixture() {
       reference: "b".repeat(64),
       consultedAt: "2026-10-16T02:00:00.000Z",
     },
-    action: "retire" as const,
-    nextWorkspace: null,
+    action: "marker-repair" as const,
   };
   const originals = [
     { name: "first-setup.json", bytes: Buffer.from('{"consumptionIntent":true}') },
@@ -46,57 +45,12 @@ async function fixture() {
   ];
   return { root, roots, store, input, originals, coordinator };
 }
-it("retains unused-assignment authority with a consulted register across restart", async () => {
+it("refuses an empty register object", async () => {
   const f = await fixture();
-  const prepared = await f.store.prepare(
-    { ...f.input, authority: "local-empty-unused-assignment" },
-    f.originals,
-  );
-  const applied = await f.store.apply(prepared);
-  const restarted = resolution.createFirstSetupResolutionStore({
-    ...f.roots,
-    coordinator: f.coordinator,
+  await expect(f.store.prepare({ ...f.input, register: {} }, f.originals)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
   });
-  expect(await restarted.read(f.input.resolutionId)).toEqual([prepared, applied]);
-  expect(applied.authority).toBe("local-empty-unused-assignment");
-  expect(applied.register).toEqual(f.input.register);
 });
-it.each(["missing", "committed-exact", "unknown-or-nonempty"] as const)(
-  "unused-assignment authority refuses %s database evidence",
-  async (database) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        { ...f.input, authority: "local-empty-unused-assignment", database },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
-it.each(["marker-repair", "ownership-rebind", "finish-publication"] as const)(
-  "unused-assignment authority cannot authorise %s",
-  async (action) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        { ...f.input, authority: "local-empty-unused-assignment", action },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
-it.each([{}, { kind: "no-current-master", confirmed: true }])(
-  "unused-assignment authority refuses a malformed or contradictory register %j",
-  async (register) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        { ...f.input, authority: "local-empty-unused-assignment", register },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
 it.each(["Consumed", "Not consumed", "Unknown"] as const)(
   "retains %s separately from the unchanged consumption evidence across restart",
   async (status) => {
@@ -178,41 +132,17 @@ it.each(["../escape", "", "not-a-uuid"])(
     });
   },
 );
-it("rejects unknown fields, private input, incomplete answers and impossible authority", async () => {
+it("rejects unknown fields, private input and incomplete answers", async () => {
   const f = await fixture();
   for (const input of [
     { ...f.input, password: "must-not-persist" },
     { ...f.input, register: { ...f.input.register, reference: "" } },
     { ...f.input, register: { ...f.input.register, consultedAt: "yesterday" } },
-    { ...f.input, authority: "local-empty-no-custodian", register: f.input.register },
-    {
-      ...f.input,
-      database: "missing",
-      authority: "local-empty-no-custodian",
-      register: { kind: "no-current-master", confirmed: true },
-    },
   ])
     await expect(f.store.prepare(input, f.originals)).rejects.toMatchObject({
       code: "setup.attempt_invalid",
     });
 });
-it.each(["marker-repair", "ownership-rebind", "finish-publication"] as const)(
-  "local-empty authority cannot authorise %s",
-  async (action) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        {
-          ...f.input,
-          authority: "local-empty-no-custodian",
-          register: { kind: "no-current-master", confirmed: true },
-          action,
-        },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
 
 it("refuses an evidence directory symlink without writing to its target", async () => {
   const f = await fixture();
@@ -261,12 +191,12 @@ it("links separate actions and retains each action's original evidence across re
   const f = await fixture();
   const prepared = await f.store.prepare(f.input, f.originals);
   const retired = await f.store.apply(prepared);
-  const selection = { ...f.input, action: "select-workspace" as const };
+  const selection = { ...f.input, action: "ownership-rebind" as const };
   const observed = [{ name: "selection-check", bytes: Buffer.from("fresh observation") }];
   const selecting = await f.store.prepare(selection, observed);
   expect(selecting).toMatchObject({
     sequence: 3,
-    action: "select-workspace",
+    action: "ownership-rebind",
     phase: "prepared",
     previousRecordDigest: createHash("sha256").update(JSON.stringify(retired)).digest("hex"),
   });
@@ -293,7 +223,7 @@ it("does not begin a different action while the preceding action remains prepare
   const f = await fixture();
   await f.store.prepare(f.input, f.originals);
   await expect(
-    f.store.prepare({ ...f.input, action: "select-workspace" }, f.originals),
+    f.store.prepare({ ...f.input, action: "ownership-rebind" }, f.originals),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect((await f.store.read(f.input.resolutionId)).map((record) => record.phase)).toEqual([
     "prepared",
@@ -303,7 +233,7 @@ it("does not begin a different action while the preceding action remains prepare
 it("refuses a prepared later action's wrong predecessor before an applied successor exists", async () => {
   const f = await fixture();
   await f.store.apply(await f.store.prepare(f.input, f.originals));
-  await f.store.prepare({ ...f.input, action: "select-workspace" }, f.originals);
+  await f.store.prepare({ ...f.input, action: "ownership-rebind" }, f.originals);
   const path = join(
     f.roots.stateDir,
     "first-setup-resolutions",
@@ -323,7 +253,7 @@ it.each(["missing predecessor", "wrong predecessor", "changed original"])(
   async (fault) => {
     const f = await fixture();
     await f.store.apply(await f.store.prepare(f.input, f.originals));
-    const next = await f.store.prepare({ ...f.input, action: "select-workspace" }, f.originals);
+    const next = await f.store.prepare({ ...f.input, action: "ownership-rebind" }, f.originals);
     await f.store.apply(next);
     const folder = join(f.roots.stateDir, "first-setup-resolutions", f.input.resolutionId);
     if (fault === "missing predecessor") await rm(join(folder, "000002.json"));
@@ -348,7 +278,7 @@ it.each(["000003.json", "000004.json"])(
       const f = await fixture();
       const first = await f.store.prepare(f.input, f.originals);
       const applied = await f.store.apply(first);
-      const input = { ...f.input, action: "select-workspace" as const };
+      const input = { ...f.input, action: "ownership-rebind" as const };
       const actual = (await vi.importActual<typeof durable>("./durable-host-json.js"))
         .writeDurableHostJson;
       const before = point === "000004.json" ? await f.store.prepare(input, f.originals) : null;
@@ -393,7 +323,7 @@ it.each(["marker-repair", "ownership-rebind"] as const)(
     expect(await restarted.readOriginals(f.input.resolutionId)).toEqual(f.originals);
   },
 );
-it.each(["retire", "select-workspace", "finish-publication"] as const)(
+it.each(["finish-publication"] as const)(
   "an unconsulted register cannot authorise %s with an unknown database outcome",
   async (action) => {
     const f = await fixture();
@@ -405,25 +335,11 @@ it.each(["retire", "select-workspace", "finish-publication"] as const)(
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   },
 );
-it.each(["marker-repair", "ownership-rebind"] as const)(
-  "an unconsulted register cannot grant local-empty authority for %s",
-  async (action) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        { ...f.input, action, register: null, authority: "local-empty-no-custodian" },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
 
 it.each([
-  ["original-password", "retire", "missing"],
-  ["original-password", "select-workspace", "empty-preactivation"],
+  ["original-password", "marker-repair", "missing"],
+  ["original-password", "ownership-rebind", "empty-preactivation"],
   ["original-password", "finish-publication", "committed-exact"],
-  ["local-empty-unused-assignment", "retire", "empty-preactivation"],
-  ["local-empty-unused-assignment", "select-workspace", "empty-preactivation"],
 ])(
   "retains local %s/%s/%s observations without inventing register answers",
   async (authority, action, database) => {
@@ -443,16 +359,15 @@ it.each([
   },
 );
 
-it.each([
-  ["local-empty-unused-assignment", "retire", "missing"],
-  ["local-empty-unused-assignment", "finish-publication", "committed-exact"],
-  ["original-password", "finish-publication", "empty-preactivation"],
-])("refuses impossible local observations %s/%s/%s", async (authority, action, database) => {
-  const f = await fixture();
-  await expect(
-    f.store.prepare({ ...f.input, authority, action, database, register: null }, f.originals),
-  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-});
+it.each([["original-password", "finish-publication", "empty-preactivation"]])(
+  "refuses impossible local observations %s/%s/%s",
+  async (authority, action, database) => {
+    const f = await fixture();
+    await expect(
+      f.store.prepare({ ...f.input, authority, action, database, register: null }, f.originals),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);
 it("a shared originals cache reads each archive file once and hands every caller its own list", async () => {
   const f = await fixture();
   const prepared = await f.store.prepare(f.input, f.originals);
@@ -552,7 +467,7 @@ it("a shared originals cache keeps only the manifest of a later step's evidence"
   const f = await fixture();
   await f.store.apply(await f.store.prepare(f.input, f.originals));
   const observed = [{ name: "selection-check", bytes: Buffer.from("fresh observation") }];
-  await f.store.apply(await f.store.prepare({ ...f.input, action: "select-workspace" }, observed));
+  await f.store.apply(await f.store.prepare({ ...f.input, action: "ownership-rebind" }, observed));
   const cached = resolution.createFirstSetupResolutionStore({
     ...f.roots,
     coordinator: f.coordinator,
@@ -577,3 +492,25 @@ it("a shared originals cache keeps only the manifest of a later step's evidence"
     "original-0-0.json",
   ]);
 });
+it.each([
+  ["action retire", { action: "retire" }],
+  ["action select-workspace", { action: "select-workspace" }],
+  ["a nextWorkspace key", { nextWorkspace: null }],
+])("refuses a record with %s", async (_name, change) => {
+  const f = await fixture();
+  await expect(f.store.prepare({ ...f.input, ...change }, f.originals)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+  await expect(readdir(join(f.roots.stateDir, "first-setup-resolutions"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+it.each(["local-empty-unused-assignment", "local-empty-no-custodian", "made-up-authority"])(
+  "refuses a record with authority %s",
+  async (authority) => {
+    const f = await fixture();
+    await expect(f.store.prepare({ ...f.input, authority }, f.originals)).rejects.toMatchObject({
+      code: "setup.attempt_invalid",
+    });
+  },
+);

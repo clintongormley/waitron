@@ -3,16 +3,8 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import {
-  createFirstSetupCoordinator,
-  createFirstSetupResolutionStore,
-  type WorkspaceBinding,
-} from "./index.js";
-import {
-  canonicalFirstSetupDirectory,
-  firstSetupDirectory,
-  validateWorkspaceBinding,
-} from "./first-setup-resolution.js";
+import { createFirstSetupCoordinator, createFirstSetupResolutionStore } from "./index.js";
+import { canonicalFirstSetupDirectory, firstSetupDirectory } from "./first-setup-resolution.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -30,9 +22,8 @@ async function fixture() {
     observedOwnerGeneration: 1,
     database: "missing" as const,
     authority: "original-password" as const,
-    action: "retire" as const,
+    action: "marker-repair" as const,
     register: null,
-    nextWorkspace: null,
   };
   const originals = [{ name: "state/first-setup.json", bytes: Buffer.from("retained original") }];
   const store = createFirstSetupResolutionStore({
@@ -230,36 +221,6 @@ it.each([
     code: "setup.attempt_invalid",
   });
   await expect(readFile(join(f.folder, "000001.json"))).rejects.toMatchObject({ code: "ENOENT" });
-});
-
-it("binds a new workspace to the resolution and both canonical anchor directories", async () => {
-  const f = await fixture();
-  const workspaceId = randomUUID();
-  const base = join(f.anchor.stateDir, "first-setup-workspaces", workspaceId);
-  const binding: WorkspaceBinding = {
-    workspaceId,
-    resolutionId: f.input.resolutionId,
-    selectionGeneration: 1,
-    anchorVenueDir: f.anchor.venueDir,
-    anchorStateDir: f.anchor.stateDir,
-    venueDir: join(base, "venue"),
-    stateDir: join(base, "state"),
-  };
-  expect(() => validateWorkspaceBinding(binding)).not.toThrow();
-  for (const changed of [
-    { ...binding, venueDir: join(f.root, "unrelated") },
-    { ...binding, selectionGeneration: 0 },
-    { ...binding, resolutionId: randomUUID() },
-    { ...binding, anchorVenueDir: join(f.root, "other-venue") },
-  ]) {
-    await expect(
-      f.store.prepare({ ...f.input, nextWorkspace: changed }, f.originals),
-    ).rejects.toMatchObject({
-      code: "setup.attempt_invalid",
-    });
-  }
-  const prepared = await f.store.prepare({ ...f.input, nextWorkspace: binding }, f.originals);
-  expect(prepared.nextWorkspace).toEqual(binding);
 });
 
 it("keeps a missing nested path canonical and refuses file or symlink directory components", async () => {
