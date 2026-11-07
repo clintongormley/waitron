@@ -73,6 +73,7 @@ const STREAM_TEST_FILES = [
   "src/backup-room.e2e.test.ts",
   "src/handover-refetch-full-disk.e2e.test.ts",
   "src/handover-placement-full-disk.e2e.test.ts",
+  "src/restore-full-disk.e2e.test.ts",
 ];
 const STREAM_BINARY_INSTALLERS = [
   "node scripts/setup-litestream.mjs",
@@ -2746,6 +2747,7 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
     ["full-disk-backup-room", "WAITRON_FULL_DISK_DIR_BACKUP_ROOM", "32m"],
     ["full-disk-handover", "WAITRON_FULL_DISK_DIR_HANDOVER", "32m"],
     ["full-disk-placement", "WAITRON_FULL_DISK_DIR_PLACEMENT", "64m"],
+    ["full-disk-restore", "WAITRON_FULL_DISK_DIR_RESTORE", "32m"],
   ])(
     "mounts a small filesystem at %s before it runs them, and names it to the tests as %s",
     (dir, variable, size) => {
