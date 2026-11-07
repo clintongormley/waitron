@@ -1319,6 +1319,12 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
 
   beforeAll(async () => {
+    // Noon keeps the venue's and the fake's dates equal; real waits must still advance the clock.
+    vi.useFakeTimers({
+      toFake: ["Date"],
+      now: new Date("2026-11-06T12:00:00Z"),
+      shouldAdvanceTime: true,
+    });
     scratch = await mkdtemp(join(tmpdir(), "waitron-handover-controlled-"));
     boxes = await within(twoBoxes(scratch), FIRST_SETUP_MS, "M1's first setup");
     stepdown = await within(offerToStepdown(boxes), STEPDOWN_MS, "the stage up to M1's stepdown");
@@ -1352,6 +1358,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
       boxes?.m2.agent?.close(),
     ];
     const closed = await Promise.allSettled(closing);
+    vi.useRealTimers();
     kill.mockRestore();
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     for (const result of closed) if (result.status === "rejected") throw result.reason;
