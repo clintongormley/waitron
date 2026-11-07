@@ -29,7 +29,6 @@ import {
   validateConfigurationBundle,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
-import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { ALL_MODULES } from "./modules.js";
 import {
   clearStagedConfigurationImport,
@@ -940,16 +939,11 @@ describe("routing cells in a staged import", () => {
   // a module this box no longer versions.
   it("refuses a bundle from before the migration squash that names catalogue, before any write", async () => {
     const { bundle, versions } = await exported();
-    const oldCatalogue = JSON.parse(
-      readFileSync(
-        join(historicalSet("catalogue").migrationsFolder, "meta", "_journal.json"),
-        "utf8",
-      ),
-    ) as { entries: unknown[] };
     expect(versions).not.toHaveProperty("catalogue");
     const old: ConfigurationBundle = {
       ...bundle,
-      modules: { ...bundle.modules, catalogue: oldCatalogue.entries.length },
+      // Catalogue's migration count just before the squash.
+      modules: { ...bundle.modules, catalogue: 36 },
     };
     const { stateDir, result } = await staged(old, versions);
     await expect(result).rejects.toMatchObject({
