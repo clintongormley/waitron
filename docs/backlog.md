@@ -2111,7 +2111,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   restart and Cloud refresh; on restored trusted public access. Process and peer recovery retained
   the same keys and certificate. Left: image publication, final combined installation and reboot,
   public renewal and remaining isolation qualification. The private combined build removes the old
-  `@waitron/tunnel` TCP relay and its settings. Its repaired remote-only dialog passed a fresh
+  `@waitron/tunnel` TCP relay and its settings. A bounded check rejected foreign Host headers,
+  eight authenticated non-staff paths and repeated password guesses. Controlled Compose LAN
+  forwarding and one cash/F1 route case without an external route passed.
+  [Receipt and limits](operations/a951-host-evidence.md#staff-hostname-and-network-isolation-7-november-2026). Its repaired remote-only dialog passed a fresh
   public browser run: Stop retained access, confirmed off disconnected it and local on restored it.
   Translate all returned one editable menu suggestion on the test box; address completion
   remains a trial to build.
