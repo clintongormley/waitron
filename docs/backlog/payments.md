@@ -142,7 +142,7 @@ Next, in A949: preserve a bounded recognised reason for this specific refusal an
 this attempt returned no money and a new refund can be tried later. Keep other 409 causes and
 uncertain outcomes distinct; do not automatically resend an uncertain SumUp refund. Cover the
 real HTTP body and both bill and settled-tender staff paths. First check whether existing
-records can carry the reason; any schema addition waits for A760 under the A1308 hold. This is a
+records can carry the reason; any schema addition waits for the A1308 table hold to lift. This is a
 proposal, not implemented behaviour.
 
 ## The deli's outage card machine

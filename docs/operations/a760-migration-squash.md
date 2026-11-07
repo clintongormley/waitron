@@ -60,6 +60,31 @@ updater, so nothing moves it until someone runs `waitron.sh`. It stays as it is,
 before its next upgrade, and is reset once when A1308 ends. Lanes also run Docker tests on it, which
 touch no venue.
 
+### What happened on 7 November 2026
+
+- **Landed.** Part 3 merged as #2539 at 09:43 Madrid time on 7 November, merge commit `eed41cc3c0`. That
+  commit's own CI run is 42356680500. The mutation nightly was started by hand on it as run
+  42356693258, because the scheduled run that morning (42341213500) had failed.
+- **Laptop slot 0** (`~/workspace/.waitron-dev/box`). Reset with `wa-wt reset demo waitron` from
+  the main checkout at `eed41cc3c0`, after `lsof` showed nothing holding the venue folder. Before the
+  wipe, a stopped copy of the whole state folder was taken (kept in lane A's campaign folder, not in
+  the repository). Afterwards: health answered 200; each of the six populated sets in `venue.db`
+  and node's set in `node.db` held exactly one migration row; `__drizzle_migrations_fiscal_none`
+  held none; `pragma integrity_check` printed `ok` and `pragma foreign_key_check` printed nothing.
+  The stack was stopped again afterwards, as it had been before.
+- **Santet** (`waitron-local-santet-data`, slot 1). Fast-forwarded to `eed41cc3c0` and its venue
+  copied first, then `local/square/reset.sh` run. It failed at its first step: its local
+  `apps/server/scripts/santet-setup.ts` imports `./demo-seed/staff.js`, which main no longer has. The
+  script had already emptied the venue folder, so **Santet is stopped and holds no venue** until
+  its two local scripts are brought up to date with `dev-setup.ts` and the seed files; the old copy
+  is kept for reference only, since the new image cannot open it.
+- **Other laptop venue folders.** `~/workspace/.waitron-dev/instances/` also holds venue folders for
+  worktrees that no longer exist. `wa-wt` cannot reset them by name, so they were left untouched and
+  count as old-version data: a worktree recreated under one of those names needs
+  `wa-wt reset` before it starts.
+- **The owner's box, `waitron.local`.** Not touched, as above: it must be reset before its next
+  upgrade.
+
 ## Owner approval, 16 October 2026
 
 The owner approved the recommended combined decision at 18:00, as relayed by the watcher: squash

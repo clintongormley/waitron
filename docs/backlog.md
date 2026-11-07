@@ -667,7 +667,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Loose ends left by A720.**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
-- **One rule for zone closures and department hours, after A760's opening_hours** (bundle of 8, size M, waits for A760). The owner's answer: a closure outside its department's hours is ignored when read, and stops being an error. [Detail](backlog/service-periods.md#bundle-one-rule-for-zone-closures-and-department-hours-after-a760s-opening_hours)
+- **One rule for zone closures and department hours, after A760's opening_hours** (bundle of 8, size M, waits for the A1308 table hold to lift). The owner's answer: a closure outside its department's hours is ignored when read, and stops being an error. [Detail](backlog/service-periods.md#bundle-one-rule-for-zone-closures-and-department-hours-after-a760s-opening_hours)
 
 - **Calendar marks** (bundle of 2, size S). [Detail](backlog/service-periods.md#bundle-calendar-marks)
 
@@ -1192,7 +1192,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   usable in Demo, and reproduce the owner's report first.
   [Detail](backlog/till.md#each-browser-tab-as-its-own-device-in-demo-too-a271-owner-2026-10-04--open-after-a268)
 
-- **Close the day: count the cash, record cash in and out, waiter floats** (bundle of 3, 2 go-live, 1 important, size L, design approved 2026-11-06, waits for A760 and A1308's payment and refund slices). Holds A1325. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
+- **Close the day: count the cash, record cash in and out, waiter floats** (bundle of 3, 2 go-live, 1 important, size L, design approved 2026-11-06, waits for A1308's payment and refund slices). Holds A1325. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
 
 - **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
   styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another
@@ -1890,7 +1890,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Requests through the tunnel look like the box itself** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/box.md#bundle-requests-through-the-tunnel-look-like-the-box-itself)
 
-- **A1407. A wrong date needs a corrective invoice, and Waitron cannot yet issue the right one.** Research found the remedy is R4 on a full invoice and R5 on a simplified one, and `recordCorrection` handles only F2 to R5. `computeVatReturn` sorts by issue date, so a misdated sale lands in the wrong period in that report. Three identical refusals hold the rest of a chain, so a clock a day ahead could stop later filings; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for A760. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
+- **A1407. A wrong date needs a corrective invoice, and Waitron cannot yet issue the right one.** Research found the remedy is R4 on a full invoice and R5 on a simplified one, and `recordCorrection` handles only F2 to R5. `computeVatReturn` sorts by issue date, so a misdated sale lands in the wrong period in that report. Three identical refusals hold the rest of a chain, so a clock a day ahead could stop later filings; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
 
 - **Correct the sales dated wrongly once the tax adviser answers Q60.** What the correction is
   waits on [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24);
@@ -1971,7 +1971,7 @@ Not in any track until the standalone primary is done.
 
 - **Check everything at the offer, while the old box still sells** (bundle of 3, 1 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
 
-- **Which state files a handover carries; summary checks** (bundle of 2, 1 important, size S, waits for A760). [Detail](backlog/replication-cloud.md#bundle-which-state-files-a-handover-carries-summary-checks)
+- **Which state files a handover carries; summary checks** (bundle of 2, 1 important, size S, waits for the A1308 table hold to lift). [Detail](backlog/replication-cloud.md#bundle-which-state-files-a-handover-carries-summary-checks)
 
 - **A venue with no module that can prepare a promotion cannot hand over.** A venue without
   Veri\*Factu is refused `handover.venue_not_supported` before anything is recorded, because no
@@ -2310,7 +2310,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
-- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 16, 8 important, size M, waits for A760). Holds A1368, A1351, A1366. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
+- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 16, 8 important, size M, waits for the A1308 table hold to lift). Holds A1368, A1351, A1366. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
 - **Cloud's next shared UI release still needs registry and portal qualification.**
   Waitron's [preparation guide](developers/shared-ui-preparation.md) covers source staging
@@ -2462,7 +2462,7 @@ _Formerly entries spread across the old sections._
 
 - **A1404. Encrypt the bucket copy with a key the box derives (owner, 2026-11-06, A1324).** A customer-supplied key worked on real Amazon S3: the bucket login alone was refused and the right key restored every row ([receipt](receipts/a1324/README.md)). Build: derive the key from the recovery key, so there is no new secret; change the bucket setting during setup, since Amazon blocks these keys on new buckets; say plainly when a provider refuses. Check a real restore through a recovery pack, and how long a provider takes to refuse. It adds no tables.
 
-- **A1405. Erasing a person's data blocks it first, inside the database (owner, 2026-11-06).** The AEPD says erasure means blocking, then destroying (Informe 0148/2019; LOPDGDD art. 32). The owner chose real blocking over the sealed file of art. 32.4, which is allowed only where the system cannot block. An erased value leaves every screen, report, search and export, stays usable only for a claim, the authorities or the person's own request, and is destroyed when the period ends, three years where no other period applies. A980's S9 and S11 and A664's removal need this, and a restore must not make blocked values readable again. The shape the owner found reasonable, for the plan to test: one restricted table of blocked values, so that no ordinary read has to remember to skip anything. The original row stays with its field blanked. Each blocked row names its source table, row and field, the value, an erasure group, the date, the reason and the destroy date. The source is a plain table name and id, not a foreign key, and a blocked row outlives a source row that routine clean-up removes. Lookup starts from the record (Show blocked details) or from the person (a restricted search by name, phone or email, then the erasure group). One separate permission, and each look records a reason in the activity record. A restore re-applies erasures made since its backup. It adds a table, so it waits for A760. [Findings](compliance/research/2026-11-06-adviser-privacy.md)
+- **A1405. Erasing a person's data blocks it first, inside the database (owner, 2026-11-06).** The AEPD says erasure means blocking, then destroying (Informe 0148/2019; LOPDGDD art. 32). The owner chose real blocking over the sealed file of art. 32.4, which is allowed only where the system cannot block. An erased value leaves every screen, report, search and export, stays usable only for a claim, the authorities or the person's own request, and is destroyed when the period ends, three years where no other period applies. A980's S9 and S11 and A664's removal need this, and a restore must not make blocked values readable again. The shape the owner found reasonable, for the plan to test: one restricted table of blocked values, so that no ordinary read has to remember to skip anything. The original row stays with its field blanked. Each blocked row names its source table, row and field, the value, an erasure group, the date, the reason and the destroy date. The source is a plain table name and id, not a foreign key, and a blocked row outlives a source row that routine clean-up removes. Lookup starts from the record (Show blocked details) or from the person (a restricted search by name, phone or email, then the erasure group). One separate permission, and each look records a reason in the activity record. A restore re-applies erasures made since its backup. It adds a table, so it waits for the A1308 table hold to lift. [Findings](compliance/research/2026-11-06-adviser-privacy.md)
 
 - **A1408. Bring the privacy guide up to date with the adviser research.** The guide and notices describe an allergy noted when mentioned, but the till asks every table. Add order changes and the clock-in device to the staff notice, a walk-in allergy notice, and bucket login and two-step sign-in advice. Masked logs are not anonymous, and the venue's notice must name Waitron as a recipient once bug reports are built. [Findings](compliance/research/2026-11-06-adviser-privacy.md)
 
