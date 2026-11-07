@@ -21,6 +21,23 @@ and observed health separately; a five-minute-old observation reads Health unkno
 No account or Cloud call is
 added to the sale path.
 
+## Submit the test box's tunnel key
+
+For the A951-S trial, set `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control
+directory. The container persists its private key before publishing `public-key`; the app reads
+only that public file. On a connected test installation, the existing primary Cloud worker submits
+it through the signed `tunnel-provision` action after refreshing the lease. The directory is
+optional, and an absent public-key file leaves provisioning alone.
+
+Cloud chooses the cell and port and must enable its one-box trial receiver separately. A 200 reply
+can still say `unconfigured`; an allocated peer says `provisioning`. Neither proves that the tunnel
+works. The configuration writer and runtime apply the returned placement separately.
+
+A lost reply is retried with the same saved key and a fresh request identifier. A
+`placement_conflict` refusal is remembered in `cloud-connection.json` as `tunnelConflict: true`, so
+restarting does not keep submitting a key Cloud has refused. The caller neither replaces the
+container key nor rotates the Cloud placement. Stop Cloud access remains available.
+
 ## Refresh or stop Cloud access
 
 After you connect, the primary server checks Cloud once a minute. It obtains a signed
