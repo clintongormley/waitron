@@ -287,7 +287,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // The full daily close and top sellers for ONE explicit business day, for this node.
+  // The full daily close and top sellers for ONE explicit business day.
   app.get("/management-api/reports/daily-close", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -319,7 +319,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // VAT summary and top sellers over an inclusive business-day range, for this node.
+  // VAT summary and top sellers over an inclusive business-day range.
   app.get("/management-api/reports/period", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -343,7 +343,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // Sales by reporting category over an inclusive business-day range, for this node.
+  // Sales by reporting category over an inclusive business-day range.
   app.get("/management-api/reports/categories", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
