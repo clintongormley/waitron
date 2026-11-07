@@ -3232,6 +3232,7 @@ async function bootServer(
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
         stateDir: config.stateDir,
+        tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
         localVenueId: venueId,
         environment: config.environment === "production" ? "production" : "test",

@@ -1055,8 +1055,9 @@ Remaining work, following the owner's certificate-first order:
   submit/status exchange, resumes pending requests after restart and renews before expiry. A local
   TLS handshake observed the renewed chain without restarting the listener; no new public
   certificate was issued for that synthetic test.
-- Wire the optional tunnel runtime to the existing signed connection, publish its image and
-  start it automatically from Settings on/off/status, then retire `@waitron/tunnel`. The
+- The configuration writer now connects the existing signed Cloud refresh to the optional
+  tunnel's control file. Automatic public-key submission, image publication, Settings on/off/status
+  and automatic startup remain, followed by retirement of `@waitron/tunnel`. The
   [runtime](../../deploy/tunnel/README.md) stays off without its control file; its private
   WireGuard key is held in a separate container volume. The Linux container check covers
   traffic to the fixed staff upstream, refused source/port, disconnect, reconnect and restart.
@@ -1065,8 +1066,9 @@ Remaining work, following the owner's certificate-first order:
   installation across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.
-- Once the browser path works, try Translate all and the existing address fields with a Cloud
-  provider on the test box. Provider keys stay on the gateway host and come from the owner.
+- Translate all returned one real editable English menu suggestion on the test box on
+  7 November through the signed connection; it remains unaccepted. The address fields still need
+  their trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
 
 The owner accepts that a compromised Cloud could obtain a staff certificate and intercept logins,
 that the sign-in page and a bug in the remote entrance face the internet, and that this version
