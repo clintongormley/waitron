@@ -302,8 +302,8 @@ describe("draft source commands", () => {
     await vi.advanceTimersByTimeAsync(0);
     stale.resolve({ drafts: [], billEdits: [server.edit("bill-1")] });
     expect(await oldRead).toBe(false);
-    save.resolve();
     expect(sync.store.lines[0]!.quantity).toBe("3");
+    save.resolve();
     expect(await command).toEqual({ applied: 2, reloaded: true });
     expect(sync.store.lines[0]!.quantity).toBe("3");
     sync.drop();

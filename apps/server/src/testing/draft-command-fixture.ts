@@ -109,7 +109,6 @@ const ROUTES_NAMING_THE_PERSON: readonly (readonly [method: string, path: RegExp
   ["PUT", /^\/api\/parties\/[^/]+\/drafts$/],
   ["POST", /^\/api\/parties\/[^/]+\/drafts\/[^/]+\/take-over$/],
   ["POST", /^\/api\/parties\/[^/]+\/lines\/[^/]+\/recall$/],
-  ["POST", /^\/api\/parties\/[^/]+\/groups\/split-line$/],
 ];
 
 // Content-route fixtures keep the first command observation on completed retries.
