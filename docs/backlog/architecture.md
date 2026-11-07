@@ -390,7 +390,7 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Private naming sites remain in the till's boot, counter-payment and split-selection suites,
-  and in the fiscal split-bill suite; shared fixture names in the server split suites; `registroCount` consumers in
+  and shared fixture names in the server split suites; `registroCount` consumers in
   split-table, bill-editing, move-bill and other order suites; and shared helper consumers
   such as `made-here.test.ts`. Moved-dish names remain in the till's
   `till-table-order-screen.move-dishes.test.ts`.
@@ -772,12 +772,11 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot,
-  counter-payment and split-selection fixtures; shared fixture names and private bindings in the
+  counter-payment and split-selection fixtures; shared fixture names in the
   server split suites; `registroCount` consumers in split-table, bill-editing, move-bill and other
   order suites; the till's moved-dish suite; accented bindings in
   `portion-selection.test.ts`, `counter-portion-rows.test.ts` and `till-ticket-view.test.ts`,
   shared helper consumers and file names.
-  Private split-suite bindings remain in `split-bill.fiscal.test.ts`.
   Shared fixture property names such as `cafeId` remain open.
   Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
   display samples under A976.

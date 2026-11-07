@@ -91,9 +91,9 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
 interface Seeded {
   cfg: DeviceRequestConfig;
   /** "Agua" — each, 1.50 gross, general(21%). */
-  aguaId: string;
+  waterId: string;
   /** "Jamón" — WEIGHT, 24.90/kg gross, reduced(10%). */
-  jamonId: string;
+  hamId: string;
   tableId: string;
   /** Both products offered in the table's zone. */
   offers: ZoneOffers;
@@ -139,19 +139,19 @@ async function setupVenue(): Promise<Seeded> {
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const seeded = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: "Comida" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const jamon = await createProduct(tx, {
+    const food = await createCategory(tx, { name: "Comida" });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const ham = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: comida.id,
+      categoryId: food.id,
       name: "Jamón cortado",
       pricingUnit: "weight",
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    const agua = await createProduct(tx, {
+    const water = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -160,7 +160,7 @@ async function setupVenue(): Promise<Seeded> {
     await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
-    return { aguaId: agua.id, jamonId: jamon.id, tableId: t1.id, offers };
+    return { waterId: water.id, hamId: ham.id, tableId: t1.id, offers };
   });
   return { cfg, ...seeded };
 }
@@ -198,14 +198,14 @@ async function splitIntoThreeChecks(
   deps: Parameters<typeof payWorkingOrder>[0],
   shape: "portions" | "grouped" = "portions",
 ): Promise<ThreeChecks> {
-  const { cfg, aguaId, jamonId, tableId, offers } = seeded;
-  const agua = { productId: aguaId, quantity: "3" };
-  const jamon = { productId: jamonId, quantity: "0.300" };
+  const { cfg, waterId, hamId, tableId, offers } = seeded;
+  const water = { productId: waterId, quantity: "3" };
+  const ham = { productId: hamId, quantity: "0.300" };
   const { tabId } = await asApp(cfg, async (tx) => {
     if (shape === "portions") {
-      return openPartyTab(tx, cfg, { tableId, lines: offers.toOfferLines([jamon, agua]) });
+      return openPartyTab(tx, cfg, { tableId, lines: offers.toOfferLines([ham, water]) });
     }
-    const lines = offers.toOfferLines([agua, jamon]);
+    const lines = offers.toOfferLines([water, ham]);
     const opened = await openPartyTab(tx, cfg, { tableId });
     await writeGroupedLines(tx, cfg, opened.tabId, lines);
     return opened;
@@ -315,7 +315,7 @@ describe("split-bill: pay each check files its own registro", () => {
     expect(new Set(filedFor.map((s) => s.workingOrderId))).toEqual(new Set([a, b, c]));
 
     // (6) Each check's agua row stands for exactly one portion, and the three are different ones.
-    const aguaLinks = await asApp(cfg, (tx) =>
+    const waterLinks = await asApp(cfg, (tx) =>
       tx
         .select({ workingOrderId: sales.workingOrderId, portionId: saleLinePortions.portionId })
         .from(saleLinePortions)
@@ -323,8 +323,8 @@ describe("split-bill: pay each check files its own registro", () => {
         .innerJoin(sales, eq(sales.id, saleLines.saleId))
         .where(eq(saleLines.vatRate, 2100)),
     );
-    expect(aguaLinks.map((link) => link.workingOrderId).sort()).toEqual([a, b, c].sort());
-    expect(new Set(aguaLinks.map((link) => link.portionId)).size).toBe(3);
+    expect(waterLinks.map((link) => link.workingOrderId).sort()).toEqual([a, b, c].sort());
+    expect(new Set(waterLinks.map((link) => link.portionId)).size).toBe(3);
   });
 
   it("on a tab written before portions, a part of the agua line still files on its own check", async () => {
@@ -338,8 +338,8 @@ describe("split-bill: pay each check files its own registro", () => {
       "grouped",
     );
 
-    const { registros, originLines, filed } = await asApp(cfg, async (tx) => ({
-      registros: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),
+    const { records, originLines, filed } = await asApp(cfg, async (tx) => ({
+      records: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),
       originLines: await tx
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
@@ -353,7 +353,7 @@ describe("split-bill: pay each check files its own registro", () => {
         .from(saleLines)
         .innerJoin(sales, eq(sales.id, saleLines.saleId)),
     }));
-    expect(registros.length).toBe(3);
+    expect(records.length).toBe(3);
     const seqs = [seqOf(rA), seqOf(rB), seqOf(rC)].sort((x, y) => x - y);
     expect(seqs).toEqual([seqs[0], seqs[0]! + 1, seqs[0]! + 2]);
     expect([rA.total, rB.total, rC.total]).toEqual(["8.97", "1.50", "1.50"]);
@@ -425,10 +425,10 @@ describe("split-bill: pay each check files its own registro", () => {
     // CONSERVATION: summing the filed quantities per RATE across the 3 checks == the original basket.
     const filed21 = filed.filter((f) => f.vatRate === "21.00");
     const filed10 = filed.filter((f) => f.vatRate === "10.00");
-    const totalAgua = filed21.reduce((n, f) => n + Number(f.quantity), 0);
-    const totalJamon = filed10.reduce((n, f) => n + Number(f.quantity), 0);
-    expect(totalAgua).toBe(3); // 1 + 1 + 1, no unit created or destroyed
-    expect(totalJamon.toFixed(3)).toBe("0.300"); // moved whole to check A
+    const totalWater = filed21.reduce((n, f) => n + Number(f.quantity), 0);
+    const totalHam = filed10.reduce((n, f) => n + Number(f.quantity), 0);
+    expect(totalWater).toBe(3); // 1 + 1 + 1, no unit created or destroyed
+    expect(totalHam.toFixed(3)).toBe("0.300"); // moved whole to check A
 
     // PARTITION: the 10%-rate (jamón) quantity appears on EXACTLY ONE check (no double-file).
     const checksWith10 = new Set(filed10.map((f) => f.workingOrderId));
@@ -436,13 +436,13 @@ describe("split-bill: pay each check files its own registro", () => {
   });
 
   it("paying a check twice files exactly ONE registro (sale-idempotency replay)", async () => {
-    const { cfg, aguaId, tableId, offers } = await setupVenue();
+    const { cfg, waterId, tableId, offers } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
     // Open a 2× agua tab and split ONE agua onto a detached check — the working order under proof.
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {
         tableId,
-        lines: offers.toOfferLines([{ productId: aguaId, quantity: "2" }]),
+        lines: offers.toOfferLines([{ productId: waterId, quantity: "2" }]),
       }),
     );
     const { billId: checkId } = await asApp(cfg, (tx) =>
