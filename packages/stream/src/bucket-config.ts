@@ -25,13 +25,23 @@ export function readBucketConfig(
   };
   const endpoint = field("endpoint", false);
   if (endpoint !== "") {
-    let protocol: string;
+    let url: URL;
     try {
-      protocol = new URL(endpoint).protocol;
+      url = new URL(endpoint);
     } catch {
       return refuse("endpoint");
     }
-    if (protocol !== "https:" && protocol !== "http:") refuse("endpoint");
+    // A user name, password, query or fragment is where a secret could sit, and status reports the
+    // address as stored; S3 requests are signed with the access key, so none is needed.
+    if (
+      (url.protocol !== "https:" && url.protocol !== "http:") ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      refuse("endpoint");
+    }
   }
   const bucket: BucketConfig = {
     ...(endpoint === "" ? {} : { endpoint }),

@@ -596,22 +596,31 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     }
   }, 60_000);
 
-  it("leaks nothing: a password in a saved bucket endpoint's URL is masked in the answer and absent from the read's log lines", async () => {
+  it("leaks nothing: a stored bucket endpoint carrying a password reads as unreadable, and the password is absent from the answer and the read's log lines", async () => {
     const endpointPassword = "review-password-secret";
-    await write({
-      ...folderSettings(destDir()),
-      destinations: [
-        {
-          kind: "s3",
-          id: "bucket",
-          bucket: {
-            ...BUCKET,
-            endpoint: `https://backup-user:${endpointPassword}@s3.example.test`,
-          },
-          venueId: VENUE,
+    // Written as the sealed credential: `writeArchiveSettings` refuses this record.
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: ARCHIVE_PURPOSE,
+        value: {
+          settings: JSON.stringify({
+            ...folderSettings(destDir()),
+            revision: "00000000-0000-4000-8000-000000000001",
+            destinations: [
+              {
+                kind: "s3",
+                id: "bucket",
+                bucket: {
+                  ...BUCKET,
+                  endpoint: `https://backup-user:${endpointPassword}@s3.example.test`,
+                },
+                venueId: VENUE,
+              },
+            ],
+          }),
         },
-      ],
-    });
+      }),
+    );
     const sc = await scenario();
     await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sup = makeSupervisor(sc);
@@ -621,12 +630,11 @@ describe("GET /api/backup/settings-evidence proofs", () => {
 
     const body = await evidence(app);
     expect(body.now).toMatchObject({
-      state: "readable",
-      destinations: [{ kind: "bucket", endpoint: "https://backup-user:***@s3.example.test" }],
+      state: "unreadable",
+      code: "backup.archive_settings_invalid",
     });
     const said = JSON.stringify(body) + "\n" + sc.lines.join("\n");
     expect(said).not.toContain(endpointPassword);
-    expect(said).toContain("s3.example.test");
   }, 60_000);
 
   it("leaks nothing when the record does not read now: no param of the read's error in the answer or the read's log lines", async () => {

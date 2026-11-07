@@ -69,6 +69,26 @@ describe("readBucketConfig", () => {
     expect(refusedField({ ...INPUT, ...change })).toBe(field);
   });
 
+  it.each([
+    "https://user:secret@s3.example.net",
+    "https://user@s3.example.net",
+    "https://:secret@s3.example.net",
+    "https://s3.example.net/?password=x",
+    "https://s3.example.net/#x",
+  ])("refuses %s as endpoint: status would carry its user info, query or fragment", (endpoint) => {
+    expect(refusedField({ ...INPUT, endpoint })).toBe("endpoint");
+  });
+
+  // `https://@host` is accepted: `new URL` reports an empty user name and password, so the address
+  // carries nothing that could be a secret.
+  it.each([
+    "https://s3.example.net:9000/path",
+    "https://s3.example.net",
+    "https://@s3.example.net",
+  ])("accepts %s", (endpoint) => {
+    expect(readBucketConfig({ ...INPUT, endpoint }, refuse).endpoint).toBe(endpoint);
+  });
+
   it("refuses input that is not an object by its first required field", () => {
     expect(refusedField(null)).toBe("region");
   });

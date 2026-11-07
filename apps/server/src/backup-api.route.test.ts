@@ -1745,6 +1745,69 @@ describe("backup admin routes", () => {
       expect(JSON.stringify(answered)).not.toContain(CUSTOM_SECRET);
     }, 60_000);
 
+    for (const endpoint of [
+      "https://backup-user:endpoint-password-0123@s3.example.net",
+      "https://s3.example.net/?password=endpoint-password-0123",
+    ]) {
+      it(`a custom bucket address carrying a password is refused as the endpoint, with nothing written (${endpoint})`, async () => {
+        const { post } = await primaryApp();
+        const res = await post(
+          "/api/backup/apply",
+          applyBody({ ...CUSTOM, endpoint, secretAccessKey: CUSTOM_SECRET }),
+        );
+        expect(res.status).toBe(400);
+        const answered = await res.text();
+        expect(JSON.parse(answered)).toMatchObject({
+          error: { code: "backup.request_invalid", params: { field: "endpoint" } },
+        });
+        expect(answered).not.toContain("endpoint-password-0123");
+        expect(await readSealed()).toBeNull();
+        expect(bucket.calls).toEqual([]);
+      }, 60_000);
+    }
+
+    it("a stored record whose bucket address carries a password loads as unusable, and status answers without the password", async () => {
+      const password = "stored-endpoint-password-0123";
+      const { post } = await primaryApp();
+      expect(
+        (await post("/api/backup/apply", applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET })))
+          .status,
+      ).toBe(200);
+      const held = (await readSealed())!;
+      const [destination] = held.destinations as Extract<BackupDestination, { kind: "s3" }>[];
+      // Written as the sealed credential: `writeArchiveSettings` would refuse this record.
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: ARCHIVE_PURPOSE,
+          value: {
+            settings: JSON.stringify({
+              ...held,
+              destinations: [
+                {
+                  ...destination,
+                  bucket: {
+                    ...destination!.bucket,
+                    endpoint: `https://backup-user:${password}@s3.example.net`,
+                  },
+                },
+              ],
+            }),
+          },
+        }),
+      );
+      await expect(readSealed()).rejects.toMatchObject({
+        code: "backup.archive_settings_invalid",
+      });
+      const { sup, status } = await primaryApp();
+      await sup.reload();
+      const answered = await status();
+      expect(answered).toMatchObject({
+        enabled: false,
+        loadErrorCode: "backup.archive_settings_invalid",
+      });
+      expect(JSON.stringify(answered)).not.toContain(password);
+    }, 60_000);
+
     it("status carries the venue id", async () => {
       const { status } = await primaryApp();
       expect((await status()).venueId).toBe(VENUE);

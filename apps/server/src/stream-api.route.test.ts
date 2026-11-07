@@ -359,6 +359,26 @@ describe("stream settings routes", () => {
     expect(deps.probe).not.toHaveBeenCalled();
   });
 
+  it("Save refuses an address carrying a password as the endpoint, before any probe, and stores nothing", async () => {
+    const { app, deps } = harness();
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream", {
+      method: "PUT",
+      ...json(cookie, {
+        ...BODY,
+        endpoint: "https://backup-user:endpoint-password@s3.example.net",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const answered = await res.text();
+    expect(JSON.parse(answered)).toMatchObject({
+      error: { code: "backup.request_invalid", params: { field: "endpoint" } },
+    });
+    expect(answered).not.toContain("endpoint-password");
+    expect(deps.probe).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
+
   // The vault stores an absent prefix as "-", so a prefix of "-" would read back as none at all.
   it("refuses a prefix of a single hyphen, which would be stored as no prefix", async () => {
     const { app, deps } = harness();
