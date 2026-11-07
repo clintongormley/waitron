@@ -1,42 +1,36 @@
-# A1393: till route admission
+# A1393: till route inventory
 
-Goal: maintain a table of every staff-facing till route and its device/profile checks, and
-qualify the session-only writes identified in the A1393 backlog bundle.
-
-Authority: Lane F queue, watcher 2026-11-06 about 12:45, assigns A1393 after A1383;
-RUNNER.md authorises implementation and finishing. The owner invoked this unattended run on
-2026-11-07. Campaign notes are outside the repository at
-`/Users/clintongormley/waitron-campaign-f/{RUNNER.md,queue.md,questions.md}`.
-The ask is `docs/backlog/till.md`, “Bundle A1393” and its two linked details. Printer identity
-is expressly separate. A760 forbids table changes and landing during this run.
+Goal: list every till route's device proof and profile action, and close A1393's admission audit.
+Ask: `docs/backlog/till.md`, “Bundle A1393” and both linked details. Printer identity is separate.
+Authority: Lane F queue, watcher 2026-11-06 about 12:45, assigns A1393 after A1383. The owner
+invoked RUNNER.md and authorised finish/land on 2026-11-07. Actual notes are in
+`/Users/clintongormley/waitron-campaign-f/{RUNNER.md,queue.md,questions.md}`. Earlier branches
+wait for A760's landing freeze; no database table changes or landing are allowed here.
 
 ## Work
 
-1. In `apps/server/src/till-route-admission.test.ts`, mount the real till, device and staff
-   schedule APIs, enabling optional workforce, attendance, box-clock and simulator routes.
-   Compare their registered method/path pairs (excluding middleware and management routes)
-   with one maintained table in `src/testing/till-route-admission.ts`. Each row names its
-   authority, profile action(s), or the reason no action applies. The guard must fail for a
-   newly registered route without a row and for a stale row. It checks inventory completeness;
-   existing behavioral action/zone suites continue checking enforcement. Do not claim the
-   inventory comparison proves an action executes. Keep existing behavioral assertions.
-2. Audit the real mounted receipt-handover, table-cleared, zone-extension, station-day,
-   device active-profile/zones/equipment, box-clock challenge/confirmation and schedule writes.
-   Use `useVenueDb`, a real enrolled session and absent, invalid, other-device and matching
-   device cookies. Record exact responses; distinguish admission from a successful write.
-   Exercise legitimate no-selling-action callers. If deciding admission would change an
-   existing permission contract, ask the watcher with those receipts before changing it.
-   Any approved fix starts with a failing route test and changes only the affected boundary;
-   do not change `requireSession` globally or invent a new profile action.
-3. Run focused inventory, profile-action, profile-zone and affected route suites plus scoped
-   types. In a disposable installed clone, add an unlisted real route and remove an inventory
-   row; both must fail the inventory guard. Run any approved admission omission controls once,
-   retaining logs outside the checkout, without permanent self-mutation tests. Update the
-   A1393 backlog entries accurately, preserving printer-identity work and unresolved decisions.
-4. Sign off commits, run finish-branch with one Claude run-it review, normal push hook and
-   current-head CI. Retain the finished branch while A760's freeze holds; land only after
-   explicit release under the campaign lock.
-
-Review focus: optional mounts must be present; aliases and multiple actions must stay visible;
-reads/previews and device settings must not gain selling permissions; valid callers must still
-work; a response from a later lookup is evidence of admission, not successful mutation.
+1. Extend `apps/server/src/till-api.profile-actions.test.ts`, reusing its live `ROUTES` refusal
+   cases. Replace its prose action map with data for action cases in other suites (naming the
+   case) and actionless routes (giving the reason). Record device proof separately from actions:
+   matching request proof, device-cookie authority, session device only, public/bootstrap, or
+   undecided. “No action” exceptions do not decide request-device proof. Keep all existing
+   behavioral assertions and the independent zone map.
+2. Mount real till/device/staff schedule APIs in that suite, including workforce, attendance,
+   simulator, development and box-clock routes (backend must offer `confirmClockStop`). Compare
+   the set of registered `/api/` method/path keys with the classified set, normalising UUID and
+   line-number samples and parameter names. Fail on missing/stale rows; exclude middleware and
+   management routes. Start with the failing inventory comparison, then add classifications.
+   This guards completeness, not execution of every stated check; existing behavioral suites
+   still test enforcement. Prove missing/new-route failures once in an installed disposable clone.
+3. Send one watcher question before admission changes, using A941's retained HTTP receipts and
+   the current source trace. The list includes receipt-handover, cleared, zone-extension,
+   device active-profile/zones/equipment, box-clock, schedule, station-day, locale and simulator
+   writes. Do not change their admission policy before the recorded answer. Any approved repair
+   gets a reviewed amendment, a failing real-route test, minimal boundary changes and passing
+   legitimate callers, including the development header. No global `requireSession` change or
+   new action. Until resolved, keep the relevant backlog work open and mark table rows undecided.
+4. Run focused inventory/action/zone and affected route suites, scoped types, and one-time
+   controls. Update `docs/developers/conventions-ui.md` with the guard's actual limits; the watcher
+   maintains the root `CLAUDE.md` pointer. Sign off commits. Once the item's decision and build
+   are complete, run finish-branch with one Claude run-it review, normal hook and current-head CI;
+   retain the branch under A760's freeze.
