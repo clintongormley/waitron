@@ -1721,22 +1721,37 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   screen, nor normally on the recovery page; the code and which database was kept are only in the
   server's own output and in `waitron.log`. **Owner decision 2026-09-25: leave it as it is.**
 
-- **A server started outside the box's entry does not clear `.venue.db-replaced-` folders. Default
-  taken pending the owner (A1390 question 1, 2026-11-07).** Only the box's entry clears them, before
-  the server opens `venue.db`; the dev stack starts `src/bin.ts` and leaves them. Boot cannot clear
-  them instead, because its first open creates `venue.db` (`clearReplacedDatabases`,
-  `apps/server/src/restore.ts`).
+- **A server started outside the box's entry does not clear `.venue.db-replaced-` folders.
+  Decided by the campaign watcher on 2026-11-07 (A1390 question 1): the dev stack is not a
+  venue.** Only the box's entry clears them, before the server opens `venue.db`; the dev stack
+  starts `src/bin.ts` and leaves them. Boot cannot clear them instead, because its first open
+  creates `venue.db` (`clearReplacedDatabases`, `apps/server/src/restore.ts`).
 - **The first start's bucket pointer read and an operator's restore keep their own time limits and
-  codes. Default taken pending the owner (A1390 question 2, 2026-11-07).** 15 seconds and
+  codes. Decided by the campaign watcher on 2026-11-07 (A1390 question 2).** 15 seconds and
   `restore.pointer_unreadable` for the read that holds a restored box's first start (it is tried
   again at the next start); 60 seconds and `backup.stream_request_failed` for each bucket call of a
   restore an operator starts. Neither number was measured (`POINTER_READ_TIMEOUT_MS`,
   `apps/server/src/rebuild-first-start.ts`; `BUCKET_CALL_TIMEOUT_MS`,
   `apps/server/src/bounded-store.ts`).
 - **A restore that fails at the migration or module step, after the database is placed, keeps the
-  restored database with the old identity set aside. Default taken pending the owner (A1390
-  question 3, 2026-11-07).** Only a failure to move the database into place puts the identity back
-  (`placeValidated`, `apps/server/src/restore.ts`).
+  restored database with the old identity set aside; there is no second undo path. Default taken
+  pending the owner (A1390 question 3, 2026-11-07), checked by running it the same day.** Only a
+  failure to move the database into place puts the identity back (`placeValidated`,
+  `apps/server/src/restore.ts`). What the runs showed, restoring a fiscal venue's archive with
+  its recovery operation over a box holding its own database and identity: a broken migration file
+  (run through the command line) failed first on the copy the restore checks before placing, so
+  nothing on the box changed; only a migration failure that strikes the placed copy alone
+  (injected for the run) reaches the step after placement, as does a failing restore hook. There, neither identity starts beside the wrong data: no `trading.env` is left, and the old
+  one is kept as `trading.env.replaced`. The command line then prints `restore failed` (a
+  migration) or `restore failed: restore.hook_failed (module …)`, a server started now comes up in
+  setup mode, and running the same command again finishes the restore (pinned in
+  `apps/server/src/hour-recovery-placement-1.test.ts`). A restore staged for the box's next start
+  does not: every later start refuses the resumed request with `sif.allocation_invalid`
+  (`prior_activation_requires_replay`), and after three failed starts the recovery page says only
+  "Waitron could not start. Ask whoever installed this box to look at it.", with a retry that fails
+  the same way. Only a fresh staged request gets it out, and nothing the box serves can stage one.
+  The staged runs (archive form; the bucket form was not run) gave the same result on main
+  `59be31e3b7`.
 
 - **A managed Cloud restore keeps both sealed bucket records (owner answer 2026-10-13, A538-4).**
   A restored or replacement box inherits both `backup.archive` and `backup.stream` (bucket keys

@@ -23,7 +23,9 @@ import { invoiceSeries, openVenueDatabase, withTransaction, type Database } from
 import { ALL_MODULES } from "@waitron/composition";
 import { readModulePreparationHistory } from "@waitron/provisioning";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { seriesId } from "@waitron/shared";
+import { AppError, seriesId } from "@waitron/shared";
+import type { WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { restoreFromArtifact, restoreFromArtifactFile } from "./restore.js";
 import {
   createSelectedRecoveryPreparation,
@@ -547,6 +549,80 @@ describe("selected-hour admission before archive placement", () => {
     expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
     expect(output.join("\n")).not.toContain(key.secret);
     expect(output.join("\n")).not.toContain("archive password");
+  });
+
+  it("an archive command whose restore hooks fail after placement leaves no identity beside the database, and finishes when run again", async () => {
+    const f = await archiveHost();
+    const command = await archiveCommand(f);
+    agreeInternet();
+    await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
+    await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+    await suite.node.archiveTo(join(f.roots.venueDir, "node.db"));
+    const oldIdentity = `# the box being replaced\nWAITRON_NODE_ID=${node.nodeId}\n`;
+    await writeFile(join(f.roots.stateDir, "trading.env"), oldIdentity, { mode: 0o600 });
+    const refusing: WaitronModule = {
+      ...fakeSetlessModule("refusing-hook", "core"),
+      backup: {
+        restore: async () => {
+          throw new AppError("module.operation_invalid", { module: "refusing-hook" });
+        },
+      },
+    };
+    const output: string[] = [];
+    expect(
+      await runRestore({
+        ...command,
+        out: (line) => output.push(line),
+        restore: (request) =>
+          restoreFromArtifactFile({ ...request, modules: [...request.modules, refusing] }),
+      }),
+    ).toBe(1);
+    expect(output.at(-1)).toBe(
+      "restore failed: restore.hook_failed (module refusing-hook: module.operation_invalid)",
+    );
+    await expect(readFile(join(f.roots.stateDir, "trading.env"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await readFile(join(f.roots.stateDir, "trading.env.replaced"), "utf8")).toBe(
+      oldIdentity,
+    );
+    expect(await readdir(f.roots.stateDir)).not.toContain("rebuild-first-start.json");
+    const placed = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(
+        (await placed.venue.select().from(invoiceSeries)).map(({ nextNumber, retiredAt }) => ({
+          nextNumber,
+          retired: retiredAt !== null,
+        })),
+      ).toEqual([
+        { nextNumber: 123, retired: false },
+        { nextNumber: 123, retired: false },
+        { nextNumber: 123, retired: false },
+      ]);
+      expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(1);
+    } finally {
+      await placed.close();
+    }
+
+    const again: string[] = [];
+    expect(await runRestore({ ...command, out: (line) => again.push(line) })).toBe(0);
+    expect(again.at(-1)).toBe(`restored ${command.artifactPath}`);
+    expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+      `WAITRON_NODE_ID=${node.nodeId}\n`,
+    );
+    expect(await readFile(join(f.roots.stateDir, "trading.env.replaced"), "utf8")).toBe(
+      oldIdentity,
+    );
+    const restored = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(
+        (await restored.venue.select().from(invoiceSeries))
+          .filter((row) => row.retiredAt === null)
+          .map((row) => row.code),
+      ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT"]);
+    } finally {
+      await restored.close();
+    }
   });
 
   it("the bucket command reconstructs selected-hour admission from the downloaded exact point", async () => {
