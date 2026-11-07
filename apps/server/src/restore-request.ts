@@ -442,6 +442,7 @@ async function runHeld(
   let resuming = false;
   let markedStarted = false;
   let placed = false;
+  let uncommitted = false;
   try {
     const marker = JSON.parse(raw) as {
       version?: unknown;
@@ -565,6 +566,9 @@ async function runHeld(
       onDatabasePlaced: () => {
         placed = true;
       },
+      onFailedBeforeHooksCommit: () => {
+        uncommitted = true;
+      },
     };
     let run: () => Promise<void>;
     if (marker.kind === "stream") {
@@ -613,9 +617,10 @@ async function runHeld(
     }
     await run();
   } catch (error) {
-    if (markedStarted && !placed) {
-      // No module step ran on the archive's database, so the next start places it afresh. Once it
-      // is placed, a failure can follow a committed activation, which only a checked replay finds.
+    if (markedStarted && (!placed || uncommitted)) {
+      // Nothing a module step committed is in the venue folder, so the next start places the
+      // archive afresh, as running the restore command again does. Any later failure can follow a
+      // committed activation, which only a checked replay finds.
       await writeFileDurable(join(deps.stateDir, MARKER), raw, 0o600);
     } else if (
       !resuming &&

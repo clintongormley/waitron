@@ -136,6 +136,10 @@ export interface RestoreDeps extends ValidationDeps {
   /** Called once the archive's database is in the venue folder, or at once when resuming: until
    * then no module step has run on it, so a failure leaves nothing a retry must check. */
   readonly onDatabasePlaced?: () => void;
+  /** Called when a failure after placement comes before the restore hooks' transaction body has
+   * returned, so before that transaction could commit (`packages/store/src/write-queue.ts` commits
+   * only once the body resolves): the placed database holds nothing a module step committed. */
+  readonly onFailedBeforeHooksCommit?: () => void;
   readonly log: Logger;
 }
 
@@ -431,6 +435,7 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     }
   }
   deps.onDatabasePlaced?.();
+  let hooksReturned = false;
   try {
     // The gate admits an OLDER schema; a hook written against today's must not run against
     // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
@@ -456,11 +461,15 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
         log,
         withModuleOperations: deps.withModuleOperations,
         resumeOperation: deps.resumeOperation,
+        onBodyReturned: () => {
+          hooksReturned = true;
+        },
       });
     } finally {
       await opened.close();
     }
   } catch (error) {
+    if (!hooksReturned) deps.onFailedBeforeHooksCommit?.();
     await staged?.discard();
     throw error;
   }
@@ -981,6 +990,8 @@ export async function runRestoreHooks(args: {
   moduleOperations?: ModuleOperations;
   withModuleOperations?: RestoreOperationRunner;
   resumeOperation?: OperationBinding;
+  /** Called as the transaction body's last step, before its commit is issued. */
+  onBodyReturned?: () => void;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
   const suppliedOperations = snapshotModuleOperations(args.moduleOperations);
@@ -1056,6 +1067,7 @@ export async function runRestoreHooks(args: {
         }
       }
     }
+    args.onBodyReturned?.();
     return { seriesId, reports };
   };
   return args.withModuleOperations === undefined
