@@ -253,19 +253,13 @@ describe("the selection follows each package's own stryker config", () => {
   const configOf = (pkg) =>
     JSON.parse(readFileSync(join(packageDir(pkg), "stryker.config.json"), "utf8"));
 
-  it("leaves out exactly src/english-only.ts and the module tables of db's non-test .ts files", () => {
+  it("leaves out exactly src/english-only.ts of db's non-test .ts files", () => {
     // `src/english-only.ts`'s suite is `scripts/english-only.test.ts` in the ROOT project, so
-    // packages/db's own run cannot kill a single one of its mutants. The module tables' suites are
-    // still in the module packages until A760's Task 11 moves them here.
-    const moduleTables =
-      /^src\/schema\/(credentials|media|handover|identity|catalogue|adjustments|venue-service)\//;
+    // packages/db's own run cannot kill a single one of its mutants.
     const selected = mutateFiles(packageDir("db"), configOf("db").mutate);
-    expect(eligibleFiles("db").filter((path) => !selected.includes(path))).toEqual(
-      [
-        "src/english-only.ts",
-        ...eligibleFiles("db").filter((path) => moduleTables.test(path)),
-      ].sort(),
-    );
+    expect(eligibleFiles("db").filter((path) => !selected.includes(path))).toEqual([
+      "src/english-only.ts",
+    ]);
   });
 
   it("leaves out exactly ui's test-helper files of its non-test .ts files", () => {
