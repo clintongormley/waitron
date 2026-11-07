@@ -3280,29 +3280,18 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
   });
 
-  it("keeps the locked confirmation when the payment settled the bill, and Check again shows the ticket", async () => {
+  it("reads a recorded settled payment's receipt without a card resend", async () => {
     const { el, original } = await mountUnanswered();
     shows = { state: "received" };
     showsBill = { status: "settled", received: "120.00", outstanding: "0.00" };
+    const before = sent().length;
+    api.getFiledTicket = vi.fn().mockResolvedValueOnce(invoiceOf("120.00"));
 
     await reopen(el);
 
-    expect(dialog(el)!.confirmationLocked).toBe(true);
-    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
-    const confirm = inDialog(el, "[data-pay-confirm]")!;
-    expect(text(confirm)).toBe(t("bill_pay.recheck"));
-    vi.mocked(api.takeBillPayment).mockResolvedValueOnce(
-      takenOf(
-        { applied: "40.00", change: "10.00" },
-        { status: "settled", received: "120.00", outstanding: "0.00" },
-        invoiceOf("120.00"),
-      ),
-    );
-    await press(el, "[data-pay-confirm]");
-    await flush(el);
-
     expect(sent().at(-1)).toEqual(original);
+    expect(sent()).toHaveLength(before);
+    expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
     expect(dialog(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
   });
@@ -5486,6 +5475,7 @@ describe("till-app: a bill payment on the card reader", () => {
     const el = await takeOnReader(takeBillPayment, { getBillBalance });
     expect(dialog(el)!.confirmationLocked).toBe(true);
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+    expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
     await press(el, "[data-pay-confirm]");
     expect(sent()[1]).toEqual(sent()[0]);
     expect(dialog(el)!.confirmationLocked).toBe(true);

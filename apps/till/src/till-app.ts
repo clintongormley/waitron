@@ -19184,11 +19184,7 @@ export class TillApp extends LitElement {
       (shown) => shown.submissionId === entry.request.submissionId,
     );
     if (payment === undefined) return false;
-    if (
-      payment.state === "received" &&
-      balance.status === "settled" &&
-      entry.pendingRefusal?.code === "sale.charged_not_recorded"
-    ) {
+    if (payment.state === "received" && balance.status === "settled") {
       this.#unansweredPayments.delete(billId);
       const open = this.billPaying;
       if (open === null || open.billId !== billId) return true;
@@ -19226,14 +19222,17 @@ export class TillApp extends LitElement {
       return true;
     }
     if (
-      (payment.state === "pending" &&
-        (entry.pendingRefusal !== undefined || entry.unconfirmed !== true)) ||
-      (payment.state === "received" && balance.status === "settled")
+      payment.state === "pending" &&
+      (entry.pendingRefusal !== undefined || entry.unconfirmed !== true)
     ) {
+      const refusal: PayRefusal = entry.pendingRefusal ?? { code: "network" };
       const held = {
         ...entry,
         unconfirmed: true,
-        pendingRefusal: entry.pendingRefusal ?? { code: "network" },
+        pendingRefusal: {
+          ...refusal,
+          recoveryUrl: refusal.recoveryUrl ?? "/manage/payments",
+        },
       };
       this.#unansweredPayments.set(billId, held);
       const open = this.billPaying;
