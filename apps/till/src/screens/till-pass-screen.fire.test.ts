@@ -345,6 +345,39 @@ describe("A773 pass screen: Fire", () => {
     });
   }
 
+  it("on a kitchen display, a Fire refused service_zone.not_allowed says the pass doesn't show that zone", async () => {
+    const api = fakeApi({
+      releaseDevicePass: vi.fn().mockRejectedValue(refused("service_zone.not_allowed", 403)),
+    });
+    const el = await mountDisplay(api);
+    await pressFire(el);
+    expect(leverError(el)!.textContent!.trim()).toBe(
+      "#1 T1: This order is in a zone this pass screen doesn't show.",
+    );
+  });
+
+  it("on a till, a Fire refused service_zone.not_allowed says the profile can be changed, in both languages", async () => {
+    const api = fakeApi({
+      releaseDevicePass: vi.fn().mockRejectedValue(refused("service_zone.not_allowed", 403)),
+    });
+    const el = await mountTill(api);
+    await pressFire(el);
+    expect(leverError(el)!.textContent!.trim()).toBe(
+      "#1 T1: This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
+    );
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const inSpanish = await mountTill(api);
+      await pressFire(inSpanish);
+      expect(leverError(inSpanish)!.textContent!.trim()).toBe(
+        "#1 T1: El perfil de este dispositivo no trabaja en esa zona. Se puede cambiar en el panel, en Perfiles de dispositivo.",
+      );
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("on a till, a Fire refused kitchen_screen.not_allowed shows its words and asks for nothing", async () => {
     const code = "kitchen_screen.not_allowed";
     const api = fakeApi({ releaseDevicePass: vi.fn().mockRejectedValue(refused(code, 403)) });

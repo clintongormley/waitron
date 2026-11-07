@@ -133,6 +133,7 @@ export class TillUnpaidDepartureDialog extends LitElement {
     if (refusal.code === "network") return t("departure.unconfirmed");
     if (refusal.code === "approvers") return t("departure.approvers_failed");
     if (refusal.code === "order.payment_in_flight") return t("sale.payment_in_flight");
+    if (refusal.code === "bill.payments_received") return t("table.finish_bill_holds_money");
     return codeMessage(refusal.code);
   }
 

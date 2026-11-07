@@ -794,6 +794,8 @@ export const en = {
   "expo.reprint": "Reprint",
   "expo.item_forgotten": "Forgotten",
   "expo.undo": "Undo",
+  "expo.zone_not_allowed":
+    "This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
   "expo.watcher_empty": "Nothing waiting here",
   "cancel.reason_prompt": "Reason for cancelling",
   // Integrated card terminal
@@ -2697,6 +2699,8 @@ export const es: Record<StringKey, string> = {
   "expo.reprint": "Reimprimir",
   "expo.item_forgotten": "Olvidado",
   "expo.undo": "Deshacer",
+  "expo.zone_not_allowed":
+    "El perfil de este dispositivo no trabaja en esa zona. Se puede cambiar en el panel, en Perfiles de dispositivo.",
   "expo.watcher_empty": "Nada pendiente aquí",
   "cancel.reason_prompt": "Motivo de la cancelación",
   "card.collecting": "Acerca o inserta la tarjeta…",

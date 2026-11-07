@@ -339,6 +339,38 @@ describe("A773 pass screen: levers", () => {
     expect(text(leverError(el))).toBe(`#6: ${codeMessage("kitchen_screen.zone_not_allowed")}`);
   });
 
+  it.each([
+    {
+      where: "a kitchen display",
+      mountOne: mountDisplay,
+      group: "bumpDeviceGroupReady",
+      course: "bumpDeviceCourseReady",
+      sentence: "This order is in a zone this pass screen doesn't show.",
+    },
+    {
+      where: "a till",
+      mountOne: mountTill,
+      group: "bumpGroupReady",
+      course: "bumpCourseReady",
+      sentence:
+        "This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
+    },
+  ] as const)(
+    "a Ready refused service_zone.not_allowed on $where says what is true there",
+    async ({ mountOne, group, course, sentence }) => {
+      const code = refused("service_zone.not_allowed", 403);
+      const api = fakeApi({
+        [group]: vi.fn().mockRejectedValue(code),
+        [course]: vi.fn().mockRejectedValue(code),
+      });
+      const el = await mountOne(api);
+      await press(el, '[data-group-ready="g-1"]');
+      expect(text(leverError(el))).toBe(`#7 T7: ${sentence}`);
+      await press(el, '[data-ready="course-mains"]');
+      expect(text(leverError(el))).toBe(`#1 T1: ${sentence}`);
+    },
+  );
+
   it("a till reprints each bill of a card", async () => {
     const api = fakeApi();
     const el = await mountTill(api);
@@ -529,6 +561,28 @@ describe("A773 pass screen: levers on a till's All stations", () => {
     expect(inBoard(el, '[data-card="group:g-2"]')).not.toBeNull();
     expect(boardOf(el)!.shadowRoot!.querySelectorAll("[data-pass-fire]")).toHaveLength(0);
     expect(text(inBoard(el, '[data-ready="course-mains"]'))).toBe(`${t("expo.ready")} Mains`);
+  });
+
+  it("a Ready refused service_zone.not_allowed says the profile can be changed, in both languages, since this board has no zone limit", async () => {
+    const api = allApi(allBoard(), {
+      bumpCourseReady: vi.fn().mockRejectedValue(refused("service_zone.not_allowed", 403)),
+    });
+    const el = await mountTill(api);
+    await press(el, '[data-ready="course-mains"]');
+    expect(text(leverError(el))).toBe(
+      "#1 T1: This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
+    );
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const inSpanish = await mountTill(api);
+      await press(inSpanish, '[data-ready="course-mains"]');
+      expect(text(leverError(inSpanish))).toBe(
+        "#1 T1: El perfil de este dispositivo no trabaja en esa zona. Se puede cambiar en el panel, en Perfiles de dispositivo.",
+      );
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("sends nothing, and reads nothing more, for a Fire event", async () => {
