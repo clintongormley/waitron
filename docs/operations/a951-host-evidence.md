@@ -115,6 +115,39 @@ You can find the report, triage, failing and passing runs, controls and captures
 preceding bounded run tested `8a346293a1`; Lane K held the box when the later turn was checked.
 The earlier public demo remains unchanged. Combined CI, publication, retirement of the legacy
 tunnel and the unrun finish-line checks above remain open. Nothing landed during the freeze.
+The later check follows below.
+
+## Managed review repairs and relay retirement, 7 November 2026
+
+At 07:53, the combined private source `f01218f3d5aee44a4a8c441936c218e38c06483c`
+completed a fresh bounded run on Debian. This includes the Settings review repairs and removes
+the old in-process TCP relay. Eight server, dashboard and lockfile hashes matched the checkout;
+the normal Linux server and dashboard builds passed before starting the separate systemd unit.
+
+The managed probe again observed trusted public HTTP 200, remote access off across a server
+restart and Cloud refresh, local sign-in while off, and on restoring public access. Registration,
+tunnel public key and certificate bytes stayed the same. Systemd recovered the managed app
+after TERM, and restarting its separate peer recovered public access.
+
+A fresh Chromium session on the Mac signed in through the public gateway with normal
+certificate trust and opened Cloud services. The actual staff request reported remote context.
+The turn-off dialog named the local address; **Stop** kept access on and new public connections
+working. Confirming **Turn off remote access** stopped new public TLS connections. A local
+sign-in and turn-on restored trusted public HTTP 200. The five named non-staff paths in the
+first proof still returned 404. Both the live page and confirmation capture were inspected.
+
+Commands and results are in Lane E's local `receipts/a951s-retirement-20261107/`:
+`run-box.sh`, `managed-final.sh`, `managed-proof.mjs`, `managed-final-attempt2.log`,
+`managed-result.json`, `source-match.json`, `public-browser.mjs`, `public-browser.json` and
+the private captures. Cleanup removed the owned unit, peer and network, and released the box
+lock. `cleanup-final.log` checked the earlier demo service active and the owner's three
+containers healthy; `old-demo.log` recorded trusted public HTTP 200 for that earlier demo.
+
+The driver made no separate certificate request. The fresh registration's state remains saved on
+for resumption; its temporary service is stopped. This does not qualify a physical reboot,
+public certificate renewal, wrong-venue refusal, revocation, offline sale or the remaining
+cross-venue and LAN cases. Publication and the installation path remain open during the A760
+freeze. The earlier demo remains the persistent try-out.
 
 # Current addendum: returned Debian box, 5 November 2026
 
