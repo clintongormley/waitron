@@ -22,6 +22,9 @@ import {
   setProfileServiceAccess,
   zoneServicePolicies,
 } from "@waitron/venue-service";
+import { LiveEvents } from "./live-api.js";
+import { clockStartUp } from "./clock-start-up.js";
+import { mountScheduleApi } from "./schedule-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
@@ -36,133 +39,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 
-/*
- * Route-to-action map. Each row is the profile action a till or kitchen-display route needs, besides
- * whatever person permission it already checked; a refusal is `device.forbidden_action` naming the
- * `action` shown (cash is `device.cash_not_allowed`). The case that fails without each gate is the
- * row's own `refuses <METHOD> <path> ...` case in ROUTES below, for a display's pass levers its
- * `refuses the display's <path> ...` case, or for refunds in "a refund checks the action its
- * payment was taken with".
- *
- * | Route                                                     | Action                     | `action` param        |
- * | --------------------------------------------------------- | -------------------------- | --------------------- |
- * | GET/PUT /api/device/zones | admitted session; no selling action for display preferences | device-zones-api.test.ts: "requires an open session for %s", "refuses a changed profile admission for %s"; allowed: "serves admitted staff without a selling action and keeps automatic reads passive" |
- * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | session only; no profile action | find-bill-api.test.ts: "requires an open session on every list, options and by-ID route"; allowed: "allows admitted staff reads without any ordering, payment or print capability" |
- * | GET /api/tender-refunds/:refundId/receipt | admitted session; original-sale zones | tender-refund-receipt-api.test.ts: "GET needs no payment or print capability while POST requires print-receipt", "checks every original source zone on read and reprint and admits the allowed case" |
- * | POST /api/tender-refunds/:refundId/reprint | print-receipt; original-sale zones | same refusal and allowed cases; document only, never drawer |
- * | GET /api/parties/:id/split-sources | session only; no profile action; passive | own allowed case below; passive: till-api.table-actions.test.ts: "reading it does not stamp the device as seen, where the bills read does" |
- * | GET /api/transactions/:saleId/receipt | session only; no profile action | transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
- * | POST /api/transactions/:saleId/reprint | print-receipt | reprint; transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
- * | GET /api/transactions/:saleId/refundable-tenders; GET /api/tender-refunds/:refundId | admitted session; no payment capability | tender-refund-api.test.ts: "%s reads are passive and require no payment capability"; shared display refused in "does not expose a refund command or its reads on a shared kitchen display" |
- * | POST /api/transactions/:saleId/refunds; POST /api/tender-refunds/:refundId/retry | original tender's take-cash / hand-keyed-card-payment / integrated-card-payment | tender-refund-api.test.ts: "%s creation and retry require the tender's current capability"; allowed cash/manual/connected cases in that suite |
- * | GET /api/working-orders/:id/kitchen-note | take-orders | take-orders; till-api.kitchen-note.test.ts: "refuses profiles without take-orders for %s reads and writes" |
- * | PUT /api/working-orders/:id/kitchen-note | take-orders | same refusal case |
- * | GET /api/parties/:id/kitchen-note | take-orders | same refusal case |
- * | PUT /api/parties/:id/kitchen-note | take-orders | same refusal case |
- * | GET /api/parties/:id/allergy | take-orders | till-api.allergy.test.ts: "checks device, profile action and admission for GET" |
- * | PUT /api/parties/:id/allergy | take-orders | same suite: "checks device, profile action and admission for PUT" |
- * | POST /api/parties/:id/allergy/send-preview | take-orders | same suite: "checks device, profile action and admission for POST" |
- * | POST /api/bills/:id/move/allergy-preview | take-orders | till-api.allergy-move.test.ts: "preview checks current action authority"; allowed: "previews counter adoption into an existing party false without changing any row" |
- * | GET /api/clock/state                                    | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on state" |
- * | POST /api/clock/in                                      | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on in" |
- * | POST /api/clock/out                                     | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on out" |
- * | POST /api/clock/break-start                             | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on break-start" |
- * | POST /api/clock/break-end                               | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
- * Clock-route allowed control: till-clock-api.test.ts "allows admitted staff with only clock-in and no service-zone access".
- * | POST /api/box-clock/challenge, /api/box-clock/confirm | admitted session; no profile action | till-box-clock-api.test.ts: "refuses both routes without a session", "refuses a staff member the till's profile no longer admits, on both routes", "refuses a confirm when admission is withdrawn between the challenge and its transaction"; allowed: "serves a staff member whose till's profile has no selling action" |
- * | GET /api/attendance/inbox | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on inbox" |
- * | GET /api/attendance/hours | clock-in | till-hours-api.test.ts "refuses changed profile admission without revealing hours"; allowed: "clock-only staff read their own completed hours passively without recording activity" |
- * | GET /api/attendance/day | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on day?date=2026-01-05" |
- * | GET /api/attendance/commands/:commandId | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on commands/ID" |
- * | GET /api/attendance/items/:itemId/approvers | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on items/ID/approvers?action=approve" |
- * | POST /api/attendance/commands | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on commands" |
- * Attendance allowed control: till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive".
- * | POST /api/sales (tender checked first)                    | take-cash / hand-keyed-card-payment, then take-orders | (cash code) / hand-keyed-card-payment, take-orders |
- * | POST /api/pay                                             | integrated-card-payment, then take-orders | pay, take-orders |
- * | POST /api/working-orders                                  | take-orders                | take-orders           |
- * | PUT, DELETE /api/working-orders/:id                       | take-orders                | take-orders           |
- * | PUT /api/working-orders/:id/invoice-choice                | take-orders                | take-orders           |
- * | PUT /api/working-orders/:id/receipt-language              | take-orders                | take-orders           |
- * | PUT /api/working-orders/:id/label                         | take-orders                | take-orders           |
- * | POST /api/working-orders/:id/place, /prep                 | take-orders                | take-orders           |
- * | POST /api/working-orders/:id/cancel                       | take-orders                | take-orders           |
- * | PUT /api/working-orders/:id/make-at                       | take-orders                | take-orders           |
- * | POST /api/working-orders/:id/lines/move-station, /send, /recall | take-orders          | take-orders           |
- * | POST /api/parties/:id/lines/:lineId/recall | take-orders | own refusing row below; allowed: draft-recall.test.ts |
- * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | take-orders | line-cancel-api.test.ts: "requires take-orders for %s and permits it once restored"; queued revocation: "refuses take-orders revoked during a manager PIN check" |
- * | POST /api/parties/:id/drafts/:did/discard | take-orders | own refusing row below; allowed: draft-discard.test.ts |
- * | PUT /api/working-orders/:id/lines/:lineNo                 | take-orders                | take-orders           |
- * | PATCH /api/working-orders/:id/lines/:lineNo/course        | take-orders                | take-orders           |
- * | POST /api/working-orders/:id/adjustments                  | take-orders                | take-orders           |
- * | POST /api/working-orders/:id/collect, tender cash / card  | take-cash / hand-keyed-card-payment | (cash code) / hand-keyed-card-payment |
- * | POST /api/working-orders/:id/payments, cash / manual card / reader | take-cash / hand-keyed-card-payment / integrated-card-payment | (cash code) / hand-keyed-card-payment / pay |
- * | POST /api/working-orders/:id/payments/:paymentId/refunds, by how the payment was taken | take-cash / hand-keyed-card-payment / integrated-card-payment | (cash code) / hand-keyed-card-payment / pay |
- * | POST /api/orders/:id/courses/:courseId/ready              | prepare-orders             | prepare-orders        |
- * | POST /api/orders/:id/collect                              | hand-over-orders           | hand-over-orders      |
- * | POST /api/orders/:id/reprint (kitchen tickets)            | take-orders                | take-orders           |
- * | POST /api/ticket-items/:id/advance                        | prepare-orders             | prepare-orders        |
- * | POST /api/orders/:id/stations/:sid/advance                | prepare-orders             | prepare-orders        |
- * | POST /api/kitchen-notices/:id/acknowledge                 | prepare-orders             | prepare-orders        |
- * | POST /api/sales/:id/receipt/retry                         | print-receipt              | receipt_retry         |
- * | POST /api/sales/:id/deliveries (print, email)             | print-receipt              | invoice_delivery      |
- * | POST /api/sales/:id/deliveries/:deliveryId/to-receipt     | print-receipt              | invoice_delivery_to_receipt |
- * | POST /api/sales/:id/deliveries/:deliveryId/retry (email)  | print-receipt              | invoice_delivery_retry |
- * | POST /api/sales/:id/receipt, /payment-slip                | print-receipt              | receipt, payment-slip |
- * | POST /api/sales/:id/reprint                               | print-receipt              | reprint               |
- * | POST /api/drawer/open                                     | open-cash-drawer           | drawer_open           |
- * | POST /api/tables/:id/seat                                 | take-orders                | take-orders           |
- * | POST /api/tables/:id/today/move, /rotate, /take-off, /put-back, /place, /seats, /back, /mark-moved, /leave-here, /merge, /split-off, /reset, /name; POST /api/zones/:id/today/reset, /update-layout | take-orders | take-orders |
- * | POST /api/parties/:id/finish, /bill-request, /move, /join, /split-table | take-orders  | take-orders           |
- * | POST /api/parties/:id/service-steps/:stepId/done | take-orders | take-orders |
- * | PUT /api/parties/:id/name                                 | take-orders                | take-orders           |
- * | POST /api/parties/:id/bills                               | take-orders                | take-orders           |
- * | PUT /api/bills/:id/name                                   | take-orders                | take-orders           |
- * | PUT /api/parties/:id/guests                               | take-orders                | take-orders           |
- * | POST /api/parties/:id/groups, /groups/move, /groups/split-line, /groups/fire-line; PUT /groups/order | take-orders            | take-orders           |
- * | POST /api/parties/:id/groups/:gid/fire, /snooze, /unsnooze | take-orders               | take-orders           |
- * | POST /api/parties/:id/groups/:gid/ready                   | prepare-orders             | prepare-orders        |
- * | POST /api/parties/:id/groups/:gid/served           | hand-over-orders           | hand-over-orders      |
- * | POST /api/parties/:id/served, /unserved                   | hand-over-orders           | hand-over-orders      |
- * | PUT /api/parties/:id/drafts; POST /drafts/:did/take-over, /submit, /split | take-orders        | take-orders           |
- * | POST /api/parties/:id/unpaid-departure                    | take-orders                | take-orders           |
- * | POST /api/working-orders/:id/department-transfers         | take-orders                | department-transfer-api.test.ts: refuses request without the take-orders profile action |
- * | POST /api/department-transfers/:id/withdraw, /accept, /decline | take-orders             | department-transfer-api.test.ts: refuses <verb> without the take-orders profile action |
- * | POST /api/bills/:id/split, /merge, /transfer, /move, /move-dishes | take-orders         | take-orders           |
- * | GET, PUT /api/device/stations/:stationId/today            | prepare-orders             | prepare-orders        |
- * | POST /api/device/ticket-items/:id/advance (display)       | prepare-orders             | prepare-orders        |
- * | POST /api/device/kitchen-notices/:id/acknowledge (display)| prepare-orders             | prepare-orders        |
- * | POST /api/device/orders/:id/courses/:courseId/ready (display) | prepare-orders        | prepare-orders        |
- * | POST /api/device/parties/:id/groups/:gid/ready (display)  | prepare-orders             | prepare-orders        |
- * | POST /api/device/working-orders/:id/lines/move-station (display) | take-orders         | take-orders           |
- * | POST /api/device/pass-screen/release (display or till pass) | prepare-orders, then run-the-pass | prepare-orders, run-the-pass |
- *
- * A management reprint (`POST /management-api/orders/:id/reprint`) checks `print-receipt` on the
- * device cookie it carries, if any (`orders-reprint.test.ts`).
- *
- * Not action-gated, so a signed-in person (or, for a display's reads and its own display choice,
- * the device) is enough: every
- * read, including a display's `GET /api/device/stations`, `GET /api/device/pass-board` and
- * `GET /api/device/pass-monitor-board`, and the till's All stations board `GET /api/expo/board`
- * and `GET /api/invoice-delivery-options`, the POST previews (`/payments/preview`,
- * `/adjustments/preview`) and the dead-end checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
- * routes (choosing equipment is not printing, paying or opening the drawer), and a pass's own
- * `PUT /api/device/kitchen-screen-display` (what the pass shows is no cooking action; "A773 pass
- * display policy: the device's own route" in `device-api.pass.test.ts`). Left ungated by
- * decision, each with its reason:
- * - `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
- *   `PUT /api/stations/:stationId/today`: a decision about the venue's day; reads require a session,
- *   writes require `venue_service.manage` or a permitted PIN override;
- * - `GET /api/service-zones/:zoneId/keep-open` and
- *   `PUT /api/service-zones/:zoneId/zone-extension`: the venue's day, session reads and
- *   `venue_service.manage` or a permitted PIN for writes;
- * - the table's cleared mark, and `/api/sales/:id/receipt/handover` (a printed receipt
- *   handed over): none is an ordering, payment or drawer write;
- * - `/api/demo-reader/cancel`: mounted only when the card provider is the simulator.
- *
- * A shared display (`kds`) may only prepare, take orders and hand them over, whatever its stored
- * list says (`profileAllows`); on its own cookie, with nobody signed in, every till route answers
- * `session.required`.
- */
+// ROUTES executes action refusals; the inventory below classifies its remaining mounted routes.
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -514,6 +391,364 @@ beforeAll(async () => {
     }
   }
 }, 120_000);
+
+type DeviceProof =
+  | "matching request (source)"
+  | "device cookie (source)"
+  | "session device (source)"
+  | "public"
+  | "undecided";
+type RouteGroup = {
+  proof: DeviceProof;
+  actions: readonly ProfileAction[];
+  basis: string;
+  routes: readonly string[];
+};
+
+// The action cases below name their behavioral receipt. Device-proof labels remain source readings.
+const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
+  {
+    proof: "matching request (source)",
+    actions: ["clock-in"],
+    basis: 'till-clock-api.test.ts: "rejects a profile without clock-in on"',
+    routes: [
+      "GET /api/clock/state",
+      "POST /api/clock/in",
+      "POST /api/clock/out",
+      "POST /api/clock/break-start",
+      "POST /api/clock/break-end",
+    ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["clock-in"],
+    basis:
+      'till-attendance-api.test.ts: "rejects a profile without clock-in on"; till-hours-api.test.ts: "refuses changed profile admission without revealing hours"',
+    routes: [
+      "GET /api/attendance/inbox",
+      "GET /api/attendance/hours",
+      "GET /api/attendance/day",
+      "GET /api/attendance/commands/:commandId",
+      "GET /api/attendance/items/:itemId/approvers",
+      "POST /api/attendance/commands",
+    ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["take-orders"],
+    basis:
+      'till-api.kitchen-note.test.ts: "refuses profiles without take-orders for %s reads and writes"',
+    routes: [
+      "GET /api/working-orders/:id/kitchen-note",
+      "PUT /api/working-orders/:id/kitchen-note",
+      "GET /api/parties/:id/kitchen-note",
+      "PUT /api/parties/:id/kitchen-note",
+    ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["take-orders"],
+    basis: 'till-api.allergy.test.ts: "checks device, profile action and admission for"',
+    routes: [
+      "GET /api/parties/:id/allergy",
+      "PUT /api/parties/:id/allergy",
+      "POST /api/parties/:id/allergy/send-preview",
+    ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["take-orders"],
+    basis: 'till-api.allergy-move.test.ts: "preview checks current action authority"',
+    routes: ["POST /api/bills/:id/move/allergy-preview"],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["take-orders"],
+    basis: 'line-cancel-api.test.ts: "requires take-orders for %s and permits it once restored"',
+    routes: [
+      "GET /api/parties/:id/lines/:lineId/cancellation",
+      "POST /api/parties/:id/lines/:lineId/cancel-item",
+    ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["take-orders"],
+    basis:
+      'department-transfer-api.test.ts: "refuses ${action} without the take-orders profile action"; reads are source-only',
+    routes: [
+      "GET /api/department-transfers/destinations",
+      "GET /api/department-transfers/incoming",
+      "GET /api/department-transfers/sent",
+      "GET /api/department-transfers/:id",
+      "GET /api/department-transfers/events",
+      "GET /api/working-orders/:id/department-transfers",
+      "POST /api/working-orders/:id/department-transfers",
+      "POST /api/department-transfers/:id/accept",
+      "POST /api/department-transfers/:id/decline",
+      "POST /api/department-transfers/:id/withdraw",
+    ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["print-receipt"],
+    basis:
+      'transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt"; tender-refund-receipt-api.test.ts: "GET needs no payment or print capability while POST requires print-receipt"',
+    routes: [
+      "POST /api/transactions/:saleId/reprint",
+      "POST /api/tender-refunds/:refundId/reprint",
+    ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["take-cash", "hand-keyed-card-payment", "integrated-card-payment"],
+    basis:
+      'Conditional on original tender, not all three at once. Own "a refund checks the action its payment was taken with"; tender-refund-api.test.ts: "%s creation and retry require the tender\'s current capability"',
+    routes: [
+      "POST /api/working-orders/:id/payments/:paymentId/refunds",
+      "POST /api/transactions/:saleId/refunds",
+      "POST /api/tender-refunds/:refundId/retry",
+    ],
+  },
+  {
+    proof: "device cookie (source)",
+    actions: ["prepare-orders"],
+    basis:
+      "Own \"refuses the display's\" cases; device-api.ts / device-levers.ts; display work, not a person's session",
+    routes: [
+      "POST /api/device/kitchen-notices/:id/acknowledge",
+      "POST /api/device/ticket-items/:id/advance",
+      "POST /api/device/orders/:id/courses/:courseId/ready",
+      "POST /api/device/parties/:id/groups/:gid/ready",
+    ],
+  },
+  {
+    proof: "device cookie (source)",
+    actions: ["take-orders"],
+    basis:
+      "device-api.test.ts; requireKitchenDisplay in device-api.ts; station-screen scope also applies",
+    routes: ["POST /api/device/working-orders/:id/lines/move-station"],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["prepare-orders"],
+    basis:
+      "device-api.pass.test.ts; releasePassItems also checks the run-the-pass screen flag; a signed-in person is required except on a shared display",
+    routes: ["POST /api/device/pass-screen/release"],
+  },
+];
+
+const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
+  {
+    proof: "public",
+    actions: [],
+    basis:
+      "Bootstrap/lock-screen information: no selling action. till-api.ts; device-api.ts development-only switcher.",
+    routes: ["GET /api/till", "GET /api/staff", "GET /api/locales", "GET /api/dev/devices"],
+  },
+  {
+    proof: "public",
+    actions: [],
+    basis:
+      "Join bootstrap checks pairing window/rate limit; status checks a pending join token, not an enrolled device. device-api.test.ts.",
+    routes: ["POST /api/device/join", "GET /api/device/join/status"],
+  },
+  {
+    proof: "public",
+    actions: [],
+    basis:
+      "Logout clears even a missing/invalid session cookie; no device proof or action. till-api.test.ts.",
+    routes: ["DELETE /api/session"],
+  },
+  {
+    proof: "device cookie (source)",
+    actions: [],
+    basis:
+      "PIN sign-in proves the device and checks admission; no selling action. till-api.ts POST /api/session.",
+    routes: ["POST /api/session"],
+  },
+  {
+    proof: "device cookie (source)",
+    actions: [],
+    basis:
+      "Device identity, equipment and screen reads/housekeeping are not cooking or selling. device-api.ts; station/pass reads additionally check their screen and signed-in person where required.",
+    routes: [
+      "GET /api/device/me",
+      "GET /api/device/equipment",
+      "GET /api/device/pass-board",
+      "GET /api/device/pass-monitor-board",
+      "GET /api/device/station-screen",
+      "GET /api/device/stations",
+      "PUT /api/device/battery",
+      "PUT /api/device/kitchen-screen-display",
+    ],
+  },
+  {
+    proof: "session device (source)",
+    actions: [],
+    basis:
+      "Session reads/authorizer lists and non-writing previews; not ordering, payment, printing or drawer actions. Handler source, not universal request-device qualification.",
+    routes: [
+      "GET /api/adjustment-approvers",
+      "GET /api/adjustment-reasons",
+      "GET /api/bills",
+      "GET /api/bills/:workingOrderId",
+      "GET /api/bills/lookup",
+      "GET /api/cancel-credit-authorizers",
+      "GET /api/default-service-zone/offers",
+      "GET /api/drawer/authorizers",
+      "GET /api/expo/board",
+      "GET /api/find-bill/options",
+      "GET /api/invoice-delivery-options",
+      "GET /api/invoices/lookup",
+      "GET /api/menu-state",
+      "GET /api/orders/counter-waiting",
+      "GET /api/parties/:id/bills",
+      "GET /api/parties/:id/current-orders",
+      "GET /api/parties/:id/drafts",
+      "GET /api/parties/:id/groups",
+      "GET /api/parties/:id/split-sources",
+      "GET /api/refund-authorizers",
+      "GET /api/sales/:id",
+      "GET /api/sales/:id/deliveries",
+      "GET /api/sales/:id/receipt",
+      "GET /api/schedule/absences",
+      "GET /api/schedule/shifts",
+      "GET /api/schedule/swaps",
+      "GET /api/service-day/authorizers",
+      "GET /api/service-zones/:zoneId/keep-open",
+      "GET /api/service-zones/:zoneId/offers",
+      "GET /api/stations",
+      "GET /api/stations/:id/queue",
+      "GET /api/stations/:stationId/today",
+      "GET /api/tables",
+      "GET /api/tables/state",
+      "GET /api/tender-refunds/:refundId",
+      "GET /api/tender-refunds/:refundId/receipt",
+      "GET /api/transactions",
+      "GET /api/transactions/:saleId/receipt",
+      "GET /api/transactions/:saleId/refundable-tenders",
+      "GET /api/unpaid-departure-authorizers",
+      "GET /api/working-orders",
+      "GET /api/working-orders/:id",
+      "GET /api/working-orders/:id/lines",
+      "GET /api/working-orders/:id/payments",
+      "GET /api/working-orders/:id/placed",
+      "GET /api/zones",
+      "GET /api/device/zones",
+      "POST /api/dead-ends/draft",
+      "POST /api/dead-ends/order",
+      "POST /api/dead-ends/sale",
+      "POST /api/working-orders/:id/adjustments/preview",
+      "POST /api/working-orders/:id/payments/preview",
+    ],
+  },
+  {
+    proof: "undecided",
+    actions: [],
+    basis:
+      "Source currently takes the session device without matching request proof. Actionless by design; request-device policy awaits the A1393 decision. Existing permission/zone/admission checks remain.",
+    routes: [
+      "POST /api/sales/:id/receipt/handover",
+      "POST /api/tables/:id/cleared",
+      "PUT /api/service-zones/:zoneId/zone-extension",
+      "PUT /api/stations/:stationId/today",
+      "PUT /api/device/zones",
+      "PUT /api/device/equipment",
+      "POST /api/device/active-profile",
+      "POST /api/box-clock/challenge",
+      "POST /api/box-clock/confirm",
+      "POST /api/schedule/absences",
+      "POST /api/schedule/swaps",
+      "POST /api/schedule/swaps/:swapId/accept",
+      "PUT /api/session/locale",
+      "POST /api/demo-reader/cancel",
+    ],
+  },
+];
+
+function routeKey(method: string, path: string): string {
+  return `${method} ${path
+    .replaceAll(id, ":param")
+    .replace(/:[^/]+/g, ":param")
+    .replace(/\/lines\/1(?=\/|$)/g, "/lines/:param")}`;
+}
+
+it("classifies every mounted till, device and schedule route", () => {
+  const inventory = new Hono();
+  mountTillApi(
+    inventory,
+    {
+      admission: testTradingAdmission(),
+      db: suite.db,
+      backend: v.backend,
+      clock: v.clock,
+      cfg: v.cfg,
+      secureCookies: false,
+      venueLocale: v.cfg.locale,
+      cardProvider: new SimulatorPaymentProvider(suite.db),
+      workforceEnabled: true,
+      liveEvents: new LiveEvents(),
+      boxClock: {
+        correction: {
+          inTurn: async (fn) => fn(),
+          set: async () => {
+            throw new Error("unused clock setter");
+          },
+          steps: () => 0,
+        },
+        startUp: clockStartUp({ primaryAtStart: true }),
+        witnesses: () => [],
+        clearWitnesses: () => {},
+        readBoot: () => ({ id: "inventory", ms: 0 }),
+        steady: () => 0,
+        filesRecords: () => true,
+      },
+    },
+    noopLog,
+  );
+  mountDeviceApi(
+    inventory,
+    {
+      db: suite.db,
+      cfg: v.cfg,
+      secureCookies: false,
+      pairingMode: createPairingMode(),
+      devMode: true,
+    },
+    noopLog,
+  );
+  mountScheduleApi(inventory, { db: suite.db }, noopLog);
+  const mounted = new Set(
+    inventory.routes
+      .filter(({ method, path }) => method !== "ALL" && path.startsWith("/api/"))
+      .map(({ method, path }) => routeKey(method, path)),
+  );
+  const rows = [
+    ...ROUTES.map(([method, path, action]) => ({
+      key: routeKey(method, path),
+      actions: [action],
+      proof: path.startsWith("/api/device/")
+        ? "device cookie (source)"
+        : "matching request (source)",
+      basis:
+        "Own ROUTES refusal; device proof is a source reading of the handler and till-session.ts",
+    })),
+    ...[...EXTERNAL_ACTION_ROUTES, ...ACTIONLESS_ROUTES].flatMap(({ routes, ...entry }) =>
+      routes.map((route) => {
+        const space = route.indexOf(" ");
+        return { ...entry, key: routeKey(route.slice(0, space), route.slice(space + 1)) };
+      }),
+    ),
+  ];
+  for (const row of rows) {
+    expect(
+      new Set(rows.filter(({ key }) => key === row.key).map(({ proof }) => proof)).size,
+      row.key,
+    ).toBe(1);
+  }
+  const classified = new Set(rows.map(({ key }) => key));
+  expect([...mounted].sort()).toEqual([...classified].sort());
+});
 
 describe("each till route checks the profile action it needs", () => {
   for (const [method, path, lacking, expected, body] of ROUTES) {

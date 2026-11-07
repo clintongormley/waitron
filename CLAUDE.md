@@ -323,9 +323,11 @@ called weaker than its name, the topic file lists what it does not see.
   Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
   [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound
-  service and its admission list bounds sign-in.** Preserve the stated action-map exceptions. New routes
-  add refusing cases and rows to `apps/server/src/till-api.profile-actions.test.ts` and
-  `apps/server/src/till-api.profile-zones.test.ts`; weaker than that sounds: the maps are comments.
+  service and its admission list bounds sign-in.** Preserve the stated action exceptions. New routes
+  add refusing cases and inventory rows to `apps/server/src/till-api.profile-actions.test.ts` and
+  zone rows to `apps/server/src/till-api.profile-zones.test.ts`. The inventory guard is weaker than
+  its name: mounted till/device/schedule APIs only; proof labels are source readings. The zone map
+  remains a comment. [Limits](docs/developers/conventions-ui.md#a-devices-profile-and-the-signed-in-person-must-both-allow-what-the-device-does).
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`** (owner, A155).
   Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name: identifies menus only by that
   literal key; a data column must use another key.
