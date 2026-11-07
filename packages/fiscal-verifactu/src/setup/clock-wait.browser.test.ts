@@ -43,7 +43,7 @@ it.each([undefined, Date.parse("2026-10-18T20:04:00Z"), LAST_DATE_MS + 60_000])(
     });
     expect(read).toEqual({ kind: "later" });
     const target = document.createElement("div");
-    render(renderClockProblem(read, words, undefined), target);
+    render(renderClockProblem(read, words, undefined, true), target);
     expect(text(target.querySelector("[data-test=minute-not-later]"))).toBe(
       "The series cannot be made yet: a later minute is already in use.",
     );
@@ -62,7 +62,7 @@ it("a minute in use counts down when the box says how long", () => {
   });
   expect(read).toEqual({ kind: "next-minute", remainingMs: 180_000, recheckInMs: 30_000 });
   const target = document.createElement("div");
-  render(renderClockProblem(read, words, undefined), target);
+  render(renderClockProblem(read, words, undefined, true), target);
   expect(text(target)).toBe("");
 });
 
@@ -88,9 +88,9 @@ it.each([
   });
   expect(read).toEqual({ kind: "in-use" });
   const target = document.createElement("div");
-  render(renderClockProblem(read, words, undefined), target);
+  render(renderClockProblem(read, words, undefined, true), target);
   expect(text(target.querySelector("[data-test=minute-in-use]"))).toBe(
-    "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
+    "The series cannot be made: the minute for these series is already in this box's records. This is a fault in Waitron.",
   );
 });
 
@@ -106,11 +106,12 @@ it("a stored pick refused as in use names no time in Spanish", () => {
       read,
       { ...clockWaitStrings.es, secondClockDo: "", secondClockEnds: "", differDo: "" },
       undefined,
+      true,
     ),
     target,
   );
   expect(text(target.querySelector("[data-test=minute-in-use]"))).toBe(
-    "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
+    "No se pueden crear las series: el minuto de estas series ya está en los registros de este equipo. Es un fallo de Waitron.",
   );
 });
 
@@ -140,7 +141,7 @@ describe("a taken minute shows one countdown", () => {
     const wait = new ClockWait<{ status: "selected" }>(host, recheck);
     const drawn = () => {
       const target = document.createElement("div");
-      render(wait.counting ? wait.renderWait(words) : nothing, target);
+      render(wait.counting ? wait.renderWait(words, true) : nothing, target);
       return target;
     };
     return { wait, recheck, fail, drawn };
@@ -305,6 +306,80 @@ describe("a taken minute shows one countdown", () => {
     wait.show(undefined, WAITING);
     expect(drawn().querySelector("[data-test=minute-taken]")).toBeNull();
   });
+
+  it("a wait the person did not start says to press Make the series at zero", () => {
+    const { wait } = setup();
+    wait.show(undefined, WAITING);
+    const drawnWith = (carriesOn: boolean) => {
+      const target = document.createElement("div");
+      render(wait.renderWait(words, carriesOn), target);
+      return text(target);
+    };
+    const unpressed = drawnWith(false);
+    expect(unpressed).toContain("When the time left reaches zero, press “Make the series”.");
+    expect(unpressed).toContain("Time left: 2:30");
+    expect(unpressed).not.toContain(words.nothingToDo);
+    expect(unpressed).not.toContain(words.continuesIn);
+    const pressed = drawnWith(true);
+    expect(pressed).toContain(words.nothingToDo);
+    expect(pressed).toContain("Continues in 2:30");
+    expect(pressed).not.toContain("When the time left reaches zero");
+    expect(pressed).not.toContain("Time left:");
+  });
+});
+
+it("a second-clock wait the person did not start says to press Check again", () => {
+  const drawnWith = (carriesOn: boolean) => {
+    const target = document.createElement("div");
+    render(
+      renderClockProblem(
+        { kind: "second-clock" },
+        { ...words, secondClockEnds: "Carries on." },
+        undefined,
+        carriesOn,
+      ),
+      target,
+    );
+    return text(target);
+  };
+  const unpressed = drawnWith(false);
+  expect(unpressed).toContain("Once the box reaches the internet, press “Check again”.");
+  expect(unpressed).not.toContain("Carries on.");
+  const pressed = drawnWith(true);
+  expect(pressed).toContain("Carries on.");
+  expect(pressed).not.toContain("Once the box reaches the internet");
+});
+
+it("says in Spanish what to press when the person did not start the wait", () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+  const host: ReactiveControllerHost = {
+    addController: () => undefined,
+    removeController: () => undefined,
+    requestUpdate: () => undefined,
+    updateComplete: Promise.resolve(true),
+  };
+  const es: ClockWords = {
+    ...clockWaitStrings.es,
+    secondClockDo: "",
+    secondClockEnds: "",
+    differDo: "",
+  };
+  try {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.show(undefined, { status: "waiting", targetMs: 1, remainingMs: 61_000 });
+    const target = document.createElement("div");
+    render(wait.renderWait(es, false), target);
+    expect(text(target)).toContain(
+      "Cuando el tiempo restante llegue a cero, pulsa «Crear las series».",
+    );
+    expect(text(target.querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Tiempo restante: 1:01",
+    );
+    render(renderClockProblem({ kind: "second-clock" }, es, undefined, false), target);
+    expect(text(target)).toContain("Cuando el equipo tenga internet, pulsa «Comprobar otra vez».");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it.each([
@@ -333,12 +408,15 @@ it("says in Spanish that the code exists and when a new one is made", () => {
     wait.show({ kind: "next-minute", remainingMs: 52_000, recheckInMs: 1_000 });
     const target = document.createElement("div");
     render(
-      wait.renderWait({
-        ...clockWaitStrings.es,
-        secondClockDo: "",
-        secondClockEnds: "",
-        differDo: "",
-      }),
+      wait.renderWait(
+        {
+          ...clockWaitStrings.es,
+          secondClockDo: "",
+          secondClockEnds: "",
+          differDo: "",
+        },
+        true,
+      ),
       target,
     );
     expect(text(target.querySelector("[data-test=minute-taken]"))).toBe(

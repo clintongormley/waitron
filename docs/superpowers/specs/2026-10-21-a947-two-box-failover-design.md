@@ -1,6 +1,8 @@
 > **A1207, 29 October 2026:** the 'strictly later than every name it knows' rule and the backup's time floor are retired; a name is refused when its minute is already in use, or while the box's clock is behind this attempt's own pick, and a minute in use gets new words (the 'a later minute is already in use' words remain only for a clock behind the attempt's own pick) ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md), Q4).
 >
 > **A1207, 30 October 2026:** a setup or restore whose minute is taken now waits with one countdown and checks again by itself, instead of the refusal with "carry on from" ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md), Part 1b).
+>
+> **A1385, 7 November 2026:** the setup and restore pages check with the box by themselves only after **Make the series** was pressed on that page load; Compare clocks alone no longer starts the 15-second second-clock check, a wait shown without a press ends with no request and says what to press, and an attempt whose own pick turns up taken is called a fault in Waitron ([A1385 plan](../plans/2026-11-06-a1385-series-name-leftovers.md)).
 
 > **A947 slice 3a, 1 November 2026:** each box's own state now lives in its `node.db`, and the
 > owner answered yes to both of the slice's questions on 31 October: the box's role is saved a
@@ -143,7 +145,11 @@ rewritten, and carries a dated pointer here.
 >    with no second clock explains the wait and checks again by itself" and "Compare clocks with
 >    clocks that differ explains the refusal, not a failure";
 >    `packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "a preview refused for %s on
->    load shows the readings with no failure and no explanation".
+>    load shows the readings with no failure and no explanation". (A1385, 7 November 2026: no
+>    second clock no longer starts the re-check; the first case is now "Compare clocks with no
+>    second clock explains the wait and leaves the next check to the person". The setup page also shows the box's
+>    recorded wait without a press and asks for Make the series at zero (`first-hour.browser.test.ts`,
+>    "a reload during the box's wait says to press Make the series at zero").)
 > 5. **The setup and restore pages' refusal for a later minute in use** (`minute_not_later`), which
 >    §6.5 words only for the switch dialog: «Todavía no se pueden crear las series: ya se usó un
 >    minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.» / "The series

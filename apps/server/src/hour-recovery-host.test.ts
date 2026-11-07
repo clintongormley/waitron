@@ -98,6 +98,13 @@ it("persists a recovery hour before the real configured restore runner activates
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
 });
 
+it("a restore's chosen name records no backup-created reference", async () => {
+  const f = await host();
+  const selected = await f.selectPastWaits();
+  expect(selected).toMatchObject({ status: "selected" });
+  expect((selected as { references: string[] }).references).not.toContain("backup-created");
+});
+
 it("reopens the same selected hour after host restart and requires a fresh clock comparison", async () => {
   const first = await host();
   const selected = await first.selectPastWaits();
@@ -788,12 +795,12 @@ async function sellAt(instant: string) {
   );
 }
 
-describe("a backup whose newest record and creation time are near or past the clock", () => {
+describe("a restore whose clock is before or past the backup's newest record", () => {
   const asBrowser = { onBox: false };
   const restoreService = (f: Awaited<ReturnType<typeof host>>, createdAt = f.selected.createdAt) =>
     createSelectedRecoveryPreparation({ ...f.options, selected: { ...f.selected, createdAt } });
 
-  it("selects at the ordinary wait although the backup's newest record and creation time are later", async () => {
+  it("selects at the ordinary wait although the backup's newest record is later", async () => {
     await sellAt("2026-10-22T20:15:00Z");
     clock.set(Date.parse("2026-10-21T10:00:00Z"));
     const f = await host();
@@ -888,7 +895,7 @@ describe("a backup whose newest record and creation time are near or past the cl
     });
   });
 
-  it("waits the ordinary settle time and then selects when the clock is past the backup's record and creation time", async () => {
+  it("waits the ordinary settle time and then selects when the clock is past the backup's newest record", async () => {
     await sellAt("2026-10-22T20:15:00Z");
     clock.set(Date.parse("2026-10-24T09:00:00Z"));
     const f = await host();

@@ -44,34 +44,29 @@ const binding: OperationBinding = {
 const operator = { kind: "recovery-key" as const, nodeId: MAIN, eventId: binding.eventId };
 
 const MAIN_SETUP = at("2026-10-16T11:40:00.000Z");
-const NEWEST_RECORD = at("2026-10-22T22:30:00.000Z");
-const BACKUP_CREATED = at("2026-10-22T23:00:00.000Z");
 const SWITCH = at("2026-10-23T19:40:50.000Z");
 const TRUE_NOW = at("2026-10-24T09:00:00.000Z");
 const RELEASE = at("2026-10-15T00:00:00.000Z");
 const BEHIND = at("2026-10-20T10:00:00.000Z");
-// Above both backup floors and below the unseen name: only the clock rules stand in the way.
-const ABOVE_FLOORS = at("2026-10-23T10:00:00.000Z");
+// After the backup's newest record, before the unseen name: only the clock rules
+// stand in the way.
+const AFTER_BACKUP = at("2026-10-23T10:00:00.000Z");
 const KNOWN = "0CNNW";
 const UNSEEN = "0CZZW";
 
 function row(reference: string, kind: string, nodeId: string, identity: string, ms: number | null) {
   return { reference, kind, ...scope, softwareId: "77", nodeId, identity, recordedAtMs: ms };
 }
-// What the restore path hands the selection: the backup's history with its newest record as a
-// floor (readHourHistoryWithRecordFloor) and the backup's creation time
-// (apps/server/src/recovery-preparation.ts, from the selected backup's createdAt).
+// What the restore path hands the selection: the backup's own history (readHourRecoveryState).
 const backupHistory: HourHistorySource[] = [
   {
     reference: "venue",
     complete: true,
-    timeFloorMs: NEWEST_RECORD,
     records: [
       row("registro_sif/1", "activation", MAIN, KNOWN, MAIN_SETUP),
       row("invoice_series/1", "series", MAIN, KNOWN, null),
     ],
   },
-  { reference: "backup-created", complete: true, records: [], timeFloorMs: BACKUP_CREATED },
 ];
 const survivingWithSwitch: HourHistorySource = {
   reference: "surviving-venue/switch",
@@ -272,8 +267,8 @@ describe("refused", () => {
     });
   });
 
-  it("A2v: as A2 above the backup's floors", async () => {
-    expect(await restore({ box: ABOVE_FLOORS, release: at("2026-10-23T12:00:00Z") })).toEqual({
+  it("A2v: as A2 after the backup was made", async () => {
+    expect(await restore({ box: AFTER_BACKUP, release: at("2026-10-23T12:00:00Z") })).toEqual({
       refused: "clock_unconfirmed",
     });
   });
@@ -284,14 +279,14 @@ describe("refused", () => {
     });
   });
 
-  it("B2v: as B2 above the backup's floors", async () => {
-    expect(await restore({ box: ABOVE_FLOORS, browser: TRUE_NOW })).toEqual({
+  it("B2v: as B2 after the backup was made", async () => {
+    expect(await restore({ box: AFTER_BACKUP, browser: TRUE_NOW })).toEqual({
       refused: "clock_disagreement",
     });
   });
 
   it("B2: no proposal confirms a disagreeing comparison", async () => {
-    await hostedComparison(ABOVE_FLOORS, async (send, comparison) => {
+    await hostedComparison(AFTER_BACKUP, async (send, comparison) => {
       expect(comparison.clock.disagreement).toBe(true);
       await expect(
         send({ action: "confirm-clock", comparisonId: comparison.id }),
@@ -303,7 +298,7 @@ describe("refused", () => {
   });
 
   it.each([
-    ["Sv: as S above the backup's floors", ABOVE_FLOORS],
+    ["Sv: as S after the backup was made", AFTER_BACKUP],
     ["S: as B2, with the old sheet's code still sent", BEHIND],
   ])("%s: a selection carrying an installation code is refused", async (_name, box) => {
     await hostedComparison(box, async (send, comparison) => {
@@ -327,8 +322,8 @@ describe("refused", () => {
     },
   );
 
-  it("B4v: as B4 above the backup's floors", async () => {
-    expect(await restore({ box: ABOVE_FLOORS, browser: ABOVE_FLOORS, onBox: true })).toEqual({
+  it("B4v: as B4 after the backup was made", async () => {
+    expect(await restore({ box: AFTER_BACKUP, browser: AFTER_BACKUP, onBox: true })).toEqual({
       refused: "second_clock_missing",
     });
   });
@@ -392,8 +387,8 @@ describe("refused", () => {
     });
   });
 
-  it("D4v: as D4 above the backup's floors", async () => {
-    expect(await restore({ box: ABOVE_FLOORS, browser: null, internet: TRUE_NOW })).toEqual({
+  it("D4v: as D4 after the backup was made", async () => {
+    expect(await restore({ box: AFTER_BACKUP, browser: null, internet: TRUE_NOW })).toEqual({
       refused: "clock_disagreement",
     });
   });
@@ -449,12 +444,12 @@ describe("selected although a later name is known", () => {
     expect(await restore({ box, surviving: [surviving] })).toEqual(settled(box));
   });
 
-  it("A: a clock before the backup's own floors", async () => {
+  it("A: a clock before the backup's newest record", async () => {
     const box = at("2026-10-16T10:00:00Z");
     expect(await restore({ box })).toEqual(settled(box));
   });
 
-  it("W: the box and another device wrong together, below the backup's creation", async () => {
+  it("W: the box and another device wrong together, behind the true time", async () => {
     expect(await restore({ box: BEHIND, browser: BEHIND })).toEqual(settled(BEHIND));
   });
 });

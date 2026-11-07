@@ -25,7 +25,7 @@ other clock it reads, ahead or behind, and there is no confirmation to get past 
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). There is no "last hour" question: the page has no such field
 (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation"). Before you
-press **Make the series**, the page explains nothing and retries nothing
+press **Make the series**, a refused check on load explains nothing and retries nothing
 (`first-hour.browser.test.ts`, "a preview refused for %s on load shows the readings with no
 failure and no explanation").
 
@@ -34,7 +34,12 @@ and the page counts down; keep it open (`packages/fiscal-verifactu/src/hour-sele
 "setup checked at %s waits until %s"; `first-hour.browser.test.ts`, "explains a waiting setup with
 a countdown that goes back to the server at zero"). A reload during the wait shows the time the
 box has left (`first-hour.browser.test.ts`, "a reload during a wait shows the server's time
-left"). What the page shows when it cannot go ahead, and what it asks for:
+left"); the page then says "When the time left reaches zero, press “Make the series”.", and at zero
+it sends nothing: tick the details again and press **Make the series** (`first-hour.browser.test.ts`,
+"a reload during the box's wait ends at zero with no request, and Make the series waits for the
+tick" and "a reload during the box's wait says to press Make the series at zero"). **Check again**
+also cancels an earlier press: a wait it shows ends the same way (`first-hour.browser.test.ts`,
+"Check again after Make the series starts over: the wait it shows ends with no request"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or till on the venue's network and enter the setup
@@ -59,9 +64,12 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   time are correct." and press **Make the series** again (read, not run: the page's check on load
   ignores a refusal for a taken minute, `#compare` in `packages/fiscal-verifactu/src/setup/first-hour.ts`). If this attempt
   has already chosen its name and that name then turns up in the box's records, the attempt is refused
-  (`minute_in_use`, with no time) and is offered no way on yet
-  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is refused when a record naming its
-  own minute appears after it"; backlog A1223).
+  (`minute_in_use`, with no time; `packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is
+  refused when a record naming its own minute appears after it"). The page, and the setup app if
+  it happens when the series are made, say this is a fault in Waitron
+  (`packages/fiscal-verifactu/src/setup/clock-wait.browser.test.ts`, "a minute in use with %j names
+  no time and does not count down"; `apps/setup/src/setup-app-finish.test.ts`, "an activation
+  refused for a stored pick found taken says it is a fault in Waitron").
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
   name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
   its name

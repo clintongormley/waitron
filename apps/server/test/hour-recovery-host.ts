@@ -19,7 +19,7 @@ import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
-import { readHourHistoryWithRecordFloor } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
+import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedVenueNodes, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -220,9 +220,7 @@ export async function host() {
     environment: scope.environment,
     bases,
     contextKey: JSON.stringify([binding, key.name]),
-    history: [
-      await withTransaction(suite.db, (tx) => readHourHistoryWithRecordFloor(tx, "preproduction")),
-    ],
+    history: [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))],
     oldMachineAbsent: false,
     oldMachineRelinquished: false,
     oldMachineOffline: true,

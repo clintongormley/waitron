@@ -21,7 +21,7 @@ function project(recovery: unknown, retained: readonly unknown[] = []) {
   >[0]);
 }
 const source = { reference: "surviving-venue/hash", complete: true, records: [row] };
-it("carries surviving database names and their time floor into a second recovery without private fields", () => {
+it("carries surviving database names into a second recovery without private fields", () => {
   const first = project({
     history: [{ ...source, timeFloorMs: 1792152105000, privatePath: "/private/old" }],
     setups: [],
@@ -31,12 +31,10 @@ it("carries surviving database names and their time floor into a second recovery
     reference: "prepared-hours",
     complete: true,
     records: [row],
-    timeFloorMs: 1792152105000,
   });
   const second = project({ history: [], setups: [], publicEvidence: [] }, [first]);
   expect(projectHourHistory({ scope, sources: [second] })).toMatchObject({
     greatestSpentMinute: 415441,
-    recordedTimeFloorMs: 1792152105000,
     contradictions: [],
   });
   expect(JSON.stringify(second)).not.toContain("/private/old");
@@ -141,7 +139,7 @@ it("refuses unprojectable public evidence instead of assuming it contains no spe
     }),
   );
 });
-it("validates a public recovery-key document and retains only its creation floor", () => {
+it("validates a public recovery-key document and carries nothing from it", () => {
   const document = {
     kind: "waitron-recovery-document",
     version: 1,
@@ -155,7 +153,6 @@ it("validates a public recovery-key document and retains only its creation floor
     reference: "prepared-hours",
     complete: true,
     records: [],
-    timeFloorMs: 1792152105000,
   });
   expect(() =>
     project({

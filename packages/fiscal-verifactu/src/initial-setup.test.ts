@@ -598,7 +598,7 @@ it("refuses malformed Cloud request fields before creating a frozen setup reques
   );
 });
 
-it("gives first setup the database's newest fiscal record time as its floor", async () => {
+it("gives first setup's history no time floor", async () => {
   const [sif] = await suite.db
     .insert(registroSif)
     .values({
@@ -620,7 +620,8 @@ it("gives first setup the database's newest fiscal record time as its floor", as
   const source = await withTransaction(suite.db, (tx) =>
     FISCAL_INITIAL_SETUP.localHistory!(tx, "preproduction"),
   );
-  expect(source).toMatchObject({ timeFloorMs: Date.parse("2026-07-20T19:20:30+01:00") });
+  expect(source).not.toHaveProperty("timeFloorMs");
+  expect(source).toMatchObject({ reference: "venue" });
 });
 
 it("a version 2 approval is refused", () => {

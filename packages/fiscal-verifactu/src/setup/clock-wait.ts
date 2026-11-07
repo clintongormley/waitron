@@ -13,10 +13,13 @@ export interface ClockWords {
   whyWait: string;
   nothingToDo: string;
   continuesIn: string;
+  pressAtZero: string;
+  timeLeft: string;
   whySecondClock: string;
   onBox: string;
   secondClockDo: string;
   secondClockEnds: string;
+  secondClockAgain: string;
   whyRefused: string;
   differ: string;
   differDo: string;
@@ -43,14 +46,17 @@ export const clockWaitStrings = {
     whyWait: "Waiting to confirm the time, so no invoice series is ever repeated.",
     nothingToDo: "Nothing to do; keep this page open.",
     continuesIn: "Continues in",
+    pressAtZero: "When the time left reaches zero, press “Make the series”.",
+    timeLeft: "Time left:",
     whySecondClock:
       "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
     onBox: "This screen is on the box itself, so it does not count.",
+    secondClockAgain: "Once the box reaches the internet, press “Check again”.",
     whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
     differ: "This box's time and this device's differ by more than 30 seconds.",
     later: "The series cannot be made yet: a later minute is already in use.",
     inUse:
-      "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
+      "The series cannot be made: the minute for these series is already in this box's records. This is a fault in Waitron.",
     minuteTaken:
       "The auto-generated invoice series code (which is time-based) already exists in the database.",
     newCodeIn: "Generating a new code in:",
@@ -59,15 +65,18 @@ export const clockWaitStrings = {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
     nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
     continuesIn: "Sigue en",
+    pressAtZero: "Cuando el tiempo restante llegue a cero, pulsa «Crear las series».",
+    timeLeft: "Tiempo restante:",
     whySecondClock:
       "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
     onBox: "Esta pantalla está en el propio equipo y no cuenta.",
+    secondClockAgain: "Cuando el equipo tenga internet, pulsa «Comprobar otra vez».",
     whyRefused: "Sin una hora confirmada no se crean series, para que ninguna se repita.",
     differ: "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
     later:
       "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     inUse:
-      "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
+      "No se pueden crear las series: el minuto de estas series ya está en los registros de este equipo. Es un fallo de Waitron.",
     minuteTaken:
       "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
     newCodeIn: "Se generará un código nuevo en",
@@ -128,7 +137,8 @@ export function clockProblem(error: unknown): ClockProblem | undefined {
   if (reason !== "minute_in_use") return undefined;
   return countable(recheckInMs) && countable(remainingMs) && recheckInMs <= remainingMs
     ? { kind: "next-minute", remainingMs, recheckInMs }
-    : { kind: "in-use" };
+    : // A fault in Waitron: a stored pick found taken, or a wait whose times cannot be read.
+      { kind: "in-use" };
 }
 
 /** Asks the box for a clock challenge, then for its comparison with this browser's time. */
@@ -266,8 +276,9 @@ export class ClockWait<Selected extends { status: "selected" }> {
     }
   }
 
-  renderWait(words: ClockWords) {
-    return renderWait(words, this.#countdown, this.#minuteTaken);
+  /** `carriesOn` false: the person did not start this wait, so its end sends nothing. */
+  renderWait(words: ClockWords, carriesOn: boolean) {
+    return renderWait(words, this.#countdown, this.#minuteTaken, carriesOn);
   }
 }
 
@@ -275,6 +286,7 @@ export function renderClockProblem(
   problem: ClockProblem | undefined,
   words: ClockWords,
   clock: HourClockDecision | undefined,
+  carriesOn: boolean,
 ) {
   if (problem?.kind === "second-clock")
     return html`<section data-test="clock-wait">
@@ -285,7 +297,7 @@ export function renderClockProblem(
           : nothing
       }
       <p>${words.secondClockDo}</p>
-      <p>${words.secondClockEnds}</p>
+      <p>${carriesOn ? words.secondClockEnds : words.secondClockAgain}</p>
     </section>`;
   if (problem?.kind === "disagreement")
     return html`<section data-test="clock-refused">
@@ -303,19 +315,26 @@ export function renderClockProblem(
   return nothing;
 }
 
-function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: boolean) {
+function renderWait(
+  words: ClockWords,
+  countdown: WaitCountdown,
+  minuteTaken: boolean,
+  carriesOn: boolean,
+) {
+  // A taken minute is reached only through a press, so its words always carry on.
+  const pressLater = !carriesOn && !minuteTaken;
   return html`<section data-test="hour-wait">
     ${
       minuteTaken
         ? html`<p role="status" data-test="minute-taken">${words.minuteTaken}</p>`
         : html`<p role="status">${words.whyWait}</p>`
     }
-    <p>${words.nothingToDo}</p>
+    <p>${pressLater ? words.pressAtZero : words.nothingToDo}</p>
     ${
       countdown.remainingMs === undefined
         ? nothing
         : html`<p>
-            ${minuteTaken ? words.newCodeIn : words.continuesIn}
+            ${minuteTaken ? words.newCodeIn : pressLater ? words.timeLeft : words.continuesIn}
             <span role="timer" data-test="remaining"
               >${
                 minuteTaken

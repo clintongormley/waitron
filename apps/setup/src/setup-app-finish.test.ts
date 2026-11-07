@@ -241,6 +241,28 @@ it("does not replace a navigated-away repair page with a late Finish answer", as
   expect(q(app, "screen-done")).toBeNull();
 });
 
+it("an activation refused for a stored pick found taken says it is a fault in Waitron", async () => {
+  const { app } = await mount("committed", (path) => {
+    if (path.endsWith("/resolution/finish"))
+      return Response.json(
+        { error: { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } } },
+        { status: 409 },
+      );
+  });
+  await recover(app);
+  const review = await publication(app);
+  await userEvent.click(button(review.shadowRoot!, "provision"));
+  await expect
+    .poll(() =>
+      [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+        (f) => f.error,
+      ),
+    )
+    .toContain(
+      "The series cannot be made: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
+    );
+});
+
 it("an activation step refused storage.disk_full still says to reconnect and not repeat activation", async () => {
   const { app } = await mount("committed", (path) => {
     if (path.endsWith("/resolution/finish"))

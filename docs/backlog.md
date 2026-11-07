@@ -107,7 +107,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1382. Till refusals that say the wrong thing or nothing useful](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
 - [A1383. Tests for four guards a review deleted with nothing failing](backlog/fiscal.md#bundle-a1383-tests-for-four-guards-a-review-deleted-with-nothing-failing)
 - [A1384. Words on setup's refusals](backlog/setup.md#bundle-a1384-words-on-setups-refusals)
-- [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1386. Blank or misleading Floor pages](backlog/till.md#bundle-a1386-blank-or-misleading-floor-pages)
 - [A1387. Till sentences during the clock stop, with money in hand](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
 - [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
@@ -409,7 +408,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   dated after the real time (a restored backup from a box whose clock was fast). Nothing in Waitron
   corrects them, and what to do about them with AEAT is undesigned. Design first.
 
-- **A1385. The A1207 leftovers in choosing a series name** (bundle of 4, 3 important, size S). Holds A1223, A1224, A1226. [Detail](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
+- **A1385. The A1207 leftovers in choosing a series name** (bundle of 1, 1 important, size S). Holds A1223: start a new attempt by itself, waiting for the owner's answer to Q1 in the A1385 PR. [Detail](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
