@@ -6,7 +6,7 @@ import { handoverActivations } from "./schema/index.js";
 /**
  * This box, then the boxes it took over from, then the boxes those took over from: fewest handovers
  * back first, and the boxes one box took over from in the order it took over from them. A box
- * already listed is skipped, so a box that handed over and took back appears once and the walk ends.
+ * already listed is skipped, so a box that handed over and took back appears once.
  */
 export async function readHistoryNodes(
   db: Database | Transaction,

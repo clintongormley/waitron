@@ -2124,8 +2124,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(w.linesAfterChange).toBe(w.tab.linesBefore + 1);
   });
 
-  // Task 3 flips this
-  it.fails("M2 takes cash for that table, on a sale in its own series", () => {
+  it("M2 takes cash for that table, on a sale in its own series", () => {
     const { b, on, w } = inheritedRun();
     expect(w.balance.status, JSON.stringify(w.balance.body)).toBe(200);
     expect(
@@ -2139,8 +2138,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(w.tabSaleRecord).toMatchObject([{ node_id: b.m2.nodeId, estado: "aceptado" }]);
   });
 
-  // Task 3 flips this
-  it.fails("M2's next order number is above every number given out, and none repeats", () => {
+  it("M2's next order number is above every number given out, and none repeats", () => {
     const { w } = inheritedRun();
     expect(w.newOrder.status, JSON.stringify(w.newOrder.body)).toBe(200);
     const number = (w.newOrder.body as { orderNumber: number }).orderNumber;

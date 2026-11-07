@@ -1487,7 +1487,7 @@ export async function refuseOrderOverSimplifiedLimit(
   const [order] = await tx
     .select({ invoiceType: workingOrders.invoiceType })
     .from(workingOrders)
-    .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    .where(eq(workingOrders.id, workingOrderId));
   if (order?.invoiceType === "F1") return;
   const after = await storedOrderTotal(tx, workingOrderId);
   if (before !== null && compareDecimal(after, before) <= 0) return;
@@ -4589,7 +4589,6 @@ export async function refuseUnavailableFullInvoice(
 async function readChoiceChangeableOrder(
   db: Database,
   tx: Transaction,
-  cfg: Pick<TradingContext, "nodeId">,
   orderId: string,
   expectedRevision: number,
 ) {
@@ -4600,7 +4599,7 @@ async function readChoiceChangeableOrder(
       invoiceType: workingOrders.invoiceType,
     })
     .from(workingOrders)
-    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    .where(eq(workingOrders.id, orderId));
   if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
     throw new AppError("working_order.not_open", { workingOrderId: orderId });
   }
@@ -4646,7 +4645,7 @@ export async function setOrderInvoiceChoice(
     throw new AppError("management.request_invalid", { field: "recipient" });
   }
   return withTransaction(db, async (tx) => {
-    const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
+    const order = await readChoiceChangeableOrder(db, tx, orderId, request.revision);
     await requireOrderBillEditor(tx, orderId, request);
     if (order.invoiceType === "F1" && request.invoiceType === "F2") {
       const [paid] = await tx
@@ -4678,7 +4677,7 @@ export async function setOrderInvoiceChoice(
         recipientIdentifierCountryCode: normalizedRecipient?.identifierCountryCode ?? null,
         revision,
       })
-      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+      .where(eq(workingOrders.id, orderId));
     await captureOrderEdit(
       tx,
       attendance,
@@ -4693,14 +4692,13 @@ export async function setOrderInvoiceChoice(
 
 export async function setOrderReceiptLanguage(
   db: Database,
-  cfg: Pick<TradingContext, "nodeId">,
   orderId: string,
   request: OrderEditAuthority & { revision: number; language: unknown },
   attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   const language = requireNullableString(request.language, "language");
   return withTransaction(db, async (tx) => {
-    const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
+    const order = await readChoiceChangeableOrder(db, tx, orderId, request.revision);
     await requireOrderBillEditor(tx, orderId, request);
     if (language !== null && !(await readOfferedReceiptLanguages(tx)).includes(language)) {
       throw new AppError("management.request_invalid", { field: "language" });
@@ -4709,7 +4707,7 @@ export async function setOrderReceiptLanguage(
     await tx
       .update(workingOrders)
       .set({ receiptLocale: language, revision })
-      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+      .where(eq(workingOrders.id, orderId));
     await captureOrderEdit(
       tx,
       attendance,

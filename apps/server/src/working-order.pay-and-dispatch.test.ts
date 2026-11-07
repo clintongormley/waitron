@@ -5,6 +5,7 @@ import {
   recallLines,
   sendLines,
   setLineCourse,
+  setOrderReceiptLanguage,
   updateHeldOrder,
   placeOrder,
 } from "./testing/order-writer-fixture.js";
@@ -1288,6 +1289,39 @@ describe("cross-till end-to-end", () => {
       code: "working_order.not_found",
       params: { workingOrderId: orderId },
     });
+  });
+});
+
+describe("an order another box opened", () => {
+  it("an open order stamped with another box is paid and changed here", async () => {
+    const { cfg: here, cafe, zoneId } = await setupVenue();
+    const otherBox = await addNode(here);
+    const orderId = randomUUID();
+    await parkOrder({ db: suite.db }, otherBox, {
+      id: orderId,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    const [stamped] = await suite.db
+      .select({ nodeId: workingOrders.nodeId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, orderId));
+    expect(stamped!.nodeId).toBe(otherBox.nodeId);
+
+    const revision = await revisionOf(orderId);
+    await expect(
+      setOrderReceiptLanguage(suite.db, orderId, { revision, language: LOCALE }),
+    ).resolves.toBe(revision + 1);
+
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      here,
+      { id: orderId, lines: [], tender: { method: "cash", amount: "2.00" } },
+    );
+    expect(res.total).toBe("1.50");
+    expect(res.tender).toEqual({ method: "cash", change: "0.50" });
+    expect(await orderState(orderId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(orderId)).toBe(1);
   });
 });
 

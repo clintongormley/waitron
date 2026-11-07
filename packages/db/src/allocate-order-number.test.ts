@@ -2,13 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { allocateOrderNumber } from "./allocate-order-number.js";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
+import { workingOrderCounters } from "./schema/working-order-counters.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { seedNode, seedVenue } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 
-// One counter per node. Two nodes give the independence test a real second
-// key — the property the park path depends on is that one register's
-// held-order numbering never disturbs another's.
+// One counter row per node; two nodes give the cross-box cases a real second row.
 let nodeA1 = "";
 let nodeA2 = "";
 
@@ -39,12 +38,38 @@ describe("allocateOrderNumber", () => {
     });
   });
 
-  it("numbers each node independently", async () => {
+  it("numbers never repeat across boxes", async () => {
     const a1 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
     const a2 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
-    // nodeA2's counter is untouched by nodeA1's two allocations: it starts at 1.
     const b1 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA2));
-    expect([a1, a2, b1]).toEqual([1, 2, 1]);
+    const a3 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
+    expect([a1, a2, b1, a3]).toEqual([1, 2, 3, 4]);
+  });
+
+  it("a box's first number follows the highest of any box", async () => {
+    await withTransaction(db, (tx) =>
+      tx.insert(workingOrderCounters).values({ nodeId: nodeA1, nextNumber: 5 }),
+    );
+    const first = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA2));
+    const second = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA2));
+    expect([first, second]).toEqual([6, 7]);
+  });
+
+  it("a box that took back carries on above every number", async () => {
+    await withTransaction(db, (tx) =>
+      tx.insert(workingOrderCounters).values([
+        { nodeId: nodeA1, nextNumber: 5 },
+        { nodeId: nodeA2, nextNumber: 7 },
+      ]),
+    );
+    expect(await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1))).toBe(8);
+    const rows = await db
+      .select({ nodeId: workingOrderCounters.nodeId, nextNumber: workingOrderCounters.nextNumber })
+      .from(workingOrderCounters);
+    expect(Object.fromEntries(rows.map((r) => [r.nodeId, r.nextNumber]))).toEqual({
+      [nodeA1]: 8,
+      [nodeA2]: 7,
+    });
   });
 
   it("returns the allocated number as a JS number, not a string", async () => {

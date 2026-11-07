@@ -104,7 +104,7 @@ function run(
         ...authority,
       });
     case "receipt-language":
-      return setOrderReceiptLanguage(venue.db, venue.cfg, p.id, {
+      return setOrderReceiptLanguage(venue.db, p.id, {
         revision: p.revision,
         language: "es-ES",
         ...authority,

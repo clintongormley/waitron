@@ -135,13 +135,12 @@ export async function setWorkingOrderLabel(
 
 export async function setOrderReceiptLanguage(
   db: Parameters<typeof language>[0],
-  cfg: Parameters<typeof language>[1],
   id: string,
   request: { revision: number; language: unknown },
-  attendance?: Parameters<typeof language>[4],
+  attendance?: Parameters<typeof language>[3],
 ) {
   const observed = await withTransaction(db, (tx) => authority(tx, id, attendance?.personId));
-  return language(db, cfg, id, { ...request, ...observed }, attendance);
+  return language(db, id, { ...request, ...observed }, attendance);
 }
 
 export async function setOrderInvoiceChoice(
