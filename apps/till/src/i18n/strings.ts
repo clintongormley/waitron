@@ -3564,9 +3564,9 @@ export const es: Record<StringKey, string> = {
   "bill_pay.unconfirmed":
     "No se ha podido confirmar este cobro. Comprobar de nuevo continúa ese mismo cobro: si no estaba registrado, puede cobrar la tarjeta o registrar el efectivo.",
   "bill_pay.unconfirmed_elsewhere":
-    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para continuar ese mismo cobro.",
+    "Un pago de esta cuenta no se ha podido confirmar. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para continuar ese mismo pago.",
   "bill_pay.unconfirmed_elsewhere_handheld":
-    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para continuar ese mismo cobro.",
+    "Un pago de esta cuenta no se ha podido confirmar. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para continuar ese mismo pago.",
   "bill_pay.unanswered_title": "Cobro sin confirmar",
   "bill_pay.recheck": "Comprobar de nuevo",
   "bill_pay.sending_title": "Esperando al servidor",
