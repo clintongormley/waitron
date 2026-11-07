@@ -206,7 +206,7 @@ guests leave unpaid; departure stays as it is until then. The worked example is 
 
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 
-Within one dish `ticket.already_started` is checked first, but across a
+Within one dish `ticket.already_started` is checked first (a bare raise of a started dish is not refused as started, A1382), but across a
 save the answer can be `ticket.already_fired` (found by #2044's second Codex review, not called a
 bug). Decide whether "started first" should hold across the whole save
 ([rule](#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
@@ -388,7 +388,8 @@ fired" dropdown (A773) is not adopted.
 ### Changes after sending: every part of a dish decides, and removal is not gated (A756 PR 8, 2026-10-24)
 
 Owner FYIs, built this way; say if any should change. A dish the kitchen has started is refused
-first. Otherwise the dish's own station and the station of each extra routed elsewhere must all
+first. Since A1382 (owner, 2026-11-07), a bare quantity raise of a started dish is not refused as
+started: the extra goes to the kitchen as a new line, and Changes after sending still decides it. Otherwise the dish's own station and the station of each extra routed elsewhere must all
 allow the change. A dish with no kitchen record, on it or on any of its extras, can be recalled whatever the
 stations allow (A773-1 open
 point 4's answer A said so). A "Not allowed" station also refuses changes to a held dish, which the

@@ -2093,7 +2093,8 @@ both saved. A counter order sent with Send did not reach it: once placed, a save
 - A customer or kitchen name changed: "Could not park the order, try again", and "Could not send
   the order, try again" or "Could not complete the sale, try again" from Send or Pay. The basket
   keeps its unsaved changes, the added dish among them, and hides Cancel. Each later save gets the
-  same answer. A1426 replaces this path with a separate action for changing a sent dish.
+  same answer. The owner chose (2026-11-07) to replace this path with a separate action for changing
+  a sent dish (A1426); it is not built.
 - A staff name changed: "An item's choices have changed — open the line and choose again". The line's
   window is read-only on a dish already sent (run on a started dish; the check reads only whether it
   was sent), so nobody can. The box refuses each save `options.label_required`, started or not, and
@@ -2108,7 +2109,7 @@ kitchen-name rename, adding a dish or changing only the other dish or the label,
 ticket.already_started`, the last with the dish `ready`, and the save after cancelling it printed
 `saved`. Controls printed `saved`: no rename, renamed but not
 published, and renamed with nothing started. The till's half ran as a focused test with the refusal
-stubbed, on main and on #2542's 59636ee00e; no real till ran this case.
+stubbed, on main and on #2542, before its rebase; no real till ran this case.
 
 **State of the fix.** None built, and it is not small: it needs a decision on what a started dish's
 saved answer means. A save sends every line's answers again and the box compares them by value with
@@ -2139,7 +2140,7 @@ that changes a line's version ("The person changed nothing and cannot undo it").
 repeats the same sentence forever. The only way out I found is Park, which swallows the
 `working_order.not_open` refusal ... and silently drops the change".
 
-**Receipt.** A focused till test with stubbed answers on #2542's 59636ee00e printed the sentences and
+**Receipt.** A focused till test with stubbed answers on #2542 before its rebase, printed the sentences and
 the three results above. The `×` and menu-refresh paths are the review's own, not run here. A throwaway
 server test on main 59be31e3b7 printed `refused working_order.not_open` for a save of a placed order.
 Taking an added dish back off also went through on the demo stack, in A1382's live run.
@@ -2149,16 +2150,17 @@ the answer is unknown, so no change can be made, and add no sentence.
 
 ## A till request refused for naming someone not signed in locks the screen with no sentence
 
-Left open by A1382. On main an order save does this; #2534, if it lands, adds take-over, recall and
-split. The owner chooses words on the lock screen or a recorded exception (question in Lane C's
-`questions.md`, 7 November).
+Left open by A1382. On main an order save does this; #2534's rework puts one check on every request
+that needs a signed-in person, so any of them can. The owner chose the words on 2026-11-07: "You have
+been logged out because somebody else has logged in on this device." They go in after #2534's
+rework, which shares the path; the Spanish is not yet written.
 
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
 Left open by A1382, which changed only `device.forbidden_action`. By code:
 
 - `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `department_transfer.desk_unavailable`,
-  `device_profile.no_service_zone`, `series.no_rectificative_for_node`,
+  `series.no_rectificative_for_node`,
   `fiscal.taxpayer_domicile_missing`, `invoice_delivery.receipt_invalid`,
   `invoice_delivery.printer_invalid`, `invoice_delivery.receipt_unavailable`,
   `invoice_delivery.email_unavailable`, `sale.correction_unsupported`, `reader.not_found`,

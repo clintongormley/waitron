@@ -891,7 +891,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a1417-after-a-lost-counter-send-reply-a-basket-changed-since-cannot-be-sent-and-the-till-says-only-try-again)
 
 - **A till request refused for naming someone not signed in locks the screen with no sentence (left
-  open by A1382).** The owner chooses words on the lock screen or a recorded exception.
+  open by A1382).** The owner has chosen the words; they go in after #2534's rework.
   [Detail](backlog/till.md#a-till-request-refused-for-naming-someone-not-signed-in-locks-the-screen-with-no-sentence)
 
 - **Other till sentences still send the person to somebody else, against the refusal rule (left open

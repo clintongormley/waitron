@@ -2064,8 +2064,8 @@ Left open by A798-B slice 6 (#1977), from design §4.6 item 2. Since slice 3, on
 save has failed for a full disk, or the box started with less than 16 MiB free, every till write
 except the open ones answers `507 storage.disk_full` until the venue folder has 16 MiB free
 ([conventions-data.md](../developers/conventions-data.md#a-full-disk-stops-the-tills-writes)). The
-draft save's refusals and the unpaid departure already say "Not saved: the box is out of disk
-space…" (measured 2026-10-22, slice 6's plan), and since slice 6 the station screen does too, on a
+draft save's refusals and the unpaid departure already say "Not saved: the server is out of
+disk space…" (the paths measured 2026-10-22, slice 6's plan; the words since A1382), and since slice 6 the station screen does too, on a
 kitchen display and on a till's Station tab. The rest were not checked: audit the catch sites in
 `apps/till/src` that do not fall back to `codeMessage(code)`. The pass screens on a kitchen display,
 which has no strip, were not checked either.
