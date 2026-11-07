@@ -1554,10 +1554,22 @@ Three things that came out of those commands and are easy to get wrong:
   on that decision.
 
 The script fails rather than guessing. A transient registry error is repaired by the next merge, but
-two states are NOT self-repairing: a `:main` carrying no build id, and one built from a commit this
-repository's history does not contain (an image built outside CI, or a rewritten history). Both
-wedge every later publish identically until `:main` is deleted or retagged by hand. Its suite,
-`scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
+two states are NOT self-repairing: a `:main` carrying no build id, and one built from a commit
+GitHub's comparison cannot place against the commit being published. Both wedge every later publish
+until `:main` is deleted or retagged by hand. While the guard fails, nothing is published, the
+commit's `sha-` tag included: the guard runs inside the step "Work out the tags to publish", and the
+steps after it carry no `if:`. That last part was read from `.github/workflows/ci.yml`, not run.
+
+A rewritten history does not always reach that second state. A commit that no branch or tag holds
+but which shares history with `main` compares as `diverged`, and the guard answers `move`; two
+commits with no history in common fail it. First checked on 6 November 2026; on 7 November
+`gh api repos/clintongormley/waitron/compare/main...f8b36a6086 --jq .status` printed `diverged`
+(`f8b36a6086` is #2442's head before its rebase), and
+`gh api repos/clintongormley/ha-fado/compare/v0.0.2...main --jq .status` answered HTTP 404, "No
+common ancestor between v0.0.2 and main." So a rewrite stops publishing only when it leaves the old
+and new `:main` commits with no commit in common.
+
+Its suite, `scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
 
 ### Compare database files as bytes
 
