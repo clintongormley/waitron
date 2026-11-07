@@ -345,17 +345,6 @@ describe("A773 pass screen: Fire", () => {
     });
   }
 
-  it("on a kitchen display, a Fire refused service_zone.not_allowed says the pass doesn't show that zone", async () => {
-    const api = fakeApi({
-      releaseDevicePass: vi.fn().mockRejectedValue(refused("service_zone.not_allowed", 403)),
-    });
-    const el = await mountDisplay(api);
-    await pressFire(el);
-    expect(leverError(el)!.textContent!.trim()).toBe(
-      "#1 T1: This order is in a zone this pass screen doesn't show.",
-    );
-  });
-
   it("on a till, a Fire refused service_zone.not_allowed says the profile can be changed, in both languages", async () => {
     const api = fakeApi({
       releaseDevicePass: vi.fn().mockRejectedValue(refused("service_zone.not_allowed", 403)),

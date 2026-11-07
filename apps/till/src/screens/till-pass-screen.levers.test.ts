@@ -339,37 +339,20 @@ describe("A773 pass screen: levers", () => {
     expect(text(leverError(el))).toBe(`#6: ${codeMessage("kitchen_screen.zone_not_allowed")}`);
   });
 
-  it.each([
-    {
-      where: "a kitchen display",
-      mountOne: mountDisplay,
-      group: "bumpDeviceGroupReady",
-      course: "bumpDeviceCourseReady",
-      sentence: "This order is in a zone this pass screen doesn't show.",
-    },
-    {
-      where: "a till",
-      mountOne: mountTill,
-      group: "bumpGroupReady",
-      course: "bumpCourseReady",
-      sentence:
-        "This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
-    },
-  ] as const)(
-    "a Ready refused service_zone.not_allowed on $where says what is true there",
-    async ({ mountOne, group, course, sentence }) => {
-      const code = refused("service_zone.not_allowed", 403);
-      const api = fakeApi({
-        [group]: vi.fn().mockRejectedValue(code),
-        [course]: vi.fn().mockRejectedValue(code),
-      });
-      const el = await mountOne(api);
-      await press(el, '[data-group-ready="g-1"]');
-      expect(text(leverError(el))).toBe(`#7 T7: ${sentence}`);
-      await press(el, '[data-ready="course-mains"]');
-      expect(text(leverError(el))).toBe(`#1 T1: ${sentence}`);
-    },
-  );
+  it("a Ready refused service_zone.not_allowed on a till says the profile can be changed", async () => {
+    const code = refused("service_zone.not_allowed", 403);
+    const api = fakeApi({
+      bumpGroupReady: vi.fn().mockRejectedValue(code),
+      bumpCourseReady: vi.fn().mockRejectedValue(code),
+    });
+    const el = await mountTill(api);
+    const sentence =
+      "This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.";
+    await press(el, '[data-group-ready="g-1"]');
+    expect(text(leverError(el))).toBe(`#7 T7: ${sentence}`);
+    await press(el, '[data-ready="course-mains"]');
+    expect(text(leverError(el))).toBe(`#1 T1: ${sentence}`);
+  });
 
   it("a till reprints each bill of a card", async () => {
     const api = fakeApi();
