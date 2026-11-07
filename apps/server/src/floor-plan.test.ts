@@ -1292,7 +1292,8 @@ describe("short names", () => {
   // database, and no label here starts with "#", so no proposed short name can either.
   let shortCount = 0;
   const short = () => `#${(shortCount++).toString(36).padStart(4, "0")}`;
-  const digits = () => String(1000 + Math.floor(Math.random() * 9000));
+  let nextDigits = 1000;
+  const digits = () => String(nextDigits++);
 
   function entry(key: string, label: string, extra: Partial<SaveEntry> = {}): SaveEntry {
     return { key, label, seats: 4, fixed: false, placement: PLACE, partKeys: [], ...extra };
