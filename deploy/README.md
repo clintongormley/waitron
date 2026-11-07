@@ -633,10 +633,10 @@ command against it treat that entrypoint differently:
 
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
-  before it changes the venue folder, the box's identity or its secrets. A restore's earlier steps
-  run in temporary folders under the state folder, and the bucket and archive forms download the
-  whole copy or archive there first, then are refused only when they come to place it — so stop
-  the server before any form. A run that downloads from the bucket, or checks a backup's bucket,
+  before it downloads, decrypts or changes anything. A restore holds the venue folder from then
+  until it ends, so the server cannot start while one runs. On a box with no venue folder yet, a
+  restore makes an empty one first, holding only its lock file `venue.lock`, and leaves it there
+  even when it is then refused. A run that downloads from the bucket, or checks a backup's bucket,
   makes its own folder (`stream-restore-`, `archive-source-check-` or, inside `restore-staging`,
   `archive-download-`, each followed by six random characters) and removes it when it ends; a run
   that is killed leaves it, holding a full copy of the venue's database or the encrypted archive,

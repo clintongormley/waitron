@@ -3,8 +3,8 @@ import {
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "@waitron/provisioning";
-import { lockVenueDatabase } from "@waitron/db";
-import { open, readFile } from "node:fs/promises";
+import { lockVenueDatabase, type VenueLock } from "@waitron/db";
+import { mkdir, open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   looksLikePdf,
@@ -66,6 +66,14 @@ interface CommandDeps {
   /** How long the `--from-archive` download may take. Default {@link DEFAULT_DESTINATION_TIMEOUT_MS}. */
   archiveTimeoutMs?: number;
   withModuleOperations?: RestoreOperationRunner;
+  /** Holds the venue folder from resolving the target to exit. Default {@link lockRestoreVenue}. */
+  lockVenue?: (venueDir: string) => Promise<VenueLock>;
+}
+
+/** The lock makes the folder on a fresh box, so it is made here first, for the operator alone. */
+async function lockRestoreVenue(venueDir: string): Promise<VenueLock> {
+  await mkdir(venueDir, { recursive: true, mode: 0o700 });
+  return lockVenueDatabase(venueDir);
 }
 
 const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
@@ -133,23 +141,28 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
     return 1;
   }
 
-  const target = await resolveRestoreTarget(deps);
-  if (typeof target === "number") return target;
-  deps.out(COLD_RESTORE_NOTICE);
-  const restored = await restoreArtifact(
-    deps,
-    target,
-    artifactPath,
-    recoveryKey,
-    oldBoxGone,
-    soleRecovery,
-    {
-      keyDoesNotOpen: "restore failed: wrong recovery key or corrupt artifact",
-    },
-  );
-  if (!restored) return 1;
-  deps.out(`restored ${artifactPath}`);
-  return 0;
+  const resolved = await resolveRestoreTarget(deps);
+  if (typeof resolved === "number") return resolved;
+  const { target, hold } = resolved;
+  try {
+    deps.out(COLD_RESTORE_NOTICE);
+    const restored = await restoreArtifact(
+      deps,
+      target,
+      artifactPath,
+      recoveryKey,
+      oldBoxGone,
+      soleRecovery,
+      {
+        keyDoesNotOpen: "restore failed: wrong recovery key or corrupt artifact",
+      },
+    );
+    if (!restored) return 1;
+    deps.out(`restored ${artifactPath}`);
+    return 0;
+  } finally {
+    hold.release();
+  }
 }
 
 const COLD_RESTORE_NOTICE =
@@ -284,7 +297,9 @@ type RestoreTarget = Pick<
  * `modules` is every module, never an enabled subset: a restore hook must run for every module
  * whose tables are in the backup.
  */
-async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | number> {
+async function resolveRestoreTarget(
+  deps: CommandDeps,
+): Promise<{ target: RestoreTarget; hold: VenueLock } | number> {
   let environment: DeploymentEnvironment;
   let withModuleOperations = deps.withModuleOperations;
   try {
@@ -318,7 +333,14 @@ async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | 
     deps.out(error instanceof AppError ? `restore failed: ${error.code}` : "restore failed");
     return 1;
   }
-  return {
+  let hold: VenueLock;
+  try {
+    hold = await (deps.lockVenue ?? lockRestoreVenue)(venueDir);
+  } catch (error) {
+    deps.out(sharedRefusal(error));
+    return 1;
+  }
+  const target: RestoreTarget = {
     stateDir,
     // Unset or EMPTY takes `<stateDir>/venue`, never `resolve("")` — which is the working directory.
     venueDir,
@@ -332,6 +354,7 @@ async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | 
       () => new Date(),
     ),
   };
+  return { target, hold };
 }
 
 async function archiveRecoveryRunner(
@@ -480,45 +503,50 @@ async function runBucketRestore(
     );
     return 1;
   }
-  const target = await resolveRestoreTarget(deps);
-  if (typeof target === "number") return target;
-  deps.out(
-    "cold restore from the bucket: use only when the old server is gone — two servers selling from one database cannot be reconciled",
-  );
+  const resolved = await resolveRestoreTarget(deps);
+  if (typeof resolved === "number") return resolved;
+  const { target, hold } = resolved;
   try {
-    await (deps.restoreStream ?? restoreFromStream)({
-      ...target,
-      kit,
-      oldBoxGone,
-      litestreamBin: resolveLitestreamBin(deps.env),
-      openStore: boundedOpener(deps),
-      now: clock,
-      ...(soleRecovery
-        ? {
-            prepareModuleOperations: async (copy: ValidatedArtifact, sourceId: string) =>
-              selectedRecoveryRunner(
-                deps,
-                target,
-                copy,
-                await readRecoveryOperationFile(deps.env.WAITRON_RECOVERY_OPERATION_FILE ?? ""),
-                oldBoxGone,
-                sourceId,
-              ),
-          }
-        : {}),
-      confirmVenue: (venue) => {
-        deps.out(
-          `the copy in the bucket is: ${venue.legalName}, tax id ${venue.taxId}, venue ${venue.venueName}`,
-        );
-        return confirmsVenue(venue, confirmedTaxId);
-      },
-    });
-  } catch (err) {
-    deps.out((err instanceof AppError && bucketRefusal(err)) || sharedRefusal(err));
-    return 1;
+    deps.out(
+      "cold restore from the bucket: use only when the old server is gone — two servers selling from one database cannot be reconciled",
+    );
+    try {
+      await (deps.restoreStream ?? restoreFromStream)({
+        ...target,
+        kit,
+        oldBoxGone,
+        litestreamBin: resolveLitestreamBin(deps.env),
+        openStore: boundedOpener(deps),
+        now: clock,
+        ...(soleRecovery
+          ? {
+              prepareModuleOperations: async (copy: ValidatedArtifact, sourceId: string) =>
+                selectedRecoveryRunner(
+                  deps,
+                  target,
+                  copy,
+                  await readRecoveryOperationFile(deps.env.WAITRON_RECOVERY_OPERATION_FILE ?? ""),
+                  oldBoxGone,
+                  sourceId,
+                ),
+            }
+          : {}),
+        confirmVenue: (venue) => {
+          deps.out(
+            `the copy in the bucket is: ${venue.legalName}, tax id ${venue.taxId}, venue ${venue.venueName}`,
+          );
+          return confirmsVenue(venue, confirmedTaxId);
+        },
+      });
+    } catch (err) {
+      deps.out((err instanceof AppError && bucketRefusal(err)) || sharedRefusal(err));
+      return 1;
+    }
+    deps.out(`restored from the bucket named in ${kitPath}`);
+    return 0;
+  } finally {
+    hold.release();
   }
-  deps.out(`restored from the bucket named in ${kitPath}`);
-  return 0;
 }
 
 type Source = { text: string } | { refused: string };
@@ -611,38 +639,43 @@ async function runPackRestore(
     );
     return 1;
   }
-  const target = await resolveRestoreTarget(deps);
-  if (typeof target === "number") return target;
-  deps.out(COLD_RESTORE_NOTICE);
-  let downloaded: DownloadedArchive;
+  const resolved = await resolveRestoreTarget(deps);
+  if (typeof resolved === "number") return resolved;
+  const { target, hold } = resolved;
   try {
-    downloaded = await downloadArchive({
-      pack,
-      key: archiveKey,
-      stagingDir: target.stagingDir,
-      signal: AbortSignal.timeout(deps.archiveTimeoutMs ?? DEFAULT_DESTINATION_TIMEOUT_MS),
-      openFiles: deps.openArchiveFiles,
-    });
-  } catch (err) {
-    deps.out((err instanceof AppError && packRefusal(err)) || sharedRefusal(err));
-    return 1;
-  }
-  let restored: boolean;
-  try {
-    restored = await restoreArtifact(
-      deps,
-      target,
-      downloaded.path,
-      pack.recoveryKey,
-      oldBoxGone,
-      soleRecovery,
-      {
-        keyDoesNotOpen: PACK_KEY_DOES_NOT_OPEN,
-      },
-    );
-    if (restored) deps.out(`restored archive ${archiveKey} from the bucket named in ${packPath}`);
+    deps.out(COLD_RESTORE_NOTICE);
+    let downloaded: DownloadedArchive;
+    try {
+      downloaded = await downloadArchive({
+        pack,
+        key: archiveKey,
+        stagingDir: target.stagingDir,
+        signal: AbortSignal.timeout(deps.archiveTimeoutMs ?? DEFAULT_DESTINATION_TIMEOUT_MS),
+        openFiles: deps.openArchiveFiles,
+      });
+    } catch (err) {
+      deps.out((err instanceof AppError && packRefusal(err)) || sharedRefusal(err));
+      return 1;
+    }
+    let restored: boolean;
+    try {
+      restored = await restoreArtifact(
+        deps,
+        target,
+        downloaded.path,
+        pack.recoveryKey,
+        oldBoxGone,
+        soleRecovery,
+        {
+          keyDoesNotOpen: PACK_KEY_DOES_NOT_OPEN,
+        },
+      );
+      if (restored) deps.out(`restored archive ${archiveKey} from the bucket named in ${packPath}`);
+    } finally {
+      await downloaded.dispose().catch(() => deps.out(DOWNLOAD_LEFT_BEHIND));
+    }
+    return restored ? 0 : 1;
   } finally {
-    await downloaded.dispose().catch(() => deps.out(DOWNLOAD_LEFT_BEHIND));
+    hold.release();
   }
-  return restored ? 0 : 1;
 }

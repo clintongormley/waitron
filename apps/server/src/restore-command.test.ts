@@ -1,5 +1,6 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
-import { cp, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -16,7 +17,10 @@ import {
   withDigest,
 } from "../test/recovery-pack-pdf.js";
 import { describe, expect, it, vi } from "vitest";
+import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
+import { archiveNamespace } from "./archive-settings.js";
 import { encryptArtifact } from "./artifact-cipher.js";
+import { backupArchiveKey } from "./backup-keys.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
@@ -1130,4 +1134,201 @@ describe("waitron-restore restore --from-bucket <recovery pack PDF>", () => {
     expect(received).toBeUndefined();
     expect({ code, out }).toEqual({ code: 1, out: [PACK_DAMAGED] });
   });
+});
+
+describe("waitron-restore restore, the venue folder", () => {
+  const IN_USE =
+    "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
+
+  function heldElsewhere(seen: string[]): (venueDir: string) => Promise<never> {
+    return async (venueDir) => {
+      seen.push(venueDir);
+      throw new AppError("provisioning.database_in_use", { database: venueDir });
+    };
+  }
+
+  async function archivePackFile(dir: string): Promise<string> {
+    const packPath = join(dir, "pack.txt");
+    await writeFile(
+      packPath,
+      encodeArchiveRecoveryPack({
+        version: 1,
+        format: "WBK1",
+        venueId: "venue-1",
+        bucket: {
+          region: "eu-west-1",
+          bucket: "owner-bucket",
+          prefix: "waitron",
+          accessKeyId: "AKIDEXAMPLE",
+          secretAccessKey: "synthetic-secret",
+        },
+        archivePrefix: archiveNamespace("waitron", "venue-1"),
+        recoveryKey: "synthetic-backup-key",
+      }),
+    );
+    return packPath;
+  }
+
+  it("refuses at once while another program holds the venue folder, before reading the bucket", async () => {
+    const { dir, kitPath } = await kitFile();
+    const out: string[] = [];
+    const seen: string[] = [];
+    const restoreStream = vi.fn(async () => {});
+    const code = await runRestore({
+      argv: ["restore", "--from-bucket", kitPath, "--confirm-venue", VENUE.taxId],
+      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
+      out: (line) => out.push(line),
+      lockVenue: heldElsewhere(seen),
+      restoreStream,
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([IN_USE]);
+    expect(seen).toEqual([join(resolve(dir), "venue")]);
+    expect(restoreStream).not.toHaveBeenCalled();
+  });
+
+  it("refuses an archive file at once while another program holds the venue folder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-held-artifact-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const restore = vi.fn(async () => {});
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY, WAITRON_STATE_DIR: dir },
+      out: (line) => out.push(line),
+      lockVenue: heldElsewhere([]),
+      restore,
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([IN_USE]);
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it("refuses --from-archive at once while another program holds the venue folder, before downloading", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "restore-command-held-archive-"));
+    const packPath = await archivePackFile(dir);
+    const out: string[] = [];
+    const openArchiveFiles = vi.fn();
+    const code = await runRestore({
+      argv: ["restore", "--from-archive", packPath, "--archive-key", "any"],
+      env: { WAITRON_STATE_DIR: dir },
+      out: (line) => out.push(line),
+      lockVenue: heldElsewhere([]),
+      openArchiveFiles,
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([IN_USE]);
+    expect(openArchiveFiles).not.toHaveBeenCalled();
+  });
+
+  it.each(["bucket", "artifact", "archive"] as const)(
+    "holds the venue folder until it exits (%s form)",
+    async (form) => {
+      const dir = await mkdtemp(join(tmpdir(), `restore-command-hold-${form}-`));
+      const release = vi.fn();
+      const lockVenue = vi.fn(async () => ({ release }));
+      const heldDuringRestore = async (): Promise<void> => {
+        expect(lockVenue).toHaveBeenCalledTimes(1);
+        expect(release).not.toHaveBeenCalled();
+      };
+      let argv: string[];
+      const extra: Partial<Parameters<typeof runRestore>[0]> = {};
+      if (form === "bucket") {
+        argv = ["restore", "--from-bucket", (await kitFile()).kitPath];
+        extra.restoreStream = heldDuringRestore;
+      } else if (form === "artifact") {
+        argv = ["restore", await makeArtifact(dir)];
+        extra.restore = heldDuringRestore;
+      } else {
+        const key = backupArchiveKey(new Date("2026-10-01T03:00:00Z"));
+        argv = ["restore", "--from-archive", await archivePackFile(dir), "--archive-key", key];
+        const unused = async (): Promise<never> => {
+          throw new Error("unexpected file-store operation");
+        };
+        extra.restore = heldDuringRestore;
+        extra.openArchiveFiles = () => ({
+          putFile: unused,
+          putBytes: unused,
+          readStream: unused,
+          deleteMany: unused,
+          list: async () => [{ key, size: 1, lastModified: new Date() }],
+          getFile: async (_key, path) => {
+            await heldDuringRestore();
+            await writeFile(path, "x");
+          },
+          close() {},
+        });
+      }
+      const out: string[] = [];
+      const code = await runRestore({
+        argv,
+        env: {
+          WAITRON_ENV: "preproduction",
+          WAITRON_STATE_DIR: dir,
+          WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+        },
+        out: (line) => out.push(line),
+        lockVenue,
+        ...extra,
+      });
+      expect(code, out.join("\n")).toBe(0);
+      expect(lockVenue).toHaveBeenCalledWith(join(resolve(dir), "venue"));
+      expect(release).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("lets go of the venue folder when the restore fails", async () => {
+    const { dir, kitPath } = await kitFile();
+    const release = vi.fn();
+    const code = await runRestore({
+      argv: ["restore", "--from-bucket", kitPath],
+      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
+      out: () => {},
+      lockVenue: async () => ({ release }),
+      restoreStream: async () => {
+        throw new AppError("restore.stream_pointer_missing", {});
+      },
+    });
+    expect(code).toBe(1);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("is refused by a real second process holding the folder, leaving no working folder", async () => {
+    const { dir, kitPath } = await kitFile();
+    const stateDir = join(dir, "state");
+    const venueDir = join(stateDir, "venue");
+    await mkdir(venueDir, { recursive: true });
+    const script = `import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync(process.argv[1]);
+db.exec("begin immediate");
+process.stdout.write("held");
+setInterval(() => db, 1000);`;
+    const holder = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", script, join(venueDir, "venue.lock")],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    try {
+      await new Promise<void>((done, fail) => {
+        holder.stdout.on("data", (c: Buffer) => c.toString().includes("held") && done());
+        holder.on("exit", (exit) => fail(new Error(`holder exited early (${exit})`)));
+      });
+      const out: string[] = [];
+      const openStore = vi.fn();
+      const code = await runRestore({
+        argv: ["restore", "--from-bucket", kitPath],
+        env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: stateDir },
+        out: (line) => out.push(line),
+        openStore,
+      });
+      expect(code).toBe(1);
+      expect(out).toEqual([IN_USE]);
+      expect(openStore).not.toHaveBeenCalled();
+      expect(
+        (await readdir(stateDir)).filter((name) => name.startsWith("stream-restore-")),
+      ).toEqual([]);
+    } finally {
+      holder.kill("SIGKILL");
+    }
+  }, 20_000);
 });
