@@ -145,7 +145,11 @@ rewritten, and carries a dated pointer here.
 >    with no second clock explains the wait and checks again by itself" and "Compare clocks with
 >    clocks that differ explains the refusal, not a failure";
 >    `packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "a preview refused for %s on
->    load shows the readings with no failure and no explanation".
+>    load shows the readings with no failure and no explanation". (A1385, 7 November 2026: no
+>    second clock no longer starts the re-check; the first case is now "Compare clocks with no
+>    second clock explains the wait and leaves the next check to the person". The setup page also shows the box's
+>    recorded wait without a press and asks for Make the series at zero (`first-hour.browser.test.ts`,
+>    "a reload during the box's wait says to press Make the series at zero").)
 > 5. **The setup and restore pages' refusal for a later minute in use** (`minute_not_later`), which
 >    §6.5 words only for the switch dialog: «Todavía no se pueden crear las series: ya se usó un
 >    minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.» / "The series

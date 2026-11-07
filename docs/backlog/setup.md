@@ -732,7 +732,8 @@ that operation's reader. Do not remove exact-content checks to make a large file
 - **A page's own re-check never makes a series** (A1385, 2026-11-06): only a press of Make the
   series on this page load, not cancelled since (Compare clocks, Check again, an edit or Clear cancel
   it), lets the page check with the box by itself; a wait the page shows without a press ends with no
-  request.
+  request. Built as the plan's default; it narrows the owner's 2026-10-30 decision (A1207) and is
+  pending the owner (A1385 PR).
 - **A reload between the deletion and Reconnect forgets which button was pressed (A1131bc slice 3,
   plan OQ2's default).** The page keeps the choice in memory only, so after a reload it opens its
   first screen, and the person chooses **Join or recover** there to restore.

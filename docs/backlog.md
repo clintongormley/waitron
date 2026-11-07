@@ -107,7 +107,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1382. Till refusals that say the wrong thing or nothing useful](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
 - [A1383. Tests for four guards a review deleted with nothing failing](backlog/fiscal.md#bundle-a1383-tests-for-four-guards-a-review-deleted-with-nothing-failing)
 - [A1384. Words on setup's refusals](backlog/setup.md#bundle-a1384-words-on-setups-refusals)
-- [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name): only A1223's new attempt by itself is left, and it waits for the owner's answer to Q1 in the A1385 PR.
 - [A1386. Blank or misleading Floor pages](backlog/till.md#bundle-a1386-blank-or-misleading-floor-pages)
 - [A1387. Till sentences during the clock stop, with money in hand](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
 - [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
