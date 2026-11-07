@@ -1048,7 +1048,7 @@ describe("a profile's starting screen and shared-display actions", () => {
 });
 
 describe("what can refuse a write to device_profiles", () => {
-  // Migrates core and identity only: a key from another module's set is not seen.
+  // Migrates core's set only: a key from another set (payments' card-reader keys) is not seen.
   it("has no key out of device_profiles and ONE key into it that can refuse", async () => {
     const { rows } = await suite.db.execute<{
       child: string;
@@ -1061,6 +1061,12 @@ describe("what can refuse a write to device_profiles", () => {
       where m.type = 'table' and (f."table" = 'device_profiles' or m.name = 'device_profiles')
       order by child, column`);
     expect(rows).toEqual([
+      {
+        child: "department_transfer_desks",
+        column: "receiving_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
       {
         child: "device_approved_profiles",
         column: "device_profile_id",
@@ -1080,7 +1086,25 @@ describe("what can refuse a write to device_profiles", () => {
         on_delete: "CASCADE",
       },
       {
+        child: "device_profile_kitchen_screens",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
+      {
         child: "device_profile_printers",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
+      {
+        child: "device_profile_service_access",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
+      {
+        child: "device_zone_selections",
         column: "device_profile_id",
         parent: "device_profiles",
         on_delete: "CASCADE",
