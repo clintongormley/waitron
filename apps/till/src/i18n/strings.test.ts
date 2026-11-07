@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fill } from "./t.js";
 import { catalogues, en, es } from "./strings.js";
 
 /**
@@ -311,4 +312,21 @@ describe("the “Check the time” button", () => {
       expect(es[key]).toContain(`«${es["staff_notice.check_time"]}»`);
     },
   );
+});
+
+describe("the no-prep-station refusal that names its dishes", () => {
+  it.each([
+    [
+      "en-GB",
+      "No prep station can make Navajas, Almejas. Fix this in the dashboard, on the Prep stations page.",
+    ],
+    [
+      "es-ES",
+      "Ninguna estación de preparación puede preparar Navajas, Almejas. Corrígelo en el panel, en la página Estaciones de preparación.",
+    ],
+  ])("names the dishes in %s", (locale, message) => {
+    expect(
+      fill(catalogues[locale]!["station.no_default_named"]!, { dishes: "Navajas, Almejas" }),
+    ).toBe(message);
+  });
 });

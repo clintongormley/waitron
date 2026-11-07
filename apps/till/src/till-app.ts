@@ -688,7 +688,6 @@ const TABLE_REFUSALS = new Set([
   "bill.presented",
   "bill.paid",
   "bill.other_party",
-  "bill.payments_received",
   "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
@@ -815,6 +814,14 @@ function tableWriteError(error: unknown): CounterError {
   if (code === undefined || !TABLE_REFUSALS.has(code)) return "table.error";
   return code === "table.needs_moving" && typeof refused!.tableId === "string"
     ? { code, tableId: refused!.tableId }
+    : withDishes(code, error);
+}
+
+/** A `station.no_default` refusal keeps the dishes it names, for the sentence that names them. */
+function withDishes(code: string, error: unknown): { code: string; dishes?: string } {
+  const dishes = (error as { dishes?: unknown } | undefined)?.dishes;
+  return code === "station.no_default" && typeof dishes === "string" && dishes !== ""
+    ? { code, dishes }
     : { code };
 }
 
@@ -1065,7 +1072,7 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
   const code = (error as { code?: string } | undefined)?.code;
-  return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
+  return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? withDishes(code, error) : fallback;
 }
 
 function discardError(error: unknown): CounterError {
@@ -1483,6 +1490,7 @@ type CounterError =
       bill?: string;
       recoveryUrl?: string;
       manualCard?: true;
+      dishes?: string;
     }
   | { billPayments: string }
   | { replacedGroups: string }
@@ -1581,10 +1589,13 @@ function errorText(
       if (table !== undefined)
         return tableSentence(table, "floor.needs_moving_first", "floor.needs_moving_first_named");
     }
+    const message =
+      error.dishes === undefined
+        ? codeMessage(error.code)
+        : fill(t("station.no_default_named"), { dishes: error.dishes });
     const bill = error.bill;
-    if (bill !== undefined)
-      return fill(t("table.refused_on_bill"), { bill, message: codeMessage(error.code) });
-    return codeMessage(error.code);
+    if (bill !== undefined) return fill(t("table.refused_on_bill"), { bill, message });
+    return message;
   }
   if ("billNameTakenOver" in error)
     return named(
@@ -16817,7 +16828,10 @@ export class TillApp extends LitElement {
       });
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
-      await this.#onBillPairRefusal(error);
+      if (isPaymentsReceived(error)) {
+        this.errorKey = { code: "bill.payments_received" };
+        await this.#loadPartyBills();
+      } else await this.#onBillPairRefusal(error);
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }

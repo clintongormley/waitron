@@ -17,7 +17,7 @@ import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import { sentFallbackFor } from "./screens/till-table-order-screen.sent.test-helpers.js";
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { formatMoney } from "@waitron/shared";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -1236,6 +1236,32 @@ describe("till-app table ordering: refused and failed table actions", () => {
     expect(banner(el)!.textContent).not.toContain(t("table.error"));
   });
 
+  it.each([
+    ["send-lines", "sendLines"],
+    ["submit-draft", "submitDraft"],
+  ] as const)(
+    "a %s refused because no station can make two dishes names them",
+    async (type, method) => {
+      const { el } = await mountApp({
+        ...seatedFloor(),
+        [method]: vi.fn().mockRejectedValue({
+          code: "station.no_default",
+          status: 409,
+          dishes: "Navajas, Almejas",
+        }),
+      });
+      const screen = await toTableOrder(el);
+
+      emit(screen, type, type === "submit-draft" ? await ringCoffee(el, screen) : { lineNos: [1] });
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(
+        fill(t("station.no_default_named"), { dishes: "Navajas, Almejas" }),
+      );
+      expect(banner(el)!.textContent).not.toContain(codeMessage("station.no_default"));
+    },
+  );
+
   it("a cancel refused because a card payment of the order is running says so", async () => {
     const { el } = await mountApp({
       ...seatedFloor(),
@@ -1417,6 +1443,21 @@ describe("till-app table ordering: refused and failed table actions", () => {
       expect(banner(el)!.textContent).toContain(codeMessage("bill.line_paid"));
     },
   );
+
+  it("a move of dishes refused because a bill has taken payments does not say the merge sentence", async () => {
+    const { el } = await mountApp({
+      ...seatedFloor(),
+      moveDishes: vi.fn().mockRejectedValue({ code: "bill.payments_received", status: 409 }),
+    });
+    const screen = await toTableOrder(el);
+
+    emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" });
+    await flush(el);
+
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(t("table.error"));
+    expect(text).not.toContain(codeMessage("bill.payments_received"));
+  });
 
   it("a move to a new bill refused for any other reason shows table.error and keeps paying the original tab", async () => {
     const { el } = await mountApp({

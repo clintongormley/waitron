@@ -364,8 +364,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido sin enviar ya no está en esta mesa. Vuelve a cargar la mesa e inténtalo de nuevo",
   },
   "bill.payments_received": {
-    en: "A bill that has taken payments cannot be merged with another. Take the rest from the bill's payments",
-    es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra. Cobra el resto desde los pagos de la cuenta",
+    en: "A bill that has taken payments cannot be merged with another.",
+    es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra.",
   },
   "working_order.not_placed": {
     en: "This bill is no longer waiting for payment",
@@ -572,8 +572,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
   },
   "station.no_default": {
-    en: "No station can make one of these dishes. A station can be made the default in the dashboard, under Prep stations",
-    es: "Ninguna estación puede preparar uno de estos platos. Se puede hacer predeterminada una estación en el panel, en Estaciones de preparación",
+    en: "No prep station can make one of these dishes. Fix this in the dashboard, on the Prep stations page.",
+    es: "Ninguna estación de preparación puede preparar uno de estos platos. Corrígelo en el panel, en la página Estaciones de preparación.",
   },
   "ticket.already_started": {
     en: "The kitchen has already started this item, so it can no longer be changed. You can cancel it",

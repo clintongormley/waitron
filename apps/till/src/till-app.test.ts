@@ -38,7 +38,7 @@ import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 import { nextFloorMoment } from "./state/floor-today.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -6604,6 +6604,26 @@ describe("till-app", () => {
 
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
       codeMessage("station.no_default"),
+    );
+  });
+
+  it("place-order refused station.no_default naming its dishes says which dishes no station can make", async () => {
+    const { el } = await mountApp({
+      placeOrder: vi.fn().mockRejectedValue({
+        code: "station.no_default",
+        status: 409,
+        dishes: "Navajas, Almejas",
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "place-order", {});
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      fill(t("station.no_default_named"), { dishes: "Navajas, Almejas" }),
     );
   });
 

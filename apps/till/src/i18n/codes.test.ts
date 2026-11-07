@@ -209,10 +209,10 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     expect(codeMessage(code, "en")).not.toContain(code);
   }
   expect(codeMessage("bill.payments_received", "en")).toBe(
-    "A bill that has taken payments cannot be merged with another. Take the rest from the bill's payments",
+    "A bill that has taken payments cannot be merged with another.",
   );
   expect(codeMessage("bill.payments_received", "es")).toBe(
-    "Una cuenta que ya ha recibido pagos no se puede juntar con otra. Cobra el resto desde los pagos de la cuenta",
+    "Una cuenta que ya ha recibido pagos no se puede juntar con otra.",
   );
 });
 
@@ -505,12 +505,12 @@ it("explains that unsupported published menus require a venue reset in both lang
   );
 });
 
-it("says no station can make a dish and where to make one the default, in both locales", () => {
+it("says no prep station can make one of the dishes and where to fix it, in both locales", () => {
   expect(codeMessage("station.no_default", "en")).toBe(
-    "No station can make one of these dishes. A station can be made the default in the dashboard, under Prep stations",
+    "No prep station can make one of these dishes. Fix this in the dashboard, on the Prep stations page.",
   );
   expect(codeMessage("station.no_default", "es")).toBe(
-    "Ninguna estación puede preparar uno de estos platos. Se puede hacer predeterminada una estación en el panel, en Estaciones de preparación",
+    "Ninguna estación de preparación puede preparar uno de estos platos. Corrígelo en el panel, en la página Estaciones de preparación.",
   );
 });
 
