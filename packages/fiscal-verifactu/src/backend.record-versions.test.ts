@@ -165,7 +165,7 @@ it("a void retains the issued sale's origin after corrections from another origi
   const result = await withTransaction(suite.db, async (tx) => {
     await tx.execute(sql`pragma reverse_unordered_selects = on`);
     try {
-      return await backend.recordVoid(tx, originalSaleId, "Operator error");
+      return await backend.recordVoid(tx, originalSaleId, "Operator error", node.nodeId);
     } finally {
       await tx.execute(sql`pragma reverse_unordered_selects = off`);
     }

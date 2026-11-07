@@ -156,7 +156,14 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
 
   const alta = await altaIdentityFor(sale.saleId);
   await withTransaction(suite.db, async (tx) => {
-    await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
+    await recordVoid(
+      tx,
+      backend,
+      sale.saleId,
+      "staff error",
+      { sessionId: voidSession.id },
+      nodeId,
+    );
   });
   expect(await hasAnulacion(alta.id)).toBe(true);
   const { rows: anul } = await suite.db.execute<{ id: string }>(

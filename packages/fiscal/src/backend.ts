@@ -495,7 +495,17 @@ export interface FiscalBackend {
   /** Optional receipt observation, independent of allocation and the original receipt result. */
   invoiceEvidenceFor?(tx: Transaction, saleId: SaleId): Promise<FiledInvoiceEvidence | undefined>;
 
-  recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef>;
+  /**
+   * Cancels a sale. The cancellation is issued by `issuingNodeId`, the box running now, and goes on
+   * that box's chain, which may differ from the box that filed the sale; it still cites the
+   * original invoice exactly.
+   */
+  recordVoid(
+    tx: Transaction,
+    saleId: SaleId,
+    reason: string,
+    issuingNodeId: NodeId,
+  ): Promise<FiscalRecordRef>;
 
   /**
    * Records a corrective invoice of a prior sale. `sale` is the corrective invoice's OWN data — its

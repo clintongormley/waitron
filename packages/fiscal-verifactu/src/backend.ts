@@ -112,12 +112,7 @@ export interface VerifactuBackendOptions {
 /** The columns `recordVoid` reads off the alta it voids. */
 type OriginalAlta = Pick<
   RegistroRow,
-  | "source"
-  | "device_id"
-  | "node_id"
-  | "id_emisor_factura"
-  | "num_serie_factura"
-  | "fecha_expedicion_factura"
+  "source" | "device_id" | "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura"
 >;
 
 /**
@@ -412,12 +407,17 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */
-  async recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef> {
+  async recordVoid(
+    tx: Transaction,
+    saleId: SaleId,
+    reason: string,
+    issuingNodeId: NodeId,
+  ): Promise<FiscalRecordRef> {
     // AEAT's `RegistroAnulacion` has no free-text field, so `reason` is not filed.
     void reason;
 
     const { rows } = await tx.execute<OriginalAlta>(sql`
-      select source, device_id, node_id, id_emisor_factura, num_serie_factura,
+      select source, device_id, id_emisor_factura, num_serie_factura,
         fecha_expedicion_factura
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
@@ -429,9 +429,10 @@ export class VerifactuBackend implements FiscalBackend {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
 
-    // The anulación extends the ORIGINAL's chain, keyed by its node, and inherits its origin.
+    // The anulación extends the ISSUING box's chain, under that box's SIF, and inherits the
+    // original's origin and invoice identity.
     const origin = readSaleOrigin(original.source, original.device_id);
-    const nodeId = original.node_id as NodeId;
+    const nodeId = issuingNodeId;
     await this.refuseNewIssuance(tx, nodeId);
     const sif = await currentSif(tx, nodeId);
     const tenant = await this.taxpayer(tx);

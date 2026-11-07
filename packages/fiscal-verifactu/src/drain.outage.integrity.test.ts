@@ -40,7 +40,7 @@ it("keeps actual sale/void hashes, predecessor bytes and invoice numbers intact 
     withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput({ nodeId, seriesId })));
   const sale = await sell();
   await withTransaction(suite.db, (tx) =>
-    recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: session.id }),
+    recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: session.id }, nodeId),
   );
   const snapshot = async () => ({
     records: (

@@ -18,7 +18,8 @@ import { recordIncident } from "./incidents.js";
  * only moment it can be recorded. It runs after the sale lookup, so a missing sale is
  * `sale.not_found` rather than an authorization error, and before any fiscal work.
  *
- * A failed chain check's incident names the device the sale was rung on.
+ * The cancellation is issued by `issuingNodeId`, the box running now: its chain is the one checked
+ * and extended. A failed chain check's incident names the device the sale was rung on.
  */
 export async function recordVoid(
   tx: Transaction,
@@ -26,9 +27,10 @@ export async function recordVoid(
   saleId: SaleId,
   reason: string,
   authz: AuthzInput,
+  issuingNodeId: NodeId,
 ): Promise<{ fiscal: FiscalRecordRef }> {
   const [sale] = await tx
-    .select({ nodeId: sales.nodeId, source: sales.source, deviceId: sales.deviceId })
+    .select({ source: sales.source, deviceId: sales.deviceId })
     .from(sales)
     .where(eq(sales.id, saleId));
 
@@ -46,7 +48,7 @@ export async function recordVoid(
   // `verification.ok`: a failed check records an incident and the void proceeds anyway.
   //
   // No clock-degradation incident: this path takes no `TrustedClock`.
-  const verification = await backend.checkIntegrity(tx, sale.nodeId as NodeId);
+  const verification = await backend.checkIntegrity(tx, issuingNodeId);
   // One incident per failed check, carrying every issue in `params.issues`.
   const pending =
     verification.issues.length > 0
@@ -98,7 +100,7 @@ export async function recordVoid(
 
   // Only the sale id: a fiscal identity passed through here would give that fact a second source
   // of truth in the generic layer.
-  const fiscal = await backend.recordVoid(tx, saleId, reason);
+  const fiscal = await backend.recordVoid(tx, saleId, reason, issuingNodeId);
 
   return { fiscal };
 }

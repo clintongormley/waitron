@@ -97,7 +97,7 @@ import { serverFixture } from "./testing/server-fixture.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { recordVoid } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
-import { saleId as brandSaleId } from "@waitron/shared";
+import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { systemClock } from "./till-backend.js";
 import { deploymentEnvironment } from "./config.js";
 
@@ -1701,9 +1701,14 @@ async function inheritedWork(
             personId: venue.adminId,
             pin: "1234",
           });
-          return recordVoid(tx, backend, brandSaleId(voidTarget.sale_id), "Rung up twice", {
-            sessionId: session.id,
-          });
+          return recordVoid(
+            tx,
+            backend,
+            brandSaleId(voidTarget.sale_id),
+            "Rung up twice",
+            { sessionId: session.id },
+            brandNodeId(m2.nodeId),
+          );
         });
         voided = { ok: true, fiscal };
       } catch (error) {

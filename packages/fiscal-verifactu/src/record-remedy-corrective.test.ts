@@ -517,6 +517,7 @@ it.each([false, true])(
         tx,
         original!.id as Parameters<VerifactuBackend["recordVoid"]>[1],
         "Synthetic cancellation",
+        brandNodeId(original!.nodeId),
       ),
     );
     if (asTarget) input.request.registroId = cancellation.recordId;

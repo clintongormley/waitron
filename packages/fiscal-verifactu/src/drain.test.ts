@@ -135,7 +135,14 @@ async function sellAndVoid(options: {
     return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
   });
   await withTransaction(suite.db, async (tx) => {
-    await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
+    await recordVoid(
+      tx,
+      backend,
+      sale.saleId,
+      "staff error",
+      { sessionId: voidSession.id },
+      nodeId,
+    );
   });
   return { nodeId };
 }
@@ -1214,7 +1221,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
 
   const voidSale = (saleId: Awaited<ReturnType<typeof sell>>["saleId"]) =>
     withTransaction(suite.db, (tx) =>
-      recordVoid(tx, backend, saleId, "staff error", { sessionId: voidSessionId }),
+      recordVoid(tx, backend, saleId, "staff error", { sessionId: voidSessionId }, venue.nodeId),
     );
 
   /** The chain's rows in order: tipo, estado and incidencia per secuencia. */

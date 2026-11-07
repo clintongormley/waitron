@@ -80,7 +80,8 @@ const builders = ["sale", "void", "correction", "substitution"] as const;
 async function build(kind: (typeof builders)[number]) {
   const sale = await candidate();
   return withTransaction(suite.db, (tx) => {
-    if (kind === "void") return backend.recordVoid(tx, original.saleId, "Incorrect invoice");
+    if (kind === "void")
+      return backend.recordVoid(tx, original.saleId, "Incorrect invoice", venue.nodeId);
     if (kind === "correction")
       return backend.recordCorrection(
         tx,

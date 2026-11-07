@@ -266,7 +266,7 @@ describe("the source and device on each record", () => {
 
   it("copies the original alta's source and device onto a void's anulación", async () => {
     const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
-    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId));
     expect(await storedOrigins(saleId)).toEqual([
       { tipo_registro: "alta", source: "device", device_id: deviceId },
       { tipo_registro: "anulacion", source: "device", device_id: deviceId },
@@ -275,7 +275,7 @@ describe("the source and device on each record", () => {
 
   it("copies a job-origin alta's source, with no device, onto its anulación", async () => {
     const { saleId } = await sell({ origin: jobOrigin("readiness_test") });
-    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId));
     expect(await storedOrigins(saleId)).toEqual([
       { tipo_registro: "alta", source: "readiness_test", device_id: null },
       { tipo_registro: "anulacion", source: "readiness_test", device_id: null },
@@ -287,7 +287,12 @@ describe("recordVoid", () => {
   it("throws fiscal.sale_not_recorded for a sale with no prior alta", async () => {
     await expect(
       withTransaction(suite.db, (tx) =>
-        backend.recordVoid(tx, "00000000-0000-4000-8000-000000000000" as never, "staff error"),
+        backend.recordVoid(
+          tx,
+          "00000000-0000-4000-8000-000000000000" as never,
+          "staff error",
+          nodeId,
+        ),
       ),
     ).rejects.toMatchObject({ code: "fiscal.sale_not_recorded" });
   });
@@ -295,7 +300,7 @@ describe("recordVoid", () => {
   it("appends an anulación referencing the original alta's own identity", async () => {
     const { saleId } = await sell();
     const ref = await withTransaction(suite.db, (tx) =>
-      backend.recordVoid(tx, saleId, "staff error"),
+      backend.recordVoid(tx, saleId, "staff error", nodeId),
     );
     expect(ref.backend).toBe("verifactu");
     expect(ref.state).toBe("pending");
@@ -315,6 +320,44 @@ describe("recordVoid", () => {
       .from(envios)
       .where(eq(envios.registroId, anulacion!.id));
     expect(sidecar?.estado).toBe("pendiente");
+  });
+
+  it("a cancellation of another box's sale is chained on the issuing box, citing the original", async () => {
+    const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
+    const m2 = await seedTenantWithSif(suite.db);
+    const m2Sif = await withTransaction(suite.db, (tx) => currentSif(tx, m2.nodeId));
+
+    await withTransaction(suite.db, (tx) =>
+      backend.recordVoid(tx, saleId, "staff error", m2.nodeId),
+    );
+
+    const rows = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, saleId));
+    const alta = rows.find((row) => row.tipoRegistro === "alta")!;
+    const anulacion = rows.find((row) => row.tipoRegistro === "anulacion")!;
+    expect(alta.nodeId).toBe(nodeId);
+    expect({
+      nodeId: anulacion.nodeId,
+      sifId: anulacion.sifId,
+      secuencia: anulacion.secuencia,
+    }).toEqual({ nodeId: m2.nodeId, sifId: m2Sif.id, secuencia: 1 });
+    expect({
+      idEmisorFactura: anulacion.idEmisorFactura,
+      numSerieFactura: anulacion.numSerieFactura,
+      fechaExpedicionFactura: anulacion.fechaExpedicionFactura,
+      source: anulacion.source,
+      deviceId: anulacion.deviceId,
+    }).toEqual({
+      idEmisorFactura: alta.idEmisorFactura,
+      numSerieFactura: alta.numSerieFactura,
+      fechaExpedicionFactura: alta.fechaExpedicionFactura,
+      source: alta.source,
+      deviceId: alta.deviceId,
+    });
+    // The two boxes carry different NIFs here, so the cited issuer is the original's, not M2's.
+    expect(alta.idEmisorFactura).not.toBe(m2Sif.nif);
   });
 });
 
@@ -349,7 +392,9 @@ describe("recordVoid — date reconstruction", () => {
       db: suite.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await withTransaction(suite.db, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(suite.db, (tx) =>
+      voidBackend.recordVoid(tx, saleId, "staff error", nodeId),
+    );
 
     const rows = await suite.db
       .select()
@@ -368,7 +413,9 @@ describe("recordVoid — date reconstruction", () => {
       db: suite.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await withTransaction(suite.db, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(suite.db, (tx) =>
+      voidBackend.recordVoid(tx, saleId, "staff error", nodeId),
+    );
 
     const rows = await suite.db
       .select()

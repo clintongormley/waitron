@@ -90,7 +90,9 @@ async function saleOf1230(ms: number): Promise<void> {
 }
 
 async function voidAt(ms: number, saleId: SaleId): Promise<void> {
-  await withTransaction(suite.db, (tx) => backendAt(ms).recordVoid(tx, saleId, "staff error"));
+  await withTransaction(suite.db, (tx) =>
+    backendAt(ms).recordVoid(tx, saleId, "staff error", nodeId),
+  );
 }
 
 interface Row {

@@ -48,7 +48,7 @@ beforeEach(async () => {
     .where(eq(locations.id, seededNode.locationId));
 });
 async function prepare(tx: Transaction, id: SaleId, clock = source) {
-  return fiscal.prepareFiscalVoidClock(tx, id, clock);
+  return fiscal.prepareFiscalVoidClock(tx, id, clock, seededNode.nodeId);
 }
 const original = () =>
   withTransaction(suite.db, (tx) =>
@@ -60,7 +60,7 @@ const original = () =>
   );
 const annul = (id: SaleId) =>
   withTransaction(suite.db, async (tx) =>
-    backend(await prepare(tx, id)).recordVoid(tx, id, "Operator error"),
+    backend(await prepare(tx, id)).recordVoid(tx, id, "Operator error", seededNode.nodeId),
   );
 function snapshot() {
   return Object.fromEntries(
@@ -98,7 +98,7 @@ describe("the venue's zone across a daylight-saving change", () => {
     const secondSale = await issue("2026-10-25T01:30:00.000Z");
     await withTransaction(suite.db, async (tx) => {
       const clock = await prepare(tx, firstSale.saleId, sourceAt("2026-10-25T01:30:00.000Z"));
-      await backend(clock).recordVoid(tx, firstSale.saleId, "Operator error");
+      await backend(clock).recordVoid(tx, firstSale.saleId, "Operator error", seededNode.nodeId);
     });
     const [first, annulment] = records(firstSale.saleId);
     const [second] = records(secondSale.saleId);

@@ -141,9 +141,14 @@ async function cancelAndRefund() {
     json: { state: "completed", appliedAmount: "12.10", tipAmount: "0.00" },
   });
   const cancelled = await inTx(venue, (tx) =>
-    recordVoid(tx, venue.backend, brandSaleId(saleId), "Returned order", {
-      sessionId: session!.id,
-    }),
+    recordVoid(
+      tx,
+      venue.backend,
+      brandSaleId(saleId),
+      "Returned order",
+      { sessionId: session!.id },
+      venue.cfg.nodeId,
+    ),
   );
   const facts = await accounting();
   expect(facts.voids).toMatchObject([

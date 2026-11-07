@@ -229,7 +229,7 @@ describe("recordVoid", () => {
   it("refuses to void a sale that was never recorded", async () => {
     const unknown = saleId("00000000-0000-0000-0000-000000000000");
     try {
-      await suite.db.transaction((tx) => backend.recordVoid(tx, unknown, "staff error"));
+      await suite.db.transaction((tx) => backend.recordVoid(tx, unknown, "staff error", NODE_A));
       expect.unreachable("recordVoid should have thrown");
     } catch (error) {
       expect((error as AppError).code).toBe("fiscal.sale_not_recorded");
@@ -240,7 +240,7 @@ describe("recordVoid", () => {
     const sale = saleOn(NODE_A, 1);
     await suite.db.transaction((tx) => backend.recordSale(tx, sale));
     const ref = await suite.db.transaction((tx) =>
-      backend.recordVoid(tx, sale.saleId, "staff error"),
+      backend.recordVoid(tx, sale.saleId, "staff error", NODE_A),
     );
     const records = await backend.recordsFor(NODE_A);
     expect(records.map((r) => r.kind)).toEqual(["sale", "void"]);

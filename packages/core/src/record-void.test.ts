@@ -149,7 +149,7 @@ async function voidSale(
   authz: AuthzInput = { sessionId: managerSessionId },
 ) {
   return withTransaction(suite.db, async (tx) => {
-    return recordVoid(tx, backend, saleId, reason, authz);
+    return recordVoid(tx, backend, saleId, reason, authz, nodeId);
   });
 }
 
@@ -177,7 +177,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
-    recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
+    recordVoid: (tx, id, reason, issuingNodeId) => fake.recordVoid(tx, id, reason, issuingNodeId),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
     checkIntegrity: (tx, node) => fake.checkIntegrity(tx, node),
@@ -413,9 +413,14 @@ describe("recordVoid — error propagation", () => {
     };
 
     const error = await captureError(() =>
-      recordVoid(fakeTx, backend, "00000000-0000-4000-8000-000000000000" as SaleId, "reason", {
-        sessionId: "operator-session",
-      }),
+      recordVoid(
+        fakeTx,
+        backend,
+        "00000000-0000-4000-8000-000000000000" as SaleId,
+        "reason",
+        { sessionId: "operator-session" },
+        nodeId,
+      ),
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect(driverErrorCode(error)).toBe("53100");
@@ -492,9 +497,9 @@ describe("recordVoid — stored-predecessor and clock warnings", () => {
         observed.push("checkIntegrity");
         return fake.checkIntegrity(tx, node);
       },
-      async recordVoid(tx, id, reason) {
+      async recordVoid(tx, id, reason, issuingNodeId) {
         observed.push("recordVoid");
-        return fake.recordVoid(tx, id, reason);
+        return fake.recordVoid(tx, id, reason, issuingNodeId);
       },
     });
     const { saleId } = await sell(backend);

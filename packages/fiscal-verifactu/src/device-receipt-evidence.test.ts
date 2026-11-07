@@ -98,7 +98,7 @@ it("keeps the original invoice fingerprint after a cancellation, in either query
     backend.invoiceEvidenceFor(tx, result.saleId),
   );
   await withTransaction(suite.db, (tx) =>
-    backend.recordVoid(tx, result.saleId, "Recorded cancellation"),
+    backend.recordVoid(tx, result.saleId, "Recorded cancellation", nodeId),
   );
   await suite.db.execute(sql`pragma reverse_unordered_selects = on`);
   try {
