@@ -5647,6 +5647,111 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(sent()).toHaveLength(1);
   });
 
+  async function knownChargeCompleted(getFiledTicket: unknown) {
+    let received = false;
+    const older = paymentOf({
+      id: "older-payment",
+      submissionId: "older-submission",
+      applied: "80.00",
+    });
+    const getBillBalance = vi.fn(async () => {
+      const original = sent()[0];
+      return balanceOf({
+        status: received ? "settled" : "open",
+        received: received ? "120.00" : "80.00",
+        reserved: original !== undefined && !received ? "40.00" : "0.00",
+        outstanding: original === undefined ? "40.00" : "0.00",
+        payments:
+          original === undefined
+            ? [older]
+            : [
+                older,
+                paymentOf({
+                  id: "original-payment",
+                  submissionId: original.submissionId,
+                  method: "card",
+                  entry: "reader",
+                  state: received ? "received" : "pending",
+                  applied: "40.00",
+                  tip: "0.00",
+                  tendered: null,
+                  change: null,
+                }),
+              ],
+      });
+    });
+    const el = await takeOnReader(
+      vi
+        .fn()
+        .mockRejectedValue({ code: "sale.charged_not_recorded", reason: "disk_full", status: 507 }),
+      { getBillBalance, getFiledTicket },
+    );
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    return {
+      el,
+      async finish() {
+        received = true;
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+        await openDialog(el, "share");
+      },
+    };
+  }
+
+  it("A1399: a fully settled known charge reads its ticket without a card resend", async () => {
+    const getFiledTicket = vi.fn().mockResolvedValue(invoiceOf("120.00"));
+    const { el, finish } = await knownChargeCompleted(getFiledTicket);
+    await finish();
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(getFiledTicket).toHaveBeenCalledWith("wo-4");
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("A1399: a settled known charge stays recorded when reading its receipt fails", async () => {
+    const { el, finish } = await knownChargeCompleted(
+      vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+    );
+    await finish();
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent).toContain(
+      t("bill_pay.ticket_unread"),
+    );
+    expect(sent()).toHaveLength(1);
+  });
+
+  it.each(["received", "refused"] as const)(
+    "A1399: a receipt read answered %s after another sign-in stays off that screen",
+    async (outcome) => {
+      let answer: (value: TillSaleResult) => void = () => {};
+      let refuse: (error: unknown) => void = () => {};
+      const getFiledTicket = vi.fn(
+        () =>
+          new Promise<TillSaleResult>((resolve, reject) => {
+            answer = resolve;
+            refuse = reject;
+          }),
+      );
+      const { el, finish } = await knownChargeCompleted(getFiledTicket);
+      await finish();
+      expect(getFiledTicket).toHaveBeenCalledOnce();
+      emit(shell(el), "logout");
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+      await flush(el);
+      if (outcome === "received") answer(invoiceOf("120.00"));
+      else refuse({ code: "server.internal", status: 500 });
+      await flush(el);
+      expect(dialog(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".error")?.textContent ?? "").not.toContain(
+        t("bill_pay.ticket_unread"),
+      );
+      expect(sent()).toHaveLength(1);
+    },
+  );
+
   it("A532 leaves cash payment waits subject to the ordinary idle sign-out", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 30 }),

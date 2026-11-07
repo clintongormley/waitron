@@ -19035,7 +19035,8 @@ export class TillApp extends LitElement {
       this.#shownBalanceAt = Math.max(this.#shownBalanceAt, sentAt);
     }
     const freed =
-      sentAt > (this.#sendEndedAt.get(billId) ?? 0) && this.#freeShownPayment(billId, balance);
+      sentAt > (this.#sendEndedAt.get(billId) ?? 0) &&
+      (await this.#freeShownPayment(billId, balance));
     if (freed && order !== undefined) await this.#rereadPayingOrder(order, balance);
   }
 
@@ -19176,13 +19177,54 @@ export class TillApp extends LitElement {
   }
 
   // Only reads sent after the last send ended can resolve its retained confirmation.
-  #freeShownPayment(billId: string, balance: BillBalance): boolean {
+  async #freeShownPayment(billId: string, balance: BillBalance): Promise<boolean> {
     const entry = this.#unansweredPayments.get(billId);
     if (entry === undefined || this.#paymentsOut.has(billId)) return false;
     const payment = balance.payments.find(
       (shown) => shown.submissionId === entry.request.submissionId,
     );
     if (payment === undefined) return false;
+    if (
+      payment.state === "received" &&
+      balance.status === "settled" &&
+      entry.pendingRefusal?.code === "sale.charged_not_recorded"
+    ) {
+      this.#unansweredPayments.delete(billId);
+      const open = this.billPaying;
+      if (open === null || open.billId !== billId) return true;
+      const api = this.api;
+      const session = this.#operatorSession;
+      this.billPaying = { ...open, busy: true };
+      // The native dialog's queued open must run while its host is still connected.
+      await this.updateComplete;
+      const dialog = this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog");
+      await dialog?.updateComplete;
+      await dialog?.shadowRoot?.querySelector<HTMLElement & { updateComplete: Promise<boolean> }>(
+        "wt-dialog",
+      )?.updateComplete;
+      if (
+        this.api !== api ||
+        this.#operatorSession !== session ||
+        this.#billPayingNow(open.id) === null
+      )
+        return true;
+      dialog?.paymentAccepted();
+      this.#closeBillPaying();
+      const current = () =>
+        this.api === api &&
+        this.#operatorSession === session &&
+        this.billPaying === null &&
+        (open.surface === "counter"
+          ? !this.#hasLeftCounterOrder(billId, open.visit)
+          : !this.#hasLeftOrder(billId, open.visit));
+      try {
+        const ticket = await api.getFiledTicket(billId);
+        if (current()) await this.#showPaidTicket(open, ticket, balance.payments);
+      } catch {
+        if (current()) this.errorKey = "bill_pay.ticket_unread";
+      }
+      return true;
+    }
     if (
       (payment.state === "pending" &&
         (entry.pendingRefusal !== undefined || entry.unconfirmed !== true)) ||
