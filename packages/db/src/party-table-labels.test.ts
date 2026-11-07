@@ -26,6 +26,8 @@ let LOCATION: string;
 const OPERATOR = "cccccccc-2222-4000-8000-000000000001";
 
 describe("party table labels", () => {
+  let nextLabelSuffix = 0;
+  const labelSuffix = () => String(++nextLabelSuffix).padStart(6, "0");
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
@@ -414,7 +416,7 @@ describe("party table labels", () => {
 
   /** Bar, Counter 3, 4 and 5 (each label suffixed), joining a new party in that order. */
   async function longTable() {
-    const s = randomUUID().slice(0, 6);
+    const s = labelSuffix();
     const ids = { bar: randomUUID(), c3: randomUUID(), c4: randomUUID(), c5: randomUUID() };
     const labels = {
       bar: `Bar ${s}`,
@@ -443,7 +445,7 @@ describe("party table labels", () => {
     });
 
     it("places a named group among the party's other tables by the order they joined", async () => {
-      const s = randomUUID().slice(0, 6);
+      const s = labelSuffix();
       const [bar, c3, nine] = [randomUUID(), randomUUID(), randomUUID()];
       const later = await party([
         { id: bar, label: `Bar ${s}`, joinedAt: "2026-09-29T20:01:00.000Z" },
@@ -455,7 +457,7 @@ describe("party table labels", () => {
         new Map([[later, [`Taylor birthday ${s}`, `Table 9 ${s}`]]]),
       );
 
-      const t = randomUUID().slice(0, 6);
+      const t = labelSuffix();
       const [bar2, c32, nine2] = [randomUUID(), randomUUID(), randomUUID()];
       const earlier = await party([
         { id: nine2, label: `Table 9 ${t}`, joinedAt: "2026-09-29T20:00:00.000Z" },
@@ -496,7 +498,7 @@ describe("party table labels", () => {
     });
 
     it("lists a group's name for each party seated at one of its tables", async () => {
-      const s = randomUUID().slice(0, 6);
+      const s = labelSuffix();
       const [bar, c3] = [randomUUID(), randomUUID()];
       const first = await party([{ id: bar, label: `Bar ${s}`, ...AT }]);
       const second = await party([{ id: c3, label: `Counter 3 ${s}`, ...AT }]);
@@ -527,7 +529,7 @@ describe("party table labels", () => {
     });
 
     it("names an order delivered to a table by its group's name, else its own, else its saved label", async () => {
-      const s = randomUUID().slice(0, 6);
+      const s = labelSuffix();
       const bar = await table(`Bar ${s}`);
       const c3 = await table(`Counter 3 ${s}`);
       const c4 = await table(`Counter 4 ${s}`);

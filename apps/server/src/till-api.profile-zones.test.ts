@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { readBillEditState } from "./bill-editing.js";
@@ -1396,9 +1397,12 @@ describe("a kitchen display", () => {
       return seated;
     };
     const deliTable = await inTx(v, (tx) =>
-      createTable(tx, v.cfg, { label: `D${randomUUID().slice(0, 4)}`, zoneId: f.deliTables }),
+      createTable(tx, v.cfg, {
+        label: `D${floorLabelSuffix().padStart(4, "0")}`,
+        zoneId: f.deliTables,
+      }),
     );
-    const restTable = () => v.table(`R${randomUUID().slice(0, 4)}`);
+    const restTable = () => v.table(`R${floorLabelSuffix().padStart(4, "0")}`);
     const deliRound = await fire(deliTable.id, f.deliTablesItem);
     const restRound = await fire(await restTable(), v.item("Agua"));
     // One more order from each department, its dish then moved to another station.
@@ -1409,7 +1413,10 @@ describe("a kitchen display", () => {
       await fire(
         (
           await inTx(v, (tx) =>
-            createTable(tx, v.cfg, { label: `D${randomUUID().slice(0, 4)}`, zoneId: f.deliTables }),
+            createTable(tx, v.cfg, {
+              label: `D${floorLabelSuffix().padStart(4, "0")}`,
+              zoneId: f.deliTables,
+            }),
           )
         ).id,
         f.deliTablesItem,
@@ -1534,10 +1541,16 @@ describe("A773 pass board", () => {
       return placed.groups[0]!.id;
     };
     const deliTable = await inTx(v, (tx) =>
-      createTable(tx, v.cfg, { label: `D${randomUUID().slice(0, 4)}`, zoneId: f.deliTables }),
+      createTable(tx, v.cfg, {
+        label: `D${floorLabelSuffix().padStart(4, "0")}`,
+        zoneId: f.deliTables,
+      }),
     );
     const deliGroup = await fire(deliTable.id, deliTablesBurger);
-    const restGroup = await fire(await v.table(`R${randomUUID().slice(0, 4)}`), v.item("Burger"));
+    const restGroup = await fire(
+      await v.table(`R${floorLabelSuffix().padStart(4, "0")}`),
+      v.item("Burger"),
+    );
     for (const [kind, path] of [
       ["pass", "/api/device/pass-board"],
       ["pass_monitor", "/api/device/pass-monitor-board"],
