@@ -24,7 +24,7 @@ beforeEach(async () => {
 function run(overrides: Partial<PeriodVatInput> = {}): Promise<VatSummary> {
   const input: PeriodVatInput = {
     cutoverChanges: [],
-    nodeId: venue.nodeId,
+    nodeIds: [venue.nodeId],
     fromBusinessDay: FROM,
     toBusinessDay: TO,
     timeZone: TZ,
@@ -146,7 +146,7 @@ describe("computeVatSummaryForPeriod", () => {
     );
     const oneDay = { fromBusinessDay: "2026-08-04", toBusinessDay: "2026-08-04" };
     // nodeId omitted → both nodes: 100 + 200 = 300.
-    expect((await run({ ...oneDay, nodeId: undefined })).byRate).toEqual([
+    expect((await run({ ...oneDay, nodeIds: undefined })).byRate).toEqual([
       { rate: "21.00", base: "300.00", tax: "63.00" },
     ]);
     // nodeId = node A → only 100.00, node B's 200.00 excluded.

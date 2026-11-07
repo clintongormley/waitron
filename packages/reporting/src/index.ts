@@ -56,7 +56,6 @@ export type {
   InputVatSummary,
   OriginCashUp,
   OverdueOrder,
-  OverdueOrdersInput,
   PeriodVatInput,
   PurchaseVatKind,
   TenderMethod,

@@ -189,7 +189,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     return computeCategorySales(
       tx,
       {
-        nodeId,
+        nodeIds: [nodeId],
         fromBusinessDay: req.from,
         toBusinessDay: req.to,
         timeZone: clock.timeZone,
@@ -250,7 +250,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
         const { clock } = await buildReportContext(tx);
         const businessDay = currentBusinessDay(clock);
-        // No `nodeId`: venue-wide.
+        // No `nodeIds`: venue-wide.
         const input = {
           businessDay,
           timeZone: clock.timeZone,
@@ -292,7 +292,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
         const { nodeId, clock } = await buildReportContext(tx);
         const input = {
-          nodeId,
+          nodeIds: [nodeId],
           businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
@@ -301,7 +301,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
         const close = await computeDailyClose(tx, input);
         const topSellers = await computeTopSellers(tx, {
-          nodeId,
+          nodeIds: [nodeId],
           fromBusinessDay: businessDay,
           toBusinessDay: businessDay,
           timeZone: clock.timeZone,
@@ -324,7 +324,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
         const { nodeId, clock } = await buildReportContext(tx);
         const common = {
-          nodeId,
+          nodeIds: [nodeId],
           fromBusinessDay: from,
           toBusinessDay: to,
           timeZone: clock.timeZone,
@@ -405,15 +405,14 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // This node's open kitchen orders whose worst unserved line is overdue, worst first. A live
-  // snapshot: only `nodeId` is taken from the report context.
+  // The venue's open kitchen orders whose worst unserved line is overdue, worst first. A live
+  // snapshot.
   app.get("/management-api/reports/overdue-orders", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const orders = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { nodeId } = await buildReportContext(tx);
-        return computeOverdueOrders(tx, { nodeId });
-      });
+      const orders = await gated(sessionId, REPORT_VIEW_PERMISSION, (tx) =>
+        computeOverdueOrders(tx),
+      );
       return c.json({ orders });
     }),
   );

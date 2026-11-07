@@ -23,7 +23,7 @@ beforeEach(async () => {
 function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   return {
     cutoverChanges: [],
-    nodeId: venue.nodeId,
+    nodeIds: [venue.nodeId],
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",

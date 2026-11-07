@@ -41,7 +41,7 @@ export async function recordDailyClose(
   const head = await readChainHead(tx, input.nodeId);
 
   const close = await computeDailyClose(tx, {
-    nodeId: input.nodeId,
+    nodeIds: [input.nodeId],
     businessDay: input.businessDay,
     ...clock,
   });

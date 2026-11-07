@@ -42,7 +42,7 @@ function run(
 ): Promise<CategoryReport> {
   const input: CategorySalesInput = {
     cutoverChanges: [],
-    nodeId: venue.nodeId,
+    nodeIds: [venue.nodeId],
     fromBusinessDay: "2026-08-01",
     toBusinessDay: "2026-08-31",
     timeZone: TZ,
@@ -576,7 +576,7 @@ describe("computeCategorySales at time of sale", () => {
     ]);
 
     expect((await run()).net).toBe("1.00");
-    expect((await run({ nodeId: undefined })).net).toBe("3.00");
+    expect((await run({ nodeIds: undefined })).net).toBe("3.00");
   });
 
   it("leaves out lines issued outside the period", async () => {

@@ -1210,12 +1210,12 @@ describe("venue detail consumer reads", () => {
       withTransaction(suite.db, async (tx) => {
         const current = await resolveVenueClock(tx, venue.cfg.nodeId);
         const previous = await computeDailyClose(tx, {
-          nodeId: venue.cfg.nodeId,
+          nodeIds: [venue.cfg.nodeId],
           businessDay: "2026-10-05",
           ...current,
         });
         const day = await computeDailyClose(tx, {
-          nodeId: venue.cfg.nodeId,
+          nodeIds: [venue.cfg.nodeId],
           businessDay: "2026-10-06",
           ...current,
         });

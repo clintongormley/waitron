@@ -46,7 +46,7 @@ function run(
 ): Promise<CategoryReport> {
   const input: CategorySalesInput = {
     cutoverChanges: [],
-    nodeId: venue.nodeId,
+    nodeIds: [venue.nodeId],
     fromBusinessDay: "2026-08-01",
     toBusinessDay: "2026-08-31",
     timeZone: TZ,

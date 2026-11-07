@@ -60,7 +60,8 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
 
 function runCompute(businessDay: string) {
   return withTransaction(suite.db, async (tx: Transaction) => {
-    return computeDailyClose(tx, closeInput(businessDay));
+    const { nodeId, ...input } = closeInput(businessDay);
+    return computeDailyClose(tx, { ...input, nodeIds: [nodeId] });
   });
 }
 

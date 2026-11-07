@@ -30,9 +30,9 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
  */
 export async function aggregateVatByRate(
   tx: Transaction,
-  scope: { nodeId?: NodeId; counted: SQL; reversed?: SQL },
+  scope: { nodeIds?: readonly NodeId[]; counted: SQL; reversed?: SQL },
 ): Promise<VatSummary> {
-  const nodeClause = nodeScopeClause(scope.nodeId);
+  const nodeClause = nodeScopeClause(scope.nodeIds);
   // `sales.vat_breakdown` is a JSON document whose `base` and `tax` are the decimal literals filed
   // with the invoice, not integer cents, and this engine has no exact decimal type, so the sum is
   // taken here in Decimal arithmetic, one JSON element per row. Each element is rounded to cents
@@ -100,22 +100,22 @@ export async function aggregateVatByRate(
   };
 }
 
-/** VAT summary for one node, or the whole venue, over one business day. */
+/** VAT summary for a list of boxes, or the whole venue, over one business day. */
 export async function computeVatSummary(
   tx: Transaction,
   input: DailyCloseInput,
 ): Promise<VatSummary> {
   const window = businessDayWindow(input);
   return aggregateVatByRate(tx, {
-    nodeId: input.nodeId,
+    nodeIds: input.nodeIds,
     counted: issuedSalesClause(window),
     reversed: reversedSalesClause(window),
   });
 }
 
 /**
- * VAT summary over a closed RANGE of business days, for one node or, when `nodeId` is omitted, the
- * whole venue. Invalid inputs are a caller precondition and throw a plain `Error`.
+ * VAT summary over a closed RANGE of business days, for a list of boxes or, when `nodeIds` is
+ * omitted, the whole venue. Invalid inputs are a caller precondition and throw a plain `Error`.
  */
 export async function computeVatSummaryForPeriod(
   tx: Transaction,
@@ -123,7 +123,7 @@ export async function computeVatSummaryForPeriod(
 ): Promise<VatSummary> {
   const window = validatedRangeWindow(input);
   return aggregateVatByRate(tx, {
-    nodeId: input.nodeId,
+    nodeIds: input.nodeIds,
     counted: issuedSalesClause(window),
     reversed: reversedSalesClause(window),
   });

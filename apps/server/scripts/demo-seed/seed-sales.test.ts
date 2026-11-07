@@ -123,7 +123,7 @@ describe("seedSales", () => {
       const businessDay = new Date(start - DAY_MS).toISOString().slice(0, 10);
       const close = await computeDailyClose(tx, {
         cutoverChanges: [],
-        nodeId: brandNodeId(venue.nodeId),
+        nodeIds: [brandNodeId(venue.nodeId)],
         businessDay,
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",

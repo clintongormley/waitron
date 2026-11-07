@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, tenders, withTransaction } from "@waitron/db";
 import { seriesId as brandSeriesId } from "@waitron/shared";
+import type { NodeId, SeriesId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedBillPayment,
   seedBillRefund,
+  seedNodeAndSeries,
   seedOpenOrder,
   seedSale,
   seedTender,
@@ -26,7 +28,7 @@ beforeEach(async () => {
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<CashUp> {
   const input: DailyCloseInput = {
     cutoverChanges: [],
-    nodeId: venue.nodeId,
+    nodeIds: [venue.nodeId],
     businessDay: DAY,
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
@@ -284,6 +286,35 @@ describe("computeCashUp", () => {
       { method: "cash", amount: "10.00", settledAt: settledNoon },
     );
     expect((await run()).byOrigin).toEqual([]);
+  });
+
+  it("a report for two boxes counts both boxes' sales", async () => {
+    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeC = await seedNodeAndSeries(suite.db, venue, "C");
+    const amounts: Array<[{ nodeId: NodeId; seriesId: SeriesId }, string]> = [
+      [venue, "10.00"],
+      [nodeB, "20.00"],
+      [nodeC, "40.00"],
+    ];
+    for (const [box, amount] of amounts) {
+      const saleId = await seedSale(
+        suite.db,
+        { ...venue, nodeId: box.nodeId, seriesId: box.seriesId },
+        {
+          invoiceNumber: 1,
+          issuedAt: settledNoon,
+          total: amount,
+          lines: [{ vatRate: "21.00", lineTotal: amount }],
+        },
+      );
+      await seedTender(suite.db, { saleId }, { method: "cash", amount, settledAt: settledNoon });
+    }
+    // Boxes A and B: 10.00 + 20.00; box C's 40.00 is outside the list.
+    expect((await run({ nodeIds: [venue.nodeId, nodeB.nodeId] })).tenderTotal).toBe("30.00");
+  });
+
+  it("an empty box list is refused", async () => {
+    await expect(run({ nodeIds: [] })).rejects.toThrow("reporting: empty box list");
   });
 });
 
@@ -569,8 +600,8 @@ describe("computeCashUp — bill payments and their refunds", () => {
     );
 
     expect((await run()).byOrigin).toEqual([]);
-    expect((await run({ nodeId: other.nodeId })).tenderTotal).toBe("20.00");
-    expect((await run({ nodeId: undefined })).byOrigin).toEqual([
+    expect((await run({ nodeIds: [other.nodeId] })).tenderTotal).toBe("20.00");
+    expect((await run({ nodeIds: undefined })).byOrigin).toEqual([
       {
         source: "device",
         deviceId: other.deviceId,
