@@ -889,6 +889,47 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     });
   });
 
+  it("names a catalogue dish no station can take beside a dish with no product, in line order", async () => {
+    const coffee = await dish("Coffee");
+    const { dish: routed } = await routedDish("Pulpo");
+    const stranded = await strandedDish("Navajas");
+    const chosen = await dish("Almejas");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [
+        { menuItemId: coffee.counterOffer, quantity: "1" },
+        { menuItemId: routed.counterOffer, quantity: "1" },
+        { menuItemId: stranded.counterOffer, quantity: "1" },
+        { menuItemId: chosen.counterOffer, quantity: "1", makeAt: await station("Bar") },
+      ],
+    });
+    await inTx(v, (tx) =>
+      tx.insert(workingOrderLines).values({
+        workingOrderId: id,
+        lineNo: 5,
+        productId: null,
+        name: "Soup",
+        descriptions: { [v.cfg.locale]: "Soup" },
+        quantity: 1000,
+        unitPriceGross: 150,
+        vatClass: "general",
+        lineTotal: 150,
+      }),
+    );
+    const refusal = { code: "station.no_default", params: { dishes: `${coffee.name}, Soup` } };
+
+    await expect(
+      inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id))),
+    ).rejects.toMatchObject(refusal);
+    await expect(
+      inTx(v, async (tx) =>
+        fireLines(tx, v.cfg, id, await unsentDishLines(tx, id), { unroutable: "skip" }),
+      ),
+    ).rejects.toMatchObject(refusal);
+  });
+
   it("with an active default station, a table round sends a dish with no route and one whose route's station is off", async () => {
     const stranded = await strandedDish("Pulpo");
     const missing = await dish("Navajas");

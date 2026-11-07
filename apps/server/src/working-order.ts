@@ -2217,7 +2217,11 @@ export async function fireLines(
     if (fallbackStationId === null)
       throw await noDefaultStation(
         tx,
-        lines.filter((line) => line.productId === null && !chosenStations.has(line.id)),
+        lines.filter((line) => {
+          if (line.productId === null) return !chosenStations.has(line.id);
+          const kind = makers.get(line.productId)?.kind;
+          return stationFor(line) === null && kind !== "made" && kind !== "no_replacement";
+        }),
       );
   }
   const unrouted: FireableLine[] = [];
