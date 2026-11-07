@@ -12,7 +12,7 @@ import {
   RecoveryPackFileError,
   type RecoveryPackFile,
 } from "@waitron/recovery-pack";
-import { AppError, hasCode } from "@waitron/shared";
+import { AppError, diskFullIn, hasCode } from "@waitron/shared";
 import {
   createS3ObjectStore,
   type S3FileStore,
@@ -412,7 +412,8 @@ function sharedRefusal(err: unknown): string {
     return "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
   }
   if (err.code === "migrations.apply_failed") {
-    return "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; run the same command again: it starts the restore over";
+    if (diskFullIn(err)) return RESTORE_DISK_FULL;
+    return "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; install a version that fixes this, then run the same command again: it starts the restore over";
   }
   if (hasCode(err, "restore.hook_failed")) {
     return `restore failed: restore.hook_failed (module ${err.params.module}: ${err.params.code})`;

@@ -1738,16 +1738,16 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   (run through the command line) failed first on the copy the restore checks before placing, so
   nothing on the box changed; only a migration failure that strikes the placed copy alone
   (injected for the run) reaches the step after placement, as does a failing restore hook. There, neither identity starts beside the wrong data: no `trading.env` is left, and the old
-  one is kept as `trading.env.replaced`. The command line then prints `restore failed` (a
-  migration) or `restore failed: restore.hook_failed (module …)`, a server started now comes up in
-  setup mode, and running the same command again finishes the restore (pinned in
+  one is kept as `trading.env.replaced`. The command line then prints, for a migration,
+  `restore failed: migrations.apply_failed — …; install a version that fixes this, then run the
+  same command again: it starts the restore over` (the disk-full line when the engine reported a
+  full disk), or `restore failed: restore.hook_failed (module …)` for a hook; a server started now
+  comes up in setup mode, and once the cause is gone the same command finishes the restore (pinned in
   `apps/server/src/hour-recovery-placement-1.test.ts`). A restore staged for the box's next start
-  does not: every later start refuses the resumed request with `sif.allocation_invalid`
-  (`prior_activation_requires_replay`), and after three failed starts the recovery page says only
-  "Waitron could not start. Ask whoever installed this box to look at it.", with a retry that fails
-  the same way. Only a fresh staged request gets it out, and nothing the box serves can stage one.
-  The staged runs (archive form; the bucket form was not run) gave the same result on main
-  `59be31e3b7`.
+  puts its original request back when the failure came before the restore hooks' transaction body
+  returned, so the next start restores afresh with the same event and series name; a failure after
+  that keeps "placement started" for a checked replay (`runHeld`, `apps/server/src/restore-request.ts`;
+  pinned for the archive and bucket forms in `apps/server/src/restore-emergency-crash.e2e.test.ts`).
 
 - **A managed Cloud restore keeps both sealed bucket records (owner answer 2026-10-13, A538-4).**
   A restored or replacement box inherits both `backup.archive` and `backup.stream` (bucket keys
