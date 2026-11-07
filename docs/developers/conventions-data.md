@@ -3025,7 +3025,9 @@ so the current log and the newest rotated one stay; in `<logDir>/crash-reports`,
 `holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). Never the box's spare file
 (see "The box's spare file"). That is the start's forced
 clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses)
-minus the staged recovery copies in `<state>/restore-staging/staged-recovery`, and minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
+minus every restore working folder (`restoreLeftovers`, `apps/server/src/restore-staging-dirs.ts`),
+which it never reads: the running server makes some of them itself while it checks a backup, so only
+a start removes them. Also minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
 the link and its size is not space freed. Also minus a configured backup folder: a `backup-encrypt-`
 folder that is a `local-fs` backup destination's folder, or holds one, is skipped. The destinations
 are read from the backup supervisor (`current()`) at every survey and every press, and compared both
@@ -3249,18 +3251,31 @@ dies leaves its file behind; the next holder overwrites it.
 **Every start takes the venue lock before it deletes backup staging; the holder file decides only
 when the lock cannot be taken.** Whatever the free space, a start through the box's entry point
 (`runEntry`, `apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this
-clean-up) deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
+clean-up, except that boot itself removes the restore working folders, `clearRestoreLeftovers` in
+`apps/server/src/boot.ts`) deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
 `lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it.
-The same section deletes `<state>/restore-staging/staged-recovery` whole. That is where the setup
-wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
+The same section deletes every restore working folder (`restoreLeftovers`,
+`apps/server/src/restore-staging-dirs.ts`): `<state>/restore-staging/staged-recovery` whole, the
+`stream-restore-` and `restore-entry-` folders in `<state>`, and the `archive-download-`,
+`archive-validate-` and `restore-admission-` folders in `<state>/restore-staging`. The staged-recovery
+folder is where the setup wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
 `apps/server/src/recovery-preparation.ts`) keeps the uploaded backup it is checking as a decrypted
 venue database, with a working copy of it, one backup at a time: staging another deletes the one it
-replaces once nothing reads it. Only the server stages a copy, after its store has taken the lock: in
-`bootServer` (`apps/server/src/boot.ts`) the long-lived `openVenueDatabase` comes before the only call
-of `createSetupRecoveryPreparation`. On a
+replaces once nothing reads it. The others are a restore's or a backup check's own, removed when it
+ends. Every process that makes one holds the venue folder from before it makes it until it is done
+with it, so a start that holds the folder finds only what a killed run left: the server, whose store
+takes the lock in `bootServer` (`apps/server/src/boot.ts`), where the long-lived `openVenueDatabase`
+comes before the only call of `createSetupRecoveryPreparation`; the restore command, from resolving
+its target to its exit (`resolveRestoreTarget`, `apps/server/src/restore-command.ts`); and a staged
+restore, from just after its start-again check until it returns (`runStagedRestore`,
+`apps/server/src/restore-request.ts`), which the box's entry runs before it takes its own hold. On a
 box, only the server runs a backup (`BackupSupervisor`, started in
 `apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
-staging, the start is refused. With no venue folder it deletes without the lock, because taking it creates the folder.
+staging, the start is refused. With no venue folder it deletes without the lock, because taking it
+creates the folder. Each maker above creates the venue folder before its first working folder, so
+the start lists the restore folders first and deletes them only if the venue folder is still missing
+after the listing; the case "keeps the working folder of a restore that makes the venue folder after
+the start found none" in `apps/server/src/start-space.test.ts` holds that order.
 Measured 2026-10-21, Node v26.11.1, macOS, on the 32 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
 makes, with a second process holding `venue.lock` by `begin immediate`: `lockVenueDatabase` was
 refused `provisioning.database_in_use` with 0, 4 KiB and 16 KiB left. The control, with no other
@@ -3351,9 +3366,9 @@ lock, not that every writer of the file takes it.
 | --- | --- | --- |
 | `apps/server/src/boot.ts` | the server | locks up to five times in turn: placing a handover's accepted copy (`placeAcceptedCopyForStart`, `apps/server/src/handover-place-copy.ts`, with a node identity and an existing `node.db`), the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
-| `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws (on a box that waits for its peers, `startServer` returns as soon as the waiting start is listening, before the wait ends; see the backlog's _The waiting start's loose ends_). The ahead check's opens and the server's opens during its start share that hold |
+| `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase`; the staged restore takes `lockRestoreTarget` just after its start-again check, before it makes a working folder or changes anything, and its placement (`writeValidated`) shares that hold. `runEntry` then takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws (on a box that waits for its peers, `startServer` returns as soon as the waiting start is listening, before the wait ends; see the backlog's _The waiting start's loose ends_). The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
-| `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated`; and the setup-mode server before it stages a restore (`boot.ts`): `refuseIfArchiveSourceLive` for `/setup-api/restore` and `/setup-api/cloud-recovery/restore`, `prepareStreamRestore` for `/setup-api/restore-bucket` | each opens validation's private archive database or the prepared download (`stream-restore-XXXXXX`), never the destination venue folder; archive validation owns and disposes its private directory |
+| `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated`; and the setup-mode server before it stages a restore (`boot.ts`): `refuseIfArchiveSourceLive` for `/setup-api/restore` and `/setup-api/cloud-recovery/restore`, `prepareStreamRestore` for `/setup-api/restore-bucket` | each opens validation's private archive database or the prepared download (`stream-restore-XXXXXX`), never the destination venue folder; archive validation owns and disposes its private directory. In `waitron-restore` these run under the restore command's own hold on the destination venue folder (`restore-command.ts`, `resolveRestoreTarget`), taken after the start-again check and before the first-setup check and kept until the command exits, so a server holding the folder refuses the command before it downloads or decrypts anything, and `writeValidated`'s take shares that hold |
 | `apps/server/src/reset-request.ts` (`runStagedReset`) | the container entrypoint, when the setup wizard has staged a reset, before the server starts | takes `lockVenueDatabase` before its first check and holds it through the wipe; its `openVenueDatabase` for the check shares that hold, and it releases before `runEntry` locks again |
 | `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |
 | `packages/migrations/src/apply.ts` | boot, restore, rejoin, dev scripts | locks (default), inside its own `migrations.lock` |
@@ -5138,8 +5153,12 @@ by `since` even when it missed the run that cleared it.
   deleted, and stays "the newest" in its folder until a later one exists, so the real latest backup
   can be deleted. A step the box made puts it last and stops it counting as the newest, but only
   while the hold lasts; a clock that runs ahead with no step the box made changes nothing.
-- A restore reading an archive in another process can race its deletion (A1127's limit). Not
-  measured.
+- On one box the restore command cannot overlap these deletions: the restore command takes the venue
+  folder before it reads an archive and holds it to its exit (`resolveRestoreTarget`,
+  `apps/server/src/restore-command.ts`), so it is refused while the server runs and the server
+  cannot start under it, and the start's own deletion (`deleteOldBackupsAtStart`) skips while the
+  folder is held. A restore reading an archive from a folder another box also backs up to can still
+  race that box's deletion (A1127's limit). Not measured.
 - The folder check before each deletion narrows, but does not close, the window in which a folder
   swapped for a link is followed.
 - A crash between a deletion and recording its alert loses the alert; so does a disk still too full
@@ -5251,8 +5270,6 @@ only the rejoin's wipe, through `db-wipe.ts`, is guarded.
 - `venue.db`'s device number and birth time are not measured on Linux or in Docker; a mismatch
   skips, which is safe. The in-place-write control in `apps/server/src/backup-room-note.test.ts`, run
   by CI on Linux, is the only receipt that ordinary writes keep them.
-- A `waitron-restore` run reading a folder archive while the app restarts can race its deletion, as
-  above. Not measured.
 - A backup stamped by a clock that ran ahead, and a folder two boxes share, are the run's own limits
   above.
 - A restore that crashes between placing the file and writing its new installation leaves the

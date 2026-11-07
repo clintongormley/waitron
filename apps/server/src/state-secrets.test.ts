@@ -276,6 +276,13 @@ describe("state-secrets", () => {
     expect((await stat(join(dest, "tls"))).mode & 0o777).toBe(0o700);
   });
 
+  it("writes each file under its name plus the suffix, and not under its own name", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-suffix-"));
+    await unpackBundleToDir({ "a.env": "a\n" }, dest, { suffix: ".incoming" });
+    expect(await readFile(join(dest, "a.env.incoming"), "utf8")).toBe("a\n");
+    expect(await readdir(dest)).toEqual(["a.env.incoming"]);
+  });
+
   it("leaves the folder above the destination as it was", async () => {
     const files = await collectStateSecrets(await seedStateDir());
     const above = mkdtempSync(join(tmpdir(), "state-secrets-above-"));

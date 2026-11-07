@@ -384,10 +384,7 @@ describe("prepareStreamRestore", () => {
 
   it("a failed integrity check stops the restore before anything changes", async () => {
     const deps = await prepareDeps(await bucket(), {
-      checkIntegrity: async () => [
-        "*** in database main ***",
-        "Page 7: btreeInitPage() returns error code 11",
-      ],
+      checkIntegrity: async () => false,
     });
     await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
       code: "restore.stream_integrity_failed",
@@ -607,7 +604,7 @@ describe("prepareStreamRestore", () => {
       "two venue rows",
       "insert into locations (id, name, invoice_locales, operation_description) values ('c0000000-0000-4000-8000-0000000000aa', 'Other', '[\"es\"]', 'Venta')",
     ],
-    ["no venue row", "delete from locations"],
+    ["no venue row", "delete from invoice_series; delete from nodes; delete from locations"],
   ])("refuses a copy with %s as an unknown identity, as an archive of it is", async (_, change) => {
     const deps = await prepareDeps(await bucket(), {
       restoreGeneration: async (args) => {
@@ -615,6 +612,8 @@ describe("prepareStreamRestore", () => {
         const copy = new DatabaseSync(args.outPath, { enableForeignKeyConstraints: false });
         try {
           copy.exec(change);
+          // Otherwise the copy is refused as damaged before the identity is read.
+          expect(copy.prepare("pragma foreign_key_check").all()).toEqual([]);
         } finally {
           copy.close();
         }
@@ -882,21 +881,51 @@ describe("refuseIfArchiveSourceLive", () => {
   });
 });
 
-/** `checkIntegrity` over `<dir>/venue.db`, opened for the call. */
-async function integrityOf(dir: string): Promise<string[]> {
-  const store = await openVenueDatabase(dir);
-  try {
-    return await checkIntegrity(store);
-  } finally {
-    await store.close();
-  }
+/** `checkIntegrity` over `<dir>/venue.db`. */
+function integrityOf(dir: string): Promise<boolean> {
+  return checkIntegrity(join(dir, "venue.db"));
 }
 
 describe("checkIntegrity", () => {
+  it("keeps the main thread's timers turning while it checks a copy that takes the main thread over one timer period", async () => {
+    const file = join(await fresh("waitron-integrity-large-"), "venue.db");
+    const build = new DatabaseSync(file);
+    try {
+      build.exec("create table t(x blob)");
+      build.exec("begin");
+      const insert = build.prepare("insert into t values (randomblob(4000))");
+      for (let i = 0; i < 15_000; i++) insert.run();
+      build.exec("commit");
+    } finally {
+      build.close();
+    }
+    const ticksDuring = async (work: () => unknown) => {
+      let ticks = 0;
+      const interval = setInterval(() => ticks++, 10);
+      try {
+        return { answer: await work(), ticks };
+      } finally {
+        clearInterval(interval);
+      }
+    };
+    // The file is large enough only if checking it on the main thread outlasts the interval below.
+    const started = performance.now();
+    const db = new DatabaseSync(file);
+    try {
+      db.prepare("pragma integrity_check").all();
+    } finally {
+      db.close();
+    }
+    expect(performance.now() - started).toBeGreaterThanOrEqual(10);
+    const threaded = await ticksDuring(() => checkIntegrity(file));
+    expect(threaded.answer).toBe(true);
+    expect(threaded.ticks).toBeGreaterThan(0);
+  }, 60_000);
+
   it("passes a healthy venue file", async () => {
     const dir = await fresh("waitron-integrity-");
     await copyFile(fixtureDb, join(dir, "venue.db"));
-    expect(await integrityOf(dir)).toEqual([]);
+    expect(await integrityOf(dir)).toBe(true);
   });
 
   it("fails a download that is not a database as a damaged copy, without a raw error", async () => {
@@ -912,18 +941,49 @@ describe("checkIntegrity", () => {
     await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
       code: "restore.stream_integrity_failed",
     });
-    expect(problems).toEqual([{ problems: 1 }]);
+    expect(problems).toEqual([{}]);
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("fails a copy whose rows name a missing parent, with the real check left in place", async () => {
+    const problems: unknown[] = [];
+    const deps = await prepareDeps(await bucket(), {
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const db = new DatabaseSync(args.outPath);
+        try {
+          db.exec("pragma foreign_keys = off; delete from locations");
+        } finally {
+          db.close();
+        }
+      },
+      log: (_level, event, fields) => {
+        if (event === "restore.stream_integrity_failed") problems.push(fields);
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_integrity_failed",
+    });
+    expect(problems).toEqual([{}]);
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("fails a copy that passes the check but will not open as a damaged copy", async () => {
+    const deps = await prepareDeps(await bucket(), {
+      checkIntegrity: async () => true,
+      restoreGeneration: async (args) => {
+        await writeFile(args.outPath, Buffer.alloc(8192, 0x5a));
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_integrity_failed",
+    });
     await expectStateUntouched(deps.stateDir);
   });
 
   it("reports a copy it cannot read, without throwing", async () => {
     const dir = await fresh("waitron-integrity-");
-    await copyFile(fixtureDb, join(dir, "venue.db"));
-    const store = await openVenueDatabase(dir);
-    await store.close();
-    expect(await checkIntegrity(store)).toEqual([
-      "the file could not be opened or read as a database",
-    ]);
+    expect(await integrityOf(dir)).toBe(false);
   });
 
   it("reports what SQLite's check finds in a database that opens but is damaged", async () => {
@@ -952,8 +1012,7 @@ describe("checkIntegrity", () => {
     const bytes = await readFile(file);
     bytes.fill(0x5a, (root - 1) * pageSize + 8, root * pageSize);
     await writeFile(file, bytes);
-    const problems = await integrityOf(dir);
-    expect(problems.some((line) => /missing from index damaged_a/.test(line))).toBe(true);
+    expect(await integrityOf(dir)).toBe(false);
   });
 });
 
@@ -1043,7 +1102,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
   it("a failed integrity check leaves the box's own database and identity exactly as they were", async () => {
     const venueDir = await fresh("waitron-stream-venue-");
     await writeFile(join(venueDir, "venue.db"), "the box's own database");
-    const deps = await prepareDeps(await bucket(), { checkIntegrity: async () => ["corrupt"] });
+    const deps = await prepareDeps(await bucket(), { checkIntegrity: async () => false });
     await writeFile(join(deps.stateDir, "trading.env"), "WAITRON_NODE_ID=someone-else\n");
     await expect(
       restoreFromStream({
@@ -1331,7 +1390,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
-  it("never confirms a copy that names no tax id, even against an empty confirmation", async () => {
+  it("refuses a copy with no taxpayer as an unknown identity, staging nothing", async () => {
     const deps = await stageDeps({
       venueConfirmed: "",
       restoreGeneration: async (args) => {
@@ -1345,8 +1404,28 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
       },
     });
     await expect(stageStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.identity_unknown",
+      params: { nodeId: T.nodeId },
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("refuses a copy whose taxpayer has no tax id as unconfirmed, staging nothing", async () => {
+    const deps = await stageDeps({
+      venueConfirmed: "",
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const copy = new DatabaseSync(args.outPath);
+        try {
+          copy.exec("update tenants set tax_id = ''");
+        } finally {
+          copy.close();
+        }
+      },
+    });
+    await expect(stageStreamRestore(deps)).rejects.toMatchObject({
       code: "restore.stream_venue_unconfirmed",
-      params: { legalName: "", taxId: "", venueName: VENUE.venueName },
+      params: { ...VENUE, taxId: "" },
     });
     await expectStateUntouched(deps.stateDir);
   });

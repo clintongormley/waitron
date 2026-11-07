@@ -1194,8 +1194,9 @@ that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/s
 `refused`, not the names.
 
 **A full disk at start** (A798-B slice 2). Every start through the box's entry point (`runEntry`,
-`apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this)
-deletes the copies a cut-off backup run left in backup staging, and the staged recovery copies in `restore-staging/staged-recovery`,
+`apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this, except that
+boot itself removes the restore working folders, `clearRestoreLeftovers` in `apps/server/src/boot.ts`)
+deletes the copies a cut-off backup run left in backup staging, and the working folders a killed restore or backup check left (`restoreLeftovers`, `apps/server/src/restore-staging-dirs.ts`, which names them),
 unless another process holds the venue folder's lock (the heartbeat fallback is in
 conventions-data.md, "Every start takes the venue lock"); one that
 finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a

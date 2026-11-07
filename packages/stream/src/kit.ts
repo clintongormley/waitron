@@ -46,7 +46,10 @@ export function parseRecoveryKit(input: string): RecoveryKit {
   if (
     k.version !== 1 ||
     !text(k.venueId) ||
-    !text(k.recoveryKey) ||
+    // The box's own key rules (`checkedRecoveryKey`) allow any character, and a kit must open the
+    // key it was made with.
+    typeof k.recoveryKey !== "string" ||
+    k.recoveryKey === "" ||
     !text(k.pointerSignerPublicKey)
   ) {
     refuse("shape");

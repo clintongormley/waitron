@@ -6,7 +6,7 @@ import { BACKUP_ENCRYPT_DIR_PREFIX, BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
-import { RESTORE_STAGING_DIR, STAGED_RECOVERY_DIR } from "./restore-staging-dirs.js";
+import { RESTORE_STAGING_DIR, restoreLeftovers } from "./restore-staging-dirs.js";
 
 export const START_FREE_SPACE_FLOOR = 256 * 1024 * 1024;
 export const CRASH_REPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
@@ -52,7 +52,7 @@ export interface StartSpaceDeps {
 
 /**
  * Every call deletes the dumps and `backup-encrypt-*` folders a backup run leaves in backup staging,
- * and the staged recovery copies in restore staging, unless another process holds the venue folder's
+ * and the working folders a restore leaves (`restoreLeftovers`), unless another process holds the venue folder's
  * lock — or, when the lock cannot be taken for any other reason, the folder's holder heartbeat is
  * fresh. Below `floor` (or when forced) it also
  * deletes rotated logs but the newest and crash reports older than {@link CRASH_REPORT_KEEP_MS}. A
@@ -75,23 +75,29 @@ export async function freeSpaceAtStart(
       failed(error);
     }
   };
-  const deleteStagingLeftovers = async () => {
+  const deleteStagingLeftovers = async (restoreFolders: readonly string[]) => {
     const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
     for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
       if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
       else if (name.startsWith(BACKUP_ENCRYPT_DIR_PREFIX))
         await remove(join(stagingDir, name), true);
     }
-    const restoreDir = join(deps.stateDir, RESTORE_STAGING_DIR);
-    const restoreNames = await entries(restoreDir, RESTORE_STAGING_DIR, deps.log, failed);
-    if (restoreNames?.includes(STAGED_RECOVERY_DIR))
-      await remove(join(restoreDir, STAGED_RECOVERY_DIR), true);
+    // Listed for its skipped-link and failed-listing logs; restoreLeftovers makes the same skip.
+    await entries(join(deps.stateDir, RESTORE_STAGING_DIR), RESTORE_STAGING_DIR, deps.log, failed);
+    for (const path of restoreFolders) await remove(path, true);
   };
-  // On a box, only the server runs a backup or stages a recovery copy, and it holds the venue
-  // folder's lock while it does.
+  // On a box, only the server runs a backup or stages a recovery copy, and only a process holding
+  // the venue folder's lock runs a restore; each holds that lock while it does.
   const removeStagingLeftovers = async () => {
-    // Taking the lock would create a missing venue folder; with none, no process can hold it.
-    if (deps.venueHeld === true || (await missing(deps.venueDir))) return deleteStagingLeftovers();
+    if (deps.venueHeld === true)
+      return deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
+    // Taking the lock would create a missing venue folder; with none, no process can hold it. A
+    // restore makes that folder before its first working folder, so one still missing after the
+    // listing means nothing listed is a live restore's.
+    if (await missing(deps.venueDir)) {
+      const listed = await restoreLeftovers(deps.stateDir);
+      if (await missing(deps.venueDir)) return deleteStagingLeftovers(listed);
+    }
     let hold: VenueLock;
     try {
       hold = await deps.lockVenue(deps.venueDir);
@@ -102,10 +108,10 @@ export async function freeSpaceAtStart(
       // The time is read again: the deletions before this can outlast VENUE_HOLDER_STALE_MS, and a
       // live heartbeat judged against the start of them reads as one from the future.
       if (holder !== null && isVenueHolderFresh(holder, deps.now())) return;
-      return deleteStagingLeftovers();
+      return deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
     }
     try {
-      await deleteStagingLeftovers();
+      await deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
     } finally {
       hold.release();
     }

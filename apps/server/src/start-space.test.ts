@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { lockVenueDatabase, readVenueHolder, type VenueHolder } from "@waitron/db";
@@ -17,7 +17,7 @@ import {
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...real, stat: vi.fn(real.stat) };
+  return { ...real, lstat: vi.fn(real.lstat), stat: vi.fn(real.stat) };
 });
 
 const NOW = new Date("2026-10-21T12:00:00Z");
@@ -41,6 +41,7 @@ beforeEach(async () => {
 afterEach(async () => {
   // Drops a queued one-off rejection a failed case left unused; stat delegates to the real one again.
   vi.mocked(stat).mockReset();
+  vi.mocked(lstat).mockReset();
   await Promise.all(stops.splice(0).map((stop) => stop()));
   await rm(root, { recursive: true, force: true });
 });
@@ -405,26 +406,40 @@ describe("freeSpaceAtStart", () => {
       await touch(download());
     }
 
-    it("deletes the staged folder whole and leaves the rest of restore staging, with room", async () => {
+    it("deletes the staged folder whole and the restore's other working folders, with room", async () => {
       await stagedCopiesBesideADownload();
       const { deps: d, log } = deps({ free: 5000 });
       await freeSpaceAtStart(d);
       expect(existsSync(join(restoreStaging(), "staged-recovery"))).toBe(false);
-      expect(existsSync(download())).toBe(true);
-      expect(log.mock.calls).toEqual([["info", "storage.start_leftovers_deleted", { deleted: 1 }]]);
+      expect(existsSync(dirname(download()))).toBe(false);
+      expect(existsSync(restoreStaging())).toBe(true);
+      expect(log.mock.calls).toEqual([["info", "storage.start_leftovers_deleted", { deleted: 2 }]]);
     });
 
-    it("deletes the staged folder whole and leaves the rest of restore staging, below the floor", async () => {
+    it("deletes the staged folder whole and the restore's other working folders, below the floor", async () => {
       await stagedCopiesBesideADownload();
       const { deps: d, log } = deps({ free: 100 });
       await freeSpaceAtStart(d);
       expect(existsSync(join(restoreStaging(), "staged-recovery"))).toBe(false);
-      expect(existsSync(download())).toBe(true);
+      expect(existsSync(dirname(download()))).toBe(false);
       expect(log).toHaveBeenCalledWith(
         "warn",
         "storage.start_space_low",
-        expect.objectContaining({ deleted: 1 }),
+        expect.objectContaining({ deleted: 2 }),
       );
+    });
+
+    it("deletes the working folders a restore leaves in the state folder", async () => {
+      const stream = join(stateDir, "stream-restore-a1", "venue.db");
+      const entry = join(stateDir, "restore-entry-b2", "trading.env");
+      await touch(stream);
+      await touch(entry);
+      const { deps: d, log } = deps({ free: 5000 });
+      await freeSpaceAtStart(d);
+      expect(existsSync(dirname(stream))).toBe(false);
+      expect(existsSync(dirname(entry))).toBe(false);
+      expect(existsSync(venueDir)).toBe(true);
+      expect(log.mock.calls).toEqual([["info", "storage.start_leftovers_deleted", { deleted: 2 }]]);
     });
 
     it("counts the staged folder beside backup staging", async () => {
@@ -437,11 +452,21 @@ describe("freeSpaceAtStart", () => {
 
     it("keeps the staged folder while another process holds the venue folder", async () => {
       await touch(stagedCopy());
+      await touch(download());
+      const others = [
+        join(restoreStaging(), "archive-validate-d4", "venue.db"),
+        join(restoreStaging(), "restore-admission-e5", "venue.db"),
+        join(stateDir, "stream-restore-a1", "venue.db"),
+        join(stateDir, "restore-entry-b2", "trading.env"),
+      ];
+      for (const path of others) await touch(path);
       await heldElsewhere();
       const readVenueHolder = vi.fn(() => null);
       const { deps: d, log } = deps({ free: 5000, readVenueHolder });
       await freeSpaceAtStart(d);
       expect(existsSync(stagedCopy())).toBe(true);
+      expect(existsSync(download())).toBe(true);
+      for (const path of others) expect(existsSync(path)).toBe(true);
       expect(log).not.toHaveBeenCalled();
       expect(readVenueHolder).not.toHaveBeenCalled();
     });
@@ -485,6 +510,32 @@ describe("freeSpaceAtStart", () => {
       });
       await freeSpaceAtStart(stale);
       expect(existsSync(stagedCopy())).toBe(false);
+    });
+
+    it("keeps the working folder of a restore that makes the venue folder after the start found none", async () => {
+      const absent = join(root, "no-venue");
+      const live = join(restoreStaging(), "archive-validate-live");
+      const real = vi.mocked(lstat).getMockImplementation()!;
+      let first = true;
+      // The start's first look finds no venue folder; a restore then starts, making the folder,
+      // holding it, and making its first working folder, in that order.
+      vi.mocked(lstat).mockImplementation((async (path: string) => {
+        if (path !== absent || !first) return real(path);
+        first = false;
+        const answer = real(path);
+        await answer.catch(() => {});
+        await mkdir(absent);
+        stops.push((await holdVenueElsewhere(absent)).stop);
+        await mkdir(live, { recursive: true });
+        return answer;
+      }) as typeof lstat);
+      const { deps: d } = deps({
+        venueDir: absent,
+        statfs: statfsStub({ [stateDir]: [5000], [absent]: [new Error("ENOENT")] }),
+      });
+      await freeSpaceAtStart(d);
+      expect(first).toBe(false);
+      expect(existsSync(live)).toBe(true);
     });
 
     it("leaves alone a restore staging folder that is a symbolic link, and what it points at", async () => {

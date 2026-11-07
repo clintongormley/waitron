@@ -1692,7 +1692,10 @@ declare module "@waitron/shared" {
      */
     "restore.schema_too_new": { module: string; backup: number; target: number };
     /**
-     * An archive entry name is unsafe or repeats a destination already named in the archive.
+     * An archive entry name is unsafe, repeats a destination already named in the archive, names
+     * a destination that already exists as a folder (or a link to one), or names a secret ending
+     * in a suffix the restore gives its own working files (`.incoming`, `.restore-previous`,
+     * `.tmp`, `.replaced`).
      * Duplicates are refused by `validateArtifact`; escapes by `restore-entry-guard.ts`, before any
      * write, both lexically (an absolute name or a `../` escape) and through symlinks (a parent
      * directory that is a pre-existing symlink out of the target). The archive's integrity check
@@ -1755,8 +1758,8 @@ declare module "@waitron/shared" {
     /** The restored copy is a venue the operator has not confirmed: its legal name, tax id and
      * venue name, which the operator must recognise before anything is staged. */
     "restore.stream_venue_unconfirmed": { legalName: string; taxId: string; venueName: string };
-    /** SQLite's `integrity_check` found the restored copy damaged, or could not open it. Carries no
-     * SQLite text, which can name paths. */
+    /** SQLite's integrity or foreign-key check found the restored copy damaged, or the copy could
+     * not be opened. Carries no SQLite text, which can name paths. */
     "restore.stream_integrity_failed": Record<string, never>;
     /** The restored copy holds no sealed state row for the node the pointer names, so the box's
      * vault key and certificate authority cannot come back with it. */

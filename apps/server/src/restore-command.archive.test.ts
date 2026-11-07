@@ -71,7 +71,7 @@ const COLD_RESTORE_NOTICE =
 const WRONG_KEY_LINE =
   "restore failed: the recovery key in this pack does not open the archive, or the archive is damaged";
 const LEFT_DOWNLOAD_LINE =
-  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the state folder's restore-staging folder by hand";
+  "the downloaded archive could not be removed; the next server start tries to remove it";
 const DISK_FULL_LINE =
   "restore failed: the disk filled during the restore; free some space and run it again";
 const HUELLA = "A".repeat(64);
@@ -795,7 +795,7 @@ describe("waitron-restore restore --from-archive", () => {
     expect(await legalName(f.venueDir)).toBe("Live venue");
   });
 
-  it("downloads the archive before it is refused by a server holding the venue folder", async () => {
+  it("is refused by a server holding the venue folder before it downloads the archive", async () => {
     const f = await fixture();
     await liveVenue(f);
     const held = new DatabaseSync(join(f.venueDir, "venue.lock"));
@@ -811,7 +811,7 @@ describe("waitron-restore restore --from-archive", () => {
       held.close();
     }
     expect(after).toEqual(before);
-    expect(f.storeCalls).toContain(`getFile:${KEY}`);
+    expect(f.storeCalls).not.toContain(`getFile:${KEY}`);
     expect({ code: result.code, last: result.out.at(-1) }).toEqual({
       code: 1,
       last: "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)",

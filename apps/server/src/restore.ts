@@ -75,8 +75,10 @@ import { checkRestoreCompatibility } from "./restore-gate.js";
 import { assertSafeEntryName } from "./restore-entry-guard.js";
 import type { BundleFiles } from "./recovery-bundle.js";
 import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
+import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { type StagedSecrets, stageSecrets } from "./restore-secrets.js";
 import "./errors.js";
 import { currentBackupVerificationTarget } from "./backup-verification-target.js";
 import {
@@ -131,6 +133,13 @@ export interface RestoreDeps extends ValidationDeps {
   readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
   readonly withModuleOperations?: RestoreOperationRunner;
   readonly resumeOperation?: OperationBinding;
+  /** Called once the archive's database is in the venue folder, or at once when resuming: until
+   * then no module step has run on it, so a failure leaves nothing a retry must check. */
+  readonly onDatabasePlaced?: () => void;
+  /** Called when a failure after placement comes before the restore hooks' transaction body has
+   * returned, so before that transaction could commit (`packages/store/src/write-queue.ts` commits
+   * only once the body resolves): the placed database holds nothing a module step committed. */
+  readonly onFailedBeforeHooksCommit?: () => void;
   readonly log: Logger;
 }
 
@@ -143,6 +152,8 @@ export interface RestoreHookResult {
 }
 
 // Authentication is reconstructed by the trusted host, never deserialised from a backup or marker.
+// A runner calls `run` once, as the body of the venue transaction it saves, and saves nothing to
+// venue.db before `run` returns: `onFailedBeforeHooksCommit` relies on it.
 export interface RestoreOperationRunner {
   (
     context: {
@@ -270,7 +281,7 @@ export async function validateEntries(
   deps: EntryValidationDeps,
 ): Promise<ValidatedArtifact> {
   const { dumpEntry, ...metadata } = await validateEntryMetadata(entries, deps);
-  const scratch = await mkdtemp(join(deps.stagingDir, "archive-validate-"));
+  const scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
   const discard = () => rm(scratch, { recursive: true, force: true });
   const databasePath = join(scratch, VENUE_FILE);
   try {
@@ -370,10 +381,15 @@ async function validateEntryMetadata(
     const prefix = entry.name.startsWith(SECRETS_PREFIX) ? SECRETS_PREFIX : "";
     const root = prefix === SECRETS_PREFIX ? deps.stateDir : deps.stagingDir;
     const target = await assertSafeEntryName(entry.name.slice(prefix.length), root);
-    if (destinations.has(target)) {
+    // Two names for one file would share one staged and one set-aside copy, and the second publish
+    // would set the first one's new file aside over the box's old one. Resolved through links (the
+    // guard has made the parent), and the name in lower case because a case-insensitive filesystem
+    // treats `server.key` and `SERVER.KEY` as one file.
+    const location = join(await realpath(dirname(target)), basename(target)).toLowerCase();
+    if (destinations.has(location)) {
       throw new AppError("restore.unsafe_entry_path", { name: entry.name });
     }
-    destinations.add(target);
+    destinations.add(location);
     entry.name = posix.normalize(entry.name);
   }
 
@@ -383,8 +399,10 @@ async function validateEntryMetadata(
 }
 
 /**
- * Once the old identity is set aside, a failure before the secrets write leaves no bootable
- * identity.
+ * The secrets are staged before anything is replaced, so a full disk met during staging leaves the
+ * box as it was. Placing the database is the point of no return for the box's files: after it a
+ * failure keeps the placed database with the box's identity set aside. The hooks' commit is what a
+ * staged restore resumes from.
  */
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
@@ -401,46 +419,69 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     } finally {
       await existing.close();
     }
-  } else {
-    if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
-    await restoreDatabase({
-      databasePath: validated.databasePath,
-      // One source per restore: a restore that keeps the box's identity keeps its node.db too.
-      ...(deps.skipSecrets ? {} : { nodeDump: validated.nodeDump }),
-      venueDir: deps.venueDir,
-      stateDir: deps.stateDir,
-      log,
-    });
   }
-  // The gate admits an OLDER schema; a hook written against today's must not run against
-  // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
-  await (deps.migrate ?? applyMigrations)(
-    deps.venueDir,
-    migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
-  );
-  log("info", "restore.migrated", {});
-  if (deps.skipSecrets) {
-    log("info", "restore.identity.kept", {});
-    return;
+  let staged: StagedSecrets | undefined;
+  if (!deps.skipSecrets)
+    staged = await stageSecrets({ entries: validated.secretEntries, stateDir: deps.stateDir, log });
+  if (deps.resumeOperation === undefined) {
+    let identityMoved = false;
+    try {
+      if (!deps.skipSecrets) identityMoved = await setAsideExistingIdentity(deps.stateDir, log);
+      await restoreDatabase({
+        databasePath: validated.databasePath,
+        // One source per restore: a restore that keeps the box's identity keeps its node.db too.
+        ...(deps.skipSecrets ? {} : { nodeDump: validated.nodeDump }),
+        venueDir: deps.venueDir,
+        stateDir: deps.stateDir,
+        log,
+      });
+    } catch (error) {
+      await staged?.discard();
+      if (identityMoved) await putIdentityBack(deps.stateDir, log);
+      throw error;
+    }
   }
-  const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
+  deps.onDatabasePlaced?.();
+  let hooksReturned = false;
   try {
-    const node = await resolveArtifactNode(opened.db, validated.secretEntries);
-    const name = await readRecoveryKeyName(opened.node, node.nodeId);
-    if (name !== null) log("info", "restore.recovery_key_selected", { name });
-    await runRestoreHooks({
-      db: opened.db,
-      nodeDb: opened.node,
-      modules: deps.modules,
-      node,
-      log,
-      withModuleOperations: deps.withModuleOperations,
-      resumeOperation: deps.resumeOperation,
-    });
-  } finally {
-    await opened.close();
+    // The gate admits an OLDER schema; a hook written against today's must not run against
+    // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
+    await (deps.migrate ?? applyMigrations)(
+      deps.venueDir,
+      migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
+    );
+    log("info", "restore.migrated", {});
+    if (staged === undefined) {
+      log("info", "restore.identity.kept", {});
+      return;
+    }
+    const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
+    try {
+      const node = await resolveArtifactNode(opened.db, validated.secretEntries);
+      const name = await readRecoveryKeyName(opened.node, node.nodeId);
+      if (name !== null) log("info", "restore.recovery_key_selected", { name });
+      await runRestoreHooks({
+        db: opened.db,
+        nodeDb: opened.node,
+        modules: deps.modules,
+        node,
+        log,
+        withModuleOperations: deps.withModuleOperations,
+        resumeOperation: deps.resumeOperation,
+        onBodyReturned: () => {
+          hooksReturned = true;
+        },
+      });
+    } finally {
+      await opened.close();
+    }
+  } catch (error) {
+    if (!hooksReturned) deps.onFailedBeforeHooksCommit?.();
+    await staged?.discard();
+    throw error;
   }
-  await restoreSecrets({ entries: validated.secretEntries, stateDir: deps.stateDir, log });
+  await staged.publish();
+  await staged.finish();
 }
 
 /**
@@ -468,7 +509,7 @@ export async function writeValidated(
     if (!deps.skipSecrets && check !== undefined) {
       let directory = deps.venueDir;
       if (deps.resumeOperation === undefined) {
-        admissionDirectory = await mkdtemp(join(deps.stagingDir, "restore-admission-"));
+        admissionDirectory = await mkdtemp(join(deps.stagingDir, RESTORE_ADMISSION_PREFIX));
         directory = admissionDirectory;
         admitted = {
           ...validated,
@@ -522,14 +563,15 @@ export async function writeValidated(
  * The lock creates the folder when the restore is the first thing to write there, so it is created
  * here first, for the operator alone, as {@link restoreDatabase} would.
  */
-async function lockRestoreTarget(directory: string): Promise<VenueLock> {
+export async function lockRestoreTarget(directory: string): Promise<VenueLock> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   return lockVenueDatabase(directory);
 }
 
 /**
- * Validate an encrypted backup and its identity completeness, then set aside any existing identity,
- * restore, migrate, run the module hooks in one transaction and write the artifact's secrets last.
+ * Validate an encrypted backup and its identity completeness, then stage the artifact's secrets,
+ * set aside any existing identity, place the database, migrate, run the module hooks in one
+ * transaction and publish the staged secrets.
  */
 export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   return restoreOwned(await validateArtifact(deps), deps);
@@ -765,6 +807,10 @@ async function removeIncoming(fs: PlacementFs, incoming: string, log: Logger): P
  * main file is one whose placement put the new file in. With no `venue.db`, a folder holding
  * anything may be the only copy of the venue's database, so it is kept and the start refused with
  * `restore.database_set_aside`; an empty one is removed.
+ *
+ * Only the box's entry (`node-entry.ts`) calls it, before the server opens `venue.db`; a server
+ * started from `bin.ts` (the dev stack) does not. Boot cannot call it instead: boot's first open
+ * creates `venue.db`, which would hide the missing-database case above.
  */
 export async function clearReplacedDatabases(
   venueDir: string,
@@ -820,19 +866,38 @@ export async function restoreSecrets(args: {
 }
 
 /**
- * Move a pre-existing identity aside before anything irreversible: `<stateDir>/trading.env` →
- * `trading.env.replaced` (boot reads only the former). With the artifact's identity written only
- * after the hook transaction commits, a successful set-aside leaves NO bootable identity until the
- * secrets write — neither the target's old one nor the artifact's. A missing file is the normal
- * fresh-box case.
+ * Move a pre-existing identity aside before the database is placed: `<stateDir>/trading.env` →
+ * `trading.env.replaced` (boot reads only the former), so no identity starts beside a restored
+ * database before the artifact's is published. True when it moved a file; a missing file is the
+ * normal fresh-box case.
  */
-export async function setAsideExistingIdentity(stateDir: string, log: Logger): Promise<void> {
+export async function setAsideExistingIdentity(stateDir: string, log: Logger): Promise<boolean> {
   const path = join(stateDir, TRADING_ENV_FILE);
   try {
     await rename(path, `${path}${REPLACED_SUFFIX}`);
     log("info", "restore.identity.set_aside", {});
+    return true;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    return false;
+  }
+}
+
+/** Undoes {@link setAsideExistingIdentity} when no `trading.env` has taken its place. False, logged,
+ * when it cannot. */
+export async function putIdentityBack(stateDir: string, log: Logger): Promise<boolean> {
+  const path = join(stateDir, TRADING_ENV_FILE);
+  if (lstatSync(path, { throwIfNoEntry: false }) !== undefined) {
+    log("error", "restore.identity.put_back_failed", { errno: "EEXIST" });
+    return false;
+  }
+  try {
+    await rename(`${path}${REPLACED_SUFFIX}`, path);
+    log("info", "restore.identity.put_back", {});
+    return true;
+  } catch (error) {
+    log("error", "restore.identity.put_back_failed", { errno: errnoOf(error) });
+    return false;
   }
 }
 
@@ -932,6 +997,8 @@ export async function runRestoreHooks(args: {
   moduleOperations?: ModuleOperations;
   withModuleOperations?: RestoreOperationRunner;
   resumeOperation?: OperationBinding;
+  /** Called as the transaction body's last step, before its commit is issued. */
+  onBodyReturned?: () => void;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
   const suppliedOperations = snapshotModuleOperations(args.moduleOperations);
@@ -1007,6 +1074,7 @@ export async function runRestoreHooks(args: {
         }
       }
     }
+    args.onBodyReturned?.();
     return { seriesId, reports };
   };
   return args.withModuleOperations === undefined
@@ -1041,7 +1109,7 @@ export async function validateArtifactFile(
   deps: ValidationFileDeps,
 ): Promise<ValidatedArtifact & { readonly sourceId: string }> {
   await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
-  const scratch = await mkdtemp(join(deps.stagingDir, "archive-validate-"));
+  const scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
   const discard = () => rm(scratch, { recursive: true, force: true });
   const plaintext = join(scratch, "plaintext");
   try {

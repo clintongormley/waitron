@@ -1,9 +1,15 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { AppError } from "@waitron/shared";
+import { VENUE_LOCK_FILE } from "@waitron/store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
+import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
+
+const execFileAsync = promisify(execFile);
 
 const dirs: string[] = [];
 async function fresh(): Promise<string> {
@@ -110,7 +116,7 @@ describe("staged restore requests", () => {
       await runStagedRestore(
         {
           stateDir,
-          venueDir: "/var/lib/waitron/venue",
+          venueDir: join(stateDir, "venue"),
           migrationsRoot: "/migrations",
           log: vi.fn(),
           onManagedCloudRestored,
@@ -124,7 +130,7 @@ describe("staged restore requests", () => {
         artifactPath: join(stateDir, "restore-request.artifact"),
         recoveryKey: "recovery",
         environment: "preproduction",
-        venueDir: "/var/lib/waitron/venue",
+        venueDir: join(stateDir, "venue"),
       }),
     );
     await expect(readFile(join(stateDir, "setup-operation.json"))).rejects.toMatchObject({
@@ -146,7 +152,7 @@ describe("staged restore requests", () => {
       runStagedRestore(
         {
           stateDir,
-          venueDir: "/var/lib/waitron/venue",
+          venueDir: join(stateDir, "venue"),
           migrationsRoot: "/migrations",
           log: vi.fn(),
         },
@@ -175,7 +181,7 @@ describe("staged restore requests", () => {
       runStagedRestore(
         {
           stateDir,
-          venueDir: "/var/lib/waitron/venue",
+          venueDir: join(stateDir, "venue"),
           migrationsRoot: "/migrations",
           log: vi.fn(),
         },
@@ -203,7 +209,7 @@ describe("staged restore requests", () => {
 
     await expect(
       runStagedRestore(
-        { stateDir, venueDir: "/var/lib/waitron/venue", migrationsRoot: null, log: vi.fn() },
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: vi.fn() },
         restore,
       ),
     ).rejects.toMatchObject({ code: "EISDIR" });
@@ -225,7 +231,7 @@ describe("staged restore requests", () => {
 
     await expect(
       runStagedRestore(
-        { stateDir, venueDir: "/var/lib/waitron/venue", migrationsRoot: null, log: vi.fn() },
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: vi.fn() },
         restore,
       ),
     ).rejects.toThrow("invalid staged restore request");
@@ -272,7 +278,7 @@ describe("staged restore requests", () => {
     const restore = vi.fn(async () => {});
     await expect(
       runStagedRestore(
-        { stateDir, venueDir: "/var/lib/waitron/venue", migrationsRoot: null, log: vi.fn() },
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: vi.fn() },
         restore,
       ),
     ).rejects.toThrow("invalid staged restore request");
@@ -347,7 +353,7 @@ describe("staged restore requests from the bucket", () => {
       await runStagedRestore(
         {
           stateDir,
-          venueDir: "/var/lib/waitron/venue",
+          venueDir: join(stateDir, "venue"),
           migrationsRoot: "/migrations",
           log: vi.fn(),
         },
@@ -361,7 +367,7 @@ describe("staged restore requests from the bucket", () => {
         databasePath: join(stateDir, "restore-request.db"),
         entries: [{ name: "manifest.json", bytes: Buffer.from("{}") }],
         environment: "production",
-        venueDir: "/var/lib/waitron/venue",
+        venueDir: join(stateDir, "venue"),
         stateDir,
         stagingDir: join(stateDir, "restore-staging"),
         migrationsRoot: "/migrations",
@@ -393,7 +399,7 @@ describe("staged restore requests from the bucket", () => {
     let observed = false;
     expect(
       await runStagedRestore(
-        { stateDir, venueDir: "/v", migrationsRoot: null, log: () => {} },
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: () => {} },
         async () => {
           throw new Error("archive path selected");
         },
@@ -427,7 +433,7 @@ describe("staged restore requests from the bucket", () => {
     await staged(stateDir);
     await expect(
       runStagedRestore(
-        { stateDir, venueDir: "/v", migrationsRoot: "/m", log: vi.fn() },
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: "/m", log: vi.fn() },
         async () => {},
         async () => {
           throw new Error("restore failed");
@@ -444,7 +450,7 @@ describe("staged restore requests from the bucket", () => {
     await staged(stateDir);
     await expect(
       runStagedRestore(
-        { stateDir, venueDir: "/v", migrationsRoot: "/m", log: vi.fn() },
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: "/m", log: vi.fn() },
         async () => {},
         async () => {
           throw new AppError("provisioning.database_in_use", { database: "/v" });
@@ -485,7 +491,7 @@ describe("staged restore requests from the bucket", () => {
     const stream = vi.fn(async () => {});
     await expect(
       runStagedRestore(
-        { stateDir, venueDir: "/v", migrationsRoot: "/m", log: vi.fn() },
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: "/m", log: vi.fn() },
         archive,
         stream,
       ),
@@ -502,7 +508,7 @@ describe("staged restore requests, the edges", () => {
     const stream = vi.fn(async () => {});
     expect(
       await runStagedRestore(
-        { stateDir, venueDir: "/v", migrationsRoot: null, log: vi.fn() },
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: vi.fn() },
         restore,
         stream,
       ),
@@ -528,7 +534,13 @@ describe("staged restore requests, the edges", () => {
     });
     expect(
       await runStagedRestore(
-        { stateDir, venueDir: "/v", migrationsRoot: null, log: vi.fn(), onManagedCloudRestored },
+        {
+          stateDir,
+          venueDir: join(stateDir, "venue"),
+          migrationsRoot: null,
+          log: vi.fn(),
+          onManagedCloudRestored,
+        },
         async () => {},
       ),
     ).toBe(true);
@@ -539,7 +551,7 @@ describe("staged restore requests, the edges", () => {
 describe("restaging over an earlier request", () => {
   const deps = (stateDir: string) => ({
     stateDir,
-    venueDir: "/v",
+    venueDir: join(stateDir, "venue"),
     migrationsRoot: null,
     log: vi.fn(),
   });
@@ -592,5 +604,76 @@ describe("restaging over an earlier request", () => {
     const archive = vi.fn(async () => {});
     expect(await runStagedRestore(deps(stateDir), archive)).toBe(false);
     expect(archive).not.toHaveBeenCalled();
+  });
+});
+
+describe("a staged restore holds the venue folder", () => {
+  /** Whether a second PROCESS can take `venueDir`'s lock the way `lockVenueDirectory` takes it. */
+  async function lockableElsewhere(venueDir: string): Promise<boolean> {
+    const script = `import { DatabaseSync } from "node:sqlite";
+const connection = new DatabaseSync(process.argv[1]);
+connection.exec("pragma busy_timeout = 0");
+try { connection.exec("begin immediate"); process.stdout.write("free"); }
+catch (error) { process.stdout.write(error.errcode === 5 ? "busy" : String(error)); }`;
+    const { stdout } = await execFileAsync(process.execPath, [
+      "--input-type=module",
+      "-e",
+      script,
+      join(venueDir, VENUE_LOCK_FILE),
+    ]);
+    if (stdout !== "free" && stdout !== "busy") throw new Error(stdout);
+    return stdout === "free";
+  }
+
+  async function stagedArchive(): Promise<{ stateDir: string; venueDir: string }> {
+    const stateDir = await fresh();
+    const venueDir = join(stateDir, "venue");
+    await mkdir(venueDir);
+    await stageRestoreRequest(stateDir, {
+      artifact: Uint8Array.from([9]),
+      recoveryKey: "recovery",
+      environment: "production",
+    });
+    return { stateDir, venueDir };
+  }
+
+  it("while the staged copy is checked, so another process cannot take the folder", async () => {
+    const { stateDir, venueDir } = await stagedArchive();
+    let duringRestore: boolean | undefined;
+    await runStagedRestore({ stateDir, venueDir, migrationsRoot: null, log: vi.fn() }, async () => {
+      duringRestore = await lockableElsewhere(venueDir);
+    });
+    expect(duringRestore).toBe(false);
+    expect(await lockableElsewhere(venueDir)).toBe(true);
+  });
+
+  it("and gives it up when the restore fails", async () => {
+    const { stateDir, venueDir } = await stagedArchive();
+    await expect(
+      runStagedRestore({ stateDir, venueDir, migrationsRoot: null, log: vi.fn() }, async () => {
+        throw new Error("restore failed");
+      }),
+    ).rejects.toThrow("restore failed");
+    expect(await lockableElsewhere(venueDir)).toBe(true);
+  });
+
+  it("refused before any check runs, keeping the request, while another process holds it", async () => {
+    const { stateDir, venueDir } = await stagedArchive();
+    const holder = await holdVenueElsewhere(venueDir);
+    const restore = vi.fn(async () => {});
+    try {
+      await expect(
+        runStagedRestore({ stateDir, venueDir, migrationsRoot: null, log: vi.fn() }, restore),
+      ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+    } finally {
+      await holder.stop();
+    }
+    expect(restore).not.toHaveBeenCalled();
+    expect(await readFile(join(stateDir, "restore-request.artifact"))).toEqual(Buffer.from([9]));
+    expect(await readFile(join(stateDir, "restore-request.key"), "utf8")).toBe("recovery");
+    expect(JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"))).toEqual({
+      version: 1,
+      environment: "production",
+    });
   });
 });

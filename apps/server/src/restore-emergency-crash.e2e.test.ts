@@ -21,11 +21,19 @@ import {
 } from "@waitron/fiscal-verifactu";
 import { recordSale } from "@waitron/core";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
-import { orderedMigrationSets } from "@waitron/module";
-import { seriesId as brandSeriesId } from "@waitron/shared";
-import { migrationOptionsFor } from "@waitron/migrations";
+import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
+import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
+import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { ALL_MODULES } from "./modules.js";
-import { runRestoreHooks } from "./restore.js";
+import {
+  restoreFromArtifactFile,
+  runRestoreHooks,
+  type PlacementDeps,
+  type RestoreOperationRunner,
+} from "./restore.js";
+import { runStagedRestore } from "./restore-request.js";
+import { writeStreamRestore } from "./restore-stream.js";
 import { stagedHourCrash } from "./testing/staged-hour-crash.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
@@ -100,14 +108,11 @@ it.each([
   async (kind, fault) => {
     const f = await stage(kind);
     const failure = Object.assign(new Error("injected post-commit write failure"), { code: "EIO" });
-    const originalOpen = nativeFs.open;
-    vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
-      if (
-        String(args[0]) ===
-        join(f.stateDir, fault === "settings" ? "trading.env.tmp" : "credentials.key.tmp")
-      )
-        throw failure;
-      return originalOpen(...args);
+    const target = join(f.stateDir, fault === "settings" ? "trading.env" : "credentials.key");
+    const originalRename = nativeFs.rename;
+    vi.spyOn(nativeFs, "rename").mockImplementation(async (...args) => {
+      if (String(args[0]) === `${target}.incoming` && String(args[1]) === target) throw failure;
+      return originalRename(...args);
     });
     syncBuiltinESMExports();
     await expect(f.run()).rejects.toBe(failure);
@@ -133,6 +138,285 @@ it.each([
       code: "ENOENT",
     });
     expect(await f.run()).toBe(false);
+  },
+);
+
+/** Every call of `nativeFs[method]` that `matches` picks throws `failure` until the mocks are
+ * restored. */
+function failEvery(
+  method: "copyFile" | "rename" | "writeFile",
+  matches: (...args: string[]) => boolean,
+  failure: Error,
+) {
+  const original = nativeFs[method] as (...args: unknown[]) => Promise<unknown>;
+  vi.spyOn(nativeFs, method).mockImplementation((async (...args: unknown[]) => {
+    if (matches(...args.map(String))) throw failure;
+    return original(...args);
+  }) as never);
+  syncBuiltinESMExports();
+}
+
+const enospc = () =>
+  Object.assign(new Error("injected full disk before placement"), { code: "ENOSPC" });
+
+const beforePlacement = {
+  "the first-start marker cannot be written": (f: Awaited<ReturnType<typeof stage>>) =>
+    failEvery(
+      "writeFile",
+      (path) => path === join(f.stateDir, "rebuild-first-start.json.tmp"),
+      enospc(),
+    ),
+  "the copy for the admission check cannot be written": () =>
+    failEvery("copyFile", (_from, to) => to.includes("restore-admission-"), enospc()),
+};
+
+it.each(
+  (["archive", "stream"] as const).flatMap((kind) =>
+    Object.keys(beforePlacement).map(
+      (name) => [kind, name as keyof typeof beforePlacement] as const,
+    ),
+  ),
+)(
+  "a started %s request whose restore stops before placement because %s gets its marker back and the next start finishes it",
+  async (kind, name) => {
+    const inject = beforePlacement[name];
+    const f = await stage(kind);
+    const markerPath = join(f.stateDir, "restore-request.json");
+    const before = await readFile(markerPath, "utf8");
+    inject(f);
+    await expect(f.run()).rejects.toMatchObject({ code: "ENOSPC" });
+    vi.restoreAllMocks();
+    syncBuiltinESMExports();
+    expect(await readFile(markerPath, "utf8")).toBe(before);
+    expect(await readdir(f.venueDir)).not.toContain("venue.db");
+    await expect(f.run()).resolves.toBe(true);
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
+  },
+);
+
+it("a started request whose database move leaves the old one set aside gets its marker back and the next start finishes it", async () => {
+  const f = await stage("archive");
+  await f.seedDestination();
+  const markerPath = join(f.stateDir, "restore-request.json");
+  const before = await readFile(markerPath, "utf8");
+  const venueFile = join(f.venueDir, "venue.db");
+  failEvery(
+    "rename",
+    (_from, to) => to === venueFile,
+    Object.assign(new Error("injected placement failure"), { code: "EIO" }),
+  );
+  await expect(f.run()).rejects.toMatchObject({
+    code: "restore.placement_failed",
+    params: { kept: "set_aside" },
+  });
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
+  expect(await readFile(markerPath, "utf8")).toBe(before);
+  await expect(f.run()).resolves.toBe(true);
+  expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
+  expect((await f.snapshot()).allocations).toHaveLength(2);
+});
+
+// The identity's way back failing does not keep "placement started": nothing a module step commits
+// has run, so the next start places the archive afresh, and the old identity stays set aside.
+it("a started request whose old identity cannot be put back after a placement failure gets its marker back", async () => {
+  const f = await stage("archive");
+  await f.seedDestination();
+  const previousIdentity = `WAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n# old box\n`;
+  await writeFile(join(f.stateDir, "trading.env"), previousIdentity, { mode: 0o600 });
+  const markerPath = join(f.stateDir, "restore-request.json");
+  const before = await readFile(markerPath, "utf8");
+  const venueFile = join(f.venueDir, "venue.db");
+  const replaced = join(f.stateDir, "trading.env.replaced");
+  failEvery(
+    "rename",
+    (from, to) => (from === `${venueFile}.incoming` && to === venueFile) || from === replaced,
+    Object.assign(new Error("injected placement failure"), { code: "EIO" }),
+  );
+  await expect(f.run()).rejects.toMatchObject({
+    code: "restore.placement_failed",
+    params: { kept: "previous" },
+  });
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
+  await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
+  expect(await readFile(markerPath, "utf8")).toBe(before);
+  await expect(f.run()).resolves.toBe(true);
+  expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).not.toBe(previousIdentity);
+  expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
+});
+
+const throwingHook: WaitronModule = {
+  ...fakeSetlessModule("synthetic-failing-restore", "core"),
+  backup: {
+    restore: async () => {
+      throw new AppError("module.operation_invalid", { module: "synthetic-failing-restore" });
+    },
+  },
+} as WaitronModule;
+
+const afterPlacement = {
+  "its migration fails": {
+    inject: (f: Awaited<ReturnType<typeof stage>>): Partial<PlacementDeps> => ({
+      migrate: async (directory, options) => {
+        if (directory === f.venueDir)
+          throw new AppError("migrations.apply_failed", { set: "__drizzle_migrations_db" });
+        return applyMigrations(directory, options);
+      },
+    }),
+    code: "migrations.apply_failed",
+    fiscalHookRan: false,
+  },
+  // Last, so the fiscal hook has run in the same transaction before this one throws.
+  "a module's restore hook throws": {
+    inject: (): Partial<PlacementDeps> => ({ modules: [...ALL_MODULES, throwingHook] }),
+    code: "restore.hook_failed",
+    fiscalHookRan: true,
+  },
+};
+
+it.each(
+  (["archive", "stream"] as const).flatMap((kind) =>
+    Object.keys(afterPlacement).map((name) => [kind, name as keyof typeof afterPlacement] as const),
+  ),
+)(
+  "a started %s request whose restore stops after placement because %s gets its marker back and the next start finishes it",
+  async (kind, name) => {
+    const f = await stage(kind);
+    await f.seedDestination();
+    const previousIdentity = `WAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n# old box\n`;
+    await writeFile(join(f.stateDir, "trading.env"), previousIdentity, { mode: 0o600 });
+    const markerPath = join(f.stateDir, "restore-request.json");
+    const before = await readFile(markerPath, "utf8");
+    const fault = afterPlacement[name];
+    const injected = fault.inject(f);
+    const journal = f.journal();
+    const hooksDone: unknown[] = [];
+    await expect(
+      runStagedRestore(
+        {
+          ...f.restore,
+          log: (_level, event, fields) => {
+            if (event === "restore.hook.done") hooksDone.push(fields?.module);
+          },
+        },
+        (deps) => restoreFromArtifactFile({ ...deps, ...injected }),
+        (args) => writeStreamRestore({ ...args, ...injected }),
+      ),
+    ).rejects.toMatchObject({ code: fault.code });
+    expect(hooksDone.includes("fiscal-verifactu")).toBe(fault.fiscalHookRan);
+    expect(await readFile(markerPath, "utf8")).toBe(before);
+    expect(f.journal()).toBe(journal);
+    const placed = await f.snapshot();
+    expect(placed.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
+    await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    const replaced = join(f.stateDir, "trading.env.replaced");
+    expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
+    await expect(f.run()).resolves.toBe(true);
+    const restored = await f.snapshot();
+    expect(restored.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
+    expect(restored.records).toEqual(f.originalRecords);
+    expect(restored.registrations).toHaveLength(2);
+    const selected: { code: string }[] =
+      JSON.parse(before).recoveryOperation.input.allocation.series;
+    expect(
+      restored.series
+        .filter((row) => row.retiredAt === null)
+        .map((row) => row.code)
+        .sort(),
+    ).toEqual(selected.map((row) => row.code).sort());
+    const identity = await readFile(join(f.stateDir, "trading.env"), "utf8");
+    expect(identity).toContain(f.node.nodeId);
+    expect(identity).not.toBe(previousIdentity);
+    expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
+    expect(await f.run()).toBe(false);
+  },
+);
+
+it.each(["archive", "stream"] as const)(
+  "a started %s request that fails after its restore hooks committed keeps placement started, and the next start finishes it by a checked replay",
+  async (kind) => {
+    const f = await stage(kind);
+    await f.seedDestination();
+    const failure = new Error("injected failure closing the committed database");
+    const openDb: PlacementDeps["openDb"] = async (directory) => {
+      const store = await openVenueDatabase(directory);
+      return {
+        db: store.venue,
+        node: store.node,
+        close: async () => {
+          await store.close();
+          if (directory === f.venueDir) throw failure;
+        },
+      };
+    };
+    await expect(
+      runStagedRestore(
+        { ...f.restore },
+        (deps) => restoreFromArtifactFile({ ...deps, openDb }),
+        (args) => writeStreamRestore({ ...args, openDb }),
+      ),
+    ).rejects.toBe(failure);
+    expect(
+      JSON.parse(await readFile(join(f.stateDir, "restore-request.json"), "utf8")),
+    ).toHaveProperty("placementStarted", true);
+    const committed = await f.snapshot();
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
+      "0CNNW",
+      "0CNQR",
+    ]);
+    await expect(f.run()).resolves.toBe(true);
+    expect(await f.snapshot()).toEqual(committed);
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
+  },
+);
+
+it.each(["archive", "stream"] as const)(
+  "a started %s request whose restore runner fails after its save went through keeps placement started, and the next start finishes it by a checked replay",
+  async (kind) => {
+    const f = await stage(kind);
+    await f.seedDestination();
+    const failure = new Error("injected failure after the runner's save");
+    const failAfter = (runner: RestoreOperationRunner | undefined): RestoreOperationRunner => {
+      const wrapped: RestoreOperationRunner = async (context, run) => {
+        await runner!(context, run);
+        throw failure;
+      };
+      if (runner?.checkBeforePlacement !== undefined)
+        wrapped.checkBeforePlacement = runner.checkBeforePlacement;
+      return wrapped;
+    };
+    await expect(
+      runStagedRestore(
+        { ...f.restore },
+        (deps) =>
+          restoreFromArtifactFile({
+            ...deps,
+            withModuleOperations: failAfter(deps.withModuleOperations),
+          }),
+        (args) =>
+          writeStreamRestore({
+            ...args,
+            withModuleOperations: failAfter(args.withModuleOperations),
+          }),
+      ),
+    ).rejects.toBe(failure);
+    expect(
+      JSON.parse(await readFile(join(f.stateDir, "restore-request.json"), "utf8")),
+    ).toHaveProperty("placementStarted", true);
+    const committed = await f.snapshot();
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
+      "0CNNW",
+      "0CNQR",
+    ]);
+    await expect(f.run()).resolves.toBe(true);
+    expect(await f.snapshot()).toEqual(committed);
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
   },
 );
 
@@ -332,10 +616,10 @@ import { runStagedRestore } from ${JSON.stringify(resolve("src/restore-request.t
 const [stateDir, venueDir, migrationsRoot, phase] = process.argv.slice(2);
 const wait = async () => { console.log("RECOVERY_CRASH_GATE"); await new Promise(() => { setInterval(() => {}, 1000); }); };
 if (phase === "staged" || phase === "hour-selected") await wait();
-const original = nativeFs.open;
-nativeFs.open = async (path, ...args) => {
-  if (phase === "before-publication" && String(path) === join(stateDir, "trading.env.tmp")) await wait();
-  return original(path, ...args);
+const original = nativeFs.rename;
+nativeFs.rename = async (from, to) => {
+  if (phase === "before-publication" && String(to) === join(stateDir, "trading.env")) await wait();
+  return original(from, to);
 };
 syncBuiltinESMExports();
 await runStagedRestore({ stateDir, venueDir, migrationsRoot, log: (_level, event, fields) => {

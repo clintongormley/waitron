@@ -3,7 +3,7 @@ import {
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "@waitron/provisioning";
-import { lockVenueDatabase } from "@waitron/db";
+import type { VenueLock } from "@waitron/db";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -12,7 +12,7 @@ import {
   RecoveryPackFileError,
   type RecoveryPackFile,
 } from "@waitron/recovery-pack";
-import { AppError, hasCode } from "@waitron/shared";
+import { AppError, diskFullIn, hasCode } from "@waitron/shared";
 import {
   createS3ObjectStore,
   type S3FileStore,
@@ -33,6 +33,7 @@ import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
+  lockRestoreTarget,
   restoreFromArtifactFile,
   validateArtifactFile,
   type RestoreFileDeps,
@@ -66,6 +67,8 @@ interface CommandDeps {
   /** How long the `--from-archive` download may take. Default {@link DEFAULT_DESTINATION_TIMEOUT_MS}. */
   archiveTimeoutMs?: number;
   withModuleOperations?: RestoreOperationRunner;
+  /** Holds the venue folder from resolving the target to exit. Default {@link lockRestoreTarget}. */
+  lockVenue?: (venueDir: string) => Promise<VenueLock>;
 }
 
 const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
@@ -133,23 +136,28 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
     return 1;
   }
 
-  const target = await resolveRestoreTarget(deps);
-  if (typeof target === "number") return target;
-  deps.out(COLD_RESTORE_NOTICE);
-  const restored = await restoreArtifact(
-    deps,
-    target,
-    artifactPath,
-    recoveryKey,
-    oldBoxGone,
-    soleRecovery,
-    {
-      keyDoesNotOpen: "restore failed: wrong recovery key or corrupt artifact",
-    },
-  );
-  if (!restored) return 1;
-  deps.out(`restored ${artifactPath}`);
-  return 0;
+  const resolved = await resolveRestoreTarget(deps);
+  if (typeof resolved === "number") return resolved;
+  const { target, hold } = resolved;
+  try {
+    deps.out(COLD_RESTORE_NOTICE);
+    const restored = await restoreArtifact(
+      deps,
+      target,
+      artifactPath,
+      recoveryKey,
+      oldBoxGone,
+      soleRecovery,
+      {
+        keyDoesNotOpen: "restore failed: wrong recovery key or corrupt artifact",
+      },
+    );
+    if (!restored) return 1;
+    deps.out(`restored ${artifactPath}`);
+    return 0;
+  } finally {
+    hold.release();
+  }
 }
 
 const COLD_RESTORE_NOTICE =
@@ -202,8 +210,8 @@ async function restoreArtifact(
 }
 
 /**
- * No "nothing changed": the last secrets write runs after the database is placed
- * (`placeValidated`, `restore.ts`).
+ * No "nothing changed": a disk that fills after the database is placed (the migration, the hooks)
+ * leaves the restored database in place (`placeValidated`, `restore.ts`).
  */
 const RESTORE_DISK_FULL =
   "restore failed: the disk filled during the restore; free some space and run it again";
@@ -284,7 +292,9 @@ type RestoreTarget = Pick<
  * `modules` is every module, never an enabled subset: a restore hook must run for every module
  * whose tables are in the backup.
  */
-async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | number> {
+async function resolveRestoreTarget(
+  deps: CommandDeps,
+): Promise<{ target: RestoreTarget; hold: VenueLock } | number> {
   let environment: DeploymentEnvironment;
   let withModuleOperations = deps.withModuleOperations;
   try {
@@ -304,21 +314,30 @@ async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | 
   const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+  const setupRefusal = (error: unknown) =>
+    deps.out(error instanceof AppError ? `restore failed: ${error.code}` : "restore failed");
   try {
     await assertNoStartAgainDeletion(venueDir);
-    if ((await inspectFirstSetupMarker(venueDir)) !== null) {
-      const hold = await lockVenueDatabase(venueDir);
-      try {
-        await assertVenueFirstSetupAllowed(venueDir);
-      } finally {
-        hold.release();
-      }
-    }
   } catch (error) {
-    deps.out(error instanceof AppError ? `restore failed: ${error.code}` : "restore failed");
+    setupRefusal(error);
     return 1;
   }
-  return {
+  let hold: VenueLock;
+  try {
+    hold = await (deps.lockVenue ?? lockRestoreTarget)(venueDir);
+  } catch (error) {
+    deps.out(sharedRefusal(error));
+    return 1;
+  }
+  try {
+    if ((await inspectFirstSetupMarker(venueDir)) !== null)
+      await assertVenueFirstSetupAllowed(venueDir);
+  } catch (error) {
+    hold.release();
+    setupRefusal(error);
+    return 1;
+  }
+  const target: RestoreTarget = {
     stateDir,
     // Unset or EMPTY takes `<stateDir>/venue`, never `resolve("")` — which is the working directory.
     venueDir,
@@ -332,6 +351,7 @@ async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | 
       () => new Date(),
     ),
   };
+  return { target, hold };
 }
 
 async function archiveRecoveryRunner(
@@ -391,6 +411,10 @@ function sharedRefusal(err: unknown): string {
   if (err.code === "provisioning.database_in_use") {
     return "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
   }
+  if (err.code === "migrations.apply_failed") {
+    if (diskFullIn(err)) return RESTORE_DISK_FULL;
+    return "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; install a version that fixes this, then run the same command again: it starts the restore over";
+  }
   if (hasCode(err, "restore.hook_failed")) {
     return `restore failed: restore.hook_failed (module ${err.params.module}: ${err.params.code})`;
   }
@@ -437,6 +461,8 @@ function bucketRefusal(err: AppError): string | null {
     "restore.stream_integrity_failed": "the copy downloaded from the bucket is damaged",
     "restore.stream_state_missing":
       "the copy in the bucket does not hold the old server's locked secrets, so it cannot be restored",
+    "restore.identity_unknown":
+      "the copy in the bucket does not say which business it belongs to, so it cannot be restored",
     "provisioning.database_ahead":
       "the copy in the bucket was made by newer Waitron software than this server has; update this server first",
     "backup.stream_restore_failed":
@@ -478,45 +504,50 @@ async function runBucketRestore(
     );
     return 1;
   }
-  const target = await resolveRestoreTarget(deps);
-  if (typeof target === "number") return target;
-  deps.out(
-    "cold restore from the bucket: use only when the old server is gone — two servers selling from one database cannot be reconciled",
-  );
+  const resolved = await resolveRestoreTarget(deps);
+  if (typeof resolved === "number") return resolved;
+  const { target, hold } = resolved;
   try {
-    await (deps.restoreStream ?? restoreFromStream)({
-      ...target,
-      kit,
-      oldBoxGone,
-      litestreamBin: resolveLitestreamBin(deps.env),
-      openStore: boundedOpener(deps),
-      now: clock,
-      ...(soleRecovery
-        ? {
-            prepareModuleOperations: async (copy: ValidatedArtifact, sourceId: string) =>
-              selectedRecoveryRunner(
-                deps,
-                target,
-                copy,
-                await readRecoveryOperationFile(deps.env.WAITRON_RECOVERY_OPERATION_FILE ?? ""),
-                oldBoxGone,
-                sourceId,
-              ),
-          }
-        : {}),
-      confirmVenue: (venue) => {
-        deps.out(
-          `the copy in the bucket is: ${venue.legalName}, tax id ${venue.taxId}, venue ${venue.venueName}`,
-        );
-        return confirmsVenue(venue, confirmedTaxId);
-      },
-    });
-  } catch (err) {
-    deps.out((err instanceof AppError && bucketRefusal(err)) || sharedRefusal(err));
-    return 1;
+    deps.out(
+      "cold restore from the bucket: use only when the old server is gone — two servers selling from one database cannot be reconciled",
+    );
+    try {
+      await (deps.restoreStream ?? restoreFromStream)({
+        ...target,
+        kit,
+        oldBoxGone,
+        litestreamBin: resolveLitestreamBin(deps.env),
+        openStore: boundedOpener(deps),
+        now: clock,
+        ...(soleRecovery
+          ? {
+              prepareModuleOperations: async (copy: ValidatedArtifact, sourceId: string) =>
+                selectedRecoveryRunner(
+                  deps,
+                  target,
+                  copy,
+                  await readRecoveryOperationFile(deps.env.WAITRON_RECOVERY_OPERATION_FILE ?? ""),
+                  oldBoxGone,
+                  sourceId,
+                ),
+            }
+          : {}),
+        confirmVenue: (venue) => {
+          deps.out(
+            `the copy in the bucket is: ${venue.legalName}, tax id ${venue.taxId}, venue ${venue.venueName}`,
+          );
+          return confirmsVenue(venue, confirmedTaxId);
+        },
+      });
+    } catch (err) {
+      deps.out((err instanceof AppError && bucketRefusal(err)) || sharedRefusal(err));
+      return 1;
+    }
+    deps.out(`restored from the bucket named in ${kitPath}`);
+    return 0;
+  } finally {
+    hold.release();
   }
-  deps.out(`restored from the bucket named in ${kitPath}`);
-  return 0;
 }
 
 type Source = { text: string } | { refused: string };
@@ -570,7 +601,7 @@ const PACK_KEY_DOES_NOT_OPEN =
 
 /** Fixed words: the error would name the path and its cause. */
 const DOWNLOAD_LEFT_BEHIND =
-  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the state folder's restore-staging folder by hand";
+  "the downloaded archive could not be removed; the next server start tries to remove it";
 
 /**
  * The recovery key and the bucket's secret come from the pack, never the environment; no printed
@@ -609,38 +640,43 @@ async function runPackRestore(
     );
     return 1;
   }
-  const target = await resolveRestoreTarget(deps);
-  if (typeof target === "number") return target;
-  deps.out(COLD_RESTORE_NOTICE);
-  let downloaded: DownloadedArchive;
+  const resolved = await resolveRestoreTarget(deps);
+  if (typeof resolved === "number") return resolved;
+  const { target, hold } = resolved;
   try {
-    downloaded = await downloadArchive({
-      pack,
-      key: archiveKey,
-      stagingDir: target.stagingDir,
-      signal: AbortSignal.timeout(deps.archiveTimeoutMs ?? DEFAULT_DESTINATION_TIMEOUT_MS),
-      openFiles: deps.openArchiveFiles,
-    });
-  } catch (err) {
-    deps.out((err instanceof AppError && packRefusal(err)) || sharedRefusal(err));
-    return 1;
-  }
-  let restored: boolean;
-  try {
-    restored = await restoreArtifact(
-      deps,
-      target,
-      downloaded.path,
-      pack.recoveryKey,
-      oldBoxGone,
-      soleRecovery,
-      {
-        keyDoesNotOpen: PACK_KEY_DOES_NOT_OPEN,
-      },
-    );
-    if (restored) deps.out(`restored archive ${archiveKey} from the bucket named in ${packPath}`);
+    deps.out(COLD_RESTORE_NOTICE);
+    let downloaded: DownloadedArchive;
+    try {
+      downloaded = await downloadArchive({
+        pack,
+        key: archiveKey,
+        stagingDir: target.stagingDir,
+        signal: AbortSignal.timeout(deps.archiveTimeoutMs ?? DEFAULT_DESTINATION_TIMEOUT_MS),
+        openFiles: deps.openArchiveFiles,
+      });
+    } catch (err) {
+      deps.out((err instanceof AppError && packRefusal(err)) || sharedRefusal(err));
+      return 1;
+    }
+    let restored: boolean;
+    try {
+      restored = await restoreArtifact(
+        deps,
+        target,
+        downloaded.path,
+        pack.recoveryKey,
+        oldBoxGone,
+        soleRecovery,
+        {
+          keyDoesNotOpen: PACK_KEY_DOES_NOT_OPEN,
+        },
+      );
+      if (restored) deps.out(`restored archive ${archiveKey} from the bucket named in ${packPath}`);
+    } finally {
+      await downloaded.dispose().catch(() => deps.out(DOWNLOAD_LEFT_BEHIND));
+    }
+    return restored ? 0 : 1;
   } finally {
-    await downloaded.dispose().catch(() => deps.out(DOWNLOAD_LEFT_BEHIND));
+    hold.release();
   }
-  return restored ? 0 : 1;
 }

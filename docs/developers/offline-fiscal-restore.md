@@ -149,8 +149,8 @@ the ordinary Compose file to detach the outside storage. Keep the outside eviden
 
 If a process was interrupted, follow the [checked restart procedure](emergency-recovery.md#resume-an-interrupted-staged-restore).
 Do not remove a consumed incident or placement marker to retry. A matching local committed result
-and fresh current outside evidence are required for exact replay. An uncommitted identity remains
-burned; a new attempt takes a new event and allocation.
+and fresh current outside evidence are required for exact replay. After an interruption, an
+uncommitted identity remains burned; a new attempt takes a new event and allocation.
 
 
 ## When the secure connection is unavailable

@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { stageRestoreRequest, runStagedRestore, type RestoreRequest } from "./restore-request.js";
+import { ALL_MODULES } from "./modules.js";
+import { writeValidated } from "./restore.js";
 
 const dirs: string[] = [];
 const NODE_KEY_FILE = "restore-request.node-key";
@@ -143,7 +145,8 @@ it.each(["success", "refusal"])(
   async (outcome) => {
     const stateDir = await fresh();
     await stageRestoreRequest(stateDir, archive());
-    const restore = async () => {
+    const restore = async (args: { onDatabasePlaced?: () => void }) => {
+      args.onDatabasePlaced?.();
       if (outcome === "refusal") throw new AppError("promotion.break_glass_invalid", {});
     };
     const context = deps(stateDir);
@@ -163,6 +166,97 @@ it.each(["success", "refusal"])(
     expect(JSON.stringify(context.log.mock.calls)).not.toContain(secret);
   },
 );
+
+it.each(["", " and the clean-up then fails too"])(
+  "a started request whose placement changed nothing gets its marker back%s",
+  async (cleanUp) => {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, archive());
+    const before = await readFile(join(stateDir, "restore-request.json"), "utf8");
+    const writeFailure = Object.assign(new Error("injected secrets write failure"), {
+      code: "ENOSPC",
+    });
+    const cleanUpFailure = Object.assign(new Error("injected clean-up failure"), { code: "EIO" });
+    const failure = cleanUp === "" ? writeFailure : cleanUpFailure;
+    const originalOpen = nativeFs.open;
+    vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
+      if (String(args[0]) === join(stateDir, "secrets.env.incoming.tmp")) throw writeFailure;
+      return originalOpen(...args);
+    });
+    const originalRm = nativeFs.rm;
+    vi.spyOn(nativeFs, "rm").mockImplementation(async (...args) => {
+      if (cleanUp !== "" && String(args[0]) === join(stateDir, "rebuild-first-start.json"))
+        throw cleanUpFailure;
+      return originalRm(...args);
+    });
+    syncBuiltinESMExports();
+    const restore = async (args: Parameters<typeof writeValidated>[1]) => {
+      // The real placement, from a copy already validated: the fake archive above cannot be opened.
+      const databasePath = join(stateDir, "validated.db");
+      await writeFile(databasePath, "database", { mode: 0o600 });
+      await writeValidated(
+        {
+          manifest: {
+            manifestVersion: 1,
+            createdAt: "2026-11-07T00:00:00.000Z",
+            environment: "preproduction",
+            modules: {},
+          },
+          databasePath,
+          nodeDump: Buffer.from("node"),
+          discard: async () => {},
+          secretEntries: [
+            { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_VAULT_MASTER_KEY=1\n") },
+            {
+              name: "secrets/trading.env",
+              bytes: Buffer.from(`WAITRON_NODE_ID=${operation.binding.targetNodeId}\n`),
+            },
+          ],
+        },
+        { ...args, modules: ALL_MODULES, withModuleOperations: undefined },
+      );
+    };
+    await expect(runStagedRestore(deps(stateDir), restore)).rejects.toBe(failure);
+    expect(await readFile(join(stateDir, "restore-request.json"), "utf8")).toBe(before);
+    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+  },
+);
+
+it("writes a started request's marker back durably: the file synced before it is renamed into place, then its folder", async () => {
+  const stateDir = await fresh();
+  await stageRestoreRequest(stateDir, archive());
+  const before = await readFile(join(stateDir, "restore-request.json"), "utf8");
+  const events: string[] = [];
+  const rel = (path: unknown) => String(path).slice(stateDir.length + 1) || ".";
+  const originalOpen = nativeFs.open;
+  vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
+    const handle = await originalOpen(...args);
+    const sync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      events.push(`sync ${rel(args[0])}`);
+      return sync();
+    };
+    return handle;
+  });
+  const originalRename = nativeFs.rename;
+  vi.spyOn(nativeFs, "rename").mockImplementation(async (from, to) => {
+    events.push(`${rel(from)} → ${rel(to)}`);
+    return originalRename(from, to);
+  });
+  syncBuiltinESMExports();
+  await expect(
+    runStagedRestore(deps(stateDir), async () => {
+      throw new Error("injected failure before placement");
+    }),
+  ).rejects.toThrow("injected failure before placement");
+  expect(await readFile(join(stateDir, "restore-request.json"), "utf8")).toBe(before);
+  const writeBack = events.lastIndexOf("restore-request.json.tmp → restore-request.json");
+  expect(events.slice(writeBack - 1)).toEqual([
+    "sync restore-request.json.tmp",
+    "restore-request.json.tmp → restore-request.json",
+    "sync .",
+  ]);
+});
 
 it("keeps the node credential when the venue lock refuses before placement", async () => {
   const stateDir = await fresh();

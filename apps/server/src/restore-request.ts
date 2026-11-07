@@ -3,18 +3,18 @@ import {
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "@waitron/provisioning";
-import { lockVenueDatabase } from "@waitron/db";
 import { chmod, copyFile, mkdtemp, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { VENUE_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
-import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
+import { stagedPath, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
+import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
+  lockRestoreTarget,
   restoreFromArtifactFile,
   validateArtifactFile,
   validateDatabaseEntries,
@@ -418,18 +418,31 @@ export async function runStagedRestore(
     }
   }
   await assertNoStartAgainDeletion(deps.venueDir);
-  if ((await inspectFirstSetupMarker(deps.venueDir)) !== null) {
-    const claimHold = await lockVenueDatabase(deps.venueDir);
-    try {
+  // Held until this returns: another process's start removes restore working folders whenever it
+  // can take this folder (`restoreLeftovers`), and this run makes them before placement's own hold.
+  // Refused here, nothing is cleared, so the request stays staged.
+  const hold = await lockRestoreTarget(deps.venueDir);
+  try {
+    if ((await inspectFirstSetupMarker(deps.venueDir)) !== null)
       await assertVenueFirstSetupAllowed(deps.venueDir);
-    } finally {
-      claimHold.release();
-    }
+    return await runHeld(deps, raw, snapshot, restore, restoreStream);
+  } finally {
+    hold.release();
   }
+}
+
+async function runHeld(
+  deps: StagedRestoreDeps,
+  raw: string,
+  snapshot: Awaited<ReturnType<typeof readSnapshotRecoveryBinding>>,
+  restore: Restore,
+  restoreStream: RestoreStream,
+): Promise<boolean> {
   let managedCloud: { requestId: string; pointId: string } | undefined;
   let resuming = false;
   let markedStarted = false;
-  let admissionRefused = false;
+  let placed = false;
+  let uncommitted = false;
   try {
     const marker = JSON.parse(raw) as {
       version?: unknown;
@@ -506,7 +519,7 @@ export async function runStagedRestore(
       const copy =
         marker.kind === "stream"
           ? await (async () => {
-              const directory = await mkdtemp(join(deps.stateDir, "restore-entry-"));
+              const directory = await mkdtemp(join(deps.stateDir, RESTORE_ENTRY_PREFIX));
               const discard = () => rm(directory, { recursive: true, force: true });
               try {
                 const databasePath = join(directory, VENUE_FILE);
@@ -540,22 +553,6 @@ export async function runStagedRestore(
         await copy.discard();
       }
     }
-    const admission = withModuleOperations?.checkBeforePlacement;
-    if (
-      marker.nodeRecoveryKey === true &&
-      !resuming &&
-      withModuleOperations !== undefined &&
-      admission !== undefined
-    ) {
-      withModuleOperations.checkBeforePlacement = async (context) => {
-        try {
-          await admission(context);
-        } catch (error) {
-          admissionRefused = true;
-          throw error;
-        }
-      };
-    }
     const common = {
       venueDir: deps.venueDir,
       stateDir: deps.stateDir,
@@ -566,6 +563,12 @@ export async function runStagedRestore(
       log: deps.log,
       ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
       ...(resuming && operation !== undefined ? { resumeOperation: operation.binding } : {}),
+      onDatabasePlaced: () => {
+        placed = true;
+      },
+      onFailedBeforeHooksCommit: () => {
+        uncommitted = true;
+      },
     };
     let run: () => Promise<void>;
     if (marker.kind === "stream") {
@@ -614,17 +617,17 @@ export async function runStagedRestore(
     }
     await run();
   } catch (error) {
-    // Refused admission never runs placement. A later failure can follow activation and must
-    // retain the checked-replay marker.
-    if (snapshot && error instanceof SnapshotPlacementRefused) {
-      if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
+    if (markedStarted && (!placed || uncommitted)) {
+      // Nothing a module step committed is in the venue folder, so the next start places the
+      // archive afresh, as running the restore command again does. Any later failure can follow a
+      // committed activation, which only a checked replay finds.
+      await writeFileDurable(join(deps.stateDir, MARKER), raw, 0o600);
     } else if (
       !resuming &&
-      (admissionRefused || (isAppError(error) && error.code === "provisioning.database_in_use"))
+      !markedStarted &&
+      !(snapshot && error instanceof SnapshotPlacementRefused) &&
+      !(isAppError(error) && error.code === "provisioning.database_in_use")
     ) {
-      if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
-    } else if (!resuming && !markedStarted) {
-      // A later file error can follow a committed activation; started requests need checked replay.
       await clearStagedRestore(deps.stateDir);
     }
     throw error;

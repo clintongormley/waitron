@@ -22,6 +22,7 @@ import {
 } from "@waitron/stream";
 import type { ArchiveEntry } from "./backup-archive.js";
 import { parseEnvFile } from "./env-file.js";
+import { isCopyIntact } from "./handover-integrity.js";
 import type { Logger } from "./logger.js";
 import {
   openStagedCopy,
@@ -33,6 +34,7 @@ import {
   type ValidatedArtifact,
 } from "./restore.js";
 import { readSealedStateRow, unsealNodeState } from "./sealed-state.js";
+import { STREAM_RESTORE_PREFIX } from "./restore-staging-dirs.js";
 import { readStreamSettings } from "./stream-host.js";
 import "./errors.js";
 
@@ -52,8 +54,7 @@ export function confirmsVenue(venue: RestoredVenue, confirmedTaxId: string | nul
 }
 
 /** A fresh folder keeps concurrent preparations from removing each other's copy. */
-const SCRATCH = "stream-restore-";
-const UNREADABLE = "the file could not be opened or read as a database";
+const SCRATCH = STREAM_RESTORE_PREFIX;
 
 export interface PrepareStreamDeps {
   kit: RecoveryKit;
@@ -66,7 +67,7 @@ export interface PrepareStreamDeps {
   log: Logger;
   openStore?: (bucket: BucketConfig) => ObjectStore;
   restoreGeneration?: typeof restoreGeneration;
-  checkIntegrity?: (store: VenueDatabase) => Promise<string[]>;
+  checkIntegrity?: (databasePath: string) => Promise<boolean>;
 }
 
 export interface PreparedStream {
@@ -82,21 +83,16 @@ export interface PreparedStream {
 }
 
 /**
- * SQLite's `integrity_check` over an open venue database: `[]` when healthy, else its lines. A
- * failure to read the file is reported as a problem rather than thrown.
+ * Whether the copy at `databasePath` passes SQLite's integrity and foreign-key checks, run on a
+ * thread of its own so the main thread's timers, and with them the venue watchdog, keep turning.
+ * A copy whose rows name a missing parent is refused like any other damage.
  */
-export async function checkIntegrity(store: VenueDatabase): Promise<string[]> {
-  try {
-    const result = await store.venue.execute<Record<string, unknown>>(sql`pragma integrity_check`);
-    const lines = result.rows.map((row) => String(Object.values(row)[0]));
-    return lines.length === 1 && lines[0] === "ok" ? [] : lines;
-  } catch {
-    return [UNREADABLE];
-  }
+export function checkIntegrity(databasePath: string): Promise<boolean> {
+  return isCopyIntact(databasePath);
 }
 
-function integrityFailed(log: Logger, problems: readonly string[]): never {
-  log("warn", "restore.stream_integrity_failed", { problems: problems.length });
+function integrityFailed(log: Logger): never {
+  log("warn", "restore.stream_integrity_failed", {});
   throw new AppError("restore.stream_integrity_failed", {});
 }
 
@@ -211,6 +207,7 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
     .select({ legalName: tenants.legalName, taxId: tenants.taxId })
     .from(tenants)
     .where(eq(tenants.id, 1));
+  if (tenant === undefined) throw new AppError("restore.identity_unknown", { nodeId });
   let venue;
   try {
     venue = await readVenue(store.venue);
@@ -224,31 +221,30 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
     throw error;
   }
   return {
-    legalName: tenant?.legalName ?? "",
-    taxId: tenant?.taxId ?? "",
+    legalName: tenant.legalName,
+    taxId: tenant.taxId,
     venueName: venue.name,
   };
 }
 
-/** From the restored copy alone, opened once: refuse a damaged file, then a schema ahead of this
+/** From the restored copy alone: refuse a damaged file, then a schema ahead of this
  * software, then read the node's locked row and whose copy it is. */
 async function readRestoredCopy(args: {
   directory: string;
   nodeId: string;
   migrationsRoot: string | null;
-  checkIntegrity: (store: VenueDatabase) => Promise<string[]>;
+  checkIntegrity: (databasePath: string) => Promise<boolean>;
   log: Logger;
 }): Promise<{ sealed: Uint8Array; venue: RestoredVenue }> {
   const { nodeId } = args;
+  if (!(await args.checkIntegrity(join(args.directory, VENUE_FILE)))) integrityFailed(args.log);
   let store: VenueDatabase;
   try {
     store = await openVenueDatabase(args.directory);
   } catch {
-    integrityFailed(args.log, [UNREADABLE]);
+    integrityFailed(args.log);
   }
   try {
-    const problems = await args.checkIntegrity(store);
-    if (problems.length > 0) integrityFailed(args.log, problems);
     await assertNotAhead(store, manifestSets(), args.migrationsRoot);
     const table = await store.venue.execute<{ name: string }>(
       sql`select name from sqlite_master where type = 'table' and name = ${"node_sealed_state"}`,
