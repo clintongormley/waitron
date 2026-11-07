@@ -516,7 +516,7 @@ two painted (dark and pale) sold-out tiles and a weighed product's tile, has no 
 A variant is a `products` row whose `parent_id` names its parent product — "125 ml" and
 "175 ml" under "Wine by the glass". There is no separate variant table. A variant's parent is a
 top-level product in the same catalogue, is fixed when the variant is created, and a variant has no
-variants of its own (the one-level rule is the core migration `packages/db/drizzle/0004_variant_one_level.sql`). A product
+variants of its own (the one-level rule is the core migration `scripts/fixtures/a760-history/core/0004_variant_one_level.sql`). A product
 may have any number of variants, one included.
 
 ### What a variant reads from its parent
@@ -805,9 +805,10 @@ and `deleteImage` in `packages/media/src/images.ts`); a variant with no photo of
 parent's and holds no use of it.
 
 `products.image` is protected by the database, variant rows included, but not by a real foreign
-key: `packages/media/drizzle/0001_image_references.sql` protects it with **four triggers** — one on
+key: core's set (`packages/db/drizzle/0000_baseline.sql`) protects it with **four triggers** — one on
 insert, one on an update of `image`, one on deleting the parent image, one on renaming it.
-That file's own header states what a trigger is not, and two of its points matter to anyone reading
+The header of the old migration that first made them,
+`scripts/fixtures/a760-history/media/0001_image_references.sql`, states what a trigger is not, and two of its points matter to anyone reading
 this page: `pragma foreign_key_list('products')` does not list the rule, so nothing that enumerates
 keys from the engine sees it; and a write naming a missing filename is refused with errcode 1811
 (`SQLITE_CONSTRAINT_TRIGGER`), where a declared key refuses it with 787

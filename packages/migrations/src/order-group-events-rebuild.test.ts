@@ -60,7 +60,7 @@ function coreBeforeRebuild(core: VenueMigrationOptions): VenueMigrationOptions {
 }
 
 /** Core cut before `0201_retire_main_bill_triggers`: a box holding a party cannot take its
- * `0202_retire_main_bill` without a venue reset (`RESETS` in `scripts/migration-upgrade.test.ts`). */
+ * `0202_retire_main_bill` without a venue reset. */
 function coreBeforeMainBillRetired(core: VenueMigrationOptions): VenueMigrationOptions {
   return coreCut(core, (entries) => {
     const retired = entries.findIndex(({ tag }) => tag.endsWith("_retire_main_bill_triggers"));

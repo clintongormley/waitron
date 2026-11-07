@@ -541,13 +541,15 @@ called weaker than its name, the topic file lists what it does not see.
 - **A time stored as text and compared or sorted as text is right only while every writer stores one
   spelling**. Normalise at the writer, as `shiftInterval` and the `storedTime` helpers do. Nothing
   guards the one-spelling rule across the columns.
-- **Classify new tables `ledger`, `state` or `local` in their module; use `appendOnly()` for
+- **Classify new tables `ledger`, `state` or `local` in the classification of the package holding
+  their migration set (`packages/db/src/classification.ts` for core's); use `appendOnly()` for
   uncorrectable tables and `migrationOptionsFor(...)` when migrating.** Classification alone is not
   the trigger set; triggers cannot prevent `DROP TABLE`. Marking an existing table
   append-only must be disclosed in the PR because first start can raise `append_only.triggers_restored`.
   Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts`,
   `scripts/apply-migrations-callers.test.ts`; the last is weaker than its name: call shape, not sets.
-- **A new append-only table travels in both its module's exported migration descriptor and
+- **A new append-only table travels in both its set's exported migration descriptor (the host
+  set's, such as `CORE_MIGRATIONS`, for a module with no set) and
   `packages/migrations/migrations.manifest.json`.** Guards:
   `scripts/append-only-migration-sets.test.ts` and `packages/composition/src/composition.test.ts`.
 - **Live/restored database and venue-folder operations must expect Litestream's `_litestream_seq`,
@@ -570,17 +572,17 @@ called weaker than its name, the topic file lists what it does not see.
   sweeps in `apps/server/src/boot.management-origin.test.ts` and `apps/server/src/waiting-start.test.ts`,
   weaker than their names: one attack, own app's routes as mounted; recovery, first-setup, landing,
   node-entry apps unseen. [Receipt](docs/developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it).
-- **Declare a migration-set dependency in `requires` for SQL references, trigger targets/body
-  tables and top-level writes into that set.** Guard: `scripts/module-graph-honesty.test.ts`,
+- **A module with a migration set names in `requires` every other set its SQL references, puts a
+  trigger on, names in a trigger body or writes at top level.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.
 - **A column of a transferred table that holds another row's id is a foreign key, a declared
   `references` entry or left out of the export** (`omit`); any other column the export carries
   arrives holding the exporting venue's id. Guard:
   `scripts/id-columns-are-references.test.ts`, weaker than its name — it knows an id column only by
   a name ending `_id` or `_ids`.
-- **No new table enters the core migration set without a stated reason in the commit.** A domain
-  table a module owns belongs to that module's own set, where its append-only classification
-  travels with it.
+- **A module that can be switched off or swapped keeps a migration set of its own; any other adds
+  its tables to core's set, and the commit says which.** Staffing, switchable with its tables in
+  workforce's set, is the stated exception. Append-only classification travels with the set.
 - **Declare every foreign key and unique index in the TypeScript schema.** If impossible, say at
   the column what it cost and where the refusal moved. Guard: `scripts/schema-constraints.test.ts`,
   weaker than its name: reads built schema, never offending writes; matches unique indexes by name.

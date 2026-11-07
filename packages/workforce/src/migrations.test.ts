@@ -29,8 +29,8 @@ import {
 const suite = useVenueDb({
   resetPerTest: false,
   // Core for the `tenants` row the setup seeds and the `locations` and `nodes` rows the cases seed
-  // (`seedLocation`, `seedNode`); identity for `persons`, which the cases write and workforce's
-  // tables reference.
+  // (`seedLocation`, `seedNode`), and for `persons`, which the cases write and workforce's tables
+  // reference.
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);

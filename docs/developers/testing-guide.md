@@ -366,19 +366,13 @@ trigger body does not stop a set migrating on this engine — a foreign key nami
 not exist is refused at the first write, not at migrate time — so a clean migrate alone would not
 have told you, and an existing `useVenueDb` call in the package is a place to start reading, not an
 answer. `packages/workforce/src/schema/schema-conformance.test.ts` is the worked example, and it
-states the reason for a two-set list in the comment beside it: core because the set's foreign keys
-point at its `locations`, `devices` and `nodes`, and identity because they point at its `persons`.
-That is the database those keys resolve in, not something the migration needs — the suite also
-passes with an empty list (measured 2026-09-23) — which is why each call site writes the reason
+states the reason for its list in the comment beside it: core, because the set's foreign keys point
+at core's tables. That is the database those keys resolve in, not something the migration needs —
+the suite also passed with an empty list (measured 2026-09-23, when the list was core and the old
+identity set) — which is why each call site writes the reason
 down rather than just the list. A package's suites can apply MORE than its set's tables need,
 though: `packages/workforce/src/migrations.test.ts` applies core also for the `tenants` row its
-setup seeds and the `locations` and `nodes` rows its cases seed (`seedLocation`, `seedNode`), and
-most of `packages/credentials`'s database suites apply core — `credentials.test.ts` because
-`credentialProvisioned` reads `tenants` — while its migrations point at nothing in core, so its
-`migrations.test.ts` and its schema-conformance call site pass no prerequisites.
-`packages/media/src/schema/schema-conformance.test.ts` is the case of the trigger: its set puts
-triggers on core's and catalogue's tables, and the migration fails with `no such table` without
-them.
+setup seeds and the `locations` and `nodes` rows its cases seed (`seedLocation`, `seedNode`).
 
 **Adding a call site can turn a module's own suite red, and that is the point.** A set getting its
 first check may report real drift. Treat that as its own piece of work rather than something to fix
@@ -400,7 +394,7 @@ pnpm --filter @waitron/staffing exec vitest run --project node src/schema/schema
 
 The unchanged checkout passed all eight cases. Removing only `ON DELETE restrict` from the
 `shift_assignments.staff_role_id` reference to `staff_roles.id` in
-`packages/staffing/drizzle/0001_staffing_days_blocks_assignments.sql`, leaving the declaration and
+`scripts/fixtures/a760-history/staffing/0001_staffing_days_blocks_assignments.sql`, leaving the declaration and
 test unchanged, made the `shift_assignments` comparison fail with this difference:
 
 ```diff

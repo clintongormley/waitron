@@ -128,7 +128,7 @@ changing enforcement, keeping each legitimate mutation path.
 | `printers`               | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `products`               | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `registro_sif`           | `DELETE`             | [packages/fiscal-verifactu/src/classification.ts](../../packages/fiscal-verifactu/src/classification.ts) |
-| `scheduled_runs`         | `DELETE`             | [packages/scheduler/src/classification.ts](../../packages/scheduler/src/classification.ts)               |
+| `scheduled_runs`         | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |
 | `sessions`               | `DELETE`             | [packages/identity/src/classification.ts](../../packages/identity/src/classification.ts)                 |
 | `station_printers`       | `UPDATE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `table_service_statuses` | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |

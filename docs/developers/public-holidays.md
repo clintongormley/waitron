@@ -44,7 +44,7 @@ its import compares such a date with the others in its first year only (`validat
 - Special days live in `special_days` and `special_day_dates`, declared in
   `packages/db/src/schema/venue-service/seasons.ts`; `saveSpecialDay` in
   `packages/venue-service/src/special-days.ts` validates them.
-  `packages/venue-service/drizzle/0038_clammy_klaw.sql` dropped `local_holidays`.
+  `scripts/fixtures/a760-history/venue-service/0038_clammy_klaw.sql` dropped `local_holidays`.
 - `holiday_geographies` in `packages/db/src/schema/venue-service/holidays.ts` retains the
   holiday-area choice for an address. `readHolidayAreaModel` and `saveHolidayArea` in
   `packages/venue-service/src/holidays.ts` read and write that choice; the area control is in the

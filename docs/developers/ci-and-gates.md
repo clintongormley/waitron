@@ -3544,7 +3544,8 @@ whose value is null), and core `0012_printer_calibration`, which rebuilds `drawe
 copying its rows (`drawer_opens: 2 rows before, 0 after`). These were the first steps `RESETS`
 listed; C107 then added core `0055_drop_printer_character_set` (the `printers` rebuild, refused
 with `FOREIGN KEY constraint failed` the way `0044` is), and `RESETS` in
-`scripts/migration-upgrade.test.ts` holds the whole list. At each step it lists, the guard
+`scripts/migration-upgrade.test.ts` held the whole list until A760 (November 2026) left it empty. At
+each step it lists, the guard
 checks the failure is still the listed one, then migrates an empty database to that point and
 carries on. A reset that expects a
 row loss must lose exactly the listed tables, so a second table losing rows at the same step fails

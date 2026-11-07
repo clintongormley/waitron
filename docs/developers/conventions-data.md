@@ -336,7 +336,7 @@ whose permitted values are listed in a `check()` constraint that `enumCheck` bui
 array the TypeScript type is derived from, so the type and the constraint cannot state different
 sets. On this engine that constraint is the only thing between the column and any string at all.
 `products.ordering` has no CHECK at all: its values are refused by a trigger pair instead
-(`packages/db/drizzle/0047_product_ordering_check.sql`), because adding a CHECK to an existing table
+(`packages/db/drizzle/0000_baseline.sql`), because adding a CHECK to an existing table
 makes drizzle rebuild it.
 
 Guarded by `scripts/column-vocabulary.test.ts`, whose own header says what it reads and where it is
@@ -370,14 +370,18 @@ line as text, so a builder reached through `import * as` is invisible to it. A b
 vocabulary STOPS importing would leave the set the same day; the hand-written list that holds such a
 name forbidden sits beside the derived one, and it is empty.
 
-## No new table enters the core migration set without a stated reason in the commit
+## A module that can be switched off or swapped keeps a migration set of its own; any other adds its tables to core's set, and the commit says which
 
-A domain table a module owns belongs to that module's own migration set (`migrations.from`),
-where its append-only declaration travels with it — the module declares the table with
-`appendOnly()`, and `MigrationSet.appendOnlyTables` carries the names to `applyMigrations`
-(`packages/migrations/src/manifest.ts`). A core-set addition is a deliberate exception and says why
-it is not a module's. Same defect class as §1's unstated claims — an unexplained core table is a boundary
-decision no future reader can audit.
+Since A760 (November 2026), a module that can be switched off or swapped keeps its own migration
+set (`migrations.from`), so a box without it carries none of its tables; every other module adds its
+tables to core's set and names core in `tablesIn`. Staffing is the stated exception: it can be
+switched off, but its tables live in workforce's set (`tablesIn: "workforce"`,
+`packages/composition/src/modules.ts`), so they are present whenever workforce is on. Either way the
+append-only declaration travels with the set that holds the table — the table is declared with
+`appendOnly()` in that set's classification, and `MigrationSet.appendOnlyTables` carries the names
+to `applyMigrations` (`packages/migrations/src/manifest.ts`). The commit that adds a table says
+which of the two it did and why. Same defect class as §1's unstated claims — an unexplained choice
+of set is a boundary decision no future reader can audit.
 
 **Writing SQL safely**
 
@@ -440,7 +444,7 @@ outside the table holds a key into it, so the rows may lose their identity — a
 had to be respelled for the storage switch: the generated SQLite baselines quote with backticks and
 name no schema, so the old `REFERENCES "public"."extra_l` pattern matches nothing at all now. Run
 ``grep -rn 'REFERENCES `extra_l' --include='*.sql' packages`` — three lines on 2026-09-22, all in
-`packages/catalogue/drizzle/0000_baseline.sql` and all naming `extra_lists`, the PARENT. None names
+`scripts/fixtures/a760-history/catalogue/0000_baseline.sql` and all naming `extra_lists`, the PARENT. None names
 `extra_list_items`, so the condition still holds; the count does not stand on its own, because the
 pattern matches the parent's name as well. Scope it to `packages` rather than `packages apps`:
 `apps/server/dist/drizzle` holds built copies of the same baselines, and it is git-ignored build
@@ -498,7 +502,7 @@ change requires a venue reset.
 
 Public holidays come only from the shipped country calendar; the venue is not a holiday source
 (`readHolidays`, `holidays.ts`; see [public-holidays.md](public-holidays.md)).
-`packages/venue-service/drizzle/0038_clammy_klaw.sql` dropped `local_holidays`. The earlier A261
+`scripts/fixtures/a760-history/venue-service/0038_clammy_klaw.sql` dropped `local_holidays`. The earlier A261
 storage account below is historical.
 
 The upgrade guard's reset list describes losses in its synthetic rows, rather than every table
@@ -1339,7 +1343,7 @@ in the sweep below are retired. The booking writer remains; the account below re
 Nothing guards the one-spelling rule across these columns. A new text time column, or a new writer
 of an old one, is seen by nothing unless its table carries a CHECK like the ones above.
 
-## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and a table that must never be corrected is declared with `appendOnly()` instead
+## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in the `<MODULE>_CLASSIFICATION` list of the package holding its migration set (`CORE_CLASSIFICATION` in `packages/db/src/classification.ts` for core's) via `classify()` (`@waitron/sync-enrolment`), and a table that must never be corrected is declared with `appendOnly()` instead
 
 The enforcement is no longer written into each migration by hand: `installAppendOnlyTriggers`
 (`packages/store/src/append-only.ts`) puts a `RAISE(ABORT)` trigger pair on each named table, and
@@ -1427,8 +1431,8 @@ start serves the recovery page at once, with no count of failed starts (`refused
 
 No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
 decision 2026-09-05). Two root guards enforce the classification on every non-docs push:
-`scripts/classification-complete.test.ts` (every table in every module's `drizzle/` is classified
-exactly once) and `scripts/append-only-triggers.test.ts` (every declared table refuses a plain
+`scripts/classification-complete.test.ts` (every table each migration set's `drizzle/` creates is
+classified exactly once) and `scripts/append-only-triggers.test.ts` (every declared table refuses a plain
 `UPDATE` and a plain `DELETE`, tried against a database `applyMigrations` migrated — the product's
 own entry point, not one the guard builds and protects itself). The second is narrower than its name
 in two ways it states itself: it covers those two statement shapes only, because the other two need
@@ -1645,9 +1649,12 @@ serves would also look covered.
 ## A migration set depends on another through a foreign key, a trigger on its table, or a trigger body naming its table
 
 FK `REFERENCES`, and a `CREATE TRIGGER … ON <table>` where the TABLE is owned by a different
-migration set. Both exist in the tree today.
+migration set. Since A760 (November 2026) only the first exists in the tree: every trigger is in
+core's set (`packages/db/drizzle/0000_baseline.sql`) and names only tables core's set creates.
 
-The live instance of the trigger edge is `packages/media`. Its
+Until A760 the live instance of the trigger edge was `packages/media`, whose migrations are now
+frozen in `scripts/fixtures/a760-history/media/`; the account below describes that old set in the
+present tense of its day. Its
 `drizzle/0001_image_references.sql` carries eight triggers standing in for two foreign keys, and four
 of them sit on tables another set owns: `products`, created by core in
 `packages/db/drizzle/0000_baseline.sql` and rebuilt by core's
@@ -1713,10 +1720,10 @@ with no `ON DELETE` action, and separately one with `ON DELETE RESTRICT`, failed
 `FOREIGN KEY constraint failed`. The control, the same sequence outside a transaction, kept the
 child row in all three cases and raised nothing. Two rebuilds in
 the variants-as-products work hit it. Task 1's rebuild of `products` (core's
-`packages/db/drizzle/0003_variant_inherited_nullable.sql`, #511) cascade-deleted `product_categories`
+`scripts/fixtures/a760-history/core/0003_variant_inherited_nullable.sql`, #511) cascade-deleted `product_categories`
 on a venue without the media triggers (measured 2026-09-23 by a review of #511's plan, through
 `applyMigrations` on a scratch copy of `packages/db`). Task 4's rebuild of `menu_items`
-(`packages/catalogue/drizzle/0003_menu_price_nullable.sql`, #532), measured 2026-09-23 through
+(`scripts/fixtures/a760-history/catalogue/0003_menu_price_nullable.sql`, #532), measured 2026-09-23 through
 `applyMigrations`, emptied `menu_item_extra_lists`, `menu_item_extra_items` and
 `menu_item_variant_overrides` while reporting success, and failed with
 `FOREIGN KEY constraint failed` when a `working_line_contexts` row named the offer. A paid order
@@ -2284,9 +2291,10 @@ handle. The only trigger whose SQL names `dining_tables` is `parties_clear_table
 > Added 2026-10-13 by A503 part 3: two more incoming keys, `floor_today_split_parts.joined_table_id`
 > and `.part_table_id`, both `no action`.
 
-A504's `0169_floor_tables_keep_no_place.sql` (`packages/db/drizzle/`) rebuilds `floor_plan_tables`,
-`floor_plan_table_sizes` and `floor_plans`; every venue needs a reset for it
-(`scripts/migration-upgrade.test.ts` lists it under `RESETS`). Measured on 2026-10-18, Node
+A504's `0169_floor_tables_keep_no_place.sql` (core's old history, now
+`scripts/fixtures/a760-history/core/`) rebuilt `floor_plan_tables`,
+`floor_plan_table_sizes` and `floor_plans`; every venue needed a reset for it
+(`scripts/migration-upgrade.test.ts` listed it under `RESETS` until A760 left that list empty). Measured on 2026-10-18, Node
 v26.11.1, after applying every manifest migration through `useVenueDb`, by reading
 `pragma_foreign_key_list` for every table: the keys pointing at `floor_plan_tables` are
 `dining_tables.plan_table_id`, `floor_plan_placements.plan_table_id`,
@@ -2298,7 +2306,7 @@ tables; it holds no change feed, which `bootServer` installs.
 
 Slice 5's rebuild uses `0137_floor_retire_drop_table_triggers.sql`,
 `0138_floor_retire_old_table_columns.sql` and `0139_floor_retire_recreate_table_triggers.sql` in
-`packages/db/drizzle/`. Every venue needs a reset for this change. Running
+core's old history (`scripts/fixtures/a760-history/core/`). Every venue needs a reset for this change. Running
 `pnpm exec vitest run scripts/migration-upgrade.test.ts` before adding its declared reset failed
 with `NOT NULL constraint failed: __new_dining_tables.zone_id`; the same guard then passed with
 that reset declared. In a disposable checkout, replacing the trigger drop with `SELECT 1;`
@@ -3616,74 +3624,78 @@ notices one dropped), `scripts/migrations-match-schema.test.ts` and
 `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
 Paid for on #165.
 
+**Since A760 (November 2026)** every set starts from one `0000_baseline.sql`, and the migration
+files named in the rest of this section are frozen in `scripts/fixtures/a760-history/`; what
+follows is the account of the old history.
+
 The justification this used to carry — "works because the snapshot chain deliberately lags the DB,
 custom migrations being snapshot-less" — is half right. The hand-written `--custom` migrations in
-the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
-`packages/db/drizzle/0004_variant_one_level.sql`,
-`packages/db/drizzle/0015_settled_order_freeze_new_columns.sql`,
-`packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`,
-`packages/db/drizzle/0020_visit_clears_table_status.sql`,
-`packages/db/drizzle/0024_bill_payment_triggers.sql`,
-`packages/db/drizzle/0027_line_vat_class_triggers.sql`,
-`packages/db/drizzle/0033_line_served_exception.sql`,
-`packages/db/drizzle/0038_main_bill_release.sql` (two triggers on `working_orders` that clear
+the old history (`scripts/fixtures/a760-history/core/0001_behavioural_triggers.sql`,
+`scripts/fixtures/a760-history/core/0004_variant_one_level.sql`,
+`scripts/fixtures/a760-history/core/0015_settled_order_freeze_new_columns.sql`,
+`scripts/fixtures/a760-history/core/0019_settled_order_freeze_visit_id.sql`,
+`scripts/fixtures/a760-history/core/0020_visit_clears_table_status.sql`,
+`scripts/fixtures/a760-history/core/0024_bill_payment_triggers.sql`,
+`scripts/fixtures/a760-history/core/0027_line_vat_class_triggers.sql`,
+`scripts/fixtures/a760-history/core/0033_line_served_exception.sql`,
+`scripts/fixtures/a760-history/core/0038_main_bill_release.sql` (two triggers on `working_orders` that clear
 `parties.main_bill_id`),
-`packages/db/drizzle/0137_floor_retire_drop_table_triggers.sql` and
-`packages/db/drizzle/0139_floor_retire_recreate_table_triggers.sql` (drop and restore
+`scripts/fixtures/a760-history/core/0137_floor_retire_drop_table_triggers.sql` and
+`scripts/fixtures/a760-history/core/0139_floor_retire_recreate_table_triggers.sql` (drop and restore
 `parties_clear_table_status` around the `dining_tables` rebuild),
-`packages/db/drizzle/0042_placed_bill_moves.sql` (a presented bill changing party),
-`packages/db/drizzle/0043_drop_triggers_before_rebuild.sql` and
-`packages/db/drizzle/0045_recreate_triggers_after_rebuild.sql` (the three triggers around `0044`'s
+`scripts/fixtures/a760-history/core/0042_placed_bill_moves.sql` (a presented bill changing party),
+`scripts/fixtures/a760-history/core/0043_drop_triggers_before_rebuild.sql` and
+`scripts/fixtures/a760-history/core/0045_recreate_triggers_after_rebuild.sql` (the three triggers around `0044`'s
 rebuild of `dining_tables`, `parties` and `service_commands`),
-`packages/db/drizzle/0047_product_ordering_check.sql`,
-`packages/db/drizzle/0050_line_list_price_frozen.sql` (re-creates
+`scripts/fixtures/a760-history/core/0047_product_ordering_check.sql`,
+`scripts/fixtures/a760-history/core/0050_line_list_price_frozen.sql` (re-creates
 `working_order_lines_require_open_parent_update` with `list_unit_price_gross` in both
 unchanged-column lists),
-`packages/db/drizzle/0053_line_sent_after_close.sql` (re-creates
+`scripts/fixtures/a760-history/core/0053_line_sent_after_close.sql` (re-creates
 `working_order_lines_require_open_parent_update` with an exception for a line's first sent stamp),
-`packages/db/drizzle/0056_placed_order_handover.sql` (re-creates
+`scripts/fixtures/a760-history/core/0056_placed_order_handover.sql` (re-creates
 `working_orders_enforce_transition` with an exception for a sent, unpaid order's handover stamp),
-`packages/db/drizzle/0059_drop_product_triggers_before_rebuild.sql` and
-`packages/db/drizzle/0061_recreate_product_triggers.sql` (the triggers on `products` around
+`scripts/fixtures/a760-history/core/0059_drop_product_triggers_before_rebuild.sql` and
+`scripts/fixtures/a760-history/core/0061_recreate_product_triggers.sql` (the triggers on `products` around
 `0060`'s rebuild),
-`packages/db/drizzle/0064_line_locale_triggers_text_only.sql` (re-creates the two locale update
+`scripts/fixtures/a760-history/core/0064_line_locale_triggers_text_only.sql` (re-creates the two locale update
 triggers on `working_order_lines` to fire only when an update changes the name map each checks or
 moves the line),
-`packages/db/drizzle/0066_line_make_at_station_trigger.sql` (re-creates
+`scripts/fixtures/a760-history/core/0066_line_make_at_station_trigger.sql` (re-creates
 `working_order_lines_require_open_parent_update` with `make_at_station_id` in each of its three
 unchanged-column lists),
-`packages/db/drizzle/0072_device_binding_watcher_sql.sql` (re-creates the two device binding
+`scripts/fixtures/a760-history/core/0072_device_binding_watcher_sql.sql` (re-creates the two device binding
 triggers so a kitchen display binds a station or a watcher; dropped by `0119`),
-`packages/db/drizzle/0080_money_records_drop_triggers.sql` and
-`packages/db/drizzle/0082_money_records_recreate_triggers.sql` (the triggers around `0081`'s rebuild
+`scripts/fixtures/a760-history/core/0080_money_records_drop_triggers.sql` and
+`scripts/fixtures/a760-history/core/0082_money_records_recreate_triggers.sql` (the triggers around `0081`'s rebuild
 of `sales`, `bill_payments`, `bill_payment_refunds` and `unpaid_departures`),
-`packages/db/drizzle/0083_working_orders_drop_triggers.sql` and
-`packages/db/drizzle/0086_working_orders_recreate_triggers.sql` (the triggers around `0085`'s
+`scripts/fixtures/a760-history/core/0083_working_orders_drop_triggers.sql` and
+`scripts/fixtures/a760-history/core/0086_working_orders_recreate_triggers.sql` (the triggers around `0085`'s
 rebuild of `working_orders`),
-`packages/db/drizzle/0089_devices_drop_triggers.sql` and
-`packages/db/drizzle/0091_devices_recreate_triggers.sql` (the triggers around `0090`'s rebuild of
+`scripts/fixtures/a760-history/core/0089_devices_drop_triggers.sql` and
+`scripts/fixtures/a760-history/core/0091_devices_recreate_triggers.sql` (the triggers around `0090`'s rebuild of
 `devices`),
-`packages/db/drizzle/0119_drop_device_binding_triggers.sql` (drops the device binding trigger),
-`packages/db/drizzle/0122_devices_drop_form_factor_trigger.sql` and
-`packages/db/drizzle/0124_devices_recreate_form_factor_trigger.sql` (the trigger around `0123`'s
+`scripts/fixtures/a760-history/core/0119_drop_device_binding_triggers.sql` (drops the device binding trigger),
+`scripts/fixtures/a760-history/core/0122_devices_drop_form_factor_trigger.sql` and
+`scripts/fixtures/a760-history/core/0124_devices_recreate_form_factor_trigger.sql` (the trigger around `0123`'s
 rebuild of `devices`),
-`packages/db/drizzle/0128_delivery_table_release.sql` (re-creates
+`scripts/fixtures/a760-history/core/0128_delivery_table_release.sql` (re-creates
 `working_orders_enforce_transition` with `delivery_table_label` in the presented-bill and handover
 unchanged-column lists, and an exception letting an order past `open` drop its delivery table and
 keep its name),
-`packages/db/drizzle/0201_retire_main_bill_triggers.sql` (drops `0038`'s two triggers before
+`scripts/fixtures/a760-history/core/0201_retire_main_bill_triggers.sql` (drops `0038`'s two triggers before
 `0202`'s rebuild of `parties`),
-`packages/media/drizzle/0001_image_references.sql`,
-`packages/media/drizzle/0002_section_image_references.sql`,
-`packages/media/drizzle/0003_published_image_references.sql`,
-`packages/media/drizzle/0004_drop_category_image_triggers.sql`,
-`packages/media/drizzle/0006_recreate_section_image_triggers.sql`,
-`packages/media/drizzle/0007_recreate_product_image_triggers.sql`,
-`packages/media/drizzle/0008_queued_edition_image_references.sql`,
-`packages/media/drizzle/0009_include_folder_image_references.sql`,
-`packages/catalogue/drizzle/0013_drop_category_image_triggers.sql`,
-`packages/catalogue/drizzle/0018_sections_owned_prepare.sql` and
-`packages/catalogue/drizzle/0021_sections_owned_restore.sql`) each carry their own
+`scripts/fixtures/a760-history/media/0001_image_references.sql`,
+`scripts/fixtures/a760-history/media/0002_section_image_references.sql`,
+`scripts/fixtures/a760-history/media/0003_published_image_references.sql`,
+`scripts/fixtures/a760-history/media/0004_drop_category_image_triggers.sql`,
+`scripts/fixtures/a760-history/media/0006_recreate_section_image_triggers.sql`,
+`scripts/fixtures/a760-history/media/0007_recreate_product_image_triggers.sql`,
+`scripts/fixtures/a760-history/media/0008_queued_edition_image_references.sql`,
+`scripts/fixtures/a760-history/media/0009_include_folder_image_references.sql`,
+`scripts/fixtures/a760-history/catalogue/0013_drop_category_image_triggers.sql`,
+`scripts/fixtures/a760-history/catalogue/0018_sections_owned_prepare.sql` and
+`scripts/fixtures/a760-history/catalogue/0021_sections_owned_restore.sql`) each carry their own
 `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-26 (2026-09-27 for
 `0024_bill_payment_triggers.sql`, 2026-09-28 for `0027_line_vat_class_triggers.sql`,
 `0033_line_served_exception.sql` and `0038_main_bill_release.sql`, 2026-09-29 for
@@ -3706,8 +3718,8 @@ each of those files equalled the one before it once `id` and
 does not reproduce it.
 
 Three generated migrations also carry hand-written SQL:
-`packages/media/drizzle/0005_photo_name_only.sql`, `packages/db/drizzle/0036_party_rename.sql` and
-`packages/db/drizzle/0194_sale_receipt_guest_count.sql`. In `0194` only the copy line's `SELECT` is
+`scripts/fixtures/a760-history/media/0005_photo_name_only.sql`, `scripts/fixtures/a760-history/core/0036_party_rename.sql` and
+`scripts/fixtures/a760-history/core/0194_sale_receipt_guest_count.sql`. In `0194` only the copy line's `SELECT` is
 hand-written: drizzle's rebuild for the `guests` → `guest_count` rename selects the NEW column name
 from the old table and fails with `no such column` on every database, a fresh one included (the
 earlier migrations create the table with `guests` before `0194` runs), so a regeneration
@@ -3746,8 +3758,8 @@ Drizzle records a hash of each migration file's whole text in the database's jou
 `provisioning.database_ahead` when the journal records a hash the image does not ship.
 `packages/migrations/src/journal-hashes.test.ts` pins how drizzle computes the hash. Measured
 2026-10-02 with drizzle's own `readMigrationFiles` (`drizzle-orm@0.45.3`): editing only comment
-lines in `packages/db/drizzle/0001_behavioural_triggers.sql` and
-`packages/media/drizzle/0001_image_references.sql` changed exactly those two files' hashes, index 1
+lines in `scripts/fixtures/a760-history/core/0001_behavioural_triggers.sql` and
+`scripts/fixtures/a760-history/media/0001_image_references.sql` changed exactly those two files' hashes, index 1
 of 68 and index 1 of 8. So such an edit ships only with a reset of every venue already migrated,
 said in the pull request's first line. Cost: #1036 had to restore both files byte for byte; the
 owner then chose to edit them and reset the venues.
@@ -4118,7 +4130,7 @@ is `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` unless another i
 
 **The tables** (owner FYI 4). Two append-only `ledger` tables, declared `appendOnly()` in
 `packages/fiscal-verifactu/src/classification.ts` and created by
-`packages/fiscal-verifactu/drizzle/0011_clock_checks_and_confirmations.sql`. `clock_checks` holds
+`packages/fiscal-verifactu/drizzle/0000_baseline.sql`. `clock_checks` holds
 one row each time a check of the clock opens: the reading, the boot-time clock's reading and boot
 id, the latest record and every chain's largest `secuencia` (`detail.heads`).
 `clock_confirmations` holds one row each time a check closes, and since slice 9b one for each
@@ -4571,7 +4583,7 @@ start, or wrong backward by less than the gap to the last sale, raises no stop, 
 **The `staff` source and its one migration** (Task 8-0). A staff member's confirmation or step is
 `source = 'staff'` with their `person_id`, and the till is under `proof.device` (fiscal code never
 names a till, `scripts/no-till-as-issuer.test.ts`).
-`packages/fiscal-verifactu/drizzle/0012_clock_confirmations_staff.sql` adds `staff` to
+`scripts/fixtures/a760-history/fiscal-verifactu/0012_clock_confirmations_staff.sql` adds `staff` to
 `clock_confirmations_source_ck` and makes `clock_confirmations_person_ck` read "a person exactly
 when the source is `admin` or `staff`". A CHECK change makes drizzle-kit rebuild the table (copy
 into `__new_clock_confirmations`, drop, rename). Nothing references the table and no trigger body
@@ -4581,7 +4593,7 @@ triggers go with it and `applyMigrations` puts them back after the set (`install
 (`missingBeforeMigration`, `apps/server/src/boot.ts`), so the rebuild raises no
 `append_only.triggers_restored`. Guard: `packages/fiscal-verifactu/src/clock-confirmations-upgrade.test.ts`,
 an upgrade from the shipped table. Pre-live, nothing else carries old rows forward (CLAUDE.md §3).
-Task 15a's read adds one index, `packages/workforce/drizzle/0011_person_chain_index.sql`.
+Task 15a's read adds one index, `scripts/fixtures/a760-history/workforce/0011_person_chain_index.sql`.
 
 **Measured** (Tasks 1 and 4, on GitHub `ubuntu-24.04` runners with systemd 255 and chrony as the
 time service; every printed line is in the plan's "Measured for 9b" table):
@@ -4867,7 +4879,9 @@ On 2026-10-05, A261-2 added `sale_receipt_headers` with `appendOnly()` but initi
 both the venue-service exported descriptor and the JSON manifest. The normal push hook refused
 `scripts/append-only-migration-sets.test.ts`; after the descriptor fix, CI refused the descriptor/manifest
 equality in `packages/composition/src/composition.test.ts`. Add the table to both inputs: the descriptor derives
-its list with `appendOnlyTablesIn(VENUE_SERVICE_CLASSIFICATION)`, and the manifest carries the same name.
+its list with `appendOnlyTablesIn(...)` over its set's classification, and the manifest carries the same
+name. (Since A760 venue-service has no set of its own; its tables, `sale_receipt_headers` among
+them, are in core's, whose `CORE_MIGRATIONS` derives its list from `CORE_CLASSIFICATION`.)
 
 After those fixes, `pnpm exec vitest run scripts/append-only-migration-sets.test.ts` passed 15 tests,
 `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts` passed 20, and
@@ -5476,10 +5490,10 @@ against 10000. Guard: the shared schema-conformance suite,
 `packages/db/src/testing/schema-conformance.ts`, which a migration set opts into — a set with none
 is unguarded.
 
-### A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION` list, and a table that must never be corrected is declared with `appendOnly()` instead of `classify()`
+### A new table is classified `ledger`, `state` or `local` in the `<MODULE>_CLASSIFICATION` list of the package holding its migration set, and a table that must never be corrected is declared with `appendOnly()` instead of `classify()`
 
-**A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
-list, and a table that must never be corrected is declared with `appendOnly()` instead of
+**A new table is classified `ledger`, `state` or `local` in the `<MODULE>_CLASSIFICATION` list of
+the package holding its migration set (`packages/db/src/classification.ts` for core's), and a table that must never be corrected is declared with `appendOnly()` instead of
 `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair,
 but only from a `migrationOptionsFor(...)` result; a plain options array gets none of those
 triggers, silently. **The CLASS is not the trigger set.** A trigger cannot refuse `DROP TABLE`.
@@ -5505,11 +5519,12 @@ Guards, weaker than the rule: the "what a copy of the database holds" cases in
 alone, and only the dashboard's stored hash is tried as a token
 (`packages/identity/src/management-session.test.ts`); a new login table is seen by nothing.
 
-### A module depends on another migration set when its SQL `REFERENCES` one of that set's tables, puts a `CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or writes one at top level — and its descriptor's `requires` must name it.
+### A migration set depends on another when its SQL `REFERENCES` one of that set's tables, puts a `CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or writes one at top level — and the `requires` of the module owning the set must name it.
 
-**A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,
-puts a `CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or writes one
-at top level — and its descriptor's `requires` must name it.** The engine will not catch a
+**A migration set depends on another when its SQL `REFERENCES` one of that set's tables, puts a
+`CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or writes one at top level —
+and the `requires` of the module owning the set must name it.** A module whose tables live in
+another module's set has no SQL of its own, and the guard compares its `requires` with nothing. The engine will not catch a
 missing body target. Guard: `scripts/module-graph-honesty.test.ts`, weaker than its name — it
 reads SQL as TEXT and recognizes a fixed set of statement shapes.
 
