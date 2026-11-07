@@ -2307,3 +2307,34 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
   other package in this repo, and `@waitron/printing` depends on IT, never the reverse. The guard is
   the `import-x/no-restricted-paths` zone in `eslint.config.js`, not the empty `dependencies` block.
+
+## Root receipts moved on 2026-11-06
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. They are not new measurements.
+
+### The recovery page's fixed strings, log tail and password form
+
+- **The unauthenticated recovery page's title and action are fixed strings chosen by the error
+  code (after a Start again Move, an answer naming the set-aside folder takes their place); its log
+  tail is the file's last lines, whichever start or running server wrote them, written through
+  `redactSecrets` and the personal-data mask (except the frozen-process watchdog's own line, which
+  goes through neither), and HTML-escaped** (owner decision 2026-09-26; the
+  tail's span and the personal-data mask are A980 S10's defaults, open to the owner).
+  `redactSecrets` masks only a password in a URL, which is why no code's
+  params and no logged message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
+  the administrator password over HTTPS only (cost if not: a password sent in plain text on the
+  venue's network); its Move choice is the owner's one exception to never suggesting a removal
+  (A1098). Guard: the never-delete cases in
+  `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
+  not the page.
+
+### Which drawer opens, and who may open it
+
+- **Printing never opens the drawer. Cash and hand-keyed card enqueue separate audited `drawer`
+  jobs; documents contain no drawer commands and connected-card payments open nothing.** Device drawer
+  choice precedes profile default, never follows receipt printer; require active printer with drawer
+  and profile `open-cash-drawer`. Taking cash separately requires `take-cash` through `assertTakesCash`.
+  Manual open needs an active device/session plus `cash.drawer` or the PIN of someone holding it and uses that same
+  drawer; dashboard calibration is the exception. Never manually resend drawer jobs.
+  Guards, weaker than the rule: named drawer/cash/refund/calibration/resend suites only; new routes unguarded. [Detail](conventions-ui.md).

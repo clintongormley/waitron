@@ -131,9 +131,8 @@ hook, or how tests are scheduled:
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
-  `packages` outputs before treating a green PR as evidence about the workspace. A main push
-  reuses a same-repository PR's successful CI only after API verification of equal trees and
-  complete successful job evidence, plus a full-green main run for the pushed commit's parent.
+  `packages` outputs before treating a green PR as evidence about the workspace. A main push reuses
+  a same-repository PR's successful CI only after API verification.
   [Details and limits](docs/developers/ci-and-gates.md#main-can-reuse-an-identical-pull-request-tree).
 - **No front-end bundle is built by a pull request that changed no image input**, and wherever one
   is built nothing opens it, so a bundle that renders nothing passes anyway.
@@ -226,7 +225,10 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
 
-- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts, which name no next step (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
+- **A refusal explains what happened and what each choice does; offer any needed administrator or
+  owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody
+  else.** Nothing guards it. Receipt and the owner's few exceptions:
+  [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
 - **New or changed forms use [design-system.md](docs/developers/design-system.md) → Forms.**
   Required fields are marked; invalid fields get inline errors and one localized bottom message on its
   own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals appear under that field (owner,
@@ -364,17 +366,16 @@ called weaker than its name, the topic file lists what it does not see.
   `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
   code (after a Start again Move, an answer naming the set-aside folder takes their place); its log
-  tail is the file's last lines, whichever start or running server wrote them, written through
-  `redactSecrets` and the personal-data mask (except the frozen-process watchdog's own line, which
-  goes through neither), and HTML-escaped** (owner decision 2026-09-26; the
-  tail's span and the personal-data mask are A980 S10's defaults, open to the owner).
-  `redactSecrets` masks only a password in a URL, which is why no code's
-  params and no logged message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
-  the administrator password over HTTPS only (cost if not: a password sent in plain text on the
-  venue's network); its Move choice is the owner's one exception to never suggesting a removal
-  (A1098). Guard: the never-delete cases in
-  `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
-  not the page.
+  tail is written through `redactSecrets` and the personal-data mask (except the frozen-process
+  watchdog's own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26;
+  the personal-data mask is A980 S10's default, open to the owner). `redactSecrets` masks only a
+  password in a URL, which is why no code's params and no logged message may carry a secret. Its one
+  password form, for `setup.start_again_files_found`, takes the administrator password over HTTPS
+  only; its Move choice is the owner's one exception to never suggesting a removal (A1098). The
+  tail's span and the cost of taking that password without HTTPS:
+  [conventions-ui.md](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-06). Guard:
+  the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name: they
+  read the text tables, not the page.
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
@@ -823,12 +824,12 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 [stream tests](docs/developers/testing-guide.md#root-detail-moved-on-2026-10-26).
 
 - **Printing never opens the drawer. Cash and hand-keyed card enqueue separate audited `drawer`
-  jobs; documents contain no drawer commands and connected-card payments open nothing.** Device drawer
-  choice precedes profile default, never follows receipt printer; require active printer with drawer
-  and profile `open-cash-drawer`. Taking cash separately requires `take-cash` through `assertTakesCash`.
-  Manual open needs an active device/session plus `cash.drawer` or the PIN of someone holding it and uses that same
-  drawer; dashboard calibration is the exception. Never manually resend drawer jobs.
-  Guards, weaker than the rule: named drawer/cash/refund/calibration/resend suites only; new routes unguarded. [Detail](docs/developers/conventions-ui.md).
+  jobs; documents contain no drawer commands and connected-card payments open nothing.** Taking cash
+  separately requires `take-cash` through `assertTakesCash`. Never manually resend drawer jobs.
+  Which drawer opens and who may open it:
+  [conventions-ui.md](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-06). Guards,
+  weaker than the rule: named drawer/cash/refund/calibration/resend suites only; new routes
+  unguarded.
 
 - **One database per environment.** A pre-production database is never promoted. `WAITRON_ENV`
   governs this; unset means `preproduction`, `production` must be typed out, and `dev` is
@@ -854,43 +855,36 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
   on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
   is weaker than its name: stored text only, only tables migrated at start.
-- **More than a minute behind the latest fiscal record, write no record and take/refund no new
-  money unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
+- **More than a minute behind the latest fiscal record, write no record and take/refund no new money
+  unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
   reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
-  their dating transaction after provider waits. Still store money already moved.
-  **Clock confirmation lifts the stop for one step back, with no gap limit; once a record is written
-  under it, readings stay within a minute of the latest record written since.** Sources: AEAT, two
-  agreeing devices at different addresses (not while the stop found at start-up lasts), an
-  administrator's own device, or a till's time confirmed on it by an administrator at any time or,
-  during a stop found at start-up once AEAT has not answered or cannot be asked, by a staff member
-  signed in on it (owner, 2026-10-31); never a box device outside development. Guards:
-  clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm route
-  and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule: only named routes/readings/requests; new money routes
-  unguarded. **The box sets its clock only through the host service, from AEAT, a till's time (a
-  staff member's during start-up, an administrator's at any time) or an administrator's own device —
-  never from devices alone and never while it keeps time over the internet — and every step it
-  verifies, or sees move the clock by over a second, is alerted and emailed.** Guards:
+  their dating transaction after provider waits. Still store money already moved. **Clock
+  confirmation lifts the stop for one step back, with no gap limit; once a record is written under
+  it, readings stay within a minute of the latest record written since.** Sources, never a box
+  device outside development:
+  [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06).
+  Guards: clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm
+  route and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule: only named
+  routes/readings/requests; new money routes unguarded. **The box sets its clock only through the
+  host service, from AEAT, a till's time (a staff member's during start-up, an administrator's at any
+  time) or an administrator's own device — never from devices alone and never while it keeps time
+  over the internet — and every step it verifies, or sees move the clock by over a second, is alerted
+  and emailed.** Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
   rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
   [Detail](docs/developers/conventions-data.md#the-box-sets-its-own-clock).
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
-- **Restore and promotion start a new chain under a new installation name.**
-  Setup/restore/promotion use five symbols for the box's UTC minute, after another machine's clock
-  agrees within 30 seconds (no confirmation); a minute whose name is already in a history the box
-  reads is not taken (the box waits for the next free one if it starts within 150 seconds, and
-  otherwise refuses with when it can; the setup and restore pages count that down and check again by
-  themselves; owner, 2026-10-30, A1207), and no other name or record
-  refuses or moves it (owner, 2026-10-29, A1207), except that an attempt whose own pick is ahead of
-  the box's clock is refused until the clock reaches it. Start again keeps no record of the names
-  it deletes (owner, 2026-10-29, A1206): a box and the machine confirming its clock, wrong by the
-  same amount, can repeat a name. Setup/restore wait 90–150 seconds; promotion does not.
-  [Detail](docs/developers/conventions-data.md). Only preproduction throwaway skips
-  second-clock/history checks; refuse it outside preproduction. Restore takes one source;
-  working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
-  unknown-name suites (the last weaker than its name) and
-  `packages/workforce/src/restore-continuation.test.ts`.
+- **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
+  use five symbols for the box's UTC minute, after another machine's clock agrees within 30 seconds
+  (no confirmation); a minute whose name is already in a history the box reads is not taken. Its
+  waits, its other refusals and when a name can repeat:
+  [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
+  preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
+  Restore takes one source; working-time chain continues from its head. Guards:
+  hour-selection/hour-clock/minute-selection-unknown-name suites (the last weaker than its name)
+  and `packages/workforce/src/restore-continuation.test.ts`.
 - **A box holding a `node_handover_restriction` row starts restricted, before every worker; a
   background duty is stopped through `apps/server/src/background-duties.ts`, signalled at a
   stepdown or carrying a reason.** Guards: `apps/server/src/boot.restricted-quiet.test.ts` and
@@ -961,15 +955,13 @@ request; if that really cannot be done, it joins an existing bundle in its area.
 finished entry leaves open, gets a short entry of its own in the same area only if a person would
 notice it, it could cost money or a filing, or it breaks a written rule. Everything else stays in
 the pull request thread** (owner, 2026-11-06). Cost: the list grew by about 25 entries a day, about
-half of them from reviews. An entry's long detail goes in its area's file under `docs/backlog/`. A
-decision a comment or doc cites moves to its area's
-`## Decisions and deliberate limits` instead of being deleted, and entries there are never deleted
-for being finished. How: `docs/backlog.md` → _How to keep this file honest_.
-Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`,
-both committed deliberately. Session handoffs in `docs/handoffs/` are gitignored — never open a PR
-for one. Historical docs record what was true when written: add a dated pointer rather than
-rewriting them. The legal track is separate, in `docs/compliance/action-plan.md`.
-[Receipt](docs/developers/workflow-guide.md#documentation-rules).
+half of them from reviews. A decision a comment or doc cites moves to its area's
+`## Decisions and deliberate limits` instead of being deleted. How, and where long detail goes:
+`docs/backlog.md` → _How to keep this file honest_. Specs live in `docs/superpowers/specs/`, plans in
+`docs/superpowers/plans/`, both committed deliberately. Session handoffs in `docs/handoffs/` are
+gitignored — never open a PR for one. Historical docs record what was true when written: add a dated
+pointer rather than rewriting them. The legal track is separate, in
+`docs/compliance/action-plan.md`. [Receipt](docs/developers/workflow-guide.md#documentation-rules).
 
 ---
 
@@ -992,22 +984,11 @@ Its path rules and examples are in [writing-claims.md](docs/developers/writing-c
 
 **Do not add:** one-off bugs with no reusable shape, anything the code or types already state plainly,
 or the narrative of what a session did — that belongs in the commit or the PR thread. **A count is a
-receipt that goes stale**, so describe the property, not the number. **If a guard enforces the rule, name the
-guard and stop** — do not also explain what the guard checks, because the failing test says that
-better and never goes stale. **The exception is a guard that is WEAKER than its name suggests**: one
-that reads text rather than running code, or that covers only part of what a reader would assume.
-Say so in the same line, briefly — "weaker than its name: reads text, not code" — and list what it
-misses in the topic file: a hedge is the one thing a failing test can never restore, because the
-case it never checks is the case you needed to know about.
-
-**Prune as well as append.** A superseded rule teaches a session to work around something that no
-longer exists; delete it and say so in the commit. Natural moments: while addressing review findings,
-and when writing a handoff — anything phrased "next time, remember to…" belongs here instead. A
-written rule with standing violations needs a guard, not another paragraph.
-
-**Contained, not capped** (owner decision 2026-10-07). This file has no byte limit and no gate on
-its size, and is never purged because it is a few bytes over a number. Keeping it small is regular
-housekeeping: move a receipt to its topic file and delete a superseded rule whenever you touch an
-entry, and run a pruning sweep when the file has grown noticeably — as a loose guide, past roughly
-the size the 2026-10-07 sweep left it (about 71 KB). Cost: this file is re-read on every step of every session and subagent. The 2026-10-07
-cost estimate is in [writing-claims.md](docs/developers/writing-claims.md).
+receipt that goes stale**, so describe the property, not the number. **If a guard enforces the rule,
+name the guard and stop; a guard WEAKER than its name says so in the same line**, with what it misses
+in the topic file. **Prune as well as append**: delete a superseded rule and say so in the commit; a
+written rule with standing violations needs a guard, not another paragraph. **Contained, not capped**
+(owner decision 2026-10-07): no byte limit and no gate on its size, and never purged because it is a few bytes over a number; move a receipt to its topic file
+and delete a superseded rule whenever you touch an entry, and sweep when the file has grown
+noticeably, as a loose guide past about 71 KB. The whole of this:
+[writing-claims.md](docs/developers/writing-claims.md#root-receipts-moved-on-2026-11-06).
