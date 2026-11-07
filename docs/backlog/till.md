@@ -1367,15 +1367,6 @@ Combine tables a held dish on the absorbed party's paid bill answers `group.not_
 whole group, or collecting at the counter, fires it. It predates A758-7 (`c9ad7a634`).
 
 
-## A1029. The till has no words of its own for `station.no_default` (found by A758-7).
-
-No key
-for it in `CODE_MESSAGES` (`apps/till/src/i18n/codes.ts`), so `codeMessage` falls back to the
-generic "Something went wrong, try again", and a waiter whose station has no default printer is
-told to retry a request that cannot succeed. It predates A758-7
-(`git log -S'"station.no_default"' -- apps/till`).
-
-
 ## A957. The Spanish report still says «anulado» beside «Cancelaciones» (left open by A758-3).
 
 The column «Valor de carta anulado» and the summary figure «Valor de carta de lo
@@ -1542,14 +1533,6 @@ of its content: at 1280 px in English it grew from about 274 to about 348 px whe
 it, and at 390 px the customer's name is cut short. A fixed width for its fields, as the find-bill
 dialog has (`apps/till/src/widgets/find-bill-dialog.ts`), would widen it to about 576 px — a
 decision for the whole dialog. Left open by A231q.
-
-
-## A lost counter Send reply still tells you to check whether a sale went through.
-
-`#onPlaceOrder` uses `sale.unconfirmed`; its English and Spanish strings refer to a sale.
-The HTTP retry case in `apps/server/src/place-replay.test.ts` checks that placement leaves
-`sales` empty. **Next action:** give a counter send its own
-uncertainty message, telling you how to retry without implying a payment was taken.
 
 
 ## Loose ends left by A429 slice 5.
@@ -2095,37 +2078,34 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   then test or narrow it.
   [Detail](till.md#a792-two-smaller-points-a768s-last-review-left-2026-10-17)
 
-## Bundle A1382: Till refusals that say the wrong thing or nothing useful
+## A till request refused for naming someone not signed in locks the screen with no sentence
 
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Left open by A1382. On main an order save does this; #2534 adds take-over, recall and split. The
+owner chooses words on the lock screen or a recorded exception (question in `questions.md`).
 
-- **A1286. `bill.payments_received`'s words still say items cannot be transferred between a bill
-  with payments and another bill, which Move dishes… now allows (left open by A803 slice 4a).** New
-  English and approved Spanish are needed.
-  [Detail](till.md#a1286-billpayments_receiveds-words-still-say-items-cannot-be-transferred-between-a-bill-with-payments-and-another-bill-which-move-dishes-now-allows)
-- **A1298. Move dishes… says only "Could not update the table, try again" when a picked dish has
-  left the bill or the bill was merged away (left open by A803 slice 4a).** Needs English and
-  Spanish words.
-  [Detail](till.md#a1298-move-dishes-says-only-could-not-update-the-table-try-again-when-a-picked-dish-has-left-the-bill-or-the-bill-was-merged-away)
-- **A1200. Raising a dish the kitchen has started, from the counter, says only "Could not park the
-  order, try again".** The server answers `ticket.already_started`, which the till has words for,
-  but the counter's park shows only the codes on `ACTIONABLE_REFUSALS` (`apps/till/src/till-app.ts`).
-  Seen in A803 slice 1's LOOK; by reading, it predates slice 1 (not run before it).
-- **A1029. The till has no words of its own for `station.no_default` (found by A758-7).** No key for
-  it in `CODE_MESSAGES` (`apps/till/src/i18n/codes.ts`), so `codeMessage` falls back to the generic
-  "Something went wrong, try again", and a waiter whose station has no default printer is told to
-  retry a request that cannot succeed.
-  [Detail](till.md#a1029-the-till-has-no-words-of-its-own-for-stationno_default-found-by-a758-7)
-- **Two refusal sentences the pass shows after Fire or Ready do not fit it (left open by A773-2 B4a,
-  decision D87).** `device.forbidden_action` sends the person to a manager; `service_zone.not_allowed`
-  says to choose an area. Both predate A773-2 (#1311).
-  [Detail](till.md#two-refusal-sentences-the-pass-shows-after-fire-or-ready-do-not-fit-it)
-- **A lost counter Send reply still tells you to check whether a sale went through.**
-  `#onPlaceOrder` uses `sale.unconfirmed`; its English and Spanish strings refer to a sale.
-  [Detail](till.md#a-lost-counter-send-reply-still-tells-you-to-check-whether-a-sale-went-through)
-- **`apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown at six call sites;
-  a helper would collapse it.** Cosmetic, and cheapest alongside A848 (the empty-order message) that
-  touches `#onPayTab` (under _Payments and card readers_). Raised by the A1 review wave (A1d).
+## Other till sentences still send the person to a manager, against the refusal rule
+
+Left open by A1382, which changed only `device.forbidden_action`. By code:
+
+- `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `department_transfer.desk_unavailable`,
+  `device_profile.no_service_zone`, `series.no_rectificative_for_node`,
+  `fiscal.taxpayer_domicile_missing`, `invoice_delivery.receipt_invalid`,
+  `invoice_delivery.printer_invalid`, `invoice_delivery.receipt_unavailable`,
+  `invoice_delivery.email_unavailable`, `sale.correction_unsupported`, `reader.not_found`,
+  `reader.provider_disconnected`, `device.forbidden_station`, `kitchen_screen.not_allowed`,
+  `device.pairing_closed`, `reader.payment_in_progress`, `sale.department_missing`,
+  `department.operation_description_required`, `sale.charged_not_recorded`, `clock.unusable`,
+  `clock.behind_chain`.
+- `apps/till/src/i18n/strings.ts`: `venue.time_zone_confirm`, `tender_refund.storage`,
+  `kitchen_screen.none`, `kitchen_screen.choose_again`, `station.printer_down`,
+  `device.join_name_hint`, `device.join_approval_guide`, `device.join_refused_hint`,
+  `card.pending_check`, `adjust.no_reasons`, `sale.clock_unusable`, `sale.clock_behind_chain`,
+  `bill_pay.reader_not_held_unknown`, `bill_pay.card_pending`, `bill_pay.pending_where`,
+  `bill_refund.pending`.
+
+Not listed: the owner's full-disk strip (`staff_notice.tell_manager`); the till's other full-disk
+words, which _Other full-disk words still send the person elsewhere_ in `setup.md` holds; sentences
+that take a manager's PIN or choice on the spot; and labels such as `approval.title_manager`.
 
 ## Bundle A1392: Discard and Cancel fail on a table bill reached from the counter
 
@@ -4026,16 +4006,6 @@ board's status slot, above the columns (`apps/till/src/screens/till-pass-screen.
 a card low on a long column the line is off screen. The old pass screen drew its line in the same
 place.
 
-## Two refusal sentences the pass shows after Fire or Ready do not fit it
-
-Left open by A773-2 B4a (its plan's D87). A Fire refused `device.forbidden_action` (and on a till a
-Ready refused the same) shows "This device's profile doesn't allow that. Ask a manager to change
-it.", which sends the person to someone else; `service_zone.not_allowed` shows "This device's profile
-does not work in that area. Choose one of its own areas", which a pass cannot do. Both sentences are
-in `apps/till/src/i18n/codes.ts`, came with #1311 (2026-10-07, device profiles; `git log -S`) and
-are used outside the pass, so B4a did not change them. New words need the owner's approval in both
-languages.
-
 ## A678. Two readers answer "where is this order"
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
@@ -4318,12 +4288,12 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 
 **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
+ticket/receipt grouping, has landed. What it leaves open is A1191–A1199, A1201, A1202, A1217 and the store limit under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
-has landed (#2372); it leaves open A1286–A1294 and A1298–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
+has landed (#2372); it leaves open A1287–A1294 and A1299–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
 dishes in one panel, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
@@ -4443,16 +4413,6 @@ lines (`removed`) as its own state, and the same element is reused when `#openDe
 on the first question is shown on the second and sent with it, to `setMakeAt` and to the
 counter's `removeLine`. By reading, not run. Clear both when the question changes.
 
-## A1286. `bill.payments_received`'s words still say items cannot be transferred between a bill with payments and another bill, which Move dishes… now allows
-
-**A1286. `bill.payments_received`'s words still say items cannot be transferred between a bill
-with payments and another bill, which Move dishes… now allows (left open by A803 slice 4a).**
-`bill.payments_received` says "items cannot be transferred between it and
-another bill" (`apps/till/src/i18n/codes.ts`), but since slice 4a unpaid dishes may leave a
-part-paid bill and may move onto one (owner, 2026-11-01): `moveDishes` no longer refuses with
-it. Merge bills still does, and the words' second half is now untrue. New English and approved
-Spanish are needed.
-
 ## A1287. With no party, the ⋮'s Merge bills does nothing
 
 **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).** A
@@ -4516,15 +4476,6 @@ A803 slice 4a's LOOK).** After a move, the dialog's totals updated but its list 
 dishes that left; paying one gave "Something went wrong, try again", and reopening the dialog put
 it right. I believe this predates slice 4a (Transfer items would leave it the same); not checked
 on `main`. It sits in A739's payment window files. Pictures `x-h-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
-
-## A1298. Move dishes… says only "Could not update the table, try again" when a picked dish has left the bill or the bill was merged away
-
-**A1298. Move dishes… says only "Could not update the table, try again" when a picked dish has
-left the bill or the bill was merged away (left open by A803 slice 4a).** The server answers
-`tab.line_not_found` or `tab.not_open`; neither is in the till's `TABLE_REFUSALS`
-(`apps/till/src/till-app.ts`), so `#onMoveDishes` falls back to `table.error`. The station move
-already words the first (`move_station.refused.tab.line_not_found`). By reading, not run; the
-retired Transfer items handler went the same way. Needs English and Spanish words.
 
 ## A1196. Retire the partial-quantity server paths
 

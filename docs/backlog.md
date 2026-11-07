@@ -102,7 +102,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
-- [A1382. Till refusals that say the wrong thing or nothing useful](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1387. Till sentences during the clock stop, with money in hand](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
 - [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
@@ -881,7 +880,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   slice 3's LOOK fix review 3; predates it, `c8487cba5`).** Clear both when the question changes.
   [Detail](backlog/till.md#a1269-a-dead-end-question-that-replaces-another-keeps-the-first-ones-picks)
 
-- **A1382. Till refusals that say the wrong thing or nothing useful** (bundle of 7, 5 important, size M). Holds A1286, A1298, A1200, A1029. [Detail](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
+- **A till request refused for naming someone not signed in locks the screen with no sentence (left
+  open by A1382).** The owner chooses words on the lock screen or a recorded exception.
+  [Detail](backlog/till.md#a-till-request-refused-for-naming-someone-not-signed-in-locks-the-screen-with-no-sentence)
+
+- **Other till sentences still send the person to a manager, against the refusal rule (left open by
+  A1382).** Listed by code in the detail.
+  [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-a-manager-against-the-refusal-rule)
 
 - **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).**
   Decide whether Merge bills goes too.
