@@ -1373,10 +1373,9 @@ function editOf(file: string, billId: string) {
 }
 
 interface InheritedSeen {
-  tab: { nodeId: string | null; partyId: string | null; linesBefore: number };
+  tab: { partyId: string | null; linesBefore: number };
   readOne: Attempt;
   change: Attempt;
-  changeWithAllergy: Attempt | null;
   linesAfterChange: number;
   balance: Attempt;
   pay: Attempt;
@@ -1388,17 +1387,15 @@ interface InheritedSeen {
   newOrder: Attempt;
   m1Orders: { id: string; node_id: string; order_number: number; status: string }[];
   m2Orders: { id: string; node_id: string; order_number: number; status: string }[];
-  m1Counters: { node_id: string; next_number: number }[];
-  m2Counters: { node_id: string; next_number: number }[];
-  salesByNode: { node_id: string; n: number; total: number }[];
+  salesByNode: { node_id: string; n: number }[];
   overview: Attempt;
   dailyClose: Attempt;
-  period: Attempt;
-  overdue: Attempt;
   refundSaleNode: string | null;
   refund: Attempt | null;
+  refundRows: { node_id: string; state: string }[];
+  m1RecordsAroundRefund: { before: number; after: number };
   voidSaleId: string | null;
-  voidSaleSerie: string | null;
+  voidedInvoice: { serie: string; emisor: string; fecha: string } | null;
   m2SifId: string | null;
   voidSaleNode: string | null;
   voided: { ok: true; fiscal: unknown } | { ok: false; error: ReturnType<typeof caught> } | null;
@@ -1408,7 +1405,6 @@ interface InheritedSeen {
     sif_id: string;
     tipo_registro: string;
     estado?: string;
-    envio?: unknown;
   }[];
   voidHeard: { venueFile: string; record: unknown }[];
   m2SellingAfterVoidRestart: boolean | null;
@@ -1445,9 +1441,9 @@ async function inheritedWork(
   const [tabRow] = guard(
     "tab row",
     () =>
-      readRows<{ node_id: string | null; party_id: string | null }>(
+      readRows<{ party_id: string | null }>(
         m2.venueFile,
-        "select node_id, party_id from working_orders where id = ?",
+        "select party_id from working_orders where id = ?",
         tabId,
       ),
     [],
@@ -1466,29 +1462,20 @@ async function inheritedWork(
     );
   const linesBefore = lineCount();
 
-  // a. Change the inherited table: one more Caña, sent to the kitchen.
+  // Change the inherited table: one more Caña, sent to the kitchen.
   const readOne = await attempt(m2, `/api/working-orders/${tabId}`, { cookie: venue.cookie });
-  const groupsBody = (allergy: boolean) => ({
-    submissionId: randomUUID(),
-    expectedPartyRevision: partyRevision(),
-    expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null),
-    groups: [{ lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" }],
-    ...(allergy ? { allergy: { party: { answer: "none", guests: [] }, ticks: [] } } : {}),
-  });
   const change = await attempt(m2, `/api/parties/${partyId}/groups`, {
     cookie: venue.cookie,
-    body: groupsBody(false),
+    body: {
+      submissionId: randomUUID(),
+      expectedPartyRevision: partyRevision(),
+      expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null),
+      groups: [{ lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" }],
+    },
   });
-  const changeWithAllergy =
-    change.status !== 200 && JSON.stringify(change.body).includes("allerg")
-      ? await attempt(m2, `/api/parties/${partyId}/groups`, {
-          cookie: venue.cookie,
-          body: groupsBody(true),
-        })
-      : null;
   const linesAfterChange = lineCount();
 
-  // b. Pay the inherited table in cash: the whole outstanding amount as one bill payment, and if
+  // Pay the inherited table in cash: the whole outstanding amount as one bill payment, and if
   // that leaves it unsettled, the whole-bill path (place, then collect).
   const balance = await attempt(m2, `/api/working-orders/${tabId}/payments`, {
     cookie: venue.cookie,
@@ -1572,7 +1559,7 @@ async function inheritedWork(
     [],
   );
 
-  // c. A new order on M2, and the order numbers M1 gave out.
+  // A new order on M2, and the order numbers M1 gave out.
   const newOrder = await attempt(m2, "/api/working-orders", {
     cookie: venue.cookie,
     body: {
@@ -1591,18 +1578,8 @@ async function inheritedWork(
         ),
       [],
     );
-  const countersOf = (file: string) =>
-    guard(
-      "counters",
-      () =>
-        readRows<{ node_id: string; next_number: number }>(
-          file,
-          "select node_id, next_number from working_order_counters",
-        ),
-      [],
-    );
 
-  // e. The reports for today, the day M1 sold on.
+  // The reports for today, the day M1 sold on.
   const overview = await attempt(m2, "/management-api/reports/overview", {
     cookie: boxes.adminCookie,
   });
@@ -1612,18 +1589,12 @@ async function inheritedWork(
   const dailyClose = await attempt(m2, `/management-api/reports/daily-close?businessDay=${day}`, {
     cookie: boxes.adminCookie,
   });
-  const period = await attempt(m2, `/management-api/reports/period?from=${day}&to=${day}`, {
-    cookie: boxes.adminCookie,
-  });
-  const overdue = await attempt(m2, "/management-api/reports/overdue-orders", {
-    cookie: boxes.adminCookie,
-  });
   const salesByNode = guard(
     "sales by node",
     () =>
-      readRows<{ node_id: string; n: number; total: number }>(
+      readRows<{ node_id: string; n: number }>(
         m2.venueFile,
-        "select node_id, count(*) as n, sum(total) as total from sales group by node_id",
+        "select node_id, count(*) as n from sales group by node_id",
       ),
     [],
   );
@@ -1640,6 +1611,18 @@ async function inheritedWork(
       ),
     [],
   );
+  const m1Records = () =>
+    guard(
+      "M1's records",
+      () =>
+        readRows<{ n: number }>(
+          m2.venueFile,
+          "select count(*) as n from registros_facturacion where node_id = ?",
+          m1.nodeId,
+        )[0]!.n,
+      -1,
+    );
+  const m1RecordsBeforeRefund = m1Records();
   const refund =
     refundTarget === undefined
       ? null
@@ -1654,15 +1637,33 @@ async function inheritedWork(
             override: { personId: venue.adminId, pin: "1234" },
           },
         });
+  const refundRows = guard(
+    "refund rows",
+    () =>
+      readRows<{ node_id: string; state: string }>(
+        m2.venueFile,
+        "select node_id, state from tender_refunds where sale_id = ?",
+        refundTarget?.sale_id ?? "",
+      ),
+    [],
+  );
+  const m1RecordsAroundRefund = { before: m1RecordsBeforeRefund, after: m1Records() };
 
-  // d. Void one of M1's filed sales. No route reaches `recordVoid` (only test fixtures call it),
+  // Cancel one of M1's filed sales. No route reaches `recordVoid` (only test fixtures call it),
   // so it is called in process on M2's own files, with M2's server closed.
   const [voidTarget] = guard(
     "void target",
     () =>
-      readRows<{ sale_id: string; node_id: string; num_serie_factura: string }>(
+      readRows<{
+        sale_id: string;
+        node_id: string;
+        num_serie_factura: string;
+        id_emisor_factura: string;
+        fecha_expedicion_factura: string;
+      }>(
         m2.venueFile,
-        "select sale_id, node_id, num_serie_factura from registros_facturacion where id = ?",
+        `select sale_id, node_id, num_serie_factura, id_emisor_factura, fecha_expedicion_factura
+         from registros_facturacion where id = ?`,
         stepdown.records.filed,
       ),
     [],
@@ -1741,20 +1742,15 @@ async function inheritedWork(
           m2.venueFile,
           "select id, node_id, sif_id, tipo_registro from registros_facturacion where sale_id = ? and tipo_registro = 'anulacion'",
           voidTarget.sale_id,
-        ).map((row) => ({
-          ...row,
-          estado: filingStateOf(m2.venueFile, row.id),
-          envio: readRows(m2.venueFile, "select * from envios where registro_id = ?", row.id)[0],
-        })),
+        ).map((row) => ({ ...row, estado: filingStateOf(m2.venueFile, row.id) })),
       [],
     );
   }
 
   return {
-    tab: { nodeId: tabRow?.node_id ?? null, partyId, linesBefore },
+    tab: { partyId, linesBefore },
     readOne,
     change,
-    changeWithAllergy,
     linesAfterChange,
     balance,
     pay,
@@ -1766,17 +1762,22 @@ async function inheritedWork(
     newOrder,
     m1Orders: ordersOf(m1.venueFile),
     m2Orders: ordersOf(m2.venueFile),
-    m1Counters: countersOf(m1.venueFile),
-    m2Counters: countersOf(m2.venueFile),
     salesByNode,
     overview,
     dailyClose,
-    period,
-    overdue,
     refundSaleNode: refundTarget?.node_id ?? null,
     refund,
+    refundRows,
+    m1RecordsAroundRefund,
     voidSaleId: voidTarget?.sale_id ?? null,
-    voidSaleSerie: voidTarget?.num_serie_factura ?? null,
+    voidedInvoice:
+      voidTarget === undefined
+        ? null
+        : {
+            serie: voidTarget.num_serie_factura,
+            emisor: voidTarget.id_emisor_factura,
+            fecha: voidTarget.fecha_expedicion_factura,
+          },
     m2SifId: m2Sif?.sif_id ?? null,
     voidSaleNode: voidTarget?.node_id ?? null,
     voided,
@@ -2119,8 +2120,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   it("M2 adds a dish to the table it took over", () => {
     const { w } = inheritedRun();
     expect(w.readOne.status, JSON.stringify(w.readOne.body)).toBe(200);
-    const change = w.changeWithAllergy ?? w.change;
-    expect(change.status, JSON.stringify(change.body)).toBe(200);
+    expect(w.change.status, JSON.stringify(w.change.body)).toBe(200);
     expect(w.linesAfterChange).toBe(w.tab.linesBefore + 1);
   });
 
@@ -2136,6 +2136,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(w.tabSale).toHaveLength(1);
     expect(w.tabSale[0]!.node_id).toBe(b.m2.nodeId);
     expect(w.tabSale[0]!.code).toBe(`A-${on.selected.identity}`);
+    expect(w.tabSaleRecord).toMatchObject([{ node_id: b.m2.nodeId, estado: "aceptado" }]);
   });
 
   // Task 3 flips this
@@ -2154,6 +2155,8 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(w.refundSaleNode).toBe(b.m1.nodeId);
     expect(w.refund?.status, JSON.stringify(w.refund?.body)).toBe(200);
     expect(w.refund?.body).toMatchObject({ state: "completed" });
+    expect(w.refundRows).toEqual([{ node_id: b.m2.nodeId, state: "completed" }]);
+    expect(w.m1RecordsAroundRefund.after).toBe(w.m1RecordsAroundRefund.before);
   });
 
   // Task 5b flips this
@@ -2169,7 +2172,11 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(w.voidHeard).toHaveLength(1);
     expect(w.voidHeard[0]!.record).toMatchObject({
       SistemaInformatico: { NumeroInstalacion: on.selected.identity },
-      IDFactura: { NumSerieFacturaAnulada: w.voidSaleSerie },
+      IDFactura: {
+        IDEmisorFacturaAnulada: w.voidedInvoice?.emisor,
+        NumSerieFacturaAnulada: w.voidedInvoice?.serie,
+        FechaExpedicionFacturaAnulada: w.voidedInvoice?.fecha.split("-").reverse().join("-"),
+      },
     });
   });
 
@@ -2187,7 +2194,12 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     const { w } = inheritedRun();
     expect(w.stageErrors).toEqual([]);
     expect(w.m2SifId).not.toBeNull();
-    expect(w.voidSaleSerie).not.toBeNull();
+    expect(w.voidedInvoice).not.toBeNull();
+    expect(w.m1RecordsAroundRefund.before).toBeGreaterThan(0);
+    for (const answer of [w.balance, w.newOrder, w.overview, w.dailyClose])
+      expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    expect(w.voided, JSON.stringify(w.voided)).toMatchObject({ ok: true });
+    expect(w.voidRecords).toHaveLength(1);
     expect(w.m2SellingAfterVoidRestart).toBe(true);
   });
 });
