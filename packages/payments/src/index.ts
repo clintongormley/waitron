@@ -150,5 +150,9 @@ export { payments } from "./schema/payments.js";
 export { paymentResolutions } from "./schema/payment-resolutions.js";
 export { paymentHoldOutcome, paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 
-export { hasCaptureMismatch, recordCaptureMismatch } from "./capture-mismatch.js";
+export {
+  hasCaptureMismatch,
+  recordCaptureMismatch,
+  findActiveCaptureMismatch,
+} from "./capture-mismatch.js";
 export type { CaptureMismatch, CaptureMismatchSink } from "./capture-mismatch.js";

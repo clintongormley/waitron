@@ -47,6 +47,7 @@ import {
   associatePaymentWithSale,
   ChargeNotSavedError,
   findPaymentsByBillPayments,
+  findActiveCaptureMismatch,
   MANUAL_PROVIDER,
   recordManualCardPayment,
 } from "@waitron/payments";
@@ -195,6 +196,7 @@ export interface BillPaymentView {
 }
 
 export interface BillBalance {
+  captureMismatch?: true;
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
   total: Decimal;
@@ -211,10 +213,17 @@ export interface BillBalance {
 }
 
 export interface BillPaymentResult {
-  /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending) or
-   * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
+  /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending),
+   * `capture_mismatch` (held, checking stopped) or `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
    * till (the first sign-in or a later one) answers the state it finds. */
-  outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
+  outcome:
+    | "received"
+    | "pending"
+    | "failed"
+    | "declined"
+    | "timeout"
+    | "capture_mismatch"
+    | "network_unavailable";
   payment: BillPaymentView;
   balance: BillBalance;
   /** Present when the bill is invoiced: by this payment, or, on a replay, since. */
@@ -632,7 +641,9 @@ export async function readBillBalance(
     held,
   );
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
+  const captureMismatch = await findActiveCaptureMismatch(tx, { orderIds: [workingOrderId] });
   return {
+    ...(captureMismatch === undefined ? {} : { captureMismatch: true as const }),
     workingOrderId,
     status: order.status,
     total: money(funds.total),
@@ -995,7 +1006,11 @@ async function resultOf(
       ? await readSettledTicket(deps.backend, tx, cfg, payment.workingOrderId)
       : null);
   return {
-    outcome: payment.state,
+    outcome:
+      payment.state === "pending" &&
+      (await findActiveCaptureMismatch(tx, { billPaymentId: payment.id })) !== undefined
+        ? "capture_mismatch"
+        : payment.state,
     payment: view,
     balance,
     ...(ticket === null ? {} : { invoice: ticket }),
@@ -1538,7 +1553,8 @@ export async function takeReaderBillPayment(
     return await withTransaction(deps.db, async (tx) => {
       await requireEconomicWrite(tx, cfg, deps.admission);
       if (!NOT_CHARGED.has(result.state)) {
-        return { ...(await resultOf(tx, deps, cfg, payment, null)), outcome: "timeout" };
+        const answer = await resultOf(tx, deps, cfg, payment, null);
+        return answer.outcome === "capture_mismatch" ? answer : { ...answer, outcome: "timeout" };
       }
       const failed = await failBillPayment(
         tx,

@@ -13,6 +13,7 @@ import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js"
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
 import { decimal } from "@waitron/shared";
+import { getBillBalance } from "./bill-payments.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import { releaseStalePaymentAttempts } from "./till-sale.js";
@@ -92,6 +93,7 @@ for (const providerId of ["stripe", "sumup"]) {
             });
       const answer = await request();
       expect(answer.status).toBe(200);
+      expect(answer.json.outcome).toBe("capture_mismatch");
       expect(await statusOf(venue, id)).toBe("open");
       const [payment] = await suite.db
         .select()
@@ -123,7 +125,8 @@ for (const providerId of ["stripe", "sumup"]) {
       await releaseStalePaymentAttempts(suite.db);
       const again = await request();
       expect(again.status).toBe(409);
-      expect(again.json.code).toBe("order.payment_in_flight");
+      expect(again.json.code).toBe("reader.payment_in_progress");
+      expect(again.json.params).toMatchObject({ recoveryUrl: "/manage/payments" });
       expect(collect).toHaveBeenCalledTimes(1);
       expect(refund).not.toHaveBeenCalled();
       expect(voidPayment).not.toHaveBeenCalled();
@@ -148,3 +151,75 @@ for (const providerId of ["stripe", "sumup"]) {
     },
   );
 }
+
+it.each(["stripe", "sumup"])(
+  "%s partial mismatch stops further cash and cards on the bill and new charges through its reader",
+  async (providerId) => {
+    const venue = await provisionBillVenue(suite.db);
+    let provider: PaymentProvider;
+    let starts: () => number;
+    if (providerId === "stripe") {
+      const client = new FakeStripe();
+      const create = vi.spyOn(client, "createPaymentIntent");
+      starts = () => create.mock.calls.length;
+      const read = client.retrievePaymentIntent.bind(client);
+      vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (id) => ({
+        ...(await read(id)),
+        status: "succeeded",
+        amountReceived: 900,
+      }));
+      provider = new StripeTerminalProvider({ db: suite.db, client, captureAlerts, poll });
+    } else {
+      const client = new FakeSumUp();
+      const create = vi.spyOn(client, "createCheckout");
+      starts = () => create.mock.calls.length;
+      vi.spyOn(client, "findTransaction").mockResolvedValue({
+        id: "txn_nine",
+        status: "SUCCESSFUL",
+        amount: decimal("9.00"),
+      });
+      provider = new SumUpCloudProvider({
+        db: suite.db,
+        client,
+        captureAlerts,
+        incidents: captureAlerts.raise,
+        poll,
+      });
+    }
+    const routed: PaymentProvider = Object.assign(Object.create(provider) as PaymentProvider, {
+      collect: (params: Parameters<PaymentProvider["collect"]>[0]) =>
+        provider.collect({ ...params, readerRef: "rdr_test" }),
+    });
+    vi.spyOn(venue.pool, "get").mockResolvedValue(routed);
+    const id = await tabWith(venue, "Paella");
+    const pay = (billId: string, method: "cash" | "card", amount: string, cookie = venue.cookie) =>
+      send(venue.app, cookie, "POST", `/api/working-orders/${billId}/payments`, {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount,
+        method,
+        applied: amount,
+        tip: "0.00",
+        ...(method === "cash" ? { tendered: amount } : { entry: "reader" }),
+      });
+    const initial = await pay(id, "card", "10.00");
+    expect(initial.status).toBe(200);
+    expect(initial.json).toMatchObject({
+      outcome: "capture_mismatch",
+      balance: { captureMismatch: true },
+    });
+    expect(await getBillBalance(venue, id)).toMatchObject({ captureMismatch: true });
+    const cash = await pay(id, "cash", "5.00");
+    expect(cash.status).toBe(409);
+    expect(cash.json.code).toBe("payment.capture_mismatch_unresolved");
+    for (const cookie of [venue.cookie, venue.cookie2])
+      expect((await pay(id, "card", "5.00", cookie)).status).toBe(409);
+    const other = await tabWith(venue, "Paella");
+    expect((await pay(other, "card", "5.00")).status).toBe(409);
+    expect(starts()).toBe(1);
+    expect((await pay(other, "cash", "5.00")).status).toBe(200);
+    expect((await paymentRows(venue, other)).filter((row) => row.state === "pending")).toEqual([]);
+    expect(registroCount(venue, id)).toBe(0);
+    expect(await tendersOfBill(venue, id)).toEqual([]);
+  },
+);

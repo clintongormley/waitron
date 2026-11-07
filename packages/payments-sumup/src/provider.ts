@@ -210,6 +210,10 @@ export class SumUpCloudProvider implements PaymentProvider {
         provider: SUMUP_PROVIDER,
         paymentRef,
         state: row.state,
+        ...(row.state === "attempting" &&
+        (await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
+          ? { captureMismatch: true as const }
+          : {}),
         amount: params.amount,
         settledAt: null,
       };
@@ -261,14 +265,28 @@ export class SumUpCloudProvider implements PaymentProvider {
       provider: SUMUP_PROVIDER,
       paymentRef,
       state: row.state,
+      ...(row.state === "attempting" &&
+      (await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
+        ? { captureMismatch: true as const }
+        : {}),
       amount: params.amount,
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       card,
     };
   }
 
-  private pendingResult(paymentRef: string, amount: Decimal): PaymentResult {
-    return { provider: SUMUP_PROVIDER, paymentRef, state: "attempting", amount, settledAt: null };
+  private async pendingResult(paymentRef: string, amount: Decimal): Promise<PaymentResult> {
+    const captureMismatch = await this.inTransaction((tx) =>
+      hasCaptureMismatch(tx, { provider: SUMUP_PROVIDER, paymentRef }),
+    );
+    return {
+      provider: SUMUP_PROVIDER,
+      paymentRef,
+      state: "attempting",
+      amount,
+      settledAt: null,
+      ...(captureMismatch ? { captureMismatch: true as const } : {}),
+    };
   }
 
   static classify(t: SumUpTransaction | null, now: Date): PollOutcome {
@@ -378,6 +396,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       }
       if (outcome.kind === "captured") {
         const captured = await this.inTransaction(async (tx) => {
+          if ((await getPaymentByRef(tx, key))?.state !== "attempting") return false;
           if (await hasCaptureMismatch(tx, key)) return false;
           if (compareDecimal(outcome.amount, decimal(row.amount)) !== 0) {
             if (

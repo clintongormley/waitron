@@ -1134,6 +1134,20 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #body(): SheetView {
+    if (this.balance?.captureMismatch === true)
+      return {
+        body: html`${this.#balance()} ${this.#payments()}
+          <p role="status" data-pay-mismatch>${t("card.mismatch")}</p>`,
+        actions: html`<wt-form-actions slot="footer"
+          >${recoveryLink({ code: "card_mismatch" })}<wt-button
+            slot="cancel"
+            variant="secondary"
+            data-pay-close
+            @click=${() => this.#requestClose()}
+            >${t("bill_pay.close")}</wt-button
+          ></wt-form-actions
+        >`,
+      };
     const step = this.nextOffered ? this.#nextActions() : this.#step();
     const body = html`${this.#balance()} ${this.#taken()}
     ${
@@ -1363,7 +1377,9 @@ export class TillBillPayDialog extends LitElement {
         ${amount(balance.received)}
       </div>
       <div data-pay-reserved>
-        <dt>${t("bill_pay.reserved")}</dt>
+        <dt>
+          ${t(balance.captureMismatch === true ? "bill_pay.mismatch_reserved" : "bill_pay.reserved")}
+        </dt>
         ${amount(balance.reserved)}
       </div>
       <div data-pay-outstanding>
