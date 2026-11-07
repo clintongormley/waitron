@@ -277,7 +277,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
   }
 
   /** `carriesOn` false: the person did not start this wait, so its end sends nothing. */
-  renderWait(words: ClockWords, carriesOn = true) {
+  renderWait(words: ClockWords, carriesOn: boolean) {
     return renderWait(words, this.#countdown, this.#minuteTaken, carriesOn);
   }
 }
@@ -286,7 +286,7 @@ export function renderClockProblem(
   problem: ClockProblem | undefined,
   words: ClockWords,
   clock: HourClockDecision | undefined,
-  carriesOn = true,
+  carriesOn: boolean,
 ) {
   if (problem?.kind === "second-clock")
     return html`<section data-test="clock-wait">
