@@ -57,17 +57,18 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * literals, a column's default and {@link CANDIDATES}. A nullable column outside every unique
  * index is null wherever its constraints allow, except that a second row points a self-reference
  * at the first. So a migration that fails only on values the product writes and these rows lack
- * passes. The reference check reads the SQL as text: a table belongs to the set whose migration
- * first names it after `CREATE TABLE` or `RENAME TO`; a table named only in a trigger body or a
- * view is not checked, a `REFERENCES` inside a comment is checked as if it were a key, and a set's
- * requirements count through other sets. A lost trigger is judged by name alone: one recreated
- * with another body passes, and a change-feed trigger the next install leaves out (its source's
- * columns gone) counts as lost. The tables {@link ONE_ROW} names, and a singleton
- * (`CHECK (id = 1)`), hold one row. Steps a walk's resets list names cannot carry the rows, and
- * the walk restarts from an empty database at each. Between steps rows are counted, not compared,
- * so a migration that rewrites a value passes; only the epoch's repeat compares values. After the
- * final step it also pins the nine product triggers and the append-only triggers of every table
- * the sets declare; no trigger is compared across the initial checkpoint, which starts empty.
+ * passes. The reference check reads the SQL as text, with comments removed: a reference is to the
+ * latest migration in run order, at or before it, whose `CREATE TABLE` or `RENAME TO` names the
+ * table; a table named only in a trigger body or a view is not checked, and a set's requirements
+ * count through other sets. A lost trigger is judged by name alone: one recreated with another
+ * body passes. A change-feed trigger counts as lost only when today's change-feed source names a
+ * column the step drops, since the feed then leaves it out. The tables {@link ONE_ROW} names, and
+ * a singleton (`CHECK (id = 1)`), hold one row. Steps a walk's resets list names cannot carry the
+ * rows, and the walk restarts from an empty database at each. Between steps rows are counted, not
+ * compared, so a migration that rewrites a value passes; only the epoch's repeat compares values.
+ * After the final step it also pins the nine product triggers and the append-only triggers of
+ * every table the sets declare; no trigger is compared across the initial checkpoint, which
+ * starts empty.
  */
 
 type ChangeSource = NonNullable<(typeof ALL_MODULES)[number]["changes"]>[number];
@@ -119,10 +120,11 @@ const RESETS: Resets = {};
 
 const EPOCH_FILE = new URL("./migration-baseline-epoch.json", import.meta.url);
 
+const SET_REQUIRES = setRequires(ALL_MODULES);
 const sets: WalkSet[] = orderedMigrationSets(ALL_MODULES).map((set) => ({
   name: set.name,
   ...migrationOptionsFor([set], null)[0],
-  requires: setRequires(ALL_MODULES).get(set.name) ?? [],
+  requires: SET_REQUIRES.get(set.name) ?? [],
 }));
 const epoch = readEpoch();
 const { cuts } = planWalk(sets, epoch);
@@ -296,12 +298,14 @@ async function walkUpgrade(input: WalkInput) {
       await feed();
       const after = triggersOf(venueDir);
       const lost = [...before].filter(
-        ([trigger, table]) => !after.has(trigger) && existing.has(table) && !dropped.has(trigger),
+        ([trigger, table]) =>
+          !after.has(trigger) && existing.has(table) && !dropped.has(trigger.toLowerCase()),
       );
       if (lost.length > 0) {
         throw new Error(
           `Step ${label} lost triggers on tables it kept: ` +
-            lost.map(([trigger, table]) => `${trigger} on ${table}`).join(", "),
+            lost.map(([trigger, table]) => `${trigger} on ${table}`).join(", ") +
+            "; a migration that drops a trigger on purpose says so with DROP TRIGGER",
         );
       }
       const unprotected = appendOnlyTriggers(
@@ -386,10 +390,18 @@ function triggersOf(venueDir: string): Map<string, string> {
   }
 }
 
-/** Each name, unquoted, that follows a match of `before` in `sql`. */
+/**
+ * Each name, unquoted, without a `main.` prefix and lowercased as SQLite compares names, that
+ * follows a match of `before` in `sql` outside its comments.
+ */
 function namesAfter(sql: string, before: RegExp): string[] {
-  const pattern = new RegExp(`${before.source}[\`"]?(\\w+)`, before.flags);
-  return [...sql.matchAll(pattern)].map((match) => match[1]);
+  const quote = `[\`"[\\]]?`;
+  const pattern = new RegExp(
+    `${before.source}(?:${quote}main${quote}\\s*\\.\\s*)?${quote}(\\w+)`,
+    before.flags,
+  );
+  const code = sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+  return [...code.matchAll(pattern)].map((match) => match[1].toLowerCase());
 }
 
 /** Each module's set's requirements, as set names: a module without a set counts as its host's. */
@@ -437,8 +449,9 @@ function orderByRequires(walkSets: readonly WalkSet[]): WalkSet[] {
 /**
  * Throws unless every table a migration's foreign keys name belongs to its own set, or to a set
  * it requires directly or through another, and is created no later than the migration runs (the
- * epoch's migrations all run first). Read from the SQL as text: a table belongs to the set whose
- * migration first creates it, by `CREATE TABLE` or `RENAME TO`, and a foreign key is `REFERENCES`.
+ * epoch's migrations all run first). Read from the SQL as text: a reference is to the latest
+ * migration, in run order, that creates the table (`CREATE TABLE` or `RENAME TO`) at or before the
+ * referring one, so a table may move between sets; a foreign key is `REFERENCES`.
  */
 function checkReferences(
   walkSets: readonly WalkSet[],
@@ -463,26 +476,30 @@ function checkReferences(
       })),
     )
     .sort((a, b) => a.runs - b.runs || a.order - b.order);
-  const creators = new Map<string, (typeof migrations)[number]>();
-  for (const migration of migrations) {
+  // Each table's creating migrations, by their place in run order.
+  const creators = new Map<string, number[]>();
+  migrations.forEach((migration, place) => {
     for (const table of [
       ...namesAfter(migration.sql, /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?/gi),
       ...namesAfter(migration.sql, /\bRENAME\s+TO\s+/gi),
     ]) {
-      if (!creators.has(table)) creators.set(table, migration);
+      creators.set(table, [...(creators.get(table) ?? []), place]);
     }
-  }
-  for (const migration of migrations) {
+  });
+  for (const [place, migration] of migrations.entries()) {
     const at = `${migration.set}/${migration.entry.tag}`;
     for (const table of namesAfter(migration.sql, /\bREFERENCES\s+/gi)) {
-      const creator = creators.get(table);
-      if (creator === undefined || creator.set === migration.set) continue;
+      const places = creators.get(table) ?? [];
+      const made = places.findLast((created) => created <= place) ?? places[0];
+      if (made === undefined) continue;
+      const creator = migrations[made];
+      if (creator.set === migration.set) continue;
       if (!required(migration.set).has(creator.set)) {
         throw new Error(
           `${at} refers to ${table}, a table of ${creator.set}, which ${migration.set} does not require`,
         );
       }
-      if (creator.runs > migration.runs) {
+      if (made > place) {
         throw new Error(
           `${at}, dated ${migration.entry.when}, refers to ${table}, which ` +
             `${creator.set}/${creator.entry.tag} creates only at ${creator.entry.when}`,
@@ -1042,10 +1059,20 @@ describe("the walk past the epoch", () => {
   const childSql =
     "CREATE TABLE `child` (`id` integer PRIMARY KEY NOT NULL, " +
     "`parent_id` integer NOT NULL REFERENCES `later_parent`(`id`))";
-  /** A base set whose parent table arrives after the epoch, and a set that refers to it. */
-  const a624 = (childWhen: number, requires: readonly string[] = ["base"]): WalkSet[] => [
+  // Fails while `later_parent` is missing, so it shows which set ran first.
+  const parentTriggerSql =
+    "CREATE TRIGGER `later_parent_seen` AFTER INSERT ON `later_parent` BEGIN SELECT 1; END";
+  /**
+   * A base set whose parent table arrives after the epoch, and a set that refers to it, passed
+   * first so that running it after `base` is the walk's doing.
+   */
+  const a624 = (
+    childWhen: number,
+    requires: readonly string[] = ["base"],
+    sql: readonly string[] = [childSql, parentTriggerSql],
+  ): WalkSet[] => [
     {
-      ...syntheticSet("dependent", [{ tag: "0000_child", when: childWhen, sql: [childSql] }]),
+      ...syntheticSet("dependent", [{ tag: "0000_child", when: childWhen, sql }]),
       requires,
     },
     syntheticSet("base", [
@@ -1083,8 +1110,18 @@ describe("the walk past the epoch", () => {
     }
   });
 
+  it("runs sets in the order given when neither requires the other, so a wrong order fails", async () => {
+    const walkSets = a624(2_000, [], [parentTriggerSql]);
+    const failure = await walkUpgrade({
+      sets: walkSets,
+      epoch: baseEpoch(walkSets),
+      resets: {},
+    }).then(() => "it passed", messagesOf);
+    expect(failure).toContain("no such table: main.later_parent");
+  });
+
   it("shows why: putting every set's first migration in the epoch fails on the later parent", async () => {
-    const walkSets = a624(2_000);
+    const walkSets = a624(2_000, ["base"], [childSql]);
     await expect(
       walkUpgrade({
         sets: walkSets,
@@ -1111,6 +1148,47 @@ describe("the walk past the epoch", () => {
     ).rejects.toThrow(
       "dependent/0000_child, dated 1500, refers to later_parent, which base/0001_parent creates only at 2000",
     );
+  });
+
+  it("credits a table that moved between sets to the set that created it last", async () => {
+    const walkSets: WalkSet[] = [
+      syntheticSet("base", [BASE, { tag: "0001_drop", when: 2_000, sql: ["DROP TABLE `kept`"] }]),
+      syntheticSet("other", [
+        {
+          tag: "0000_kept",
+          when: 3_000,
+          sql: [
+            "CREATE TABLE `kept` (`id` integer PRIMARY KEY NOT NULL, `label` text NOT NULL)",
+            "CREATE TABLE `kept_child` (`id` integer PRIMARY KEY NOT NULL, " +
+              "`kept_id` integer NOT NULL REFERENCES `kept`(`id`))",
+          ],
+        },
+      ]),
+    ];
+    const { held } = await walkUpgrade({
+      sets: walkSets,
+      epoch: epochOf(walkSets.slice(0, 1)),
+      resets: {},
+    });
+    expect(held.get("kept")).toBe(2);
+    expect(held.get("kept_child")).toBe(2);
+  });
+
+  it("does not read a REFERENCES inside a comment as a foreign key", async () => {
+    const walkSets = a624(
+      2_000,
+      [],
+      [
+        "-- once: `parent_id` integer REFERENCES `later_parent`(`id`)\n" +
+          "CREATE TABLE `child` (`id` integer PRIMARY KEY NOT NULL /* REFERENCES `later_parent` */)",
+      ],
+    );
+    const { held } = await walkUpgrade({
+      sets: walkSets,
+      epoch: baseEpoch(walkSets),
+      resets: {},
+    });
+    expect(held.get("child")).toBe(2);
   });
 
   it("carries rows through two later steps", async () => {
@@ -1229,14 +1307,14 @@ describe("the walk past the epoch", () => {
     ],
   };
 
-  it("passes a step that drops a trigger by name, or drops the trigger's table", async () => {
+  it("passes a step that drops a trigger by name, in any case and quoting, or drops the trigger's table", async () => {
     const walkSets = [
       syntheticSet("synthetic", [
         TRIGGERED,
         {
           tag: "0001_later",
           when: 2_000,
-          sql: ["DROP TRIGGER `kept_stamp`", "DROP TABLE `other`"],
+          sql: ["drop trigger if exists main.[KEPT_STAMP]", "DROP TABLE `other`"],
         },
       ]),
     ];
@@ -1287,7 +1365,9 @@ describe("the walk past the epoch", () => {
       base: TRIGGERED,
       wrong: ["DROP TRIGGER `other_touch`", ...rebuild(""), otherTouch],
       right: ["DROP TRIGGER `other_touch`", ...rebuild(""), otherTouch, keptStamp],
-      message: "Step synthetic/0001_later lost triggers on tables it kept: kept_stamp on kept",
+      message:
+        "Step synthetic/0001_later lost triggers on tables it kept: kept_stamp on kept; " +
+        "a migration that drops a trigger on purpose says so with DROP TRIGGER",
     },
   ])(
     "fails $failure and passes the same change made safely",
