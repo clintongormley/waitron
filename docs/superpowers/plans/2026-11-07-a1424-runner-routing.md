@@ -1,5 +1,7 @@
 # A1424: server shard routing implementation plan
 
+**7 November 2026:** [Implemented rules](../../developers/ci-and-gates.md#disposable-server-test-runners) supersede this proposal, under watcher 15:02.
+
 Authority: F questions.md, 2026-11-07 14:39: “Build both”. Approved direct expression/metadata-only hosted watchdog: 20-minute queue allowance exceeds I’s 15-minute controller stop. Preserve existing reuse. Watcher, 2026-11-07 14:43, approved: “Give it test-server's gate and exit successfully without an API call on main, retries, forks and disabled routing”. final-plan-review.md S1, WATCHER-NEEDED 14:50: driver recommends retaining existing identity GET/409 readback pending verification; cancellation decision before LAND, not BUILD. Claude reads amended plan before build; none started.
 
 Healthy [run 42370934080](https://github.com/clintongormley/waitron/actions/runs/42370934080) queued 24 server jobs for median 552 seconds and executed them for median 182 seconds. Dashboard and heavy remain I's probes.

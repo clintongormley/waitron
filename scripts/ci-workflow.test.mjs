@@ -84,16 +84,26 @@ describe("disposable server routing", () => {
 describe("the server queue watchdog shell", () => {
   let root;
   let bin;
+  let realTimeout;
   beforeAll(() => {
+    realTimeout = spawnSync(
+      "sh",
+      ["-c", "command -v gnutimeout || command -v gtimeout || command -v timeout"],
+      { encoding: "utf8" },
+    ).stdout.trim();
+    expect(realTimeout).not.toBe("");
     root = mkdtempSync(join(tmpdir(), "waitron-server-queue-"));
     bin = join(root, "bin");
     mkdirSync(bin);
     const stubs = {
+      gnutimeout:
+        '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$STUB_DIR/deadlines"\nexec "$REAL_TIMEOUT" "$@"\n',
       date: '#!/bin/sh\ncat "$STUB_DIR/clock"\n',
       sleep:
-        '#!/bin/sh\nclock=$(cat "$STUB_DIR/clock")\necho "$((clock + CLOCK_JUMP))" > "$STUB_DIR/clock"\n',
+        '#!/bin/sh\nclock=$(cat "$STUB_DIR/clock")\nprintf \'%s\\n\' "$1" >> "$STUB_DIR/sleeps"\nadvance=$(($1 + SLEEP_OVERRUN))\nif [ "$FREEZE_CLOCK" = true ]; then advance=0; fi\necho "$((clock + advance))" > "$STUB_DIR/clock"\n',
       gh: `#!/bin/bash
 printf '%s\\n' "$*" >> "$STUB_DIR/calls"
+if [ "$CHECK_STDIN" = true ] && [ ! /dev/stdin -ef /dev/null ]; then echo 'API command inherited shell input' >&2; exit 1; fi
 endpoint=''
 for arg in "$@"; do case "$arg" in repos/*) endpoint=$arg ;; esac; done
 advance() {
@@ -109,6 +119,7 @@ case "$endpoint" in
   repos/o/r/actions/runs/1234/attempts/1/jobs\\?per_page=30\\&page=*)
     page=\${endpoint##*page=}
     if [ "$page" = 1 ]; then advance jobs; echo "$selected" > "$STUB_DIR/poll"; fi
+    if [ "$page" = 1 ]; then read -r clock < "$STUB_DIR/clock"; echo "$((clock + PAGE_ONE_SECONDS))" > "$STUB_DIR/clock"; fi
     read -r selected < "$STUB_DIR/poll"
     response="$STUB_DIR/jobs.$selected.$page"
     if [ -f "$STUB_DIR/jobs-error.status" ]; then response="$STUB_DIR/jobs-error"; fi
@@ -165,7 +176,7 @@ exit "$status"
       .map((line) => line.slice(10))
       .join("\n");
     const dir = mkdtempSync(join(root, "case-"));
-    writeFileSync(join(dir, "clock"), "0");
+    writeFileSync(join(dir, "clock"), "0\n");
     const fixture = {
       polls: [pages(inventory())],
       runs: [{ out: identity }],
@@ -197,7 +208,12 @@ exit "$status"
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
         STUB_DIR: dir,
-        CLOCK_JUMP: "400",
+        REAL_TIMEOUT: realTimeout,
+        FREEZE_CLOCK: "false",
+        // Refusal cases model a descheduled runner; timing cases use exact sleeps.
+        SLEEP_OVERRUN: "1170",
+        PAGE_ONE_SECONDS: "0",
+        CHECK_STDIN: "false",
         SHOULD_WATCH: "true",
         GH_TOKEN: "test-token",
         REPO: "o/r",
@@ -217,7 +233,21 @@ exit "$status"
           .split("\n")
           .map((line) => line.split(" "))
       : [];
-    return { status: result.status, output: `${result.stdout}${result.stderr}`, calls };
+    const deadlines = existsSync(join(dir, "deadlines"))
+      ? readFileSync(join(dir, "deadlines"), "utf8").trim().split("\n")
+      : [];
+    const sleeps = existsSync(join(dir, "sleeps"))
+      ? readFileSync(join(dir, "sleeps"), "utf8").trim().split("\n")
+      : [];
+    const elapsed = Number(readFileSync(join(dir, "clock"), "utf8"));
+    return {
+      status: result.status,
+      output: `${result.stdout}${result.stderr}`,
+      calls,
+      deadlines,
+      sleeps,
+      elapsed,
+    };
   }
   const cancellations = (result) => result.calls.filter((args) => args.includes("POST"));
 
@@ -225,6 +255,42 @@ exit "$status"
     const result = runWatch({}, { SHOULD_WATCH: "false" });
     expect(result.status, result.output).toBe(0);
     expect(result.calls).toEqual([]);
+  });
+  it("prefers GNU timeout for both the shell and its API requests", () => {
+    const result = runWatch({
+      polls: [
+        pages(
+          inventory((rows) => {
+            Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+          }),
+        ),
+      ],
+    });
+    expect(result.status, result.output).toBe(0);
+    expect(result.deadlines).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("-k 2s 1260 bash -e"),
+        expect.stringContaining(
+          "-k 1s 10 gh api repos/o/r/actions/runs/1234/attempts/1/jobs?per_page=30&page=1",
+        ),
+      ]),
+    );
+  });
+  it("closes API command input rather than sharing the shell heredoc", () => {
+    const result = runWatch(
+      {
+        polls: [
+          pages(
+            inventory((rows) => {
+              Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+            }),
+          ),
+        ],
+      },
+      { CHECK_STDIN: "true" },
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(cancellations(result)).toEqual([]);
   });
   it.each(["assigned", "completed"])(
     "accepts a complete inventory with the routed job %s",
@@ -240,14 +306,43 @@ exit "$status"
       expect(cancellations(result)).toEqual([]);
     },
   );
+  it.each([true, false])(
+    "requires both routed shards to leave the queue (both assigned: %s)",
+    (both) => {
+      const rows = inventory((entries) => {
+        Object.assign(entries[0], { status: "in_progress", runner_id: 9 });
+        entries[1].labels = ["self-hosted", "dt-42-1234-1-test-server-2"];
+        if (both) Object.assign(entries[1], { status: "in_progress", runner_id: 10 });
+      });
+      const result = runWatch({ polls: [pages(rows)] });
+      expect(result.status === 0, result.output).toBe(both);
+      expect(cancellations(result)).toHaveLength(both ? 0 : 1);
+    },
+  );
+  it("does not call an in-progress shard assigned without a positive runner ID", () => {
+    const result = runWatch({
+      polls: [
+        pages(
+          inventory((rows) => {
+            rows[0].status = "in_progress";
+          }),
+        ),
+      ],
+    });
+    expect(result.status, result.output).not.toBe(0);
+    expect(cancellations(result)).toHaveLength(1);
+  });
   it("allows an initial empty listing and legitimate inventory growth between paginated polls", () => {
     const ready = inventory((rows) => {
       Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
       rows.push(...Array.from({ length: 10 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })));
     });
-    const result = runWatch({
-      polls: [[{ total_count: 0, jobs: [] }], pages(inventory()), pages(ready)],
-    });
+    const result = runWatch(
+      {
+        polls: [[{ total_count: 0, jobs: [] }], pages(inventory()), pages(ready)],
+      },
+      { SLEEP_OVERRUN: "0" },
+    );
     expect(result.status, result.output).toBe(0);
     expect(result.calls.some((args) => args.some((arg) => arg.endsWith("&page=2")))).toBe(true);
     expect(cancellations(result)).toEqual([]);
@@ -275,6 +370,9 @@ exit "$status"
     "foreign identity",
     "foreign attempt",
     "foreign head",
+    "zero job ID",
+    "fractional job ID",
+    "string labels",
     "wrong label",
     "changing total",
   ])(
@@ -287,6 +385,9 @@ exit "$status"
         if (fault === "foreign identity") rows[0].run_id = 5678;
         if (fault === "foreign attempt") rows[0].run_attempt = 2;
         if (fault === "foreign head") rows[0].head_sha = "b".repeat(40);
+        if (fault === "zero job ID") rows[0].id = 0;
+        if (fault === "fractional job ID") rows[0].id = 1.5;
+        if (fault === "string labels") rows[0].labels = "self-hosted dt-42-1234-1-test-server-1";
         if (fault === "wrong label") rows[0].labels[1] = "dt-42-5678-1-test-server-1";
         if (fault === "changing total")
           rows.push(
@@ -300,6 +401,30 @@ exit "$status"
       expect(cancellations(result)).toHaveLength(1);
     },
   );
+  it("refuses more than thirty records in one API page", () => {
+    const entries = inventory((rows) => {
+      Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+      rows.push(...Array.from({ length: 10 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })));
+    });
+    const result = runWatch({ polls: [[{ total_count: entries.length, jobs: entries }]] });
+    expect(result.status, result.output).not.toBe(0);
+    expect(cancellations(result)).toHaveLength(1);
+  });
+  it("uses the remainder of one ten-second budget for subsequent pages", () => {
+    const entries = inventory((rows) => {
+      Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+      rows.push(...Array.from({ length: 10 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })));
+    });
+    const result = runWatch({ polls: [pages(entries)] }, { PAGE_ONE_SECONDS: "6" });
+    expect(result.status, result.output).toBe(0);
+    expect(result.deadlines).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          "-k 1s 4 gh api repos/o/r/actions/runs/1234/attempts/1/jobs?per_page=30&page=2",
+        ),
+      ]),
+    );
+  });
   it("fails a complete all-hosted inventory immediately without cancelling", () => {
     const result = runWatch({
       polls: [
@@ -322,12 +447,25 @@ exit "$status"
     }
   });
   it("makes no more than forty inventory polls even when the clock does not advance", () => {
-    const result = runWatch({}, { CLOCK_JUMP: "0" });
+    const result = runWatch({}, { FREEZE_CLOCK: "true" });
     expect(result.status, result.output).not.toBe(0);
     expect(result.calls.filter((args) => args.some((arg) => arg.includes("/jobs?")))).toHaveLength(
       40,
     );
     expect(cancellations(result)).toHaveLength(1);
+    expect(result.sleeps).toEqual(Array(40).fill("30"));
+  });
+  it("waits twenty minutes before requesting cancellation of a queued run", () => {
+    const result = runWatch({}, { SLEEP_OVERRUN: "0" });
+    expect(result.status, result.output).not.toBe(0);
+    expect(result.elapsed).toBe(1200);
+    expect(result.sleeps).toEqual(Array(40).fill("30"));
+    expect(cancellations(result)).toHaveLength(1);
+  });
+  it("does not cancel a matching attempt that has already completed", () => {
+    const result = runWatch({ runs: [{ out: { ...identity, status: "completed" } }] });
+    expect(result.status, result.output).toBe(0);
+    expect(cancellations(result)).toEqual([]);
   });
   it.each([{ id: 999 }, { run_attempt: 2 }, { head_sha: "b".repeat(40) }])(
     "refuses cancellation after an identity change %j",
@@ -357,7 +495,7 @@ exit "$status"
     const entries = inventory((rows) => {
       rows.push(...Array.from({ length: 600 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })));
     });
-    const result = runWatch({ polls: [pages(entries)] }, { CLOCK_JUMP: "0" });
+    const result = runWatch({ polls: [pages(entries)] }, { FREEZE_CLOCK: "true" });
     expect(result.status, result.output).not.toBe(0);
     expect(result.calls).toHaveLength(200);
     expect(result.output).toContain("API call limit");

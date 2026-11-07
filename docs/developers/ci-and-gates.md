@@ -81,6 +81,8 @@ to Lane I's disposable Linux runners. Routing is disabled by default. After the 
 qualification below, set `DISPOSABLE_TESTS_MODE=server` and
 `DISPOSABLE_TESTS_SERVER_JOBS=1` for the first measured slot. Increase the job count only
 from measured capacity; one runner slot does not make several shards run in parallel.
+Choose a budget whose shards can all start within twenty minutes. Otherwise the watchdog
+requests cancellation of the entire workflow run even when another shard is already running.
 
 Only the first attempt of a same-repository pull request uses this route. Main pushes,
 tags, manual runs, forks and every retry use GitHub-hosted runners. This includes retries
@@ -113,6 +115,9 @@ cancelling. Exhausted API calls, unreadable metadata and refused cancellation en
 If cancellation cannot reach GitHub, the aggregate can remain pending until queued jobs
 expire. The watchdog itself must also obtain a hosted runner, so this is not a bound on
 total elapsed time during a GitHub outage.
+Both deadlines prefer `gnutimeout`, then `gtimeout`, then `timeout`. Run the root shell
+checks with one of these commands installed; the selection test wraps the actual timeout
+command and checks which executable the workflow chooses.
 
 The watchdog shares the server job's code, package and reuse gate. Outside a routed
 attempt it exits successfully without an API call. This costs one small hosted job on
@@ -140,6 +145,7 @@ guidance before enabling a slot.
 | [GitHub runner hardening](https://docs.github.com/en/enterprise-cloud@latest/actions/reference/security/secure-use#hardening-for-self-hosted-runners) | “can be persistently compromised by untrusted code in a workflow” | Disposable VMs and contributor approval reduce exposure without establishing isolation. |
 | [Self-hosted routing](https://docs.github.com/en/actions/reference/runners/self-hosted-runners#routing-precedence-for-self-hosted-runners) | “the job will remain queued until a runner comes online” | Execution limits alone do not stop an unavailable-label queue; the watchdog needs hosted availability. |
 | [REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) | “1,000 requests per hour per repository” | The watchdog uses bounded polling and a 200-call cap; this is not a reservation of the repository's shared allowance. |
+| [Cancellation API](https://docs.github.com/en/rest/actions/workflow-runs#cancel-a-workflow-run) | “Cancels a workflow run using its id.” | The request names the whole run rather than individual queued jobs. |
 
 ## The optional whole-workspace check
 
