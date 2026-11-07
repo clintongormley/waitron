@@ -732,3 +732,72 @@ describe("the open alerts at phone width", () => {
     },
   );
 });
+
+const captureCases = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(captureCases)(
+  "shows both capture figures for every payment in $locale $theme at $width",
+  async ({ locale, theme, width }) => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(width, 900);
+    try {
+      setLocale(locale);
+      const capture: AlertView = {
+        ...open,
+        code: "payment.capture_mismatch",
+        params: {
+          payments: [
+            {
+              provider: "stripe",
+              paymentRef: "33333333-3333-4333-8333-333333333333",
+              requestedAmount: "12.10",
+              reportedAmount: "0.00",
+            },
+            {
+              provider: "sumup",
+              paymentRef: "44444444-4444-4444-8444-444444444444",
+              requestedAmount: "20.00",
+              reportedAmount: "21.50",
+            },
+          ],
+        },
+      };
+      const { el } = await mountWidget<AlertsScreen>(
+        "dashboard-alerts-screen",
+        {
+          api: stubApi({
+            listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [capture] }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      await expect.poll(() => rows(el, "open-alerts-table").length).toBe(1);
+      const text = rows(el, "open-alerts-table")[0]!.textContent!;
+      for (const ref of [
+        "33333333-3333-4333-8333-333333333333",
+        "44444444-4444-4444-8444-444444444444",
+      ])
+        expect(text).toContain(ref);
+      for (const amount of locale === "en-GB"
+        ? ["€12.10", "€0.00", "€20.00", "€21.50"]
+        : ["12,10", "0,00", "20,00", "21,50"])
+        expect(text).toContain(amount);
+      expect(text).not.toContain('"requestedAmount"');
+      const row = rows(el, "open-alerts-table")[0]!;
+      const message = row.querySelector<HTMLElement>('[part="alert-message"]')!;
+      const actions = row.lastElementChild!;
+      expect(message.getBoundingClientRect().right).toBeLessThanOrEqual(
+        actions.getBoundingClientRect().left,
+      );
+
+      if (import.meta.env.VITE_A1389_CAPTURE === "1")
+        await page.screenshot({ path: `__screenshots__/a1389/${locale}-${theme}-${width}.png` });
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);

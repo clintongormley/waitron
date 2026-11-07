@@ -16,6 +16,7 @@ export const ALERT_MESSAGES: Readonly<
   Record<
     string,
     Words & {
+      readonly items?: Words & { readonly param: string };
       readonly one?: Words & { readonly param: string };
       readonly variants?: Readonly<Record<string, Words & { readonly mode: "replace" | "append" }>>;
     }
@@ -332,6 +333,15 @@ export const ALERT_MESSAGES: Readonly<
   "payment.offline_forward_declined": {
     en: "A card payment of {amount:money} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
     es: "Un pago con tarjeta de {amount:money} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
+  },
+  "payment.capture_mismatch": {
+    en: "The card amount differs. The order stays unpaid and locked. Automatic checks have stopped. Check the charge in the card provider's dashboard.",
+    es: "El importe de la tarjeta no coincide. El pedido sigue sin pagar y bloqueado. Las comprobaciones automáticas se han detenido. Comprueba el cobro en el panel del proveedor de pagos.",
+    items: {
+      param: "payments",
+      en: "{provider} {paymentRef}: Waitron requested {requestedAmount:money}; the card provider reported {reportedAmount:money}.",
+      es: "{provider} {paymentRef}: Waitron solicitó {requestedAmount:money}; el proveedor de pagos indicó {reportedAmount:money}.",
+    },
   },
   "payment.pending_outcome_unactionable": {
     en: "Waitron could not tell what happened to card payment {paymentRef}: the card provider reported {status}, and money may have moved without reaching a sale. Waitron has marked the payment as failed. Check it in the provider's own dashboard.",

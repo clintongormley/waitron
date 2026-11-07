@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -266,6 +267,7 @@ function integratedDeps(
   client = new FakeStripe(),
 ): { deps: IntegratedPayDeps; client: FakeStripe } {
   const provider = new StripeTerminalProvider({
+    captureAlerts,
     client,
     db: app,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -1670,6 +1672,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     });
     const app = suite.db;
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: new FakeStripe(),
       db: app,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -2770,6 +2773,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       const t = await twoTabs();
       const client = new FakeSumUp();
       const provider = new SumUpCloudProvider({
+        captureAlerts,
         client,
         db: suite.db,
         incidents: () => Promise.resolve(false),

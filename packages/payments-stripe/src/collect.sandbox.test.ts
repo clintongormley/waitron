@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import Stripe from "stripe";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
@@ -65,6 +66,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
   it("drives a real test-mode PaymentIntent to captured", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: stripeClient(stripe),
       db: suite.db,
       poll: { maxAttempts: 40, intervalMs: 500 },
@@ -92,6 +94,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
     const client = stripeClient(stripe);
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client,
       db: suite.db,
       poll: { maxAttempts: 40, intervalMs: 500 },
@@ -126,10 +129,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
   it("resolving an abandoned attempt cancels its unpaid PaymentIntent at real Stripe", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
     const client = stripeClient(stripe);
-    const provider = new StripeTerminalProvider({
-      client,
-      db: suite.db,
-    });
+    const provider = new StripeTerminalProvider({ captureAlerts, client, db: suite.db });
     const intent = await client.createPaymentIntent({
       amount: decimal("12.10"),
       currency: "eur",

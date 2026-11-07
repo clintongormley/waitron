@@ -1,0 +1,150 @@
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { expect, it, vi } from "vitest";
+import { incidents, sales, withTransaction, workingOrders } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { payments, readerPaymentInProgress } from "@waitron/payments";
+import type { PaymentProvider } from "@waitron/payments";
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
+import { StripeTerminalProvider } from "@waitron/payments-stripe";
+import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
+import { SumUpCloudProvider } from "@waitron/payments-sumup";
+import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
+import { decimal } from "@waitron/shared";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
+import { releaseStalePaymentAttempts } from "./till-sale.js";
+import {
+  paymentRows,
+  provisionBillVenue,
+  registroCount,
+  send,
+  statusOf,
+  tabWith,
+  tendersOfBill,
+} from "./testing/bill-venue.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
+
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60000,
+});
+const poll = { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() };
+
+for (const providerId of ["stripe", "sumup"]) {
+  it.each(["whole order", "bill contribution"])(
+    `${providerId} mismatch keeps a %s unpaid, locked and on its reader through recovery`,
+    async (path) => {
+      const venue = await provisionBillVenue(suite.db);
+      let provider: PaymentProvider;
+      if (providerId === "stripe") {
+        const client = new FakeStripe();
+        const read = client.retrievePaymentIntent.bind(client);
+        vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (id) => ({
+          ...(await read(id)),
+          status: "succeeded",
+          amountReceived: 3400,
+        }));
+        provider = new StripeTerminalProvider({ db: suite.db, client, captureAlerts, poll });
+      } else {
+        const client = new FakeSumUp();
+        const find = client.findTransaction.bind(client);
+        vi.spyOn(client, "findTransaction").mockImplementation(async (query) => {
+          const answer = await find(query);
+          return answer === null
+            ? null
+            : { ...answer, status: "SUCCESSFUL", amount: decimal("34.00") };
+        });
+        provider = new SumUpCloudProvider({
+          db: suite.db,
+          client,
+          captureAlerts,
+          incidents: captureAlerts.raise,
+          poll,
+        });
+      }
+      const collect = vi.spyOn(provider, "collect");
+      const refund = vi.spyOn(provider, "refund");
+      const voidPayment = vi.spyOn(provider, "void");
+      const routed: PaymentProvider = Object.assign(Object.create(provider) as PaymentProvider, {
+        collect: (params: Parameters<PaymentProvider["collect"]>[0]) =>
+          provider.collect({ ...params, readerRef: "rdr_test" }),
+      });
+      vi.spyOn(venue.pool, "get").mockResolvedValue(routed);
+      const id = await tabWith(venue, "Paella");
+      const request = () =>
+        path === "whole order"
+          ? send(venue.app, venue.cookie, "POST", "/api/pay", {
+              id,
+              lines: [],
+              zoneId: venue.zoneId,
+            })
+          : send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+              submissionId: randomUUID(),
+              kind: "contribution",
+              amount: "35.00",
+              method: "card",
+              entry: "reader",
+              applied: "35.00",
+              tip: "0.00",
+            });
+      const answer = await request();
+      expect(answer.status).toBe(200);
+      expect(await statusOf(venue, id)).toBe("open");
+      const [payment] = await suite.db
+        .select()
+        .from(payments)
+        .where(eq(payments.workingOrderId, id));
+      expect(payment).toMatchObject({
+        state: "attempting",
+        amount: 3500,
+        saleId: null,
+        settledAt: null,
+      });
+      expect(payment!.readerId).not.toBeNull();
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          readerPaymentInProgress(tx, payment!.readerId!, venue.device2Id),
+        ),
+      ).toBe(true);
+      expect(
+        await provider.resolvePending(venue.clock.now().instant, await ownsEveryPayment(suite.db)),
+      ).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+      await settlePendingBillPayments({ ...venue, admission: testTradingAdmission() });
+      expect(
+        await recoverAutomaticCardPayments({
+          ...venue,
+          admission: testTradingAdmission(),
+          pool: { get: async () => provider },
+        }),
+      ).toEqual({ filed: 0, errors: [] });
+      await releaseStalePaymentAttempts(suite.db);
+      const again = await request();
+      expect(again.status).toBe(409);
+      expect(again.json.code).toBe("order.payment_in_flight");
+      expect(collect).toHaveBeenCalledTimes(1);
+      expect(refund).not.toHaveBeenCalled();
+      expect(voidPayment).not.toHaveBeenCalled();
+      expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toEqual([]);
+      expect(registroCount(venue, id)).toBe(0);
+      expect(await tendersOfBill(venue, id)).toEqual([]);
+      expect(await statusOf(venue, id)).toBe("open");
+      if (path === "bill contribution")
+        expect((await paymentRows(venue, id)).map((row) => row.state)).toEqual(["pending"]);
+      else {
+        const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+        expect(order!.paymentAttemptAt).not.toBeNull();
+      }
+      const alerts = await suite.db
+        .select()
+        .from(incidents)
+        .where(eq(incidents.code, "payment.capture_mismatch"));
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]!.params).toMatchObject({
+        payments: [{ requestedAmount: "35.00", reportedAmount: "34.00" }],
+      });
+    },
+  );
+}

@@ -4,6 +4,7 @@ import type { Database } from "@waitron/db";
 import type { KeyRing, Purpose } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import type { PaymentProvider } from "./provider.js";
+import type { CaptureMismatchSink } from "./capture-mismatch.js";
 import type { IncidentSink } from "./reconcile.js";
 
 /** A browser-safe field descriptor for the generic connect form. `secret` fields are password inputs
@@ -107,6 +108,7 @@ export interface CardProviderBuildDeps {
   environment: "preproduction" | "production";
   /** Where a provider raises `payment.pending_outcome_unactionable`. */
   incidents: IncidentSink;
+  captureAlerts: CaptureMismatchSink;
 }
 export interface CardProviderRuntimeDeps {
   db: Database;

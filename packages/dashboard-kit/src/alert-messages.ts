@@ -21,6 +21,7 @@ export type AlertMessageTable = Readonly<Record<string, AlertMessageEntry>>;
 type Words = { readonly en: string; readonly es: string };
 
 export type AlertMessageEntry = Words & {
+  readonly items?: Words & { readonly param: string };
   readonly one?: Words & { readonly param: string };
   readonly variants?: Readonly<Record<string, Words & { readonly mode: "replace" | "append" }>>;
 };
@@ -105,7 +106,7 @@ export function alertWords(
   l: string = currentLocale(),
 ): string {
   const template = chooseTemplate(entry, params, l);
-  return template.replace(
+  const message = template.replace(
     /\{([A-Za-z0-9_]+)(?::([a-z_]+))?\}/g,
     (_match, name: string, kind: string | undefined) => {
       const value = Object.hasOwn(params, name) ? params[name] : undefined;
@@ -129,4 +130,15 @@ export function alertWords(
       );
     },
   );
+  const items = entry.items === undefined ? undefined : params[entry.items.param];
+  if (entry.items === undefined || !Array.isArray(items)) return message;
+  return [
+    message,
+    ...items
+      .filter(
+        (item): item is Record<string, unknown> =>
+          item !== null && typeof item === "object" && !Array.isArray(item),
+      )
+      .map((item) => alertWords(entry.items!, item, l)),
+  ].join(" ");
 }

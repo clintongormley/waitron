@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -297,6 +298,7 @@ function fakePool(client: FakeStripe): CardProviderPool {
       let provider = cache.get(providerId);
       if (provider === undefined) {
         provider = new StripeTerminalProvider({
+          captureAlerts,
           client,
           db: suite.db,
           // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
@@ -1813,6 +1815,7 @@ class StripeProviderWithHook extends StripeTerminalProvider {
 function poolWithHook(client: FakeStripe, beforeCollect: () => Promise<void>): CardProviderPool {
   const provider = new StripeProviderWithHook(
     {
+      captureAlerts,
       client,
       db: suite.db,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },

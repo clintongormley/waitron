@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
@@ -21,6 +22,7 @@ export async function setup(suite: { readonly db: Database }, tune?: (f: FakeSum
     new SumUpCloudProvider({
       client: fake,
       db: suite.db,
+      captureAlerts,
       incidents: () => Promise.resolve(true),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

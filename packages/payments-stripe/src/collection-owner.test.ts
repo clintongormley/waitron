@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -40,6 +41,7 @@ describe("a Stripe payment carries the node id of the box that started it", () =
   it("StripeTerminalProvider.collect", async () => {
     const { s, collect } = await params();
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: new FakeStripe(),
       db: suite.db,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },

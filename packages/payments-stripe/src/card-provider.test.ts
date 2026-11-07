@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { describe, expect, it } from "vitest";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -205,6 +206,7 @@ describe("STRIPE_CARD_PROVIDER.build", () => {
       ring,
       environment: "preproduction",
       incidents,
+      captureAlerts,
     });
     expect(provider.provider).toBe("stripe");
   });
