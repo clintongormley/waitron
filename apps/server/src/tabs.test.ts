@@ -2169,12 +2169,80 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect((await ticketRow(tabId, 2))!.firedAt).not.toBeNull();
   });
 
-  it("refuses any edit of a started line, and its removal, changing nothing", async () => {
-    const { cfg, tabId, ticket, waterOffer } = await tabWithFiredCoffee();
+  it("raising a started line through the whole-order save leaves it preparing and sends the extra one and the new dish", async () => {
+    const { cfg, tabId, ticket, lineId, coffeeOffer, waterOffer } = await tabWithFiredCoffee();
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+      operatorId: OPERATOR,
+      revision: await revisionOf(tabId),
+      lines: [
+        { workingOrderLineId: lineId, menuItemId: coffeeOffer, quantity: "2" },
+        { menuItemId: waterOffer, quantity: "1" },
+      ],
+    });
+
+    expect(await ticketRow(tabId, 1)).toMatchObject({
+      id: ticket.id,
+      quantity: 1000,
+      state: "preparing",
+    });
+    const lines = await linesOf(tabId);
+    expect(lines).toEqual([
+      expect.objectContaining({ lineNo: 1, quantity: 1000 }),
+      expect.objectContaining({ lineNo: 2, quantity: 1000 }),
+      expect.objectContaining({ lineNo: 3, quantity: 1000 }),
+    ]);
+    for (const lineNo of [2, 3]) {
+      const added = await ticketRow(tabId, lineNo);
+      expect(added).toMatchObject({ quantity: 1000, state: "queued" });
+      expect(added!.firedAt).not.toBeNull();
+    }
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("raising a started line through the one-line edit leaves it preparing and sends the extra one", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCoffee();
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
+    );
+
+    expect(await linesOf(tabId)).toEqual([
+      expect.objectContaining({ lineNo: 1, quantity: 1000 }),
+      expect.objectContaining({ lineNo: 2, quantity: 1000 }),
+    ]);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
+    const added = await ticketRow(tabId, 2);
+    expect(added).toMatchObject({ quantity: 1000, state: "queued" });
+    expect(added!.firedAt).not.toBeNull();
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("at a Not allowed station, refuses raising a started line as fired, changing nothing", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCoffee();
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never", [ticket.stationId]));
+    const before = await linesOf(tabId);
+
+    await expect(
+      asApp(cfg, async (tx) =>
+        updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
+      ),
+    ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
+
+    expect(await linesOf(tabId)).toEqual(before);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("refuses raising a started line with a note, and dropping it, changing nothing", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCoffee("2");
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
     const before = await linesOf(tabId);
 
-    for (const patch of [{ note: "no onions" }, { quantity: "2" }]) {
+    for (const patch of [{ quantity: "3", note: "no onions" }, { quantity: "1" }]) {
       await expect(
         asApp(cfg, async (tx) =>
           updateOrderLine(tx, cfg, tabId, 1, patch, await revisionOf(tabId), OPERATOR),
@@ -2184,6 +2252,37 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
         params: { ticketItemId: ticket.id },
       });
     }
+
+    expect(await linesOf(tabId)).toEqual(before);
+    expect(await ticketRow(tabId, 1)).toMatchObject({
+      id: ticket.id,
+      quantity: 2000,
+      state: "preparing",
+    });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("refuses a change to a started line, and its removal, changing nothing", async () => {
+    const { cfg, tabId, ticket, waterOffer } = await tabWithFiredCoffee();
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    const before = await linesOf(tabId);
+
+    await expect(
+      asApp(cfg, async (tx) =>
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { note: "no onions" },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "ticket.already_started",
+      params: { ticketItemId: ticket.id },
+    });
     await expect(
       updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
         operatorId: OPERATOR,

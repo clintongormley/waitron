@@ -720,7 +720,60 @@ describe("made-here route wiring", () => {
       firedAt: expect.any(String),
     });
   });
-  it("refuses changing or recalling an already-made drink", async () => {
+  it("adds another of an already-made drink on a counter order as a new line", async () => {
+    const orderId = randomUUID();
+    const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      id: orderId,
+      lines: [{ menuItemId: counterOffer, quantity: "1" }],
+    });
+    expect(parked.status).toBe(200);
+    const [drink] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, orderId)),
+    );
+    const deviceId = venue.cookie.match(/waitron_device=([0-9a-f-]+)\./)![1]!;
+    await inTx(venue, (tx) =>
+      fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [
+        {
+          id: drink!.id,
+          productId: drink!.productId!,
+          parentLineId: null,
+          courseId: null,
+          note: null,
+          quantity: drink!.quantity,
+        },
+      ]),
+    );
+    const [made] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+    );
+    expect(made).toMatchObject({ madeHere: true, state: "ready" });
+    const [order] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, orderId)),
+    );
+
+    const raised = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${orderId}`, {
+      revision: order!.revision,
+      lines: [{ workingOrderLineId: drink!.id, menuItemId: counterOffer, quantity: "2" }],
+    });
+
+    expect(raised.status, JSON.stringify(raised.json)).toBe(200);
+    const lines = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(lines.map((row) => [row.lineNo, row.quantity])).toEqual([
+      [1, 1000],
+      [2, 1000],
+    ]);
+    const items = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+    );
+    expect(items.find((item) => item.id === made!.id)).toMatchObject({ state: "ready" });
+  });
+  it("adds another of an already-made drink as a new line, and refuses recalling it", async () => {
     const party = await seatedWith(venue);
     const sent = await send(
       venue.app,
@@ -754,7 +807,34 @@ describe("made-here route wiring", () => {
         ],
       },
     );
-    expect(changed.json.code).toBe("ticket.already_started");
+    expect(changed.status, JSON.stringify(changed.json)).toBe(200);
+    const lines = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, party.tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(lines.map((row) => [row.lineNo, row.productId, row.quantity])).toEqual([
+      [line!.lineNo, line!.productId, 1000],
+      [line!.lineNo + 1, line!.productId, 1000],
+    ]);
+    const items = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    );
+    expect(items).toHaveLength(2);
+    expect(
+      items.map((item) => ({
+        lineId: item.workingOrderLineId,
+        madeHere: item.madeHere,
+        state: item.state,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        { lineId: lines[0]!.id, madeHere: true, state: "ready" },
+        { lineId: lines[1]!.id, madeHere: true, state: "ready" },
+      ]),
+    );
     const recalled = await send(
       venue.app,
       venue.cookie,

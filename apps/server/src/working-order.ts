@@ -5956,9 +5956,10 @@ async function assertProductsSellable(
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
  *   a new line; a drop voids the difference, with a notice and slip. Removing it voids it the same
  *   way.
- * - A started line is refused `ticket.already_started`; then a changed or raised line whose records'
- *   stations do not allow changes after sending is refused `ticket.already_fired`. A removal or a
- *   drop is a void, which the stations' choice does not gate.
+ * - A started line's quantity rise is taken as a not-started one's is; its change, drop or removal
+ *   is refused `ticket.already_started`. Then a changed or raised line whose records' stations do
+ *   not allow changes after sending is refused `ticket.already_fired`. A removal or a drop is a
+ *   void, which the stations' choice does not gate.
  *
  * New lines are numbered after the order's highest line number, and reach the kitchen as
  * {@link EditableOrder.newWork} says: where work was sent, as a round's line would, a course the
@@ -5997,14 +5998,15 @@ async function applyLineEdits(
   );
   /**
    * Refuses what the kitchen state forbids, the stations' choice only for a change; answers
-   * whether the kitchen holds fired work.
+   * whether the kitchen holds fired work. A bare raise leaves the started work alone, so it is not
+   * refused as started.
    */
-  const kitchenHas = (line: EditableParent, change: boolean): boolean => {
+  const kitchenHas = (line: EditableParent, change: boolean, bareRaise = false): boolean => {
     const records = [line, ...line.children].flatMap((part) =>
       part.ticket === null ? [] : [part.ticket],
     );
     const started = records.find((record) => isStarted(record.state));
-    if (started !== undefined) {
+    if (started !== undefined && !bareRaise) {
       throw new AppError("ticket.already_started", { ticketItemId: started.id });
     }
     if (change) refuseChangesAfterSending(orderId, records, stationChanges);
@@ -6170,7 +6172,7 @@ async function applyLineEdits(
     if (!changed && rise === 0) continue;
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
-    const fired = kitchenHas(parent, changed || rise > 0);
+    const fired = kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
     // Widening an adjusted line would sell the added units at its adjusted price (ruling R12).
     const addedApart = action === "free" && rise > 0 && parent.adjusted;

@@ -464,6 +464,28 @@ describe("editing split-off extras", () => {
     });
   });
 
+  it("raises a burger whose chips have started: the started chips stay, the extra burger and chips go to their stations", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const id = venue.party.tabId;
+    await withTransaction(db, async (tx) => {
+      await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
+      const sent = (await state(tx, id)).items;
+      const chips = sent.find((item) => item.stationId === venue.stations.fryer)!;
+      await tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, chips.id));
+      await edit(tx, venue, 1, { quantity: "2" });
+      const { items } = await state(tx, id);
+      expect(items.find((item) => item.id === chips.id)).toMatchObject({
+        state: "preparing",
+        quantity: 1000,
+      });
+      const added = items.filter((item) => !sent.some((before) => before.id === item.id));
+      expect(added.every((item) => item.state === "queued")).toBe(true);
+      expect(added.map((item) => item.stationId).sort()).toEqual(
+        [venue.stations.grill, venue.stations.fryer].sort(),
+      );
+      expect(added.every((item) => item.firedAt !== null)).toBe(true);
+    });
+  });
   it("keeps chips with the dish when Fryer closes and sends its work to Grill", async () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
