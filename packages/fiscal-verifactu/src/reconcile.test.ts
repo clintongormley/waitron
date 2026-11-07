@@ -951,6 +951,49 @@ describe("reconcile — an invoice the old box issued and the box that took over
       withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
     ).resolves.toBeUndefined();
   });
+
+  it("raises no conflict when AEAT reports the cancellation's fingerprint with the issuing box's installation", async () => {
+    const { aeat, issued, cancellation, selling, deps, backend } = await crossBox();
+    const client = aeat.client();
+    const issuing = issued.sistemaInformatico as { NumeroInstalacion: string };
+    const [cancelled] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, cancellation));
+    const mixed: VerifactuClient = {
+      submit: (...args) => client.submit(...args),
+      consultar: async (...args) => {
+        const response = await client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((r) =>
+            r.IDFactura.NumSerieFactura !== issued.numSerieFactura
+              ? r
+              : {
+                  ...r,
+                  DatosRegistroFacturacion: {
+                    ...r.DatosRegistroFacturacion,
+                    Huella: cancelled!.huella,
+                    SistemaInformatico: {
+                      ...(r.DatosRegistroFacturacion.SistemaInformatico as object),
+                      NumeroInstalacion: issuing.NumeroInstalacion,
+                    },
+                  },
+                },
+          ),
+        };
+      },
+    };
+
+    const result = await reconcile(deps(mixed), PERIOD);
+
+    expect(result.checked).toBe(3);
+    expect(result.conflicts).toBeUndefined();
+    expect(result.deferred).toBeUndefined();
+    await expect(
+      withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
+    ).resolves.toBeUndefined();
+  });
 });
 
 describe("reconcile — a conflict on a record of the box this one took over from", () => {

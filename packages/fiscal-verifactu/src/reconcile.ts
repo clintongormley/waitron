@@ -62,7 +62,7 @@ type PeriodRow = {
   sale_id: string;
   /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
   anulacion_id: string | null;
-  /** `[huella, NumeroInstalacion]` of every stored record of this invoice, oldest first. */
+  /** `[huella, NumeroInstalacion]` of every stored record of this invoice. */
   known_records: string;
   huella: string;
   tipo_registro: string;
@@ -451,11 +451,13 @@ async function fetchAuthority(
         const reportedHuella =
           typeof data.Huella === "string" && data.Huella.length > 0 ? data.Huella : null;
         const reportedInstallation = system?.installation ?? null;
-        const known = (JSON.parse(row.known_records) as [string, unknown][]).some(
-          ([huella, installation]) =>
-            (reportedHuella === null || huella === reportedHuella) &&
-            (reportedInstallation === null || installation === reportedInstallation),
-        );
+        // Matched separately: AEAT may report a cancelled invoice with the cancellation's
+        // fingerprint and the issuing installation, which no single stored record holds.
+        const stored = JSON.parse(row.known_records) as [string, unknown][];
+        const known =
+          (reportedHuella === null || stored.some(([huella]) => huella === reportedHuella)) &&
+          (reportedInstallation === null ||
+            stored.some(([, installation]) => installation === reportedInstallation));
         const externalCancellation =
           record.EstadoRegistro === "Anulado" &&
           row.tipo_registro === "alta" &&

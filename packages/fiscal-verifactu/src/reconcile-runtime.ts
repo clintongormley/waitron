@@ -16,7 +16,6 @@ import {
 import { createReconciliationSweep, type ReconciliationSweepResult } from "./reconcile-sweep.js";
 import type { ReconcileScope } from "./reconcile.js";
 
-/** Read once per sweep: a promotion restarts the box, so the boxes it took over from are fixed. */
 export async function reconciliationScope(
   db: Database,
   identity: { nodeId: string; taxpayerId: string; environment: DeploymentEnvironment },
