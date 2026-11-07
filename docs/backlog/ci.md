@@ -389,10 +389,10 @@ The shard counts and their sizing arguments were all measured against PGlite. On
 nightly runs of 2026-10-31 to 2026-11-02 (41171151689, 41275572381, 41392057587) show
 `packages/db`'s three `src/schema/sales.ts` ranges, each in a shard of its own because of
 `HEAVY_FILES`, taking 29 to 164 s of mutation work, while the other seven shards took 270 to
-1,258 s. Since A1309 those seven are packed by estimated cost (about 720 s each, by the model in
+1,258 s. The whole-file shards are now packed by estimated cost (about 902 s each of ten, by the model in
 [ci-and-gates.md](../developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost)).
-**Next action:** drop `sales.ts` from `HEAVY_FILES.db` and let the cost table place it, so all ten
-shards share the work; check a nightly run afterwards. The `ui` and `ui-core` splits have not been
+**Next action:** drop `sales.ts` from `HEAVY_FILES.db` and let the cost table place it, so every
+shard shares the work; check a nightly run afterwards. The `ui` and `ui-core` splits have not been
 re-measured.
 
 

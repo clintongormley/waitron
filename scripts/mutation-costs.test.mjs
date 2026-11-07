@@ -7,97 +7,118 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   costTable,
+  DURATION_FACTOR,
   fileSecondsFromReport,
   main,
   MUTANT_SECONDS,
-  TEST_FILE_SECONDS,
   TIMEOUT_SECONDS,
 } from "./mutation-costs.mjs";
 
-/** A Stryker JSON report: `files` maps a path to its mutants, `testFiles` maps a suite to its test ids. */
-function report(files, testFiles = {}) {
+/** A Stryker JSON report: `files` maps a path to its mutants, each `[status, duration in ms]`. */
+function report(files) {
   return {
     files: Object.fromEntries(
       Object.entries(files).map(([path, mutants]) => [
         path,
-        { mutants: mutants.map(([status, coveredBy]) => ({ status, coveredBy })) },
+        { mutants: mutants.map(([status, duration]) => ({ status, duration })) },
       ]),
-    ),
-    testFiles: Object.fromEntries(
-      Object.entries(testFiles).map(([path, ids]) => [path, { tests: ids.map((id) => ({ id })) }]),
     ),
   };
 }
 
-const suites = { "src/a.test.ts": ["0", "1"], "src/b.test.ts": ["2"], "src/c.test.ts": ["3"] };
+const charge = (ms) => (DURATION_FACTOR * ms) / 1000 + MUTANT_SECONDS;
 
 describe("fileSecondsFromReport", () => {
-  it("charges each tested mutant once plus once per distinct test file it runs", () => {
+  it("charges each tested mutant by its own measured duration", () => {
     const seconds = fileSecondsFromReport(
-      report({ "src/x.ts": [["Killed", ["0", "1", "2"]]] }, suites),
+      report({
+        "src/x.ts": [
+          ["Killed", 120],
+          ["Killed", 9000],
+        ],
+      }),
     );
-    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS + 2 * TEST_FILE_SECONDS);
+    expect(seconds.get("src/x.ts")).toBeCloseTo(charge(120) + charge(9000));
+    expect(seconds.get("src/x.ts")).toBeCloseTo(0.3585 * 9.12 + 2 * 0.1222);
   });
 
   it("adds the timeout charge for a mutant that timed out", () => {
-    const seconds = fileSecondsFromReport(report({ "src/x.ts": [["Timeout", ["3"]]] }, suites));
-    expect(seconds.get("src/x.ts")).toBeCloseTo(
-      MUTANT_SECONDS + TEST_FILE_SECONDS + TIMEOUT_SECONDS,
-    );
+    const seconds = fileSecondsFromReport(report({ "src/x.ts": [["Timeout", 2000]] }));
+    expect(seconds.get("src/x.ts")).toBeCloseTo(charge(2000) + TIMEOUT_SECONDS);
+    expect(TIMEOUT_SECONDS).toBe(82.2);
   });
 
   it("charges a survivor as a tested mutant", () => {
-    const seconds = fileSecondsFromReport(report({ "src/x.ts": [["Survived", ["3"]]] }, suites));
-    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS + TEST_FILE_SECONDS);
+    const seconds = fileSecondsFromReport(report({ "src/x.ts": [["Survived", 5000]] }));
+    expect(seconds.get("src/x.ts")).toBeCloseTo(charge(5000));
   });
 
   it("charges nothing for a mutant no test ran", () => {
     const seconds = fileSecondsFromReport(
-      report(
-        {
-          "src/x.ts": [
-            ["NoCoverage", []],
-            ["Ignored", ["0"]],
-            ["CompileError", ["0"]],
-            ["RuntimeError", ["0"]],
-          ],
-        },
-        suites,
-      ),
+      report({
+        "src/x.ts": [
+          ["NoCoverage", 3000],
+          ["Ignored", 3000],
+          ["CompileError", 3000],
+          ["RuntimeError", 3000],
+        ],
+      }),
+    );
+    expect(seconds.get("src/x.ts")).toBe(0);
+  });
+
+  it("charges a tested mutant with no recorded duration the per-mutant charge alone", () => {
+    const seconds = fileSecondsFromReport({
+      files: { "src/x.ts": { mutants: [{ status: "Killed" }] } },
+    });
+    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS);
+  });
+
+  it("charges a tested mutant whose duration is null the per-mutant charge alone", () => {
+    const seconds = fileSecondsFromReport(report({ "src/x.ts": [["Killed", null]] }));
+    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS);
+  });
+
+  it.each([
+    ["a non-numeric string", "oops", /'oops'/],
+    ["a numeric string", "1200", /'1200'/],
+    ["a negative number", -5000, /-5000/],
+    ["NaN", Number.NaN, /NaN/],
+    ["Infinity", Number.POSITIVE_INFINITY, /Infinity/],
+  ])(
+    "refuses a tested mutant whose duration is %s, naming the file and the value",
+    (_, duration, value) => {
+      expect(() => fileSecondsFromReport(report({ "src/x.ts": [["Killed", duration]] }))).toThrow(
+        value,
+      );
+      expect(() => fileSecondsFromReport(report({ "src/x.ts": [["Killed", duration]] }))).toThrow(
+        /src\/x\.ts/,
+      );
+    },
+  );
+
+  it("does not check the duration of a mutant no test ran", () => {
+    const seconds = fileSecondsFromReport(
+      report({
+        "src/x.ts": [
+          ["NoCoverage", "oops"],
+          ["Ignored", -1],
+          ["CompileError", "1200"],
+          ["RuntimeError", Number.NaN],
+        ],
+      }),
     );
     expect(seconds.get("src/x.ts")).toBe(0);
   });
 
   it("charges nothing for a file the shard was asked to mutate that produced no mutant", () => {
     const seconds = fileSecondsFromReport({
-      ...report({ "src/x.ts": [["Killed", []]] }, suites),
+      ...report({ "src/x.ts": [["Killed", 1000]] }),
       config: { mutate: ["src/x.ts", "src/types-only.ts", "src/split.ts:1-40"] },
     });
     expect(seconds.get("src/types-only.ts")).toBe(0);
     expect(seconds.get("src/split.ts")).toBe(0);
-    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS);
-  });
-
-  it("counts no test files for a report with no testFiles section", () => {
-    const seconds = fileSecondsFromReport({
-      files: { "src/x.ts": { mutants: [{ status: "Killed", coveredBy: ["0"] }] } },
-    });
-    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS);
-  });
-
-  it("counts only the test files a covering id maps to", () => {
-    const seconds = fileSecondsFromReport(
-      report({ "src/x.ts": [["Killed", ["0", "unmapped", "also-unmapped"]]] }, suites),
-    );
-    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS + TEST_FILE_SECONDS);
-  });
-
-  it("reads a mutant with no coveredBy list as covered by no test file", () => {
-    const seconds = fileSecondsFromReport({
-      files: { "src/x.ts": { mutants: [{ status: "Killed" }] } },
-      testFiles: {},
-    });
-    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS);
+    expect(seconds.get("src/x.ts")).toBeCloseTo(charge(1000));
   });
 });
 
@@ -182,12 +203,9 @@ describe("main", () => {
   };
 
   it("writes the package's table from every report it is given", () => {
-    const one = JSON.stringify(report({ "src/x.ts": [["Killed", ["0"]]] }, suites));
+    const one = JSON.stringify(report({ "src/x.ts": [["Killed", 100]] }));
     const two = JSON.stringify(
-      report(
-        { "src/schema/sales.ts": [["Killed", ["0"]]], "src/y.ts": [["Timeout", ["2"]]] },
-        suites,
-      ),
+      report({ "src/schema/sales.ts": [["Killed", 100]], "src/y.ts": [["Timeout", 4000]] }),
     );
     const { status, written } = run(["db", "out.json", "one.json", "two.json"], {
       "one.json": one,
@@ -196,13 +214,13 @@ describe("main", () => {
     expect(status).toBe(0);
     const table = JSON.parse(written["out.json"]);
     expect(Object.keys(table)).toEqual(["src/x.ts", "src/y.ts"]);
-    expect(table["src/y.ts"]).toBeCloseTo(MUTANT_SECONDS + TEST_FILE_SECONDS + TIMEOUT_SECONDS, 1);
+    expect(table["src/y.ts"]).toBeCloseTo(charge(4000) + TIMEOUT_SECONDS, 1);
     expect(written["out.json"].endsWith("}\n")).toBe(true);
   });
 
   it("writes only the files the package's mutate selection holds", () => {
     const one = JSON.stringify(
-      report({ "src/x.ts": [["Killed", ["0"]]], "src/gone.ts": [["Killed", ["0"]]] }, suites),
+      report({ "src/x.ts": [["Killed", 100]], "src/gone.ts": [["Killed", 100]] }),
     );
     const { status, written } = run(["db", "out.json", "one.json"], { "one.json": one });
     expect(status).toBe(0);
@@ -222,9 +240,23 @@ describe("main", () => {
     expect(errors.join("\n")).toMatch(/unknown package "nope"/);
   });
 
+  it("refuses a report with a malformed duration, naming it, and writes nothing", () => {
+    const good = JSON.stringify(report({ "src/x.ts": [["Killed", 100]] }));
+    const bad = JSON.stringify(report({ "src/y.ts": [["Killed", "oops"]] }));
+    const { status, errors, written } = run(["db", "out.json", "good.json", "bad.json"], {
+      "good.json": good,
+      "bad.json": bad,
+    });
+    expect(status).toBe(1);
+    expect(errors.join("\n")).toMatch(
+      /^malformed report bad\.json: src\/y\.ts: .*'oops'.*; out\.json left unchanged$/,
+    );
+    expect(written).toEqual({});
+  });
+
   it("leaves the table unchanged when the reports hold no file", () => {
     const { status, errors, written } = run(["db", "out.json", "one.json"], {
-      "one.json": JSON.stringify(report({}, suites)),
+      "one.json": JSON.stringify(report({})),
     });
     expect(status).toBe(1);
     expect(errors.join("\n")).toMatch(/no mutated files in the reports; out\.json left unchanged/);
@@ -246,7 +278,7 @@ describe("the command line", () => {
     const out = join(dir, "out.json");
     const reports = argv.map((files, i) => {
       const path = join(dir, `${i}.json`);
-      writeFileSync(path, JSON.stringify(report(files, suites)));
+      writeFileSync(path, JSON.stringify(report(files)));
       return path;
     });
     const result = spawnSync(process.execPath, [script, "db", out, ...reports], {
@@ -257,18 +289,29 @@ describe("the command line", () => {
 
   it("writes db's table to the named file, keeping only files db mutates, and exits 0", () => {
     const { result, out } = run({
-      "src/errors.ts": [["Killed", ["0", "2"]]],
-      "src/no-longer-mutated.ts": [["Killed", ["0"]]],
+      "src/errors.ts": [
+        ["Killed", 10000],
+        ["Killed", 0],
+      ],
+      "src/no-longer-mutated.ts": [["Killed", 100]],
     });
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
-    expect(readFileSync(out, "utf8")).toBe('{\n  "src/errors.ts": 0.9\n}\n');
+    expect(readFileSync(out, "utf8")).toBe('{\n  "src/errors.ts": 3.8\n}\n');
   });
 
   it("exits 1 and writes no file when the reports name no file db mutates", () => {
-    const { result, out } = run({ "src/no-longer-mutated.ts": [["Killed", ["0"]]] });
+    const { result, out } = run({ "src/no-longer-mutated.ts": [["Killed", 100]] });
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/^no mutated files in the reports/);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  it("exits 1 and writes no file when a report holds a malformed duration", () => {
+    const { result, out } = run({ "src/errors.ts": [["Killed", "1200"]] });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/^malformed report .*0\.json: src\/errors\.ts: .*'1200'/);
+    expect(result.stderr).toMatch(/left unchanged\n$/);
     expect(existsSync(out)).toBe(false);
   });
 

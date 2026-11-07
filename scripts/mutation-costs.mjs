@@ -3,34 +3,31 @@
 //   node scripts/mutation-costs.mjs <package> <out.json> <mutation.json> [<mutation.json> …]
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { inspect } from "node:util";
 
 import { HEAVY_FILES, packageSelection } from "./mutation-shard.mjs";
 
-// A Stryker report records no time per mutant, so a file's seconds are estimated from these three
-// fitted charges: docs/developers/ci-and-gates.md,
-// "db's mutation shards are packed by estimated cost".
-export const MUTANT_SECONDS = 0.694;
-export const TEST_FILE_SECONDS = 0.084;
+// Fitted charges: docs/developers/ci-and-gates.md, "db's mutation shards are packed by estimated cost".
+export const DURATION_FACTOR = 0.3585;
+export const MUTANT_SECONDS = 0.1222;
 export const TIMEOUT_SECONDS = 82.2;
 
 const UNTESTED = new Set(["NoCoverage", "Ignored", "CompileError", "RuntimeError"]);
 
 export function fileSecondsFromReport(report) {
-  const fileOfTest = new Map();
-  for (const [path, { tests }] of Object.entries(report.testFiles ?? {}))
-    for (const test of tests) fileOfTest.set(test.id, path);
-
   const seconds = new Map();
   for (const [path, { mutants }] of Object.entries(report.files)) {
     let total = 0;
     for (const mutant of mutants) {
       if (UNTESTED.has(mutant.status)) continue;
-      const testFiles = new Set(
-        (mutant.coveredBy ?? [])
-          .map((id) => fileOfTest.get(id))
-          .filter((file) => file !== undefined),
-      );
-      total += MUTANT_SECONDS + TEST_FILE_SECONDS * testFiles.size;
+      const duration = mutant.duration ?? 0;
+      if (!Number.isFinite(duration) || duration < 0) {
+        throw new Error(
+          `${path}: a tested mutant's duration is ${inspect(duration)}, not a number of milliseconds ≥ 0`,
+        );
+      }
+      total += (DURATION_FACTOR * duration) / 1000 + MUTANT_SECONDS;
+      // A timed-out mutant's `duration` is short; the wait it cost is not recorded.
       if (mutant.status === "Timeout") total += TIMEOUT_SECONDS;
     }
     seconds.set(path, total);
@@ -84,11 +81,17 @@ export function main(argv, { selection, readFile, writeFile, stderr }) {
     stderr(`unknown package "${pkg}" — expected one of ${Object.keys(HEAVY_FILES).join(", ")}`);
     return 2;
   }
-  const table = costTable(
-    reports.map((path) => fileSecondsFromReport(JSON.parse(readFile(path)))),
-    Object.keys(HEAVY_FILES[pkg]),
-    selection(pkg),
-  );
+  const seconds = [];
+  for (const path of reports) {
+    const parsed = JSON.parse(readFile(path));
+    try {
+      seconds.push(fileSecondsFromReport(parsed));
+    } catch (error) {
+      stderr(`malformed report ${path}: ${error.message}; ${out} left unchanged`);
+      return 1;
+    }
+  }
+  const table = costTable(seconds, Object.keys(HEAVY_FILES[pkg]), selection(pkg));
   if (Object.keys(table).length === 0) {
     stderr(`no mutated files in the reports; ${out} left unchanged`);
     return 1;

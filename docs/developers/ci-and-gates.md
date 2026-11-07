@@ -682,16 +682,36 @@ every mutant of the check changes what a test sees. The same local run over the 
 (`--mutate "src/testing/venue-db.ts:219-220"`) made 6 mutants, all killed, each after 18 to 276
 tests; its mutation phase took 24 s, against 3 min 27 s for the old lines.
 
-**The cost model.** A Stryker report records no time per mutant, so `scripts/mutation-costs.mjs`
-estimates a file's seconds from what the report does record: 0.694 s per tested mutant, plus
-0.084 s for each test file a mutant's covering tests live in, plus 82.2 s per timed-out mutant.
-Those charges are a least-squares fit of the mutation phase (from "Initial test run succeeded" to
-"MutationTestExecutor Done" in the job log) of the 29 db shards with a report on those three nights,
-against their reports: root-mean-square error 113 s. Fitted on two nights and checked on the third,
-the worst shard was off by 250 to 275 s. Replayed over those reports, the byte split at the
-2026-11-02 tree put 417 to 1,131 estimated seconds in each of the seven shards; the cost split puts
-about 720 in each. The failed shard's files estimated 764 s, so the model does not explain that
-shard on its own: the extra timeouts, which no report recorded, are the rest.
+**The cost model.** Each tested mutant in a Stryker report CI writes carries `duration`, which the
+report schema (`mutation-testing-report-schema` 3.8.4) describes as "The net time it took to test
+this mutant in milliseconds … without overhead from the mutation testing framework" (the key list
+of run 42356693258's shard 6 report: `id, mutatorName, replacement, statusReason, status, static,
+coveredBy, location, testsCompleted, duration, killedBy`). `scripts/mutation-costs.mjs` charges
+every mutant but a `NoCoverage`, `Ignored`, `CompileError` or `RuntimeError` one 0.3585 times its
+`duration` in seconds plus 0.1222 s, and a timed-out mutant 82.2 s more. Those two charges are a
+least-squares fit, over all 26 db shards of `main`'s nightly run 42356693258 and PR-head run
+42351739804 (the same `packages/db` tree), of each shard's mutation phase (from "Initial test run
+succeeded" to "MutationTestExecutor Done" in the job log, less 82.2 s per timeout) against its
+mutants' summed durations and count: root-mean-square error 42.6 s, worst shard 132 s. A timed-out
+mutant's `duration` is short (751 to 27,834 ms in those reports), not the wait it cost, so the
+timeout charge stays the 82.2 s of A1309's fit over the nights of 2026-10-31 to 2026-11-02; only
+three mutants timed out, the same three in each run, too few to refit it.
+
+The model this replaced charged a fixed amount per mutant and per covering test file, on the false
+premise that a report records no time per mutant. It estimated every one of run 42356693258's ten
+whole-file shards at about 746 s while they spent 448 to 1,240 s mutating (shard 6's job took
+23.1 min of its 25), and rebuilding its table from both runs gave a byte-identical table: mutant
+outcomes did not change between runs, so it had nothing to learn from.
+
+Same-file mutation time varies a lot from run to run (shard 4: 448 s and 768 s; shard 8: 1,170 and
+824), which is why the table takes each file's median over the reports given. Summing the table
+built from both runs over each of those whole-file shards' files, the mutation phase measured in
+either run was 0.70 to 1.24 times the estimate, at most about 211 s off. The table packs the ten
+whole-file shards at about 902 estimated seconds each. At 1.24 times that, the worst ratio of those
+two runs to a table built from their own reports, a shard would mutate for about 1,120 s; with the
+up to 166 s a job of those runs spent before mutating, that is about 21 minutes of its 25. At seven
+whole-file shards (ten in all), dispatched run 42344158863 had whole-file shards 4, 8, 9 and 10
+cancelled at the 25-minute limit.
 
 **Refreshing the table.** When a db shard drifts towards its limit, or after a change like A1309's
 that removes timed-out mutants:
@@ -701,32 +721,19 @@ gh run download <nightly run> -p 'mutation-report-db-shard-*' -D <scratch dir>
 node scripts/mutation-costs.mjs db packages/db/mutation-costs.json <scratch dir>/*/mutation.json
 ```
 
-Several runs can be given at once; each file takes its median. A report made locally can be given too, cut as
-below. Whether a mutant timed out depends on the machine that ran it, and each timeout weighs
-82.2 s; the four local reports of 7 November had the same timeout counts the CI logs showed for
-those jobs. Before using one from a run
+Several runs can be given at once; each file takes its median. A report made locally can be given
+too, cut as below, but its durations and timeouts were measured on that machine, not CI's runners,
+and each timeout weighs 82.2 s. Before using one from a run
 that followed another in the same checkout, keep only the files its own `config.mutate` names:
 Stryker's incremental file carries the earlier run's files into the later report.
 
-**The 2026-11-07 refresh (A760 part 3).** At ten shards, dispatched run 42344158863 had whole-file
-shards 4, 8, 9 and 10 cancelled at the limit, without a report. The table was rebuilt from that
-run's six reports (shards 1 to 3 and 5 to 7) and four reports of shards 4, 8, 9 and 10 made locally
-on 7 November 2026 with that shard's file list (`pnpm exec stryker run --mutate "<files>"
---concurrency 10 --force` in `packages/db`). Against that run's job logs (from "Initial test run
-succeeded" to "MutationTestExecutor Done" or, in a cancelled shard, its last progress line), the
-model under-read the cancelled shards: shard 10 had tested 856 of its 998 mutants after 1,370 s
-against 1,078 estimated for all of them, about 1.5 times the estimate if the rest ran at the same
-pace, and shards 4 and 8 about 1.3 and 1.4 times. It over-read shards 5 and 6 (483 and 675 s
-against 752 and 1,050). The refreshed table puts about 1,065 estimated seconds in each of the
-seven whole-file shards at ten, and about 746 in each of ten at thirteen shards: about 19 minutes of
-mutation at 1.5 times, after the up to 2 min 38 s each job spent before mutating.
-
 A1309's job logs, reports, fit and replay are in `/Users/clintongormley/waitron-campaign-b/a1309/`,
-and this refresh's reports and scripts in `/Users/clintongormley/waitron-campaign/a760-p3/mut/`, both
-outside the repository.
+and the two runs' reports, job-log timings and fit in
+`/Users/clintongormley/waitron-campaign/a760-p3f/`, both outside the repository.
 
-**Limits.** The model is a fit over three nights, not a measurement of any one file, and on the
-2026-11-07 tree a shard's mutation time ran from 0.64 to about 1.5 times its estimate. The guard in
+**Limits.** The model is a fit over two runs of one tree, not a measurement of any one file; its
+timeout charge comes from three older nights; and a shard's mutation time on the same files differed
+by up to about 1.8 times between the two runs. The guard in
 `scripts/mutation-shard.test.mjs` checks only that db's table exists, holds positive seconds for
 unsplit `src/` files and names only files db's Stryker config still mutates, never that it is fresh. Nothing guards against another condition, in code
 that every test runs, that its own guard already implies.
