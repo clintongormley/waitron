@@ -246,7 +246,7 @@ async function counterOrder(...names: string[]): Promise<string> {
 
 describe("split a bill", () => {
   it("puts the chosen items on a new bill of the same party, from a bill that was itself split off", async () => {
-    const table4 = await v.table("Mesa 4");
+    const table4 = await v.table("Table 4");
     const { partyId, tabId } = await seat(v, table4);
     await order(v, tabId, "Burger", "Vino", "Agua");
     const first = await splitOff(partyId, tabId, [2, 3]);
@@ -267,7 +267,7 @@ describe("split a bill", () => {
   });
 
   it("refuses a presented bill, changing nothing", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 5"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 5"));
     await order(v, tabId, "Burger", "Vino");
     const checkId = await splitOff(partyId, tabId, [2]);
     await placeByHand(v, checkId);
@@ -280,7 +280,7 @@ describe("split a bill", () => {
   });
 
   it("keeps an item already paid for where it is", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 6"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 6"));
     await order(v, tabId, "Burger", "Vino");
     await takeBillPayment(
       { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
@@ -309,7 +309,7 @@ describe("split a bill", () => {
   });
 
   it("splits the unpaid items off a partly paid bill, leaving its payment where it is", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 6b"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 6b"));
     await order(v, tabId, "Burger", "Vino");
     await contribute(tabId, "5.00");
 
@@ -321,7 +321,7 @@ describe("split a bill", () => {
   });
 
   it("refuses a split leaving less on the bill than it has received, changing nothing", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 6c"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 6c"));
     await order(v, tabId, "Burger", "Vino");
     await contribute(tabId, "20.00");
     const before = await snapshot(partyId, [tabId]);
@@ -339,7 +339,7 @@ describe("split a bill", () => {
   });
 
   it("puts a dish held for the kitchen on the new bill, keeping its group", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 7"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 7"));
     await inTx(v, (tx) =>
       orderGroups(tx, partyId, [
         { names: ["Burger"], release: "fire" },
@@ -356,7 +356,7 @@ describe("split a bill", () => {
   });
 
   it("puts a dish in a held group that the kitchen has no ticket for on the new bill, keeping its group", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 8"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 8"));
     await inTx(v, (tx) =>
       orderGroups(tx, partyId, [
         { names: ["Burger"], release: "fire" },
@@ -373,7 +373,7 @@ describe("split a bill", () => {
   });
 
   it("refuses a paid bill, changing nothing", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 9"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 9"));
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
     const before = await snapshot(partyId, [tabId]);
@@ -385,7 +385,7 @@ describe("split a bill", () => {
   });
 
   it("refuses an empty batch, changing nothing", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 10"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 10"));
     await order(v, tabId, "Burger");
     const before = await snapshot(partyId, [tabId]);
 
@@ -396,7 +396,7 @@ describe("split a bill", () => {
   });
 
   it("refuses a stale party revision, changing nothing", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 11"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 11"));
     await order(v, tabId, "Burger", "Vino");
     const stale = await commandFor(v, partyId);
     await nameParty(v, partyId, "Ana");
@@ -414,7 +414,7 @@ describe("split a bill", () => {
   });
 
   it("refuses a bill merged away, or one that does not exist, as not open", async () => {
-    const { partyId, main, second } = await twoBills("Mesa 12");
+    const { partyId, main, second } = await twoBills("Table 12");
     await merge(partyId, main, second);
     const missing = randomUUID();
     const before = await snapshot(partyId, [main, second]);
@@ -428,7 +428,7 @@ describe("split a bill", () => {
   });
 
   it("refuses a request naming a party that does not exist as not open", async () => {
-    const { partyId, main } = await twoBills("Mesa 13");
+    const { partyId, main } = await twoBills("Table 13");
     const read = await commandFor(v, partyId);
     const unknown = randomUUID();
     const before = await snapshot(partyId, [main]);
@@ -579,7 +579,7 @@ describe("a held dish split onto a check", () => {
   });
 
   it("reaches the kitchen once, stamped sent, and is charged on the check alone when fired before the check is paid", async () => {
-    const held = await heldFlanOnCheck("Mesa held fired first");
+    const held = await heldFlanOnCheck("Table held fired first");
 
     await fireHeld(held.partyId, held.groupId);
     await pay(v, held.checkId, "5.00");
@@ -592,7 +592,7 @@ describe("a held dish split onto a check", () => {
   });
 
   it("reaches the kitchen once and is charged on the check alone when the check is paid before it is fired", async () => {
-    const held = await heldFlanOnCheck("Mesa held paid first");
+    const held = await heldFlanOnCheck("Table held paid first");
 
     await pay(v, held.checkId, "5.00");
     await fireHeld(held.partyId, held.groupId);
@@ -602,7 +602,7 @@ describe("a held dish split onto a check", () => {
   });
 
   it("is stamped sent when its group fires after the check it was split onto is paid", async () => {
-    const held = await heldFlanOnCheck("Mesa held paid then sent");
+    const held = await heldFlanOnCheck("Table held paid then sent");
 
     await pay(v, held.checkId, "5.00");
     const [before] = await lineRows(held.checkId);
@@ -622,7 +622,7 @@ describe("a held dish split onto a check", () => {
 
   describe("A773 waiter request", () => {
     it("requests a paid check's held dish when every station waits and changes no financial row", async () => {
-      const held = await heldFlanOnCheck("Mesa held paid then requested");
+      const held = await heldFlanOnCheck("Table held paid then requested");
       const stationIds = v.db
         .all<{ id: string }>(sql`select id from kitchen_stations`)
         .map((station) => station.id);
@@ -663,7 +663,7 @@ describe("a held dish split onto a check", () => {
 
 describe("a held dish on a whole table bill presented or paid before its group fires", () => {
   it("is stamped sent when its group fires, and a dish in a group that never fires stays unsent", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa paid whole then sent"));
+    const { partyId, tabId } = await seat(v, await v.table("Table paid whole then sent"));
     await inTx(v, (tx) =>
       orderGroups(tx, partyId, [
         { names: ["Burger"], release: "fire" },
@@ -700,7 +700,7 @@ describe("a held dish on a whole table bill presented or paid before its group f
   });
 
   it("is stamped sent when its group fires after the bill is presented, before it is paid", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa presented then sent"));
+    const { partyId, tabId } = await seat(v, await v.table("Table presented then sent"));
     await inTx(v, (tx) =>
       orderGroups(tx, partyId, [
         { names: ["Burger"], release: "fire" },
@@ -728,7 +728,7 @@ describe("a held dish on a whole table bill presented or paid before its group f
 
 describe("merge bills", () => {
   it("moves every line onto the bill merged into, keeping its group and credit, and abandons the other", async () => {
-    const table = await v.table("Mesa 20");
+    const table = await v.table("Table 20");
     const { partyId, tabId } = await seat(v, table);
     await orderForParty(v, partyId, ["Burger", "Vino"]);
     const second = await splitOff(partyId, tabId, [2]);
@@ -777,7 +777,7 @@ describe("merge bills", () => {
   });
 
   it("keeps the bill merged into as Bill 2, and the table opens on it, when Bill 1 is merged away", async () => {
-    const { partyId, main, second } = await twoBills("Mesa 21");
+    const { partyId, main, second } = await twoBills("Table 21");
 
     await merge(partyId, second, main);
 
@@ -792,7 +792,7 @@ describe("merge bills", () => {
   });
 
   it("files one record, for both bills' items, when the bill merged into is paid, and none for the other", async () => {
-    const { partyId, main, second } = await twoBills("Mesa 60");
+    const { partyId, main, second } = await twoBills("Table 60");
     const filed = (billId: string) =>
       v.db.all(sql`
         select importe_total as total from registros_facturacion
@@ -812,7 +812,7 @@ describe("merge bills", () => {
   const EACH_SIDE = SIDES.flatMap((side) => TOUCHES.map((how) => [side, how] as const));
 
   it.each(EACH_SIDE)("refuses a merge whose %s bill is %s, changing nothing", async (side, how) => {
-    const { partyId, main, second } = await twoBills(`Mesa merge ${side} ${how}`);
+    const { partyId, main, second } = await twoBills(`Table merge ${side} ${how}`);
     // The Vino bill is touched; it is `from` or `into` as the case says.
     await touch(second, how, "30.00");
     const [into, from] = side === "from" ? [main, second] : [second, main];
@@ -828,8 +828,8 @@ describe("merge bills", () => {
   });
 
   it("refuses bills of two parties, changing neither", async () => {
-    const a = await twoBills("Mesa 23");
-    const b = await twoBills("Mesa 24");
+    const a = await twoBills("Table 23");
+    const b = await twoBills("Table 24");
     const beforeA = await snapshot(a.partyId, [a.main]);
     const beforeB = await snapshot(b.partyId, [b.main]);
 
@@ -841,7 +841,7 @@ describe("merge bills", () => {
   });
 
   it("refuses a party bill and a counter order, either way round", async () => {
-    const { partyId, main } = await twoBills("Mesa 25");
+    const { partyId, main } = await twoBills("Table 25");
     const counterId = await counterOrder("Flan");
     const before = await snapshot(partyId, [main, counterId]);
 
@@ -862,7 +862,7 @@ describe("merge bills", () => {
   });
 
   it("refuses a bill merged into itself, changing nothing", async () => {
-    const { partyId, main } = await twoBills("Mesa 26");
+    const { partyId, main } = await twoBills("Table 26");
     const before = await snapshot(partyId, [main]);
 
     const error = await captureError(() => merge(partyId, main, main));
@@ -872,7 +872,7 @@ describe("merge bills", () => {
   });
 
   it("refuses a bill that does not exist as not open, changing nothing", async () => {
-    const { partyId, main } = await twoBills("Mesa 27");
+    const { partyId, main } = await twoBills("Table 27");
     const missing = randomUUID();
     const before = await snapshot(partyId, [main]);
 
@@ -885,7 +885,7 @@ describe("merge bills", () => {
 
 describe("transfer items", () => {
   it("moves the chosen items, keeping price, VAT class, group and credit, and moves the revision on by one", async () => {
-    const table = await v.table("Mesa 30");
+    const table = await v.table("Table 30");
     const { partyId, tabId } = await seat(v, table);
     await orderForParty(v, partyId, ["Burger", "Vino", "Paella"]);
     const second = await splitOff(partyId, tabId, [2]);
@@ -929,7 +929,7 @@ describe("transfer items", () => {
   it.each(EACH_SIDE)(
     "refuses a transfer whose %s bill is %s, changing nothing",
     async (side, how) => {
-      const { partyId, main, second } = await twoBills(`Mesa transfer ${side} ${how}`);
+      const { partyId, main, second } = await twoBills(`Table transfer ${side} ${how}`);
       await touch(second, how, "30.00");
       const [from, to] = side === "from" ? [second, main] : [main, second];
       const before = await snapshot(partyId, [main, second]);
@@ -945,8 +945,8 @@ describe("transfer items", () => {
   );
 
   it("refuses bills of two parties, changing neither", async () => {
-    const a = await twoBills("Mesa 31");
-    const b = await twoBills("Mesa 32");
+    const a = await twoBills("Table 31");
+    const b = await twoBills("Table 32");
     const beforeA = await snapshot(a.partyId, [a.main]);
     const beforeB = await snapshot(b.partyId, [b.main]);
 
@@ -958,7 +958,7 @@ describe("transfer items", () => {
   });
 
   it("refuses a transfer to the same bill, changing nothing", async () => {
-    const { partyId, main } = await twoBills("Mesa 33");
+    const { partyId, main } = await twoBills("Table 33");
     const before = await snapshot(partyId, [main]);
 
     const error = await captureError(() => transfer(partyId, main, main, [1]));
@@ -968,7 +968,7 @@ describe("transfer items", () => {
   });
 
   it("refuses a transfer carrying no items, changing neither bill", async () => {
-    const { partyId, main, second } = await twoBills("Mesa 34");
+    const { partyId, main, second } = await twoBills("Table 34");
     const before = await snapshot(partyId, [main, second]);
 
     const error = await captureError(() => transfer(partyId, main, second, []));
@@ -980,7 +980,7 @@ describe("transfer items", () => {
 
 describe("requireUntouched", () => {
   it("refuses a bill that does not exist, one holding a payment, and passes an untouched one", async () => {
-    const { main, second } = await twoBills("Mesa untouched");
+    const { main, second } = await twoBills("Table untouched");
     await contribute(main, "5.00");
     const missing = randomUUID();
 
@@ -1024,7 +1024,7 @@ describe("bills of two service modes", () => {
   ] as const;
 
   it.each(CASES)("refuses a %s %s, changing neither bill", async (verb, direction) => {
-    const { partyId, prepay, tableTab } = await mixedModes(`Mesa modes ${verb} ${direction}`);
+    const { partyId, prepay, tableTab } = await mixedModes(`Table modes ${verb} ${direction}`);
     const [to, from] = direction.includes("prepay") ? [prepay, tableTab] : [tableTab, prepay];
     const before = await snapshot(partyId, [prepay, tableTab]);
 
@@ -1088,7 +1088,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
 
   /** A MOVED slip at the station, the party at `label`'s two tables before and after. */
   function movedSlip(numbers: string, label: string, dishes: string[]): unknown[] {
-    const tables = `Patio ${label}, Terraza ${label}`;
+    const tables = `Patio ${label}, Terrace ${label}`;
     return [
       "*** MOVIDO ***",
       expect.any(String),
@@ -1128,7 +1128,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     const patio = await v.table(`Patio ${label}`);
     const moving = await commandFor(v, partyId);
     await inTx(v, (tx) => moveGuests(tx, v.cfg, partyId, patio, { ...moving, otherPartyId: null }));
-    const terrace = await v.table(`Terraza ${label}`);
+    const terrace = await v.table(`Terrace ${label}`);
     const sent = await commandFor(v, partyId);
     await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, terrace, { ...sent, otherPartyId: null }));
     // The control: this printer does print the MOVED slips the move makes.
@@ -1139,7 +1139,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
   }
 
   it("tells the kitchen of a merge, whose bills share the party's tables, that the merged dishes are on another order", async () => {
-    const { partyId, main, second, printerId } = await atTwoTables("Mesa 50", "1", "second");
+    const { partyId, main, second, printerId } = await atTwoTables("Table 50", "1", "second");
     const printed = await printedBy(printerId);
     const notices = noticesOn([main, second]);
     const [mainNumber, secondNumber] = [await numberOf(main), await numberOf(second)];
@@ -1149,7 +1149,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     expect((await linesOf(v, main)).map((l) => l.name)).toEqual(["Burger", "Vino"]);
     expect(await printedBy(printerId)).toEqual([
       ...printed,
-      movedSlip(`${secondNumber} -> ${mainNumber}`, "Mesa 50", ["1 x TINTO"]),
+      movedSlip(`${secondNumber} -> ${mainNumber}`, "Table 50", ["1 x TINTO"]),
     ]);
     expect(noticesOn([main, second])).toEqual([
       ...notices,
@@ -1158,13 +1158,13 @@ describe("sent work moved between a party's bills at two of its tables", () => {
         kind: "moved",
         line_name: "TINTO",
         quantity: 1000,
-        moved_to: "Patio Mesa 50, Terraza Mesa 50",
+        moved_to: "Patio Table 50, Terrace Table 50",
       },
     ]);
   });
 
   it("tells the kitchen of part of a sent line transferred, whose bills share the party's tables, that the part moved is on another order", async () => {
-    const { partyId, main, second, printerId } = await atTwoTables("Mesa 51", "2", "main");
+    const { partyId, main, second, printerId } = await atTwoTables("Table 51", "2", "main");
     const printed = await printedBy(printerId);
     const notices = noticesOn([main, second]);
     const [mainNumber, secondNumber] = [await numberOf(main), await numberOf(second)];
@@ -1180,7 +1180,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     ]);
     expect(await printedBy(printerId)).toEqual([
       ...printed,
-      movedSlip(`${mainNumber} -> ${secondNumber}`, "Mesa 51", ["1 x BURG"]),
+      movedSlip(`${mainNumber} -> ${secondNumber}`, "Table 51", ["1 x BURG"]),
     ]);
     expect(noticesOn([main, second])).toEqual([
       ...notices,
@@ -1189,7 +1189,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
         kind: "moved",
         line_name: "BURG",
         quantity: 1000,
-        moved_to: "Patio Mesa 51, Terraza Mesa 51",
+        moved_to: "Patio Table 51, Terrace Table 51",
       },
     ]);
   });
@@ -1208,7 +1208,7 @@ describe("two tills at once", () => {
 
   for (const first of ["merge", "transfer"] as const) {
     it(`refuses the second of a merge of B2 into B1 and a transfer from B2 to B3 (${first} first)`, async () => {
-      const { partyId, b1, b2, b3 } = await threeBills(`Mesa 40 ${first}`);
+      const { partyId, b1, b2, b3 } = await threeBills(`Table 40 ${first}`);
       const read = await commandFor(v, partyId);
       const mergeB2 = () => inTx(v, (tx) => mergeBills(tx, v.cfg, b1, b2, read));
       const transferB2 = () =>
@@ -1230,7 +1230,7 @@ describe("two tills at once", () => {
 
   for (const first of ["merge", "split"] as const) {
     it(`refuses the second of a split of B1 and a merge of B1 into B3 (${first} first)`, async () => {
-      const { partyId, b1, b2, b3 } = await threeBills(`Mesa 41 ${first}`);
+      const { partyId, b1, b2, b3 } = await threeBills(`Table 41 ${first}`);
       const read = await commandFor(v, partyId);
       const mergeB1 = () => inTx(v, (tx) => mergeBills(tx, v.cfg, b3, b1, read));
       const splitB1 = () => inTx(v, (tx) => splitBill(tx, v.cfg, b1, [{ lineNo: 1 }], read));
@@ -1250,8 +1250,8 @@ describe("two tills at once", () => {
   }
 
   it("refuses a request naming a party the path bill has left, even when its revision matches the bill's party now", async () => {
-    const one = await twoBills("Mesa 42");
-    const other = await seat(v, await v.table("Mesa 43"));
+    const one = await twoBills("Table 42");
+    const other = await seat(v, await v.table("Table 43"));
     await order(v, other.tabId, "Paella");
     // Joining party one's table combines it into the other, taking its open second bill with it.
     const sent = {
@@ -1290,7 +1290,7 @@ describe("two tills at once", () => {
   });
 
   it("refuses a request naming the party a bill has left for the counter", async () => {
-    const { partyId, second } = await twoBills("Mesa 44");
+    const { partyId, second } = await twoBills("Table 44");
     const read = await commandFor(v, partyId);
     // Stands in for moving the bill to the counter, which no route does yet.
     await inTx(v, (tx) =>
