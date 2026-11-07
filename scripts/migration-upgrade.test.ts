@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -24,9 +32,13 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * does what boot does after migrating (the change feed) and fills every table. It then repeats
  * `applyMigrations` and the change feed on the filled database, and every row must be unchanged.
  * Every later migration, in any set, including one the epoch does not name, runs at its own date,
- * with the change feed installed between steps and rows carried through. At every step the walk
- * migrates, installs the change feed, then runs `applyMigrations` once more so the append-only
- * triggers go on the tables the step created, and installs the change feed again, before any row
+ * with the change feed installed between steps and rows carried through; on one date, a set runs
+ * after the sets it requires. Before anything runs, a foreign key that names another set's table
+ * is refused unless its set requires that set and the table is created no later than the key. At
+ * every step the walk migrates, installs the change feed, then runs `applyMigrations` once more so
+ * the append-only triggers go on the tables the step created, and installs the change feed again;
+ * it then fails if a declared append-only table lacks its triggers, or if a trigger the step before
+ * left is gone while its table remains and the step's SQL never drops it by name, before any row
  * is written.
  *
  * After each step every table is topped up to two rows, read from that step's own schema (its
@@ -40,16 +52,22 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * Weaker than its name in these ways. The change feed at each step is TODAY's list, less whatever
  * that step's schema lacks, and the append-only tables are TODAY's list filtered to the tables that
  * exist: a step's own migration runs with only the tables the PREVIOUS step left protected, so a
- * table the step creates gets its triggers at the second pass, not while that step migrates. The rows are synthetic, not the product's: a few generic values per declared
- * type, a CHECK's own literals, a column's default and {@link CANDIDATES}. A nullable column outside
- * every unique index is null wherever its constraints allow, except that a second row points a
- * self-reference at the first. So a migration that fails only on values the product writes and
- * these rows lack passes. The tables {@link ONE_ROW} names, and a singleton (`CHECK (id = 1)`), hold
- * one row. Steps a walk's resets list names cannot carry the rows, and the walk restarts from an
- * empty database at each. Between steps rows are counted, not compared, so a migration that
- * rewrites a value passes; only the epoch's repeat compares values. After the final step it also
- * pins the nine product triggers and the append-only triggers of every table the sets declare;
- * other triggers dropped by a rebuild are not checked here.
+ * table the step creates gets its triggers at the second pass, not while that step migrates. The
+ * rows are synthetic, not the product's: a few generic values per declared type, a CHECK's own
+ * literals, a column's default and {@link CANDIDATES}. A nullable column outside every unique
+ * index is null wherever its constraints allow, except that a second row points a self-reference
+ * at the first. So a migration that fails only on values the product writes and these rows lack
+ * passes. The reference check reads the SQL as text: a table belongs to the set whose migration
+ * first names it after `CREATE TABLE` or `RENAME TO`; a table named only in a trigger body or a
+ * view is not checked, a `REFERENCES` inside a comment is checked as if it were a key, and a set's
+ * requirements count through other sets. A lost trigger is judged by name alone: one recreated
+ * with another body passes, and a change-feed trigger the next install leaves out (its source's
+ * columns gone) counts as lost. The tables {@link ONE_ROW} names, and a singleton
+ * (`CHECK (id = 1)`), hold one row. Steps a walk's resets list names cannot carry the rows, and
+ * the walk restarts from an empty database at each. Between steps rows are counted, not compared,
+ * so a migration that rewrites a value passes; only the epoch's repeat compares values. After the
+ * final step it also pins the nine product triggers and the append-only triggers of every table
+ * the sets declare; no trigger is compared across the initial checkpoint, which starts empty.
  */
 
 type ChangeSource = NonNullable<(typeof ALL_MODULES)[number]["changes"]>[number];
@@ -67,6 +85,8 @@ interface Journal {
 /** A migration set as the walk applies it: `applyMigrations`'s options plus the set's name. */
 interface WalkSet extends VenueMigrationOptions {
   readonly name: string;
+  /** The sets this one's descriptors require, by set name. */
+  readonly requires?: readonly string[];
 }
 
 interface EpochEntry {
@@ -102,6 +122,7 @@ const EPOCH_FILE = new URL("./migration-baseline-epoch.json", import.meta.url);
 const sets: WalkSet[] = orderedMigrationSets(ALL_MODULES).map((set) => ({
   name: set.name,
   ...migrationOptionsFor([set], null)[0],
+  requires: setRequires(ALL_MODULES).get(set.name) ?? [],
 }));
 const epoch = readEpoch();
 const { cuts } = planWalk(sets, epoch);
@@ -163,9 +184,10 @@ function verifyEpoch(epoch: Epoch, known: readonly WalkSet[]): void {
  * Each set's journal, the epoch's entry in each, and the dates of every later migration. A
  * migration is in the initial checkpoint only if the epoch names it.
  */
-function planWalk(walkSets: readonly WalkSet[], walkEpoch: Epoch) {
+function planWalk(walkSets: readonly WalkSet[], walkEpoch: Epoch, firstMigrationsInEpoch = false) {
   const journals = new Map(walkSets.map((set) => [set.name, readJournal(set.migrationsFolder)]));
   const isEpoch = (name: string, entry: JournalEntry) =>
+    (firstMigrationsInEpoch && entry.idx === 0) ||
     walkEpoch.entries.some((at) => at.name === name && at.tag === entry.tag);
   const cuts = [
     ...new Set(
@@ -189,6 +211,11 @@ interface WalkInput {
   watch?: ReturnType<typeof createStepWatch>;
   /** Runs around the populated repeat of the initial checkpoint, for a caller's own comparison. */
   aroundRepeat?: (venueDir: string, repeat: () => Promise<void>) => Promise<void>;
+  /**
+   * Also puts every set's first migration in the initial checkpoint, and skips the reference
+   * check: the rule the walk must not follow, kept to show how it fails.
+   */
+  firstMigrationsInEpoch?: boolean;
 }
 
 /**
@@ -200,13 +227,19 @@ async function walkUpgrade(input: WalkInput) {
   const sources = input.sources ?? [];
   const watch = input.watch ?? createStepWatch();
   verifyEpoch(walkEpoch, input.sets);
-  const { journals, isEpoch, cuts: walkCuts } = planWalk(input.sets, walkEpoch);
+  const ordered = orderByRequires(input.sets);
+  const {
+    journals,
+    isEpoch,
+    cuts: walkCuts,
+  } = planWalk(ordered, walkEpoch, input.firstMigrationsInEpoch);
+  if (input.firstMigrationsInEpoch !== true) checkReferences(ordered, journals, isEpoch);
 
   const root = mkdtempSync(join(SCRATCH_PARENT, "wt-migration-upgrade-"));
   scratch.push(root);
   const staged = join(root, "migrations");
   const venueDir = join(root, "venue");
-  const stagedSets = input.sets.map((set) => {
+  const stagedSets = ordered.map((set) => {
     const folder = join(staged, set.name);
     cpSync(set.migrationsFolder, folder, { recursive: true });
     return { ...set, migrationsFolder: folder };
@@ -216,6 +249,7 @@ async function walkUpgrade(input: WalkInput) {
   const reachedResets = new Set<string>();
   let held = new Map<string, number>();
   let existing = new Set<string>();
+  const labels: string[] = [];
   for (const cut of [INITIAL, ...walkCuts] as const) {
     const at = (name: string, entry: JournalEntry) =>
       cut === INITIAL ? isEpoch(name, entry) : entry.when === cut && !isEpoch(name, entry);
@@ -223,6 +257,14 @@ async function walkUpgrade(input: WalkInput) {
       journal.entries.filter((entry) => at(name, entry)).map((entry) => `${name}/${entry.tag}`),
     );
     const label = cut === INITIAL ? `epoch (${tags.join(", ")})` : tags.join(", ");
+    labels.push(label);
+    const dropped = new Set(
+      tags.flatMap((tag) => {
+        const [name, file] = tag.split("/");
+        const sql = readFileSync(join(staged, name, `${file}.sql`), "utf8");
+        return namesAfter(sql, /\bDROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?/gi);
+      }),
+    );
     for (const [name, journal] of journals) {
       const entries = journal.entries.filter(
         (entry) => isEpoch(name, entry) || (cut !== INITIAL && entry.when <= cut),
@@ -247,10 +289,34 @@ async function walkUpgrade(input: WalkInput) {
       );
     };
     const step = async () => {
+      const before = cut === INITIAL ? new Map<string, string>() : triggersOf(venueDir);
       await migrate("migrate");
       await feed();
       await migrate("protect");
       await feed();
+      const after = triggersOf(venueDir);
+      const lost = [...before].filter(
+        ([trigger, table]) => !after.has(trigger) && existing.has(table) && !dropped.has(trigger),
+      );
+      if (lost.length > 0) {
+        throw new Error(
+          `Step ${label} lost triggers on tables it kept: ` +
+            lost.map(([trigger, table]) => `${trigger} on ${table}`).join(", "),
+        );
+      }
+      const unprotected = appendOnlyTriggers(
+        stagedSets.flatMap((set) =>
+          set.database === "node"
+            ? []
+            : (set.appendOnlyTables ?? []).filter((table) => existing.has(table)),
+        ),
+      ).filter((trigger) => !after.has(trigger.name));
+      if (unprotected.length > 0) {
+        throw new Error(
+          `Step ${label}: append-only triggers missing before rows are written: ` +
+            unprotected.map((trigger) => trigger.name).join(", "),
+        );
+      }
       held = await watch.phase(`${label}: rows`, () =>
         carryRows(venueDir, label, held, bookkeeping),
       );
@@ -301,7 +367,129 @@ async function walkUpgrade(input: WalkInput) {
   if (unreached.length > 0) {
     throw new Error(`RESETS names steps the walk never took: ${unreached.join(", ")}`);
   }
-  return { venueDir, held, steps: walkCuts.length + 1 };
+  return { venueDir, held, steps: walkCuts.length + 1, labels };
+}
+
+/** Each trigger in the venue file, with its table; none before the file exists. */
+function triggersOf(venueDir: string): Map<string, string> {
+  if (!existsSync(join(venueDir, "venue.db"))) return new Map();
+  const connection = openRaw(venueDir);
+  try {
+    return new Map(
+      connection
+        .prepare("select name, tbl_name from sqlite_master where type = 'trigger'")
+        .all()
+        .map((row) => [String(row.name), String(row.tbl_name)]),
+    );
+  } finally {
+    connection.close();
+  }
+}
+
+/** Each name, unquoted, that follows a match of `before` in `sql`. */
+function namesAfter(sql: string, before: RegExp): string[] {
+  const pattern = new RegExp(`${before.source}[\`"]?(\\w+)`, before.flags);
+  return [...sql.matchAll(pattern)].map((match) => match[1]);
+}
+
+/** Each module's set's requirements, as set names: a module without a set counts as its host's. */
+function setRequires(modules: typeof ALL_MODULES): Map<string, string[]> {
+  const byName = new Map(modules.map((module) => [module.name, module]));
+  const setOf = (name: string) => {
+    const module = byName.get(name);
+    return module?.migrations?.name ?? byName.get(module?.tablesIn ?? "")?.migrations?.name;
+  };
+  const requires = new Map<string, string[]>();
+  for (const module of modules) {
+    const own = setOf(module.name);
+    if (own === undefined) continue;
+    const deps = [
+      ...(module.requires?.core === undefined ? [] : ["core"]),
+      ...Object.keys(module.requires?.modules ?? {}),
+    ]
+      .map(setOf)
+      .filter((dep): dep is string => dep !== undefined && dep !== own);
+    requires.set(own, [...new Set([...(requires.get(own) ?? []), ...deps])]);
+  }
+  return requires;
+}
+
+/** `walkSets` with every set after the sets it requires, input order breaking ties. */
+function orderByRequires(walkSets: readonly WalkSet[]): WalkSet[] {
+  const names = new Set(walkSets.map((set) => set.name));
+  const ordered: WalkSet[] = [];
+  const placed = new Set<string>();
+  let remaining = [...walkSets];
+  while (remaining.length > 0) {
+    const next = remaining.find((set) =>
+      (set.requires ?? []).every((dep) => placed.has(dep) || !names.has(dep)),
+    );
+    if (next === undefined) {
+      throw new Error(`these sets require each other: ${remaining.map((s) => s.name).join(", ")}`);
+    }
+    ordered.push(next);
+    placed.add(next.name);
+    remaining = remaining.filter((set) => set !== next);
+  }
+  return ordered;
+}
+
+/**
+ * Throws unless every table a migration's foreign keys name belongs to its own set, or to a set
+ * it requires directly or through another, and is created no later than the migration runs (the
+ * epoch's migrations all run first). Read from the SQL as text: a table belongs to the set whose
+ * migration first creates it, by `CREATE TABLE` or `RENAME TO`, and a foreign key is `REFERENCES`.
+ */
+function checkReferences(
+  walkSets: readonly WalkSet[],
+  journals: Map<string, Journal>,
+  isEpoch: (name: string, entry: JournalEntry) => boolean,
+): void {
+  const byName = new Map(walkSets.map((set) => [set.name, set]));
+  const required = (name: string, seen = new Set<string>()): Set<string> => {
+    for (const dep of byName.get(name)?.requires ?? []) {
+      if (!seen.has(dep)) required(dep, seen.add(dep));
+    }
+    return seen;
+  };
+  const migrations = walkSets
+    .flatMap((set, order) =>
+      journals.get(set.name)!.entries.map((entry) => ({
+        set: set.name,
+        entry,
+        order,
+        runs: isEpoch(set.name, entry) ? -Infinity : entry.when,
+        sql: readFileSync(join(set.migrationsFolder, `${entry.tag}.sql`), "utf8"),
+      })),
+    )
+    .sort((a, b) => a.runs - b.runs || a.order - b.order);
+  const creators = new Map<string, (typeof migrations)[number]>();
+  for (const migration of migrations) {
+    for (const table of [
+      ...namesAfter(migration.sql, /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?/gi),
+      ...namesAfter(migration.sql, /\bRENAME\s+TO\s+/gi),
+    ]) {
+      if (!creators.has(table)) creators.set(table, migration);
+    }
+  }
+  for (const migration of migrations) {
+    const at = `${migration.set}/${migration.entry.tag}`;
+    for (const table of namesAfter(migration.sql, /\bREFERENCES\s+/gi)) {
+      const creator = creators.get(table);
+      if (creator === undefined || creator.set === migration.set) continue;
+      if (!required(migration.set).has(creator.set)) {
+        throw new Error(
+          `${at} refers to ${table}, a table of ${creator.set}, which ${migration.set} does not require`,
+        );
+      }
+      if (creator.runs > migration.runs) {
+        throw new Error(
+          `${at}, dated ${migration.entry.when}, refers to ${table}, which ` +
+            `${creator.set}/${creator.entry.tag} creates only at ${creator.entry.when}`,
+        );
+      }
+    }
+  }
 }
 
 /** `set` as `applyMigrations` takes it, with append-only triggers only on tables that exist. */
@@ -845,6 +1033,276 @@ describe("upgrading a venue one migration at a time", () => {
       );
     },
     TEST_BOUND_MS,
+  );
+});
+
+describe("the walk past the epoch", () => {
+  const parentSql =
+    "CREATE TABLE `later_parent` (`id` integer PRIMARY KEY NOT NULL, `label` text NOT NULL)";
+  const childSql =
+    "CREATE TABLE `child` (`id` integer PRIMARY KEY NOT NULL, " +
+    "`parent_id` integer NOT NULL REFERENCES `later_parent`(`id`))";
+  /** A base set whose parent table arrives after the epoch, and a set that refers to it. */
+  const a624 = (childWhen: number, requires: readonly string[] = ["base"]): WalkSet[] => [
+    {
+      ...syntheticSet("dependent", [{ tag: "0000_child", when: childWhen, sql: [childSql] }]),
+      requires,
+    },
+    syntheticSet("base", [
+      { ...BASE, tag: "0000_baseline" },
+      { tag: "0001_parent", when: 2_000, sql: [parentSql] },
+    ]),
+  ];
+  const baseEpoch = (walkSets: readonly WalkSet[]) =>
+    epochOf(walkSets.filter((set) => set.name === "base"));
+
+  it("runs a set that first appears after the epoch at its own date, after the sets it requires", async () => {
+    const walkSets = a624(2_000);
+    const { held, labels, venueDir } = await walkUpgrade({
+      sets: walkSets,
+      epoch: baseEpoch(walkSets),
+      resets: {},
+    });
+    expect(labels).toEqual([
+      "epoch (base/0000_baseline)",
+      "base/0001_parent, dependent/0000_child",
+    ]);
+    expect(held.get("later_parent")).toBe(2);
+    expect(held.get("child")).toBe(2);
+    const connection = openRaw(venueDir);
+    try {
+      expect(
+        connection
+          .prepare(
+            "select count(*) as n from `child` join `later_parent` on `later_parent`.`id` = `child`.`parent_id`",
+          )
+          .get()?.n,
+      ).toBe(2);
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("shows why: putting every set's first migration in the epoch fails on the later parent", async () => {
+    const walkSets = a624(2_000);
+    await expect(
+      walkUpgrade({
+        sets: walkSets,
+        epoch: baseEpoch(walkSets),
+        resets: {},
+        firstMigrationsInEpoch: true,
+      }),
+    ).rejects.toThrow("could not write child: no such table: main.later_parent");
+  });
+
+  it("refuses a foreign key to a table of a set the referring set does not require", async () => {
+    const walkSets = a624(2_000, []);
+    await expect(
+      walkUpgrade({ sets: walkSets, epoch: baseEpoch(walkSets), resets: {} }),
+    ).rejects.toThrow(
+      "dependent/0000_child refers to later_parent, a table of base, which dependent does not require",
+    );
+  });
+
+  it("refuses a migration that refers to a table its required set creates only later", async () => {
+    const walkSets = a624(1_500);
+    await expect(
+      walkUpgrade({ sets: walkSets, epoch: baseEpoch(walkSets), resets: {} }),
+    ).rejects.toThrow(
+      "dependent/0000_child, dated 1500, refers to later_parent, which base/0001_parent creates only at 2000",
+    );
+  });
+
+  it("carries rows through two later steps", async () => {
+    const walkSets = [
+      syntheticSet("synthetic", [
+        BASE,
+        { tag: "0001_note", when: 2_000, sql: ["ALTER TABLE `kept` ADD `note` text"] },
+        {
+          tag: "0002_size",
+          when: 3_000,
+          sql: ["ALTER TABLE `kept` ADD `size` integer DEFAULT 1 NOT NULL"],
+        },
+      ]),
+    ];
+    const { held, labels, venueDir } = await walkUpgrade({
+      sets: walkSets,
+      epoch: epochOf(walkSets),
+      resets: {},
+    });
+    expect(labels).toEqual([
+      "epoch (synthetic/0000_baseline)",
+      "synthetic/0001_note",
+      "synthetic/0002_size",
+    ]);
+    expect(held.get("kept")).toBe(2);
+    expect(allRows(venueDir).kept).toHaveLength(2);
+  });
+
+  it("reads an epoch file and runs a new set and a later migration of a named set at their dates", async () => {
+    const walkSets: WalkSet[] = [
+      syntheticSet("base", [
+        BASE,
+        { tag: "0001_note", when: 3_000, sql: ["ALTER TABLE `kept` ADD `note` text"] },
+      ]),
+      {
+        ...syntheticSet("dependent", [
+          {
+            tag: "0000_child",
+            when: 2_000,
+            sql: [
+              "CREATE TABLE `child` (`id` integer PRIMARY KEY NOT NULL, " +
+                "`kept_id` integer NOT NULL REFERENCES `kept`(`id`))",
+            ],
+          },
+        ]),
+        requires: ["base"],
+      },
+    ];
+    const folder = mkdtempSync(join(SCRATCH_PARENT, "wt-upgrade-epoch-file-"));
+    scratch.push(folder);
+    const file = join(folder, "migration-baseline-epoch.json");
+    writeFileSync(file, JSON.stringify(epochOf(walkSets.slice(0, 1))));
+    const { held, labels } = await walkUpgrade({
+      sets: walkSets,
+      epoch: readEpoch(file),
+      resets: {},
+    });
+    expect(labels).toEqual([
+      "epoch (base/0000_baseline)",
+      "dependent/0000_child",
+      "base/0001_note",
+    ]);
+    expect(held.get("kept")).toBe(2);
+    expect(held.get("child")).toBe(2);
+  });
+
+  it("puts append-only triggers on a table a later step creates before writing its rows", async () => {
+    const walkSets = [
+      {
+        ...syntheticSet("synthetic", [
+          BASE,
+          {
+            tag: "0001_ledger",
+            when: 2_000,
+            sql: [
+              "CREATE TABLE `ledger` (`id` integer PRIMARY KEY NOT NULL, `label` text NOT NULL)",
+            ],
+          },
+        ]),
+        appendOnlyTables: ["kept", "ledger"],
+      },
+    ];
+    const { held, venueDir } = await walkUpgrade({
+      sets: walkSets,
+      epoch: epochOf(walkSets),
+      resets: {},
+    });
+    expect(held.get("ledger")).toBe(2);
+    const connection = openRaw(venueDir);
+    try {
+      expect(() => connection.exec("update `ledger` set `label` = 'changed'")).toThrow(
+        "ledger is append-only",
+      );
+    } finally {
+      connection.close();
+    }
+  });
+
+  const rebuild = (copy: string) => [
+    "CREATE TABLE `__new_kept` (`id` integer PRIMARY KEY NOT NULL, `label` text NOT NULL)",
+    `INSERT INTO \`__new_kept\`(\`id\`, \`label\`) SELECT \`id\`, \`label\` FROM \`kept\`${copy}`,
+    "DROP TABLE `kept`",
+    "ALTER TABLE `__new_kept` RENAME TO `kept`",
+  ];
+  const otherTouch =
+    "CREATE TRIGGER `other_touch` AFTER INSERT ON `other` BEGIN " +
+    "UPDATE `kept` SET `label` = `label` WHERE 0; END";
+  const keptStamp = "CREATE TRIGGER `kept_stamp` AFTER INSERT ON `kept` BEGIN SELECT 1; END";
+  const TRIGGERED = {
+    ...BASE,
+    sql: [
+      ...BASE.sql,
+      "CREATE TABLE `other` (`id` integer PRIMARY KEY NOT NULL)",
+      otherTouch,
+      keptStamp,
+    ],
+  };
+
+  it("passes a step that drops a trigger by name, or drops the trigger's table", async () => {
+    const walkSets = [
+      syntheticSet("synthetic", [
+        TRIGGERED,
+        {
+          tag: "0001_later",
+          when: 2_000,
+          sql: ["DROP TRIGGER `kept_stamp`", "DROP TABLE `other`"],
+        },
+      ]),
+    ];
+    const { held, venueDir } = await walkUpgrade({
+      sets: walkSets,
+      epoch: epochOf(walkSets),
+      resets: {},
+    });
+    expect(held.get("kept")).toBe(2);
+    expect([...triggersOf(venueDir).keys()]).toEqual([]);
+  });
+
+  it.each([
+    {
+      failure: "row loss",
+      base: BASE,
+      wrong: rebuild(" WHERE `id` = (SELECT min(`id`) FROM `kept`)"),
+      right: rebuild(""),
+      message:
+        "Step synthetic/0001_later lost rows the step before wrote:\nkept: 2 rows before, 1 after",
+    },
+    {
+      failure: "a NOT NULL column with no default",
+      base: BASE,
+      wrong: ["ALTER TABLE `kept` ADD `required` text NOT NULL"],
+      right: ["ALTER TABLE `kept` ADD `required` text DEFAULT 'none' NOT NULL"],
+      message: "Cannot add a NOT NULL column with default value NULL",
+    },
+    {
+      failure: "a duplicate unique value",
+      base: BASE,
+      wrong: ["CREATE UNIQUE INDEX `kept_label_unique` ON `kept` (`label`)"],
+      right: [
+        "UPDATE `kept` SET `label` = `label` || '-' || `id`",
+        "CREATE UNIQUE INDEX `kept_label_unique` ON `kept` (`label`)",
+      ],
+      message: "UNIQUE constraint failed: kept.label",
+    },
+    {
+      failure: "a rebuild of a table another trigger's body names",
+      base: TRIGGERED,
+      wrong: [...rebuild(""), keptStamp],
+      right: ["DROP TRIGGER `other_touch`", ...rebuild(""), otherTouch, keptStamp],
+      message: "error in trigger other_touch: no such table: main.kept",
+    },
+    {
+      failure: "a rebuild that does not recreate its table's trigger",
+      base: TRIGGERED,
+      wrong: ["DROP TRIGGER `other_touch`", ...rebuild(""), otherTouch],
+      right: ["DROP TRIGGER `other_touch`", ...rebuild(""), otherTouch, keptStamp],
+      message: "Step synthetic/0001_later lost triggers on tables it kept: kept_stamp on kept",
+    },
+  ])(
+    "fails $failure and passes the same change made safely",
+    async ({ base, wrong, right, message }) => {
+      const walk = (later: readonly string[]) => {
+        const walkSets = [
+          syntheticSet("synthetic", [base, { tag: "0001_later", when: 2_000, sql: later }]),
+        ];
+        return walkUpgrade({ sets: walkSets, epoch: epochOf(walkSets), resets: {} });
+      };
+      // A refused migration's own message is the cause of `migrations.apply_failed`.
+      expect(await walk(wrong).then(() => "it passed", messagesOf)).toContain(message);
+      const { held } = await walk(right);
+      expect(held.get("kept")).toBe(2);
+    },
   );
 });
 
