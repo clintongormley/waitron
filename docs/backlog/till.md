@@ -3148,6 +3148,13 @@ device's session, which belongs to someone else. The server cases are in
 cases are in `apps/till/src/till-app-drafts.test.ts`, `till-app-parties.test.ts` and
 `till-app-split-table.test.ts`.
 
+A sign-out (`DELETE /api/session`) from the till names its person too, the one signed in on that tab
+when the sign-out began. When the session behind the device's cookie is someone else's, the server
+ends nothing, keeps the cookie and answers `{ ok: true }`, not a refusal; a malformed name answers
+`management.request_invalid` on `personId`. A sign-out naming nobody ends whichever session the
+cookie holds. The server cases are in `apps/server/src/till-api.test.ts`; the app cases, which use a
+controlled API, are in `till-app-drafts.test.ts`.
+
 ### Permanent group numbers (A773)
 
 A group's display number is separate from its firing position. Reordering held groups keeps

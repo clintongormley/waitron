@@ -11944,7 +11944,7 @@ export class TillApp extends LitElement {
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
     if (refusal.refused === DRAFT_PERSON_REFUSAL) {
-      // The device's session belongs to someone else now; ending it would sign them out too.
+      // The device's session belongs to someone else now, so this person has none to end.
       if (sync.personId === this.#sessionPersonId && this.operatorName !== "")
         void this.#onLogout(false);
       return;
@@ -19794,6 +19794,7 @@ export class TillApp extends LitElement {
 
   /** Keeps the basket: it belongs to the till. */
   async #onLogout(endServerSession = true): Promise<void> {
+    const personId = this.#sessionPersonId;
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
@@ -19849,7 +19850,7 @@ export class TillApp extends LitElement {
     if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
     if (endServerSession)
       try {
-        await api.logout();
+        await api.logout(personId);
       } catch {
         // The device is already locked locally.
       }

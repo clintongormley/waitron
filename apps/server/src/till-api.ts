@@ -217,6 +217,7 @@ import {
   canonicaliseUuid,
   clearSessionCookie,
   isUuid,
+  openSessionPerson,
   readSessionToken,
   assertRequestDevice,
   requireSession,
@@ -1507,11 +1508,20 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Idempotent: a missing, malformed or closed session still clears the cookie and answers 200.
+  // Idempotent: a missing, malformed or closed session still clears the cookie and answers 200. A
+  // request naming a person whose session this is not ends nothing: that person is not signed in
+  // here, and the cookie is what keeps the person who is.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
+      const { personId } = await readJsonBody<{ personId?: unknown }>(c);
+      const named =
+        personId === undefined ? undefined : requireBodyUuid(personId, "personId").toLowerCase();
       const token = readSessionToken(c);
       if (token !== null && isUuid(token)) {
+        if (named !== undefined) {
+          const holder = await openSessionPerson(deps.db, token);
+          if (holder !== null && holder.toLowerCase() !== named) return c.json({ ok: true });
+        }
         await withTransaction(deps.db, async (tx) => {
           await endSession(tx, token);
         });

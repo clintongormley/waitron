@@ -1017,12 +1017,13 @@ describe("TillApi", () => {
   it("logout DELETEs the session", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
 
-    await new TillApi("", fetchStub).logout();
+    await new TillApi("", fetchStub).logout("p1");
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/session",
       expect.objectContaining({ method: "DELETE", credentials: "include" }),
     );
+    expect(JSON.parse(fetchStub.mock.calls[0]![1]!.body as string)).toEqual({ personId: "p1" });
   });
 
   it("prefixes every path with the configured baseUrl", async () => {
