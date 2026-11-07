@@ -73,7 +73,7 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
     await writeFile(markerPath, JSON.stringify(marker));
   }
   await suite.db.archiveTo(join(roots.venueDir, "venue.db"));
-  const service = createFirstSetupResolutionInspection({ ...roots, store });
+  const service = createFirstSetupResolutionInspection({ modules: ALL_MODULES, ...roots, store });
   const recovering = createFirstSetupOwner({ ...ownerOptions, resolution: service });
   return {
     root,
@@ -201,6 +201,7 @@ it.each(["file", "directory"] as const)(
     const unchanged = await startAgainUnchanged(f);
     const missing = join(f.root, "missing-outside-history");
     const resolution = createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
       ...f,
       ...(kind === "file"
         ? { publicEvidencePaths: [missing] }
@@ -315,6 +316,7 @@ it("retirement snapshots retain configured public files, receipt directories and
   await mkdir(receipts);
   await writeFile(join(receipts, "one.json"), "original receipt");
   const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
     ...f,
     publicEvidencePaths: [publicFile, join(f.root, "missing.json")],
     publicEvidenceDirectories: [receipts],
@@ -419,6 +421,7 @@ it("retirement captures stable physical paths for configured ancestor aliases an
   await writeFile(join(physical, "receipts", "one.json"), '{"serial":42}');
   await symlink(physical, join(f.root, "alias"));
   const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
     ...f,
     publicEvidencePaths: [
       join(f.root, "alias", "history", "current.json"),
@@ -460,6 +463,7 @@ it.each(["file", "directory"])(
     const alias = join(f.root, "alias");
     await symlink(join(f.root, "first"), alias);
     const service = createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
       ...f,
       ...(kind === "file"
         ? { publicEvidencePaths: [join(alias, "history", "current.json")] }

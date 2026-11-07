@@ -116,7 +116,6 @@ export function createFirstSetupRuntime(options: {
     store,
     migrationsRoot: options.environment.WAITRON_MIGRATIONS_DIR || null,
     expectedMigrationSets: modulesWithSets(options.modules).map((module) => module.migrations.name),
-    modules: options.modules,
     publicEvidencePaths: retained.flatMap((sources) => sources.files),
     publicEvidenceDirectories: retained.flatMap((sources) => sources.directories),
   });

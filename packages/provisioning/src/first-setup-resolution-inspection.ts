@@ -119,7 +119,7 @@ export function createFirstSetupResolutionInspection(
     migrationsRoot?: string | null;
     expectedMigrationSets?: readonly string[];
     /** Maps an attempt's module names to the sets holding their tables. */
-    modules?: readonly WaitronModule[];
+    modules: readonly WaitronModule[];
     publicEvidencePaths?: readonly string[];
     publicEvidenceDirectories?: readonly string[];
   },
@@ -267,7 +267,7 @@ export function createFirstSetupResolutionInspection(
       // Fingerprint the files after that connection closes so its own read does not stale the ID.
       const { database, emptyDatabase } = await service.inspectFirstSetupDatabase(
         migrationSetsHolding(
-          options.modules ?? [],
+          options.modules,
           repair?.state.frozen.modules.map((entry) => entry.module) ?? [],
         ),
       );
