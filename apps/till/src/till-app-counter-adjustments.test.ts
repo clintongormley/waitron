@@ -1488,7 +1488,7 @@ describe("till-app: comping a stored counter order", () => {
       );
     });
 
-    it("offers no + after the reload, and the Cancel on screen opens the dish's cancellation", async () => {
+    it("keeps + after the reload, and the Cancel on screen opens the dish's cancellation", async () => {
       const el = await retrieved({
         ...startsMeanwhile(),
         updateWorkingOrder: vi.fn().mockRejectedValue(refused),
@@ -1499,7 +1499,7 @@ describe("till-app: comping a stored counter order", () => {
 
       expect(
         basket(el).shadowRoot!.querySelectorAll(".line")[0]!.querySelector(".step-inc"),
-      ).toBeNull();
+      ).not.toBeNull();
 
       await press(el, inBasket(el, '[data-cancel-line="0"]')!);
       await chooseReason(el, "Mistake");
@@ -1539,6 +1539,128 @@ describe("till-app: comping a stored counter order", () => {
       ]);
       expect(banner(el)).toBeNull();
     });
+
+    const extraStarted = (lines: TabLines): TabLines => {
+      const dish = { ...lines.lines[0]!, sentAt: null, firedAt: null, state: null };
+      const extra = tabLine({
+        id: "l-1x",
+        lineNo: 9,
+        parentLineNo: 1,
+        name: "Alioli",
+        productId: "alioli",
+        unitPriceGross: "0.00",
+        sentAt: "2026-09-30T09:00:00.000Z",
+        firedAt: "2026-09-30T09:00:00.000Z",
+        state: "preparing",
+      });
+      return { ...lines, lines: [dish, ...lines.lines.slice(1), extra] };
+    };
+    it.each([
+      ["a started dish", (lines: TabLines) => lines],
+      ["a dish whose extra is started", extraStarted],
+    ])(
+      "reads %s back after a raise as the two lines the server keeps, so a later save does not raise it again",
+      async (_, shape) => {
+        const raisedOrder = (): HeldOrder => {
+          const order = heldOrder(5);
+          return {
+            ...order,
+            lines: [
+              ...order.lines,
+              { ...order.lines[0]!, workingOrderLineId: "l-3", quantity: "1.000" },
+            ],
+          } as HeldOrder;
+        };
+        const raisedListing = (): TabLines => {
+          const lines = startedListing(5);
+          lines.lines.push({ ...lines.lines[0]!, id: "l-3", lineNo: 3, state: "queued" });
+          return lines;
+        };
+        const updateWorkingOrder = vi
+          .fn()
+          .mockResolvedValueOnce({ revision: 5 })
+          .mockResolvedValue({ revision: 6 });
+        const el = await retrieved({
+          listWorkingOrders: vi.fn().mockResolvedValue([
+            {
+              items: [],
+              id: "wo-9",
+              orderNumber: 12,
+              label: "Mesa 4",
+              counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
+              total: "8.50",
+              outstanding: "4.50",
+              hasPayments: true,
+              partyId: null,
+              billNumber: null,
+              billName: null,
+              openedAt: "2026-09-30T09:00:00.000Z",
+              signals: [],
+            },
+          ]),
+          getBillBalance: vi.fn().mockResolvedValue({
+            workingOrderId: "wo-9",
+            status: "open",
+            total: "8.50",
+            received: "4.00",
+            reserved: "0.00",
+            outstanding: "4.50",
+            tips: "0.00",
+            payments: [],
+            paidLines: [],
+          }),
+          retrieveWorkingOrder: vi
+            .fn()
+            .mockResolvedValueOnce(heldOrder(4))
+            .mockResolvedValue(raisedOrder()),
+          getTabLines: vi
+            .fn()
+            .mockResolvedValueOnce(shape(startedListing(4)))
+            .mockResolvedValue(raisedListing()),
+          updateWorkingOrder,
+        });
+        await raise(el);
+        emit(counter(el), "counter-bill-pay", { amount: "4.50" });
+        await flush(el);
+
+        const first = vi.mocked(updateWorkingOrder).mock.calls[0]![1] as {
+          lines: { workingOrderLineId?: string; quantity: string }[];
+        };
+        expect(first.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+          ["l-1", "2"],
+          ["l-2", "1"],
+        ]);
+        expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+        expect(api.getTabLines).toHaveBeenCalledTimes(2);
+        const store = counter(el).store;
+        expect(store.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+          ["l-1", "1"],
+          ["l-2", "1"],
+          ["l-3", "1"],
+        ]);
+        expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
+        expect(inBasket(el, '[data-cancel-line="2"]')).not.toBeNull();
+
+        emit(el.shadowRoot!.querySelector("till-bill-pay-dialog")!, "bill-pay-close");
+        await flush(el);
+        store.addProduct(store.lines[1]!.product, "1");
+        emit(counter(el), "park-order", {});
+        await flush(el);
+
+        expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+        const later = vi.mocked(updateWorkingOrder).mock.calls[1]![1] as {
+          lines: { workingOrderLineId?: string; quantity: string }[];
+          revision: number;
+        };
+        expect(later.revision).toBe(5);
+        expect(later.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+          ["l-1", "1"],
+          ["l-2", "1"],
+          ["l-3", "1"],
+          [undefined, "1"],
+        ]);
+      },
+    );
 
     it("still says the started dish and the reload, with no Cancel on screen, when the lines cannot be read", async () => {
       const el = await retrieved({

@@ -7668,10 +7668,16 @@ export class TillApp extends LitElement {
     // go on a line of their own) or a row of portions can leave stored dishes the basket's rows do
     // not name (plan D12).
     const listed = this.counterLines?.orderId === id ? this.counterLines.lines : [];
+    // The server adds a raise of a dish the kitchen has, or of one with an extra it has, as a new
+    // line.
     const risesInPlace = (lineId: string) =>
       listed.some(
         (line) =>
-          line.id === lineId && line.portion !== true && line.listUnitPriceGross === undefined,
+          line.id === lineId &&
+          line.portion !== true &&
+          line.listUnitPriceGross === undefined &&
+          line.firedAt === null &&
+          !listed.some((extra) => extra.parentLineNo === line.lineNo && extra.firedAt !== null),
       );
     const movesIds =
       rows.some((row) => row.portionLineIds !== undefined) ||
