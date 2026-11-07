@@ -233,8 +233,9 @@ export async function openFilingCasesSummary(
 /**
  * Every `detenido` record that has no case of its own: the records held behind another record,
  * or behind a run of refusals with one code. A held cancellation whose original alta (same
- * `sif_id`, same invoice identity) is `detenido` names its original's case; one whose original is
- * `rechazado` is set aside with a case of its own (`./drain.ts`), so it is not listed. Any
+ * invoice identity, on any chain) is listed here names its original's case: an ordinary one whose
+ * original is `rechazado` is set aside with a case of its own (`./drain.ts`), so it is not
+ * listed, but an absent-original one (`SinRegistroPrevio=S`) is held. Any
  * other held record names the case of the nearest earlier `detenido` record on its chain
  * (`sif_id`): that record's own case, or, when it has none, the case it names in turn. With no
  * earlier `detenido` record, it names the case of the record immediately before it, set-aside
@@ -272,8 +273,12 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
     order by r.sif_id, r.secuencia
   `);
   const held: HeldRecord[] = [];
-  // Per chain: the case each original alta answers to, keyed by invoice identity.
-  const altaCases = new Map<string, string | null>();
+  // The case each original alta answers to, keyed by invoice identity across chains. An alta on
+  // a chain read later starts at its own case; on reaching it, the walk replaces that with the
+  // case that holds it.
+  const altaCases = new Map<string, string | null>(
+    rows.filter((row) => row.tipo_registro === "alta").map((row) => [row.identity, row.case_id]),
+  );
   let chain: string | null = null;
   let holding: string | null = null;
   let heldEarlier = false;
@@ -282,7 +287,6 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
       chain = row.sif_id;
       holding = null;
       heldEarlier = false;
-      altaCases.clear();
     }
     let caseId = row.case_id;
     if (row.estado === "detenido" && caseId === null) {

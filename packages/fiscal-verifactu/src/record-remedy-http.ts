@@ -5,7 +5,7 @@ import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
 import { AppError, readSaleOrigin, saleId } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
-import { applyRecordCorrection, type RemedyKind } from "./record-remedy.js";
+import { applyRecordCorrection, isInHistory, type RemedyKind } from "./record-remedy.js";
 import { readCorrectedRecordFacts } from "./record-remedy-facts.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -49,7 +49,7 @@ export async function applyCorrectedRecordFacts(
   if (rawTarget === undefined) throw new AppError("fiscal.remedy_invalid", { registroId });
   const target = decodeRegistroRow(rawTarget);
   if (
-    target.node_id !== generation.nodeId ||
+    !(await isInHistory(tx, generation.nodeId, target.node_id)) ||
     target.entorno !== generation.environment ||
     target.tipo_registro !== "alta"
   )

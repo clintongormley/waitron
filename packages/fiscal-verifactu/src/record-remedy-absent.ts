@@ -7,7 +7,7 @@ import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, readSaleOrigin, saleId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { recordCaseEvent } from "./filing-cases.js";
-import { admitRecordRemedy, type RemedyKind } from "./record-remedy.js";
+import { admitRecordRemedy, isInHistory, type RemedyKind } from "./record-remedy.js";
 import { currentSif } from "./registro-sif.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
@@ -47,7 +47,7 @@ export async function applyAbsentOriginalCancellation(
     .where(eq(registrosFacturacion.id, registroId));
   if (
     target === undefined ||
-    target.nodeId !== generation.nodeId ||
+    !(await isInHistory(tx, generation.nodeId, target.nodeId)) ||
     target.entorno !== generation.environment ||
     target.tipoRegistro !== "alta"
   ) {

@@ -14,6 +14,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
@@ -31,6 +32,7 @@ let tradingReady: boolean;
 let token: string;
 let personId: string;
 let node: SeededNode;
+let generationNode: SeededNode["nodeId"];
 let body: Record<string, unknown>;
 const clock: TrustedClock = {
   now: () => ({
@@ -56,6 +58,7 @@ beforeEach(async () => {
   tradingReady = true;
   registerModulePermissions(FISCAL_PERMISSIONS);
   node = await seedNode(suite.db);
+  generationNode = node.nodeId;
   const saleId = await seedSale(suite.db, node, 1);
   await withTransaction(suite.db, async (tx) => {
     const [person] = await tx
@@ -97,7 +100,7 @@ function send(value: unknown = body, enabled = true, runtime = true) {
       db: suite.db,
       recordGeneration: runtime
         ? {
-            nodeId: node.nodeId,
+            nodeId: generationNode,
             environment: "preproduction",
             clock,
             requireWritable: () => {
@@ -668,3 +671,42 @@ it.each(["R1", "F3"] as const)(
     });
   },
 );
+
+it("a refused record of the box this one took over from can be remedied here", async () => {
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  generationNode = successor.nodeId;
+  const before = await snapshot();
+
+  const res = await send();
+
+  expect(res.status).toBe(200);
+  const { registroId } = (await res.json()) as { registroId: string };
+  const [appended] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, registroId));
+  expect(appended).toMatchObject({
+    nodeId: successor.nodeId,
+    sifId: successor.sifId,
+    correctsRegistroId: body.registroId,
+    descripcionOperacion: "Corrected restaurant service",
+  });
+  expect(await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId))).toEqual(
+    before.head,
+  );
+});
+
+it("a record of an unrelated box is still refused", async () => {
+  const successor = await seedNode(suite.db, "B");
+  const unrelated = await seedNode(suite.db, "C");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  generationNode = unrelated.nodeId;
+  const before = await snapshot();
+
+  const res = await send();
+
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});

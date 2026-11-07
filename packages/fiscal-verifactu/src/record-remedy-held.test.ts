@@ -13,6 +13,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
 import { writeAck, pendingAcks } from "./acks.js";
 import { appendToChain, readChainHead } from "./chain.js";
@@ -561,6 +562,122 @@ it("refuses an absent-original cancellation even with a matching accepted invoic
   });
   const before = await snapshot();
   const response = await send();
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+async function deliveryOf(registroId: string) {
+  const [delivery] = await suite.db.select().from(envios).where(eq(envios.registroId, registroId));
+  return delivery;
+}
+
+it("a set-aside cancellation on another chain is released once its original is accepted", async () => {
+  // The box this one took over from cancelled its own refused invoice, and the cancellation was
+  // set aside; this box corrects the invoice on its own chain, and the correction is accepted.
+  const saleId = await seedSale(suite.db, node, 2);
+  const { refused, refusedCase, cancellation, cancellationCase } = await withTransaction(
+    suite.db,
+    async (tx) => {
+      const refused = await appendToChain(
+        tx,
+        node.nodeId,
+        altaFor(node, saleId, 2, 40, "preproduction"),
+      );
+      await tx
+        .insert(envios)
+        .values({ registroId: refused.id, estado: "rechazado", codigoError: "1161" });
+      const refusedCase = await openFilingCase(tx, {
+        registroId: refused.id,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: 1161, mensaje: null, csv: null },
+        now: NOW,
+      });
+      const cancellation = await appendToChain(
+        tx,
+        node.nodeId,
+        anulacionFor(node, saleId, 2, 41, "preproduction"),
+      );
+      await tx
+        .insert(envios)
+        .values({ registroId: cancellation.id, estado: "retenido", intentos: 1, incidencia: true });
+      const cancellationCase = await openFilingCase(tx, {
+        registroId: cancellation.id,
+        cause: "fiscal.anulacion_retenida",
+        evidence: { codigo: null, mensaje: null, csv: null },
+        now: NOW,
+      });
+      return { refused, refusedCase, cancellation, cancellationCase };
+    },
+  );
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  runtimeNode = successor.nodeId;
+  const correction = await send(
+    {
+      kind: "record-correction",
+      registroId: refused.id,
+      caseId: refusedCase.id,
+      actionKey: "correct-inherited-original",
+      reason: "Correct rejected stored facts",
+      facts: { description: "Corrected restaurant service" },
+    },
+    ["record-correction"],
+  );
+  expect(correction.status).toBe(200);
+  const corrected = ((await correction.json()) as { registroId: string }).registroId;
+  const [correctedRecord] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, corrected));
+  expect(correctedRecord).toMatchObject({ nodeId: successor.nodeId, sifId: successor.sifId });
+  await suite.db
+    .update(envios)
+    .set({ estado: "aceptado", confirmadoEn: NOW, csv: "SYNTHETIC-CORRECTION-CSV" })
+    .where(eq(envios.registroId, corrected));
+
+  const response = await send({
+    ...body,
+    caseId: cancellationCase.id,
+    registroId: cancellation.id,
+    acceptedRegistroId: corrected,
+    actionKey: "release-inherited-1",
+  });
+
+  expect(response.status).toBe(200);
+  expect(await deliveryOf(cancellation.id)).toMatchObject({
+    estado: "pendiente",
+    proximoIntentoEn: NOW,
+  });
+});
+
+it("a refused record of the box this one took over from can be remedied here", async () => {
+  await acceptCurrent();
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  runtimeNode = successor.nodeId;
+  const before = await snapshot();
+
+  const response = await send();
+
+  expect(response.status).toBe(200);
+  expect((await snapshot()).records).toEqual(before.records);
+  expect(await deliveryOf(body.registroId as string)).toMatchObject({
+    estado: "pendiente",
+    proximoIntentoEn: NOW,
+  });
+});
+
+it("a record of an unrelated box is still refused", async () => {
+  await acceptCurrent();
+  const successor = await seedNode(suite.db, "B");
+  const unrelated = await seedNode(suite.db, "C");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  runtimeNode = unrelated.nodeId;
+  const before = await snapshot();
+
+  const response = await send();
+
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
   expect(await snapshot()).toEqual(before);

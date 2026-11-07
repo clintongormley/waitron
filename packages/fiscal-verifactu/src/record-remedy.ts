@@ -1,7 +1,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
-import type { Transaction } from "@waitron/db";
+import { readHistoryNodes, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, type NodeId } from "@waitron/shared";
@@ -36,6 +36,15 @@ export async function admitRecordRemedy(
   });
   if (!enabledRemedies.has(kind)) throw new AppError("fiscal.remedy_disabled", { kind });
   return authorizedBy;
+}
+
+/** True when a record on `recordNodeId` is this box's own, or one of a box it took over from. */
+export async function isInHistory(
+  tx: Transaction,
+  nodeId: NodeId,
+  recordNodeId: string,
+): Promise<boolean> {
+  return (await readHistoryNodes(tx, nodeId)).some((id) => id === recordNodeId);
 }
 
 export interface RecordCorrectionRequest {
@@ -76,7 +85,7 @@ export async function applyRecordCorrection(
     .where(eq(registrosFacturacion.id, request.registroId));
   if (
     target === undefined ||
-    target.nodeId !== input.nodeId ||
+    !(await isInHistory(tx, input.nodeId, target.nodeId)) ||
     target.entorno !== input.environment ||
     request.pending.entorno !== input.environment
   ) {

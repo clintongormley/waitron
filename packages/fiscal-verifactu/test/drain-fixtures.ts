@@ -345,12 +345,14 @@ export async function appendCancellation(
 }
 
 /** A pending cancellation of `originalId` appended to ANOTHER chain, after that chain's record
- * `headId`: a box cancelling an invoice that another box's chain issued. */
+ * `headId`: a box cancelling an invoice that another box's chain issued. `sinRegistroPrevio: "S"`
+ * makes it the absent-original cancellation a person files for a refused invoice. */
 export async function appendCancellationOnChain(
   db: Database,
   originalId: string,
   headId: string,
   secuencia: number,
+  options: { sinRegistroPrevio?: "S" } = {},
 ): Promise<string> {
   const records = await db.select().from(registrosFacturacion);
   const original = records.find((row) => row.id === originalId)!;
@@ -371,6 +373,7 @@ export async function appendCancellationOnChain(
     cuotaTotal: null,
     importeTotal: null,
     primerRegistro: false,
+    sinRegistroPrevio: options.sinRegistroPrevio ?? null,
     anteriorIdEmisorFactura: head.idEmisorFactura,
     anteriorNumSerieFactura: head.numSerieFactura,
     anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,

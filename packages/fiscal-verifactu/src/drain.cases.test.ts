@@ -15,6 +15,7 @@ import {
   collideAtAeat,
   seedIndependentChain,
   seedPendingEnvios,
+  seedPinnedChain,
   seedSecondChain,
   type SeededDrain,
 } from "../test/drain-fixtures.js";
@@ -1022,6 +1023,44 @@ describe("drain — a cancellation on another chain", () => {
     expect(await incidentCodes()).toEqual([
       "fiscal.anulacion_retenida",
       "fiscal.registro_rechazado",
+    ]);
+  });
+});
+
+describe("heldRecords — a cancellation on another chain", () => {
+  it("a halted cancellation on another chain joins its original's case", async () => {
+    // Reached through the drain alone: an absent-original cancellation (SinRegistroPrevio=S) is
+    // never set aside, so it is claimed once its original is refused, and a run of refusals on
+    // its own chain holds it. That chain's id sorts before the original's.
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const other = await seedPinnedChain(suite.db, seeded, {
+      sifId: "00000000-0000-4000-8000-000000000001",
+      firstSecuencia: 10,
+      rows: [1, 2, 3].map(() => ({
+        nombreRazonEmisor: "Waitron SL",
+        generadoEn: "2026-07-20T19:20:30+01:00",
+      })),
+    });
+    for (const key of other.chain.facturaKeys) aeat.reject(key, 1100, "Campo obligatorio ausente");
+    const original = await appendPendingAlta(suite.db, seeded, 2);
+    aeat.reject(original.facturaKey, 1100, "Campo obligatorio ausente");
+    await drain(deps(aeat.client()), FIRST);
+    expect(await envioOf(original.registroId)).toMatchObject({ estado: "rechazado" });
+    const cancellation = await appendCancellationOnChain(
+      suite.db,
+      original.registroId,
+      other.registroIds[2]!,
+      13,
+      { sinRegistroPrevio: "S" },
+    );
+
+    await drain(deps(aeat.client()), SECOND);
+
+    expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+    const originalCase = (await cases()).find((c) => c.registroId === original.registroId)!;
+    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
+      { registroId: cancellation, caseId: originalCase.id },
     ]);
   });
 });
