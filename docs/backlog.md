@@ -856,7 +856,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   because `paidQuantitiesOf` counts pending item payments. The row's words came with slice 4a.
   [Detail](backlog/till.md#a1350-a-row-can-read-paid-on-money-a-card-in-progress-has-only-reserved)
 
-- **A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person** (bundle of 5, 1 go-live, 2 important, size M). Holds A1357, A1263, A792. [Detail](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
+- **A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person** (bundle of 6, 1 go-live, 2 important, size M). Holds A1357, A1263, A792. [Detail](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 
 - **A1358. A number stepper's − and + are 24 by 32 px, against the 44 px tap size (seen in A803
   slice 4c's LOOK; predates it).** Measured on Split a table's guest steppers at 390 wide. The
