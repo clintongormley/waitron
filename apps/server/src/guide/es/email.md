@@ -6,13 +6,13 @@ del administrador que has introducido.
 
 ## Configura un servidor de correo {#set-up}
 
-En Preparar o En servicio, abre **Ajustes → Correo**. Como administrador, elige **Configurar servidor
+En Preparación o En vivo, abre **Ajustes → Correo**. Como administrador, elige **Configurar servidor
 de correo** o **Cambiar servidor de correo**, introduce los ajustes de tu proveedor y envía una prueba
 antes de guardar. Introduce de nuevo los datos de acceso al cambiar un servidor con autenticación;
 Waitron nunca muestra la contraseña guardada. Los gerentes pueden consultar los ajustes, pero no
 guardarlos ni quitarlos.
 
-Antes de completar la configuración en Preparar o En servicio, introduce los ajustes del servidor
+Antes de completar la configuración en Preparación o En vivo, introduce los ajustes del servidor
 y envía una prueba aceptada a la dirección del administrador. En desarrollo puedes omitir este paso.
 Al guardar un servidor, las invitaciones y los enlaces para restablecer contraseñas llegan a buzones
 reales. Revisa el estado del correo de cuentas en esta página y el de las facturas en **Servidor de
@@ -50,7 +50,7 @@ Como administrador, elige **Quitar servidor de correo** y lee la confirmación. 
 los ajustes. Al quitar el servidor también se borran sus datos de acceso; introdúcelos de nuevo
 si lo configuras más adelante.
 
-En Preparar o En servicio, los enlaces de acceso y las facturas no pueden enviarse hasta que
+En Preparación o En vivo, los enlaces de acceso y las facturas no pueden enviarse hasta que
 configures otro servidor; las ventas continúan.
 En una caja de desarrollo, el correo vuelve al buzón de prueba. Si los ajustes no se cargan tras
 quitar el servidor, vuelve a cargarlos; el servidor ya se ha quitado.

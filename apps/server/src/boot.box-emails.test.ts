@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import { incidents, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
+import type { AccountEmailSender } from "./account-email.js";
+import type { runAttendanceEmailLoop } from "./attendance-email-worker.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
@@ -32,7 +34,45 @@ const holder = vi.hoisted(() => ({
   armed: [] as (() => void)[],
   sent: [] as Parameters<TextEmailSender>[0][],
   outcomes: undefined as BackupOutcomeHolder | undefined,
+  managementSend: undefined as AccountEmailSender | undefined,
+  profileSend: undefined as AccountEmailSender | undefined,
+  attendance: undefined as Parameters<typeof runAttendanceEmailLoop>[0] | undefined,
 }));
+
+vi.mock("./management-api.js", async (load) => {
+  const actual = await load<typeof import("./management-api.js")>();
+  return {
+    ...actual,
+    mountManagementApi: (...args: Parameters<typeof actual.mountManagementApi>) => {
+      holder.managementSend = args[1].sendAccountEmail;
+      return actual.mountManagementApi(...args);
+    },
+  };
+});
+vi.mock("./me-api.js", async (load) => {
+  const actual = await load<typeof import("./me-api.js")>();
+  return {
+    ...actual,
+    mountMeApi: (...args: Parameters<typeof actual.mountMeApi>) => {
+      holder.profileSend = args[1].sendAccountEmail;
+      return actual.mountMeApi(...args);
+    },
+  };
+});
+vi.mock("./attendance-email-worker.js", async (load) => {
+  const actual = await load<typeof import("./attendance-email-worker.js")>();
+  return {
+    ...actual,
+    runAttendanceEmailLoop: (deps: Parameters<typeof actual.runAttendanceEmailLoop>[0]) => {
+      holder.attendance = deps;
+      return actual.runAttendanceEmailLoop(deps);
+    },
+  };
+});
+vi.mock("./smtp-send.js", async (load) => {
+  const actual = await load<typeof import("./smtp-send.js")>();
+  return { ...actual, sendSmtpMessage: async () => ({ status: "sent" as const }) };
+});
 
 // The backup run's memory of its last stop, the one boot hands both the bell and the email duty.
 vi.mock("./alert-sources.js", async (importOriginal) => {
@@ -131,6 +171,9 @@ async function shutDown(booted: Booted): Promise<void> {
   if (booted.server !== undefined) await booted.server.close();
   holder.deps = undefined;
   holder.outcomes = undefined;
+  holder.managementSend = undefined;
+  holder.profileSend = undefined;
+  holder.attendance = undefined;
   holder.armed.length = 0;
   holder.sent.length = 0;
   if (booted.scratch !== undefined) await rm(booted.scratch, { recursive: true, force: true });
@@ -192,6 +235,82 @@ describe("the running server's managers' email check", () => {
       }
     },
   );
+
+  it.each([false, true])(
+    "Prepare account senders require SMTP during zone repair=%s",
+    async (repair) => {
+      const venue = await setupVenue(suite.db);
+      if (repair)
+        await suite.db
+          .update(locations)
+          .set({ timeZone: "Invalid/Zone" })
+          .where(eq(locations.id, venue.cfg.locationId));
+      const booted: Booted = {};
+      try {
+        await bootServer(booted, venue, { intent: "prepare", development: false });
+        const message = {
+          purpose: "invitation" as const,
+          email: "invitee@example.test",
+          displayName: "Invitee",
+          actionUrl: "https://dashboard.example.test/manage/account",
+          expiresAt: "2026-11-08T12:00:00Z",
+          locale: "en-GB",
+        };
+        expect(holder.managementSend).toBeTypeOf("function");
+        expect(holder.profileSend).toBeTypeOf("function");
+        await expect(holder.managementSend!(message)).rejects.toThrow("configured");
+        await expect(
+          holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
+        ).rejects.toThrow("configured");
+        if (!repair) {
+          const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
+            headers: { cookie: venue.managerCookie },
+          });
+          expect(inbox.status).toBe(200);
+          expect(await inbox.json()).toEqual({ mode: "unconfigured", count: 0, messages: [] });
+          expect(holder.attendance).toBeDefined();
+          expect(await holder.attendance!.resolveDelivery()).toEqual({ mode: "unconfigured" });
+        }
+      } finally {
+        await shutDown(booted);
+      }
+    },
+  );
+  it("Prepare sends through the saved relay at both account boundaries", async () => {
+    const venue = await setupVenue(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      putCredential(
+        tx,
+        loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        }),
+        {
+          purpose: "email.smtp",
+          value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
+        },
+      ),
+    );
+    const booted: Booted = {};
+    try {
+      await bootServer(booted, venue, { intent: "prepare", development: false });
+      const message = {
+        purpose: "invitation" as const,
+        email: "invitee@example.test",
+        displayName: "Invitee",
+        actionUrl: "https://dashboard.example.test/manage/account",
+        expiresAt: "2026-11-08T12:00:00Z",
+        locale: "en-GB",
+      };
+      await expect(holder.managementSend!(message)).resolves.toBeUndefined();
+      await expect(
+        holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
+      ).resolves.toBeUndefined();
+      expect((await holder.attendance!.resolveDelivery()).mode).toBe("smtp");
+    } finally {
+      await shutDown(booted);
+    }
+  });
 
   it("boot emails the managers when the disk is full, once", async () => {
     const venue = await setupVenue(suite.db);
