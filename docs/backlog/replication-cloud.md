@@ -1045,14 +1045,20 @@ controlled process exits, and the public page returned 200. Both are enabled for
 physical box reboot remains untested. The owner's containers were untouched.
 [Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
 
+The five reviewed cuts are combined on private `feat/a951s-integration` for the fresh test-box
+trial. The combined Linux server and dashboard build, and the container creates its key while
+remaining off without a placement. The fresh signed pairing is awaiting Cloud approval; automatic
+provisioning, certificate installation and public sign-in on that fresh venue remain unverified.
+The earlier managed demo remains separate and running.
+
 Remaining work, following the owner's certificate-first order:
 
 - Qualify the certificate worker on the managed public demo. The worker uses the existing signed
   submit/status exchange, resumes pending requests after restart and renews before expiry. A local
   TLS handshake observed the renewed chain without restarting the listener; no new public
   certificate was issued for that synthetic test.
-- Add the managed outbound tunnel container, send box details over the existing signed connection,
-  provide Settings on/off/status, and retire `@waitron/tunnel`.
+- Qualify the combined tunnel runtime, signed key submission and configuration writer on the fresh
+  venue, provide Settings on/off/status, and retire `@waitron/tunnel`.
 - Qualify the managed demo across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.
