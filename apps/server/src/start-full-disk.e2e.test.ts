@@ -830,7 +830,7 @@ describe("a start on a real full disk", () => {
     expect(d.startServer).toHaveBeenCalledTimes(1);
     expect(() => statSync(staged)).toThrow();
     expect(statSync(restoreStaging).isDirectory()).toBe(true);
-    expect(readFileSync(join(download, "part"), "utf8")).toBe("x");
+    expect(() => statSync(download)).toThrow();
   });
 
   let nothingDir: string | undefined;

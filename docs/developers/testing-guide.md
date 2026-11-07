@@ -1561,6 +1561,14 @@ start's own full-disk check to name the failure. It calls
 `openSmallDisk("WAITRON_FULL_DISK_DIR_PLACEMENT", 64)`, and CI mounts a sixth tmpfs, 64 MiB, at
 `$RUNNER_TEMP/full-disk-placement` in the same step.
 
+**A seventh real-disk file checks that a restore which runs out of room changes nothing.**
+`apps/server/src/restore-full-disk.e2e.test.ts` runs `restoreFromArtifact` with the box's state and
+venue folders on a small disk and its staging folder on the normal one. With too little room for a
+2 MiB secret the restore fails `ENOSPC` while staging that secret; with room for the secrets but not
+a 4 MiB database it fails `ENOSPC` copying the database. Both times the box's database, identity and
+secrets are left as they were. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_RESTORE", 32)`, and CI
+mounts a seventh 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-restore` in the same step.
+
 **A test that runs a backup through the supervisor or boot depends on the machine's free disk.**
 The supervisor passes the run no floor or aim, so the product's defaults apply: below the need plus
 2 GiB free, a run deletes old archives in local folders on that disk (only where an installation
@@ -1604,7 +1612,8 @@ the full-disk page's words quoted below are the ones that run asserted.
   `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts -t staged`. Before
   `freeSpaceAtStart` deleted that folder the box stuck: `serveRecovery` was called once and
   `startServer` never (`Tests  1 failed | 16 skipped (17)`). Now `startServer` is called once,
-  `staged-recovery` is gone, and `restore-staging` and its `archive-download-x` folder stay.
+  `staged-recovery` and `restore-staging`'s `archive-download-x` folder are gone, and
+  `restore-staging` stays.
 - A start with nothing to delete and no spare file serves the recovery page at once: over HTTPS, trusting the box's
   own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted the
   temporary copies, old logs and crash reports it can make again, and the disk is still full." and
@@ -3687,7 +3696,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
   `WAITRON_FULL_DISK_DIR_FROM_SPARE`, `WAITRON_FULL_DISK_DIR_BACKUP_ROOM`,
-  `WAITRON_FULL_DISK_DIR_HANDOVER` and `WAITRON_FULL_DISK_DIR_PLACEMENT` for the second to sixth files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
+  `WAITRON_FULL_DISK_DIR_HANDOVER`, `WAITRON_FULL_DISK_DIR_PLACEMENT` and
+  `WAITRON_FULL_DISK_DIR_RESTORE` for the second to seventh files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
   run them at once), otherwise skips locally and fails CI. Interrupted
   macOS images can remain attached; `pnpm reap` does not detach them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.

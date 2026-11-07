@@ -115,6 +115,8 @@ export const shellEn = {
     "The copy read from the bucket is damaged. Nothing on this server was changed.",
   "shell.bucket.state_missing":
     "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
+  "shell.bucket.identity_unknown":
+    "The copy in the bucket does not say which business it belongs to, so it cannot be restored. Nothing on this server was changed.",
   "shell.bucket.restore_failed":
     "The copy could not be downloaded from the bucket. Check this server's internet connection and that the bucket still exists, then try again.",
   "shell.bucket.request_failed":
@@ -282,6 +284,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "La copia leída del bucket está dañada. No se ha cambiado nada en este servidor.",
   "shell.bucket.state_missing":
     "La copia del bucket no guarda los ajustes cifrados del servidor anterior, así que no se puede reconstruir a partir de ella.",
+  "shell.bucket.identity_unknown":
+    "La copia del bucket no indica a qué negocio pertenece, así que no se puede restaurar. No se ha cambiado nada en este servidor.",
   "shell.bucket.restore_failed":
     "No se ha podido descargar la copia del bucket. Comprueba la conexión a internet de este servidor y que el bucket sigue existiendo, e inténtalo de nuevo.",
   "shell.bucket.request_failed":

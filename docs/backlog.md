@@ -110,7 +110,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1387. Till sentences during the clock stop, with money in hand](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
 - [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
-- [A1390. A restore is all or nothing, and its key always opens](backlog/box.md#bundle-a1390-a-restore-is-all-or-nothing-and-its-key-always-opens)
 - [A1391. Backup status tells the truth and leaks nothing](backlog/box.md#bundle-a1391-backup-status-tells-the-truth-and-leaks-nothing)
 - [A1392. Discard and Cancel fail on a table bill reached from the counter](backlog/till.md#bundle-a1392-discard-and-cancel-fail-on-a-table-bill-reached-from-the-counter)
 - [A1393. A table of every till route's device check, with a guard](backlog/till.md#bundle-a1393-a-table-of-every-till-routes-device-check-with-a-guard)
@@ -1804,8 +1803,6 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   `apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,
   `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`.
   [Detail](backlog/box.md#the-amazon-s3-delete-and-archive-rehearsals-open-edges-a538-9)
-
-- **A1390. A restore is all or nothing, and its key always opens** (bundle of 3, 3 important, size M). [Detail](backlog/box.md#bundle-a1390-a-restore-is-all-or-nothing-and-its-key-always-opens)
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is

@@ -146,4 +146,28 @@ describe("the recovery kit", () => {
       params: { reason: "shape" },
     });
   });
+
+  it.each([
+    ["a tab", "a".repeat(12) + "\t" + "a".repeat(12)],
+    ["DEL", "a".repeat(24) + "\x7f"],
+  ])("carries a recovery key holding %s, as the box's own key rules allow", (_label, key) => {
+    expect(parseRecoveryKit(encodeRecoveryKit({ ...KIT, recoveryKey: key })).recoveryKey).toBe(key);
+  });
+
+  it("still refuses an empty recovery key", () => {
+    expect(refusal(encodeRecoveryKit({ ...KIT, recoveryKey: "" }))).toEqual({
+      code: "backup.stream_kit_invalid",
+      params: { reason: "shape" },
+    });
+  });
+
+  it.each([
+    ["the venue id", { venueId: "c0000000\t0000" }],
+    ["the signer's key", { pointerSignerPublicKey: "MCowBQYDK2Vw\x7fAyEA" }],
+  ])("still refuses a control character in %s", (_label, change) => {
+    expect(refusal(encodeRecoveryKit({ ...KIT, ...change }))).toEqual({
+      code: "backup.stream_kit_invalid",
+      params: { reason: "shape" },
+    });
+  });
 });

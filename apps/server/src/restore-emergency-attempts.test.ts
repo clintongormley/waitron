@@ -1,5 +1,6 @@
-import { readFile, rm } from "node:fs/promises";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import nativeFs, { readFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -12,6 +13,19 @@ afterEach(async () => {
   await f?.cleanup();
   f = undefined;
 });
+
+/** Makes the restore's rename of `<target>.incoming` over `target` throw `failure` until the mocks
+ * are restored. */
+function failPublicationOf(target: string, failure: Error) {
+  const originalRename = nativeFs.rename;
+  vi.spyOn(nativeFs, "rename").mockImplementation(async (...args) => {
+    if (String(args[0]) === `${target}.incoming` && String(args[1]) === target) throw failure;
+    return originalRename(...args);
+  });
+  syncBuiltinESMExports();
+}
+const ioFailure = () =>
+  Object.assign(new Error("injected post-commit publication failure"), { code: "EIO" });
 
 it.each(["archive", "stream"] as const)(
   "retains the %s hour intent before publishing trading settings",
@@ -42,13 +56,19 @@ it.each(["archive", "stream"] as const)(
     f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const retained = f.journal();
     const trading = join(f.stateDir, "trading.env");
+    const failure = ioFailure();
     await expect(
       f.run((_level, event, fields) => {
         if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu")
-          mkdirSync(trading);
+          failPublicationOf(trading, failure);
       }),
-    ).rejects.toMatchObject({ code: "EISDIR" });
-    await expect(readFile(trading)).rejects.toMatchObject({ code: "EISDIR" });
+    ).rejects.toBe(failure);
+    vi.restoreAllMocks();
+    syncBuiltinESMExports();
+    await expect(readFile(trading)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(f.stateDir, "credentials.key"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     await f.advanceCounters();
     const committed = await f.snapshot();
     expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
@@ -56,7 +76,6 @@ it.each(["archive", "stream"] as const)(
       "0CNQT",
     ]);
     expect(f.journal()).toBe(retained);
-    await rm(trading, { recursive: true });
     await expect(f.run()).resolves.toBe(true);
     expect(await f.snapshot()).toEqual(committed);
     expect(f.journal()).toBe(retained);
@@ -132,15 +151,19 @@ it.each(["archive", "stream"] as const)(
     f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const retained = f.journal();
     const credential = join(f.stateDir, "credentials.key");
+    const failure = ioFailure();
     await expect(
       f.run((_level, event, fields) => {
         if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu")
-          mkdirSync(credential);
+          failPublicationOf(credential, failure);
       }),
-    ).rejects.toMatchObject({ code: "EISDIR" });
+    ).rejects.toBe(failure);
+    vi.restoreAllMocks();
+    syncBuiltinESMExports();
     await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+    await expect(readFile(credential)).rejects.toMatchObject({ code: "ENOENT" });
     await f.advanceCounters();
     const committed = await f.snapshot();
     expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
@@ -148,7 +171,6 @@ it.each(["archive", "stream"] as const)(
       "0CNQT",
     ]);
     expect(f.journal()).toBe(retained);
-    await rm(credential, { recursive: true });
     await expect(f.run()).resolves.toBe(true);
     expect(await f.snapshot()).toEqual(committed);
   },

@@ -103,7 +103,7 @@ async function main(): Promise<void> {
   const estimate =
     o.images * o.imageKib * 1024 + (o.historyDays * o.salesPerDay + o.daySales) * DB_BYTES_PER_SALE;
   const disk = statfsSync(tmpdir());
-  const free = disk.bavail * disk.bsize;
+  const free = disk.bavail * disk.frsize;
   if (free < DISK_FACTOR * estimate) {
     report(PROBE, "NOT-RUN", {
       reason: "not enough free disk",

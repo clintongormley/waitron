@@ -227,6 +227,77 @@ it("the restore command refuses a fixed claim before invoking archive recovery",
   expect(out.join("\n")).not.toContain("SYNTHETIC-SECRET");
 });
 
+it.each(["pre-consumption-abandoned", "complete"])(
+  "the restore command names a second process holding a folder with a %s claim, as it does with none",
+  async (kind) => {
+    const f = await abandonedConsumedClaim(kind);
+    const { runRestore } = await import("./restore-command.js");
+    const source = join(f.root, "archive");
+    await writeFile(source, "unopened-archive");
+    const restore = vi.fn(async () => {});
+    const out: string[] = [];
+    const holder = await holdVenueElsewhere(f.venueDir);
+    try {
+      expect(
+        await runRestore({
+          argv: ["restore", source],
+          env: {
+            WAITRON_VENUE_DIR: f.venueDir,
+            WAITRON_STATE_DIR: f.stateDir,
+            WAITRON_BACKUP_RECOVERY_KEY: "SYNTHETIC-SECRET",
+          },
+          out: (line) => out.push(line),
+          restore,
+        }),
+      ).toBe(1);
+    } finally {
+      await holder.stop();
+    }
+    expect(out).toEqual([
+      "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)",
+    ]);
+    expect(restore).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  ["a fixed claim", "setup.attempt_invalid"],
+  ["a consumed abandoned claim", "setup.attempt_uncertain"],
+])(
+  "the restore command refuses %s while holding the folder, and lets go of it",
+  async (claim, code) => {
+    const f = claim === "a fixed claim" ? await fixture() : await abandonedConsumedClaim();
+    const { runRestore } = await import("./restore-command.js");
+    const source = join(f.root, "archive");
+    await writeFile(source, "unopened-archive");
+    const events: string[] = [];
+    const out: string[] = [];
+    expect(
+      await runRestore({
+        argv: ["restore", source],
+        env: {
+          WAITRON_VENUE_DIR: f.venueDir,
+          WAITRON_STATE_DIR: f.stateDir,
+          WAITRON_BACKUP_RECOVERY_KEY: "SYNTHETIC-SECRET",
+        },
+        out: (line) => {
+          events.push("printed");
+          out.push(line);
+        },
+        lockVenue: async () => {
+          events.push("held");
+          return { release: () => events.push("released") };
+        },
+        restore: async () => {
+          events.push("restored");
+        },
+      }),
+    ).toBe(1);
+    expect(out).toEqual([`restore failed: ${code}`]);
+    expect(events).toEqual(["held", "released", "printed"]);
+  },
+);
+
 async function abandonedConsumedClaim(kind = "consumed-abandoned") {
   const { randomUUID, createHash } = await import("node:crypto");
   const { createFirstSetupStore, createFirstSetupCoordinator } =
