@@ -34,10 +34,22 @@ it("retains the PNG encoder output for the exported dataset and preserves other 
           join(root, "scripts/gen-demo-media.mjs"),
           ...id,
         ],
-        { encoding: "utf8", timeout: 10000 },
+        {
+          encoding: "utf8",
+          timeout: 10000,
+          env: { ...process.env, TSX_DISABLE_CACHE: "1" },
+        },
       );
     const generated = run(["casa-delgado-es"]);
-    expect(generated.status, generated.stderr).toBe(0);
+    expect(
+      generated.status,
+      JSON.stringify({
+        error: generated.error?.message,
+        signal: generated.signal,
+        stdout: generated.stdout,
+        stderr: generated.stderr,
+      }),
+    ).toBe(0);
     const sharp = createRequire(resolve("apps/server/package.json"))("sharp");
     const filename = join(root, "demo-media/casa-delgado-es/negroni.png");
     const image = sharp(filename, { failOn: "warning" });

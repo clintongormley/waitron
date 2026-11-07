@@ -65,11 +65,6 @@ export function litestreamEnv(
  * - One full copy a day and a week of history; `retention` takes hours only.
  * - `l0-retention` is Litestream's default, written out because the freshness reader relies on a
  *   level-0 file staying listed at least that long after it is created.
- * - `l0-retention-check-interval` replaces Litestream's 15 seconds (`store.go:72` at the pinned
- *   tag). Each check lists level 1 and, once that holds a file, level 0, whether or not anything
- *   changed (`db.go:3029,3051`), which made it most of a quiet box's requests. A level-0 file stays
- *   listed up to this much longer, and nothing here needs one gone. Litestream's advice beside that
- *   default is for its VFS read replicas, which Waitron does not run.
  * - The path and the address are double-quoted YAML scalars (JSON's escaping is valid there), so a
  *   `:` or `#` in either cannot change the structure.
  */
