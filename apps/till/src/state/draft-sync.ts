@@ -163,7 +163,8 @@ export interface DraftSyncOptions {
   personId: string;
   /** The saved lines as the till shows them, from the table's offers. */
   rebuild: (lines: readonly DraftLine[]) => OrderLine[];
-  /** A save was refused. When the draft itself was, the drafts have been read again first. */
+  /** A save was refused, or a take-over, recall or split was refused for its person. When a save's
+   * draft itself was refused, the drafts have been read again first; a person refusal reads nothing. */
   onRefused: (code: string, ownerName?: string) => void;
   /** The server's draft has replaced what the store held. */
   onReplaced?: () => void;

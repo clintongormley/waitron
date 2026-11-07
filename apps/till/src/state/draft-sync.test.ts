@@ -2063,6 +2063,28 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
     expect(await outcome).toBe("failed");
   });
 
+  it("a take-over refused while a read overlapped it answers failed, locks nothing and reads no more", async () => {
+    const onScreen = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    expect(draft.store.editsLocked).toBe(true);
+    let refuse!: (error: unknown) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<BillDraftSnapshot>((_resolve, reject) => (refuse = reject)),
+    );
+
+    const outcome = draft.takeOver(onScreen.id, onScreen.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    server.drafts.splice(server.drafts.indexOf(onScreen), 1);
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+    refuse({ code: "draft.out_of_date", status: 409 });
+
+    expect(await outcome).toBe("failed");
+    expect(draft.store.editsLocked).toBe(false);
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+  });
+
   it("A803 split: a read that fails keeps the last read's drafts", async () => {
     const elsewhere = seedOther("p2", steak);
     const draft = sync();
