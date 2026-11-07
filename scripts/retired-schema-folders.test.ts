@@ -17,6 +17,9 @@ import { afterAll, describe, expect, it } from "vitest";
  * no schema source. A branch cut before the move can still add a migration to the retired folder or
  * a table file to its `src/schema/`: both rebase cleanly, and neither creates a table, because
  * nothing reads them any more. Which packages hold a set is read from the migrations manifest.
+ * It applies to every package under `packages/` without a set, not only the retired ones, and it
+ * reads only each package's `drizzle/` and `src/schema/` folders by path, never what a file
+ * declares: a table declared anywhere else, or a `drizzle/` folder under `apps/`, is not seen.
  */
 
 const REPO = join(import.meta.dirname, "..");

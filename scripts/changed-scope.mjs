@@ -89,6 +89,8 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
       "packages/venue-service",
     ],
   ],
+  // Only the reader is listed: entries match by exact path, and the fixture's data files are frozen,
+  // pinned byte for byte by `scripts/a760-history-fixture.test.ts`.
   [
     "scripts/fixtures/a760-history/historical-set.mjs",
     [

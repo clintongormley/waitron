@@ -17,6 +17,8 @@ import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js"
  * detector misses makes every edge written that way invisible.
  *
  * KNOWN LIMITATIONS:
+ * - ONLY A MODULE THAT OWNS A MIGRATION SET IS SCANNED. The `requires` of a module without its own
+ *   set (its tables live in another module's set) is compared with nothing.
  * - `[BRACKET]` QUOTING IS NOT HANDLED, and SQLite accepts it. A hand-written migration spelling an
  *   identifier that way would have its table read as owned by nobody and its FK edge dropped —
  *   silently, because a dropped edge looks exactly like an honest descriptor.
