@@ -1,6 +1,5 @@
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
