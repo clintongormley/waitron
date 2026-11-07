@@ -345,7 +345,7 @@ describe("stream-settings-panel: the bucket form", () => {
     ],
     ["backup.stream_config_unsafe", "region", "bucket-region", "stream.field.check"],
     ["backup.request_invalid", "prefix", "bucket-prefix", "stream.field.check"],
-    ["backup.request_invalid", "endpoint", "bucket-endpoint", "stream.field.check"],
+    ["backup.request_invalid", "endpoint", "bucket-endpoint", "stream.form.endpoint_invalid"],
   ] as const)("puts %s naming %s beside its field", async (code, named, name, key) => {
     const api = stubApi({
       testStreamBucket: vi.fn().mockRejectedValue({ code, params: { field: named } }),

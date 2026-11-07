@@ -322,7 +322,12 @@ export class StreamSettingsPanel extends LitElement {
       (code === "backup.stream_config_unsafe" || code === "backup.request_invalid") &&
       isField(named)
     ) {
-      const key = code === "backup.stream_config_unsafe" ? UNSAFE_FIELD_KEYS[named] : undefined;
+      const key =
+        code === "backup.stream_config_unsafe"
+          ? UNSAFE_FIELD_KEYS[named]
+          : named === "endpoint"
+            ? "stream.form.endpoint_invalid"
+            : undefined;
       this.refused = { [named]: t(key ?? "stream.field.check") };
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
