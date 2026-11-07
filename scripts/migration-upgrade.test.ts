@@ -1,4 +1,5 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -8,18 +9,21 @@ import { openVenueDatabase } from "../packages/db/src/client.js";
 import { applyMigrations } from "../packages/migrations/src/apply.js";
 import {
   migrationOptionsFor,
-  resolveMigrationsFolder,
+  type VenueMigrationOptions,
 } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
+import { historicalSets } from "./fixtures/a760-history/historical-set.mjs";
 import { migrationUpgradeBudget } from "./migration-upgrade-budget.mjs";
 import { scratchParent } from "./scratch-dir.mjs";
 import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
 
 /**
- * One database upgraded the way a box is: every shipped migration applied in date order, with what
- * boot does after migrating (the change feed) done between each step, and rows carried through. A
- * fresh database migrated in one go never meets a trigger a previous boot left behind, nor a row a
- * migration has to keep.
+ * One database upgraded the way a box is, from the squash epoch onwards. The initial checkpoint
+ * applies only the migrations {@link EPOCH_FILE} names, in the descriptors' dependency order, then
+ * does what boot does after migrating (the change feed) and fills every table. It then repeats
+ * `applyMigrations` and the change feed on the filled database, and every row must be unchanged.
+ * Every later migration, in any set, including one the epoch does not name, runs at its own date,
+ * with the change feed installed between steps and rows carried through.
  *
  * After each step every table is topped up to two rows, read from that step's own schema (its
  * columns, foreign keys, unique indexes and CHECK constraints) and written with the file's foreign
@@ -29,25 +33,20 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * before the next step; a table that still exists after it holding fewer rows fails the test,
  * naming the step.
  *
- * Weaker than its name in these ways. Every set's first migration, and everything up to
- * {@link FLOOR}, is applied together, because the baselines were regenerated out of date order
- * (core's is dated after the sets that build on it), and because core's `0003` rebuilds `products`
- * while a trigger whose BODY reads `products` exists (media's `products_media_image_fk_parent_delete`).
- * The change feed at each step is TODAY's list, less whatever that step's schema lacks, and the
- * append-only tables are TODAY's list filtered to the tables the PREVIOUS step left, so a table a
- * step creates has no append-only trigger while the NEXT step migrates, and gets one only after it;
- * neither is the list the image of that date carried. The rows are synthetic, not the product's:
- * a few generic values per declared type, a CHECK's own literals, a column's default and
- * {@link CANDIDATES}. A nullable column outside every unique index is null wherever its
- * constraints allow, except that a second row points a self-reference at the first. So a migration
- * that fails only on values the product writes and these rows lack passes: a unique index two real
- * rows break where these two differ, or a CHECK real values break and these do not. The tables
- * {@link ONE_ROW} names, and a singleton (`CHECK (id = 1)`), hold one row. The steps
- * {@link RESETS} lists cannot carry the rows, and the walk restarts from an empty database at each;
- * at one refused by a constraint, nothing else the step does to the rows is seen. Rows are counted,
- * not compared, so a migration that rewrites a value passes. After the final step it also pins
- * the nine product triggers; other triggers dropped by a rebuild are not checked here.
+ * Weaker than its name in these ways. The change feed at each step is TODAY's list, less whatever
+ * that step's schema lacks, and the append-only tables are TODAY's list filtered to the tables the
+ * PREVIOUS step left. The rows are synthetic, not the product's: a few generic values per declared
+ * type, a CHECK's own literals, a column's default and {@link CANDIDATES}. A nullable column outside
+ * every unique index is null wherever its constraints allow, except that a second row points a
+ * self-reference at the first. So a migration that fails only on values the product writes and
+ * these rows lack passes. The tables {@link ONE_ROW} names, and a singleton (`CHECK (id = 1)`), hold
+ * one row. Steps a walk's resets list names cannot carry the rows, and the walk restarts from an
+ * empty database at each. Between steps rows are counted, not compared, so a migration that
+ * rewrites a value passes; only the epoch's repeat compares values. After the final step it also
+ * pins the nine product triggers; other triggers dropped by a rebuild are not checked here.
  */
+
+type ChangeSource = NonNullable<(typeof ALL_MODULES)[number]["changes"]>[number];
 
 interface JournalEntry {
   idx: number;
@@ -55,26 +54,51 @@ interface JournalEntry {
   tag: string;
 }
 
-/**
- * Applied together with the baselines rather than stepped onto. It rebuilds `products` while a
- * trigger whose BODY reads `products` exists (media's `products_media_image_fk_parent_delete`), and
- * SQLite refuses the rename that ends the rebuild.
- */
-const FLOOR = { set: "core", tag: "0003_variant_inherited_nullable" };
+interface Journal {
+  entries: JournalEntry[];
+}
 
-const sets = orderedMigrationSets(ALL_MODULES);
-const journals = new Map(
-  sets.map((set) => [set.name, readJournal(resolveMigrationsFolder(set, null))]),
-);
-const floorEntry = journals.get(FLOOR.set)?.entries.find((entry) => entry.tag === FLOOR.tag);
-const floor = floorEntry?.when ?? 0;
-const cuts = [
-  ...new Set(
-    [...journals.values()].flatMap((journal) =>
-      journal.entries.filter((entry) => entry.when > floor).map((entry) => entry.when),
-    ),
-  ),
-].sort((a, b) => a - b);
+/** A migration set as the walk applies it: `applyMigrations`'s options plus the set's name. */
+interface WalkSet extends VenueMigrationOptions {
+  readonly name: string;
+}
+
+interface EpochEntry {
+  name: string;
+  tag: string;
+  when: number;
+  sha256: string;
+}
+
+/** The migrations a squashed venue starts from; a later migration is not in it. */
+interface Epoch {
+  version: number;
+  entries: EpochEntry[];
+  emptySets: string[];
+}
+
+type ResetExpectation = { refused: readonly string[] } | { lost: readonly string[] };
+
+/**
+ * Shipped steps that cannot carry these rows, each keyed `set/tag` with the failure it must still
+ * show: the parts of a refusal's message, or exactly the tables whose rows the step loses, so a
+ * loss beside the listed ones fails the guard. Before go-live a schema change may need a venue
+ * reset (CLAUDE.md §3), so at a listed step the guard checks the failure, then migrates an empty
+ * database to the same point and fills it again. A listed step that carries the rows, a step two
+ * keys name, or a key naming no step the walk takes, fails the guard.
+ */
+type Resets = Readonly<Record<string, ResetExpectation>>;
+
+const RESETS: Resets = {};
+
+const EPOCH_FILE = new URL("./migration-baseline-epoch.json", import.meta.url);
+
+const sets: WalkSet[] = orderedMigrationSets(ALL_MODULES).map((set) => ({
+  name: set.name,
+  ...migrationOptionsFor([set], null)[0],
+}));
+const epoch = readEpoch();
+const { cuts } = planWalk(sets, epoch);
 const {
   workMs: WORK_BUDGET_MS,
   idleMs: NO_PROGRESS_LIMIT_MS,
@@ -87,9 +111,391 @@ afterAll(() => {
   for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
 });
 
-function readJournal(folder: string): { entries: JournalEntry[] } {
+function readJournal(folder: string): Journal {
   return JSON.parse(readFileSync(join(folder, "meta", "_journal.json"), "utf8"));
 }
+
+function readEpoch(file: URL | string = EPOCH_FILE): Epoch {
+  return JSON.parse(readFileSync(file, "utf8"));
+}
+
+function sqlHash(folder: string, tag: string): string {
+  return createHash("sha256")
+    .update(readFileSync(join(folder, `${tag}.sql`)))
+    .digest("hex");
+}
+
+/** Throws, naming the set and tag, unless every identity the epoch records is still shipped. */
+function verifyEpoch(epoch: Epoch, known: readonly WalkSet[]): void {
+  if (epoch.version !== 1) throw new Error(`epoch version ${epoch.version}, expected 1`);
+  if (epoch.entries.length === 0) throw new Error("epoch names no migration");
+  const byName = new Map(known.map((set) => [set.name, set]));
+  const named = new Set<string>();
+  for (const entry of epoch.entries) {
+    const at = `${entry.name}/${entry.tag}`;
+    const set = byName.get(entry.name);
+    if (set === undefined) throw new Error(`${at}: the epoch names an unknown set`);
+    if (named.has(entry.name)) throw new Error(`${at}: the epoch names its set twice`);
+    named.add(entry.name);
+    const shipped = readJournal(set.migrationsFolder).entries.find((e) => e.tag === entry.tag);
+    if (shipped === undefined) throw new Error(`${at}: not in its set's journal`);
+    if (shipped.when !== entry.when) {
+      throw new Error(`${at}: dated ${shipped.when} in its journal, ${entry.when} in the epoch`);
+    }
+    const hash = sqlHash(set.migrationsFolder, entry.tag);
+    if (hash !== entry.sha256) {
+      throw new Error(`${at}: its SQL hashes to ${hash}, the epoch records ${entry.sha256}`);
+    }
+  }
+  for (const name of epoch.emptySets) {
+    if (!byName.has(name)) throw new Error(`${name}: the epoch names an unknown empty set`);
+    if (named.has(name)) throw new Error(`${name}: the epoch names it both empty and populated`);
+  }
+}
+
+/**
+ * Each set's journal, the epoch's entry in each, and the dates of every later migration. A
+ * migration is in the initial checkpoint only if the epoch names it.
+ */
+function planWalk(walkSets: readonly WalkSet[], walkEpoch: Epoch) {
+  const journals = new Map(walkSets.map((set) => [set.name, readJournal(set.migrationsFolder)]));
+  const isEpoch = (name: string, entry: JournalEntry) =>
+    walkEpoch.entries.some((at) => at.name === name && at.tag === entry.tag);
+  const cuts = [
+    ...new Set(
+      [...journals].flatMap(([name, journal]) =>
+        journal.entries.filter((entry) => !isEpoch(name, entry)).map((entry) => entry.when),
+      ),
+    ),
+  ].sort((a, b) => a - b);
+  return { journals, isEpoch, cuts };
+}
+
+const INITIAL = Symbol("the epoch");
+
+interface WalkInput {
+  /** In dependency order, each with the folder its migrations are staged from. */
+  sets: readonly WalkSet[];
+  epoch: Epoch;
+  resets: Resets;
+  /** The change feed's sources; the walk installs those whose table and columns exist. */
+  sources?: readonly ChangeSource[];
+  watch?: ReturnType<typeof createStepWatch>;
+  /** Runs around the populated repeat of the initial checkpoint, for a caller's own comparison. */
+  aroundRepeat?: (venueDir: string, repeat: () => Promise<void>) => Promise<void>;
+}
+
+/**
+ * Walks `input.sets` from the epoch to their last migration and returns the venue folder and the
+ * row counts after the last step.
+ */
+async function walkUpgrade(input: WalkInput) {
+  const { epoch: walkEpoch, resets } = input;
+  const sources = input.sources ?? [];
+  const watch = input.watch ?? createStepWatch();
+  verifyEpoch(walkEpoch, input.sets);
+  const { journals, isEpoch, cuts: walkCuts } = planWalk(input.sets, walkEpoch);
+
+  const root = mkdtempSync(join(SCRATCH_PARENT, "wt-migration-upgrade-"));
+  scratch.push(root);
+  const staged = join(root, "migrations");
+  const venueDir = join(root, "venue");
+  const stagedSets = input.sets.map((set) => {
+    const folder = join(staged, set.name);
+    cpSync(set.migrationsFolder, folder, { recursive: true });
+    return { ...set, migrationsFolder: folder };
+  });
+
+  const bookkeeping = new Set(stagedSets.map((set) => set.migrationsTable));
+  const reachedResets = new Set<string>();
+  let held = new Map<string, number>();
+  let existing = new Set<string>();
+  for (const cut of [INITIAL, ...walkCuts] as const) {
+    const at = (name: string, entry: JournalEntry) =>
+      cut === INITIAL ? isEpoch(name, entry) : entry.when === cut && !isEpoch(name, entry);
+    const tags = [...journals].flatMap(([name, journal]) =>
+      journal.entries.filter((entry) => at(name, entry)).map((entry) => `${name}/${entry.tag}`),
+    );
+    const label = cut === INITIAL ? `epoch (${tags.join(", ")})` : tags.join(", ");
+    // Only tables the step before already had: a set's declared list is today's, and some of its
+    // tables are created by later migrations.
+    const options = stagedSets.map((set) => optionsOf(set, existing));
+    for (const [name, journal] of journals) {
+      const entries = journal.entries.filter(
+        (entry) => isEpoch(name, entry) || (cut !== INITIAL && entry.when <= cut),
+      );
+      writeFileSync(
+        join(staged, name, "meta", "_journal.json"),
+        JSON.stringify({ ...journal, entries }),
+      );
+    }
+    const migrate = () =>
+      watch.phase(`${label}: migrate`, () => applyMigrations(venueDir, options));
+    const feed = async () => {
+      existing = await installPresentChangeFeed(venueDir, sources, (phase, run) =>
+        watch.phase(`${label}: ${phase}`, run),
+      );
+    };
+    const step = async () => {
+      await migrate();
+      await feed();
+      held = await watch.phase(`${label}: rows`, () =>
+        carryRows(venueDir, label, held, bookkeeping),
+      );
+    };
+
+    const listed = tags.filter((tag) => tag in resets);
+    for (const entry of listed) reachedResets.add(entry);
+    if (listed.length > 1) {
+      throw new Error(
+        `Step ${label} matches ${listed.length} RESETS entries (${listed.join(", ")}); ` +
+          "a step is checked against one entry, so merge them into one",
+      );
+    }
+    const [reset] = listed;
+    if (reset === undefined) {
+      await step();
+    } else {
+      const failure = await step().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      const mismatch = resetMismatch(resets[reset], failure);
+      if (mismatch !== undefined) {
+        throw new Error(
+          `Step ${label} is listed in RESETS as ${JSON.stringify(resets[reset])}, but ${mismatch}`,
+          { cause: failure },
+        );
+      }
+      rmSync(venueDir, { recursive: true, force: true });
+      held = new Map();
+      await step();
+    }
+
+    if (cut === INITIAL) {
+      const repeat = async () => {
+        await migrate();
+        await feed();
+      };
+      const around = input.aroundRepeat ?? ((_dir, run) => run());
+      const before = allRows(venueDir);
+      await around(venueDir, repeat);
+      expect(allRows(venueDir), `${label}: rows after repeating migrate and change feed`).toEqual(
+        before,
+      );
+    }
+  }
+  const unreached = Object.keys(resets).filter((key) => !reachedResets.has(key));
+  if (unreached.length > 0) {
+    throw new Error(`RESETS names steps the walk never took: ${unreached.join(", ")}`);
+  }
+  return { venueDir, held, steps: walkCuts.length + 1 };
+}
+
+/** `set` as `applyMigrations` takes it, with append-only triggers only on tables that exist. */
+function optionsOf(set: VenueMigrationOptions, existing: Set<string>): VenueMigrationOptions {
+  return {
+    migrationsFolder: set.migrationsFolder,
+    migrationsTable: set.migrationsTable,
+    appendOnlyTables: (set.appendOnlyTables ?? []).filter((table) => existing.has(table)),
+    ...(set.database === undefined ? {} : { database: set.database }),
+  };
+}
+
+/** Installs the change feed for the sources whose table and columns exist; returns the tables. */
+async function installPresentChangeFeed(
+  venueDir: string,
+  sources: readonly ChangeSource[],
+  phase: <T>(name: string, run: () => T | Promise<T>) => Promise<T> = async (_name, run) => run(),
+): Promise<Set<string>> {
+  const store = await phase("open", () => openVenueDatabase(venueDir));
+  try {
+    const present = sources.filter((source) => {
+      const columns = new Set(
+        store.venue
+          .all<{ name: string }>(`select name from pragma_table_info('${source.table}')`)
+          .map((column) => column.name),
+      );
+      return columns.size > 0 && (source.related ?? []).every((rel) => columns.has(rel.column));
+    });
+    // The next migration meets the completed feed; its individual DDL commits are not a step.
+    await phase("change feed", () =>
+      store.venue.withWriteLock(() => installChangeFeed(store.venue, present)),
+    );
+    return new Set(
+      store.venue
+        .all<{ name: string }>(`select name from sqlite_master where type = 'table'`)
+        .map((table) => table.name),
+    );
+  } finally {
+    await phase("close", () => store.close());
+  }
+}
+
+/** Every row of every table, sorted, keyed by table. */
+function allRows(venueDir: string): Record<string, unknown[]> {
+  const connection = openRaw(venueDir);
+  try {
+    const names = connection
+      .prepare(
+        `select name from sqlite_master where type = 'table' and name not like 'sqlite\\_%' escape '\\' order by name`,
+      )
+      .all()
+      .map((row) => String(row.name));
+    return Object.fromEntries(
+      names.map((name) => [
+        name,
+        connection
+          .prepare(`select * from ${ident(name)}`)
+          .all()
+          .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+      ]),
+    );
+  } finally {
+    connection.close();
+  }
+}
+
+const PRODUCT_TRIGGERS = [
+  "products_variant_one_level_insert",
+  "products_variant_parent_fixed_update",
+  "products_id_fixed_update",
+  "products_ordering_check_insert",
+  "products_ordering_check_update",
+  "products_media_image_fk_insert",
+  "products_media_image_fk_update",
+  "products_media_image_fk_parent_delete",
+  "products_media_image_fk_parent_rename",
+];
+
+const KITCHEN_STEP = { set: "core", tag: "0135_course_station_delete" };
+
+/** A made-up migration set in a scratch folder: each migration's tag, date and SQL statements. */
+function syntheticSet(
+  name: string,
+  migrations: readonly { tag: string; when: number; sql: readonly string[] }[],
+): WalkSet {
+  const folder = mkdtempSync(join(SCRATCH_PARENT, `wt-upgrade-${name}-`));
+  scratch.push(folder);
+  const meta = join(folder, "meta");
+  for (const migration of migrations) {
+    writeFileSync(
+      join(folder, `${migration.tag}.sql`),
+      migration.sql.join("\n--> statement-breakpoint\n"),
+    );
+  }
+  mkdirSync(meta);
+  writeFileSync(
+    join(meta, "_journal.json"),
+    JSON.stringify({
+      version: "7",
+      dialect: "sqlite",
+      entries: migrations.map((migration, idx) => ({
+        idx,
+        version: "6",
+        when: migration.when,
+        tag: migration.tag,
+        breakpoints: true,
+      })),
+    }),
+  );
+  return {
+    name,
+    migrationsFolder: folder,
+    migrationsTable: `__drizzle_migrations_${name.replaceAll("-", "_")}`,
+    appendOnlyTables: [],
+  };
+}
+
+/** The epoch naming each set's first migration as its journal records it. */
+function epochOf(walkSets: readonly WalkSet[]): Epoch {
+  return {
+    version: 1,
+    entries: walkSets.map((set) => {
+      const [first] = readJournal(set.migrationsFolder).entries;
+      return {
+        name: set.name,
+        tag: first.tag,
+        when: first.when,
+        sha256: sqlHash(set.migrationsFolder, first.tag),
+      };
+    }),
+    emptySets: [],
+  };
+}
+
+const BASE = {
+  tag: "0000_baseline",
+  when: 1_000,
+  sql: ["CREATE TABLE `kept` (`id` integer PRIMARY KEY NOT NULL, `label` text NOT NULL)"],
+};
+
+/** One synthetic set: the baseline, then `later` at a later date. */
+function oneStep(later: readonly string[]): WalkSet[] {
+  return [syntheticSet("synthetic", [BASE, { tag: "0001_later", when: 2_000, sql: later }])];
+}
+
+describe("the squash epoch", () => {
+  it("is committed, names the seven populated sets and still matches what ships", () => {
+    expect(epoch.version).toBe(1);
+    expect(epoch.entries.map((entry) => entry.name)).toEqual([
+      "core",
+      "node",
+      "workforce",
+      "workforce-es",
+      "payments",
+      "bookings",
+      "fiscal-verifactu",
+    ]);
+    expect(epoch.emptySets).toEqual(["fiscal-none"]);
+    expect(() => verifyEpoch(epoch, sets)).not.toThrow();
+  });
+
+  it.each([
+    [
+      "an unknown set",
+      (e: Epoch) => ({ ...e, entries: [...e.entries, { ...e.entries[0], name: "nowhere" }] }),
+      "nowhere/0000_baseline: the epoch names an unknown set",
+    ],
+    [
+      "a tag its journal lacks",
+      (e: Epoch) => ({
+        ...e,
+        entries: e.entries.map((entry) =>
+          entry.name === "payments" ? { ...entry, tag: "0000_gone" } : entry,
+        ),
+      }),
+      "payments/0000_gone: not in its set's journal",
+    ],
+    [
+      "a changed hash",
+      (e: Epoch) => ({
+        ...e,
+        entries: e.entries.map((entry) =>
+          entry.name === "core" ? { ...entry, sha256: "0".repeat(64) } : entry,
+        ),
+      }),
+      `core/0000_baseline: its SQL hashes to`,
+    ],
+    [
+      "a changed date",
+      (e: Epoch) => ({
+        ...e,
+        entries: e.entries.map((entry) =>
+          entry.name === "bookings" ? { ...entry, when: entry.when + 1 } : entry,
+        ),
+      }),
+      "bookings/0000_baseline: dated",
+    ],
+    [
+      "an unknown empty set",
+      (e: Epoch) => ({ ...e, emptySets: [...e.emptySets, "fiscal-elsewhere"] }),
+      "fiscal-elsewhere: the epoch names an unknown empty set",
+    ],
+  ])("refuses an epoch with %s, naming it", (_case, change, message) => {
+    expect(() => verifyEpoch(change(structuredClone(epoch)), sets)).toThrow(message);
+  });
+});
 
 describe("upgrading a venue one migration at a time", () => {
   it("inspects schemas only for tables that may need more rows", () => {
@@ -181,29 +587,207 @@ describe("upgrading a venue one migration at a time", () => {
     }
   });
 
+  it("carries rows through a later step that keeps them", async () => {
+    const walkSets = oneStep(["ALTER TABLE `kept` ADD `note` text"]);
+    const { held, steps } = await walkUpgrade({
+      sets: walkSets,
+      epoch: epochOf(walkSets),
+      resets: {},
+    });
+    expect(steps).toBe(2);
+    expect(held.get("kept")).toBe(2);
+  });
+
+  it("fails a later step that loses rows no resets entry lists", async () => {
+    const walkSets = oneStep(["DELETE FROM `kept` WHERE `id` = (SELECT max(`id`) FROM `kept`)"]);
+    await expect(
+      walkUpgrade({ sets: walkSets, epoch: epochOf(walkSets), resets: {} }),
+    ).rejects.toThrow("Step synthetic/0001_later lost rows the step before wrote:\nkept: 2 rows");
+  });
+
+  it("passes a listed step that fails for exactly its stated reason", async () => {
+    const refusing = oneStep(["ALTER TABLE `kept` ADD `required` text NOT NULL"]);
+    const refused = await walkUpgrade({
+      sets: refusing,
+      epoch: epochOf(refusing),
+      resets: {
+        "synthetic/0001_later": {
+          refused: ["ALTER TABLE `kept` ADD `required`", "Cannot add a NOT NULL column"],
+        },
+      },
+    });
+    expect(refused.held.get("kept")).toBe(2);
+
+    const losing = oneStep(["DELETE FROM `kept`"]);
+    const lost = await walkUpgrade({
+      sets: losing,
+      epoch: epochOf(losing),
+      resets: { "synthetic/0001_later": { lost: ["kept"] } },
+    });
+    expect(lost.held.get("kept")).toBe(2);
+  });
+
+  it("fails a listed step that fails for another reason", async () => {
+    const walkSets = oneStep(["ALTER TABLE `kept` ADD `required` text NOT NULL"]);
+    await expect(
+      walkUpgrade({
+        sets: walkSets,
+        epoch: epochOf(walkSets),
+        resets: { "synthetic/0001_later": { refused: ["FOREIGN KEY constraint failed"] } },
+      }),
+    ).rejects.toThrow(/is listed in RESETS as .* but it failed with: .*Cannot add a NOT NULL/s);
+  });
+
+  it("fails a listed step that loses rows beside the tables it lists", async () => {
+    const walkSets = [
+      syntheticSet("synthetic", [
+        {
+          ...BASE,
+          sql: [...BASE.sql, "CREATE TABLE `other` (`id` integer PRIMARY KEY NOT NULL)"],
+        },
+        { tag: "0001_later", when: 2_000, sql: ["DELETE FROM `kept`", "DELETE FROM `other`"] },
+      ]),
+    ];
+    await expect(
+      walkUpgrade({
+        sets: walkSets,
+        epoch: epochOf(walkSets),
+        resets: { "synthetic/0001_later": { lost: ["kept"] } },
+      }),
+    ).rejects.toThrow("it also lost rows RESETS does not list:\nother: 2 rows before, 0 after");
+  });
+
+  it("fails a listed step that carries its rows", async () => {
+    const walkSets = oneStep(["ALTER TABLE `kept` ADD `note` text"]);
+    await expect(
+      walkUpgrade({
+        sets: walkSets,
+        epoch: epochOf(walkSets),
+        resets: { "synthetic/0001_later": { lost: ["kept"] } },
+      }),
+    ).rejects.toThrow("but it carried the rows");
+  });
+
+  it("fails a listed step the walk never reaches", async () => {
+    const walkSets = oneStep(["ALTER TABLE `kept` ADD `note` text"]);
+    await expect(
+      walkUpgrade({
+        sets: walkSets,
+        epoch: epochOf(walkSets),
+        resets: { "synthetic/0009_nowhere": { lost: ["kept"] } },
+      }),
+    ).rejects.toThrow("RESETS names steps the walk never took: synthetic/0009_nowhere");
+  });
+
+  it("refuses to walk from an epoch that no longer matches what ships", async () => {
+    const walkSets = oneStep(["ALTER TABLE `kept` ADD `note` text"]);
+    const stale = epochOf(walkSets);
+    stale.entries[0].sha256 = "0".repeat(64);
+    await expect(walkUpgrade({ sets: walkSets, epoch: stale, resets: {} })).rejects.toThrow(
+      "synthetic/0000_baseline: its SQL hashes to",
+    );
+  });
+
+  it(`keeps course and station rows through the frozen ${KITCHEN_STEP.set}/${KITCHEN_STEP.tag}`, async () => {
+    const old: WalkSet[] = historicalSets();
+    const target = readJournal(
+      old.find((set) => set.name === KITCHEN_STEP.set)!.migrationsFolder,
+    ).entries.find((entry) => entry.tag === KITCHEN_STEP.tag);
+    expect(target, `${KITCHEN_STEP.set}/${KITCHEN_STEP.tag} in the frozen history`).toBeDefined();
+    const root = mkdtempSync(join(SCRATCH_PARENT, "wt-upgrade-kitchen-"));
+    scratch.push(root);
+    const venueDir = join(root, "venue");
+    const staged = old.map((set) => {
+      const folder = join(root, "migrations", set.name);
+      cpSync(set.migrationsFolder, folder, { recursive: true });
+      return { ...set, migrationsFolder: folder, journal: readJournal(set.migrationsFolder) };
+    });
+    const migrateTo = async (included: (when: number) => boolean, existing: Set<string>) => {
+      for (const set of staged) {
+        writeFileSync(
+          join(set.migrationsFolder, "meta", "_journal.json"),
+          JSON.stringify({
+            ...set.journal,
+            entries: set.journal.entries.filter((entry) => included(entry.when)),
+          }),
+        );
+      }
+      await applyMigrations(
+        venueDir,
+        staged.map((set) => optionsOf(set, existing)),
+      );
+    };
+    const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
+    await migrateTo((when) => when < target!.when, new Set());
+    let existing = await installPresentChangeFeed(venueDir, sources);
+    await migrateTo((when) => when < target!.when, existing);
+    existing = await installPresentChangeFeed(venueDir, sources);
+    const bookkeeping = new Set(staged.map((set) => set.migrationsTable));
+    carryRows(venueDir, `before ${KITCHEN_STEP.tag}`, new Map(), bookkeeping);
+
+    const coreTable = staged.find((set) => set.name === KITCHEN_STEP.set)!.migrationsTable;
+    const applied = () => {
+      const connection = openRaw(venueDir);
+      try {
+        return Number(connection.prepare(`select count(*) as n from ${ident(coreTable)}`).get()?.n);
+      } finally {
+        connection.close();
+      }
+    };
+    const appliedBefore = applied();
+    const kitchenBefore = kitchenRows(venueDir);
+    await migrateTo((when) => when <= target!.when, existing);
+    expect(applied(), `${KITCHEN_STEP.tag} was applied`).toBe(appliedBefore + 1);
+    expect(kitchenRows(venueDir), `${KITCHEN_STEP.tag}: parent and child row values`).toEqual(
+      kitchenBefore,
+    );
+  });
+
   it(
-    "applies every shipped migration on top of the change feed the step before installed",
+    "applies every shipped migration from the epoch on top of the change feed the step before installed",
     async () => {
       const watch = createStepWatch();
       const wallStartedAt = performance.now();
       const cpuStartedAt = process.threadCpuUsage();
-      const held = await reportStallAfter(
+      let comparedKitchenRows = false;
+      const { held, venueDir } = await reportStallAfter(
         watch,
         { workMs: WORK_BUDGET_MS, idleMs: NO_PROGRESS_LIMIT_MS },
-        () => upgradeOneStepAtATime(watch),
+        () =>
+          walkUpgrade({
+            sets,
+            epoch,
+            resets: RESETS,
+            sources: ALL_MODULES.flatMap((module) => module.changes ?? []),
+            watch,
+            aroundRepeat: async (dir, repeat) => {
+              const kitchenBefore = kitchenRows(dir);
+              await repeat();
+              expect(kitchenRows(dir), "epoch repeat: parent and child row values").toEqual(
+                kitchenBefore,
+              );
+              comparedKitchenRows = true;
+            },
+          }),
       );
       const cpu = process.threadCpuUsage(cpuStartedAt);
       const cpuMs = Math.round((cpu.user + cpu.system) / 1000);
       const wallMs = Math.round(performance.now() - wallStartedAt);
+      expect(comparedKitchenRows, "the epoch repeat compared course and station rows").toBe(true);
       // The control: a fill that wrote nothing would pass every row-count comparison.
       expect([...held].filter(([, rows]) => rows === 0).map(([table]) => table)).toEqual([]);
-      const unreached = (list: object, seen: Set<string>) =>
-        Object.keys(list).filter((entry) => !seen.has(entry));
-      expect({
-        RESETS: unreached(RESETS, reached.resets),
-        CANDIDATES: unreached(CANDIDATES, reached.candidates),
-        ONE_ROW: unreached(ONE_ROW, reached.oneRow),
-      }).toEqual({ RESETS: [], CANDIDATES: [], ONE_ROW: [] });
+      const connection = openRaw(venueDir);
+      try {
+        const names = connection
+          .prepare(
+            "select name from sqlite_master where type = 'trigger' and name like 'products_%'",
+          )
+          .all()
+          .map((row) => String(row.name));
+        expect(names).toEqual(expect.arrayContaining(PRODUCT_TRIGGERS));
+      } finally {
+        connection.close();
+      }
       console.log(
         `${watch.summary(5)}\n${held.size} tables hold rows after the last step.\n` +
           `${cuts.length + 1} steps: ${cpuMs} ms of processor time against a ${WORK_BUDGET_MS} ms work budget, ` +
@@ -213,384 +797,20 @@ describe("upgrading a venue one migration at a time", () => {
     },
     TEST_BOUND_MS,
   );
+
+  // Last, and after the frozen-history case: some entries are for tables only that case fills.
+  it("reached every CANDIDATES and ONE_ROW entry in this file's fills", () => {
+    const unreached = (list: object, seen: Set<string>) =>
+      Object.keys(list).filter((entry) => !seen.has(entry));
+    expect({
+      CANDIDATES: unreached(CANDIDATES, reached.candidates),
+      ONE_ROW: unreached(ONE_ROW, reached.oneRow),
+    }).toEqual({ CANDIDATES: [], ONE_ROW: [] });
+  });
 });
 
-async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) {
-  const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
-
-  const root = mkdtempSync(join(SCRATCH_PARENT, "wt-migration-upgrade-"));
-  scratch.push(root);
-  const staged = join(root, "migrations");
-  const venueDir = join(root, "venue");
-  for (const set of sets) {
-    const from = resolveMigrationsFolder(set, null);
-    cpSync(from, join(staged, set.name), { recursive: true });
-  }
-
-  expect(floorEntry).toBeDefined();
-  expect(cuts.length).toBeGreaterThan(1);
-
-  const bookkeeping = new Set(migrationOptionsFor(sets, staged).map((set) => set.migrationsTable));
-  let held = new Map<string, number>();
-  let existing = new Set<string>();
-  let comparedKitchenRows = false;
-  for (const cut of [floor, ...cuts]) {
-    const tags = [...journals]
-      .flatMap(([name, journal]) =>
-        journal.entries
-          .filter((entry) => entry.when === cut)
-          .map((entry) => `${name}/${entry.tag}`),
-      )
-      .join(", ");
-    const label = cut === floor ? `baselines to ${FLOOR.set}/${FLOOR.tag}` : tags;
-    // Only tables the step before already had: a set's declared list is today's, and some of its
-    // tables are created by later migrations.
-    const options = migrationOptionsFor(sets, staged).map((set) => ({
-      ...set,
-      appendOnlyTables: (set.appendOnlyTables ?? []).filter((table) => existing.has(table)),
-    }));
-    for (const [name, journal] of journals) {
-      const entries = journal.entries.filter((entry) => entry.idx === 0 || entry.when <= cut);
-      writeFileSync(
-        join(staged, name, "meta", "_journal.json"),
-        JSON.stringify({ ...journal, entries }),
-      );
-    }
-    const step = async () => {
-      const nameIndexUpgrade = label === "core/0135_course_station_delete";
-      const kitchenBefore = nameIndexUpgrade ? kitchenRows(venueDir) : undefined;
-      await watch.phase(`${label}: migrate`, () => applyMigrations(venueDir, options));
-      if (kitchenBefore !== undefined) {
-        comparedKitchenRows = true;
-        expect(kitchenRows(venueDir), `${label}: parent and child row values`).toEqual(
-          kitchenBefore,
-        );
-        console.log(
-          `${label}: kept row values in ${kitchenBefore.map(([table, rows]) => `${table} (${rows.length})`).join(", ")}`,
-        );
-      }
-      const store = await watch.phase(`${label}: open`, () => openVenueDatabase(venueDir));
-      try {
-        const present = sources.filter((source) => {
-          const columns = new Set(
-            store.venue
-              .all<{ name: string }>(`select name from pragma_table_info('${source.table}')`)
-              .map((column) => column.name),
-          );
-          return columns.size > 0 && (source.related ?? []).every((rel) => columns.has(rel.column));
-        });
-        // The next migration meets the completed feed; its individual DDL commits are not a step.
-        await watch.phase(`${label}: change feed`, () =>
-          store.venue.withWriteLock(() => installChangeFeed(store.venue, present)),
-        );
-        existing = new Set(
-          store.venue
-            .all<{ name: string }>(`select name from sqlite_master where type = 'table'`)
-            .map((table) => table.name),
-        );
-      } finally {
-        await watch.phase(`${label}: close`, () => store.close());
-      }
-      held = await watch.phase(`${label}: rows`, () =>
-        carryRows(venueDir, label, held, bookkeeping),
-      );
-    };
-
-    const resets = tags.split(", ").filter((tag) => tag in RESETS);
-    for (const entry of resets) reached.resets.add(entry);
-    if (resets.length > 1) {
-      throw new Error(
-        `Step ${label} matches ${resets.length} RESETS entries (${resets.join(", ")}); ` +
-          "a step is checked against one entry, so merge them into one",
-      );
-    }
-    const [reset] = resets;
-    if (reset === undefined) {
-      await step();
-      continue;
-    }
-    const failure = await step().then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    const mismatch = resetMismatch(RESETS[reset], failure);
-    if (mismatch !== undefined) {
-      throw new Error(
-        `Step ${label} is listed in RESETS as ${JSON.stringify(RESETS[reset])}, but ${mismatch}`,
-        { cause: failure },
-      );
-    }
-    rmSync(venueDir, { recursive: true, force: true });
-    held = new Map();
-    await step();
-  }
-  expect(comparedKitchenRows, "course/station name-index upgrade was reached").toBe(true);
-  const connection = openRaw(venueDir);
-  try {
-    const names = connection
-      .prepare("select name from sqlite_master where type = 'trigger' and name like 'products_%'")
-      .all()
-      .map((row) => String(row.name));
-    expect(names).toEqual(
-      expect.arrayContaining([
-        "products_variant_one_level_insert",
-        "products_variant_parent_fixed_update",
-        "products_id_fixed_update",
-        "products_ordering_check_insert",
-        "products_ordering_check_update",
-        "products_media_image_fk_insert",
-        "products_media_image_fk_update",
-        "products_media_image_fk_parent_delete",
-        "products_media_image_fk_parent_rename",
-      ]),
-    );
-  } finally {
-    connection.close();
-  }
-  return held;
-}
-
-/**
- * Shipped steps that cannot carry these rows, each with the failure it must still show: the parts
- * of a refusal's message, or exactly the tables whose rows the step loses, so a loss beside the
- * listed ones fails the guard. Before go-live a schema change may need a venue reset (CLAUDE.md
- * §3), so at a listed step the guard checks the failure, then migrates an empty database to the
- * same point and fills it again. A listed step that carries the rows, a step two keys name, or a
- * key naming no step the walk takes, fails the guard.
- */
-const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
-  // Reasons change shape; every venue needs a reset (A758).
-  "adjustments/0005_lucky_chamber": {
-    refused: ["NOT NULL constraint failed: __new_adjustment_reasons.kind"],
-  },
-  // Rebuilds floor_plan_tables, which live tables point at; every venue needs a reset (A504).
-  "core/0169_floor_tables_keep_no_place": {
-    refused: ["NOT NULL constraint failed: __new_floor_plan_tables.zone_id"],
-  },
-  "catalogue/0035_unit_staff_identity": {
-    refused: [
-      "ALTER TABLE `units` ADD `staff_name` text NOT NULL",
-      "Cannot add a NOT NULL column with default value NULL",
-    ],
-  },
-  "core/0160_retire_canvases": {
-    refused: ["DROP TABLE `device_profiles`", "FOREIGN KEY constraint failed"],
-  },
-  // Requires a venue reset: null zones fail the copy; a retained today's row refuses DROP.
-  "core/0138_floor_retire_old_table_columns": {
-    refused: ["NOT NULL constraint failed: __new_dining_tables.zone_id"],
-  },
-  "venue-service/0038_clammy_klaw": {
-    lost: ["special_date_hours", "special_date_hours_periods", "zone_closed_times"],
-  },
-  "venue-service/0045_retire_service_style": {
-    refused: ["DROP TABLE `departments`", "FOREIGN KEY constraint failed"],
-  },
-  "venue-service/0033_aromatic_slapstick": {
-    refused: ["DROP TABLE `department_menus`", "FOREIGN KEY constraint failed"],
-  },
-  "core/0109_retire_printing_rules_policy": {
-    refused: ["DROP TABLE `locations`", "FOREIGN KEY constraint failed"],
-  },
-  "venue-service/0020_retire_invoice_first": {
-    refused: ["DROP TABLE `departments`", "FOREIGN KEY constraint failed"],
-  },
-  // The walk printed this step's DROP TABLE of zone_service_policies refused by a foreign key.
-  "venue-service/0027_retire_zone_menus": {
-    refused: ["DROP TABLE `zone_service_policies`", "FOREIGN KEY constraint failed"],
-  },
-  "core/0106_retire_location_order_flow": {
-    refused: ["DROP TABLE `locations`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `menu_items`; dropping the old one is refused while a non-cascading child holds rows.
-  "catalogue/0003_menu_price_nullable": {
-    refused: ["DROP TABLE `menu_items`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `mirror_config` with `node_id` required; a copied row's `node_id` is null.
-  "core/0008_node_keyed_rows": {
-    refused: ["NOT NULL constraint failed: __new_mirror_config.node_id"],
-  },
-  // Rebuilds `management_sessions` with `token_hash` required; a copied row's is null.
-  "identity/0003_session_token_hash_required": {
-    refused: ["NOT NULL constraint failed: __new_management_sessions.token_hash"],
-  },
-  // Rebuilds `menu_items` again, as `catalogue/0003` does.
-  "catalogue/0008_menu_details": {
-    refused: ["DROP TABLE `menu_items`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `drawer_opens` without copying its rows.
-  "core/0012_printer_calibration": { lost: ["drawer_opens"] },
-  // Drops every passkey challenge, so the next step can add the required `purpose`.
-  "identity/0008_webauthn_challenges_clear": { lost: ["webauthn_challenges"] },
-  // 0009 and 0010 are refused only for a challenge written after 0008 emptied the table. The three
-  // shipped in one change, so a venue's upgrade runs them back to back.
-  "identity/0009_webauthn_challenge_purpose": {
-    refused: ["ALTER TABLE `webauthn_challenges` ADD `purpose`", "Cannot add a NOT NULL column"],
-  },
-  "identity/0010_webauthn_challenge_purpose_check": {
-    refused: ["CHECK constraint failed: webauthn_challenges_purpose_ck"],
-  },
-  // Rebuilds `working_order_lines` with `vat_class` required; a copied row's is null.
-  "core/0026_line_vat_class": {
-    refused: ["NOT NULL constraint failed: __new_working_order_lines.vat_class"],
-  },
-  // Rebuilds `dining_tables`, refused as `menu_items` is; #897 says every venue needs a reset.
-  "core/0044_drop_table_bill_pointer": {
-    refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `parties` without `main_bill_id`; every venue that has seated a party needs a reset
-  // (A803 slice 3).
-  "core/0202_retire_main_bill": {
-    refused: ["DROP TABLE `parties`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `dining_tables` without `status_id`; every venue needs a reset (A757 slice 2).
-  "core/0181_retire_table_service_statuses": {
-    refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `printers`; dropping the old one is refused while a non-cascading child holds rows.
-  "core/0055_drop_printer_character_set": {
-    refused: ["DROP TABLE `printers`", "FOREIGN KEY constraint failed"],
-  },
-  // The product rebuild refuses a non-cascading child after the category rebuild carried its rows.
-  "core/0060_drop_routing_station_columns": {
-    refused: ["DROP TABLE `products`", "FOREIGN KEY constraint failed"],
-  },
-  // A line's self-reference refuses this first rebuild; sale_lines can refuse at its later rebuild.
-  "core/0092_positive_price_quantity": {
-    refused: ["DROP TABLE `working_order_lines`", "FOREIGN KEY constraint failed"],
-  },
-  "core/0095_operator_script_source": {
-    refused: ["DROP TABLE `working_orders`", "FOREIGN KEY constraint failed"],
-  },
-  "core/0096_operator_script_restore_incident_index": {
-    refused: ["UNIQUE constraint failed: index 'incidents_open_dedup'"],
-  },
-  "core/0103_full_invoice_model": {
-    refused: ["DROP TABLE `invoice_series`", "FOREIGN KEY constraint failed"],
-  },
-  "catalogue/0018_sections_owned_prepare": {
-    refused: ["DELETE FROM sections WHERE role = 'library'", "FOREIGN KEY constraint failed"],
-  },
-  "catalogue/0020_sections_owned": {
-    refused: ["NOT NULL constraint failed: __new_sections.owner_menu_id"],
-  },
-  "catalogue/0021_sections_owned_restore": {
-    refused: ["NOT NULL constraint failed: section_members.id"],
-  },
-  // Adds `sessions.device_id` as required with no default; a held row has no device to name.
-  "identity/0005_session_device_add": {
-    refused: ["ALTER TABLE `sessions` ADD `device_id`", "Cannot add a NOT NULL column"],
-  },
-  // Adds `incidents.source` as required with no default; a held row has no source to name.
-  "core/0077_incident_origin_add": {
-    refused: ["ALTER TABLE `incidents` ADD `source`", "Cannot add a NOT NULL column"],
-  },
-  // Rebuilds `incidents` with the source list's check; a carried row's source is not on the list.
-  "core/0078_incident_origin_drop_till": {
-    refused: ["CHECK constraint failed: incidents_source_ck"],
-  },
-  // Restores the open-alert index after the rebuild; the rows carried while it was absent collide.
-  "core/0079_incident_origin_dedup": {
-    refused: ["UNIQUE constraint failed: index 'incidents_open_dedup'"],
-  },
-  // Rebuilds the money records without `till_id`, with `source` required; a carried row has none.
-  "core/0081_money_records_lose_till": {
-    refused: ["NOT NULL constraint failed: __new_bill_payment_refunds.source"],
-  },
-  // Rebuilds `registros_facturacion` the same way.
-  "fiscal-verifactu/0002_registro_lose_till": {
-    refused: ["NOT NULL constraint failed: __new_registros_facturacion.source"],
-  },
-  "fiscal-verifactu/0003_operator_script_source": {
-    refused: ["DROP TABLE `registros_facturacion`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `payments` with `source` required; a carried row has none.
-  "payments/0004_payment_origin_required": {
-    refused: ["NOT NULL constraint failed: __new_payments.source"],
-  },
-  "payments/0005_operator_script_source": {
-    refused: ["DROP TABLE `payments`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds the working-time tables without a location; a venue holding working time is refused
-  // and needs a reset.
-  "workforce/0013_working_time_per_venue": {
-    refused: ["DROP TABLE `attendance_questions`", "FOREIGN KEY constraint failed"],
-  },
-  "workforce/0005_a10_record_constraints": {
-    refused: ["DROP TABLE `time_entries`", "FOREIGN KEY constraint failed"],
-  },
-  "workforce/0003_operator_script_source": {
-    refused: ["DROP TABLE `time_entries`", "FOREIGN KEY constraint failed"],
-  },
-  // Adds `working_orders.source` as required with no default; a held row has no source to name.
-  "core/0084_working_orders_add_origin": {
-    refused: ["ALTER TABLE `working_orders` ADD `source`", "Cannot add a NOT NULL column"],
-  },
-  // Rebuilds `working_orders` with the source list's check; a carried row's source is not on it.
-  "core/0085_working_orders_drop_till": {
-    refused: ["CHECK constraint failed: working_orders_source_ck"],
-  },
-  // Adds `order_amendments.captured_by_source` as required with no default; a held row has none.
-  "core/0087_history_origin_add": {
-    refused: [
-      "ALTER TABLE `order_amendments` ADD `captured_by_source`",
-      "Cannot add a NOT NULL column",
-    ],
-  },
-  // Adds `time_entries.captured_by_source` the same way.
-  "workforce/0001_time_entries_origin_add": {
-    refused: [
-      "ALTER TABLE `time_entries` ADD `captured_by_source`",
-      "Cannot add a NOT NULL column",
-    ],
-  },
-  // Rebuilds `order_amendments` and `drawer_opens` without the till; a carried amendment's source
-  // is not on the list.
-  "core/0088_history_origin_drop_till": {
-    refused: ["CHECK constraint failed: order_amendments_captured_by_source_ck"],
-  },
-  // Rebuilds `time_entries` the same way.
-  "workforce/0002_time_entries_origin_drop_till": {
-    refused: ["CHECK constraint failed: time_entries_captured_by_source_ck"],
-  },
-  // Drops `tills`, refused while a device names one, then rebuilds `devices` without `till_id`.
-  "core/0090_devices_lose_till": {
-    refused: ["DROP TABLE `tills`", "FOREIGN KEY constraint failed"],
-  },
-  // Drops `watcher_item_marks`, then rebuilds `devices` without `station_id` and `watcher_id`,
-  // refused while a `restrict` or `no action` child names a device.
-  "core/0123_devices_lose_binding": {
-    refused: ["DROP TABLE `devices`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `menu_periods` to widen its colour CHECK; the DROP empties its cascading children, and
-  // is refused while a day range names a period (`department_day_ranges`, no action).
-  "venue-service/0057_black_shadow_king": {
-    lost: ["menu_period_staff_menus", "period_extensions", "routing_cell_periods"],
-  },
-  // Rebuilds `menu_periods` again to widen its colour CHECK; loses the same children.
-  "venue-service/0060_certain_the_fallen": {
-    lost: ["menu_period_staff_menus", "period_extensions", "routing_cell_periods"],
-  },
-  // Rebuilds `staff_roles` to widen its colour CHECK; dropping the old one is refused while a
-  // non-cascading child holds rows.
-  "staffing/0002_charming_black_widow": {
-    refused: ["DROP TABLE `staff_roles`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `staff_roles` again to widen its colour CHECK; refused the same way.
-  "staffing/0003_huge_william_stryker": {
-    refused: ["DROP TABLE `staff_roles`", "FOREIGN KEY constraint failed"],
-  },
-  // Rebuilds `menu_item_variant_overrides` with a price required; a copied row's price is null.
-  "catalogue/0024_drop_menu_offered": {
-    refused: [
-      "INSERT INTO `__new_menu_item_variant_overrides`",
-      "CHECK constraint failed: menu_item_variant_overrides_overrides_ck",
-    ],
-  },
-};
-
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */
-function resetMismatch(expected: (typeof RESETS)[string], failure: unknown): string | undefined {
+function resetMismatch(expected: ResetExpectation, failure: unknown): string | undefined {
   if (failure === undefined) return "it carried the rows";
   if ("refused" in expected) {
     const message = messagesOf(failure);
@@ -653,7 +873,6 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   "sales.total": [0n],
   // The CHECK wants a bare `YYYY-MM-DD`, a shape none of the generic text values has.
   "special_dates.date": ["2026-01-01", "2026-01-02"],
-  "local_holidays.date": ["2026-01-01", "2026-01-02"],
   "special_day_dates.date": ["2026-01-01", "2026-01-02"],
   // Its CHECK wants a bare `MM-DD` that is not `02-29`.
   "seasons.starts_on": ["03-01", "06-01"],
@@ -668,12 +887,11 @@ const ONE_ROW: Record<string, string> = {
 };
 
 /**
- * The entries of {@link RESETS}, {@link CANDIDATES} and {@link ONE_ROW} the walk reached; one it
- * never reached fails the guard. Reaching a CANDIDATES or ONE_ROW entry shows only that the walk
+ * The entries of {@link CANDIDATES} and {@link ONE_ROW} the walk reached; one it never reached
+ * fails the guard. Reaching a CANDIDATES or ONE_ROW entry shows only that the walk
  * met its column or table, not that the entry is still needed.
  */
 const reached = {
-  resets: new Set<string>(),
   candidates: new Set<string>(),
   oneRow: new Set<string>(),
 };
