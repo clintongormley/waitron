@@ -399,7 +399,8 @@ export const en = {
   "cloud.remote_on": "On in Settings · connection not checked here",
   "cloud.remote_off": "Off in Settings · disconnection not checked here",
   "cloud.remote_help":
-    "Turning this off disconnects remote staff. Local use and your other Cloud services continue. Turning it on lets this box reconnect.",
+    "Turning this off disconnects remote staff, including you if you use the staff address. Keep the local address available to turn it on again. Local use and your other Cloud services continue.",
+  "cloud.remote_stop": "Stop",
   "cloud.remote_turn_on": "Turn on remote access",
   "cloud.remote_turn_off": "Turn off remote access",
   "cloud.expires": "Code expires",
@@ -4196,7 +4197,8 @@ export const es: Record<StringKey, string> = {
   "cloud.remote_on": "Activado en Ajustes · conexión sin comprobar aquí",
   "cloud.remote_off": "Desactivado en Ajustes · desconexión sin comprobar aquí",
   "cloud.remote_help":
-    "Desactivarlo desconecta al personal remoto. El uso local y los demás servicios de Cloud continúan. Activarlo permite que este equipo vuelva a conectarse.",
+    "Desactivarlo desconecta al personal remoto, incluido tú si usas la dirección del personal. Ten a mano la dirección local para volver a activarlo. El uso local y los demás servicios de Cloud continúan.",
+  "cloud.remote_stop": "Detener",
   "cloud.remote_turn_on": "Activar el acceso remoto",
   "cloud.remote_turn_off": "Desactivar el acceso remoto",
   "cloud.expires": "El código caduca",

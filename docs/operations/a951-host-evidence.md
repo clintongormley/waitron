@@ -90,6 +90,32 @@ public certificate renewal, wrong-venue refusal, revocation, offline sale and th
 cross-venue and LAN checks are still open. The earlier managed demo remains the owner's
 persistent try-out. Nothing landed during the A760 freeze.
 
+## Settings review repairs, 7 November 2026
+
+The private Settings build now re-reads its saved choice after a failed action while retaining
+that action's refusal. With a writable connection file, a failed peer write while turning on
+saves the choice off again; a failed removal keeps off saved. A pending Cloud stop refuses a
+turn-on. A saved off choice also replaces an old healthy service-row observation on the screen.
+
+On the staff address, turning off opens the existing dialog with **Stop**, **Turn off remote
+access** and a warning that turning it on again needs the local address. The local-address
+switch stays direct. The Cloud API reports the actual staff-request context for that display
+choice; it does not replace the route's permission and origin checks.
+
+The single Claude review took 611 seconds. The watcher approved retaining the choice before
+allocation and required the remote-only dialog at 07:29. Local checks passed 140 focused server
+cases, including the guide checks, and 63 Cloud-screen cases. Fourteen one-time alterations
+failed assertions; restored cases passed. Both apps typechecked. Eight ordinary and eight dialog
+English/Spanish, light/dark, phone/desktop captures were inspected; accessibility checks passed.
+No capture or one-time probe was committed. The one-time replacement probe confirmed that a new
+box does not inherit the old box's local off choice.
+
+You can find the report, triage, failing and passing runs, controls and captures in Lane E's local
+`receipts/a951s-managed-20261107/`. These repairs have not had a new managed/public run. The
+preceding bounded run tested `8a346293a1`; Lane K held the box when the later turn was checked.
+The earlier public demo remains unchanged. Combined CI, publication, retirement of the legacy
+tunnel and the unrun finish-line checks above remain open. Nothing landed during the freeze.
+
 # Current addendum: returned Debian box, 5 November 2026
 
 > 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol

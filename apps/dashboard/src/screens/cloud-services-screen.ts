@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-dialog.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { centsToDecimal, formatMoney } from "@waitron/shared";
 import type { CloudBilling, CloudConnectionStatus, DashboardApi } from "../api/client.js";
@@ -71,6 +72,7 @@ export class CloudServicesScreen extends LitElement {
   @state() private error: string | undefined;
   @state() private requestUnavailable = false;
   @state() private confirmingStop = false;
+  @state() private confirmingRemoteOff = false;
   #generation = 0;
   #clock: ReturnType<typeof setTimeout> | undefined;
   /** The status read's own failure, kept apart from `error` so its recovery never clears an action's. */
@@ -101,6 +103,7 @@ export class CloudServicesScreen extends LitElement {
     super.connectedCallback();
     this.busy = false;
     this.confirmingStop = false;
+    this.confirmingRemoteOff = false;
     const generation = this.#generation;
     const query = dashboardQuery(this.api, "getCloudStatus", []);
     void this.#queries
@@ -157,7 +160,7 @@ export class CloudServicesScreen extends LitElement {
     if (this.isConnected && this.status?.state === "complete")
       this.#clock = setTimeout(() => this.requestUpdate(), 1000);
   }
-  async #run(request: () => Promise<CloudConnectionStatus>) {
+  async #run(request: () => Promise<CloudConnectionStatus>, readAfterFailure = false) {
     if (this.busy) return;
     this.busy = true;
     this.error = undefined;
@@ -175,6 +178,13 @@ export class CloudServicesScreen extends LitElement {
       if (generation === this.#generation) {
         this.error = codeOf(error);
         if (this.error === "cloud.request_unavailable") this.requestUnavailable = true;
+        if (readAfterFailure) {
+          const status = await this.api.getCloudStatus().catch(() => undefined);
+          if (status && generation === this.#generation) {
+            this.#actionResults++;
+            this.status = status;
+          }
+        }
       }
     } finally {
       if (generation === this.#generation) {
@@ -302,8 +312,12 @@ export class CloudServicesScreen extends LitElement {
           (service) =>
             html`<dt>${t(names[service.service])}</dt>
               <dd>
-                ${t(`cloud.state_${service.state}`)} ·
-                ${t(`cloud.health_${installation?.state === "revoked" || !service.observedAt || Date.parse(service.observedAt) <= Date.now() - 300000 ? "unknown" : service.health}`)}
+                ${
+                  service.service === "remote_access" && s.remoteAccessEnabled === false
+                    ? t("cloud.remote_off")
+                    : html`${t(`cloud.state_${service.state}`)} ·
+                      ${t(`cloud.health_${installation?.state === "revoked" || !service.observedAt || Date.parse(service.observedAt) <= Date.now() - 300000 ? "unknown" : service.health}`)}`
+                }
               </dd>`,
         )}
       </dl>
@@ -322,12 +336,46 @@ export class CloudServicesScreen extends LitElement {
                       variant="primary"
                       .disabled=${this.busy}
                       @click=${() => {
-                        void this.#run(() => this.api.setCloudRemoteAccess(!s.remoteAccessEnabled));
+                        if (s.isRemote && s.remoteAccessEnabled) this.confirmingRemoteOff = true;
+                        else
+                          void this.#run(
+                            () => this.api.setCloudRemoteAccess(!s.remoteAccessEnabled),
+                            true,
+                          );
                       }}
                       >${t(s.remoteAccessEnabled ? "cloud.remote_turn_off" : "cloud.remote_turn_on")}</wt-button
                     >`
                   : nothing
               }
+              <wt-dialog
+                id="remote-off-dialog"
+                .open=${this.confirmingRemoteOff}
+                heading=${t("cloud.remote_turn_off")}
+                @wt-close=${(event: Event) => {
+                  event.stopPropagation();
+                  this.confirmingRemoteOff = false;
+                }}
+              >
+                <p>${t("cloud.remote_help")}</p>
+                <wt-button
+                  slot="footer"
+                  id="remote-off-stop"
+                  @click=${() => {
+                    this.confirmingRemoteOff = false;
+                  }}
+                  >${t("cloud.remote_stop")}</wt-button
+                >
+                <wt-button
+                  slot="footer"
+                  id="remote-off-confirm"
+                  variant="primary"
+                  @click=${() => {
+                    this.confirmingRemoteOff = false;
+                    void this.#run(() => this.api.setCloudRemoteAccess(false), true);
+                  }}
+                  >${t("cloud.remote_turn_off")}</wt-button
+                >
+              </wt-dialog>
             </section>`
           : nothing
       }
