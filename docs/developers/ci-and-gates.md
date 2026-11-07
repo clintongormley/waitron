@@ -169,7 +169,7 @@ no image input. Verified equal-tree PR CI can still supply the main push's resul
 
 The job opens the built setup page in headless Chromium and presses Continue to
 setup. It expects the setup choices to appear and refuses browser exceptions or
-HTTP error responses. The three setup reads use fixed browser-intercepted answers;
+HTTP error responses observed before that transition completes. The three setup reads use fixed browser-intercepted answers;
 this checks the built page and its event handlers, not the server's setup routes.
 Dashboard and till are built but are not opened by this check. The existing
 credentials refusal and server-start smoke checks remain separate.
@@ -183,10 +183,6 @@ pnpm --filter @waitron/setup exec node test/bundle-smoke.mjs
 
 A successful check prints `Built setup bundle rendered and advanced to the setup choices.`
 Chromium must be installed for the setup package's Playwright version.
-
-On 2026-11-07 A1402 replaced the earlier gap recorded here: that job built only
-credentials and server, while front-end builds depended on an image build and
-none was opened. The image build keeps its own input gate.
 
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
 guards — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which

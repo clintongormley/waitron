@@ -587,11 +587,21 @@ jobs:
       # coverage, and typecheck/test both run against TypeScript source, never the bundle operators
       # actually run.
       - run: pnpm --filter @waitron/server build
-      - run: pnpm --filter @waitron/print-agent build
+      - run: pnpm --filter @waitron/print-agent-app build
       - run: pnpm --filter @waitron/provisioning build
       - run: pnpm --filter @waitron/dashboard build
       - run: pnpm --filter @waitron/setup build
       - run: pnpm --filter @waitron/till build
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/setup exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached Playwright browsers
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Install bundle-smoke Chromium
         timeout-minutes: 7

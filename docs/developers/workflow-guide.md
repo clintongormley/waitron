@@ -90,12 +90,12 @@ What still needs a person:
   (`content/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/manage-dependabot-prs.md`
   in github/docs, line 37, read 2026-09-27), so after such a push Dependabot no longer rebases it
   on its own.
-- **A green CI result does not prove the build.** An npm-only Dependabot PR does not touch
-  `deploy/`, so CI builds no front-end bundle (CLAUDE.md §2); any Dependabot PR that bumps a
-  bundler or compiler (vite, esbuild, typescript) needs a local build with the root `build` script,
-  its output compared with `main`'s, before landing — why CI does not do it:
-  [ci-and-gates.md](ci-and-gates.md) → *What `bundle-smoke` does NOT cover: the three front-end
-  bundles*.
+- **A green build does not compare its output with the previous version.** The code-gated
+  `bundle-smoke` job builds the three front-ends and opens setup with intercepted reads, including
+  on npm-only Dependabot PRs. It does not open dashboard or till or compare any output with `main`.
+  For a bundler or compiler upgrade (vite, esbuild, typescript), run the root `build` script locally
+  and compare its output with `main` before landing.
+  [What the CI check covers](ci-and-gates.md#built-applications-in-bundle-smoke).
 - **A bundled package with no licence file of its own fails every bundle build that includes it,
   Node or front-end, once it moves to a version with no fallback.**
   `scripts/npm-bundle-notices.mjs` looks in `deploy/third-party/npm-fallback/` for a file named
@@ -554,6 +554,10 @@ These excerpts retain the supporting detail and full guard limits from `CLAUDE.m
 They are source excerpts, not new experiments or changes to the rules.
 
 ### Treat a Dependabot pull request like any other: an npm-only one's green CI builds no front-end, and a guard that pins a version number fails its bump.
+
+Updated 2026-11-07 by A1402: the front-end build gap in this historical excerpt is closed.
+Use the current [Dependabot guidance](#dependabot-pull-requests) above; CI builds all three
+front-ends and opens setup, while output comparisons and dashboard/till rendering remain outside it.
 
 **Treat a Dependabot pull request like any other: an npm-only one's green CI builds no front-end,
 and a guard that pins a version number fails its bump.** A bot gets no exemption from the strict
