@@ -305,12 +305,14 @@ export async function appendPendingAlta(
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }
 
-/** A pending cancellation of `originalId`, appended to the original's own chain at `secuencia`. */
+/** A pending cancellation of `originalId`, appended to the original's own chain at `secuencia`.
+ * `sinRegistroPrevio: "S"` makes it the absent-original cancellation. */
 export async function appendCancellation(
   db: Database,
   seeded: SeededDrain,
   originalId: string,
   secuencia: number,
+  options: { sinRegistroPrevio?: "S" } = {},
 ): Promise<string> {
   const records = await db.select().from(registrosFacturacion);
   const original = records.find((row) => row.id === originalId)!;
@@ -329,6 +331,44 @@ export async function appendCancellation(
     desglose: null,
     cuotaTotal: null,
     importeTotal: null,
+    primerRegistro: false,
+    sinRegistroPrevio: options.sinRegistroPrevio ?? null,
+    anteriorIdEmisorFactura: head.idEmisorFactura,
+    anteriorNumSerieFactura: head.numSerieFactura,
+    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
+    anteriorHuella: head.huella,
+    huella,
+  });
+  await db.execute(sql`
+    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
+    where node_id = ${seeded.nodeId}
+  `);
+  await db.insert(envios).values({ registroId: id, proximoIntentoEn: DUE_AT });
+  return id;
+}
+
+/** A pending correction (Subsanacion=S) of the alta `originalId`, appended to its own chain at
+ * `secuencia`: the same invoice, replacing that version. */
+export async function appendCorrection(
+  db: Database,
+  seeded: SeededDrain,
+  originalId: string,
+  secuencia: number,
+): Promise<string> {
+  const records = await db.select().from(registrosFacturacion);
+  const original = records.find((row) => row.id === originalId)!;
+  const head = records
+    .filter((row) => row.sifId === original.sifId)
+    .sort((a, b) => b.secuencia - a.secuencia)[0]!;
+  const id = newId();
+  const huella = "D".repeat(63) + String(secuencia % 10);
+  await db.insert(registrosFacturacion).values({
+    ...original,
+    id,
+    secuencia,
+    correctsRegistroId: originalId,
+    subsanacion: "S",
+    rechazoPrevio: "X",
     primerRegistro: false,
     anteriorIdEmisorFactura: head.idEmisorFactura,
     anteriorNumSerieFactura: head.numSerieFactura,

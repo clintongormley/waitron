@@ -38,7 +38,7 @@ export async function admitRecordRemedy(
   return authorizedBy;
 }
 
-/** True when a record on `recordNodeId` is this box's own, or one of a box it took over from. */
+/** True when a record on `recordNodeId` is this box's own, or one of a box in its takeover history. */
 export async function isInHistory(
   tx: Transaction,
   nodeId: NodeId,

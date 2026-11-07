@@ -11,6 +11,7 @@ import {
   consultaNames,
   appendCancellation,
   appendCancellationOnChain,
+  appendCorrection,
   appendPendingAlta,
   collideAtAeat,
   seedIndependentChain,
@@ -1027,11 +1028,15 @@ describe("drain — a cancellation on another chain", () => {
   });
 });
 
-describe("heldRecords — a cancellation on another chain", () => {
-  it("a halted cancellation on another chain joins its original's case", async () => {
-    // Reached through the drain alone: an absent-original cancellation (SinRegistroPrevio=S) is
-    // never set aside, so it is claimed once its original is refused, and a run of refusals on
-    // its own chain holds it. That chain's id sorts before the original's.
+describe("heldRecords — a cancellation held by a run of refusals", () => {
+  const THIRD = new Date("2026-07-21T00:02:00Z");
+  const caseOf = async (registroId: string) =>
+    (await cases()).find((c) => c.registroId === registroId)!.id;
+
+  it("a halted cancellation on another chain names the run that holds it", async () => {
+    // An absent-original cancellation (SinRegistroPrevio=S) is never set aside, so it is claimed
+    // once its original is refused, and a run of refusals on its own chain holds it. That chain's
+    // id sorts before the original's.
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const other = await seedPinnedChain(suite.db, seeded, {
@@ -1058,9 +1063,56 @@ describe("heldRecords — a cancellation on another chain", () => {
     await drain(deps(aeat.client()), SECOND);
 
     expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
-    const originalCase = (await cases()).find((c) => c.registroId === original.registroId)!;
     expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
-      { registroId: cancellation, caseId: originalCase.id },
+      { registroId: cancellation, caseId: await caseOf(other.registroIds[2]!) },
+    ]);
+  });
+
+  it("an absent-original cancellation held by a run on its original's chain names the run", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 4 });
+    const [original, , , lastRefusal] = seeded.registroIds as [string, string, string, string];
+    for (const key of seeded.facturaKeys) aeat.reject(key, 1100, "Campo obligatorio ausente");
+    await drain(deps(aeat.client()), FIRST);
+    expect(await envioOf(lastRefusal)).toMatchObject({ estado: "rechazado" });
+    const cancellation = await appendCancellation(suite.db, seeded, original, 5, {
+      sinRegistroPrevio: "S",
+    });
+
+    await drain(deps(aeat.client()), SECOND);
+
+    expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
+      { registroId: cancellation, caseId: await caseOf(lastRefusal) },
+    ]);
+  });
+
+  it("a cancellation whose original was replaced by an accepted correction names the run", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [original] = seeded.registroIds as [string];
+    aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente");
+    await drain(deps(aeat.client()), FIRST);
+    expect(await envioOf(original)).toMatchObject({ estado: "rechazado" });
+    const correction = await appendCorrection(suite.db, seeded, original, 2);
+    await suite.db.execute(
+      sql`update envios set estado = 'aceptado' where registro_id = ${correction}`,
+    );
+    const refusals = [];
+    for (const secuencia of [3, 4, 5]) {
+      const refusal = await appendPendingAlta(suite.db, seeded, secuencia);
+      aeat.reject(refusal.facturaKey, 1100, "Campo obligatorio ausente");
+      refusals.push(refusal.registroId);
+    }
+    await drain(deps(aeat.client()), SECOND);
+    expect(await envioOf(refusals[2]!)).toMatchObject({ estado: "rechazado" });
+    const cancellation = await appendCancellation(suite.db, seeded, original, 6);
+
+    await drain(deps(aeat.client()), THIRD);
+
+    expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
+      { registroId: cancellation, caseId: await caseOf(refusals[2]!) },
     ]);
   });
 });

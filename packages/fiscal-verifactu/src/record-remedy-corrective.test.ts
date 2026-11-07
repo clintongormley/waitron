@@ -623,7 +623,21 @@ it("a refused record of the box this one took over from can be remedied here", a
     .select()
     .from(registrosFacturacion)
     .where(eq(registrosFacturacion.id, result.registroId));
-  expect(appended).toMatchObject({ nodeId: successor.nodeId, sifId: successor.sifId });
+  expect(appended).toMatchObject({
+    nodeId: successor.nodeId,
+    sifId: successor.sifId,
+    facturasRectificadas: {
+      IDFacturaRectificada: [
+        {
+          IDEmisorFactura: before.records[0]!.idEmisorFactura,
+          NumSerieFactura: before.records[0]!.numSerieFactura,
+          FechaExpedicionFactura: "01-03-2026",
+        },
+      ],
+    },
+  });
+  const [correctiveSale] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
+  expect(correctiveSale).toMatchObject({ correctsSaleId: before.sales[0]!.id });
   expect((await snapshot()).head).toEqual(before.head);
 });
 
