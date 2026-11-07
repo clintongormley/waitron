@@ -114,6 +114,12 @@ catch a return to the host-derived issue clock in CI. Run it with
 `pnpm --filter @waitron/provisioning exec vitest run src/fiscal-readiness-runner.test.ts`.
 This verifies the synthetic readiness path, not AEAT's acceptance at a Spanish midnight.
 
+On 6 November, CI run `42311599907`, server shard 8, failed the handover simulation's first
+filing at 23:28 UTC. The same case failed on untouched main `59be31e3b7`; logging the fake's
+reply showed invoice date `07-11-2026` and refusal `1112`. The simulation now starts its shared
+`Date` clock at noon with `shouldAdvanceTime: true`, leaving real waits running and preserving
+its handover assertions. Its teardown restores the real clock after both boxes close.
+
 | Source | Exact words | What they establish |
 | --- | --- | --- |
 | [AEAT validations v1.2.2, §3.1.3.1](https://www.agenciatributaria.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Validaciones_Errores_Veri-Factu.pdf), checked 1 November 2026 | “La FechaExpedicionFactura no podrá ser superior a la fecha actual.” | The date may not exceed the current date. This section does not name its comparison time zone. |

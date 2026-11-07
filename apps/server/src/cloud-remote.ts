@@ -6,11 +6,13 @@ import { buildServeOptions, watchTlsFiles } from "./tls.js";
 import { closeListener } from "./close-listener.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
-import { generateKeyPairSync, X509Certificate, randomUUID } from "node:crypto";
-import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { generateKeyPair, X509Certificate, randomUUID } from "node:crypto";
+import { lstat, mkdir, open, readFile, rename, rm, link } from "node:fs/promises";
 import { join } from "node:path";
 import forge from "node-forge";
 import { createSecureContext } from "node:tls";
+import { promisify } from "node:util";
+const generateStaffKeyPair = promisify(generateKeyPair);
 
 export function mountCloudPublic(app: Hono, serving: () => boolean): void {
   app.get("/public/availability", (c) => {
@@ -43,14 +45,20 @@ export async function createStaffCsr(stateDir: string, hostname: string): Promis
     await lstat(path);
   } catch (error) {
     if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
-    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const { privateKey } = await generateStaffKeyPair("rsa", { modulusLength: 2048 });
+    const temporary = path + "." + randomUUID();
     try {
-      const file = await open(path, "wx", 0o600);
+      const file = await open(temporary, "wx", 0o600);
       try {
         await file.writeFile(privateKey.export({ type: "pkcs8", format: "pem" }));
         await file.sync();
       } finally {
         await file.close();
+      }
+      try {
+        await link(temporary, path);
+      } catch (error) {
+        if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
       }
       const directory = await open(stateDir, "r");
       try {
@@ -58,8 +66,8 @@ export async function createStaffCsr(stateDir: string, hostname: string): Promis
       } finally {
         await directory.close();
       }
-    } catch (error) {
-      if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+    } finally {
+      await rm(temporary, { force: true });
     }
   }
   const key = forge.pki.privateKeyFromPem(await readStaffKey(stateDir));
@@ -175,7 +183,7 @@ export function startStaffListener(
   config: Pick<ServerConfig, "staff" | "stateDir">,
   app: Hono,
   log: Logger,
-): { close(): Promise<void> } | undefined {
+): { close(): Promise<void>; isListening(): boolean } | undefined {
   const staff = config.staff;
   if (staff === undefined) return undefined;
   const failure = (error: unknown) =>
@@ -201,7 +209,7 @@ export function startStaffListener(
       watchTlsFiles(server, tls, new URL(staff.origin).hostname, () =>
         log("error", "cloud.certificate_reload_failed"),
       );
-    return { close: () => closeListener(server) };
+    return { close: () => closeListener(server), isListening: () => server.listening };
   } catch (error) {
     failure(error);
     return undefined;

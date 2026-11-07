@@ -6,12 +6,29 @@ export async function runCloudWorker(options: {
   signal: AbortSignal;
   isPrimary: () => boolean;
   onError?: (error: unknown) => void;
+  staffHostname?: string;
+  onStaffCertificate?: () => unknown;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }): Promise<void> {
   const sleep = options.sleep ?? ((ms, signal) => delay(ms, undefined, { signal }));
   while (!options.signal.aborted) {
     try {
-      if (options.isPrimary()) await options.connection.refresh(options.signal);
+      if (options.isPrimary()) {
+        const status = await options.connection.refresh(options.signal);
+        if (
+          options.staffHostname &&
+          status.installation?.state === "active" &&
+          !options.signal.aborted &&
+          options.isPrimary()
+        ) {
+          const ready = await options.connection.staffCertificate(
+            options.staffHostname,
+            options.signal,
+          );
+          if (ready && !options.signal.aborted && options.isPrimary())
+            await options.onStaffCertificate?.();
+        }
+      }
     } catch (error) {
       if (!options.signal.aborted) options.onError?.(error);
     }

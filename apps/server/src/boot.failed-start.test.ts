@@ -37,6 +37,11 @@ import { createSealedStateRefresher } from "./sealed-state.js";
 import { freePorts } from "./testing/free-ports.js";
 import { startStaffListener } from "./cloud-remote.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { stopBackgroundDuties } from "./background-duties.js";
+vi.mock("./background-duties.js", async (original) => {
+  const actual = await original<typeof import("./background-duties.js")>();
+  return { ...actual, stopBackgroundDuties: vi.fn(actual.stopBackgroundDuties) };
+});
 
 vi.mock("./cloud-remote.js", async (original) => {
   const actual = await original<typeof import("./cloud-remote.js")>();
@@ -403,6 +408,109 @@ async function tradingEnv(venueDir: string, state: string, { landing = false } =
 }
 
 describe("a start that fails after the venue folder is opened gives the folder back", () => {
+  it.each(["waiting", "busy", "shutdown"])(
+    "handles the staff entrance while %s",
+    async (mode) => {
+      const venueDir = await seededVenueDir(),
+        state = await stateDir(undefined, { leaf: true });
+      const [localPort, staffPort] = await freePorts(2);
+      const material = mintSelfSignedServerCert({
+        now: new Date(),
+        hostnames: ["staff.example.test"],
+        ipAddresses: [],
+      });
+      const install = async () => {
+        await writeFile(join(state, "cloud-staff.key"), material.serverKeyPem, { mode: 0o600 });
+        await writeFile(join(state, "cloud-staff.crt"), material.serverCertPem);
+      };
+      let workerOptions: Parameters<typeof runCloudWorker>[0] | undefined;
+      vi.mocked(runCloudWorker).mockImplementationOnce(async (options) => {
+        workerOptions = options;
+        await new Promise<void>((resolve) =>
+          options.signal.addEventListener("abort", () => resolve(), { once: true }),
+        );
+      });
+      const blocker = createNetServer();
+      let refused = () => {};
+      const refusal = new Promise<void>((resolve) => {
+        refused = resolve;
+      });
+      if (mode === "busy") {
+        await install();
+        await new Promise<void>((resolve) => blocker.listen(staffPort, "127.0.0.1", resolve));
+        const actual =
+          await vi.importActual<typeof import("./cloud-remote.js")>("./cloud-remote.js");
+        vi.mocked(startStaffListener).mockImplementationOnce((config, app, log) =>
+          actual.startStaffListener(config, app, (...args) => {
+            if (args[1] === "server.listen_failed") refused();
+            log(...args);
+          }),
+        );
+      }
+      let server: StartedServer | undefined;
+      try {
+        const lines = await withLoggedLines(async () => {
+          server = await startServer({
+            WAITRON_VENUE_DIR: venueDir,
+            WAITRON_STATE_DIR: state,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+            WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+            WAITRON_CREDENTIALS_KEY_VERSION: "1",
+            ...TILL_ENV,
+            WAITRON_HTTP_PORT: String(localPort),
+            WAITRON_HTTP_LANDING_PORT: "0",
+            WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+            WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+            WAITRON_STAFF_PORT: String(staffPort),
+          });
+        });
+        if (mode === "waiting") {
+          expect(
+            lines.filter(
+              (line) => line.event === "server.listen_failed" && line.listener === "staff",
+            ),
+          ).toEqual([]);
+          await bindAndRelease(staffPort);
+          await install();
+          expect(workerOptions?.staffHostname).toBe("staff.example.test");
+          await workerOptions?.onStaffCertificate?.();
+          await vi.waitFor(async () => {
+            await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
+          });
+        } else if (mode === "busy") {
+          await refusal;
+          await new Promise<void>((resolve) => blocker.close(() => resolve()));
+          await workerOptions!.onStaffCertificate!();
+          await vi.waitFor(async () => {
+            await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
+          });
+          const calls = vi.mocked(startStaffListener).mock.calls.length;
+          await workerOptions!.onStaffCertificate!();
+          expect(vi.mocked(startStaffListener).mock.calls.length).toBe(calls);
+        } else {
+          await install();
+          const actual =
+            await vi.importActual<typeof import("./background-duties.js")>(
+              "./background-duties.js",
+            );
+          vi.mocked(stopBackgroundDuties).mockImplementationOnce(async (duties) => {
+            await workerOptions!.onStaffCertificate!();
+            await actual.stopBackgroundDuties(duties);
+          });
+        }
+        await server!.close();
+        await bindAndRelease(staffPort);
+      } finally {
+        if (blocker.listening) await new Promise<void>((resolve) => blocker.close(() => resolve()));
+        await server?.close();
+        for (const result of vi.mocked(startStaffListener).mock.results)
+          await result.value?.close();
+      }
+    },
+    60000,
+  );
+
   it("closes the staff socket when a later boot step fails", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
