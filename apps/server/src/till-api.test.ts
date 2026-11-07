@@ -559,9 +559,9 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A stale or garbage cookie is never an error: the route clears it and answers 200. Weaker than
-    // its name: it does not pin the `isUuid` screen, since `endSession` hashes the value and matches
-    // no row either way.
+    // A stale or garbage cookie is never an error: naming nobody, the route clears it and answers
+    // 200. Weaker than its name: it does not pin the `isUuid` screen, since `endSession` hashes the
+    // value and matches no row either way.
     const del = await app.request("/api/session", {
       method: "DELETE",
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
@@ -573,12 +573,12 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(cleared).toMatch(/Max-Age=0/);
   });
 
-  it("DELETE naming an ALREADY-ended session is still an idempotent 200 that clears the cookie", async () => {
+  it("DELETE with an ALREADY-ended session's cookie, naming nobody, is still an idempotent 200 that clears the cookie", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A cookie naming a session that was already closed: `endSession` matches nothing, but logout
-    // still answers 200 and clears the cookie.
+    // A cookie naming a session that was already closed: `endSession` matches nothing, but a logout
+    // naming nobody still answers 200 and clears the cookie.
     const token = await openSession(suite.db);
     await closeSession(suite.db, token);
 
@@ -645,7 +645,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
 
       expect(del.status).toBe(200);
       expect(await del.json()).toEqual({ ok: true });
-      expect(del.headers.get("set-cookie")).toMatch(/waitron_till_session=;/);
+      expect(del.headers.get("set-cookie")).toBeNull();
       expect(await isOpen(app, token)).toBe(false);
     });
 
@@ -688,7 +688,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       },
     );
 
-    it("still clears a closed session's cookie, whoever it names", async () => {
+    it("leaves a closed session's cookie in place, whoever it names", async () => {
       const app = signOutApp();
       const token = await openSession(suite.db);
       await closeSession(suite.db, token);
@@ -696,7 +696,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       const del = await signOut(app, token, JSON.stringify({ personId: abel.id }));
 
       expect(del.status).toBe(200);
-      expect(del.headers.get("set-cookie")).toMatch(/waitron_till_session=;/);
+      expect(del.headers.get("set-cookie")).toBeNull();
     });
 
     it("answers 200 with no session cookie, whoever it names", async () => {
@@ -708,6 +708,96 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
 
       expect(del.status).toBe(200);
       expect(await del.json()).toEqual({ ok: true });
+      expect(del.headers.get("set-cookie")).toBeNull();
+    });
+
+    describe("a sign-out naming a person, with the next person's sign-in", () => {
+      async function signIn(
+        app: Hono,
+        deviceCookie: string,
+        person: { id: string },
+        pin: string,
+        held = "",
+      ): Promise<Response> {
+        const res = await app.request("/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: `${held}${deviceCookie}` },
+          body: JSON.stringify({ personId: person.id, pin }),
+        });
+        expect(res.status).toBe(200);
+        return res;
+      }
+
+      function tokenOf(answer: Response): string {
+        return /waitron_till_session=([^;]+)/.exec(answer.headers.get("set-cookie")!)![1]!;
+      }
+
+      /** What a browser keeps of the session cookie after these answers, taken in this order. */
+      function sessionCookieAfter(...answers: Response[]): string | null {
+        let kept: string | null = null;
+        for (const answer of answers) {
+          const header = answer.headers.get("set-cookie");
+          if (header === null) continue;
+          const pair = /^waitron_till_session=([^;]*)/.exec(header);
+          if (pair === null) continue;
+          kept = /Max-Age=0/i.test(header) ? null : `${SESSION_COOKIE}=${pair[1]!}`;
+        }
+        return kept;
+      }
+
+      async function read(app: Hono, cookie: string | null): Promise<Response> {
+        return app.request("/whoami", cookie === null ? {} : { headers: { cookie } });
+      }
+
+      it("leaves that person signed in", async () => {
+        const app = signOutApp();
+        const device = await enrolTillDeviceCookie(suite.db);
+        const anaIn = await signIn(app, device, ana, "5555");
+        const anaOut = await signOut(app, tokenOf(anaIn), JSON.stringify({ personId: ana.id }));
+        const benIn = await signIn(app, device, abel, "1111");
+
+        const held = await read(app, sessionCookieAfter(anaIn, benIn, anaOut));
+
+        expect(held.status).toBe(200);
+        expect(await held.json()).toEqual({ personId: abel.id });
+      });
+
+      it("still ends her session when nobody follows, so her token answers as no cookie does", async () => {
+        const app = signOutApp();
+        const device = await enrolTillDeviceCookie(suite.db);
+        const anaIn = await signIn(app, device, ana, "5555");
+        const token = tokenOf(anaIn);
+        expect((await read(app, `${SESSION_COOKIE}=${token}`)).status).toBe(200);
+
+        const anaOut = await signOut(app, token, JSON.stringify({ personId: ana.id }));
+        expect(anaOut.status).toBe(200);
+        expect(anaOut.headers.get("set-cookie")).toBeNull();
+
+        const withDeadToken = await read(app, sessionCookieAfter(anaIn, anaOut));
+        const withNoCookie = await read(app, null);
+        expect(withDeadToken.status).toBe(401);
+        expect(withNoCookie.status).toBe(401);
+        const refusal = await withDeadToken.json();
+        expect(refusal).toMatchObject({ error: { code: "session.required" } });
+        expect(refusal).toEqual(await withNoCookie.json());
+      });
+
+      it("lets the next sign-in replace the dead cookie it was sent with", async () => {
+        const app = signOutApp();
+        const device = await enrolTillDeviceCookie(suite.db);
+        const anaIn = await signIn(app, device, ana, "5555");
+        const deadToken = tokenOf(anaIn);
+        const anaOut = await signOut(app, deadToken, JSON.stringify({ personId: ana.id }));
+        const dead = sessionCookieAfter(anaIn, anaOut);
+        expect(dead).toBe(`${SESSION_COOKIE}=${deadToken}`);
+
+        const benIn = await signIn(app, device, abel, "1111", `${dead!}; `);
+
+        expect(tokenOf(benIn)).not.toBe(deadToken);
+        const after = await read(app, sessionCookieAfter(anaIn, anaOut, benIn));
+        expect(after.status).toBe(200);
+        expect(await after.json()).toEqual({ personId: abel.id });
+      });
     });
   });
 });

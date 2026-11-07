@@ -11,6 +11,7 @@ import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import { createStation } from "./kitchen.js";
 import { mountThemesApi } from "./themes-api.js";
+import { openSessionPerson } from "./till-session.js";
 import {
   inTx,
   provisionBillVenue,
@@ -293,6 +294,7 @@ describe("the full-disk gate on the till's routes", () => {
       body: JSON.stringify({ personId: venue.operatorId, pin: "5555" }),
     });
     const session = signIn.headers.get("set-cookie")!.split(";")[0]!;
+    const token = session.slice(session.indexOf("=") + 1);
     const signOutNaming = (personId: string) =>
       app.request("/api/session", {
         method: "DELETE",
@@ -303,10 +305,12 @@ describe("the full-disk gate on the till's routes", () => {
     const other = await signOutNaming(randomUUID());
     expect(other.status).toBe(200);
     expect(other.headers.get("set-cookie")).toBeNull();
+    expect(await openSessionPerson(venue.db, token)).toBe(venue.operatorId);
 
     const own = await signOutNaming(venue.operatorId);
     expect(own.status).toBe(200);
-    expect(own.headers.get("set-cookie")).toMatch(/waitron_till_session=;/);
+    expect(own.headers.get("set-cookie")).toBeNull();
+    expect(await openSessionPerson(venue.db, token)).toBeNull();
   });
 
   it("refuses no route mounted after the till's", async () => {
