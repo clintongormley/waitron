@@ -194,7 +194,8 @@ RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
   && install -d -o waitron -g waitron -m 0700 \
     /var/lib/waitron/state \
     /var/lib/waitron/logs \
-    /var/lib/waitron/backups
+    /var/lib/waitron/backups \
+  && install -d -o waitron -g root -m 0770 /var/lib/waitron/tunnel
 
 # Copy only the runtime entries and declared operator commands. The bundle's package.json
 # declares /app's module system independently of the parent filesystem.

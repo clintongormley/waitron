@@ -158,6 +158,18 @@ jobs:
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
             org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
 
+      - name: Check the app can write the shared tunnel control volume
+        run: |
+          set -eu
+          control_volume=$(docker volume create)
+          trap 'docker volume rm "$control_volume" >/dev/null' EXIT
+          docker run --rm --entrypoint sh \
+            -v "$control_volume:/var/lib/waitron/tunnel" waitron:ci -ec '
+              test "$(id -u)" = 10001
+              printf probe > /var/lib/waitron/tunnel/write-probe
+              test "$(cat /var/lib/waitron/tunnel/write-probe)" = probe
+            '
+
       - name: Inspect both images' source labels
         env:
           EXPECTED_SHA: ${{ github.sha }}

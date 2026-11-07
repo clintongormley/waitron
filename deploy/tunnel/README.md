@@ -40,7 +40,8 @@ there is no valid `peer.json` in the shared `tunnel_control` volume. The app see
 ```
 
 Replace the example values with the placement assigned to your box. Write the complete file to a
-temporary sibling and rename it to `peer.json`. Removing it disconnects the tunnel on the next
+temporary sibling with mode 0644 and rename it to `peer.json`. These fields are not secrets;
+the directory is restricted to the app (uid 10001) and the peer’s root group. Removing it disconnects the tunnel on the next
 poll, normally within two seconds. This is not an instant shutdown guarantee.
 
 The peer creates its key in `tunnel_keys`, which the app does not mount, and publishes only
