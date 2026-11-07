@@ -604,7 +604,7 @@ describe("prepareStreamRestore", () => {
       "two venue rows",
       "insert into locations (id, name, invoice_locales, operation_description) values ('c0000000-0000-4000-8000-0000000000aa', 'Other', '[\"es\"]', 'Venta')",
     ],
-    ["no venue row", "delete from locations"],
+    ["no venue row", "delete from invoice_series; delete from nodes; delete from locations"],
   ])("refuses a copy with %s as an unknown identity, as an archive of it is", async (_, change) => {
     const deps = await prepareDeps(await bucket(), {
       restoreGeneration: async (args) => {
@@ -612,6 +612,8 @@ describe("prepareStreamRestore", () => {
         const copy = new DatabaseSync(args.outPath, { enableForeignKeyConstraints: false });
         try {
           copy.exec(change);
+          // Otherwise the copy is refused as damaged before the identity is read.
+          expect(copy.prepare("pragma foreign_key_check").all()).toEqual([]);
         } finally {
           copy.close();
         }
