@@ -4,7 +4,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { TillKeepOpen } from "./keep-open.js";
 import type { TillKeepOpenDialog } from "./keep-open-dialog.js";
 import "./keep-open.js";
@@ -230,7 +230,9 @@ it.each(["pin.invalid", "pin.throttled", "authorization.not_permitted"])(
     await expect.poll(() => parent.busy).toBe(false);
     await parent.updateComplete;
     expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
-    expect(parent.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(codeMessage(code));
+    expect(parent.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
+      code === "pin.invalid" || code === "pin.throttled" ? t(code) : codeMessage(code),
+    );
     expect(
       parent.shadowRoot!.querySelector("wt-combobox")!.shadowRoot!.querySelector("button")!
         .disabled,
