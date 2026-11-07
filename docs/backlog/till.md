@@ -2056,7 +2056,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 
 ## Bundle A1380: Saves, reads and sign-outs that can lose a dish or act as the wrong person
 
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06), except the last, from A1382.
 
 - **A1357. The till's draft saves and reads can still pass each other (seen in A803 slice 4c's
   review; two of the three are the same on main).** A failed read leaves a waiting edit unsent until
@@ -2077,8 +2077,8 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 - **A792. Two smaller points A768's last review left (2026-10-17).** Read, not run: confirm each,
   then test or narrow it.
   [Detail](till.md#a792-two-smaller-points-a768s-last-review-left-2026-10-17)
-- **After a lost counter Send reply, a changed basket or new invoice details can never be sent, and
-  the till says "Could not send the order, try again" (left open by A1382).** The box answers
+- **After a lost counter Send reply, a changed basket can never be sent, and the till says "Could not
+  send the order, try again" (left open by A1382).** The box answers
   `working_order.not_open`, `#onPlaceOrder` shows `place.error`, and Park drops the change with no
   sentence. On the demo stack, taking an added dish back off and pressing Send went through; a raised
   sent dish has no `−`, so by reading it cannot be taken back. A review's proposal, not built: lock
