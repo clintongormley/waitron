@@ -575,6 +575,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.provider_disconnected": 409,
   "reader.not_held": 409,
   "reader.payment_in_progress": 409,
+  "payment.capture_mismatch_unresolved": 409,
   "table.not_found": 404,
   "table.inactive": 409,
   "table.not_on_today_plan": 409,

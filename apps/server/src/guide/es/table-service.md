@@ -51,6 +51,8 @@ La exportación de configuración incluye la política de pagos, pero no los lec
 
 Cuando Waitron imprime el justificante de tarjeta de una venta, sus palabras, fecha e importes siguen el idioma de ticket guardado con esa venta. Cambiar el idioma de tu pantalla o el idioma de ticket actual del local conserva el idioma original del justificante de la venta anterior.
 
+Si la pantalla de cobro indica que el proveedor de pagos ha comunicado un importe distinto, abre **Pagos con tarjeta / acceder**. Compara los importes solicitado e indicado de la alerta con el cobro en el panel del proveedor. No cobres más en ese pedido ni reutilices ese lector mientras siga bloqueado. Las comprobaciones automáticas se han detenido; marcar la alerta como resuelta no libera el pago.
+
 ## Confía en el servidor antes de abrir la caja {#certificate-trust}
 
 La página de la caja **Este dispositivo todavía no confía en la caja** usa el idioma compatible

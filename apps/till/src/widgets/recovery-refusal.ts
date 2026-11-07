@@ -9,7 +9,8 @@ interface RecoveryRefusal {
 }
 
 function recoveryPath(refusal: RecoveryRefusal | null): string | null {
-  const path = refusal?.recoveryUrl;
+  const path =
+    refusal?.recoveryUrl ?? (refusal?.code === "card_mismatch" ? "/manage/payments" : undefined);
   if (path === undefined || !path.startsWith("/manage/")) return null;
   const parsed = new URL(path, location.origin);
   return parsed.pathname === path ? path : null;
@@ -26,6 +27,12 @@ export function recoveryRefusalOf(value: unknown): RecoveryRefusal | undefined {
 export function recoveryRefusalText(refusal: RecoveryRefusal): string | null {
   const path = recoveryPath(refusal);
   if (path === null) return null;
+  if (
+    refusal.code === "card_mismatch" ||
+    refusal.code === "payment.capture_mismatch_unresolved" ||
+    (refusal.code === "reader.payment_in_progress" && recoveryPath(refusal) === "/manage/payments")
+  )
+    return t("card.mismatch");
   if (path === "/manage/payments") {
     if (refusal.code !== "sale.charged_not_recorded") return null;
     const charged = t(

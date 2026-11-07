@@ -1271,6 +1271,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Waitron cannot ask this card provider about a stuck payment, so the order stays locked. Check the payment in the provider's dashboard.",
     es: "Waitron no puede consultar un cobro pendiente con este proveedor de pagos, así que el pedido sigue bloqueado. Revisa el pago en el panel del proveedor.",
   },
+  "payment.capture_mismatch_unresolved": {
+    en: "The card provider reported a different amount. Automatic checks have stopped. The order and reader stay locked. Check the charge in the provider's dashboard and compare it with both amounts in the alert.",
+    es: "El proveedor de pagos indicó un importe distinto. Las comprobaciones automáticas se han detenido. El pedido y el lector siguen bloqueados. Comprueba el cobro en el panel del proveedor y compáralo con los dos importes de la alerta.",
+  },
   "payment.outcome_unknown": {
     en: "The card provider could not say what happened to this payment; the order stays locked. Try again in a minute.",
     es: "El proveedor de pagos no pudo confirmar qué pasó con este cobro; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto.",

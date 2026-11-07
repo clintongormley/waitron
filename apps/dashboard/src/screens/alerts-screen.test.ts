@@ -752,12 +752,16 @@ it.each(captureCases)(
           payments: [
             {
               provider: "stripe",
+              externalRef: "pi_external",
+              orderNumber: 27,
               paymentRef: "33333333-3333-4333-8333-333333333333",
               requestedAmount: "12.10",
               reportedAmount: "0.00",
             },
             {
               provider: "sumup",
+              externalRef: "sumup_external",
+              orderNumber: 28,
               paymentRef: "44444444-4444-4444-8444-444444444444",
               requestedAmount: "20.00",
               reportedAmount: "21.50",
@@ -782,6 +786,8 @@ it.each(captureCases)(
         "44444444-4444-4444-8444-444444444444",
       ])
         expect(text).toContain(ref);
+      for (const identity of ["pi_external", "sumup_external", "Stripe", "SumUp", "27", "28"])
+        expect(text).toContain(identity);
       for (const amount of locale === "en-GB"
         ? ["€12.10", "€0.00", "€20.00", "€21.50"]
         : ["12,10", "0,00", "20,00", "21,50"])

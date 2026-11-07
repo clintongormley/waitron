@@ -789,7 +789,7 @@ The ones worth grepping for:
   process-liveness signal; it does not flip `/health`.
 - **`resolve_pending.complete`** (`info`) — `{ captured, failed, incidentsRaised, nextDueAt }`. The
   summary of this node's card sweep: rows it captured, rows it resolved `failed`, and any
-  `payment.pending_outcome_unactionable` incidents raised for a human.
+  `payment.pending_outcome_unactionable` or `payment.capture_mismatch` incidents raised for a human.
 - **`payment_attempt.released`** (`info`) — `{ released }`. After a pass, the loop cleared the "a
   card is paying this order" mark on that many open orders: each one's card attempt is not running
   in this process, and the order has no payment still `attempting`, nor a `captured` or

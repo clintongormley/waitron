@@ -15,6 +15,7 @@ import "./errors.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
+import { findActiveCaptureMismatch } from "./capture-mismatch.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
 import type { CardDetails, CollectionOwners, PaymentState } from "./provider.js";
 
@@ -127,7 +128,8 @@ export async function insertFailedPayment(
 
 /**
  * Refuses a payment start on `readerId` unless the origin device holds it and no other device has a
- * payment in progress on it; no reader named passes. Run in the transaction that writes the
+ * payment in progress on it. A known amount mismatch stops new payments from its own holder too.
+ * No reader named passes. Run in the transaction that writes the
  * payment's first row, so a takeover and a start cannot both commit.
  */
 export async function assertReaderStartable(
@@ -138,6 +140,9 @@ export async function assertReaderStartable(
   if (readerId === undefined) return;
   if ((await readerHeldBy(tx, readerId)) !== origin.deviceId) {
     throw new AppError("reader.not_held", { readerId });
+  }
+  if (await findActiveCaptureMismatch(tx, { readerId })) {
+    throw new AppError("reader.payment_in_progress", { readerId, recoveryUrl: "/manage/payments" });
   }
   if (await readerPaymentInProgress(tx, readerId, origin.deviceId)) {
     throw new AppError("reader.payment_in_progress", { readerId });
@@ -191,6 +196,12 @@ async function resolveAttempting(
   state: "captured" | "failed",
   extra: { settledAt?: string; externalRef?: string; card?: CardDetails },
 ): Promise<PaymentRow> {
+  const mismatch = await findActiveCaptureMismatch(tx, { payment: params });
+  if (mismatch !== undefined)
+    throw new AppError("payment.capture_mismatch_unresolved", {
+      workingOrderId: mismatch.workingOrderId,
+      recoveryUrl: "/manage/payments",
+    });
   const [row] = await tx
     .update(payments)
     .set({

@@ -161,5 +161,9 @@ export { SCHEDULER_BACKUP_VERIFICATION } from "./reconciliation-schedule/backup-
 
 export { reversePayment } from "./reverse.js";
 
-export { hasCaptureMismatch, recordCaptureMismatch } from "./capture-mismatch.js";
+export {
+  hasCaptureMismatch,
+  recordCaptureMismatch,
+  findActiveCaptureMismatch,
+} from "./capture-mismatch.js";
 export type { CaptureMismatch, CaptureMismatchSink } from "./capture-mismatch.js";

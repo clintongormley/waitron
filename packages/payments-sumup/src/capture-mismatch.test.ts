@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, incidents, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { diskFullIn, decimal } from "@waitron/shared";
-import { ChargeNotSavedError, PAYMENTS_MIGRATIONS, recordCaptureMismatch } from "@waitron/payments";
+import {
+  ChargeNotSavedError,
+  PAYMENTS_MIGRATIONS,
+  recordCaptureMismatch,
+  captureAttempting,
+  failAttempting,
+} from "@waitron/payments";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { setup } from "./testing/setup.js";
@@ -63,6 +69,7 @@ describe("SumUp capture amount evidence", () => {
         amount: decimal("12.00"),
       });
       const result = await provider.collect(params);
+      expect(result.captureMismatch).toBe(true);
       const [alert] = await suite.db.select().from(incidents);
       expect(alert).toBeDefined();
       if (alert !== undefined)
@@ -193,3 +200,71 @@ it("does not let a create refusal erase mismatch evidence recorded while that cr
   expect(result).toMatchObject({ state: "attempting", settledAt: null });
   expect(await row(result.paymentRef)).toMatchObject({ state: "attempting", settledAt: null });
 });
+
+it.each(["captured", "failed"])(
+  "does not alert on a stale sweep after another caller resolved the row as %s",
+  async (state) => {
+    const { provider, fake, params, row } = await setup(suite, (f) => f.stallNext());
+    const result = await provider.collect(params);
+    vi.spyOn(fake, "findTransaction").mockImplementationOnce(async () => {
+      await withTransaction(suite.db, (tx) =>
+        state === "captured"
+          ? captureAttempting(tx, {
+              provider: "sumup",
+              paymentRef: result.paymentRef,
+              settledAt: now,
+              externalRef: "txn_earlier",
+            })
+          : failAttempting(tx, { provider: "sumup", paymentRef: result.paymentRef }),
+      );
+      return { id: "txn_late", status: "SUCCESSFUL", amount: decimal("12.00") };
+    });
+    expect(await provider.resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    });
+    expect((await row(result.paymentRef)).state).toBe(state);
+    expect(await suite.db.select().from(incidents)).toEqual([]);
+  },
+);
+
+it.each(["SUCCESSFUL", "FAILED"])(
+  "retains a sweep's mismatch when collect later answers %s",
+  async (status) => {
+    const { provider, fake, params, row } = await setup(suite);
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    let release!: (value: {
+      id: string;
+      status: string;
+      amount: ReturnType<typeof decimal>;
+    }) => void;
+    const answer = new Promise<{ id: string; status: string; amount: ReturnType<typeof decimal> }>(
+      (resolve) => {
+        release = resolve;
+      },
+    );
+    vi.spyOn(fake, "findTransaction")
+      .mockImplementationOnce(async () => {
+        enter();
+        return answer;
+      })
+      .mockResolvedValue({ id: "txn_mismatch", status: "SUCCESSFUL", amount: decimal("12.00") });
+    const collecting = provider.collect(params);
+    try {
+      await entered;
+      expect(
+        (await provider.resolvePending(now, await ownsEveryPayment(suite.db))).incidentsRaised,
+      ).toBe(1);
+    } finally {
+      release({ id: "txn_exact", status, amount: decimal("12.50") });
+    }
+    const result = await collecting;
+    expect(result).toMatchObject({ state: "attempting", settledAt: null, amount: "12.50" });
+    expect(await row(result.paymentRef)).toMatchObject({ state: "attempting", settledAt: null });
+  },
+);

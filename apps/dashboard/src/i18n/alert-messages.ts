@@ -339,8 +339,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "El importe de la tarjeta no coincide. El pedido sigue sin pagar y bloqueado. Las comprobaciones automáticas se han detenido. Comprueba el cobro en el panel del proveedor de pagos.",
     items: {
       param: "payments",
-      en: "{provider} {paymentRef}: Waitron requested {requestedAmount:money}; the card provider reported {reportedAmount:money}.",
-      es: "{provider} {paymentRef}: Waitron solicitó {requestedAmount:money}; el proveedor de pagos indicó {reportedAmount:money}.",
+      en: "Order {orderNumber}, {provider:card_provider} {externalRef} (Waitron {paymentRef}): Waitron requested {requestedAmount:money}; the card provider reported {reportedAmount:money}.",
+      es: "Pedido {orderNumber}, {provider:card_provider} {externalRef} (Waitron {paymentRef}): Waitron solicitó {requestedAmount:money}; el proveedor de pagos indicó {reportedAmount:money}.",
     },
   },
   "payment.pending_outcome_unactionable": {
@@ -471,6 +471,10 @@ export const ALERT_WORDS: Readonly<
     }
   >
 > = {
+  card_provider: {
+    words: { stripe: { en: "Stripe", es: "Stripe" }, sumup: { en: "SumUp", es: "SumUp" } },
+    otherwise: { en: "Card provider", es: "Proveedor de pagos" },
+  },
   // What an office printer holding a job needs, by the hold code an alert's `hold` param carries
   // (`a4HoldCodes`, `@waitron/db`). The server shows these alerts with `report.view`, which a
   // supervisor holds without `hardware.manage`, so each asks only for something done at the printer.

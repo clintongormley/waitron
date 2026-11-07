@@ -2412,6 +2412,34 @@ describe("till-app: the next guest on a handheld", () => {
     expect(inDialog(el, "[data-pay-continue]")).toBeNull();
   });
 
+  it("a partial mismatch shows charge inspection without offering the next guest or claiming checking continues", async () => {
+    const { el } = await mountApp(
+      onPhone({
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi.fn().mockResolvedValue({
+          ...takenOf(
+            { method: "card", entry: "reader", applied: "40.00", state: "pending", change: null },
+            { reserved: "40.00", outstanding: "80.00", captureMismatch: true },
+          ),
+          outcome: "capture_mismatch",
+        }),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() =>
+      expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments"),
+    );
+    expect(inDialog(el, "[data-pay-next]")).toBeNull();
+    expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
+    expect(inDialog(el, "[data-pay-taken]")).toBeNull();
+  });
+
   it("three equal shares paid in turn offer the second, then the third, of three", async () => {
     const shareOf = (applied: string, outstanding: string) =>
       takenOf(

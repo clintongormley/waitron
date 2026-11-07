@@ -1196,6 +1196,7 @@ export interface BillUnsent {
 }
 
 export interface BillBalance {
+  captureMismatch?: true;
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
@@ -1213,9 +1214,17 @@ export interface BillBalance {
 }
 
 export interface BillPaymentResult {
-  /** A reader card's own answer is `declined`, `timeout` (still pending) or `network_unavailable`
-   * (failed, nothing charged); a resend answers the state it finds. */
-  outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
+  /** A reader card's own answer is `declined`, `timeout` (still pending), `capture_mismatch`
+   * (held, checking stopped) or `network_unavailable` (failed, nothing charged); a resend answers
+   * the state it finds. */
+  outcome:
+    | "received"
+    | "pending"
+    | "failed"
+    | "declined"
+    | "timeout"
+    | "capture_mismatch"
+    | "network_unavailable";
   payment: BillPaymentView;
   balance: BillBalance;
   /** Present when the bill is invoiced: by this payment, or, on a resend, since. */
@@ -2043,6 +2052,7 @@ export type PayOutcome =
   | { outcome: "captured"; ticket: TillSaleResult }
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
+  | { outcome: "capture_mismatch" }
   | { outcome: "network_unavailable" };
 
 /** The `absence_kind` members; the server re-validates against the real enum. */

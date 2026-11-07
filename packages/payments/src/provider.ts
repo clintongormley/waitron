@@ -94,8 +94,10 @@ export interface PaymentResult {
   provider: string;
   paymentRef: string;
   state: PaymentResultState;
-  /** The amount this result concerns. For `collect`/`void`/`refund` it is the captured total; for
-   * `partialRefund` it is the AMOUNT REFUNDED (not the capture). */
+  /** A recorded amount mismatch keeps this attempt unresolved and stops provider checks. */
+  captureMismatch?: true;
+  /** The requested amount for `collect`, the captured total for `void`/`refund`, or the amount
+   * refunded for `partialRefund`. A mismatch never rewrites the requested amount. */
   amount: Decimal;
   /** True only on an `accepted_offline` result, which awaits `forward()`. */
   offline?: boolean;
@@ -133,6 +135,7 @@ export interface CollectionOwners {
  * cancelled, so the working order's next card payment must not reuse it. `unknown`: the row is
  * untouched — the processor could not be asked (`unreachable`) or answered something that is
  * neither a charge nor a certain refusal (`ambiguous`, with its own status when it gave one).
+ * A known amount mismatch stays `unknown` without asking the processor again.
  */
 export type AbandonedAttemptOutcome =
   | { outcome: "captured" }
@@ -265,7 +268,7 @@ export interface PaymentProvider {
   resolvePending(now: Date, owners: CollectionOwners, signal?: AbortSignal): Promise<ForwardResult>;
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller
-   * guarantees that — by asking the processor what became of it. A `captured` or `failed` outcome
+   * guarantees that. Known amount mismatches stay unresolved without a processor read. A `captured` or `failed` outcome
    * records `audit`'s person in `payment_resolutions` in the same transaction that changes the row:
    * the order's next card payment reads that record to know the processor's payment is cancelled.
    * Throws `payment.not_found` when the row is missing or no longer `attempting`. Absent on an

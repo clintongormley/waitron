@@ -194,6 +194,9 @@ export class StripeTerminalProvider implements PaymentProvider {
         provider: PROVIDER,
         paymentRef,
         state: "attempting",
+        ...((await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
+          ? { captureMismatch: true as const }
+          : {}),
         amount: params.amount,
         settledAt: null,
       };
@@ -244,6 +247,10 @@ export class StripeTerminalProvider implements PaymentProvider {
       provider: PROVIDER,
       paymentRef,
       state: row.state,
+      ...(row.state === "attempting" &&
+      (await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
+        ? { captureMismatch: true as const }
+        : {}),
       amount: params.amount,
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       ...(outcome.kind === "failed" &&
@@ -294,7 +301,6 @@ export class StripeTerminalProvider implements PaymentProvider {
         break;
       }
       const key = { provider: PROVIDER, paymentRef: row.paymentRef };
-      if (await this.inTransaction((tx) => hasCaptureMismatch(tx, key))) continue;
       try {
         const result = await this.resolveInactiveAttempt(row.paymentRef, now, null);
         incidentsRaised += result.incidentsRaised ?? 0;
