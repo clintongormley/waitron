@@ -1256,9 +1256,11 @@ The preceding and following healthy shards do not diagnose the hang.
 
 A1027 adds a diagnostic process deadline with unfinished-file and process reports
 to every browser package's test command. The original wait remains unlocated.
-On recurrence, retain the failed step log and use its file list, any
-`[file-progress] stack:` lines and the process state to identify the blocked
-operation. Keep the venue-service startup investigation and A419's dashboard stall
+On recurrence, retain the failed step log and use its file list, selected-file
+case/hook events, Playwright API calls, any `[file-progress] stack:` lines and the
+process state to identify the blocked operation. The till shard selects the parties,
+line-detail and refund-unsaved files for the existing case/hook trace and enables
+`DEBUG=pw:api`; these diagnostics do not establish a cause or repair. Keep the venue-service startup investigation and A419's dashboard stall
 separate; no shared cause is established.
 
 ## Local multi-file till browser interruption
