@@ -23,6 +23,16 @@ added to the sale path.
 
 ## Submit the test box's tunnel key
 
+Use the WireGuard container for remote staff access. The old in-process TCP relay package
+`@waitron/tunnel` and its `WAITRON_TUNNEL_RELAY_URL`, `WAITRON_TUNNEL_BOX_ID`,
+`WAITRON_TUNNEL_TOKEN` and `WAITRON_TUNNEL_POOL_SIZE` settings are retired. Remove those
+settings from your environment; boot no longer reads them. `WAITRON_TUNNEL_CONTROL_DIR`
+still selects the WireGuard container's control directory.
+
+The staff entrance carries dashboard requests only. It supplies no standby relay to the
+mirror-bundle route, which refuses adoption with `mirror.no_relay`. A staff connection
+does not enable the parked cloud-standby work.
+
 For the A951-S trial, set `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control
 directory. The container persists its private key before publishing `public-key`; the app reads
 only that public file. On a connected test installation, the primary Cloud worker and **Refresh

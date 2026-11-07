@@ -134,7 +134,7 @@ import {
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
-import { loadConfig, loadTunnelConfig, type ServerConfig } from "./config.js";
+import { loadConfig, type ServerConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import {
@@ -190,7 +190,7 @@ import {
   DUTY_BUDGET_MS,
   type HealthState,
 } from "./health.js";
-import { runLoop, realSleep } from "./loop.js";
+import { runLoop } from "./loop.js";
 import { createLoopWaker } from "./loop-wake.js";
 import { reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
@@ -411,7 +411,6 @@ import { endMirrorViewer, ensureMirrorViewer, mirrorSession } from "./mirror-ses
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
-import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule } from "./node-config.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import type { TradingContext } from "./trading-context.js";
@@ -2009,7 +2008,7 @@ async function bootServer(
         pointerTerm: () => readBucketPointerTerm(db, ring),
       });
   // The singleton duties gate on this, not on `isMirror`: a sell-only local secondary is not a mirror,
-  // and must not dial a second tunnel or write scheduled backups beside the primary.
+  // and must not write scheduled backups beside the primary.
   // `node_mode_role_valid_ck` rejects `(mirror, primary)`, so a mirror is always 'secondary'.
   //
   // A BOOT decision, deliberately not live: an in-process promotion does not start the duties gated
@@ -3355,33 +3354,6 @@ async function bootServer(
     log,
   );
 
-  // The outbound tunnel: the box sits behind NAT with no inbound ports, so it dials OUT to the relay,
-  // which splices a paired cloud client to the box's own served port. A singleton duty: only the
-  // singleton primary keeps the one outbound tunnel.
-  const tunnelConfig = loadTunnelConfig(env);
-  const tunnelController = new AbortController();
-  let tunnelWorker: Promise<void> | undefined;
-  if (isSingletonPrimary && tunnelConfig !== undefined) {
-    tunnelWorker = runTunnelClient({
-      relayHost: tunnelConfig.relayHost,
-      relayPort: tunnelConfig.relayPort,
-      boxId: tunnelConfig.boxId,
-      token: tunnelConfig.token,
-      localPort: config.httpPort,
-      poolSize: tunnelConfig.poolSize,
-      sleep: realSleep,
-      signal: tunnelController.signal,
-      log,
-    });
-    tunnelWorker.catch((err) => log("error", "tunnel.worker_rejected", { errorCode: codeOf(err) }));
-    undoOnFailure.push(async () => {
-      tunnelController.abort();
-      await tunnelWorker?.catch(() => {});
-    });
-  } else if (isSingletonPrimary) {
-    log("info", "tunnel.disabled", {});
-  }
-
   // The bundle a cloud mirror adopts; only the singleton primary emits one.
   if (isSingletonPrimary) {
     mountMirrorBundleApi(
@@ -3391,11 +3363,8 @@ async function bootServer(
         node: store.node,
         ring,
         stateDir: config.stateDir,
-        // https: the mirror reaches the box's own certificate end-to-end through the tunnel.
-        relayUrl:
-          tunnelConfig !== undefined
-            ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
-            : undefined,
+        // Staff access carries no standby protocol; adoption remains refused without a relay.
+        relayUrl: undefined,
         boxHostname: BOX_HOSTNAME,
         designated: config.node,
         accountKey: accountKey.toString("base64"),
@@ -3888,9 +3857,7 @@ async function bootServer(
     freeSpaceWatch,
     boxEmails,
     liveEvents,
-    tunnelController,
     loop,
-    tunnelWorker,
     backupSupervisor,
     demoPrinterLoop,
     clockWatch,

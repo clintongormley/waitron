@@ -43,7 +43,7 @@ import { readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
-// `relayUrl` is `undefined` when no tunnel is configured; the route then refuses `mirror.no_relay`.
+// A missing standby relay refuses `mirror.no_relay`; the staff tunnel carries dashboard requests only.
 export interface MirrorBundleApiDeps {
   appDb: Database;
   node: NodeDatabase;

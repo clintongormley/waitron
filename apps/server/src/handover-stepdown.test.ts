@@ -66,7 +66,6 @@ const LOOPS = [
   "cloudSnapshots",
   "suggestionLoop",
   "loop",
-  "tunnelWorker",
 ] as const;
 const STOPPERS = [
   "certificateDiagnosis",
@@ -94,10 +93,7 @@ const AT_STEPDOWN = [
 function fakeDuties(overrides: Partial<Record<string, unknown>> = {}) {
   const calls: string[] = [];
   const controllers: Record<string, AbortController> = {};
-  for (const name of [...ABORTS, "tunnelController"]) controllers[name] = new AbortController();
-  controllers.tunnelController!.signal.addEventListener("abort", () =>
-    calls.push("tunnelController"),
-  );
+  for (const name of ABORTS) controllers[name] = new AbortController();
   const handles: Record<string, unknown> = { ...controllers };
   for (const name of STOPPERS) {
     handles[name] = {

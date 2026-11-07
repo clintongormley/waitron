@@ -288,8 +288,8 @@ record the stop somewhere that survives the repair.
 
 ## Waitron retains
 
-The implemented Cloud connection screen and manager adapter; box-side networking
-and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby end-to-end
+The implemented Cloud connection screen and manager adapter; publication of box-side networking;
+first-contact trust bootstrap; and the cloud-standby end-to-end
 proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
 settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute
 to the promoted cloud → the venue sells and files. Local maintenance requirements remain in
@@ -1066,7 +1066,9 @@ Remaining work, following the owner's certificate-first order:
   unit, peer and network were removed; the earlier persistent demo is unchanged.
   [Receipt and limits](../operations/a951-host-evidence.md#bounded-managed-server-restart-7-november-2026).
   The Settings review repairs have local checks, including the remote-only confirmation, but
-  their fresh managed/public run remains unrun. Retiring `@waitron/tunnel` remains.
+  their fresh managed/public run remains unrun. The private combined build removes
+  `@waitron/tunnel`, its boot worker and its four relay settings. The staff listener is the
+  remote entrance; it supplies no relay for standby adoption.
 - Qualify the managed demo across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.

@@ -1,4 +1,4 @@
-import { connect, createServer as createNetServer, type AddressInfo, type Socket } from "node:net";
+import { connect, createServer as createNetServer } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -647,49 +647,6 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
-  it("when a step after the tunnel starts throws, closing its connection to the relay", async () => {
-    const venueDir = await seededVenueDir();
-    const state = await stateDir(undefined, { leaf: true });
-    // Reads and never answers, so it sees a client close, and a connection nobody stops stays open.
-    const open = new Set<Socket>();
-    let everAccepted = 0;
-    let firstAccept!: () => void;
-    const accepted = new Promise<void>((resolve) => (firstAccept = resolve));
-    const relay = createNetServer((socket) => {
-      everAccepted += 1;
-      open.add(socket);
-      socket.resume();
-      socket.on("close", () => open.delete(socket));
-      socket.on("error", () => socket.destroy());
-      firstAccept();
-    });
-    await new Promise<void>((resolve) => relay.listen(0, "127.0.0.1", resolve));
-    const relayPort = (relay.address() as AddressInfo).port;
-    const failure = new Error("interfaces unreadable");
-    // Whether the tunnel has dialled by the time its undo runs is otherwise a race, so the fake mDNS
-    // stop, which the unwind runs before the tunnel's undo, waits for the relay's first accept (or
-    // 10s, which fails the count below).
-    failLandingAfterMdns(failure, () => Promise.race([accepted, delay(10_000)]));
-
-    try {
-      await expect(
-        startServer({
-          ...(await tradingEnv(venueDir, state, { landing: true })),
-          WAITRON_TUNNEL_RELAY_URL: `tcp://127.0.0.1:${relayPort}`,
-          WAITRON_TUNNEL_BOX_ID: "box-failed-start",
-          WAITRON_TUNNEL_TOKEN: "tunnel-secret",
-          WAITRON_TUNNEL_POOL_SIZE: "1",
-        }),
-      ).rejects.toBe(failure);
-      expect(readVenueHolder(venueDir)).toBeNull();
-      expect(everAccepted).toBeGreaterThanOrEqual(1);
-      await vi.waitFor(() => expect(open.size).toBe(0), { timeout: 2_000 });
-    } finally {
-      for (const socket of open) socket.destroy();
-      await new Promise<void>((resolve) => relay.close(() => resolve()));
-    }
-  }, 60_000);
-
   it("in trading mode, when a step after the listener is started throws, stopping what started", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
@@ -1222,29 +1179,10 @@ describe("closing a started server", () => {
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
-  it("when unsubscribing from the change feed throws, still closes the tunnel and gives the folder back", async () => {
+  it("when unsubscribing from the change feed throws, still closes live events and gives the folder back", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
-    // Reads and never answers, so a tunnel nobody aborts keeps a connection open.
-    const open = new Set<Socket>();
-    let firstAccept!: () => void;
-    const accepted = new Promise<void>((resolve) => (firstAccept = resolve));
-    const relay = createNetServer((socket) => {
-      open.add(socket);
-      socket.resume();
-      socket.on("close", () => open.delete(socket));
-      socket.on("error", () => socket.destroy());
-      firstAccept();
-    });
-    await new Promise<void>((resolve) => relay.listen(0, "127.0.0.1", resolve));
-    const relayPort = (relay.address() as AddressInfo).port;
-    const env = {
-      ...(await tradingEnv(venueDir, state)),
-      WAITRON_TUNNEL_RELAY_URL: `tcp://127.0.0.1:${relayPort}`,
-      WAITRON_TUNNEL_BOX_ID: "box-close",
-      WAITRON_TUNNEL_TOKEN: "tunnel-secret",
-      WAITRON_TUNNEL_POOL_SIZE: "1",
-    };
+    const env = await tradingEnv(venueDir, state);
     const failure = new Error("unsubscribe threw");
     const { subscribeToChanges: realSubscribe } =
       await vi.importActual<typeof import("@waitron/db")>("@waitron/db");
@@ -1260,8 +1198,6 @@ describe("closing a started server", () => {
     let server: Awaited<ReturnType<typeof startServer>> | undefined;
     try {
       server = await startServer(env);
-      await Promise.race([accepted, delay(10_000)]);
-      expect(open.size).toBe(1);
 
       const settled = await Promise.race([
         server.close().then(
@@ -1272,14 +1208,11 @@ describe("closing a started server", () => {
       ]);
       expect(settled).toBe(failure);
       expect(liveEventsClose).toHaveBeenCalled();
-      await vi.waitFor(() => expect(open.size).toBe(0), { timeout: 2_000 });
       expect(readVenueHolder(venueDir)).toBeNull();
       await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
     } finally {
       await server?.close().catch(() => {});
       liveEventsClose.mockRestore();
-      for (const socket of open) socket.destroy();
-      await new Promise<void>((resolve) => relay.close(() => resolve()));
     }
   }, 60_000);
 });
