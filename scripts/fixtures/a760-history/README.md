@@ -73,3 +73,9 @@ step keeps the `when` date its journal gave it. "All" means `historicalSets()`.
 | `scripts/fiscal-allocation-migration.test.ts`                       | all                            | fiscal-verifactu `0006_numerous_roughhouse`                                           |
 | `scripts/fiscal-certificate-migration.test.ts`                      | all                            | fiscal-verifactu `0007_certificate_installs`                                          |
 | `scripts/menu-sections-upgrade.test.ts`                             | all                            | catalogue `0018_sections_owned_prepare`, media `0006_recreate_section_image_triggers` |
+| `scripts/migration-upgrade.test.ts`                                 | all                            | core `0135_course_station_delete`                                                     |
+
+Three more read it to build what an old box holds, not to replay a step: the old-epoch refusals in
+`packages/provisioning/src/schema-ahead.epoch.test.ts` (an old database and an old image),
+`apps/server/src/restore-gate.test.ts` (an old backup) and `apps/server/src/configuration-import.test.ts`
+(an old bundle).

@@ -71,8 +71,7 @@ export interface SchemaConformanceOptions {
   readonly declaresClosedVocabularies: boolean;
   /**
    * Tables, by name, that declare no closed vocabulary although the set as a whole does: each gets
-   * a case of its own. For tables that came from a set which declared none, so that what the old
-   * set's `declaresClosedVocabularies: false` held of them is still held of them.
+   * a case of its own.
    */
   readonly tablesWithoutClosedVocabularies?: readonly string[];
   /**

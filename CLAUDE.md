@@ -583,7 +583,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **A module that can be switched off or swapped keeps a migration set of its own; any other adds
   its tables to core's set, and the commit says which.** Stated exceptions: staffing, switchable
   with its tables in workforce's set, and `node`, whose set is applied to `node.db`. Append-only
-  classification travels with the set.
+  classification travels with the set. Guard: the eight-sets cases in
+  `packages/composition/src/composition.test.ts`, weaker than the rule: they pin today's sets and
+  hosted modules, never whether a module can be switched off.
 - **Declare every foreign key and unique index in the TypeScript schema.** If impossible, say at
   the column what it cost and where the refusal moved. Guard: `scripts/schema-constraints.test.ts`,
   weaker than its name: reads built schema, never offending writes; matches unique indexes by name.

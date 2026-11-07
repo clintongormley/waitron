@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PAYMENTS_CLASSIFICATION } from "../classification.js";
 import { SCHEDULER_TABLES } from "./tables.js";
 
-/** This module's share of the classification of the set that holds its tables. */
+/** The reconciliation schedule's share of payments' classification. */
 const SCHEDULER_CLASSIFICATION = PAYMENTS_CLASSIFICATION.filter(({ table }) =>
   (SCHEDULER_TABLES as readonly string[]).includes(table),
 );

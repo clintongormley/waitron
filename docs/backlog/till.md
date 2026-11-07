@@ -658,8 +658,8 @@ Open:
 - **A bill presented without an invoice keeps the label it was placed with when the departure
   invoices it.** Every other path that invoices such a bill saves the receipt label in the
   update that settles it; the departure leaves the bill placed, and the placed-to-placed clause
-  of `working_orders_enforce_transition` (latest in
-  `packages/db/drizzle/0185_settled_order_to_counter.sql`) requires the label to stay as it is
+  of `working_orders_enforce_transition` (now in `packages/db/drizzle/0000_baseline.sql`) requires
+  the label to stay as it is
   (measured 2026-10-01: saving it made the departure answer 500). Not measured: what its
   invoice's reprint and the debt list then show. Fixing it needs that trigger to allow the
   label to change. A bill the departure settles because it owes nothing goes through
@@ -3064,8 +3064,9 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
 The database's freeze on a paid (settled) bill has one exception, added by the core migration
-`packages/db/drizzle/0185_settled_order_to_counter.sql`, which re-creates
-`working_orders_enforce_transition`: a paid bill not yet handed over may leave its party, once,
+`0185_settled_order_to_counter` (frozen in `scripts/fixtures/a760-history/core/` since A760), which
+re-created `working_orders_enforce_transition`, now in `packages/db/drizzle/0000_baseline.sql`: a
+paid bill not yet handed over may leave its party, once,
 with every other column of its row unchanged — its `revision` and `label` included. Nothing else
 about a paid bill may change; it cannot join a party, change party, or leave one after handover.
 The database allows this for every paid table bill not yet handed over, a party closed days ago
@@ -3077,7 +3078,7 @@ owner's look at it.
 ### A841 slice 2's review points kept as built (lane A, 2026-10-21, before slice 3)
 
 `custom_themes.in_use` stays a nullable number with a CHECK of 1 and a plain unique index
-(`packages/db/drizzle/0182_create_custom_themes.sql`), the design's deliberate choice, where other
+(now in `packages/db/drizzle/0000_baseline.sql`), the design's deliberate choice, where other
 "at most one chosen row" columns are a not-null flag with a partial unique index. A malformed theme
 id answers `theme.not_found` (404), not `shared.invalid_id`, so the permission check still runs
 first. ui-core's token files stay shipped beside the server bundle rather than built into it. The

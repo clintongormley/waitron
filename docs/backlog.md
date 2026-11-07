@@ -2391,7 +2391,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   fixture `Gin & Tónic`.
   [Detail](backlog/architecture.md#a1241-continue-the-dashboard-test-sample-name-cleanup-one-small-slice-per-pr)
 
-- **Correct every sentence known to be false, then finish comment pruning** (bundle of 26, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
+- **Correct every sentence known to be false, then finish comment pruning** (bundle of 27, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
 
 - **A977. Widen the English-only guard to every text file, after the remaining English cleanup.** Accented
   letters too; a shrinking-only list of test folders still to clean. Exempt homes include a

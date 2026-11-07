@@ -214,11 +214,10 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
 before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
 was fixed only for the last 28 documents. Find the rest with
-`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench`. Some hits point
+`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench
+':!scripts/fixtures/a760-history'`. Some hits point
 into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
-so check which document each one names before cutting it. Two were left on purpose:
-`packages/db/drizzle/0004_variant_one_level.sql` ("spec §1.2, §15.7"), because a shipped migration
-is not edited without a venue reset (`CLAUDE.md` §3), and
+so check which document each one names before cutting it. One was left on purpose:
 `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a
 deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
 each to the pull request that built the work, or drop the tag. A test title is not a comment, so
@@ -1237,9 +1236,9 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 - **Passkey name column after A760:** A403 keeps the column under the schema hold; new registrations
   use the detected password manager. Decide whether to remove it after the hold.
   [Detail](dashboard.md#passkey-name-column-after-a760)
-- **Person-id columns and `order_draft_items.menu_item_id` have no foreign key.** About 30 columns
-  holding a person's id, and that one, say at the column that no key was added because A760 changed
-  no table's shape; their old reason (`persons` sat in another migration set) ended when A760 moved
+- **Person-id columns and `order_draft_lines.menu_item_id` have no foreign key.** About 30 columns
+  holding a person's id, and that one, say "No key yet" at the column; their old reason (`persons`
+  sat in another migration set) ended when A760 moved
   it into core. Declare the keys when A1308 rewrites the starting migrations (CLAUDE.md §3: declare
   every foreign key).
 
@@ -1374,7 +1373,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-26 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+27 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
   now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/catalogue/src/extras.ts`)
@@ -1417,6 +1416,13 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](ci.md#loose-ends-left-by-the-comment-pruning-pull-requests-559-to-624).
 - **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN.
   [Detail](dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-and-0453-0454-is-installed)
+- **Fiscal source comments still describe the migration sets A760 retired.**
+  `packages/fiscal-verifactu/src/schema/clock-confirmations.ts:46`, `clock-stop-restarts.ts:16` and
+  `filing-cases.ts:60` say `persons` is in identity's own set (it is in core's since A760);
+  `clock-stop-restarts.ts:6` says A760 will drop that table (A760 changed no table's shape); and
+  `src/drain.ts:54` and `:1930` name `@waitron/scheduler`, now part of `@waitron/payments`. A760
+  left
+  them because fiscal source stays unedited in that change; fix them in the next fiscal change.
 - **Remove the stale till description beside the device-delete preview fixture.**
   `apps/dashboard/src/screens/devices-screen.test.ts:6005` calls the fixture a till, while
   its `d1` row is a kitchen display (`kind: "kds_station"`). Remove that comment in the next

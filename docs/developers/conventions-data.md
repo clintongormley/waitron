@@ -1537,7 +1537,7 @@ rotation reads `node_signing_key` whole), a seal only a box holding the key ring
 (`tenant_credentials`, whose ring a joining spare receives from the main box), or rows the
 transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
-only as its hash (`packages/identity/src/classification.ts`; #554, and the owner's decision that a
+only as its hash (`packages/db/src/classification.ts`; #554, and the owner's decision that a
 login survives a rebuild and a promotion). Pinned,
 each by deleting the node filter and watching a case fail: the `node_mode` and
 `node_mirror_link` readers in `node.db` (the "keeps each node's row apart" case in
@@ -3760,9 +3760,10 @@ Drizzle records a hash of each migration file's whole text in the database's jou
 `provisioning.database_ahead` when the journal records a hash the image does not ship.
 `packages/migrations/src/journal-hashes.test.ts` pins how drizzle computes the hash. Measured
 2026-10-02 with drizzle's own `readMigrationFiles` (`drizzle-orm@0.45.3`): editing only comment
-lines in `scripts/fixtures/a760-history/core/0001_behavioural_triggers.sql` and
-`scripts/fixtures/a760-history/media/0001_image_references.sql` changed exactly those two files' hashes, index 1
-of 68 and index 1 of 8. So such an edit ships only with a reset of every venue already migrated,
+lines in core's `0001_behavioural_triggers.sql` and media's `0001_image_references.sql` (then in
+each package's `drizzle/` folder, frozen since A760 in `scripts/fixtures/a760-history/`) changed
+exactly those two files' hashes, index 1 of 68 and index 1
+of 8. So such an edit ships only with a reset of every venue already migrated,
 said in the pull request's first line. Cost: #1036 had to restore both files byte for byte; the
 owner then chose to edit them and reset the venues.
 

@@ -1254,7 +1254,7 @@ async function bootServer(
   }
 
   // Drift visibility: log the enabled set against what the database has actually migrated. A
-  // soft-disabled module's data is kept; it is simply not migrated.
+  // soft-disabled module's data is kept; a disabled module with a set of its own is not migrated.
   let appliedModuleVersions: Record<string, number> = {};
   if (config.node !== undefined) {
     const myModuleVersions = await schemaVersionsByModule(store, availableModules);

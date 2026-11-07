@@ -394,8 +394,9 @@ pnpm --filter @waitron/staffing exec vitest run --project node src/schema/schema
 
 The unchanged checkout passed all eight cases. Removing only `ON DELETE restrict` from the
 `shift_assignments.staff_role_id` reference to `staff_roles.id` in
-`scripts/fixtures/a760-history/staffing/0001_staffing_days_blocks_assignments.sql`, leaving the declaration and
-test unchanged, made the `shift_assignments` comparison fail with this difference:
+staffing's `0001_staffing_days_blocks_assignments.sql` (then in `packages/staffing/drizzle/`, frozen
+since A760 in `scripts/fixtures/a760-history/staffing/`), leaving the declaration and test
+unchanged, made the `shift_assignments` comparison fail with this difference:
 
 ```diff
 - staff_role_id -> staff_roles(id) on delete restrict on update no action

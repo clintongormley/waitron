@@ -23,9 +23,7 @@ import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js"
  * And it says nothing about indexes that are not unique.
  *
  * TWO KEYS ARE ABSENT from the foreign-key list: `products(image)` and `sections(image)`, both
- * naming a `media_images` filename, are held by triggers instead. The package-dependency reason
- * the triggers were first written for is gone: all three tables are declared in `packages/db`. No
- * other reason is recorded.
+ * naming a `media_images` filename, are held by triggers instead.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");

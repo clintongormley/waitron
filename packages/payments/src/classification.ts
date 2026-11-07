@@ -22,7 +22,7 @@ export const PAYMENTS_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("card_reader_holders", "state", STATE),
 ];
 
-/** Every table in payments' set: payments' own and scheduler's, which lives in it. */
+/** Every table in payments' set: payments' own and the reconciliation schedule's. */
 export const PAYMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
   ...PAYMENTS_OWN_CLASSIFICATION,
   classify(
