@@ -1143,6 +1143,16 @@ and 5,002 ms. Left alone, 0.5.18 exited 1 after 30 seconds ("shutdown timed out 
 seconds after start took up to 6,035 ms, 5 of them past that grace, against 2 to 11 ms on 0.5.17
 (its own script, not kept).
 
+**Since 2026-11-07 the box gives Litestream `shutdown-timeout: 4500ms`, so that stop ends in
+Litestream's own exit instead (owner's choice).** Through the real `litestreamConfig` and
+`spawnLitestream` against a silent port, three stops took 4,503 to 4,509 ms, each exit 1 with
+"shutdown timed out after 4.5s"; the same config without that line, three stops, 5,001 to 5,002 ms,
+exit null (the forced kill). Earlier the same day, a script writing its own config measured
+`shutdown-sync-timeout: 4s` alone at 30 seconds (3 stops), and both settings together at 4.5 seconds
+(3 stops). Against a refused port, 14 stops spread over the first 10 seconds after start, one run
+each way: with the line, two took 4,503 ms and exited 1 by themselves; without it, the same two took
+5,002 and 5,003 ms and ended in the forced kill. The other twelve matched, from 1 to 4,478 ms.
+
 **Every sale came back after a short outage, on both versions: 11 to 17 seconds of selling, one run
 each.** A throwaway probe put a forwarding port in front of the store, closed it, sold 12,000 sales,
 opened it again and restored without restarting Litestream:

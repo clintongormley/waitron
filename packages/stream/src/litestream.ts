@@ -64,6 +64,10 @@ export function litestreamEnv(
  * - One full copy a day and a week of history; `retention` takes hours only.
  * - `l0-retention` is Litestream's default, written out because the freshness reader relies on a
  *   level-0 file staying listed at least that long after it is created.
+ * - `shutdown-timeout` replaces Litestream's 30 seconds (`cmd/litestream/main.go:361` at the pinned
+ *   tag), so a stop against a bucket that never answers ends in Litestream's own exit before the
+ *   forced stop in `litestream-process.ts`. A value it cannot parse is only logged and the 30
+ *   seconds kept (`main.go:682-689`).
  * - The path and the address are double-quoted YAML scalars (JSON's escaping is valid there), so a
  *   `:` or `#` in either cannot change the structure.
  */
@@ -79,6 +83,7 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
     "  retention: 168h",
     "l0-retention: 5m",
     "l0-retention-check-interval: 5m",
+    "shutdown-timeout: 4500ms",
     "",
     "dbs:",
     `  - path: ${JSON.stringify(input.dbPath)}`,

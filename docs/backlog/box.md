@@ -491,8 +491,8 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
   [Detail](../backlog/box.md#a-pointer-write-from-a-process-that-has-since-died-landing-after-the-restart-can-still-make-the-box-refuse-itself)
 - The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a
   large database Litestream may not finish its last upload (it is still told to stop). Since
-  0.5.18 a stop against a bucket that does not answer takes the 5-second grace and ends in the
-  forced kill, and that counts against the 8.
+  0.5.18 a stop against a bucket that does not answer takes 4.5 seconds, Litestream's own
+  `shutdown-timeout` from `litestreamConfig`, and that counts against the 8.
 - `pnpm setup:litestream` skips the download when the installed binary already reports the
   pinned version, so the checksum protects fresh downloads only.
 

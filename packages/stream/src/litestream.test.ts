@@ -11,6 +11,7 @@ import {
   replicaUrl,
   resolveLitestreamBin,
 } from "./litestream.js";
+import { KILL_GRACE_MS } from "./litestream-process.js";
 
 const BUCKET: BucketConfig = {
   region: "eu-south-2",
@@ -51,6 +52,7 @@ describe("the Litestream configuration", () => {
         "  retention: 168h",
         "l0-retention: 5m",
         "l0-retention-check-interval: 5m",
+        "shutdown-timeout: 4500ms",
         "",
         "dbs:",
         '  - path: "/var/lib/waitron/state/venue/venue.db"',
@@ -59,6 +61,14 @@ describe("the Litestream configuration", () => {
         "",
       ].join("\n"),
     );
+  });
+
+  // Past its own limit Litestream exits by itself; at or past the forced stop it never gets to.
+  it("gives Litestream a stop limit shorter than the forced stop", () => {
+    const text = litestreamConfig({ dbPath: "/d/venue.db", replicaUrl: "s3://b/p?region=r" });
+    const limit = /^shutdown-timeout: (\d+)ms$/m.exec(text);
+    expect(limit).not.toBeNull();
+    expect(Number(limit![1])).toBeLessThan(KILL_GRACE_MS);
   });
 
   // Litestream expands `${VAR}` over the whole file's text before parsing it (its docs, and
