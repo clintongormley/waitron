@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
+import { runInNewContext } from "node:vm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   LIGHT_A_PACKAGES,
@@ -47,9 +48,39 @@ const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
 describe("disposable server routing", () => {
+  it.each([
+    ["", true],
+    ["a".repeat(40), true],
+    ["b".repeat(40), false],
+  ])("admits configured head %j only when empty or matching", (selectedHead, admitted) => {
+    const routing = job("test-server").body.find((line) => /^ {4}runs-on:/.test(line));
+    const condition = routing.slice(routing.indexOf("${{ ") + 4, routing.indexOf(" && fromJSON("));
+    const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
+    const watchCondition = watch.slice(watch.indexOf("${{ ") + 4, watch.lastIndexOf(" }}"));
+    const context = {
+      github: {
+        run_attempt: 1,
+        event_name: "pull_request",
+        repository_id: 42,
+        repository: "o/r",
+        event: {
+          pull_request: { head: { sha: "a".repeat(40), repo: { id: 42, full_name: "o/r" } } },
+        },
+      },
+      vars: {
+        DISPOSABLE_TESTS_MODE: "server",
+        DISPOSABLE_TESTS_SERVER_JOBS: "1",
+        DISPOSABLE_TESTS_HEAD: selectedHead,
+      },
+      matrix: { shard: 1 },
+    };
+    expect(runInNewContext(condition, context)).toBe(admitted);
+    expect(runInNewContext(watchCondition, context)).toBe(admitted);
+  });
+
   it("routes only the first attempt of same-repository server PR shards within the configured budget", () => {
     expect(job("test-server").body).toContain(
-      "    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('[\"self-hosted\",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}",
+      "    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('[\"self-hosted\",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}",
     );
     for (const entry of jobs.filter(({ id }) => id !== "test-server")) {
       const runner = entry.body.find((line) => /^ {4}runs-on:/.test(line));

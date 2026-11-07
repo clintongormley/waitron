@@ -603,10 +603,10 @@ except the last, added on 2026-11-07.
 The original entries retain their text from the index (backlog review, 2026-11-06).
 A1424's live qualification was added on 7 November 2026.
 
-- **A1424: qualify disposable server runners before activation.** Routing and its bounded
-  metadata watchdog are prepared, disabled by default. I still supplies measured readiness
-  and capacity. Run a real server-scoped PR on the rented runner, then qualify the unavailable
-  label and server-down paths through visible failure/cancellation and hosted attempt two.
+- **A1424: finish qualifying disposable server runners before general activation.** Routing
+  and its bounded metadata watchdog share the optional `DISPOSABLE_TESTS_HEAD` selection;
+  keep it set during selected-head trials. Mixed-workload capacity and the unavailable-label
+  and server-down paths through visible failure/cancellation and hosted attempt two remain open.
   Retain runner identity, unchanged source head, coverage merge and aggregate results.
   [Procedure and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
 

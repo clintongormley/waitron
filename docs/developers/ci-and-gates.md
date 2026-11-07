@@ -84,6 +84,10 @@ from measured capacity; one runner slot does not make several shards run in para
 Choose a budget whose shards can all start within twenty minutes. Otherwise the watchdog
 requests cancellation of the entire workflow run even when another shard is already running.
 
+Set `DISPOSABLE_TESTS_HEAD` to the chosen pull request's full head SHA to route only that
+commit. An empty value admits every otherwise eligible head. The queue watchdog uses
+the same selection, so other commits stay on hosted runners without a queue watch.
+
 Only the first attempt of a same-repository pull request uses this route. Main pushes,
 tags, manual runs, forks and every retry use GitHub-hosted runners. This includes retries
 that retain the successful `changes` job's outputs: routing reads the current attempt
