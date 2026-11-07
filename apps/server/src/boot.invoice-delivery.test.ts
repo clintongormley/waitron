@@ -684,7 +684,7 @@ describe("invoice email worker at trading boot", () => {
 describe("invoice-choice email context at trading boot", () => {
   it.each([
     ["demo", false, false, 200],
-    ["prepare", false, false, 200],
+    ["prepare", false, false, 409],
     ["live", true, false, 200],
     ["live", false, true, 200],
     ["live", false, false, 409],

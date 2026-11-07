@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { incidents, locations } from "@waitron/db";
+import { incidents, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -18,6 +18,7 @@ import type { TextEmailSender } from "./text-email.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { readVenueLocale } from "./venue-locale.js";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -93,6 +94,7 @@ interface Booted {
 async function bootServer(
   booted: Booted,
   venue: Awaited<ReturnType<typeof setupVenue>>,
+  email?: { intent: "demo" | "prepare"; development: boolean },
 ): Promise<void> {
   const [port] = await freePorts(1);
   booted.scratch = await mkdtemp(join(tmpdir(), "waitron-boot-box-emails-"));
@@ -116,7 +118,8 @@ async function bootServer(
     WAITRON_VENUE_DIR: dirname(database),
     WAITRON_NODE_ID: venue.cfg.nodeId,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_ENV: "preproduction",
+    WAITRON_ENV: email?.development === true ? "dev" : "preproduction",
+    ...(email === undefined ? {} : { WAITRON_ONBOARDING_INTENT: email.intent }),
   };
   booted.server = await startServer(env, env);
   await vi.waitFor(async () => {
@@ -142,6 +145,54 @@ async function venueName(venue: Awaited<ReturnType<typeof setupVenue>>): Promise
 }
 
 describe("the running server's managers' email check", () => {
+  it.each([
+    ["demo", false, false, "local_capture"],
+    ["prepare", false, false, "unconfigured"],
+    ["prepare", false, true, "smtp"],
+    ["prepare", true, false, "local_capture"],
+    ["prepare", true, true, "smtp"],
+  ] as const)(
+    "resolves box mail for %s development=%s configured=%s as %s",
+    async (intent, development, configured, mode) => {
+      const venue = await setupVenue(suite.db);
+      const booted: Booted = {};
+      if (configured) {
+        await withTransaction(suite.db, (tx) =>
+          putCredential(
+            tx,
+            loadKeyRing({
+              WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+              WAITRON_CREDENTIALS_KEY_VERSION: "1",
+            }),
+            {
+              purpose: "email.smtp",
+              value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
+            },
+          ),
+        );
+      }
+      try {
+        await bootServer(booted, venue, { intent, development });
+        expect((await holder.deps!.context()).delivery).toEqual(
+          mode === "unconfigured"
+            ? { mode }
+            : {
+                mode,
+                smtp:
+                  mode === "smtp"
+                    ? { url: "smtp://smtp.example.test:2525", from: "venue@example.test" }
+                    : {
+                        url: "smtp://127.0.0.1:1025",
+                        from: "Waitron <no-reply@waitron.test>",
+                      },
+              },
+        );
+      } finally {
+        await shutDown(booted);
+      }
+    },
+  );
+
   it("boot emails the managers when the disk is full, once", async () => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};
