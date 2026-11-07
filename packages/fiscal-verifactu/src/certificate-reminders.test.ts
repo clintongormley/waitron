@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import type { CertKind } from "./aeat-transport.js";
 import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { claimReminder, reportReminder } from "./certificate-reminders.js";
 import { recordInstall } from "./certificate-record.js";
 
@@ -236,5 +237,52 @@ describe("claimReminder", () => {
     for (const row of stored) {
       for (const value of Object.values(row)) expect(String(value)).not.toContain("@");
     }
+  });
+});
+
+describe("claimReminder after a handover", () => {
+  async function tookOver(): Promise<void> {
+    await suite.db
+      .insert(nodes)
+      .values({ id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" });
+    await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
+  }
+
+  it("a reminder the old box failed to send is retried here", async () => {
+    await seedTenantNodeSif(suite.db);
+    await install(TENANT_A.nodeId);
+    const failed = await claimAt(WARNING, [ANA]);
+    const reported = new Date("2026-08-26T10:05:00Z");
+    await reportAt(failed!.id, "rejected", reported);
+    const sent = await claimAt(WARNING, [BEA]);
+    await reportAt(sent!.id, "sent", WARNING);
+    await tookOver();
+
+    const later = new Date(reported.getTime() + 86_400_001);
+    const again = await claimAt(later, [ANA, BEA], TENANT_A.nodeId2);
+    expect(again).toMatchObject({ id: failed!.id, recipient: "ana@example.com" });
+    await expect(claimAt(later, [ANA, BEA], TENANT_A.nodeId2)).resolves.toBeNull();
+    await reportAt(again!.id, "sent", later, TENANT_A.nodeId2);
+    const stored = await rows();
+    expect(stored.map((r) => [r.person_id, r.status, r.node_id])).toEqual(
+      expect.arrayContaining([
+        [P1, "sent", TENANT_A.nodeId],
+        [P2, "sent", TENANT_A.nodeId],
+      ]),
+    );
+    expect(stored).toHaveLength(2);
+  });
+
+  it("the box that took over sends the next stage of the old box's certificate", async () => {
+    await seedTenantNodeSif(suite.db);
+    await install(TENANT_A.nodeId);
+    await tookOver();
+
+    await expect(claimAt(URGENT, [ANA], TENANT_A.nodeId2)).resolves.toMatchObject({
+      recipient: "ana@example.com",
+      text: EN_EXPIRING.replace("60 day(s)", "14 day(s)"),
+    });
+    const [row] = await rows();
+    expect(row).toMatchObject({ node_id: TENANT_A.nodeId2, stage: "urgent", status: "claimed" });
   });
 });

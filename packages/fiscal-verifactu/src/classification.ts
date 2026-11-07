@@ -27,6 +27,6 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify(
     "fiscal_certificate_reminders",
     "local",
-    "the expiry emails one node sent about its own certificate, keyed by its node id",
+    "the expiry emails one node sent about its certificate, keyed by the node id of the node that wrote the row",
   ),
 ];

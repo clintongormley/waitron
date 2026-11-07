@@ -528,27 +528,6 @@ with M1's key. `nextStandings` would give `sell-only`, which does fence, but onl
 main in the chart it minted from; a third box promoted from M1's first chart would leave M2
 `serving-secondary`, which was not run.
 
-## After a handover the new main box gives no certificate expiry warning
-
-A1341. FISCAL. The owner chose on 2026-11-05: fix it before A947 3b lands, so the certificate's records
-and warnings carry over to the new main box. Left open by A1018 Slice 5 (Ruling R51). Every reader looks the record up
-by this box's node id, and the only row, inside the copy, names the old box: `certificate-card.ts`,
-`certificate-alerts.ts`, `certificate-reminders.ts`, `certificate-diagnosis.ts`,
-`certificate-install.ts`, `provisioning-secret.ts`, and its own SQL in
-`backup-verification-secrets.ts`. Filing reads the sealed certificate, not this record.
-
-Run on M2 after the whole simulated handover, with M1's certificate 5 days from expiry:
-- no certificate alert, where M1 had `fiscal.certificate_expiring`, and no reminder email;
-- the card reads "Installed: not recorded" with a "Replace certificate" button and no dates (the
-  words are read from the card's code and a browser case);
-- a backup of M2's file fails the certificate check as `invalid`;
-- the sealed certificate opens, with the same fingerprint, and a real mutual-TLS request using it
-  answered 200, and a renewal works.
-
-Read, not run: when the certificate expires, sales go on and records wait, and the first thing that
-speaks is `fiscal.submission_delayed` about 4 hours later, with nothing naming the certificate.
-`handover-controlled.e2e.test.ts` records the missing record as `it.fails`.
-
 ## A placed copy can lose a newer chart
 
 Three points from the reviews of A1018 Slice 5's placing, left open by that slice:

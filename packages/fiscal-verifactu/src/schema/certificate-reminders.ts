@@ -5,12 +5,14 @@ import { fiscalCertificateInstalls } from "./certificate-installs.js";
 export const reminderStage = enumType(["warning", "urgent", "expired"]);
 export const reminderStatus = enumType(["claimed", "sent", "failed", "unknown"]);
 
-/** One row per expiry email a node sent, or tried to send, about its own certificate. */
+/** One row per expiry email a node sent, or tried to send, about the certificate `latestInstall`
+ * finds for it, which may be one a box it took over from installed. */
 export const fiscalCertificateReminders = table(
   "fiscal_certificate_reminders",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // No foreign key, for the reason on the install's `node_id`; the writer passes its own node's id.
+    // No foreign key, for the reason on the install's `node_id`. The node that first wrote the row;
+    // a box that took over retries the row under this id rather than rewriting it.
     nodeId: id("node_id").notNull(),
     installId: id("install_id")
       .notNull()

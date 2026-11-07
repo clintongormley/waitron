@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
-import { withTransaction } from "@waitron/db";
+import { nodes, withTransaction } from "@waitron/db";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { makeAuthority } from "../test/certificate-fixtures.js";
 import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { latestInstall, recordInstall } from "./certificate-record.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { fiscalCertificateInstalls } from "./schema/index.js";
@@ -32,6 +34,34 @@ function certOf(file: { pfx: Buffer; passphrase: string }) {
 }
 
 const at = (iso: string) => () => new Date(iso);
+
+const NODE_3 = brandNodeId("a0000000-0000-4000-8000-00000000000a");
+
+async function seedBoxes(): Promise<void> {
+  await seedTenantNodeSif(suite.db);
+  await suite.db.insert(nodes).values([
+    { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
+    { id: NODE_3, locationId: TENANT_A.locationId, name: "Node 3" },
+  ]);
+}
+
+function installOn(nodeId: string, installedAt: string, fingerprint: string) {
+  return withTransaction(suite.db, (tx) =>
+    recordInstall(tx, {
+      nodeId,
+      installedAt: new Date(installedAt),
+      source: "setup",
+      kind: "sello",
+      fingerprint,
+      validFrom: new Date("2026-01-01T00:00:00Z"),
+      validUntil: new Date("2030-01-01T00:00:00Z"),
+    }),
+  );
+}
+
+function latestOn(nodeId: string) {
+  return withTransaction(suite.db, (tx) => latestInstall(tx, nodeId));
+}
 
 function installRows() {
   return suite.db.select().from(fiscalCertificateInstalls);
@@ -181,5 +211,57 @@ describe("sealAeatSecret's install record", () => {
     );
     expect(vault).toBeNull();
     expect(await installRows()).toHaveLength(0);
+  });
+});
+
+describe("latestInstall after a handover", () => {
+  it("the newest install of the box this one took over from is found", async () => {
+    await seedBoxes();
+    await installOn(TENANT_A.nodeId, "2026-10-18T10:00:00.000Z", "m1-first");
+    await installOn(TENANT_A.nodeId, "2026-10-18T11:00:00.000Z", "m1-second");
+    await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
+
+    const latest = await latestOn(TENANT_A.nodeId2);
+    expect(latest).toMatchObject({ nodeId: TENANT_A.nodeId, fingerprint: "m1-second" });
+    expect(await latestOn(TENANT_A.nodeId)).toMatchObject({ fingerprint: "m1-second" });
+  });
+
+  it("this box's own newer install wins", async () => {
+    await seedBoxes();
+    const ring = testRing();
+    await sealAeatSecret(
+      { db: suite.db, ring, nodeId: TENANT_A.nodeId, now: at("2026-10-18T10:00:00.000Z") },
+      certOf(candidate),
+    );
+    await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
+    // The box that took over runs a minute behind the one it took over from.
+    await sealAeatSecret(
+      { db: suite.db, ring, nodeId: TENANT_A.nodeId2, now: at("2026-10-18T09:59:00.000Z") },
+      certOf(other),
+    );
+
+    const latest = await latestOn(TENANT_A.nodeId2);
+    expect(latest).toMatchObject({ nodeId: TENANT_A.nodeId2, fingerprint: other.fingerprint });
+    expect(latest?.installedAt).toEqual(new Date("2026-10-18T10:00:00.001Z"));
+  });
+
+  it("a box two handovers on finds the first box's install when neither later box has one", async () => {
+    await seedBoxes();
+    await installOn(TENANT_A.nodeId, "2026-10-18T10:00:00.000Z", "m1-only");
+    await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
+    await recordTakeover(suite.db, TENANT_A.nodeId2, NODE_3);
+
+    expect(await latestOn(NODE_3)).toMatchObject({
+      nodeId: TENANT_A.nodeId,
+      fingerprint: "m1-only",
+    });
+  });
+
+  it("the box that handed over does not find the install of the box that took over", async () => {
+    await seedBoxes();
+    await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
+    await installOn(TENANT_A.nodeId2, "2026-10-18T10:00:00.000Z", "m2-only");
+
+    expect(await latestOn(TENANT_A.nodeId)).toBeNull();
   });
 });

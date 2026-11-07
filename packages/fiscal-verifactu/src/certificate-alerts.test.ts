@@ -1,9 +1,10 @@
-import { withTransaction } from "@waitron/db";
+import { nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import type { CertKind } from "./aeat-transport.js";
 import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { certificateAlerts } from "./certificate-alerts.js";
 import { recordInstall } from "./certificate-record.js";
 
@@ -137,5 +138,17 @@ describe("certificateAlerts", () => {
       }),
     );
     await expect(alertsAt("2026-10-24T23:00:00Z")).resolves.toEqual([]);
+  });
+
+  it("raises the expiry alert on the box that took over from the one that installed it", async () => {
+    await seedTenantNodeSif(suite.db);
+    await install(TENANT_A.nodeId, "representante");
+    await suite.db
+      .insert(nodes)
+      .values({ id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" });
+    await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
+    await expect(alertsAt("2026-10-19T10:00:00Z", TENANT_A.nodeId2)).resolves.toMatchObject([
+      { code: "fiscal.certificate_expiring", params: { days: 6, date: "2026-10-25" } },
+    ]);
   });
 });

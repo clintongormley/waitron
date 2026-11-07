@@ -1968,12 +1968,6 @@ Not in any track until the standalone primary is done.
   Left open by A1018 Slice 5 (Ruling R42).
   [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 
-- **A1341. FISCAL, before A947 3b lands: after a handover the certificate's records and warnings must
-  follow the new main box.** The owner chose this on 2026-11-05. Today the new main box gives no
-  expiry warning: filing and a renewal work, but every reader looks up the install record by this
-  box's node id, and the record names the old box. Left open by A1018 Slice 5 (Ruling R51).
-  [Detail](backlog/replication-cloud.md#after-a-handover-the-new-main-box-gives-no-certificate-expiry-warning)
-
 - **Series and module-preparation gaps at handover** (bundle of 3, 2 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 
 - **Decide what the old promote route still does** (bundle of 3, 2 important, size S). Holds A1279. [Detail](backlog/replication-cloud.md#bundle-decide-what-the-old-promote-route-still-does)

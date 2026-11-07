@@ -1,5 +1,6 @@
-import { and, eq } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { readHistoryNodes, type Transaction } from "@waitron/db";
+import type { NodeId } from "@waitron/shared";
 import { calendarDaysLeft, certificateStage, localDate } from "./certificate-dates.js";
 import { venueTimeZone } from "./certificate-install.js";
 import { latestInstall } from "./certificate-record.js";
@@ -51,9 +52,10 @@ function wording(
       };
 }
 
-/** Claims the next expiry email due for the certificate `nodeId` installed last, or `null`. A
+/** Claims the next expiry email due for the certificate `latestInstall` finds, or `null`. A
  * row left `claimed` or reported `unknown` is never claimed again, so a crashed send is not
- * repeated; a `failed` one is, once its report is more than a day old. */
+ * repeated; a `failed` one is, once its report is more than a day old, also on a box that took
+ * over from the one that wrote it. The row keeps the node id it was written with. */
 export async function claimReminder(
   tx: Transaction,
   deps: { nodeId: string },
@@ -62,6 +64,7 @@ export async function claimReminder(
 ): Promise<Reminder | null> {
   const install = await latestInstall(tx, deps.nodeId);
   if (install === null) return null;
+  const history = [...(await readHistoryNodes(tx, deps.nodeId as NodeId))];
   const timeZone = await venueTimeZone(tx);
   const stage = certificateStage(install.kind, now, install.validUntil, timeZone);
   if (stage === null) return null;
@@ -70,7 +73,7 @@ export async function claimReminder(
     .from(fiscalCertificateReminders)
     .where(
       and(
-        eq(fiscalCertificateReminders.nodeId, deps.nodeId),
+        inArray(fiscalCertificateReminders.nodeId, history),
         eq(fiscalCertificateReminders.installId, install.id),
         eq(fiscalCertificateReminders.stage, stage),
       ),
@@ -111,7 +114,7 @@ export async function claimReminder(
         .set({ status: "claimed", claimedAt: now, reportedAt: null })
         .where(
           and(
-            eq(fiscalCertificateReminders.nodeId, deps.nodeId),
+            inArray(fiscalCertificateReminders.nodeId, history),
             eq(fiscalCertificateReminders.id, row.id),
             eq(fiscalCertificateReminders.status, "failed"),
           ),
@@ -132,7 +135,8 @@ export async function claimReminder(
 
 const STATUS = { sent: "sent", rejected: "failed", unknown: "unknown" } as const;
 
-/** Records how a claimed send ended. A row no longer `claimed`, or another node's, is left as it is. */
+/** Records how a claimed send ended. A row no longer `claimed`, or one written by a box this one
+ * did not take over from, is left as it is. */
 export async function reportReminder(
   tx: Transaction,
   deps: { nodeId: string },
@@ -140,12 +144,13 @@ export async function reportReminder(
   outcome: "sent" | "rejected" | "unknown",
   now: Date,
 ): Promise<void> {
+  const history = [...(await readHistoryNodes(tx, deps.nodeId as NodeId))];
   await tx
     .update(fiscalCertificateReminders)
     .set({ status: STATUS[outcome], reportedAt: now })
     .where(
       and(
-        eq(fiscalCertificateReminders.nodeId, deps.nodeId),
+        inArray(fiscalCertificateReminders.nodeId, history),
         eq(fiscalCertificateReminders.id, id),
         eq(fiscalCertificateReminders.status, "claimed"),
       ),

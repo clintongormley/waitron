@@ -2109,10 +2109,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(on.m2Certificate.revision).toBe(run.m1Certificate.revision);
   });
 
-  // Fiscal follow-up (A1018 plan Task 5.10): the install record is looked up by this box's node id and
-  // names M1, so the card reads "Installed: not recorded", and expiry alerts, reminders, diagnosis and
-  // backup's certificate check lose it too; filing and a renewal work.
-  it.fails("M2's certificate card shows that certificate", () => {
+  it("M2's certificate card shows that certificate", () => {
     expect(sold().on.m2Certificate.installed).toMatchObject({ source: "setup", kind: "sello" });
   });
 
