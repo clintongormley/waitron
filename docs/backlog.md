@@ -2096,17 +2096,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **One signed request helper; strict reply readers** (bundle of 2, size M). [Detail](backlog/replication-cloud.md#bundle-one-signed-request-helper-strict-reply-readers)
 
-- **A951-S. Reach the box's dashboard through Cloud.** The owner replaced the earlier A951 build
-  on 6 November with a small remote entrance and the existing gateway. The old branch stays parked.
-  A manual browser signed in through the public gateway with normal certificate trust on
-  6 November ([proof PR](https://github.com/clintongormley/waitron/pull/2525)); live certificate
-  replacement also worked without a server restart. A separate managed demo recovered its app
-  and tunnel after controlled exits; physical reboot is untested. The certificate worker
-  now resumes pending requests, renews before expiry and opens the listener after first issuance;
-  its automated public-demo deployment is not yet qualified. The optional tunnel runtime now has its own container and box key. Left: signed connection
-  details and automatic startup, image publication, Settings on/off/status, remaining isolation
-  qualification and retirement of `@waitron/tunnel`. Translate all and address completion remain
-  test-box trials.
+- **A951-S. Reach the box's dashboard through Cloud.** Build the owner's 6 November simple
+  route; keep the earlier private A951 branch parked. The entrance (#2525) and certificate worker
+  (#2530) await landing. Wire the optional tunnel runtime to the existing signed connection,
+  publish its image, add Settings on/off/status and retire `@waitron/tunnel`. Qualify public
+  reconnect, reboot, renewal, wrong-venue refusal, revocation and an offline sale. Translate all
+  and address completion remain test-box trials.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** box-side networking and `@waitron/tunnel`'s retirement; first-contact trust

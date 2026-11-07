@@ -129,6 +129,9 @@ jobs:
           mkdir -p build
           git show -s --format='%H:%ct' "$GITHUB_SHA" > build/source-metadata
 
+      - name: Check the optional staff tunnel image and Compose profile
+        run: sh scripts/tunnel-container-smoke.sh
+
       - name: Build the image
         uses: docker/build-push-action@v7
         with:
