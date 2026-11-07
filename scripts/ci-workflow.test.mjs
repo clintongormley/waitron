@@ -5539,6 +5539,34 @@ describe("scoped tests and nightly full verification", () => {
     expect(line).toBeDefined();
     expect(expressionValue(line, context(event, ref))).toBe(want);
   });
+  it.each(["false", "true"])(
+    "carries coverage mode %s through the declared job output to coverage merges and the verdict",
+    (full) => {
+      const output = job("changes").body.find((line) => /^ {6}full:/.test(line));
+      const propagated = output
+        ? expressionValue(output, { steps: { classify: { outputs: { full } } } })
+        : "";
+      const c = context("workflow_dispatch", "refs/heads/main", propagated);
+      for (const { id, body } of mergeJobs) {
+        const expression = body.find((line) => /^ {4}if:/.test(line)).replace(/^ {4}if: /, "");
+        expect(Boolean(runInNewContext(expression, c)), id).toBe(full === "true");
+      }
+      const needs = Object.fromEntries(
+        needsOf(job("ci").body).map((id) => [
+          id,
+          {
+            result:
+              full === "false" && mergeJobs.some((merge) => merge.id === id)
+                ? "skipped"
+                : "success",
+            outputs: {},
+          },
+        ]),
+      );
+      needs.changes.outputs = c.needs.changes.outputs;
+      expect(runVerdict(needs).status).toBe(0);
+    },
+  );
   it("schedules the full suite nightly", () => {
     expect(lines.join("\n")).toMatch(/\n {2}schedule:\n {4}- cron: "0 2 \* \* \*"/);
   });

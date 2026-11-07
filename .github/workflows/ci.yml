@@ -57,6 +57,7 @@ jobs:
       actions: read
       pull-requests: read
     outputs:
+      full: ${{ steps.classify.outputs.full }}
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
       packages: ${{ steps.classify.outputs.packages }}
