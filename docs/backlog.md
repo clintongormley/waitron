@@ -2118,6 +2118,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **A1427. Test changed runtime dependencies on PRs and landings; run full coverage nightly.**
+  [Plan](superpowers/plans/2026-11-07-a1427-related-tests-nightly.md). Build waits for D599's
+  automatic runner pickup at measured capacity and the plan's pending watcher feedback.
+
 
 - **A change to the till alone does not run the handover's end-to-end test.** The test loads the
   till's router by path, and a till-only change selects no `@waitron/server` (`scripts/changed-scope.mjs`),
