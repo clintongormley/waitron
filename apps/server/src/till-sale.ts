@@ -1629,7 +1629,6 @@ async function finalizeCapture(
         nodeId: cfg.nodeId,
         ...selected.sale,
         operationDescription,
-        // The sale-idempotency key (`sales_working_order_id_key`) the backstop below relies on.
         workingOrderId: brandWorkingOrderId(req.id),
         ...language,
         total: priced.total,
