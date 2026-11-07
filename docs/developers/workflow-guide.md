@@ -494,6 +494,15 @@ refused the merge, and Astra took 14 minutes to their 5.5 but was billed to the 
 to Claude.
 
 
+### Keep a plan-review checkout fixed until the wrapper returns
+
+`claude-seat.sh review-branch` compares the checkout's head and porcelain status before and after
+its read. A driver commit during that read also triggers “reviewer changed the candidate checkout”
+and discards the unpublished report. Use a fixed disposable snapshot when independent work must
+continue. On 7 November 2026, A1393's amendment read started at `f1a0675ea0`; the driver committed
+`c03db64c92` during it and the wrapper refused the result. The retry used an installed disposable
+clone and returned the completed 397-second plan report. This checks Git state, not ignored files.
+
 ### Read the review report before treating it as complete
 
 On 2026-10-07, A284's first `claude-seat.sh review-run` exited 0 after 539 seconds and wrote a

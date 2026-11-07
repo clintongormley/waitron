@@ -13955,3 +13955,25 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     });
   });
 });
+
+it.each(["en-GB", "es-ES"] as const)(
+  "keeps the request-device recovery instruction when marking cleared in %s",
+  async (locale) => {
+    const { el } = await mountApp({
+      markTableCleared: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    const screen = await toFloor(el);
+    setLocale(locale);
+    try {
+      emit(screen, "mark-cleared", { tableId: "t4" });
+      await flush(el);
+      expect(banner(el)!.textContent).toContain(
+        locale === "en-GB"
+          ? "Reload or reopen Waitron on this device, then try again."
+          : "Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",
+      );
+    } finally {
+      setLocale("en");
+    }
+  },
+);

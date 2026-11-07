@@ -25458,3 +25458,96 @@ describe("retrieved table bills paid at Counter", () => {
     expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
   });
 });
+
+describe("request-device refusals keep their recovery instruction", () => {
+  afterEach(() => setLocale("es-ES"));
+  const nextStep = {
+    "en-GB": "Reload or reopen Waitron on this device, then try again.",
+    "es-ES": "Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",
+  };
+  it.each(["en-GB", "es-ES"] as const)(
+    "shows the device instruction for receipt handover in %s",
+    async (locale) => {
+      const { el } = await mountApp({
+        recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+        getReceiptPrintStatus: vi
+          .fn()
+          .mockResolvedValue({ status: "done", jobId: "original", canRetry: false }),
+        confirmReceiptHandover: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      const c = await toCounter(el);
+      setLocale(locale);
+      c.store.addProduct(cafe, "2");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      emit(ticket(el)!, "confirm-handover");
+      await flush(el);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+        nextStep[locale],
+      );
+    },
+  );
+  it.each(["en-GB", "es-ES"] as const)(
+    "shows the device instruction for language save in %s",
+    async (locale) => {
+      const { el } = await mountApp({
+        putLocale: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      const c = await toCounter(el);
+      setLocale(locale);
+      emit(c, "wt-locale-selected", { code: locale === "en-GB" ? "es-ES" : "en-GB" });
+      await flush(el);
+      expect(currentLocale()).toBe(locale);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+        nextStep[locale],
+      );
+    },
+  );
+  it.each(["en-GB", "es-ES"] as const)(
+    "shows the device instruction for demo cancel in %s",
+    async (locale) => {
+      let finish!: (outcome: PayOutcome) => void;
+      const pay = vi.fn(
+        () =>
+          new Promise<PayOutcome>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const readerId = "00000000-0000-4000-8000-000000000247";
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "simulator",
+          activeReaders: [
+            {
+              printsOwnSlipAutomatically: false,
+              id: readerId,
+              name: "Demo card reader",
+              provider: "simulator",
+            },
+          ],
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        pay,
+        cancelDemoReaderPayment: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await flush(el);
+      emit(c, "collect-card", { readerId });
+      await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());
+      setLocale(locale);
+      await flush(el);
+      try {
+        emit(el.shadowRoot!.querySelector("till-counter-screen")!, "cancel-demo-reader");
+        await flush(el);
+        expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+          nextStep[locale],
+        );
+      } finally {
+        finish({ outcome: "declined" });
+        await flush(el);
+      }
+    },
+  );
+});

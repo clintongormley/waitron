@@ -397,7 +397,7 @@ type DeviceProof =
   | "device cookie (source)"
   | "session device (source)"
   | "public"
-  | "undecided";
+  | "matching request (tested)";
 type RouteGroup = {
   proof: DeviceProof;
   actions: readonly ProfileAction[];
@@ -643,10 +643,10 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     ],
   },
   {
-    proof: "undecided",
+    proof: "matching request (tested)",
     actions: [],
     basis:
-      "Source currently takes the session device without matching request proof. Actionless by design; request-device policy awaits the A1393 decision. Existing permission/zone/admission checks remain.",
+      "till-api.request-device.test.ts: absent, invalid and foreign proof is refused before body/business checks; matching cookies and development headers retain exact later outcomes without a selling action. Existing permissions, zones and admission still apply.",
     routes: [
       "POST /api/sales/:id/receipt/handover",
       "POST /api/tables/:id/cleared",

@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { BoxClockConfirmed, PersonRole, StaffMember } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
 import { clockDateTime, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { trackDialog } from "./track-dialog.js";
@@ -152,6 +153,15 @@ export class TillBoxTimeDialog extends LitElement {
   }
 
   #refused(error: unknown): void {
+    if ((error as { code?: unknown } | null)?.code === "device.unauthorized") {
+      this.view = {
+        kind: "refused",
+        text: codeMessage("device.unauthorized"),
+        checkAgain: false,
+        admin: false,
+      };
+      return;
+    }
     const { key, checkAgain } = refusalOf(error);
     this.view = {
       kind: "refused",

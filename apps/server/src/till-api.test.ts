@@ -1199,7 +1199,10 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     try {
       const res = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+        },
         body: JSON.stringify({ locale: "en-GB" }),
       });
       expect(res.status).toBe(204);
@@ -1220,7 +1223,10 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     try {
       const res = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+        },
         body: JSON.stringify({ locale: "ca-ES" }),
       });
       expect(res.status).toBe(400);
@@ -1245,7 +1251,10 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     try {
       const res = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+        },
         body: JSON.stringify(null),
       });
       expect(res.status).toBe(400);
@@ -1270,7 +1279,10 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
       // An EMPTY body under a JSON content-type.
       const empty = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+        },
         body: "",
       });
       expect(empty.status).toBe(400);
@@ -1279,7 +1291,10 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
       // A MALFORMED body — not valid JSON at all.
       const malformed = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+        },
         body: "not json",
       });
       expect(malformed.status).toBe(400);

@@ -7,6 +7,7 @@ import {
   hashPassword,
   hashPin,
   hashSessionToken,
+  loginWithPin,
   persons,
   startManagementSession,
 } from "@waitron/identity";
@@ -2967,6 +2968,66 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     };
     deviceId1 = await enrolDevice("SP-C dev override device 1");
     deviceId2 = await enrolDevice("SP-C dev override device 2");
+  }, 60_000);
+
+  it("under devMode, staff schedule writes use header-only device proof through boot", async () => {
+    const [person] = await sharedDb
+      .insert(persons)
+      .values({ displayName: "Schedule proof probe", role: "staff", pinHash: hashPin("1234") })
+      .returning({ id: persons.id });
+    const session = await withTransaction(sharedDb, (tx) =>
+      loginWithPin(tx, { deviceId: deviceId1, personId: person!.id, pin: "1234" }),
+    );
+    await withCapturedStdout(async () => {
+      const port = await freePort();
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_HOST: "0.0.0.0",
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "dev",
+        WAITRON_MIN_TICK_MS: "50",
+        WAITRON_MAX_TICK_MS: "200",
+        WAITRON_SKIP_RETRY_MS: "100",
+      });
+      try {
+        const headers = {
+          cookie: `waitron_till_session=${session.token}`,
+          [DEV_DEVICE_HEADER]: deviceId1,
+          "content-type": "application/json",
+        };
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/api/schedule/absences`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            kind: "holiday",
+            startsOn: "2099-01-01",
+            endsOn: "2099-01-02",
+            note: "Header-only schedule proof",
+          }),
+        });
+        expect(response.status).toBe(201);
+        const { absenceId } = (await response.json()) as { absenceId: string };
+        expect(absenceId).toEqual(expect.any(String));
+        const read = await fetch(`http://127.0.0.1:${httpPort()}/api/schedule/absences`, {
+          headers,
+        });
+        expect(read.status).toBe(200);
+        expect(await read.json()).toContainEqual(
+          expect.objectContaining({
+            id: absenceId,
+            personId: person!.id,
+            kind: "holiday",
+            startsOn: "2099-01-01",
+            endsOn: "2099-01-02",
+            note: "Header-only schedule proof",
+          }),
+        );
+      } finally {
+        await server.close();
+      }
+    });
   }, 60_000);
 
   it("under devMode, the x-waitron-dev-device header authenticates AS that device on /api/device/me (no cookie)", async () => {

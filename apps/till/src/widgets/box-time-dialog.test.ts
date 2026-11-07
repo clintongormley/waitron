@@ -492,3 +492,25 @@ describe("till-box-time-dialog", () => {
       }
     });
 });
+
+describe("request-device refusal recovery", () => {
+  for (const phase of ["challenge", "confirm"] as const) {
+    it.each(["en-GB", "es-ES"] as const)(
+      `shows the device instruction after ${phase} in %s`,
+      async (locale) => {
+        setLocale(locale);
+        const api = fakeApi(BOX_AGREES, refusing({ code: "device.unauthorized" }));
+        if (phase === "challenge")
+          api.boxClockChallenge.mockRejectedValue({ code: "device.unauthorized" });
+        const el = await open(api);
+        if (phase === "confirm") await press(el, "primary");
+        expect(shownError(el)).toContain(
+          locale === "en-GB"
+            ? "Reload or reopen Waitron on this device, then try again."
+            : "Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",
+        );
+        expect(controls(el)).not.toContain("check-again");
+      },
+    );
+  }
+});

@@ -3347,7 +3347,7 @@ describe("a device's current printers", () => {
       .update(devices)
       .set({ receiptPrinterId: counter!, paymentSlipPrinterId: portable! })
       .where(eq(devices.id, deviceId));
-    const session = await openTillSession(deviceId);
+    const session = `${jar}; ${await openTillSession(deviceId)}`;
     return { bar: bar!, counter: counter!, portable: portable!, deviceId, jar, session };
   }
 
@@ -3960,9 +3960,10 @@ describe("a device's approved profiles and switching its active one", () => {
 
   /** A signed-in person of `role` on the device, as the cookie the till sends. */
   async function signIn(
-    deviceId: string,
+    device: Pick<Device, "deviceId" | "jar">,
     role: "staff" | "manager" = "staff",
   ): Promise<{ cookie: string; personId: string }> {
+    const { deviceId, jar } = device;
     const [person] = await suite.db
       .insert(persons)
       .values({ displayName: `Person ${randomUUID()}`, pinHash: fixturePinHash("4321"), role })
@@ -3970,7 +3971,7 @@ describe("a device's approved profiles and switching its active one", () => {
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
     );
-    return { cookie: `${SESSION_COOKIE}=${session.token}`, personId: person!.id };
+    return { cookie: `${SESSION_COOKIE}=${session.token}; ${jar}`, personId: person!.id };
   }
 
   function switchTo(app: Hono, cookie: string | null, profileId: unknown): Promise<Response> {
@@ -4209,8 +4210,8 @@ describe("a device's approved profiles and switching its active one", () => {
       const t = await till(app, venue);
       const next = await seedProfile("till");
       await admitOnly(next, "manager");
-      await signIn(t.deviceId, "staff");
-      const manager = await signIn(t.deviceId, "manager");
+      await signIn(t, "staff");
+      const manager = await signIn(t, "manager");
       expect((await manage(app, venue, t.deviceId, { profileId: next })).status).toBe(204);
       expect(await openSessionsOn(t.deviceId)).toEqual([manager.personId]);
     });
@@ -4229,9 +4230,9 @@ describe("a device's approved profiles and switching its active one", () => {
       await withTransaction(suite.db, (tx) =>
         VENUE_SERVICE.addProfileKitchenScreen(tx, kitchen, screen),
       );
-      const staff = await signIn(t.deviceId, "staff");
-      await signIn(t.deviceId, "manager");
-      const elsewhere = await signIn(other.deviceId, "staff");
+      const staff = await signIn(t, "staff");
+      await signIn(t, "manager");
+      const elsewhere = await signIn(other, "staff");
 
       const moved = await manage(app, venue, t.deviceId, {
         profileId: kitchen,
@@ -4318,10 +4319,10 @@ describe("a device's approved profiles and switching its active one", () => {
           }
         ).approvedProfiles.map((profile) => profile.id);
 
-      const staff = await signIn(t.deviceId, "staff");
+      const staff = await signIn(t, "staff");
       expect(await offered(`${t.jar}; ${staff.cookie}`)).toEqual([t.profileId, everyone]);
 
-      const manager = await signIn(t.deviceId, "manager");
+      const manager = await signIn(t, "manager");
       const [active, ...alternatives] = await offered(`${t.jar}; ${manager.cookie}`);
       expect(active).toBe(t.profileId);
       expect(alternatives.sort()).toEqual([managersOnly, everyone].sort());
@@ -4335,7 +4336,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const managersOnly = await seedProfile("till");
       await approve(app, venue, t.deviceId, [managersOnly]);
       await admitOnly(managersOnly, "manager");
-      const elsewhere = await signIn(other.deviceId, "staff");
+      const elsewhere = await signIn(other, "staff");
 
       const res = await send(app, "GET", "/api/device/me", {
         cookie: `${t.jar}; ${elsewhere.cookie}`,
@@ -4386,7 +4387,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
-      const me = await signIn(s.deviceId);
+      const me = await signIn(s);
       const res = await switchTo(app, me.cookie, s.to);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ activeProfileId: s.to });
@@ -4410,8 +4411,8 @@ describe("a device's approved profiles and switching its active one", () => {
         .update(devices)
         .set({ receiptPrinterId: s.kitchen })
         .where(eq(devices.id, s.deviceId));
-      const me = await signIn(s.deviceId);
-      const other = await signIn(s.deviceId);
+      const me = await signIn(s);
+      const other = await signIn(s);
       await admitOnly(s.from, "manager");
       const res = await switchTo(app, me.cookie, s.from);
       expect(res.status).toBe(200);
@@ -4428,9 +4429,9 @@ describe("a device's approved profiles and switching its active one", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
-      const me = await signIn(s.deviceId, "manager");
-      const otherManager = await signIn(s.deviceId, "manager");
-      const staff = await signIn(s.deviceId, "staff");
+      const me = await signIn(s, "manager");
+      const otherManager = await signIn(s, "manager");
+      const staff = await signIn(s, "staff");
       await admitOnly(s.to, "manager");
       expect((await switchTo(app, me.cookie, s.to)).status).toBe(200);
       expect(await openSessionsOn(s.deviceId)).toEqual([me.personId, otherManager.personId].sort());
@@ -4447,7 +4448,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
-      const me = await signIn(s.deviceId);
+      const me = await signIn(s);
       const before = await deviceBindings(s.deviceId);
       for (const target of [await seedProfile("till"), randomUUID()]) {
         const res = await switchTo(app, me.cookie, target);
@@ -4461,7 +4462,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
-      const me = await signIn(s.deviceId);
+      const me = await signIn(s);
       const offered = await send(app, "GET", "/api/device/me", { cookie: s.jar });
       expect(
         ((await offered.json()) as { approvedProfiles: { id: string }[] }).approvedProfiles,
@@ -4477,7 +4478,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
-      const me = await signIn(s.deviceId, "staff");
+      const me = await signIn(s, "staff");
       await admitOnly(s.to, "manager");
       const before = await deviceBindings(s.deviceId);
       const res = await switchTo(app, me.cookie, s.to);
@@ -4493,7 +4494,7 @@ describe("a device's approved profiles and switching its active one", () => {
         const venue = await setupVenue(suite.db);
         const app = mountApp(venue.cfg);
         const s = await switchable(app, venue);
-        const me = await signIn(s.deviceId);
+        const me = await signIn(s);
         await paymentInProgress(venue, s.deviceId, state as "attempting");
         const before = await deviceBindings(s.deviceId);
         const res = await switchTo(app, me.cookie, s.to);
@@ -4508,7 +4509,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
       const other = await till(app, venue, "Other till");
-      const me = await signIn(s.deviceId);
+      const me = await signIn(s);
       const done = await paymentInProgress(venue, s.deviceId);
       await suite.db.update(payments).set({ state: "captured" }).where(eq(payments.id, done));
       await paymentInProgress(venue, other.deviceId);
@@ -4519,7 +4520,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const t = await till(app, venue);
-      const before = await signIn(t.deviceId);
+      const before = await signIn(t);
       const [listing, other] = [await seedProfile("kds"), await seedProfile("kds")];
       const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
       const stationScreen = (stationId: string): DeviceKitchenScreen => ({
@@ -4547,7 +4548,7 @@ describe("a device's approved profiles and switching its active one", () => {
       expect(await ended.json()).toMatchObject({ error: { code: "session.required" } });
 
       // Written straight through identity, past the sign-in route that refuses a kitchen screen.
-      const me = await signIn(t.deviceId);
+      const me = await signIn(t);
       const res = await switchTo(app, me.cookie, other);
       expect({ status: res.status, body: await res.json() }).toEqual({
         status: 200,
@@ -4611,9 +4612,10 @@ describe("a device's approved profiles and switching its active one", () => {
             VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId),
           )
         )[0]!.stations.find((slot) => slot.id === deli.id);
-      for (const { deviceId } of [kept, picked]) {
+      for (const device of [kept, picked]) {
+        const { deviceId } = device;
         await approve(app, venue, deviceId, [wide, narrow]);
-        const me = await signIn(deviceId);
+        const me = await signIn(device);
         expect((await switchTo(app, me.cookie, narrow)).status).toBe(200);
         expect(await deliSlot(deviceId)).toMatchObject({ available: false, switchedOff: false });
       }
@@ -4624,8 +4626,9 @@ describe("a device's approved profiles and switching its active one", () => {
           screens: [{ kind: "station", stationIds: [venue.defaultStationId], zoneIds: null }],
         }),
       );
-      for (const { deviceId } of [kept, picked]) {
-        const me = await signIn(deviceId);
+      for (const device of [kept, picked]) {
+        const { deviceId } = device;
+        const me = await signIn(device);
         expect((await switchTo(app, me.cookie, wide)).status).toBe(200);
         expect(await removalCount(deviceId)).toBe(0);
       }
@@ -4652,7 +4655,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
-      const me = await signIn(s.deviceId);
+      const me = await signIn(s);
       const [session] = await suite.db
         .select({ id: sessions.id })
         .from(sessions)
@@ -4684,7 +4687,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const s = await switchable(app, venue);
-      const me = await signIn(s.deviceId);
+      const me = await signIn(s);
       for (const bad of [undefined, null, "not-a-uuid"]) {
         const res = await switchTo(app, me.cookie, bad);
         expect(res.status).toBe(400);

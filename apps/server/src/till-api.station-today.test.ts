@@ -113,6 +113,7 @@ beforeEach(async () => {
     return [`${SESSION_COOKIE}=${a.token}`, `${SESSION_COOKIE}=${b.token}`];
   });
   [managerCookie, staffCookie] = cookies as [string, string];
+  managerCookie += `; ${await deviceCookieForTest(suite.db, managerDeviceId)}`;
   staffCookie += `; ${await deviceCookieForTest(suite.db, staffDevice)}`;
   app = new Hono();
   mountTillApi(

@@ -69,7 +69,9 @@ async function fixture(formFactor: "till" | "phone-portrait" | "tablet-landscape
   const request = async (
     method: "GET" | "PUT",
     body?: unknown,
-    cookie: string | null = `${tillSession.SESSION_COOKIE}=${session.token}`,
+    cookie:
+      | string
+      | null = `${tillSession.SESSION_COOKIE}=${session.token}; waitron_device=${device.deviceId}.${device.token}`,
   ) => {
     const response = await app.request("http://localhost/api/device/zones", {
       method,

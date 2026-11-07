@@ -115,7 +115,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1390. A restore is all or nothing, and its key always opens](backlog/box.md#bundle-a1390-a-restore-is-all-or-nothing-and-its-key-always-opens)
 - [A1391. Backup status tells the truth and leaks nothing](backlog/box.md#bundle-a1391-backup-status-tells-the-truth-and-leaks-nothing)
 - [A1392. Discard and Cancel fail on a table bill reached from the counter](backlog/till.md#bundle-a1392-discard-and-cancel-fail-on-a-table-bill-reached-from-the-counter)
-- [A1393. A table of every till route's device check, with a guard](backlog/till.md#bundle-a1393-a-table-of-every-till-routes-device-check-with-a-guard)
 - [A1394. SumUp's sweep and refund call stop throwing](backlog/payments.md#bundle-a1394-sumups-sweep-and-refund-call-stop-throwing)
 - [A1395. Cancelling or settling a placed order respects stored card payments](backlog/payments.md#bundle-a1395-cancelling-or-settling-a-placed-order-respects-stored-card-payments)
 - [A1396. A save refused after the person left must say so](backlog/dashboard.md#bundle-a1396-a-save-refused-after-the-person-left-must-say-so)
@@ -1134,7 +1133,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   as part of walking the box with the printers; with the owner present, after 2 November (owner,
   2026-10-17).
 
-- **A1393. A table of every till route's device check, with a guard** (bundle of 2, 2 important, size M). [Detail](backlog/till.md#bundle-a1393-a-table-of-every-till-routes-device-check-with-a-guard)
+- **Qualify printer identity at enrolment.** The device enrolment design's separate printer track remains. [Detail](backlog/till.md#bundle-printer-identity-at-enrolment)
 
 - **Malformed sale and cancellation bodies answer 500.** With an authenticated, permitted till,
   `POST /api/sales` with `{}` or `{"lines": []}`, and
