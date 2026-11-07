@@ -1380,7 +1380,7 @@ describe("short names", () => {
     for (const holding of [masterHolding, liveHolding]) {
       const suffix = floorLabelSuffix().padStart(4, "0");
       const takenBy = await holding(`s${suffix}`);
-      const sent = `S${suffix.toUpperCase()}`;
+      const sent = `S${suffix}`;
       const error = await refusal(
         check(z, { revision: 0, tables: [entry("a", fresh("New"), { shortName: sent })] }),
       );

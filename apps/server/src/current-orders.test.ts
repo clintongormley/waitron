@@ -1,3 +1,4 @@
+import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -244,7 +245,7 @@ interface Seated {
 async function seated(v: Venue): Promise<Seated> {
   return inTx(async (tx) => {
     const { id: tableId } = await createTable(tx, v.cfg, {
-      label: `C-${randomUUID().slice(0, 6)}`,
+      label: `C-${floorLabelSuffix().padStart(6, "0")}`,
       zoneId: v.zoneId,
     });
     const { partyId, tabId } = await seatTable(tx, v.cfg, {
@@ -729,7 +730,7 @@ describe("the reminder follows the party's department", () => {
     // Inserted after the party's own table but joined before it, so only `joined_at` makes it first.
     const first = await inTx(async (tx) => {
       const { id } = await createTable(tx, v.cfg, {
-        label: `C-${randomUUID().slice(0, 6)}`,
+        label: `C-${floorLabelSuffix().padStart(6, "0")}`,
         zoneId: v.zoneId,
       });
       const [own] = await tx
