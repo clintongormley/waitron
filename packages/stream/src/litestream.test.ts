@@ -50,6 +50,7 @@ describe("the Litestream configuration", () => {
         "  interval: 24h",
         "  retention: 168h",
         "l0-retention: 5m",
+        "l0-retention-check-interval: 5m",
         "",
         "dbs:",
         '  - path: "/var/lib/waitron/state/venue/venue.db"',

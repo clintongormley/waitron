@@ -1989,9 +1989,9 @@ describe("freshness", () => {
     expect(h.supervisor.status().lagMs).toBeGreaterThan(0);
   });
 
-  // Level 0 keeps a file five minutes after it is compacted; a change older than that can only be
-  // confirmed from level 1.
-  it("reads level 1 only once a change has waited longer than level 0 keeps a file", async () => {
+  // Level 0 keeps a file at least five minutes after it is created; a change older than that may
+  // be confirmed only from level 1.
+  it("reads level 1 only once a change has waited longer than level 0 is sure to keep a file", async () => {
     const h = await streaming();
     h.commit();
     h.clock.advance(30_000);
@@ -2114,9 +2114,9 @@ describe("freshness", () => {
     expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
   });
 
-  // The recovery page shows the log's tail: an outage is logged when it starts and every ten
-  // minutes while it lasts, not on every tick.
-  it("logs a bucket it cannot read when that starts and every ten minutes after, not every minute", async () => {
+  // The recovery page shows the log's tail: an outage is logged when a read first fails and every
+  // ten minutes while it lasts, not on every tick.
+  it("logs a bucket it cannot read when a read first fails and every ten minutes after, not every minute", async () => {
     const h = await streaming();
     const unreadable = () =>
       h.logs.filter((line) => line.event === "stream.freshness_unreadable").length;
@@ -2128,7 +2128,7 @@ describe("freshness", () => {
     await h.clock.next();
     await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(1));
     h.store.down = true;
-    await h.clock.next();
+    for (let tick = 0; tick < 10; tick += 1) await h.clock.next();
     await vi.waitFor(() => expect(unreadable()).toBe(3));
   });
 
@@ -2158,6 +2158,138 @@ describe("freshness", () => {
       await h.clock.next();
       await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(tick + 1));
       expect(h.supervisor.status().lagMs).toBe(0);
+    }
+  });
+
+  it("reads the bucket every ten minutes while no change waits", async () => {
+    const h = await streaming();
+    for (let tick = 0; tick < 21; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(3));
+    await h.clock.next();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(listingsOf(h, "0000")).toBe(3);
+  });
+
+  it("reads the bucket on the next tick once a change waits, and on every tick until it lands", async () => {
+    const h = await streaming();
+    await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(1));
+    h.commit();
+    for (let tick = 0; tick < 3; tick += 1) {
+      await h.clock.next();
+      await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(tick + 2));
+    }
+  });
+
+  it("notices a bucket that stopped answering during a quiet spell, tries it every tick, and goes quiet once it answers", async () => {
+    const h = await streaming();
+    const unreadable = () =>
+      h.logs.filter((line) => line.event === "stream.freshness_unreadable").length;
+    await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(1));
+    const list = h.store.list.bind(h.store);
+    let attempts = 0;
+    h.store.list = async (prefix, call) => {
+      if (prefix.endsWith("/0000/")) attempts += 1;
+      return list(prefix, call);
+    };
+    h.store.down = true;
+    for (let tick = 0; tick < 10; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(unreadable()).toBe(1));
+    expect(attempts).toBe(1);
+    await new Promise((resolve) => setImmediate(resolve));
+    for (let tick = 0; tick < 3; tick += 1) {
+      await h.clock.next();
+      await vi.waitFor(() => expect(attempts).toBe(tick + 2));
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    h.store.down = false;
+    await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(2));
+    await new Promise((resolve) => setImmediate(resolve));
+    await h.clock.next();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(listingsOf(h, "0000")).toBe(2);
+  });
+
+  it("replaces a quiet read left unanswered at the deadline, with no change waiting", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let attempts = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    h.store.list = async (prefix, call) => {
+      if (prefix.endsWith("/0000/")) {
+        attempts += 1;
+        if (attempts === 1) await held;
+      }
+      return list(prefix, call);
+    };
+    try {
+      for (let tick = 0; tick < 5; tick += 1) await h.clock.next();
+      await h.clock.asleep();
+      expect(attempts).toBe(1);
+      await h.clock.next();
+      await vi.waitFor(() => expect(attempts).toBe(2));
+      expect(h.logs).toContainEqual({
+        level: "warn",
+        event: "stream.freshness_unreadable",
+        fields: { errorCode: "timeout" },
+      });
+    } finally {
+      release();
+    }
+  });
+
+  it("reads on the next tick for a change that arrived while a quiet read was answering", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let answered = false;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    h.store.list = async (prefix, call) => {
+      const answer = await list(prefix, call);
+      if (prefix.endsWith("/0000/") && !answered) {
+        answered = true;
+        await held;
+      }
+      return answer;
+    };
+    await h.clock.next();
+    await vi.waitFor(() => expect(answered).toBe(true));
+    h.clock.advance(1_000);
+    h.commit();
+    h.clock.advance(1_000);
+    h.store.upload(l0(h.generation, 2));
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.supervisor.status().lagMs).toBeGreaterThan(0);
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lagMs).toBe(0));
+  });
+
+  it("a quiet read still moves the last confirmed upload", async () => {
+    const h = await streaming();
+    await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(1));
+    h.clock.advance(1_000);
+    h.store.upload(l0(h.generation, 2));
+    const uploaded = h.clock.trueNow().toISOString();
+    await new Promise((resolve) => setImmediate(resolve));
+    for (let tick = 0; tick < 10; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lastConfirmedUploadAt).toBe(uploaded));
+  });
+
+  it("reads the bucket every tick while a problem is named", async () => {
+    const h = await streaming();
+    h.store.honoursConditions = false;
+    h.clock.advance(24 * 60 * MINUTE);
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().bucketProblem).not.toBeNull());
+    const listings = listingsOf(h, "0000");
+    for (let tick = 0; tick < 3; tick += 1) {
+      await h.clock.next();
+      await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(listings + tick + 1));
     }
   });
 
@@ -2235,6 +2367,8 @@ describe("freshness", () => {
     const u2 = h.clock.trueNow().toISOString();
     await h.clock.next();
     await vi.waitFor(() => expect(h.supervisor.status().lastConfirmedUploadAt).toBe(u2));
+    h.clock.advance(1_000);
+    h.commit();
     const list = h.store.list.bind(h.store);
     let release!: () => void;
     const answered = new Promise<void>((resolve) => (release = resolve));
@@ -2390,6 +2524,7 @@ describe("freshness", () => {
 
   it("reads the bucket once at a time: a tick while a read is still waiting starts no second one", async () => {
     const h = await streaming();
+    h.commit();
     const list = h.store.list.bind(h.store);
     let reads = 0;
     let release!: () => void;
