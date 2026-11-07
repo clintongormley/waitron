@@ -590,9 +590,11 @@ plans to retire the editor.
 
 ## Bundle A1400: An older copy must not undo a save
 
-- **A department model read after the PUT commits but before its reply can be replaced by that
-  reply if the follow-up read fails.** A1400 returns the stored model and fences reads begun before
-  its reply; neither answer has a comparable server revision. The watcher approved this named
+1 entry, size S.
+
+- **A venue-model or theme-list read after the save commits but before its reply can be replaced by that
+  reply if the follow-up reads fail (including Appearance's bounded retries).** A1400 returns the stored department model and refreshes the theme list;
+  neither answer has a comparable server revision. The watcher approved this named
   limit on 2026-11-07 at 23:12. No revision storage is included in A1400.
 
 ## Bundle: Slow key derivation off the main thread

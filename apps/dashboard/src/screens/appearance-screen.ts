@@ -66,6 +66,8 @@ export class AppearanceScreen extends LitElement {
   @state() private editingId: string | null = null;
   #generation = 0;
   #writes = 0;
+  #places = 0;
+  #shownPlace = 0;
   #loadedBefore = false;
   #reads = new AbortController();
   readonly #queries = new QueryController(
@@ -102,19 +104,20 @@ export class AppearanceScreen extends LitElement {
           ...query,
           key: `${query.key}:appearance-screen`,
           read: async () => {
-            const writes = this.#writes;
+            const writes = this.#writes,
+              place = ++this.#places;
             try {
-              return { writes, value: await query.read() };
+              return { writes, place, value: await query.read() };
             } catch (error) {
-              if (writes !== this.#writes) return { writes, value: this.list! };
+              if (writes !== this.#writes || place <= this.#shownPlace)
+                return { writes, place, value: this.list! };
               throw error;
             }
           },
         },
-        ({ writes, value }) => {
+        ({ writes, place, value }) => {
           if (generation !== this.#generation || writes !== this.#writes) return;
-          this.list = value;
-          this.readError = "";
+          this.#show(place, value);
         },
       )
       .catch(() => {});
@@ -127,21 +130,25 @@ export class AppearanceScreen extends LitElement {
     const wanted = () => generation === this.#generation && writes === this.#writes;
     void readAfterSave(
       async () => {
+        const place = ++this.#places;
         try {
           const list = await this.api.background.listThemes();
-          if (wanted()) {
-            this.list = list;
-            this.readError = "";
-          }
+          if (wanted()) this.#show(place, list);
           return true;
         } catch (error) {
-          if (wanted()) this.readError = codeMessage(codeOf(error));
+          if (wanted() && place > this.#shownPlace) this.readError = codeMessage(codeOf(error));
           return false;
         }
       },
       wanted,
       this.#reads.signal,
     );
+  }
+  #show(place: number, list: ThemeList): void {
+    if (place <= this.#shownPlace) return;
+    this.#shownPlace = place;
+    this.list = list;
+    this.readError = "";
   }
   override render() {
     return html`<h1>${t("appearance.title")}</h1>

@@ -672,7 +672,7 @@ it("an older live copy cannot remove a saved Coffee step from the next save", as
   ]);
 });
 
-it("a department save answered after leaving still updates the shared snapshot", async () => {
+it("a department save answered after leaving reaches its shell without restarting reads", async () => {
   const { shell, loader, request, value, deferSave } = await mount(
     "/manage/venue-operations/department/d1",
   );

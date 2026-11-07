@@ -12,7 +12,7 @@ Department settings restores `Restaurant` over `Restaurant revised` and drops `C
 The department repros inject raw copies directly. Move their assertions into real
 loader/request tests before implementation: name `Restaurant revised`, steps
 `["Set up", "Take order", "Dessert?", "Coffee"]`, and the next save retaining Coffee
-with its returned id. They are committed in `9d70d43c3e`, not absent as the review said.
+with its returned id. The browser cases retain those original assertions through the real request flow.
 
 **Architecture:** use the existing action-snapshot path rather than introducing stored
 revisions. Return the existing venue-service model from the department save transaction;
@@ -54,3 +54,10 @@ its write counter and add a passive follow-up through the existing `readAfterSav
 be temporarily replaced if the follow-up fails. Record it in the PR and existing backlog;
 this item adds no revision storage. The unchanged fiscal suites stay because the queue's
 source-lane rule requires them for every item, despite the review's suggestion to drop them.
+
+**Run-it correction (2026-11-07):** the completed Claude review reproduced an older
+Appearance follow-up replacing a later live answer. Number reads in memory and keep the
+newer answered read, retaining the approved write counter and retry helper. This is the
+approved known-order requirement, without stored revisions. Its two weak waits are
+strengthened by awaiting body consumption; a recovery control justifies suppressing the
+old callback. The named commit-before-reply limit applies to both screens.

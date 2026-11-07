@@ -1446,7 +1446,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Reorder controller** (bundle of 3, size S). Holds A901. [Detail](backlog/dashboard.md#bundle-reorder-controller)
 
-- **A1400. An older copy must not undo a save** — remaining limit: a newer read between commit and reply can be replaced if the follow-up fails. [Detail](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
+- **A1400. An older copy must not undo a save** — remaining limit for departments and Appearance: a newer read between commit and reply can be replaced if follow-up reads fail. [Detail](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 
 - **Contrast pass** (bundle of 2, 1 important, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 

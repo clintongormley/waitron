@@ -130,6 +130,7 @@ it("shows a failed read's message, and Retry reads again", async () => {
 
 it("takes a saved theme into the card at once, and a read sent before the save does not undo it", async () => {
   setLocale("en-GB");
+  let answerFresh!: (response: Response) => void;
   let answerStale: (response: Response) => void = () => {};
   const { api, fetchImpl } = stubApi([
     json(listOf(GREEN)),
@@ -137,7 +138,10 @@ it("takes a saved theme into the card at once, and a read sent before the save d
       new Promise<Response>((resolve) => {
         answerStale = resolve;
       }),
-    json(listOf(BLUE)),
+    () =>
+      new Promise<Response>((resolve) => {
+        answerFresh = resolve;
+      }),
   ]);
   const el = await mount(api);
   await expect.poll(() => brand(el)).toBe("Custom · #1e5b3a");
@@ -154,10 +158,19 @@ it("takes a saved theme into the card at once, and a read sent before the save d
   await flush(el);
   expect(brand(el)).toBe("Custom · #2a4b8d");
 
-  answerStale(new Response(JSON.stringify(listOf(GREEN)), { status: 200 }));
+  let consumed = false;
+  const old = new Response();
+  vi.spyOn(old, "text").mockImplementation(async () => {
+    consumed = true;
+    return JSON.stringify(listOf(GREEN));
+  });
+  answerStale(old);
+  await expect.poll(() => consumed).toBe(true);
   await flush(el);
   await flush(el);
   expect(brand(el)).toBe("Custom · #2a4b8d");
+  answerFresh(new Response(JSON.stringify(listOf(BLUE))));
+  await expect.poll(() => card(el)!.list).toEqual(listOf(BLUE));
 });
 
 it("renders the Themes card under the Look card with the same list and editing right", async () => {
@@ -290,7 +303,14 @@ it("a failed follow-up keeps the saved theme, ignores an older refusal and recov
     .poll(() => text(q(el, "[data-test=read-error]")))
     .toBe(codeMessage("permission.denied"));
   expect(card(el)!.list).toEqual(listOf(BLUE));
-  answerOld(new Response(JSON.stringify({ error: { code: "theme.not_found" } }), { status: 404 }));
+  let consumed = false;
+  const old = new Response(null, { status: 404 });
+  vi.spyOn(old, "json").mockImplementation(async () => {
+    consumed = true;
+    return { error: { code: "theme.not_found" } };
+  });
+  answerOld(old);
+  await expect.poll(() => consumed).toBe(true);
   await flush(el);
   expect(text(q(el, "[data-test=read-error]"))).toBe(codeMessage("permission.denied"));
   api.liveData.invalidate([{ type: "custom_themes" }]);
@@ -365,6 +385,83 @@ it("disconnecting stops failed follow-up retries and discards a pending answer",
   await vi.advanceTimersByTimeAsync(60_000);
   expect(fetchImpl).toHaveBeenCalledTimes(2);
   expect(q(el, "[data-test=read-error]")).toBeNull();
+});
+
+it("a later live list stays when an older follow-up answers last", async () => {
+  let answerFollowup!: (response: Response) => void;
+  const latest: ThemeList = { themes: [BLUE, XMAS], inUse: BLUE.id };
+  const { api, fetchImpl } = stubApi([
+    json(listOf(GREEN)),
+    () =>
+      new Promise<Response>((resolve) => {
+        answerFollowup = resolve;
+      }),
+    json(latest),
+  ]);
+  const el = await mount(api);
+  await expect.poll(() => card(el)?.list).toEqual(listOf(GREEN));
+  card(el)!.dispatchEvent(
+    new CustomEvent("themes-changed", {
+      detail: { kind: "saved", theme: BLUE },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => fetchImpl.mock.calls.length).toBe(2);
+  api.liveData.invalidate([{ type: "custom_themes" }]);
+  await expect.poll(() => card(el)?.list).toEqual(latest);
+  let consumed = false;
+  const old = new Response();
+  vi.spyOn(old, "text").mockImplementation(async () => {
+    consumed = true;
+    return JSON.stringify(listOf(BLUE));
+  });
+  answerFollowup(old);
+  await expect.poll(() => consumed).toBe(true);
+  await flush(el);
+  expect(card(el)!.list).toEqual(latest);
+  expect(themesCard(el)!.list).toEqual(latest);
+});
+it("an ignored recovery read cannot clear a newer follow-up failure", async () => {
+  let answerRecovery!: (response: Response) => void;
+  const { api, fetchImpl } = stubApi([
+    json(listOf(GREEN)),
+    json({ error: { code: "permission.denied" } }, 403),
+    () =>
+      new Promise<Response>((resolve) => {
+        answerRecovery = resolve;
+      }),
+    json({ error: { code: "theme.not_found" } }, 404),
+  ]);
+  const el = await mount(api);
+  await expect.poll(() => card(el)?.list).toEqual(listOf(GREEN));
+  api.liveData.invalidate([{ type: "custom_themes" }]);
+  await expect
+    .poll(() => text(q(el, "[data-test=read-error]")))
+    .toBe(codeMessage("permission.denied"));
+  api.liveData.invalidate([{ type: "custom_themes" }]);
+  await expect.poll(() => fetchImpl.mock.calls.length).toBe(3);
+  card(el)!.dispatchEvent(
+    new CustomEvent("themes-changed", {
+      detail: { kind: "saved", theme: BLUE },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect
+    .poll(() => text(q(el, "[data-test=read-error]")))
+    .toBe(codeMessage("theme.not_found"));
+  let consumed = false;
+  const old = new Response();
+  vi.spyOn(old, "text").mockImplementation(async () => {
+    consumed = true;
+    return JSON.stringify(listOf(GREEN));
+  });
+  answerRecovery(old);
+  await expect.poll(() => consumed).toBe(true);
+  await flush(el);
+  expect(text(q(el, "[data-test=read-error]"))).toBe(codeMessage("theme.not_found"));
+  expect(card(el)!.list).toEqual(listOf(BLUE));
 });
 
 it("leaves the venue settings page's space between the Look card and the Themes card", async () => {
