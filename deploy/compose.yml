@@ -39,6 +39,7 @@ services:
       # Prepare uses the local card simulator unless an operator deliberately enables a configured
       # provider whose credential is restricted to its test environment.
       WAITRON_PAYMENT_TEST_PROVIDERS: ${WAITRON_PAYMENT_TEST_PROVIDERS:-}
+      WAITRON_TUNNEL_CONTROL_DIR: /var/lib/waitron/tunnel
     volumes:
       - state:/var/lib/waitron/state
       - logs:/var/lib/waitron/logs

@@ -65,6 +65,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Waitron could not reach Cloud or verify its reply. Try again.",
     es: "Waitron no pudo conectar con Cloud o verificar su respuesta. Vuelve a intentarlo.",
   },
+  "cloud.tunnel_unavailable": {
+    en: "The staff tunnel could not be configured on this box. Check its tunnel configuration and refresh status to try again.",
+    es: "No se pudo configurar el túnel del personal en esta caja. Revisa su configuración del túnel y actualiza el estado para volver a intentarlo.",
+  },
   "cloud.request_unavailable": {
     en: "This request is unavailable. Start again to get a new code.",
     es: "Esta solicitud no está disponible. Empieza de nuevo para obtener otro código.",

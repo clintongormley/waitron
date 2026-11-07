@@ -38,6 +38,7 @@ import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
+import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
@@ -1152,6 +1153,11 @@ async function bootServer(
   // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
   // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
+  try {
+    await writeTunnelConfiguration(config.tunnelControlDir);
+  } catch (error) {
+    log("error", "cloud.refresh_failed", { errorCode: codeOf(error) });
+  }
   // Here and not in entry so that `startServer`-based starts and the dev entry place too. It follows
   // entry's ahead check, whose close drains the old file's -wal before placing removes it (pinned in
   // `boot.place-copy.test.ts`). A box with no identity has no node id to read an operation by, and
@@ -3232,6 +3238,7 @@ async function bootServer(
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
         stateDir: config.stateDir,
+        tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
         localVenueId: venueId,
         environment: config.environment === "production" ? "production" : "test",

@@ -186,6 +186,40 @@ When the read fails, the screen clears the values it showed and says the details
 available. The signing vector is `apps/server/test/billing-display-vector.json`, a copy of the
 contract's.
 
+## A951-S tunnel configuration writer
+
+To use the optional tunnel container from PR #2533, set `WAITRON_TUNNEL_CONTROL_DIR` to its
+shared control mount. Compose passes `/var/lib/waitron/tunnel`. Without this setting the
+writer does nothing. Starting the container profile and publishing its image remain separate work.
+
+The existing Cloud worker refreshes the installation once a minute. When Cloud supplies a
+`provisioning` or `ready` remote-access placement, the writer matches its venue, installation
+and peer key to this box, then replaces `peer.json` with the address, gateway public key and
+endpoint. The private WireGuard key stays in the container's separate key volume. The writer
+accepts only the runtime's staff port 443 and gateway UDP port 51820.
+
+Until Cloud exposes signed key submission, read the container's `public-key` file and use
+Cloud's existing operator provisioning command. The writer consumes the resulting placement
+through the normal signed configuration request; it makes no new Cloud request.
+
+A Cloud outage retains the last usable placement. A missing registration, revoked installation,
+unconfigured or failed service, missing peer key or invalid placement removes the peer file.
+A rejected saved connection also removes the peer. Startup clears a stale peer even without a
+Cloud origin. When the worker is secondary, it reconciles locally recorded state without calling Cloud.
+An authorised **Stop Cloud access** tries local removal before sending the revoke request. A local
+removal error does not block saving and sending the Cloud stop, and is still reported afterwards.
+An already-revoked installation retries local removal. Stop and startup also remove abandoned
+writer temporary files, leaving other control files alone.
+
+A failed replacement write preserves the previous complete file. Local configuration and file
+errors use `cloud.tunnel_unavailable`; a refused placement can therefore leave the Cloud connection
+active while its tunnel is off. The container notices removal on its next poll; this gives no
+instant shutdown guarantee. The writer runs in Cloud's background refresh.
+
+The owner approved this simpler A951-S path on 6 November. The watcher explicitly approved
+the operator-provisioned writer on 7 November at 03:06 in Lane E’s local `questions.md`. The
+native-protocol plan and host-custody material below describe the earlier parked branch and add no steps to this build.
+
 ## Local remote-access integration
 
 Cloud's [local remote-access runner](https://github.com/waitron-io/waitron-cloud/blob/main/docs/local-remote-access.md)

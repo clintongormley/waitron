@@ -28,6 +28,15 @@ function codeOf(error: unknown): string {
 }
 
 describe("loadConfig", () => {
+  it("enables the optional staff tunnel writer only with an explicit control directory", () => {
+    for (const value of [undefined, ""])
+      expect(
+        loadConfig({ ...MIN_ENV, WAITRON_TUNNEL_CONTROL_DIR: value }, ROOT, STATE_ROOT),
+      ).not.toHaveProperty("tunnelControlDir");
+    expect(
+      loadConfig({ ...MIN_ENV, WAITRON_TUNNEL_CONTROL_DIR: "control" }, ROOT, STATE_ROOT),
+    ).toHaveProperty("tunnelControlDir", resolve("control"));
+  });
   it("defaults every optional value, and defaults the deployment environment to preproduction", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config).toEqual({
