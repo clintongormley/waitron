@@ -81,7 +81,13 @@ import {
   type StationQueueGroup,
   type TicketState,
 } from "./working-order.js";
-import { assertStillSignedIn, isUuid, requireSession, signedInPersonOn } from "./till-session.js";
+import {
+  assertRequestDevice,
+  assertStillSignedIn,
+  isUuid,
+  requireSession,
+  signedInPersonOn,
+} from "./till-session.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -396,6 +402,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   app.put("/api/device/zones", (c) =>
     run(c, log, async () => {
       const session = await requireSession({ db: deps.db }, c);
+      await assertRequestDevice(deps, c, session);
       const body = await readJsonBody<unknown>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body))
         throw new AppError("device_zones.invalid", { field: "profileId" });
@@ -413,7 +420,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── The device's equipment (DEVICE-GUARDED read, SESSION-GUARDED choice) ────────────────────────
   app.get("/api/device/equipment", (c) =>
     run(c, log, async () => {
       // Read before `requireDevice`, so a wait behind the write lock is not counted as the device's
@@ -455,7 +461,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // Any signed-in staff member may choose; a held item is taken by a scan or a confirmed list choice.
   app.put("/api/device/equipment", (c) =>
     run(c, log, async () => {
-      const { device, sessionId } = await requireSession({ db: deps.db }, c);
+      const session = await requireSession({ db: deps.db }, c);
+      await assertRequestDevice(deps, c, session);
+      const { device, sessionId } = session;
       const choice = parseEquipmentChoice(await readJsonBody<Record<string, unknown>>(c));
       const equipment = await withTransaction(deps.db, async (tx) => {
         // The device and the session may both have changed since requireSession's own transaction.
@@ -472,11 +480,12 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── Switch the session's device to another approved profile (SESSION-GUARDED) ──────────────────
   // A signed-in person is required, so a shared display with nobody signed in cannot switch.
   app.post("/api/device/active-profile", (c) =>
     run(c, log, async () => {
-      const { personId, sessionId, device } = await requireSession({ db: deps.db }, c);
+      const session = await requireSession({ db: deps.db }, c);
+      await assertRequestDevice(deps, c, session);
+      const { personId, sessionId, device } = session;
       const body = await readJsonBody<{ profileId?: unknown }>(c);
       const profileId = requireBodyUuid(body.profileId, "profileId");
       const switched = await withTransaction(deps.db, (tx) =>

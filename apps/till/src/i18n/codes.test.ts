@@ -103,7 +103,10 @@ it("resolves a shut pairing window to its own actionable copy, in both locales (
     "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
   );
   expect(codeMessage("device.unauthorized", "en")).toBe(
-    "This device isn't set up — ask to join this venue",
+    "This device could not be verified for this action. Reload or reopen Waitron on this device, then try again.",
+  );
+  expect(codeMessage("device.unauthorized", "es")).toBe(
+    "No se ha podido verificar este dispositivo para esta acción. Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",
   );
 });
 

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
+import { codeMessage } from "../i18n/codes.js";
 import { clockDateTime, setLocale } from "../i18n/t.js";
 import "./box-time-dialog.js";
 import type { BoxTimeApi, TillBoxTimeDialog } from "./box-time-dialog.js";
@@ -491,4 +492,22 @@ describe("till-box-time-dialog", () => {
         await page.viewport(1280, 900);
       }
     });
+});
+
+describe("request-device refusal recovery", () => {
+  for (const phase of ["challenge", "confirm"] as const) {
+    it.each(["en-GB", "es-ES"] as const)(
+      `shows the device instruction after ${phase} in %s`,
+      async (locale) => {
+        setLocale(locale);
+        const api = fakeApi(BOX_AGREES, refusing({ code: "device.unauthorized" }));
+        if (phase === "challenge")
+          api.boxClockChallenge.mockRejectedValue({ code: "device.unauthorized" });
+        const el = await open(api);
+        if (phase === "confirm") await press(el, "primary");
+        expect(shownError(el)).toContain(codeMessage("device.unauthorized", locale));
+        expect(controls(el)).not.toContain("check-again");
+      },
+    );
+  }
 });

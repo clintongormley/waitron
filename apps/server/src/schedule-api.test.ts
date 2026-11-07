@@ -17,6 +17,7 @@ import {
 import type { Logger } from "./logger.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
+import { deviceCookieForTest } from "./testing/enrol.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
@@ -26,6 +27,7 @@ import "./errors.js";
 
 const noopLog: Logger = () => {};
 let deviceId: string;
+let deviceCookie: string;
 let locationId: string;
 let me: string;
 let colleague: string;
@@ -42,6 +44,7 @@ const suite = useVenueDb({
     });
     locationId = await venueLocationId(db);
     deviceId = await seedSessionDevice(db);
+    deviceCookie = await deviceCookieForTest(db, deviceId);
     const [meRow] = await db
       .insert(persons)
       .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })
@@ -68,7 +71,7 @@ async function cookieFor(personId: string, pin: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     return loginWithPin(tx, { deviceId, personId, pin });
   });
-  return `${SESSION_COOKIE}=${session.token}`;
+  return `${SESSION_COOKIE}=${session.token}; ${deviceCookie}`;
 }
 
 async function send(
