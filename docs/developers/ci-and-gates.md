@@ -85,7 +85,7 @@ Choose a budget whose shards can all start within twenty minutes. Otherwise the 
 requests cancellation of the entire workflow run even when another shard is already running.
 
 Set `DISPOSABLE_TESTS_HEAD` to the chosen pull request's full head SHA to route only that
-commit. An empty value admits every otherwise eligible head. The queue watchdog uses
+commit. Unset it to admit every otherwise eligible head. The queue watchdog uses
 the same selection, so other commits stay on hosted runners without a queue watch.
 
 Only the first attempt of a same-repository pull request uses this route. Main pushes,
@@ -146,6 +146,7 @@ guidance before enabling a slot.
 
 | Source, checked 7 November 2026 | Source's words | Application |
 | --- | --- | --- |
+| [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) | “If you attempt to dereference a nonexistent property, it will evaluate to an empty string.” | The unset selection uses the gate's empty-string arm. |
 | [GitHub runner hardening](https://docs.github.com/en/enterprise-cloud@latest/actions/reference/security/secure-use#hardening-for-self-hosted-runners) | “can be persistently compromised by untrusted code in a workflow” | Disposable VMs and contributor approval reduce exposure without establishing isolation. |
 | [Self-hosted routing](https://docs.github.com/en/actions/reference/runners/self-hosted-runners#routing-precedence-for-self-hosted-runners) | “the job will remain queued until a runner comes online” | Execution limits alone do not stop an unavailable-label queue; the watchdog needs hosted availability. |
 | [REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) | “1,000 requests per hour per repository” | The watchdog uses bounded polling and a 200-call cap; this is not a reservation of the repository's shared allowance. |

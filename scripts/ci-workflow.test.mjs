@@ -48,6 +48,7 @@ const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
 describe("disposable server routing", () => {
+  // GitHub supplies an unset vars key as ""; see the CI guide's contexts provenance.
   it.each([
     ["", true],
     ["a".repeat(40), true],

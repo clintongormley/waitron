@@ -605,8 +605,9 @@ A1424's live qualification was added on 7 November 2026.
 
 - **A1424: finish qualifying disposable server runners before general activation.** Routing
   and its bounded metadata watchdog share the optional `DISPOSABLE_TESTS_HEAD` selection;
-  keep it set during selected-head trials. Mixed-workload capacity and the unavailable-label
-  and server-down paths through visible failure/cancellation and hosted attempt two remain open.
+  keep it set during selected-head trials. Finish the selected PR's coverage merge and aggregate,
+  then qualify mixed-workload capacity and the unavailable-label and server-down paths through
+  visible failure/cancellation and hosted attempt two.
   Retain runner identity, unchanged source head, coverage merge and aggregate results.
   [Procedure and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
 
