@@ -509,6 +509,14 @@ export class TillPassScreen extends LitElement {
     if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
   }
 
+  /** A till's board can list a card in a zone its profile refuses, where "doesn't show" is false. */
+  #leverSentence(code: string): string {
+    if (code !== "service_zone.not_allowed") return codeMessage(code);
+    return this.#onDevice()
+      ? codeMessage("kitchen_screen.zone_not_allowed")
+      : t("expo.zone_not_allowed");
+  }
+
   #leverRefused(card: PassCard | undefined, error: unknown): void {
     this.leverError = {
       code: (error as { code?: string } | null)?.code ?? "server.internal",
@@ -697,7 +705,7 @@ export class TillPassScreen extends LitElement {
       ${
         this.leverError
           ? html`<p class="error" role="alert" slot="status" data-lever-error>
-              ${this.leverError.card}: ${codeMessage(this.leverError.code)}
+              ${this.leverError.card}: ${this.#leverSentence(this.leverError.code)}
             </p>`
           : nothing
       }

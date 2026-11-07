@@ -3822,22 +3822,6 @@ describe("till-app: a change refused on a bill that holds money", () => {
     expectReadAgain({ bills: reads.bills, balance: reads.balance });
   });
 
-  it("says why a move of dishes to another bill holding money was refused, and reads the bills again", async () => {
-    const moveDishes = vi
-      .fn()
-      .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-9" });
-    const { el, order, reads } = await openHolding({ moveDishes });
-    const before = listed(order);
-
-    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" });
-    await flush(el);
-
-    expect(moveDishes).toHaveBeenCalledOnce();
-    expect(text(banner(el))).toBe(codeMessage("bill.payments_received"));
-    expect(listed(tableOrder(el))).toEqual(before);
-    expectReadAgain({ bills: reads.bills, balance: reads.balance });
-  });
-
   it.each(["bill.refund_in_progress", "working_order.not_open"])(
     "says a move to a new bill refused %s in that code's own words, and reads the bill again",
     async (code) => {

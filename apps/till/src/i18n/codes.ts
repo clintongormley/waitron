@@ -364,8 +364,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido sin enviar ya no está en esta mesa. Vuelve a cargar la mesa e inténtalo de nuevo",
   },
   "bill.payments_received": {
-    en: "A bill that has taken payments cannot be merged, and items cannot be transferred between it and another bill. Take the rest from the bill's payments",
-    es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra, ni se pueden transferir artículos entre ella y otra cuenta. Cobra el resto desde los pagos de la cuenta",
+    en: "A bill that has taken payments cannot be merged with another. Take the rest from the bill's payments",
+    es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra. Cobra el resto desde los pagos de la cuenta",
   },
   "working_order.not_placed": {
     en: "This bill is no longer waiting for payment",
@@ -685,8 +685,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo no puede usar esa estación. Pide a un responsable que revise sus ajustes.",
   },
   "device.forbidden_action": {
-    en: "This device's profile doesn't allow that. Ask a manager to change it.",
-    es: "El perfil de este dispositivo no lo permite. Pide a un responsable que lo modifique.",
+    en: "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",
+    es: "El perfil de este dispositivo no lo permite. Se puede cambiar en el panel, en Perfiles de dispositivo.",
   },
   "kitchen_screen.zone_not_allowed": {
     en: "This order is in a zone this pass screen doesn't show.",
