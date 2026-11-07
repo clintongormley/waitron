@@ -2090,7 +2090,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 
 ## Bundle A1382: Till refusals that say the wrong thing or nothing useful
 
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06); the last joined after it.
 
 - **A1286. `bill.payments_received`'s words still say items cannot be transferred between a bill
   with payments and another bill, which Move dishes… now allows (left open by A803 slice 4a).** New
@@ -2119,6 +2119,10 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 - **`apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown at six call sites;
   a helper would collapse it.** Cosmetic, and cheapest alongside A848 (the empty-order message) that
   touches `#onPayTab` (under _Payments and card readers_). Raised by the A1 review wave (A1d).
+- **An order save, a take-over, a recall or a split refused for naming someone not signed in locks
+  the till with no sentence (left open by A1380).** The person finds the sign-in screen and no
+  reason, and CLAUDE.md's refusal rule lists no exception for it. Either words on the lock screen
+  (new English and approved Spanish) or a recorded exception: the owner's choice.
 
 ## Bundle A1386: Blank or misleading Floor pages
 
@@ -3141,9 +3145,11 @@ Each order save names the person whose order it is, and the server refuses
 A791). A take-over (`POST /api/parties/:id/drafts/:did/take-over`), a recall
 (`POST /api/parties/:id/lines/:lineId/recall`) and a line split
 (`POST /api/parties/:id/groups/split-line`) also name their person and are refused the same way.
-When the till meets that refusal while someone is signed in on it, it locks to the sign-in screen
-and keeps the refused person's unsaved lines for their next sign-in, without signing out the
-device's session, which belongs to someone else. The server cases are in
+When the till meets that refusal it locks to the sign-in screen and keeps that person's unsaved
+lines for their next sign-in, without signing out the device's session, which belongs to someone
+else. A refusal arriving after another person's sign-in leaves that sign-in alone. One case does
+not: after a re-boot with no sign-out (`device-unauthorized`), a save still out when the same person
+signs back in can lock them when it is refused. A split checks for this and does not. The server cases are in
 `apps/server/src/till-api.drafts.test.ts`, `draft-recall.test.ts` and `till-api.groups.test.ts`; the app
 cases are in `apps/till/src/till-app-drafts.test.ts`, `till-app-parties.test.ts` and
 `till-app-split-table.test.ts`.
@@ -4352,7 +4358,7 @@ landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill
 main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1264–A1267 and A1269. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1286–A1294 and A1298–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1347–A1356 and A1358–A1366. Remaining: pre-bills through A446, which
+dishes in one panel, has landed; it leaves open A1347–A1352, A1358–A1360, A1362, A1365 and A1366. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval

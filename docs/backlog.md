@@ -842,7 +842,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1347–A1356 and A1358–A1366. Remaining: pre-bills through A446, which no longer
+  picker, has landed; it leaves open A1347–A1352, A1358–A1360, A1362, A1365 and A1366. Remaining: pre-bills through A446, which no longer
   waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
@@ -889,7 +889,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   slice 3's LOOK fix review 3; predates it, `c8487cba5`).** Clear both when the question changes.
   [Detail](backlog/till.md#a1269-a-dead-end-question-that-replaces-another-keeps-the-first-ones-picks)
 
-- **A1382. Till refusals that say the wrong thing or nothing useful** (bundle of 7, 5 important, size M). Holds A1286, A1298, A1200, A1029. [Detail](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
+- **A1382. Till refusals that say the wrong thing or nothing useful** (bundle of 8, 5 important, size M). Holds A1286, A1298, A1200, A1029. [Detail](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
 
 - **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).**
   Decide whether Merge bills goes too.
