@@ -3590,8 +3590,10 @@ rebuild (`error in trigger products_media_image_fk_parent_delete: no such table:
 A later rebuild of a table an earlier trigger's BODY reads fails the walk: on 2026-11-07 (A1422) a
 synthetic set whose epoch migration added a trigger reading table `p`, followed by a drizzle-shaped
 rebuild of `p`, failed the walk with `migrations.apply_failed`, caused by the rename's
-`error in trigger watch_reads_p: no such table: main.p`; the same set without the trigger passed. Until A164 (2026-10-01) it seeded no rows, so a
-migration that failed only on data passed it; the next section says what it carries now.
+`error in trigger watch_reads_p: no such table: main.p`; the same set without the trigger passed.
+Both sets ran as a temporary case in `scripts/migration-upgrade.test.ts`, removed afterwards. Until
+A164 (2026-10-01) the walk seeded no rows, so a migration that failed only on data passed it; the
+next section says what it carries now.
 
 After `applyMigrations` removes the change feed, `installChangeFeed` in `apps/server/src/boot.ts`
 reinstalls it. Cost, besides the box that failed three starts on 2026-09-26: an earlier bricked box

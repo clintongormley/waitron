@@ -411,7 +411,6 @@ until A977).
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
   The transfer, portion-sale projection and counter, filing and adjustment order-portion suites
   still have Spanish dish samples; the counter and adjustment suites have Spanish dish words in test descriptions.
-  The kitchen-note upgrade fixture uses an English operation description.
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
@@ -581,8 +580,6 @@ until A977).
   natural-order and search fixtures and the Spanish locale check remain.
   Menu-period rule samples use English names; whitespace trimming, invalid-name refusals,
   weekday validation and overnight ranges retain their checks.
-  The kitchen-note upgrade fixture uses an English operation description and keeps its
-  es-ES locale, translated dish description and populated-predecessor comparisons.
   The kitchen-notice suite uses English station samples; its statement-count checks remain.
   Native allergy, kitchen-note and bill-identity suites use English sample location names;
   their allergy assignments, note revisions and bill-number checks remain.
@@ -876,8 +873,6 @@ product failures.
   natural-order and search fixtures and the Spanish locale check remain.
   Menu-period rule samples use English names; whitespace trimming, invalid-name refusals,
   weekday validation and overnight ranges retain their checks.
-  The kitchen-note upgrade fixture uses an English operation description and keeps its
-  es-ES locale, translated dish description and populated-predecessor comparisons.
   The kitchen-notice suite uses English station samples; its statement-count checks remain.
   Native allergy, kitchen-note and bill-identity suites use English sample location names;
   their allergy assignments, note revisions and bill-number checks remain.

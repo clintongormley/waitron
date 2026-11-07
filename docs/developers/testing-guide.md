@@ -248,13 +248,6 @@ handler understand an old schema just to populate a test.
 (2026-11-07, A1422) The upgrade tests named below were deleted with the frozen history; the two
 receipts describe them as they were.
 
-A predecessor's append-only list must name only tables that exist at that migration cut. On
-1 November 2026, W41s-7's new conflict ledger made the clock-confirmation and outage upgrade
-fixtures fail during setup: today's trigger list named `fiscal_conflict_evidence` before its
-creation. Those fixture lists now omit that later table only during predecessor setup; the upgrade
-still creates it, and both cases assert it starts empty. Existing history and immutability
-assertions remain. Production classification and trigger installation are unchanged.
-
 Receipt, 2026-10-17, A773-1: running
 `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts` after integration
 failed while populating the predecessor. Calling the same group submission directly exposed

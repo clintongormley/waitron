@@ -12,6 +12,30 @@ async function imageExists(filename: string): Promise<boolean> {
   return rows.rows.length === 1;
 }
 
+it("has no alt text or labels columns", async () => {
+  const columns = await suite.db.execute<{ name: string }>(
+    sql`select name from pragma_table_info('media_images') order by cid`,
+  );
+  expect(columns.rows.map((column) => column.name)).toEqual([
+    "id",
+    "filename",
+    "names",
+    "created_at",
+    "updated_at",
+  ]);
+});
+
+it("keeps the table's indexes", async () => {
+  const indexes = await suite.db.execute<{ name: string }>(sql`
+    select name from sqlite_master
+    where type = 'index' and tbl_name = 'media_images' and name not glob 'sqlite_*'
+    order by name`);
+  expect(indexes.rows.map((index) => index.name)).toEqual([
+    "media_images_date_idx",
+    "media_images_filename_key",
+  ]);
+});
+
 it("refuses names that are not an object, and accepts names that are", async () => {
   const insert = async (filename: string, names: string): Promise<void> => {
     await suite.db.execute(sql`
