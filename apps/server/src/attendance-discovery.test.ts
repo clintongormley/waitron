@@ -21,7 +21,7 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, persons, sessions, hashSessionToken } from "@waitron/identity";
+import { persons, sessions, hashSessionToken } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
@@ -35,7 +35,7 @@ import {
 import { recordAttendanceFact } from "./attendance-capture.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const backend = new WorkforceBackend();

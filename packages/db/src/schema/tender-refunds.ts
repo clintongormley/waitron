@@ -34,7 +34,7 @@ export const tenderRefunds = table(
     appliedAmount: money("applied_amount").notNull(),
     tipAmount: money("tip_amount").notNull().default(0),
     reason: label("reason").notNull(),
-    // Persons belong to identity's optional migration set, so these are plain ids, as on bill refunds.
+    // Plain ids, as on bill refunds: no key yet.
     authorizedBy: id("authorized_by").notNull(),
     requestedBy: id("requested_by").notNull(),
     attestedBy: id("attested_by"),

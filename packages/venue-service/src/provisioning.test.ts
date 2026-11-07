@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   departments,
@@ -21,7 +20,6 @@ import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
 import { readSeasons } from "./seasons.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
 import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
@@ -35,7 +33,7 @@ import {
 } from "./starter-content.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(() => {

@@ -15,14 +15,8 @@ import {
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import {
-  CATALOGUE_MIGRATIONS,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/catalogue";
-import {
-  IDENTITY_MIGRATIONS,
   hashPin,
   hashSessionToken,
   personRole,
@@ -133,7 +127,7 @@ async function seedSale(db: Database, issuedAt: string, lines: SeedLine[]): Prom
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);

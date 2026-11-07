@@ -1,15 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, parties, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import * as notes from "./index.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 beforeEach(async () => {

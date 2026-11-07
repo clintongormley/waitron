@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { DrainResult } from "@waitron/fiscal";
-import type { RunRecord, TickResult } from "@waitron/scheduler";
+import type { RunRecord, TickResult } from "@waitron/payments";
 import { DRAIN_DUTY, RECONCILE_DUTY, runPass, type PassDeps } from "./pass.js";
 
 const NOW = new Date("2026-07-26T09:00:00Z");

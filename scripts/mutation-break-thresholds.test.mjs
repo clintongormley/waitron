@@ -96,7 +96,7 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     );
     expect(config.thresholds).toBeUndefined();
     expect(runLines()).toContain(
-      `run: node scripts/mutation-aggregate.mjs mutation-reports --package db --shards 10 --break ${BAR}`,
+      `run: node scripts/mutation-aggregate.mjs mutation-reports --package db --shards 13 --break ${BAR}`,
     );
   });
 

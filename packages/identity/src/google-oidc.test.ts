@@ -3,7 +3,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   beginGoogleLink,
   beginGoogleLogin,
@@ -16,7 +15,7 @@ import { encryptTotpSecret } from "./mfa.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const config = {

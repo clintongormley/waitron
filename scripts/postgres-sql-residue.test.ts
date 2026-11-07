@@ -43,7 +43,7 @@ const ROOTS: readonly string[] = [
   join(REPO, "packages/reporting/src"),
   join(REPO, "packages/reporting/test"),
   join(REPO, "packages/workforce/src"),
-  join(REPO, "packages/scheduler/src"),
+  join(REPO, "packages/payments/src/reconciliation-schedule"),
 ];
 
 /**

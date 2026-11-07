@@ -32,7 +32,8 @@ function bundleFor(country: string, province: string | null, languages: unknown)
   bundle.venue.country = country;
   bundle.venue.province = province;
   bundle.venue.timeZone = country === "ES" ? "Europe/Madrid" : "Europe/London";
-  bundle.modules = { catalogue: 1 };
+  // Catalogue has no set of its own, so a copy of its tables alone carries no set version.
+  bundle.modules = {};
   bundle.tables = Object.fromEntries(tables.map(({ name }) => [name, []]));
   bundle.tables.content_languages = [{ id: 1, default_language: "en", languages }];
   return bundle;
@@ -68,7 +69,8 @@ describe("required languages before configuration replacement", () => {
     });
     try {
       const bundle = configurationBundle();
-      bundle.modules = { "synthetic-language-import": 1 };
+      // Built from catalogue, which has no set of its own: no set version to carry.
+      bundle.modules = {};
       bundle.tables = { zz_language_import: [{ id: "replacement" }] };
       let seen: unknown;
       const module = {

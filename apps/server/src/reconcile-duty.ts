@@ -1,11 +1,18 @@
-import type { PaymentReconcileResult, PaymentReconciler } from "@waitron/payments";
-import type { DutyOutcome, PeriodDuty, RunPeriod } from "@waitron/scheduler";
+import type {
+  DutyOutcome,
+  PaymentReconcileResult,
+  PaymentReconciler,
+  PeriodDuty,
+  RunPeriod,
+  TickResult,
+} from "@waitron/payments";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Adapts a `PaymentReconciler` into a scheduler `PeriodDuty`. It lives in the host because
- * `packages/scheduler` may not import `@waitron/payments` and `packages/payments` does not own cadence.
+ * Adapts a `PaymentReconciler` into a scheduler `PeriodDuty`. It lives in the host because payments'
+ * reconciliation schedule may not import the rest of payments, and the reconciler does not own
+ * cadence.
  */
 export function reconcilerAsDuty(reconciler: PaymentReconciler): PeriodDuty {
   return {
@@ -45,5 +52,31 @@ function summaryOf(result: PaymentReconcileResult): Record<string, unknown> {
     incidentsRaised: result.incidentsRaised,
     remediated: result.remediated,
     remediationFailures: result.remediationFailures,
+  };
+}
+
+/** What a pass reports when it runs no reconciliation: the shape `runDue` returns for a tick with no
+ * work, so `runPass` and `health.ts` need no special case. */
+export const NOTHING_TO_RECONCILE: TickResult = {
+  ran: [],
+  deferred: 0,
+  beyondHorizon: 0,
+  skipped: [],
+  nextDueAt: null,
+};
+
+export interface ReconcilePassDeps {
+  /** With payments switched off its tables, `scheduled_runs` among them, are not migrated. */
+  paymentsEnabled: boolean;
+  /** Asked per pass, so a credential provisioned while the host runs is served on the next pass. */
+  credentialProvisioned: () => Promise<boolean>;
+  runDue: (now: Date) => Promise<TickResult>;
+}
+
+/** A pass's reconcile step: runs the duty only while payments is on and its credential is there. */
+export function reconcilePassFor(deps: ReconcilePassDeps): (now: Date) => Promise<TickResult> {
+  return async (now) => {
+    if (!deps.paymentsEnabled) return NOTHING_TO_RECONCILE;
+    return (await deps.credentialProvisioned()) ? deps.runDue(now) : NOTHING_TO_RECONCILE;
   };
 }

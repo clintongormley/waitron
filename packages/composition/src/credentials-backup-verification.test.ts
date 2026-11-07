@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   BackupCheckUnavailable,
   validateBackupModuleResult,
@@ -14,8 +14,8 @@ import {
 import { CREDENTIALS_BACKUP_VERIFICATION } from "./credentials-backup-verification.js";
 import { ALL_MODULES } from "./modules.js";
 
-const before = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
-const after = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const before = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const after = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const env = `WAITRON_CREDENTIALS_KEY=${Buffer.alloc(32, 2).toString("base64")}\nWAITRON_CREDENTIALS_KEY_VERSION=2\n`;
 const payload = { url: "smtp://secret-sentinel@example.test", from: "sender@example.test" };
 beforeEach(async () => {

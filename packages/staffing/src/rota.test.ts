@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
@@ -10,9 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import {
-  VENUE_SERVICE_MIGRATIONS,
   departmentDayRanges,
   departmentDays,
   departments,
@@ -35,20 +32,12 @@ import {
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import * as staffing from "./index.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { saveSeasonStaffing } from "./paint.js";
 import type { AreaRef } from "./slots.js";
 import type { RotaWeek } from "./staffing-types.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const tx = <T>(fn: (t: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const backend = new WorkforceBackend();

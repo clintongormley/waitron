@@ -11,7 +11,7 @@ import {
   newId,
   nowIso,
 } from "@waitron/db";
-import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -29,9 +29,9 @@ import {
 const suite = useVenueDb({
   resetPerTest: false,
   // Core for the `tenants` row the setup seeds and the `locations` and `nodes` rows the cases seed
-  // (`seedLocation`, `seedNode`); identity for `persons`, which the cases write and workforce's
-  // tables reference.
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  // (`seedLocation`, `seedNode`), and for `persons`, which the cases write and workforce's tables
+  // reference.
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
   },
@@ -45,7 +45,7 @@ function rowIdentity() {
   return sql`${newId()}, ${nowIso()}`;
 }
 
-describe("persons, from the identity migration set layered under workforce", () => {
+describe("persons, from core's set layered under workforce", () => {
   it("stores a person and defaults role to staff and status to active", async () => {
     await suite.db.execute(sql`
       insert into persons (id, created_at, display_name, pin_hash)

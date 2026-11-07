@@ -1,6 +1,5 @@
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   departments,
@@ -19,10 +18,9 @@ import {
   courseDeleteSettingsRemoves,
   readCourseDeleteSettings as read,
 } from "./index.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(() => {

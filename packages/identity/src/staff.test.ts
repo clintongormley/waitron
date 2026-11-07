@@ -4,7 +4,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { authorize } from "./authorize.js";
 import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
@@ -31,7 +30,7 @@ import {
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 // `Promise<T> | T`: `tx.execute` is synchronous on this engine.

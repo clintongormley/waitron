@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0bd5fa4b-d104-473e-9f18-9c712ed41d99",
+  "id": "35294238-6074-482f-8111-8a1d4bb1d209",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -146,43 +146,363 @@
         }
       }
     },
-    "contadores_instalacion": {
-      "name": "contadores_instalacion",
+    "clock_checks": {
+      "name": "clock_checks",
       "columns": {
-        "nif": {
-          "name": "nif",
+        "id": {
+          "name": "id",
           "type": "text",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true,
           "autoincrement": false
         },
-        "id_sistema_informatico": {
-          "name": "id_sistema_informatico",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "proximo_numero": {
-          "name": "proximo_numero",
+        "seq": {
+          "name": "seq",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": 1
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opened_at": {
+          "name": "opened_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "contadores_instalacion_nif_id_sistema_informatico_pk": {
+      "indexes": {
+        "clock_checks_seq_uq": {
+          "name": "clock_checks_seq_uq",
           "columns": [
-            "nif",
-            "id_sistema_informatico"
+            "seq"
           ],
-          "name": "contadores_instalacion_nif_id_sistema_informatico_pk"
+          "isUnique": true
         }
       },
+      "foreignKeys": {
+        "clock_checks_node_id_nodes_id_fk": {
+          "name": "clock_checks_node_id_nodes_id_fk",
+          "tableFrom": "clock_checks",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "clock_checks_reason_ck": {
+          "name": "clock_checks_reason_ck",
+          "value": "\"clock_checks\".\"reason\" in ('start', 'change', 'behind_chain', 'disagrees')"
+        }
+      }
+    },
+    "clock_confirmations": {
+      "name": "clock_confirmations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "box_clock_at": {
+          "name": "box_clock_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "step_ms": {
+          "name": "step_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "proof": {
+          "name": "proof",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "check_id": {
+          "name": "check_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "registro_id": {
+          "name": "registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "record_at": {
+          "name": "record_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "clock_confirmations_seq_uq": {
+          "name": "clock_confirmations_seq_uq",
+          "columns": [
+            "seq"
+          ],
+          "isUnique": true
+        },
+        "clock_confirmations_check_uq": {
+          "name": "clock_confirmations_check_uq",
+          "columns": [
+            "check_id"
+          ],
+          "isUnique": true
+        },
+        "clock_confirmations_registro_idx": {
+          "name": "clock_confirmations_registro_idx",
+          "columns": [
+            "registro_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "clock_confirmations_node_id_nodes_id_fk": {
+          "name": "clock_confirmations_node_id_nodes_id_fk",
+          "tableFrom": "clock_confirmations",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "clock_confirmations_check_id_clock_checks_id_fk": {
+          "name": "clock_confirmations_check_id_clock_checks_id_fk",
+          "tableFrom": "clock_confirmations",
+          "tableTo": "clock_checks",
+          "columnsFrom": [
+            "check_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "clock_confirmations_registro_id_registros_facturacion_id_fk": {
+          "name": "clock_confirmations_registro_id_registros_facturacion_id_fk",
+          "tableFrom": "clock_confirmations",
+          "tableTo": "registros_facturacion",
+          "columnsFrom": [
+            "registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "clock_confirmations_source_ck": {
+          "name": "clock_confirmations_source_ck",
+          "value": "\"clock_confirmations\".\"source\" in ('authority', 'devices', 'admin', 'staff', 'elapsed')"
+        },
+        "clock_confirmations_reason_ck": {
+          "name": "clock_confirmations_reason_ck",
+          "value": "\"clock_confirmations\".\"reason\" in ('start', 'change', 'behind_chain', 'disagrees', 'unusable')"
+        },
+        "clock_confirmations_person_ck": {
+          "name": "clock_confirmations_person_ck",
+          "value": "(\"clock_confirmations\".\"source\" in ('admin', 'staff')) = (\"clock_confirmations\".\"person_id\" is not null) and (\"clock_confirmations\".\"person_id\" is null or length(\"clock_confirmations\".\"person_id\") > 0)"
+        },
+        "clock_confirmations_record_ck": {
+          "name": "clock_confirmations_record_ck",
+          "value": "(\"clock_confirmations\".\"registro_id\" is null) = (\"clock_confirmations\".\"record_at\" is null)"
+        }
+      }
+    },
+    "clock_stop_restarts": {
+      "name": "clock_stop_restarts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "restarted_at": {
+          "name": "restarted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "clock_at": {
+          "name": "clock_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "registro_id": {
+          "name": "registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "record_at": {
+          "name": "record_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "proof": {
+          "name": "proof",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "clock_stop_restarts_registro_uq": {
+          "name": "clock_stop_restarts_registro_uq",
+          "columns": [
+            "registro_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "clock_stop_restarts_node_id_nodes_id_fk": {
+          "name": "clock_stop_restarts_node_id_nodes_id_fk",
+          "tableFrom": "clock_stop_restarts",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "clock_stop_restarts_registro_id_registros_facturacion_id_fk": {
+          "name": "clock_stop_restarts_registro_id_registros_facturacion_id_fk",
+          "tableFrom": "clock_stop_restarts",
+          "tableTo": "registros_facturacion",
+          "columnsFrom": [
+            "registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -209,6 +529,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "technical_incident_token": {
+          "name": "technical_incident_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         }
       },
@@ -258,6 +585,14 @@
         },
         "incidencia": {
           "name": "incidencia",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "technical_incidence": {
+          "name": "technical_incidence",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -315,6 +650,13 @@
             "proximo_intento_en"
           ],
           "isUnique": false
+        },
+        "envios_confirmado_idx": {
+          "name": "envios_confirmado_idx",
+          "columns": [
+            "confirmado_en"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -337,9 +679,982 @@
       "checkConstraints": {
         "envios_estado_ck": {
           "name": "envios_estado_ck",
-          "value": "\"envios\".\"estado\" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')"
+          "value": "\"envios\".\"estado\" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')"
         }
       }
+    },
+    "filing_case_events": {
+      "name": "filing_case_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "case_id": {
+          "name": "case_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action_key": {
+          "name": "action_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "remedy_registro_id": {
+          "name": "remedy_registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "filing_case_events_action_key_uq": {
+          "name": "filing_case_events_action_key_uq",
+          "columns": [
+            "action_key"
+          ],
+          "isUnique": true
+        },
+        "filing_case_events_one_resolution_uq": {
+          "name": "filing_case_events_one_resolution_uq",
+          "columns": [
+            "case_id"
+          ],
+          "isUnique": true,
+          "where": "\"filing_case_events\".\"kind\" = 'resolved'"
+        },
+        "filing_case_events_case_idx": {
+          "name": "filing_case_events_case_idx",
+          "columns": [
+            "case_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "filing_case_events_case_id_filing_cases_id_fk": {
+          "name": "filing_case_events_case_id_filing_cases_id_fk",
+          "tableFrom": "filing_case_events",
+          "tableTo": "filing_cases",
+          "columnsFrom": [
+            "case_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "filing_case_events_remedy_registro_id_registros_facturacion_id_fk": {
+          "name": "filing_case_events_remedy_registro_id_registros_facturacion_id_fk",
+          "tableFrom": "filing_case_events",
+          "tableTo": "registros_facturacion",
+          "columnsFrom": [
+            "remedy_registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "filing_case_events_kind_ck": {
+          "name": "filing_case_events_kind_ck",
+          "value": "\"filing_case_events\".\"kind\" in ('note', 'resolved')"
+        }
+      }
+    },
+    "filing_cases": {
+      "name": "filing_cases",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "registro_id": {
+          "name": "registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cause": {
+          "name": "cause",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence": {
+          "name": "evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opened_at": {
+          "name": "opened_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "filing_cases_registro_uq": {
+          "name": "filing_cases_registro_uq",
+          "columns": [
+            "registro_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "filing_cases_registro_id_registros_facturacion_id_fk": {
+          "name": "filing_cases_registro_id_registros_facturacion_id_fk",
+          "tableFrom": "filing_cases",
+          "tableTo": "registros_facturacion",
+          "columnsFrom": [
+            "registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "filing_cases_cause_ck": {
+          "name": "filing_cases_cause_ck",
+          "value": "\"filing_cases\".\"cause\" <> ''"
+        }
+      }
+    },
+    "fiscal_allocations": {
+      "name": "fiscal_allocations",
+      "columns": {
+        "event_key": {
+          "name": "event_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "allocation_key": {
+          "name": "allocation_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sif_id": {
+          "name": "sif_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taxpayer_nif": {
+          "name": "taxpayer_nif",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "software_id": {
+          "name": "software_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "environment": {
+          "name": "environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "installation_identity": {
+          "name": "installation_identity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "allocation": {
+          "name": "allocation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approval": {
+          "name": "approval",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bases": {
+          "name": "bases",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "result": {
+          "name": "result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activated_at": {
+          "name": "activated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fiscal_allocations_allocation_uq": {
+          "name": "fiscal_allocations_allocation_uq",
+          "columns": [
+            "allocation_key"
+          ],
+          "isUnique": true
+        },
+        "fiscal_allocations_identity_uq": {
+          "name": "fiscal_allocations_identity_uq",
+          "columns": [
+            "taxpayer_nif",
+            "software_id",
+            "environment",
+            "installation_identity"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "fiscal_allocations_node_id_nodes_id_fk": {
+          "name": "fiscal_allocations_node_id_nodes_id_fk",
+          "tableFrom": "fiscal_allocations",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fiscal_allocations_sif_id_registro_sif_id_fk": {
+          "name": "fiscal_allocations_sif_id_registro_sif_id_fk",
+          "tableFrom": "fiscal_allocations",
+          "tableTo": "registro_sif",
+          "columnsFrom": [
+            "sif_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "fiscal_certificate_installs": {
+      "name": "fiscal_certificate_installs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "installed_at": {
+          "name": "installed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "organisation": {
+          "name": "organisation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tax_id": {
+          "name": "tax_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "checked_endpoint": {
+          "name": "checked_endpoint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fiscal_certificate_installs_node_idx": {
+          "name": "fiscal_certificate_installs_node_idx",
+          "columns": [
+            "node_id",
+            "installed_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "fiscal_certificate_installs_source_ck": {
+          "name": "fiscal_certificate_installs_source_ck",
+          "value": "\"fiscal_certificate_installs\".\"source\" in ('setup', 'dashboard')"
+        },
+        "fiscal_certificate_installs_kind_ck": {
+          "name": "fiscal_certificate_installs_kind_ck",
+          "value": "\"fiscal_certificate_installs\".\"kind\" in ('sello', 'representante')"
+        },
+        "fiscal_certificate_installs_dashboard_ck": {
+          "name": "fiscal_certificate_installs_dashboard_ck",
+          "value": "\"fiscal_certificate_installs\".\"source\" = 'setup' or (\"fiscal_certificate_installs\".\"person_id\" is not null and \"fiscal_certificate_installs\".\"checked_at\" is not null and \"fiscal_certificate_installs\".\"checked_endpoint\" is not null)"
+        }
+      }
+    },
+    "fiscal_certificate_reminders": {
+      "name": "fiscal_certificate_reminders",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "install_id": {
+          "name": "install_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fiscal_certificate_reminders_uq": {
+          "name": "fiscal_certificate_reminders_uq",
+          "columns": [
+            "install_id",
+            "stage",
+            "person_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "fiscal_certificate_reminders_install_id_fiscal_certificate_installs_id_fk": {
+          "name": "fiscal_certificate_reminders_install_id_fiscal_certificate_installs_id_fk",
+          "tableFrom": "fiscal_certificate_reminders",
+          "tableTo": "fiscal_certificate_installs",
+          "columnsFrom": [
+            "install_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "fiscal_certificate_reminders_stage_ck": {
+          "name": "fiscal_certificate_reminders_stage_ck",
+          "value": "\"fiscal_certificate_reminders\".\"stage\" in ('warning', 'urgent', 'expired')"
+        },
+        "fiscal_certificate_reminders_status_ck": {
+          "name": "fiscal_certificate_reminders_status_ck",
+          "value": "\"fiscal_certificate_reminders\".\"status\" in ('claimed', 'sent', 'failed', 'unknown')"
+        }
+      }
+    },
+    "fiscal_conflict_evidence": {
+      "name": "fiscal_conflict_evidence",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "registro_id": {
+          "name": "registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "case_id": {
+          "name": "case_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attempt": {
+          "name": "attempt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cause": {
+          "name": "cause",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence": {
+          "name": "evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fiscal_conflict_evidence_attempt_uq": {
+          "name": "fiscal_conflict_evidence_attempt_uq",
+          "columns": [
+            "registro_id",
+            "attempt",
+            "cause"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "fiscal_conflict_evidence_registro_id_registros_facturacion_id_fk": {
+          "name": "fiscal_conflict_evidence_registro_id_registros_facturacion_id_fk",
+          "tableFrom": "fiscal_conflict_evidence",
+          "tableTo": "registros_facturacion",
+          "columnsFrom": [
+            "registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fiscal_conflict_evidence_case_id_filing_cases_id_fk": {
+          "name": "fiscal_conflict_evidence_case_id_filing_cases_id_fk",
+          "tableFrom": "fiscal_conflict_evidence",
+          "tableTo": "filing_cases",
+          "columnsFrom": [
+            "case_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "fiscal_conflict_evidence_attempt_ck": {
+          "name": "fiscal_conflict_evidence_attempt_ck",
+          "value": "\"fiscal_conflict_evidence\".\"attempt\" > 0"
+        },
+        "fiscal_conflict_evidence_cause_ck": {
+          "name": "fiscal_conflict_evidence_cause_ck",
+          "value": "\"fiscal_conflict_evidence\".\"cause\" in ('fiscal.huella_divergente', 'fiscal.duplicado_anulado')"
+        }
+      }
+    },
+    "fiscal_lookup_conflicts": {
+      "name": "fiscal_lookup_conflicts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "registro_id": {
+          "name": "registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "case_id": {
+          "name": "case_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence": {
+          "name": "evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fiscal_lookup_conflicts_registro_uq": {
+          "name": "fiscal_lookup_conflicts_registro_uq",
+          "columns": [
+            "registro_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "fiscal_lookup_conflicts_registro_id_registros_facturacion_id_fk": {
+          "name": "fiscal_lookup_conflicts_registro_id_registros_facturacion_id_fk",
+          "tableFrom": "fiscal_lookup_conflicts",
+          "tableTo": "registros_facturacion",
+          "columnsFrom": [
+            "registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fiscal_lookup_conflicts_case_id_filing_cases_id_fk": {
+          "name": "fiscal_lookup_conflicts_case_id_filing_cases_id_fk",
+          "tableFrom": "fiscal_lookup_conflicts",
+          "tableTo": "filing_cases",
+          "columnsFrom": [
+            "case_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "fiscal_reservations": {
+      "name": "fiscal_reservations",
+      "columns": {
+        "event_key": {
+          "name": "event_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "allocation_key": {
+          "name": "allocation_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_node_id": {
+          "name": "source_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taxpayer_nif": {
+          "name": "taxpayer_nif",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "software_id": {
+          "name": "software_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "environment": {
+          "name": "environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "installation_identity": {
+          "name": "installation_identity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence": {
+          "name": "evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bases": {
+          "name": "bases",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "established_at": {
+          "name": "established_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fiscal_reservations_allocation_uq": {
+          "name": "fiscal_reservations_allocation_uq",
+          "columns": [
+            "allocation_key"
+          ],
+          "isUnique": true
+        },
+        "fiscal_reservations_identity_uq": {
+          "name": "fiscal_reservations_identity_uq",
+          "columns": [
+            "taxpayer_nif",
+            "software_id",
+            "environment",
+            "installation_identity"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "fiscal_reservations_node_id_nodes_id_fk": {
+          "name": "fiscal_reservations_node_id_nodes_id_fk",
+          "tableFrom": "fiscal_reservations",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fiscal_reservations_source_node_id_nodes_id_fk": {
+          "name": "fiscal_reservations_source_node_id_nodes_id_fk",
+          "tableFrom": "fiscal_reservations",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "source_node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "fiscal_series_conflicts": {
+      "name": "fiscal_series_conflicts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sif_id": {
+          "name": "sif_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "series_id": {
+          "name": "series_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invoice_identity": {
+          "name": "invoice_identity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence": {
+          "name": "evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fiscal_series_conflicts_invoice_uq": {
+          "name": "fiscal_series_conflicts_invoice_uq",
+          "columns": [
+            "sif_id",
+            "invoice_identity"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "fiscal_series_conflicts_sif_id_registro_sif_id_fk": {
+          "name": "fiscal_series_conflicts_sif_id_registro_sif_id_fk",
+          "tableFrom": "fiscal_series_conflicts",
+          "tableTo": "registro_sif",
+          "columnsFrom": [
+            "sif_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fiscal_series_conflicts_series_id_invoice_series_id_fk": {
+          "name": "fiscal_series_conflicts_series_id_invoice_series_id_fk",
+          "tableFrom": "fiscal_series_conflicts",
+          "tableTo": "invoice_series",
+          "columnsFrom": [
+            "series_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "registro_sif": {
       "name": "registro_sif",
@@ -374,7 +1689,7 @@
         },
         "numero_instalacion": {
           "name": "numero_instalacion",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -433,7 +1748,7 @@
       "checkConstraints": {
         "registro_sif_numero_ck": {
           "name": "registro_sif_numero_ck",
-          "value": "\"registro_sif\".\"numero_instalacion\" > 0"
+          "value": "length(\"registro_sif\".\"numero_instalacion\") between 1 and 30"
         }
       }
     },
@@ -447,11 +1762,25 @@
           "notNull": true,
           "autoincrement": false
         },
-        "till_id": {
-          "name": "till_id",
+        "corrects_registro_id": {
+          "name": "corrects_registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "node_id": {
@@ -519,6 +1848,27 @@
         },
         "tipo_factura": {
           "name": "tipo_factura",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "subsanacion": {
+          "name": "subsanacion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rechazo_previo": {
+          "name": "rechazo_previo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sin_registro_previo": {
+          "name": "sin_registro_previo",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -681,6 +2031,13 @@
           ],
           "isUnique": true
         },
+        "registros_corrects_registro_uq": {
+          "name": "registros_corrects_registro_uq",
+          "columns": [
+            "corrects_registro_id"
+          ],
+          "isUnique": true
+        },
         "registros_identidad_uq": {
           "name": "registros_identidad_uq",
           "columns": [
@@ -689,7 +2046,8 @@
             "fecha_expedicion_factura",
             "tipo_registro"
           ],
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"registros_facturacion\".\"corrects_registro_id\" is null"
         },
         "registros_sale_idx": {
           "name": "registros_sale_idx",
@@ -705,20 +2063,40 @@
             "secuencia"
           ],
           "isUnique": false
+        },
+        "registros_generado_idx": {
+          "name": "registros_generado_idx",
+          "columns": [
+            "fecha_hora_huso_gen_registro"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
-        "registros_facturacion_till_id_tills_id_fk": {
-          "name": "registros_facturacion_till_id_tills_id_fk",
+        "registros_facturacion_corrects_registro_id_registros_facturacion_id_fk": {
+          "name": "registros_facturacion_corrects_registro_id_registros_facturacion_id_fk",
           "tableFrom": "registros_facturacion",
-          "tableTo": "tills",
+          "tableTo": "registros_facturacion",
           "columnsFrom": [
-            "till_id"
+            "corrects_registro_id"
           ],
           "columnsTo": [
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "registros_facturacion_device_id_devices_id_fk": {
+          "name": "registros_facturacion_device_id_devices_id_fk",
+          "tableFrom": "registros_facturacion",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         },
         "registros_facturacion_node_id_nodes_id_fk": {
@@ -764,6 +2142,14 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "registros_facturacion_source_ck": {
+          "name": "registros_facturacion_source_ck",
+          "value": "\"registros_facturacion\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+        },
+        "registros_facturacion_source_device_ck": {
+          "name": "registros_facturacion_source_device_ck",
+          "value": "(\"registros_facturacion\".\"source\" = 'device') = (\"registros_facturacion\".\"device_id\" is not null)"
+        },
         "registros_tipo_registro_ck": {
           "name": "registros_tipo_registro_ck",
           "value": "\"registros_facturacion\".\"tipo_registro\" in ('alta', 'anulacion')"

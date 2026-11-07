@@ -16,13 +16,12 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
 import { readCatalogueSettings, saveCatalogueDefaultColor } from "./settings.js";
 import { getSeededUnit } from "./units.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const expected: StarterTranslations<StarterContentLanguage> = STARTER_UNIT_NAMES;
 
 /**

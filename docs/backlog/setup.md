@@ -375,6 +375,17 @@ full-disk texts are outside them, for the owner:
 - the managers' full-disk email (`apps/server/src/i18n/box-emails.ts`) says "ask whoever installed
   the box", the never-send-the-person-elsewhere class.
 
+Not a full-disk text, but the same class, found by A760 part 3's review:
+
+- the recovery page's operator texts (`apps/server/src/i18n/recovery-page.ts`: about 15 codes,
+  among them `provisioning.database_ahead`, `provisioning.schema_mismatch` and the generic
+  fallback, plus the `forInstaller` heading "For whoever installed this box") end "ask whoever
+  installed this box for help" or a sentence like it. `apps/server/src/recovery-surface.test.ts`
+  requires that sentence beside any restore action ("The reader has no terminal and often no
+  backup, so a restore action must name who can help", #310, 2026-09-11), which conflicts with
+  CLAUDE.md §3's first rule. The owner decides which wins. After A760 a box moved to the new image
+  without a reset shows `provisioning.database_ahead`'s page.
+
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
 A1127 measured the room a lock, the emptying and the Start-again flow need on a 32 MiB HFS+ image,
@@ -673,7 +684,7 @@ that operation's reader. Do not remove exact-content checks to make a large file
   date.** Word the too-new case on its own. Found by A980 S1a2's plan review.
   [Detail](setup.md#a-box-on-an-older-configuration-format-blames-the-export-when-it-is-the-box-that-is-out-of-date)
 - **Other full-disk words still send the person elsewhere or end with the short reinstall sentence**
-  For the owner. Left open by A1127.
+  So do the recovery page's operator texts, which a test requires. For the owner. Left open by A1127.
   [Detail](setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence).
 - **Start again over plain HTTP says only that deleting is not safe.** Wanted: words saying a
   secure connection is needed. Left open by A1131bc slice 2.

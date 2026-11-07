@@ -5,17 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import {
-  IDENTITY_MIGRATIONS,
-  persons,
-  startManagementSession,
-  withPassiveManagementRead,
-} from "@waitron/identity";
+import { persons, startManagementSession, withPassiveManagementRead } from "@waitron/identity";
 import * as layouts from "@waitron/layouts";
 import * as media from "@waitron/media";
 import {
-  MEDIA_MIGRATIONS,
   prepareImage,
   readCurrentImage,
   readPresentations,
@@ -24,7 +17,6 @@ import {
   uploadImage,
   type PreparedImage,
 } from "@waitron/media";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import * as logoModule from "./receipt-logo.js";
 import { countBlackDots, drawLogoRasters } from "./receipt-logo.js";
@@ -69,13 +61,7 @@ async function blackSpeck(): Promise<PreparedImage> {
 }
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    MEDIA_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 const images = [await splitPicture(), await whiteCircle(), await blackSpeck()];
 

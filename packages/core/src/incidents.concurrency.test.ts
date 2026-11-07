@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError, deviceOrigin } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import {
@@ -17,7 +16,7 @@ import {
  * matches no row whichever order the two arrive in. Weaker than a race test: nothing observes the
  * second caller reaching the row, because the write queue runs the two transactions in turn.
  */
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 const BASE = new Date("2026-03-01T12:05:00.000Z");
 

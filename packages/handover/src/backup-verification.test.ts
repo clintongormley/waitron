@@ -5,12 +5,18 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { openBackupQuery } from "@waitron/store";
-import { HANDOVER_MIGRATIONS } from "./migrations.js";
 import * as api from "./index.js";
+import { HANDOVER_TABLES } from "./tables.js";
 
-const original = useVenueDb({ migrations: [CORE_MIGRATIONS, HANDOVER_MIGRATIONS] });
-const restored = useVenueDb({ migrations: [CORE_MIGRATIONS, HANDOVER_MIGRATIONS] });
-const absent = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const original = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const restored = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const absent = useVenueDb({
+  migrations: [CORE_MIGRATIONS],
+  // A source from before these tables existed: core's set now creates them, so they are dropped.
+  setup: async (db) => {
+    for (const table of [...HANDOVER_TABLES].reverse()) db.run(sql.raw(`drop table "${table}"`));
+  },
+});
 const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] };
 const invalid = { status: "invalid", checks: [{ code: "data", status: "invalid" }] };
 const NODE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

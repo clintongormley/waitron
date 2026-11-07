@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -10,7 +9,7 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 // A database with no `tenants` row: the boot configuration named no taxpayer.
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

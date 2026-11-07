@@ -98,7 +98,6 @@ describe("configuration", () => {
       "payments",
       "payments-stripe",
       "payments-sumup",
-      "scheduler",
       "credentials",
       "workforce",
       "identity",

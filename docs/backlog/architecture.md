@@ -214,11 +214,10 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
 before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
 was fixed only for the last 28 documents. Find the rest with
-`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench`. Some hits point
+`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench
+':!scripts/fixtures/a760-history'`. Some hits point
 into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
-so check which document each one names before cutting it. Two were left on purpose:
-`packages/db/drizzle/0004_variant_one_level.sql` ("spec §1.2, §15.7"), because a shipped migration
-is not edited without a venue reset (`CLAUDE.md` §3), and
+so check which document each one names before cutting it. One was left on purpose:
 `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a
 deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
 each to the pull request that built the work, or drop the tag. A test title is not a comment, so
@@ -664,21 +663,6 @@ On go-live day, make these changes together (owner, 2026-10-21 about 15:35–15:
 Keep the current `CLAUDE.md` rule, planning files and ignore settings until go-live day.
 The separate [A760 procedure](../operations/a760-migration-squash.md) retains its own freeze,
 reset and operator gates; this entry does not start that job.
-
-## A760. Squash every migration set before go-live
-
-The [operator procedure](../operations/a760-migration-squash.md)
-  and [inventory](../operations/a760-migration-squash-inventory.md) are approved
-  (owner, 2026-10-16), including fiscal SQL/meta and the named history-harness changes.
-  The watcher starts the sole job after big work and migration branches drain, with the full
-  Waitron/Cloud mutation freeze and named reset/operator roster recorded. Reset the laptop
-  dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
-  off/quarantined, image pinned, until A1308 ends, when it is reset once.
-  The [eight-set plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) replaces the
-  procedure where they differ, in three pull requests, only the last under the freeze. A790 Cut A,
-  A802, A799 and A739 do not hold it up: they land afterwards with regenerated migrations (owner,
-  2026-11-04). The owner approved setup-only edits to six named fiscal test files (2026-11-04).
-  Pull requests 1 and 2 landed on 2026-11-06 (#2512, #2516); pull request 3 remains.
 
 ## Loose ends left by A435's printer, reader and device delete (steps 2 to 4)
 
@@ -1204,7 +1188,8 @@ product failures.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
-15 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+16 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+except the last, added on 2026-11-07.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
 
@@ -1221,7 +1206,7 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   [Detail](catalogue.md#what-1151-left-open-2026-10-03)
 - **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
   and only the editor's parser refuses a blank; `option_lists.name`, `option_labels.name` and
-  `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
+  `extra_lists.name` share the pattern (`packages/db/drizzle/0000_baseline.sql`). **Next
   action:** decide whether the columns want a check constraint and the write paths a domain refusal.
 - **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** At the counter the dish
   leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
@@ -1251,6 +1236,11 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 - **Passkey name column after A760:** A403 keeps the column under the schema hold; new registrations
   use the detected password manager. Decide whether to remove it after the hold.
   [Detail](dashboard.md#passkey-name-column-after-a760)
+- **Person-id columns and `order_draft_lines.menu_item_id` have no foreign key.** About 30 columns
+  holding a person's id, and that one, say "No key yet" at the column; their old reason (`persons`
+  sat in another migration set) ended when A760 moved
+  it into core. Declare the keys when A1308 rewrites the starting migrations (CLAUDE.md §3: declare
+  every foreign key).
 
 ## What A1308 retires
 
@@ -1320,9 +1310,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
   folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
   until the venue reset that permits the rebuild.
-- **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the
-  go-live migration squash (A760).**
-  [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-in-the-go-live-migration-squash-a760)
+- **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when
+  A1308 rewrites the starting migrations.**
+  [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-when-a1308-rewrites-the-starting-migrations)
 - **A person row written from outside `packages/identity` still folds its key ASCII-only** — OPEN.
   [Detail](dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
 - **Task 1b** (#554, session cookies stored only as hashes).
@@ -1383,7 +1373,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-26 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+27 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
   now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/catalogue/src/extras.ts`)
@@ -1426,6 +1416,13 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](ci.md#loose-ends-left-by-the-comment-pruning-pull-requests-559-to-624).
 - **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN.
   [Detail](dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-and-0453-0454-is-installed)
+- **Fiscal source comments still describe the migration sets A760 retired.**
+  `packages/fiscal-verifactu/src/schema/clock-confirmations.ts:46`, `clock-stop-restarts.ts:16` and
+  `filing-cases.ts:60` say `persons` is in identity's own set (it is in core's since A760);
+  `clock-stop-restarts.ts:6` says A760 will drop that table (A760 changed no table's shape); and
+  `src/drain.ts:54` and `:1930` name `@waitron/scheduler`, now part of `@waitron/payments`. A760
+  left
+  them because fiscal source stays unedited in that change; fix them in the next fiscal change.
 - **Remove the stale till description beside the device-delete preview fixture.**
   `apps/dashboard/src/screens/devices-screen.test.ts:6005` calls the fixture a till, while
   its `d1` row is a kitchen display (`kind: "kds_station"`). Remove that comment in the next

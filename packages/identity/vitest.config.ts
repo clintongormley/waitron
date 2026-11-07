@@ -14,12 +14,7 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      exclude: [
-        ...coverageConfigDefaults.exclude,
-        "drizzle.config.ts",
-        "drizzle/**",
-        "src/index.ts",
-      ],
+      exclude: [...coverageConfigDefaults.exclude, "drizzle/**", "src/index.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },

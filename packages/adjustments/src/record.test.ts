@@ -12,7 +12,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, decimalToCents, stringToThousandths, subtractDecimal } from "@waitron/shared";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import {
   readBillAdjustments,
@@ -22,7 +21,7 @@ import {
 } from "./record.js";
 import { seedReason, seedWorkingOrder } from "../test/seed.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let db: Database;
 beforeAll(() => {

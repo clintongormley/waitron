@@ -87,7 +87,9 @@ describe("no tenant column", () => {
     // An absence assertion over nothing passes. Lower bounds, not counts.
     expect(nonTestSources().length).toBeGreaterThan(500);
     expect(sets.length).toBeGreaterThan(5);
-    expect(sets.flatMap((set) => migrationSqlFiles(repoRoot, set)).length).toBeGreaterThan(8);
+    expect(sets.flatMap((set) => migrationSqlFiles(repoRoot, set)).length).toBeGreaterThanOrEqual(
+      7,
+    );
   });
 
   it("declares no tenant column in any migration set's head schema", () => {

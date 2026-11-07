@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -22,7 +22,7 @@ let manager: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);

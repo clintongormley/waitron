@@ -11,7 +11,6 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   assignCatalogueToVenue,
   addProductToMenu,
@@ -34,6 +33,7 @@ import {
   parentProducts,
 } from "./variant-fallback.js";
 import { plantStoredUnit, seedVenueWithSeries } from "../test/fixtures.js";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 /**
  * A variant row is a `products` row with a `parent_id`, and a null in any inherited field reads as
@@ -45,7 +45,8 @@ import { plantStoredUnit, seedVenueWithSeries } from "../test/fixtures.js";
  * parent and 175 ml each carry three different names (125 ml has only its staff name), so a
  * reader that takes the wrong row or the wrong name fails rather than passing on a shared value.
  */
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+beforeEach(() => seedLibraryImages(fx.db, "cava.jpg", "large.jpg", "parent.jpg"));
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const PARENT_ALLERGENS = { sulphites: {} };
@@ -126,7 +127,7 @@ beforeEach(async () => {
       allergens: PARENT_ALLERGENS,
       dietOverride: { vegan: "yes" },
       dietaryDeclarations: ["vegan"],
-      image: "parent.jpg",
+      image: libraryImageName("parent.jpg"),
     });
     await tx
       .update(products)
@@ -169,7 +170,7 @@ beforeEach(async () => {
         unitPrice: 550,
         vatClass: "general",
         dietaryDeclarations: ["vegetarian"],
-        image: "large.jpg",
+        image: libraryImageName("large.jpg"),
         courseId: ownCourse!.id,
         allergens: W175_PUBLISHED_ALLERGENS,
         manualAllergens: W175_MANUAL_ALLERGENS,
@@ -243,7 +244,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         name: "175 ml",
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
-        image: "large.jpg",
+        image: libraryImageName("large.jpg"),
         unitPrice: "5.50",
         available: true,
         active: true,
@@ -366,7 +367,7 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       unitPrice: "4.50",
       menuPrice: null,
       available: true,
-      image: "parent.jpg",
+      image: libraryImageName("parent.jpg"),
       vatClass: "reduced",
       pricingUnit: "each",
       unit: { id: f.glass },
@@ -382,7 +383,7 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       customerName: { en: "Large glass of house wine" },
       kitchenName: "W175",
       unitPrice: "5.50",
-      image: "large.jpg",
+      image: libraryImageName("large.jpg"),
       vatClass: "general",
       pricingUnit: "each",
       unit: { id: f.glass },
@@ -517,7 +518,7 @@ describe("readProductEditor", () => {
   // ones are never shown.
   const parentValues = () => ({
     description: { en: "A dry white from Rueda" },
-    image: "parent.jpg",
+    image: libraryImageName("parent.jpg"),
     unitPrice: "4.00",
     vatClass: "reduced",
     unitId: f.glass,
@@ -553,7 +554,7 @@ describe("readProductEditor", () => {
       customerName: { en: "Large glass of house wine" },
       kitchenName: "W175",
       description: { en: "A sweet red from Toro" },
-      image: "large.jpg",
+      image: libraryImageName("large.jpg"),
       unitPrice: "5.50",
       vatClass: "general",
       unitId: null,
@@ -630,14 +631,14 @@ describe("createProduct", () => {
         unitId: f.largeGlass,
         unitPrice: "6.25",
         vatClass: "general",
-        image: "cava.jpg",
+        image: libraryImageName("cava.jpg"),
       }),
     );
     expect(created).toMatchObject({
       name: "Cava",
       unitPrice: "6.25",
       vatClass: "general",
-      image: "cava.jpg",
+      image: libraryImageName("cava.jpg"),
       unitId: f.largeGlass,
       categoryId: f.bottles,
       primaryCategoryId: f.bottles,

@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, captureError, tenantReceipts, withTransaction } from "
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -18,7 +18,7 @@ import {
 } from "./receipt-store.js";
 import type { ReceiptConfig, ReceiptLogoRasters, StoredLogoRaster } from "./types.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);

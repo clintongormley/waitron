@@ -18,6 +18,7 @@ const OWNED = [
   "card_reader_holders",
   "payment_holds",
   "payment_hold_outcomes",
+  "scheduled_runs",
 ];
 
 /**

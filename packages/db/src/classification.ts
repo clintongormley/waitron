@@ -6,11 +6,10 @@ const LEDGER = "what happened, keyed by the writing node; drained back from a re
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
 
 /**
- * Core's tables, classified for native replication. The completeness of this list against core's
- * migrations is guarded by `classification.test.ts`, which scans `drizzle/*.sql` for
- * `CREATE TABLE`.
+ * The tables core's own module code owns. Core's change sources and its own backup check read this
+ * list; the modules hosted in core's set name theirs in their own packages.
  */
-export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
+export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   // ledger — copied to a standby AND drained back from a returned box.
   appendOnly("sales", "ledger", LEDGER),
   appendOnly("sale_lines", "ledger", LEDGER),
@@ -271,6 +270,216 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
 ];
 
+const MENU_STATE = "menu configuration; copied to a standby, never drained back";
+const SUGGESTIONS =
+  "translation suggestions waiting for a person's review; copied to a standby, never drained back";
+const SERVICE_STATE =
+  "venue service configuration or live order state; copied to a standby, never drained back";
+const SEALED =
+  "sealed under the box's key ring, which a spare receives from the main box when it joins, so both open the main box's rows. Not keyed by node id";
+
+/** The tables of the modules whose tables live in core's set, each under the reason its module gave. */
+const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
+  // handover
+  appendOnly(
+    "handover_activations",
+    "ledger",
+    "which box took over from which, when, who asked and on what signed evidence; nothing may change or remove it",
+  ),
+
+  // catalogue
+  classify("category_details", "state", MENU_STATE),
+  classify("catalogue_settings", "state", MENU_STATE),
+  classify("content_languages", "state", MENU_STATE),
+  classify("unit_seed_states", "state", MENU_STATE),
+  classify("units", "state", MENU_STATE),
+  classify("product_units", "state", MENU_STATE),
+  classify("menu_items", "state", MENU_STATE),
+  classify("menu_item_variant_overrides", "state", MENU_STATE),
+  classify("option_lists", "state", MENU_STATE),
+  classify("option_labels", "state", MENU_STATE),
+  classify("extra_lists", "state", MENU_STATE),
+  classify("extra_list_items", "state", MENU_STATE),
+  classify("product_modifiers", "state", MENU_STATE),
+  classify("sections", "state", MENU_STATE),
+  classify("section_members", "state", MENU_STATE),
+  classify("menu_details", "state", MENU_STATE),
+  appendOnly(
+    "menu_versions",
+    "state",
+    "menu versions, published or queued, never changed once written; copied to a standby, never drained back",
+  ),
+  appendOnly(
+    "menu_version_images",
+    "state",
+    "the photos each menu version names, published or queued; copied to a standby, never drained back",
+  ),
+  classify("menu_publications", "state", MENU_STATE),
+  classify("menu_scheduled_publications", "state", MENU_STATE),
+  classify("content_suggestion_jobs", "state", SUGGESTIONS),
+  classify("content_suggestions", "state", SUGGESTIONS),
+
+  // venue-service
+  classify("departments", "state", SERVICE_STATE),
+  classify("service_steps", "state", SERVICE_STATE),
+  classify("service_step_completions", "state", SERVICE_STATE),
+  classify("department_receipts", "state", SERVICE_STATE),
+  classify("department_transfer_desks", "state", SERVICE_STATE),
+  classify("department_transfer_destinations", "state", SERVICE_STATE),
+  classify("department_transfer_requests", "state", SERVICE_STATE),
+  classify("department_sale_policies", "state", SERVICE_STATE),
+  classify("zone_service_policies", "state", SERVICE_STATE),
+  classify("zone_extensions", "state", SERVICE_STATE),
+  classify("zone_sale_policies", "state", SERVICE_STATE),
+  appendOnly("sale_receipt_headers", "ledger", "receipt header as issued for a sale"),
+  classify("menu_periods", "state", SERVICE_STATE),
+  classify("menu_period_staff_menus", "state", SERVICE_STATE),
+  classify("department_floor_plan_sets", "state", SERVICE_STATE),
+  classify("device_profile_service_access", "state", SERVICE_STATE),
+  classify("device_profile_zones", "state", SERVICE_STATE),
+  classify("device_zone_selections", "state", SERVICE_STATE),
+  classify("device_zone_selection_zones", "state", SERVICE_STATE),
+  classify("device_profile_kitchen_screens", "state", SERVICE_STATE),
+  classify("device_profile_kitchen_screen_stations", "state", SERVICE_STATE),
+  classify("device_profile_kitchen_screen_zones", "state", SERVICE_STATE),
+  classify("device_kitchen_screens", "state", SERVICE_STATE),
+  classify("device_kitchen_screen_stations", "state", SERVICE_STATE),
+  classify("device_kitchen_screen_zones", "state", SERVICE_STATE),
+  classify("device_kitchen_screen_removals", "state", SERVICE_STATE),
+  classify("station_day_states", "state", SERVICE_STATE),
+  classify("routing_cells", "state", SERVICE_STATE),
+  classify("routing_cell_periods", "state", SERVICE_STATE),
+  classify("order_service_contexts", "state", SERVICE_STATE),
+  classify("working_line_contexts", "state", SERVICE_STATE),
+  classify("kitchen_notices", "state", SERVICE_STATE),
+  classify("ticket_item_allergies", "state", SERVICE_STATE),
+  classify("order_kitchen_notes", "state", SERVICE_STATE),
+  classify("party_allergy", "state", SERVICE_STATE),
+  classify("party_allergy_guests", "state", SERVICE_STATE),
+  classify("allergy_line_ticks", "state", SERVICE_STATE),
+  classify("bill_identities", "state", SERVICE_STATE),
+  appendOnly(
+    "bill_number_allocations",
+    "ledger",
+    "each bill number a seated party has given, so none is given twice",
+  ),
+  classify("holiday_geographies", "state", SERVICE_STATE),
+  classify("seasons", "state", SERVICE_STATE),
+  classify("special_days", "state", SERVICE_STATE),
+  classify("special_day_dates", "state", SERVICE_STATE),
+  classify("department_days", "state", SERVICE_STATE),
+  classify("department_day_ranges", "state", SERVICE_STATE),
+  classify("zone_days", "state", SERVICE_STATE),
+  classify("zone_day_ranges", "state", SERVICE_STATE),
+
+  // media
+  classify("media_images", "state", "shared image metadata; copied to standbys"),
+  classify("media_image_data", "state", "shared image bytes; copied to standbys"),
+  classify(
+    "media_image_blobs",
+    "state",
+    "immutable replacement sources shared by photo identities",
+  ),
+  classify("media_image_edits", "state", "current picture, framing and revision for each photo"),
+
+  // identity: every table means the same on every node of the venue. A sign-in's cookie token is
+  // stored only as its hash, so neither that session's row id nor its stored hash, read from a copy
+  // of the database, signs anybody in.
+  classify("persons", "state", STATE),
+  classify(
+    "management_account_actions",
+    "state",
+    "pending account activation and recovery proofs; copied to a standby, never drained back",
+  ),
+  classify(
+    "webauthn_credentials",
+    "state",
+    "a person's registered authenticators; copied to a standby, never drained back",
+  ),
+  classify(
+    "recovery_codes",
+    "state",
+    "single-use account recovery proofs; copied to a standby, never drained back",
+  ),
+  classify(
+    "sessions",
+    "state",
+    "a person's shift login at a till; the cookie's token is stored only as its hash; copied to a standby, never drained back",
+  ),
+  classify(
+    "management_sessions",
+    "state",
+    "a person's dashboard login; the cookie's token is stored only as its hash; copied to a standby, never drained back",
+  ),
+  classify(
+    "webauthn_challenges",
+    "state",
+    "a short-lived passkey ceremony; a challenge signs nobody in without the authenticator; copied to a standby, never drained back",
+  ),
+  classify(
+    "totp_enrollments",
+    "state",
+    "a short-lived authenticator setup; its secret is stored encrypted; copied to a standby, never drained back",
+  ),
+  classify(
+    "device_profile_admission_roles",
+    "state",
+    "the roles a device profile admits; copied to a standby, never drained back",
+  ),
+  classify(
+    "device_profile_admission_persons",
+    "state",
+    "one person's exception to a device profile's roles; copied to a standby, never drained back",
+  ),
+  classify(
+    "google_oidc_states",
+    "state",
+    "a short-lived Google sign-in ceremony; its state is stored only as a hash; copied to a standby, never drained back",
+  ),
+
+  // credentials: a stored secret is sealed under the box's key ring, so a box holding a different
+  // ring fails to read it (`credentials.decrypt_failed`, or `credentials.key_version_unknown` when
+  // its ring holds no key of the row's version), never a wrong value.
+  classify("tenant_credentials", "local", SEALED),
+
+  // adjustments
+  classify(
+    "adjustment_reasons",
+    "state",
+    "venue adjustment policy an owner edits; copied to a standby, never drained back",
+  ),
+  appendOnly(
+    "adjustments",
+    "ledger",
+    "what was taken off a bill, by whom and under which reason; nothing may change or remove it",
+  ),
+  classify(
+    "adjustment_settings",
+    "state",
+    "venue discount limit an owner edits; copied to a standby, never drained back",
+  ),
+  appendOnly(
+    "adjustment_refunds",
+    "ledger",
+    "which cancelled dishes a refund paid back, and how much of it; nothing may change or remove it",
+  ),
+  appendOnly(
+    "adjustment_lines",
+    "ledger",
+    "which bill lines a comp or discount covered; nothing may change or remove it",
+  ),
+];
+
+/**
+ * Every table in core's set, classified for native replication: core's own and those of the modules
+ * hosted in it. The completeness of this list against core's migrations is guarded by
+ * `classification.test.ts`, which scans `drizzle/*.sql` for `CREATE TABLE`.
+ */
+export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
+  ...CORE_OWN_CLASSIFICATION,
+  ...HOSTED_CLASSIFICATION,
+];
+
 /**
  * The tables whose row changes the dashboard is told about.
  *
@@ -280,7 +489,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
  */
 const NOT_CHANGE_SOURCES = new Set(["change_log", "node_sealed_state", "recovery_packs"]);
 
-export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_CLASSIFICATION.filter(
+export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_OWN_CLASSIFICATION.filter(
   ({ table }) => !NOT_CHANGE_SOURCES.has(table),
 ).map(({ table }) => ({
   table,

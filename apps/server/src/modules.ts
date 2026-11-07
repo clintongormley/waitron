@@ -23,7 +23,8 @@ export function modulesNamed(names: readonly string[]): readonly WaitronModule[]
 export const VENUE_SERVICE: VenueServiceContribution = selectVenueService(ALL_MODULES);
 
 /** Every ENABLED module's floor-read annotator, for `listTablesWithState`. This MUST be the ENABLED
- * set: the always-on floor read reaches the annotator, and a disabled module's table is not migrated. */
+ * set: the always-on floor read reaches the annotator, and a disabled module with a set of its own
+ * is not migrated. */
 export function enabledFloorAnnotators(
   modules: readonly WaitronModule[],
 ): readonly FloorAnnotator[] {
@@ -54,13 +55,13 @@ export const ALL_ALERT_CLAIMS: readonly AlertEventClaim[] = ALL_MODULES.flatMap(
 );
 
 /** The ongoing checks of the modules given — boot passes the enabled set, because a disabled
- * module's tables are not migrated. */
+ * module with a set of its own is not migrated. */
 export function enabledAlertSources(modules: readonly WaitronModule[]): readonly AlertSource[] {
   return modules.flatMap((m) => m.alerts?.sources ?? []);
 }
 
 /** Every staff-notice check of the modules given, named by its module. Give it the enabled set:
- * a disabled module's tables are not migrated. */
+ * a disabled module with a set of its own is not migrated. */
 export function enabledStaffNoticeSources(
   modules: readonly WaitronModule[],
 ): readonly OwnedStaffNoticeSource[] {

@@ -3,12 +3,11 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { ADJUSTMENTS_MIGRATIONS, adjustments, recordAdjustment } from "@waitron/adjustments";
+import { adjustments, recordAdjustment } from "@waitron/adjustments";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
-  IDENTITY_MIGRATIONS,
   endManagementSession,
   hashPin,
   hashSessionToken,
@@ -28,7 +27,7 @@ import {
 } from "./personal-data-export-api.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, ADJUSTMENTS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const NOW = new Date("2026-10-04T22:30:00Z");
 const UNKNOWN_ID = "0f6b2c1e-7d4a-4e9b-8c3f-5a1d2e3f4a5b";

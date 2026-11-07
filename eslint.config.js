@@ -159,18 +159,15 @@ export default tseslint.config(
   },
 
   {
-    // packages/scheduler is a duty-NEUTRAL runner: duties are injected and typed structurally, so
-    // it must never import a duty's own package. Its package.json does NOT enforce that.
-    // `@waitron/payments` is a devDependency there only for the type-fit test and the AppError
-    // code augmentation — but there is no build step, `main` points at TS source, and pnpm links a
-    // workspace devDependency identically to a runtime one, so `import { reconcilePayments } from
-    // "@waitron/payments"` inside src/run.ts would typecheck, lint clean and pass every test. The
-    // manifest constrains nothing here; only this rule does.
+    // packages/payments/src/reconciliation-schedule is a duty-NEUTRAL runner: duties are injected
+    // and typed structurally, so it must never import a duty's own code, the rest of payments
+    // included, though it lives in that package. `scheduled_runs` is declared in payments' schema,
+    // which is the one payments file outside this folder the runner may import (`except` below).
     //
-    // Test files are exempt: the fit test and the AppError-code augmentation both name
-    // @waitron/payments deliberately, and neither ships in the runtime path.
-    files: ["packages/scheduler/src/**/*.ts"],
-    ignores: ["packages/scheduler/src/**/*.test.ts"],
+    // Test files are exempt: the fit test and the AppError-code augmentation both name payments
+    // deliberately, and neither ships in the runtime path.
+    files: ["packages/payments/src/reconciliation-schedule/**/*.ts"],
+    ignores: ["packages/payments/src/reconciliation-schedule/**/*.test.ts"],
     plugins: { "import-x": importX },
     settings: {
       "import-x/resolver": { typescript: true },
@@ -185,17 +182,27 @@ export default tseslint.config(
           basePath: import.meta.dirname,
           zones: [
             {
-              target: "./packages/scheduler/src/**/*",
-              from: [
-                "./packages/payments/**",
-                "./packages/fiscal/**",
-                "./packages/fiscal-verifactu/**",
+              target: "./packages/payments/src/reconciliation-schedule/**/*",
+              from: ["./packages/payments/**"],
+              // Absolute globs: a `./` form does not match.
+              except: [
+                import.meta.dirname + "/packages/payments/src/reconciliation-schedule/**",
+                import.meta.dirname + "/packages/payments/src/schema/scheduled-runs.*",
               ],
               message:
-                "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
-                "package. Duties are injected and " +
-                "typed structurally — if the runner needs something from payments or fiscal, it " +
-                "belongs on the PeriodDuty seam, not in an import.",
+                "packages/payments/src/reconciliation-schedule is a duty-neutral runner and must " +
+                "not import the rest of payments. Duties are injected and typed structurally — if " +
+                "the runner needs something from payments, it belongs on the PeriodDuty seam, not " +
+                "in an import.",
+            },
+            {
+              target: "./packages/payments/src/reconciliation-schedule/**/*",
+              from: ["./packages/fiscal/**", "./packages/fiscal-verifactu/**"],
+              message:
+                "packages/payments/src/reconciliation-schedule is a duty-neutral runner and must " +
+                "not import a duty's own package. Duties are injected and typed structurally — if " +
+                "the runner needs something from fiscal, it belongs on the PeriodDuty seam, not " +
+                "in an import.",
             },
           ],
         },
@@ -210,9 +217,9 @@ export default tseslint.config(
             {
               group: ["@waitron/verifactu", "@waitron/verifactu/*"],
               message:
-                "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
-                "package. Duties are injected and " +
-                "typed structurally — if the runner needs something from the Veri*Factu duty, it " +
+                "packages/payments/src/reconciliation-schedule is a duty-neutral runner and must " +
+                "not import a duty's own package. Duties are injected and typed structurally — if " +
+                "the runner needs something from the Veri*Factu duty, it " +
                 "belongs on the PeriodDuty seam, not in an import.",
             },
           ],

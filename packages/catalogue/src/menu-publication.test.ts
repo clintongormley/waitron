@@ -13,7 +13,7 @@ import { takeOffMenus } from "./menu-removal.js";
 import type { MenuChange, MenuChangeBody } from "@waitron/shared";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import {
   captureError,
   engineErrorMessage,
@@ -74,8 +74,12 @@ import {
   staffOptionSnapshotLabels,
 } from "./option-snapshot-labels.js";
 import { NO_ICE } from "../test/menus-fixture.js";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useCatalogueDb();
+beforeEach(() =>
+  seedLibraryImages(fx.db, "drinks.jpg", "large.jpg", "lemon.jpg", "lemonade.jpg", "new-soup.jpg"),
+);
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 describe("future unit presentation publication", () => {
@@ -374,7 +378,7 @@ describe("preview live snapshot", () => {
     const soupId = await app((tx) => offerOf(tx, f.lunch, f.soup));
     await app(async (tx) => {
       await updateMenuItem(tx, f.lunch, soupId, { grossPrice: "7.25" });
-      await updateProduct(tx, f.soup, { image: "new-soup.jpg" });
+      await updateProduct(tx, f.soup, { image: libraryImageName("new-soup.jpg") });
     });
     const preview = await app((tx) => previewMenu(tx, f.lunch));
     expect(preview.live).toEqual({ versionId: published.versionId, document: frozen });
@@ -384,7 +388,7 @@ describe("preview live snapshot", () => {
     });
     expect(preview.document.offers[soupId]).toMatchObject({
       unitPrice: "7.25",
-      image: "new-soup.jpg",
+      image: libraryImageName("new-soup.jpg"),
     });
     expect(firstPreview.document).toEqual(frozen);
     expect(menuDocumentHash(preview.document)).toBe(preview.hash);
@@ -395,7 +399,10 @@ describe("preview live snapshot", () => {
 describe("publishMenu", () => {
   it("writes version 1, its images, and points the publication at it", async () => {
     const f = await menusFixture(fx.db);
-    await fx.db.update(sections).set({ image: "drinks.jpg" }).where(eq(sections.id, f.beer));
+    await fx.db
+      .update(sections)
+      .set({ image: libraryImageName("drinks.jpg") })
+      .where(eq(sections.id, f.beer));
     const { hash } = await app((tx) => previewMenu(tx, f.lunch));
     const published = await app((tx) => publishMenu(tx, f.lunch, hash, "person-1"));
     expect(published.number).toBe(1);
@@ -413,7 +420,7 @@ describe("publishMenu", () => {
     ]);
     expect(
       (await fx.db.select().from(menuVersionImages)).map((image) => image.filename).sort(),
-    ).toEqual(["drinks.jpg", "large.jpg", "lemonade.jpg"]);
+    ).toEqual(["drinks.jpg", "large.jpg", "lemonade.jpg"].map(libraryImageName).sort());
     const live = await app((tx) => readLiveDocuments(tx, [f.lunch, f.dinner]));
     expect([...live.keys()]).toEqual([f.lunch]);
     expect(live.get(f.lunch)).toEqual({ versionId: published.versionId, document: row!.document });
@@ -508,11 +515,11 @@ describe("publishMenu", () => {
 
   it("counts the photo of a product used only as an extra among the version's images", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => updateProduct(tx, f.extraLemon, { image: "lemon.jpg" }));
+    await app((tx) => updateProduct(tx, f.extraLemon, { image: libraryImageName("lemon.jpg") }));
     await publish(f.lunch);
     expect(
       (await fx.db.select().from(menuVersionImages)).map((image) => image.filename).sort(),
-    ).toEqual(["large.jpg", "lemon.jpg", "lemonade.jpg"]);
+    ).toEqual(["large.jpg", "lemon.jpg", "lemonade.jpg"].map(libraryImageName).sort());
   });
 
   it("writes nothing when the menu already matches its live version", async () => {
@@ -1383,7 +1390,7 @@ describe("menuStatus", () => {
 
     it("flags both for a new photo on Extra lemon, used only as an extra, naming the shared product", async () => {
       const f = await published();
-      await app((tx) => updateProduct(tx, f.extraLemon, { image: "lemon.jpg" }));
+      await app((tx) => updateProduct(tx, f.extraLemon, { image: libraryImageName("lemon.jpg") }));
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
       expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toEqual([
         {
@@ -1833,7 +1840,7 @@ describe("previewMenu", () => {
               name: "Large",
               customerName: { en: "A big glass" },
               kitchenName: "LRG",
-              image: "large.jpg",
+              image: libraryImageName("large.jpg"),
               unitPrice: null,
               available: true,
             },
@@ -2000,7 +2007,7 @@ describe("previewMenu", () => {
               name: "Large",
               customerName: { en: "A big glass" },
               kitchenName: "LRG",
-              image: "large.jpg",
+              image: libraryImageName("large.jpg"),
               unitPrice: null,
               available: true,
             },
@@ -2670,7 +2677,7 @@ describe("review regressions", () => {
               name: "Large",
               customerName: { en: "A big glass" },
               kitchenName: "LRG",
-              image: "large.jpg",
+              image: libraryImageName("large.jpg"),
               unitPrice: "3.50",
               available: true,
             },
@@ -2712,7 +2719,7 @@ describe("review regressions", () => {
                 name: "Large",
                 customerName: { en: "A big glass" },
                 kitchenName: "LRG",
-                image: "large.jpg",
+                image: libraryImageName("large.jpg"),
                 unitPrice: "3.50",
                 available: true,
               },

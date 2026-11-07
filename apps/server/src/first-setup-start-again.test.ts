@@ -1225,6 +1225,7 @@ it("with the database missing, an outside evidence file configured beside a dama
   const outsidePath = join(f.root, "outside-history.json");
   await writeFile(outsidePath, "{}");
   const resolution = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
     stateDir: f.stateDir,
     venueDir: f.venueDir,
     store: f.store,

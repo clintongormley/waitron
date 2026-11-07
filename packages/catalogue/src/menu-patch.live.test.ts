@@ -1,6 +1,7 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  mediaImages,
   menuPublications,
   menuScheduledPublications,
   menuVersionImages,
@@ -9,6 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
+import { libraryImageName } from "../test/library-images.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
 import {
   liveVersions,
@@ -354,18 +356,17 @@ describe("patchLiveMenu", () => {
     });
 
     it("a picture the library does not hold, under the picture field", async () => {
-      // The catalogue's test database has no media tables, so the library holds no picture.
-      const media = await fx.db.all(
-        sql`select name from sqlite_master where type = 'table' and name = 'media_images'`,
-      );
-      expect(media).toEqual([]);
+      const picture = libraryImageName("lemon.jpg");
+      expect(
+        await fx.db.select().from(mediaImages).where(eq(mediaImages.filename, picture)),
+      ).toEqual([]);
       const item = await lemonadeItem();
       const target = { kind: "offer", menuItemId: item };
       await refuses(
         () =>
           patch(v1, [
             { target, field: "price", value: "5.5" },
-            { target, field: "image", value: "lemon.jpg" },
+            { target, field: "image", value: picture },
           ]),
         {
           code: "menu_patch.invalid",

@@ -19,8 +19,6 @@ import {
 } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
@@ -258,7 +256,7 @@ describe("venue-service schema", () => {
 
 describe("department name storage", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS],
   });
   async function location(name: string) {
     const [row] = await suite.db

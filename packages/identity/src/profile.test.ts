@@ -6,7 +6,6 @@ import { quoteLiteral } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { generateSync } from "otplib";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { codeOf, seedManager, seedSessionDevice, TOTP_KEY_RING } from "../test/fixtures.js";
 import { startManagementSession } from "./management-session.js";
 import { hashSessionToken } from "./session-token.js";
@@ -30,7 +29,7 @@ import {
   removeOwnPasskey,
 } from "./profile.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 async function fixture() {
   await seedTenant(suite.db);
   const email = `${randomUUID()}@example.com`;

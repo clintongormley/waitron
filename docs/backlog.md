@@ -126,8 +126,8 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1401. Find out why the failover bench reports a corrupt database](backlog/replication-cloud.md#bundle-a1401-find-out-why-the-failover-bench-reports-a-corrupt-database)
 - [A1402. Build the front-end and the other Node bundles in CI, and open one](backlog/ci.md#bundle-a1402-build-the-front-end-and-the-other-node-bundles-in-ci-and-open-one)
 
-**3. The foundation, already running.** A1308 and A760 stay first in lane A, with
-[Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables) and A760's history-rewrite task (Task 19, with the `:main` image check) planned before A760 part 3.
+**3. The foundation, already running.** A1308 stays first in lane A, with
+[Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
 **4. Released by the hold, once A760 lands.** Build order: A739 paying, the pay window, A446 pre-bill,
 A555, close the day, then A947 and its handover bundles, including the spare's backup settings, which
@@ -150,7 +150,7 @@ no design yet.
 - [Requests through the tunnel look like the box itself](backlog/box.md#bundle-requests-through-the-tunnel-look-like-the-box-itself)
 - [Which state files a handover carries; summary checks](backlog/replication-cloud.md#bundle-which-state-files-a-handover-carries-summary-checks)
 - [Recheck that a spare gets later charts](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
-- [Get ready for A760's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a760s-history-rewrite-a1306-and-cis-concurrency-groups)
+- [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
 **5. Important work.** The 56 bundles marked important under each area, taken by theme so that a lane
 stays in one area.
@@ -370,6 +370,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A802 — correct part of a paid invoice: build the approved design.**
   Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md), including its separate protected-writer approval
   and exact-gross qualification. The fiscal PR waits for the owner to land it.
+  After A760, rebase onto the squashed base and regenerate its migrations there; its tables go in core's set (`packages/db`). Before landing, show its new tables in `apps/server`'s `pnpm protection-list`: a table in a retired migration folder creates nothing.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
 - **Correct VAT without returning money.** Design the separate correction for a wrong VAT rate
@@ -957,6 +958,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A739 — Park · Pay and one payment window.** Owner approved plan and build on 27 October at about
   02:12 CET. The remaining payment-window implementation and runtime acceptance stay open.
+  After A760, rebase onto the squashed base and regenerate its migrations there; its tables go in payments' set. Before landing, show its new tables in `apps/server`'s `pnpm protection-list`: a table in a retired migration folder creates nothing.
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window)
 
 - **A666 — A floor join that moves tables together is sent once without seats and refused before
@@ -1314,6 +1316,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   (Cut A) from the [venue-only plan](superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md),
   then the complete live routing cut before A739's payment-window integration. Keep the live
   node/restore recovery prerequisites; overlapping files or migration numbers are resolved on rebase.
+  After A760, rebase onto the squashed base and regenerate its migrations there; its tables go in core's set (`packages/db`). Before landing, show its new tables in `apps/server`'s `pnpm protection-list`: a table in a retired migration folder creates nothing.
   [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
 
 - **Loose ends left by A661 (#1745).**
@@ -1833,7 +1836,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **A799. Real historical upgrade testing: build authorised; after the first venue (owner, 2026-11-06).**
   The owner authorised all seven [implementation-plan](superpowers/plans/2026-10-22-a799-real-upgrade-testing.md) cuts on 23 October 2026. Cuts 1–3 add metadata admission, oldest-supported plus previous-retained selection, pending-migration classification, pure typed record/schema comparison and bounded archive/fetch admission with injected adapters; the qualification index is empty. Actual filesystem adapters, isolated rigs, historical qualification, continued-sale execution and trusted CI wiring remain open.
-  Runtime, capture, A760 reset, migration, upload, provider and CI activation gates remain. No historical image, issued-F1 preservation or real upgrade is qualified. [Detail and current execution contract](backlog/box.md#2026-10-23-a799-build-authority-and-history-selection).
+  Runtime, capture, A760 reset, migration, upload, provider and CI activation gates remain. No historical image, issued-F1 preservation or real upgrade is qualified. After A760, rebase onto the squashed base and regenerate any migrations it adds there. Before landing, show any new tables in `apps/server`'s `pnpm protection-list`: a table in a retired migration folder creates nothing. [Detail and current execution contract](backlog/box.md#2026-10-23-a799-build-authority-and-history-selection).
 - **A1016. Keep every box current and backed up, with no effort from the owner (owner,
   2026-10-22).** "Another super important part of the story especially for on prem is automated
   backups. We need to make it incredibly easy for users to upgrade, hopefully even automatically,
@@ -2134,7 +2137,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **Finish the time limits on CI's network steps** (bundle of 5, size M). Holds A1251. [Detail](backlog/ci.md#bundle-finish-the-time-limits-on-cis-network-steps)
 
-- **Get ready for A760's history rewrite (A1306 and CI's concurrency groups)** (bundle of 2, 1 important, size M, waits for another entry). Holds A1306. [Detail](backlog/ci.md#bundle-get-ready-for-a760s-history-rewrite-a1306-and-cis-concurrency-groups)
+- **Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)** (bundle of 2, 1 important, size M, waits for another entry). Holds A1306. [Detail](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
 - **Real-source bundle tests repeat metadata work.**
   Measure selective shared setup and audit the remaining smaller build limits in the recovery
@@ -2168,7 +2171,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **One repeated-run rig, then each named test** (bundle of 7, 2 important, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
+- **One repeated-run rig, then each named test** (bundle of 8, 2 important, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 
@@ -2222,9 +2225,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **Root guard deadlines under extreme external load (left open by A751).**
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
-
-- **A624. The upgrade walk cannot step a new set whose first migration names another set's later table.**
-  [Detail](backlog/ci.md#a624-the-upgrade-walk-cannot-step-a-new-set-whose-first-migration-names-another-sets-later-table).
 
 - **A1307 follow-up: the file-progress reporter's tests set up a page with two near-copies of one helper.**
   Fold the new setup into the existing helper and move the two cases beside their neighbours; no
@@ -2305,12 +2305,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, and the owner has
   reviewed every file and answered every question (2026-11-04). **Approved by the owner, 2026-11-04, and the top priority: it runs before more code is built on the old tables.**
-  Lane A runs it, once A1018's current slice ends. Until A760's squash lands, slices in progress finish and no lane starts new work that adds or changes tables; work that touches no tables carries on. Slice 0's protection list is built ([how to use it](developers/testing-guide.md#the-protection-list)); its bench is still to land, in slice 0's second pull request. Next: [A760's squash into eight sets](superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md), whose first two pull requests have landed (#2512, #2516). 246 tables become 145, or 144 once A1323 removes
+  Lane A runs it, once A1018's current slice ends. Until A760's squash lands, slices in progress finish and no lane starts new work that adds or changes tables; work that touches no tables carries on. Slice 0's protection list is built ([how to use it](developers/testing-guide.md#the-protection-list)); its bench is still to land, in slice 0's second pull request. [A760's squash into eight sets](superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) has landed; next, by the design's order of work, the shared tables (`settings`, `activity_log`, `outgoing_mail`). 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`; 111 environment variables become 51, or 55 until A951 lands.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
-- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 15, 8 important, size M, waits for A760). Holds A1368, A1351, A1366. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
+- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 16, 8 important, size M, waits for A760). Holds A1368, A1351, A1366. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
 - **Cloud's next shared UI release still needs registry and portal qualification.**
   Waitron's [preparation guide](developers/shared-ui-preparation.md) covers source staging
@@ -2347,11 +2347,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#go-live-day-steps).
 
 - **Read every insert that grows with an order** (bundle of 3, 2 important, size M). Holds A1299. [Detail](backlog/architecture.md#bundle-read-every-insert-that-grows-with-an-order)
-
-- **A760. Squash every migration set before go-live.** If A1308 is approved, the squash runs
-  first, merged into its eight sets (owner, 2026-11-02; eight sets confirmed 2026-11-04).
-  [Detail](backlog/architecture.md#a760-squash-every-migration-set-before-go-live)
-  Pull requests 1 and 2 of 3 have landed: a module may have no migration set of its own and the baseline tools are built (#2512); the module packages' table definitions now live in `@waitron/db`, and staffing's in workforce, with every migration set unchanged (#2516). Next: pull request 3, under the watcher's freeze. Its plan's Task 19 covers A1306's history rewrite, if the owner wants it in this freeze, and the `:main` image tag after it. The additions in the [A1308 design](superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026) each go into a later A1308 slice, none into part 3.
 
 - **Full-invoice recipient: comma refusal and country code names** (bundle of 2, 1 important, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-comma-refusal-and-country-code-names)
 
@@ -2396,7 +2391,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   fixture `Gin & Tónic`.
   [Detail](backlog/architecture.md#a1241-continue-the-dashboard-test-sample-name-cleanup-one-small-slice-per-pr)
 
-- **Correct every sentence known to be false, then finish comment pruning** (bundle of 26, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
+- **Correct every sentence known to be false, then finish comment pruning** (bundle of 27, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
 
 - **A977. Widen the English-only guard to every text file, after the remaining English cleanup.** Accented
   letters too; a shrinking-only list of test folders still to clean. Exempt homes include a

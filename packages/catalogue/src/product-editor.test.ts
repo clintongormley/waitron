@@ -27,8 +27,10 @@ import {
   storedUnitId,
   useCatalogueDb,
 } from "../test/fixtures.js";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useCatalogueDb();
+beforeEach(() => seedLibraryImages(fx.db, "coffee.webp"));
 let catalogueId: string;
 let input: ProductEditorInput;
 beforeEach(async () => {
@@ -672,7 +674,7 @@ describe("a variant's own page", () => {
         {
           ...input,
           customerName: { en: "A cup of coffee" },
-          image: "coffee.webp",
+          image: libraryImageName("coffee.webp"),
           active: true,
           unitId: kg.id,
           primaryCategoryId: parentCategory.id,
@@ -750,7 +752,7 @@ describe("a variant's own page", () => {
       inherited: {
         name: "Coffee",
         description: { en: "Freshly roasted" },
-        image: "coffee.webp",
+        image: libraryImageName("coffee.webp"),
         unitPrice: "9.00",
         vatClass: "reduced",
         unitId: kgUnitId,

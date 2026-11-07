@@ -11,11 +11,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { jsonFile } from "@waitron/module";
 import { describe, expect, it } from "vitest";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { ADJUSTMENTS_PERSONAL_DATA } from "./personal-data.js";
 import type { AdjustmentAction } from "@waitron/shared";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const MARTA = "10000000-0000-4000-8000-00000000000a";
 const LUIS = "20000000-0000-4000-8000-00000000000b";

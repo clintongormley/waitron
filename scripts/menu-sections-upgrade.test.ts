@@ -1,7 +1,6 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
-import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { table, id, count } from "../packages/db/src/schema/columns.js";
 import { menuItems } from "../packages/db/src/schema/catalogue/menu.js";
 import { menuItemVariantOverrides } from "../packages/db/src/schema/catalogue/variant-overrides.js";
@@ -11,12 +10,8 @@ import { buildMenuDocument, menuDocumentHash } from "../packages/catalogue/src/m
 import { publishMenu } from "../packages/catalogue/src/menu-publication.js";
 import { openVenueDatabase } from "../packages/db/src/client.js";
 import { applyMigrations } from "../packages/migrations/src/apply.js";
-import {
-  migrationOptionsFor,
-  resolveMigrationsFolder,
-} from "../packages/migrations/src/manifest.js";
-import { orderedMigrationSets } from "../packages/module/src/module.js";
 import { scratchParent } from "./scratch-dir.mjs";
+import { historicalSets } from "./fixtures/a760-history/historical-set.mjs";
 
 const oldMembers = table("section_members", {
   id: id("id"),
@@ -30,7 +25,9 @@ const scratch: string[] = [];
 afterAll(() => {
   for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
 });
-const sets = orderedMigrationSets(ALL_MODULES);
+const sets = historicalSets();
+const stagedSets = (staged: string) =>
+  sets.map((set) => ({ ...set, migrationsFolder: join(staged, set.name) }));
 async function stage(control = false) {
   const root = mkdtempSync(join(scratchParent(), "wt-menu-sections-upgrade-"));
   scratch.push(root);
@@ -38,7 +35,7 @@ async function stage(control = false) {
   const journals = new Map<string, { entries: { tag: string }[] }>();
   let soupId: string;
   for (const set of sets) {
-    const source = resolveMigrationsFolder(set, null);
+    const source = set.migrationsFolder;
     cpSync(source, join(staged, set.name), { recursive: true });
     const journal = JSON.parse(readFileSync(join(source, "meta", "_journal.json"), "utf8"));
     journals.set(set.name, journal);
@@ -54,7 +51,7 @@ async function stage(control = false) {
     }
   }
   const venueDir = join(root, "venue");
-  await applyMigrations(venueDir, migrationOptionsFor(sets, staged));
+  await applyMigrations(venueDir, stagedSets(staged));
   const store = await openVenueDatabase(venueDir);
   try {
     await seedTenant(store.venue);
@@ -122,7 +119,7 @@ async function stage(control = false) {
 }
 it("keeps menu details and a home tile across the rebuild, removes the library, and reinstalls media guards", async () => {
   const { venueDir, staged, soupId } = await stage();
-  await applyMigrations(venueDir, migrationOptionsFor(sets, staged));
+  await applyMigrations(venueDir, stagedSets(staged));
   const store = await openVenueDatabase(venueDir);
   try {
     expect(
@@ -196,7 +193,7 @@ it("refuses the same populated upgrade without the carry and rolls its journal b
   const store = await openVenueDatabase(venueDir);
   const before = store.venue.all("select * from __drizzle_migrations_catalogue");
   await store.close();
-  await expect(applyMigrations(venueDir, migrationOptionsFor(sets, staged))).rejects.toMatchObject({
+  await expect(applyMigrations(venueDir, stagedSets(staged))).rejects.toMatchObject({
     cause: expect.objectContaining({
       cause: expect.objectContaining({
         message: expect.stringContaining("FOREIGN KEY constraint failed"),

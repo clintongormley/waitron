@@ -5,18 +5,20 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
 
 /**
- * Every module descriptor's `requires` must NAME every cross-module dependency its migrations
- * create in SQL. A module depends on another when its `drizzle/*.sql` names a table the other
- * module owns in an FK, a trigger's ON clause, a trigger's body, or a top-level write.
+ * The `requires` of every module that owns a migration set must NAME every other set its
+ * migrations depend on in SQL. A set depends on another when its `drizzle/*.sql` names a table the
+ * other set creates in an FK, a trigger's ON clause, a trigger's body, or a top-level write.
  *
- * It reads SQL as TEXT, never executing it: it maps every `CREATE TABLE <name>` to its owning
- * module, resolves each edge's target table to its owner, drops same-module targets, and asserts
- * the surviving cross-module set is a subset of the descriptor's declared `requires`. Every regex
- * accepts a backtick (drizzle-kit's SQLite spelling), a double quote or nothing, and the
- * optionally `public.`-qualified spelling; each spelling has a control test, because a spelling the
- * detector misses makes every edge written that way invisible.
+ * It reads SQL as TEXT, never executing it: it maps every `CREATE TABLE <name>` to the module
+ * whose set creates it, resolves each edge's target table to that module, drops same-set targets,
+ * and asserts the surviving cross-module set is a subset of the descriptor's declared `requires`.
+ * Every regex accepts a backtick (drizzle-kit's SQLite spelling), a double quote or nothing, and
+ * the optionally `public.`-qualified spelling; each spelling has a control test, because a spelling
+ * the detector misses makes every edge written that way invisible.
  *
  * KNOWN LIMITATIONS:
+ * - ONLY A MODULE THAT OWNS A MIGRATION SET IS SCANNED. The `requires` of a module without its own
+ *   set (its tables live in another module's set) is compared with nothing.
  * - `[BRACKET]` QUOTING IS NOT HANDLED, and SQLite accepts it. A hand-written migration spelling an
  *   identifier that way would have its table read as owned by nobody and its FK edge dropped —
  *   silently, because a dropped edge looks exactly like an honest descriptor.
@@ -420,20 +422,29 @@ describe("the tree's module graph is honest", () => {
     }
   }
 
-  // An empty scan would leave `violations` empty and pass. So pin modules that are not going away,
-  // and one known real edge per detector in the tree's own spelling: `workforce → identity`, a
-  // backtick-quoted `REFERENCES` onto identity's `persons`, and `media → core`, a trigger that
-  // `packages/media/drizzle/0001_image_references.sql` puts ON core's `products`.
+  // An empty scan would leave `violations` empty and pass. So pin sets that are not going away,
+  // and one known real edge in the tree's own spelling: `workforce → core`, a backtick-quoted
+  // `REFERENCES` onto core's `persons`. No trigger crosses a set in today's tree, so the two trigger
+  // detectors are pinned on core's own baseline SQL with two of its tables handed to another owner.
   it("discovers the modules and finds the known real cross-module edges", () => {
-    for (const name of ["core", "identity", "payments", "workforce"]) {
+    for (const name of ["core", "payments", "workforce", "bookings"]) {
       expect(modules).toContain(name);
     }
-    expect(modules.length).toBeGreaterThanOrEqual(10);
-    expect(foundEdgeDetails.has("workforce→identity via FK reference on persons")).toBe(true);
-    expect(foundEdgeDetails.has("media→core via trigger on products")).toBe(true);
-    expect(foundEdgeDetails.has("media→catalogue via trigger body JOIN on menu_publications")).toBe(
-      true,
+    expect(modules.length).toBeGreaterThanOrEqual(8);
+    expect(foundEdgeDetails.has("workforce→core via FK reference on persons")).toBe(true);
+
+    const core = discovered.find((pkg) => pkg.moduleName === "core");
+    expect(core?.sqls.length).toBeGreaterThan(0);
+    const moved = new Map(owner);
+    moved.set("products", "elsewhere");
+    moved.set("menu_publications", "elsewhere");
+    const coreEdges = new Set(
+      (core?.sqls ?? []).flatMap((raw) =>
+        migrationEdges(raw, "core", moved).map((edge) => `${edge.kind} on ${edge.target}`),
+      ),
     );
+    expect(coreEdges.has("trigger on products")).toBe(true);
+    expect(coreEdges.has("trigger body JOIN on menu_publications")).toBe(true);
   });
 
   it("every migration edge in the SQL is named in the depending descriptor's requires", () => {

@@ -6,6 +6,10 @@ import { buildManifest, schemaVersionsByModule } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const shippedSetNames = new Set(manifestSets().map((set) => set.name));
+const modulesWithShippedSets = ALL_MODULES.filter((m) => shippedSetNames.has(m.name)).map(
+  (m) => m.name,
+);
 
 describe("buildManifest", () => {
   it("stamps environment, createdAt, and a version per module", async () => {
@@ -22,9 +26,7 @@ describe("buildManifest", () => {
       environment: "preproduction",
       createdAt: "2026-09-05T00:00:00.000Z",
     });
-    expect(Object.keys(manifest.modules)).toEqual(
-      expect.arrayContaining(ALL_MODULES.map((m) => m.name)),
-    );
+    expect(Object.keys(manifest.modules)).toEqual(expect.arrayContaining(modulesWithShippedSets));
     // A real count, not the 0 an unmigrated module reads.
     expect(manifest.modules.core).toBeGreaterThan(0);
   });
@@ -37,7 +39,7 @@ describe("schemaVersionsByModule", () => {
       ...ALL_MODULES,
       setless,
     ]);
-    expect(Object.keys(versions)).toEqual(ALL_MODULES.map((m) => m.name));
+    expect(Object.keys(versions)).toEqual(modulesWithShippedSets);
     expect(versions.core).toBeGreaterThan(0);
   });
 });

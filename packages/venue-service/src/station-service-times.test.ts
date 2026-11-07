@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   addProductToMenu,
   createCatalogue,
   createCategory,
@@ -21,7 +20,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
@@ -33,7 +31,7 @@ import * as service from "./index.js";
 import { saveSpecialDay, type SpecialDayInput } from "./special-days.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const day = "2026-10-12";
 const at = new Date("2026-10-10T10:00:00Z");

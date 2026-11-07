@@ -91,8 +91,6 @@ import {
   type StepDownResult,
 } from "./handover-stepdown.js";
 import { closeAll } from "./close-all.js";
-import { runDue } from "@waitron/scheduler";
-import type { TickResult } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import {
   DEMO_READER_ID,
@@ -104,6 +102,7 @@ import {
   type CollectionOwners,
   type PaymentProvider,
   type ReaderStatus,
+  runDue,
 } from "@waitron/payments";
 import { recordIncidentOnce } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
@@ -112,6 +111,7 @@ import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/
 import {
   enabledModules,
   fiscalSlot,
+  migrationSetOf,
   modulesWithSets,
   orderedMigrationSets,
   reconcile,
@@ -191,7 +191,7 @@ import {
 } from "./health.js";
 import { runLoop, realSleep } from "./loop.js";
 import { createLoopWaker } from "./loop-wake.js";
-import { reconcilerAsDuty } from "./reconcile-duty.js";
+import { reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
@@ -507,16 +507,6 @@ export const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
  * buffer. A constant rather than config: it is a DoS ceiling, not an operator knob.
  */
 export const MAX_UPLOAD_BYTES = DEFAULT_MAX_UPLOAD_BYTES;
-
-/** What `reconcile` reports when the Stripe credential is not provisioned: the shape `runDue`
- * returns for a tick with no work, so `runPass` and `health.ts` need no special case. */
-const NOTHING_TO_RECONCILE: TickResult = {
-  ran: [],
-  deferred: 0,
-  beyondHorizon: 0,
-  skipped: [],
-  nextDueAt: null,
-};
 
 /**
  * The local simulator for a Demo or default-Prepare till; `undefined` otherwise, because every other
@@ -1264,7 +1254,7 @@ async function bootServer(
   }
 
   // Drift visibility: log the enabled set against what the database has actually migrated. A
-  // soft-disabled module's data is kept; it is simply not migrated.
+  // soft-disabled module's data is kept; a disabled module with a set of its own is not migrated.
   let appliedModuleVersions: Record<string, number> = {};
   if (config.node !== undefined) {
     const myModuleVersions = await schemaVersionsByModule(store, availableModules);
@@ -2289,9 +2279,7 @@ async function bootServer(
     log,
   });
   const tableRemovals = enabledTableRemovals(
-    ALL_MODULES.filter(
-      (module) => (appliedModuleVersions[module.tablesIn ?? module.name] ?? 0) > 0,
-    ),
+    ALL_MODULES.filter((module) => (appliedModuleVersions[migrationSetOf(module)] ?? 0) > 0),
   );
   const workforceEnabled =
     !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce");
@@ -2307,7 +2295,8 @@ async function bootServer(
       liveEvents,
       clock: tillClock,
       cfg: tradingContext,
-      // From the ENABLED set: a disabled module's table is not migrated, so its annotator must not run.
+      // From the ENABLED set: a disabled module with a set of its own is not migrated, so its
+      // annotator must not run.
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
       tableRemovals,
       secureCookies,
@@ -3649,24 +3638,24 @@ async function bootServer(
         runPass(
           {
             drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
-            // Asked per pass, so a credential provisioned while the host runs is served on the next
-            // pass; without one there is nothing to reconcile.
-            reconcile: async (at2) =>
-              (await credentialProvisioned(db, "payments.stripe"))
-                ? runDue(
-                    {
-                      db,
-                      duties: [duty],
-                      horizonDays: config.scheduler.horizonDays,
-                      maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
-                      maxAttempts: config.scheduler.maxAttempts,
-                      backoffBaseMs: config.scheduler.backoffBaseMs,
-                      staleAfterMs: config.scheduler.staleAfterMs,
-                      skipRetryMs: config.skipRetryMs,
-                    },
-                    at2,
-                  )
-                : NOTHING_TO_RECONCILE,
+            reconcile: reconcilePassFor({
+              paymentsEnabled: setsToMigrate.some((module) => module.name === "payments"),
+              credentialProvisioned: () => credentialProvisioned(db, "payments.stripe"),
+              runDue: (at2) =>
+                runDue(
+                  {
+                    db,
+                    duties: [duty],
+                    horizonDays: config.scheduler.horizonDays,
+                    maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
+                    maxAttempts: config.scheduler.maxAttempts,
+                    backoffBaseMs: config.scheduler.backoffBaseMs,
+                    staleAfterMs: config.scheduler.staleAfterMs,
+                    skipRetryMs: config.skipRetryMs,
+                  },
+                  at2,
+                ),
+            }),
             awaitingCert: awaitingFiscalCert,
             monotonicMs: () => performance.now(),
             log,

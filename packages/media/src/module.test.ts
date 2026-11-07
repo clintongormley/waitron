@@ -1,35 +1,30 @@
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import { CORE_CLASSIFICATION, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
-  IDENTITY_MIGRATIONS,
   persons,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { uploadImage } from "./images.js";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
-import { MEDIA_CLASSIFICATION, MEDIA_CONFIGURATION_TRANSFER, MEDIA_MODULE } from "./module.js";
+import { MEDIA_CONFIGURATION_TRANSFER, MEDIA_MODULE, MEDIA_TABLES } from "./module.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
+
+/** This module's share of core's classification, which holds its tables. */
+const MEDIA_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (MEDIA_TABLES as readonly string[]).includes(table),
+);
 
 // Boot hands every descriptor seat to generic code (`apps/server/src/boot.ts`), so each case goes
 // through the DESCRIPTOR rather than the function it names: a seat left empty or pointed at the
 // wrong thing fails here and nowhere else.
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    MEDIA_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 
 it("exports durable edits after their picture identities and source bytes", () => {

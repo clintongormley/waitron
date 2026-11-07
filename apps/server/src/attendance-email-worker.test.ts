@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
@@ -35,7 +35,7 @@ import type { AttendanceEmailSender } from "./attendance-email.js";
 import { realSleep } from "./loop.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const backend = new WorkforceBackend();
 let locationId: string,

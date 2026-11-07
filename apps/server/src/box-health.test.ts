@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, incidents, invoiceSeries, printers, venueLocationId } 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
-import { hashPin, IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { hashPin, persons } from "@waitron/identity";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, DEMO_READER_ID, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { eq, sql } from "drizzle-orm";
@@ -28,7 +28,7 @@ const READING: TrustedReading = {
 };
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
 });
 
 function stubReaders(over: Partial<BoxHealthReaders> = {}): BoxHealthReaders {

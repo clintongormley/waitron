@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   createCategory,
   updateCategory,
@@ -19,7 +18,7 @@ import { plantStoredCategory, racePair, seedLegacySellingUnits } from "../test/f
  * Category authoring against a real database, including pairs of transactions started
  * together. `racePair` (`test/fixtures.ts`) carries the mechanism, the measurement and the control.
  */
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
 
 async function fixture() {

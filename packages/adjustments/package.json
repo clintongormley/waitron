@@ -13,9 +13,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "db:generate": "drizzle-kit generate",
-    "db:generate:custom": "drizzle-kit generate --custom"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@waitron/country-packs": "workspace:*",
@@ -37,7 +35,6 @@
     "@types/node": "^26.6.6",
     "@vitest/browser-playwright": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
-    "drizzle-kit": "^0.31.11",
     "playwright": "^1.64.1",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
 import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, IDENTITY_MIGRATIONS, managementSessions, persons } from "@waitron/identity";
+import { hashPassword, managementSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
@@ -19,7 +19,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 );
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const ADMIN = "a0000000-0000-4000-8000-000000000001";
 const OTHER = "a0000000-0000-4000-8000-000000000002";

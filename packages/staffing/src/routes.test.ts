@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
@@ -13,7 +12,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
-  IDENTITY_MIGRATIONS,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -22,7 +20,6 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
-  VENUE_SERVICE_MIGRATIONS,
   departments,
   menuPeriods,
   departmentDays,
@@ -37,7 +34,6 @@ import {
   WorkforceBackend,
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 import { STAFFING_ROUTES } from "./routes.js";
 import type { StaffingMonth, StaffRole } from "./staffing-types.js";
@@ -46,14 +42,7 @@ import type { AreaRef, StaffingBlock } from "./slots.js";
 registerModulePermissions(STAFFING_PERMISSIONS);
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 const BASE = "/management-api/staffing/staff-roles";

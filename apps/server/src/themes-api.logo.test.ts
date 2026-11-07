@@ -5,10 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, customThemes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import {
-  MEDIA_MIGRATIONS,
   prepareImage,
   deleteImage,
   readCurrentImage,
@@ -21,7 +19,6 @@ import {
   type PreparedImage,
 } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import * as logoModule from "./receipt-logo.js";
@@ -49,13 +46,7 @@ async function splitPicture(reversed: boolean): Promise<PreparedImage> {
 }
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    MEDIA_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 const images = [
   await splitPicture(false),

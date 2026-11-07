@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, webauthnChallenges, webauthnCredentials } from "@waitron/identity";
+import { webauthnChallenges, webauthnCredentials } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { mountBackupRecoveryPackApi } from "./backup-recovery-pack-api.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 beforeEach(async () => {

@@ -3541,7 +3541,6 @@ jobs:
           set -- "$@" --filter "!@waitron/core"
           set -- "$@" --filter "!@waitron/payments"
           set -- "$@" --filter "!@waitron/reporting"
-          set -- "$@" --filter "!@waitron/scheduler"
           set -- "$@" --filter "!@waitron/purchasing"
           set -- "$@" --filter "!@waitron/membership"
           set -- "$@" --filter "!@waitron/module"

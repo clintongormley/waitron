@@ -7,7 +7,6 @@ import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   activateDueMenuPublications,
   addMember,
-  CATALOGUE_MIGRATIONS,
   createCatalogue,
   createProduct,
   menuDocumentHash,
@@ -23,14 +22,13 @@ import {
   sections,
   updateProduct,
 } from "@waitron/catalogue";
-import { departmentReceipts, departments, VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
+import { departmentReceipts, departments } from "@waitron/venue-service";
 import { saveImage, readCurrentImage } from "./image-edits.js";
 import { deleteImage, listImageUsages, readImage, readImageBytes, uploadImage } from "./images.js";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const original = await samplePreparedImage({ width: 27 });
 const replacement = await samplePreparedImage({ width: 51 });

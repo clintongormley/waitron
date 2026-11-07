@@ -1,10 +1,9 @@
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import * as api from "./index.js";
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, api.WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, api.WORKFORCE_MIGRATIONS],
 });
 it("reads monthly settings when no row has been written", async () => {
   expect(await api.readPayPeriodSettings(suite.db)).toEqual({

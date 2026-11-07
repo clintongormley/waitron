@@ -17,7 +17,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { contentLanguageChoices, type ContentLanguages } from "@waitron/shared";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 import {
@@ -28,7 +27,7 @@ import { listTranslationTargets, listTranslationGapRows } from "./content-transl
 import { addMember } from "./sections.js";
 import { setIncludeFolder } from "./include-folder.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const config: ContentLanguages = { defaultLanguage: "es", languages: ["es", "en"] };
 const context = { fallbackLanguage: "es", required: ["es"] };
 

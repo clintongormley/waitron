@@ -18,12 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { CORE_MIGRATIONS, withNodeTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  nodeSigningPublicKey,
-  type KeyRing,
-} from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import {
   signEnvelope,
   verifyEnvelope,
@@ -73,7 +68,7 @@ const MODULES = [
 ] as const satisfies readonly WaitronModule[];
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   setup: async (db) => {
     db.run(sql`create table handover_probe (n integer not null)`);
   },

@@ -3,12 +3,11 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WAITRON_CHOICES } from "@waitron/ui-core/theme";
 import { clearThemes, putThemeInUse, saveThemeThroughRoute } from "./theme-logo.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   setup: seedTenant,
 });
 

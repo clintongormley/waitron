@@ -5,7 +5,6 @@ import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@w
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  IDENTITY_MIGRATIONS,
   persons,
   startManagementSession,
   managementSessions,
@@ -13,7 +12,6 @@ import {
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
-  CATALOGUE_MIGRATIONS,
   createCatalogue,
   createProduct,
   writeContentLanguages,
@@ -36,7 +34,7 @@ type TranslationBatch = { edits: TranslationCellEdit[] };
 import { mountCatalogueApi } from "./catalogue-api.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 let managerCookie: string;

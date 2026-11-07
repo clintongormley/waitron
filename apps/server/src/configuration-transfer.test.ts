@@ -3458,50 +3458,6 @@ describe("a department's late-send manager setting in a configuration transfer",
     );
     expect(imported).toEqual({ lateSendNeedsManager: true });
   });
-
-  it("refuses a bundle exported before the setting existed, as an older venue-service schema", async () => {
-    const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
-    });
-    const versions = await schemaVersionsByModule(
-      { venue: suite.db, node: suite.node },
-      ALL_MODULES,
-    );
-    const transferred = await buildConfigurationBundle(
-      suite.db,
-      source,
-      ALL_MODULES,
-      new Date("2026-10-19T12:00:00Z"),
-      versions,
-    );
-    const journal = JSON.parse(
-      await readFile(
-        new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
-        "utf8",
-      ),
-    ) as { entries: { tag: string }[] };
-    expect(journal.entries.map((entry) => entry.tag)).toContain("0071_late_send");
-    expect(versions["venue-service"]).toBe(journal.entries.length);
-    const older: ConfigurationBundle = {
-      ...transferred,
-      modules: { ...transferred.modules, "venue-service": versions["venue-service"]! - 1 },
-      tables: {
-        ...transferred.tables,
-        departments: transferred.tables.departments!.map((row) =>
-          Object.fromEntries(
-            Object.entries(row).filter(([column]) => column !== "late_send_needs_manager"),
-          ),
-        ),
-      },
-    };
-    expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: "module:venue-service" },
-      }),
-    );
-  });
 });
 
 it("carries a department's reminder minutes to the importing venue", async () => {
@@ -6143,28 +6099,6 @@ describe("special days in a configuration transfer", () => {
     );
     expect(persisted.rows[0]).toEqual({ tenants: 0 });
   });
-
-  it("refuses a bundle exported before the hours tables existed, as an older venue-service schema", async () => {
-    const { versions, transferred } = await preparedWithSpecialDays("B44004411");
-    const journal = JSON.parse(
-      await readFile(
-        new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
-        "utf8",
-      ),
-    ) as { entries: { tag: string }[] };
-    expect(journal.entries.map((entry) => entry.tag)).toContain("0021_hours_calendar");
-    expect(versions["venue-service"]).toBe(journal.entries.length);
-    const older: ConfigurationBundle = {
-      ...transferred,
-      modules: { ...transferred.modules, "venue-service": versions["venue-service"]! - 1 },
-    };
-    expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: "module:venue-service" },
-      }),
-    );
-  });
 });
 
 describe("public holidays in a configuration transfer", () => {
@@ -6434,27 +6368,24 @@ describe("public holidays in a configuration transfer", () => {
     expect(persisted.rows).toEqual([{ tenants: 0 }]);
   });
 
-  it("refuses a bundle exported before the holiday tables existed, as an older venue-service schema", async () => {
+  it("refuses a bundle whose core version differs from this box's", async () => {
     const { versions, transferred } = await preparedWithHolidays("B45003311");
     const journal = JSON.parse(
       await readFile(
-        new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
+        new URL("../../../packages/db/drizzle/meta/_journal.json", import.meta.url),
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const holidayMigration = journal.entries.findIndex(
-      (entry) => entry.tag === "0023_public_holidays",
-    );
-    expect(holidayMigration).toBeGreaterThan(0);
-    expect(versions["venue-service"]).toBe(journal.entries.length);
+    expect(versions.core).toBeGreaterThanOrEqual(1);
+    expect(versions.core).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...transferred,
-      modules: { ...transferred.modules, "venue-service": holidayMigration },
+      modules: { ...transferred.modules, core: versions.core! - 1 },
     };
     expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
       expect.objectContaining({
         code: "setup.request_invalid",
-        params: { field: "module:venue-service" },
+        params: { field: "module:core" },
       }),
     );
   });

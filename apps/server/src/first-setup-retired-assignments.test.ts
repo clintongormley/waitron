@@ -287,6 +287,7 @@ async function fixture(
     anchor,
     retained?.source === "outside"
       ? createFirstSetupResolutionInspection({
+          modules: modules,
           ...anchor,
           store: oldHost.store,
           expectedMigrationSets: modulesWithSets(modules).map((module) => module.migrations.name),

@@ -71,48 +71,14 @@ which includes this helper's reset and its close.
 
 ## Migrations
 
-Core's migrations are the schema drizzle-kit generates from the barrel — `0000_baseline.sql`
-first, then each later change — plus the `--custom` files that carry triggers, which a schema cannot
-declare: `0001_behavioural_triggers.sql`, the nine behavioural rules; `0004_variant_one_level.sql`,
-which keeps a variant one level deep, its parent fixed, and a product's id unchanged; and
-`0015_settled_order_freeze_new_columns.sql`, which re-creates `0001`'s
-`working_orders_enforce_transition` with the two `working_orders` columns `0014` added (`revision`
-and `payment_attempt_at`) in its list; `0019_settled_order_freeze_visit_id.sql`, which re-creates it
-again with `visit_id`; and `0020_visit_clears_table_status.sql`, which drops `0001`'s
-`working_orders_clear_table_status` and clears a table's service status when the party leaves
-`open` instead of when a tab settles. `0036_party_rename.sql` renames visits to parties: it is
-drizzle-kit's generated file replaced by a hand-written rename, and it re-creates `0020`'s trigger
-as `parties_clear_table_status`; SQLite rewrites `visit_id` to `party_id` in
-`working_orders_enforce_transition` itself. **2026-10-19:** A757 slice 2 drops
-`parties_clear_table_status` (core `0180_drop_table_status_trigger.sql`) with the table and column it
-served. `0038_main_bill_release.sql` adds two triggers on
-`working_orders` that clear `parties.main_bill_id` when that bill leaves `open` or leaves the party
-(to another party or to the counter). **2026-10-31:** A803 slice 3 drops both triggers
-(`0201_retire_main_bill_triggers.sql`) and then the column (`0202_retire_main_bill.sql`, a rebuild
-of `parties`). `0042_placed_bill_moves.sql` re-creates
-`working_orders_enforce_transition` and `working_order_lines_require_open_parent_update`, each with
-an exception for a placed bill: its row may change its party, delivery table and revision, and its
-lines their kitchen group. `0043_drop_triggers_before_rebuild.sql` and
-`0045_recreate_triggers_after_rebuild.sql` surround `0044`'s generated rebuild of `dining_tables`,
-`parties` and `service_commands`: the first drops `parties_clear_table_status` and `0038`'s two
-triggers, and the second re-creates them with the same text. `0050_line_list_price_frozen.sql`
-re-creates `working_order_lines_require_open_parent_update` with `list_unit_price_gross` among the
-columns a served mark or a group move must leave unchanged. `0053_line_sent_after_close.sql`
-re-creates it again, letting a presented (`placed`) or paid (`settled`) bill's line take a first `sent_at` with every
-other column unchanged. `0056_placed_order_handover.sql` re-creates
-`working_orders_enforce_transition`, letting a sent, unpaid (`placed`) order take its handover stamp
-(`collected_at`, from empty) with every other column unchanged. `0128_delivery_table_release.sql`
-re-creates it again, with `delivery_table_label` in the presented-bill and handover unchanged-column
-lists, letting an order past `open` drop its delivery table (`delivery_table_id`) and keep its name
-in `delivery_table_label` with every other column unchanged. `0185_settled_order_to_counter.sql`
-re-creates it with every branch of `0143_working_order_receipt_locale_transition.sql` (the last
-re-creation, which put `receipt_locale`, added by `0142`, in its unchanged-column lists) unchanged, letting a paid (`settled`) bill not yet handed
-over leave its party (`party_id` to empty) with every other column unchanged, so a finished table
-can send it to the counter. No migration
+Core's set is one migration, `0000_baseline.sql`: the schema drizzle-kit generates from the barrel,
+plus the triggers a schema cannot declare, for core's own tables and for those of the modules whose
+tables live in core's set. The migrations before the A760 squash are kept, frozen and test-only, in
+`scripts/fixtures/a760-history/core/`. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
 and file permissions on the venue directory are the access control.
 
-`0177_paid_line_service_group.sql` lets a paid (`settled`) line change only its kitchen group;
+A paid (`settled`) line may change only its kitchen group;
 all other columns must stay unchanged in that write. The existing served-mark and first-sent-stamp
 exceptions remain separate. `scripts/behavioural-triggers.test.ts` checks the allowed group change
 and rejects a group change combined with any other column change.
@@ -124,7 +90,7 @@ plain options array carries none and gets none (`scripts/apply-migrations-caller
 every non-test caller to `migrationOptionsFor`).
 
 Keep `out: "./drizzle"` in `drizzle.config.ts` as a **single string**, not an array. One config
-produces one folder and one journal; each package that owns tables has its own config and journal.
+produces one folder and one journal; each package that owns a migration set has its own config and journal.
 
 The generated snapshot covers the schema barrel. Triggers are hand-written into a `--custom`
 migration; they survive later `generate` runs because drizzle-kit diffs against its own snapshot,

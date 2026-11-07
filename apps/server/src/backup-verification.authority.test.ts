@@ -8,6 +8,7 @@ import {
   logicalDatabase,
   querySnapshot,
   useBackupVerificationFixture,
+  type BackupVerificationFixture,
 } from "./testing/backup-verification-fixture.js";
 
 vi.mock("node:crypto", { spy: true });
@@ -185,11 +186,7 @@ it.each(["passed", "wrong-key", "invalid-chain", "undeclared-entry"])(
     for (const module of hooks) expect(module.backup.restore).not.toHaveBeenCalled();
     expect(exposed).toBe(false);
     expect(comparisons).toBe(
-      kind === "wrong-key"
-        ? 0
-        : kind === "undeclared-entry"
-          ? 1
-          : f.request.target.modules.filter((m) => f.request.archive.modules[m.name]! > 0).length,
+      kind === "wrong-key" ? 0 : kind === "undeclared-entry" ? 1 : ownersComparedFor(f),
     );
     expect(logicalDatabase(f.databasePath)).toEqual(f.logical);
     expect(await readFile(f.deps.artifactPath)).toEqual(bytes);
@@ -254,10 +251,23 @@ it("genuine archive checks encrypted account enrolment with the managed host key
   expect(f.logical.totp_enrollments).toHaveLength(1);
   const answer = await verifyBackupArtifact(f.request, f.deps);
   expect(answer.status).toBe("passed");
-  expect(answer.modules.find((m) => m.name === "identity")?.checks).toContainEqual({
+  expect(answer.modules.find((m) => m.name === "core")?.checks).toContainEqual({
     code: "secret",
     status: "passed",
   });
   expect(logicalDatabase(f.databasePath)).toEqual(f.logical);
   expect(await readdir(f.deps.scratchRoot)).toEqual([]);
 });
+
+/** Every module whose tables are in a set the archive has migrated: its own set's, or its host's
+ * (`tablesIn`), since a set's check runs its host's and each hosted module's comparison. */
+function ownersComparedFor(f: BackupVerificationFixture): number {
+  const migrated = new Set(
+    f.request.target.modules
+      .filter((m) => f.request.archive.modules[m.name]! > 0)
+      .map((m) => m.name),
+  );
+  return f.deps.modules.filter((m) =>
+    migrated.has(m.migrations === undefined ? m.tablesIn! : m.name),
+  ).length;
+}

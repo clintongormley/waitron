@@ -382,7 +382,8 @@ running it changes the box's database, and there is no backward migration — in
 afterwards (a plain `install` back to `main` included) can then fail to boot with
 `provisioning.database_ahead`. On a box you use for testing, `waitron.sh --reset install <ref>`
 (below) clears this by wiping the database and installing the ref in one run; on a box holding a
-real venue's records, take a backup first and install a newer ref instead of resetting.
+real venue's records, take a backup first and install the ref that last migrated the database
+instead of resetting.
 
 ### The health check accepts either endpoint
 

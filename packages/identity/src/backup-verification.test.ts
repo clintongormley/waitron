@@ -3,7 +3,13 @@ import { syncBuiltinESMExports } from "node:module";
 import { isoCBOR } from "@simplewebauthn/server/helpers";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, deviceProfiles, devices, locations } from "@waitron/db";
+import {
+  CORE_CLASSIFICATION,
+  CORE_MIGRATIONS,
+  deviceProfiles,
+  devices,
+  locations,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import {
@@ -11,14 +17,18 @@ import {
   validateBackupVerificationContribution,
 } from "@waitron/module";
 import { IDENTITY_BACKUP_VERIFICATION } from "./index.js";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { IDENTITY_CLASSIFICATION } from "./classification.js";
+import { IDENTITY_TABLES } from "./classification.js";
 import { decryptTotpSecret, encryptTotpSecret } from "./mfa.js";
 import { hashSecret } from "./secret-hash.js";
 import * as schema from "@waitron/db/schema/identity.js";
 
-const original = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
-const restored = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+/** This module's share of core's classification, which holds its tables. */
+const IDENTITY_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (IDENTITY_TABLES as readonly string[]).includes(table),
+);
+
+const original = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const restored = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const withoutIdentity = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const person = "10000000-0000-4000-8000-000000000001";
 const second = "10000000-0000-4000-8000-000000000002";

@@ -29,6 +29,7 @@ import {
   validateConfigurationBundle,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { ALL_MODULES } from "./modules.js";
 import {
   clearStagedConfigurationImport,
@@ -489,15 +490,11 @@ describe("staged configuration import", () => {
         name: "venue-service",
         version: "0.0.0",
         tier: "mandatory",
-        migrations: {
-          name: "venue-service",
-          table: "__drizzle_migrations_venue_service",
-          from: "../venue-service/drizzle",
-        },
+        tablesIn: "core",
         configurationTransfer: VENUE_SERVICE_CONFIGURATION_TRANSFER,
       } satisfies WaitronModule,
     ];
-    const versions = { core: 1, "venue-service": 1 };
+    const versions = { core: 1 };
     const tables: ConfigurationBundle["tables"] = Object.fromEntries(
       VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => [table.name, []]),
     );
@@ -917,32 +914,7 @@ describe("routing cells in a staged import", () => {
     expect(await readdir(rejected.stateDir)).toEqual([]);
   });
 
-  it("refuses a bundle exported before the routing grid by its venue-service version, before any write", async () => {
-    const { bundle, versions } = await exported();
-    const journal = JSON.parse(
-      await readFile(
-        new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
-        "utf8",
-      ),
-    ) as { entries: { tag: string }[] };
-    const routingMigration = journal.entries.findIndex((entry) =>
-      entry.tag.endsWith("_routing_cells"),
-    );
-    expect(routingMigration).toBeGreaterThan(0);
-    expect(versions["venue-service"]).toBe(journal.entries.length);
-    const older: ConfigurationBundle = {
-      ...bundle,
-      modules: { ...bundle.modules, "venue-service": routingMigration },
-    };
-    const { stateDir, result } = await staged(older, versions);
-    await expect(result).rejects.toMatchObject({
-      code: "setup.request_invalid",
-      params: { field: "module:venue-service" },
-    });
-    expect(await readdir(stateDir)).toEqual([]);
-  });
-
-  it("refuses a bundle exported before station bump modes by its core version, before any write", async () => {
+  it("refuses a bundle whose core version differs from this box's, before any write", async () => {
     const { bundle, versions } = await exported();
     const journal = JSON.parse(
       await readFile(
@@ -950,14 +922,11 @@ describe("routing cells in a staged import", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const stationBumpMode = journal.entries.findIndex((entry) =>
-      entry.tag.endsWith("_station_bump_mode"),
-    );
-    expect(stationBumpMode).toBeGreaterThan(0);
+    expect(versions.core).toBeGreaterThanOrEqual(1);
     expect(versions.core).toBe(journal.entries.length);
     const older: ConfigurationBundle = {
       ...bundle,
-      modules: { ...bundle.modules, core: stationBumpMode },
+      modules: { ...bundle.modules, core: versions.core! - 1 },
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({
@@ -967,11 +936,34 @@ describe("routing cells in a staged import", () => {
     expect(await readdir(stateDir)).toEqual([]);
   });
 
+  // Catalogue lost its own migration set in the A760 squash, so a bundle exported before it names
+  // a module this box no longer versions.
+  it("refuses a bundle from before the migration squash that names catalogue, before any write", async () => {
+    const { bundle, versions } = await exported();
+    const oldCatalogue = JSON.parse(
+      readFileSync(
+        join(historicalSet("catalogue").migrationsFolder, "meta", "_journal.json"),
+        "utf8",
+      ),
+    ) as { entries: unknown[] };
+    expect(versions).not.toHaveProperty("catalogue");
+    const old: ConfigurationBundle = {
+      ...bundle,
+      modules: { ...bundle.modules, catalogue: oldCatalogue.entries.length },
+    };
+    const { stateDir, result } = await staged(old, versions);
+    await expect(result).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "modules" },
+    });
+    expect(await readdir(stateDir)).toEqual([]);
+  });
+
   it("accepts a fresh bundle whose versions match the journal", async () => {
     const { bundle, versions } = await exported();
-    const venueService = ALL_MODULES.find((module) => module.name === "venue-service")!;
-    expect(versions["venue-service"]).toBe(expectedSchemaVersion(venueService.migrations!, null));
-    expect(bundle.modules["venue-service"]).toBe(versions["venue-service"]);
+    const core = ALL_MODULES.find((module) => module.name === "core")!;
+    expect(versions.core).toBe(expectedSchemaVersion(core.migrations!, null));
+    expect(bundle.modules.core).toBe(versions.core);
     const { stateDir, result } = await staged(bundle, versions);
     await expect(result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
     expect((await readdir(stateDir)).sort()).toEqual([

@@ -73,11 +73,11 @@ describe("every migration set's journal is strictly increasing", () => {
         true,
       );
     }
-    // Loose floors, under today's numbers. The entry floor is a total over every set because a set may
+    // Floors at today's numbers. The entry floor is a total over every set because a set may
     // carry a single entry or none.
-    expect(MANIFEST.length).toBeGreaterThanOrEqual(10);
+    expect(MANIFEST.length).toBeGreaterThanOrEqual(8);
     const entryTotal = MANIFEST.reduce((total, set) => total + journalEntries(set.from).length, 0);
-    expect(entryTotal).toBeGreaterThanOrEqual(8);
+    expect(entryTotal).toBeGreaterThanOrEqual(7);
     // Growing the allowlist fails here as well as in its own case, deliberately.
     expect([...KNOWN_NON_MONOTONIC.keys()]).toEqual([]);
   });

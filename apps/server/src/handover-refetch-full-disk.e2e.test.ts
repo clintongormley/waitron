@@ -17,12 +17,7 @@ import {
 } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  nodeSigningPublicKey,
-  type KeyRing,
-} from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { signEnvelope, type HandoverBinding } from "@waitron/handover";
 import { endorseKey, signDocumentBody, type MembershipDocumentBody } from "@waitron/membership";
 import {
@@ -49,7 +44,7 @@ const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const COPY = Buffer.alloc(4 * 1024 * 1024, 2);
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 
 let opened: ReturnType<typeof openSmallDisk> | undefined;

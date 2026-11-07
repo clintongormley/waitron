@@ -17,7 +17,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { setProductVariants } from "./variants.js";
@@ -30,7 +29,7 @@ import { resolveTranslationCells } from "./content-translation-cells.js";
 import { writeTranslationMaps } from "./content-translation-writes.js";
 import type { TranslationItem } from "./content-translation-types.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const context = { fallbackLanguage: "en", required: ["es", "ca"] };
 const kinds = ["product", "variant", "option_list", "option_label", "extra_list", "unit"] as const;
 type Kind = (typeof kinds)[number];

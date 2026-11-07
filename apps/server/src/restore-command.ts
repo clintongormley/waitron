@@ -438,7 +438,7 @@ function bucketRefusal(err: AppError): string | null {
     "restore.stream_state_missing":
       "the copy in the bucket does not hold the old server's locked secrets, so it cannot be restored",
     "provisioning.database_ahead":
-      "the copy in the bucket was made by newer Waitron software than this server has; update this server first",
+      "the copy in the bucket was made by a different version of Waitron; this server's version cannot restore it. Install that version on this server and run it again",
     "backup.stream_restore_failed":
       "the copy could not be downloaded from the bucket, for a reason on this server, on its network or at the bucket; check this server's network, the bucket, and that this server's disk and state folder can be written, then run it again",
     "backup.stream_request_failed":

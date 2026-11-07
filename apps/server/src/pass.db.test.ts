@@ -4,7 +4,7 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { credentialProvisioned, loadKeyRing, putCredential } from "@waitron/credentials";
-import { DEFAULTS, runDue } from "@waitron/scheduler";
+import { DEFAULTS, runDue } from "@waitron/payments";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import { drain } from "@waitron/fiscal-verifactu";
 import type Stripe from "stripe";

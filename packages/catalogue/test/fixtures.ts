@@ -22,7 +22,6 @@ import {
   createCategory,
   createProduct,
 } from "../src/operations.js";
-import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { nameColumns } from "../src/product-names.js";
 import { createUnit } from "../src/units.js";
 
@@ -209,7 +208,7 @@ export async function seedCatalogueFixture(tx: Transaction): Promise<SeededCatal
 
 /** The migrated database, emptied between tests by `useVenueDb`. */
 export function useCatalogueDb(): { readonly db: Database } {
-  return useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+  return useVenueDb({ migrations: [CORE_MIGRATIONS] });
 }
 
 /** A promise plus the function that settles it. */

@@ -5,7 +5,8 @@ import { gunzipSync } from "node:zlib";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { openVenueDatabase } from "@waitron/db";
-import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations } from "@waitron/migrations";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 async function snapshot(directory: string) {
   const store = await openVenueDatabase(directory);
@@ -45,9 +46,7 @@ it.each(["source", "issued"])(
         expect(before.rows.sales).toHaveLength(1);
         expect(before.rows.registros_facturacion).toHaveLength(1);
       }
-      await expect(
-        applyMigrations(directory, migrationOptionsFor(manifestSets(), null)),
-      ).rejects.toMatchObject({
+      await expect(applyMigrations(directory, historicalSets())).rejects.toMatchObject({
         code: "migrations.apply_failed",
         params: { set: "__drizzle_migrations_db" },
         cause: {

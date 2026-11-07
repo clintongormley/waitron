@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   buildMenuDocument,
   createCatalogue,
   menuDocumentHash,
@@ -36,14 +35,13 @@ import {
   resolveZoneClosedDays,
 } from "./day-resolver.js";
 import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, menuState, readZoneClosingStates } from "./operations.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { englishSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

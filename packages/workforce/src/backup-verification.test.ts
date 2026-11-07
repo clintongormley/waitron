@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, nodes, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import {
   validateBackupModuleResult,
@@ -11,7 +11,7 @@ import {
 } from "@waitron/module";
 import { jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { WORKFORCE_CLASSIFICATION } from "./classification.js";
+import { WORKFORCE_OWN_CLASSIFICATION } from "./classification.js";
 import { WORKFORCE_BACKUP_VERIFICATION as OWNER } from "./index.js";
 import { appendToChain, type TimeEntryAppend } from "./chain.js";
 import { closePayPeriod } from "./pay-period-close.js";
@@ -21,10 +21,10 @@ import { workforceChains } from "./schema/workforce-chains.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { payPeriodSettings } from "./schema/pay-period-settings.js";
 
-const migrations = [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS];
+const migrations = [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });
-const absent = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const absent = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const at = "2026-01-05T09:00:00.000Z";
 const person = "10000000-0000-4000-8000-000000000001";
 const place = "10000000-0000-4000-8000-000000000002";
@@ -353,7 +353,7 @@ describe("complete captured workforce backup evidence", () => {
   );
   it("registers explicit obligations for every classified table", () => {
     const owner = validateBackupVerificationContribution(OWNER);
-    expect(owner.data.tables).toEqual(WORKFORCE_CLASSIFICATION.map((c) => c.table));
+    expect(owner.data.tables).toEqual(WORKFORCE_OWN_CLASSIFICATION.map((c) => c.table));
     expect(owner.data.immutableTables).toEqual([
       "time_entries",
       "pay_period_closures",

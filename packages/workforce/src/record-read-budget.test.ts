@@ -4,7 +4,7 @@ import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -24,7 +24,7 @@ const event = (subject: string, at: string) => ({
 });
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);

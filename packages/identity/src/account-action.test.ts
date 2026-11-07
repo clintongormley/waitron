@@ -21,14 +21,13 @@ import {
   requestAccountRecoveryAction,
 } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { updatePersonDetails } from "./staff.js";
 import { hashSessionToken } from "./session-token.js";
 import { codeOf, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
   },

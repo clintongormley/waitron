@@ -5,14 +5,13 @@ import { adjustmentSettings, CORE_MIGRATIONS, tenants, withTransaction } from "@
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
 import { ADJUSTMENTS_PROVISIONING } from "./provisioning.js";
 import { STARTER_REASON_NAMES } from "./starter-content.js";
 
 const expected: StarterTranslations<StarterContentLanguage> = STARTER_REASON_NAMES;
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let db: Database;
 beforeAll(() => {
   db = suite.db;

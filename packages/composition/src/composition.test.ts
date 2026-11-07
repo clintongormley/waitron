@@ -1,18 +1,13 @@
 import { FISCAL_NONE_BACKUP_VERIFICATION } from "@waitron/fiscal-none";
 import {
   ADJUSTMENTS_CHANGE_SOURCES,
-  ADJUSTMENTS_CLASSIFICATION,
   ADJUSTMENTS_CONFIGURATION_TRANSFER,
-  ADJUSTMENTS_MIGRATIONS,
   ADJUSTMENTS_PERMISSIONS,
   ADJUSTMENTS_PERSONAL_DATA,
   ADJUSTMENTS_PROVISIONING,
   ADJUSTMENTS_ROUTES,
 } from "@waitron/adjustments";
 import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
-import { HANDOVER_MIGRATIONS } from "@waitron/handover";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { CORE_ALERTS, CORE_MIGRATIONS } from "@waitron/db";
 import { FISCAL_NONE_MIGRATIONS } from "@waitron/fiscal-none";
@@ -29,13 +24,11 @@ import {
   VERIFACTU_HANDOVER,
 } from "@waitron/fiscal-verifactu";
 import {
-  IDENTITY_MIGRATIONS,
   IDENTITY_BACKUP_VERIFICATION,
   IDENTITY_PERSONAL_DATA,
   registerModulePermissions,
   roleHasPermission,
 } from "@waitron/identity";
-import { MEDIA_MIGRATIONS } from "@waitron/media";
 import { manifestSets } from "@waitron/migrations";
 import {
   modulesWithSets,
@@ -45,12 +38,9 @@ import {
   validatePersonalDataParts,
 } from "@waitron/module";
 import { PAYMENTS_ALERTS, PAYMENTS_HANDOVER, PAYMENTS_MIGRATIONS } from "@waitron/payments";
-import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import {
   STAFFING_CHANGE_SOURCES,
-  STAFFING_CLASSIFICATION,
   STAFFING_CONFIGURATION_TRANSFER,
-  STAFFING_MIGRATIONS,
   STAFFING_PERMISSIONS,
   STAFFING_PERSONAL_DATA,
   STAFFING_ROUTES,
@@ -68,10 +58,17 @@ import {
   VENUE_SERVICE_ALERTS,
   VENUE_SERVICE_PERMISSIONS,
   VENUE_SERVICE_PROVISIONING,
-  VENUE_SERVICE_MIGRATIONS,
   VENUE_SERVICE_ROUTES,
 } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
+import { ADJUSTMENTS_TABLES } from "@waitron/adjustments";
+import { CATALOGUE_TABLES } from "@waitron/catalogue";
+import { CREDENTIALS_TABLES } from "@waitron/credentials";
+import { HANDOVER_TABLES } from "@waitron/handover";
+import { IDENTITY_TABLES } from "@waitron/identity";
+import { MEDIA_TABLES } from "@waitron/media";
+import { STAFFING_TABLES } from "@waitron/staffing";
+import { VENUE_SERVICE_TABLES } from "@waitron/venue-service";
 
 it("only workforce grants correction decisions to supervisors and higher", () => {
   const workforce = ALL_MODULES.find((m) => m.name === "workforce")!;
@@ -93,8 +90,10 @@ describe("ALL_MODULES is the migration source of truth", () => {
   it("derives exactly the manifest's sets, in order", () => {
     expect(orderedMigrationSets(ALL_MODULES)).toEqual(manifestSets());
   });
-  it("lists the manifest's module names in order", () => {
-    expect(ALL_MODULES.map((m) => m.name)).toEqual(manifestSets().map((s) => s.name));
+  it("lists the manifest's sets in the order of the modules that own them", () => {
+    expect(modulesWithSets(ALL_MODULES).map((m) => m.name)).toEqual(
+      manifestSets().map((s) => s.name),
+    );
   });
 });
 
@@ -123,6 +122,64 @@ describe("a module's tables live in exactly one set", () => {
   });
 });
 
+describe("the eight sets", () => {
+  it("are exactly core, node, workforce, workforce-es, payments, bookings and the two fiscal sets", () => {
+    expect(
+      orderedMigrationSets(ALL_MODULES)
+        .map((set) => set.name)
+        .sort(),
+    ).toEqual(
+      [
+        "core",
+        "node",
+        "workforce",
+        "workforce-es",
+        "payments",
+        "bookings",
+        "fiscal-verifactu",
+        "fiscal-none",
+      ].sort(),
+    );
+  });
+
+  it("each set's manifest entry is what the descriptors produce", () => {
+    const descriptors = new Map(orderedMigrationSets(ALL_MODULES).map((set) => [set.name, set]));
+    for (const entry of manifestSets()) expect(descriptors.get(entry.name)).toEqual(entry);
+    expect(manifestSets()).toHaveLength(descriptors.size);
+  });
+
+  it("each set classifies exactly its own module's tables and those of every module hosted in it", () => {
+    // A hosted module names its tables in a plain list; the host's own share is what its own backup
+    // check covers, which the verifier requires to match the set's classification once combined.
+    const hostedTables: Record<string, readonly string[]> = {
+      catalogue: CATALOGUE_TABLES,
+      "venue-service": VENUE_SERVICE_TABLES,
+      media: MEDIA_TABLES,
+      adjustments: ADJUSTMENTS_TABLES,
+      credentials: CREDENTIALS_TABLES,
+      identity: IDENTITY_TABLES,
+      handover: HANDOVER_TABLES,
+      staffing: STAFFING_TABLES,
+    };
+    expect(
+      ALL_MODULES.filter((m) => m.tablesIn !== undefined)
+        .map((m) => m.name)
+        .sort(),
+    ).toEqual(Object.keys(hostedTables).sort());
+    for (const host of modulesWithSets(ALL_MODULES)) {
+      const members = ALL_MODULES.filter((m) => m.tablesIn === host.name);
+      const expected = [
+        ...(host.backup?.verification?.data.tables ?? []),
+        ...members.flatMap((m) => hostedTables[m.name]!),
+      ].sort();
+      expect({
+        set: host.name,
+        tables: (host.classification ?? []).map((c) => c.table).sort(),
+      }).toEqual({ set: host.name, tables: expected });
+    }
+  });
+});
+
 describe("the migration manifest", () => {
   it("names the same journal tables the packages themselves declare", () => {
     // Every *_MIGRATIONS descriptor computes migrationsFolder from its OWN import.meta.url, which
@@ -134,21 +191,12 @@ describe("the migration manifest", () => {
     expect(byName).toEqual({
       core: CORE_MIGRATIONS.migrationsTable,
       node: NODE_MIGRATIONS.migrationsTable,
-      handover: HANDOVER_MIGRATIONS.migrationsTable,
-      catalogue: CATALOGUE_MIGRATIONS.migrationsTable,
-      media: MEDIA_MIGRATIONS.migrationsTable,
-      "venue-service": VENUE_SERVICE_MIGRATIONS.migrationsTable,
-      identity: IDENTITY_MIGRATIONS.migrationsTable,
       workforce: WORKFORCE_MIGRATIONS.migrationsTable,
       "workforce-es": WORKFORCE_ES_MIGRATIONS.migrationsTable,
       "fiscal-verifactu": FISCAL_MIGRATIONS.migrationsTable,
       "fiscal-none": FISCAL_NONE_MIGRATIONS.migrationsTable,
       payments: PAYMENTS_MIGRATIONS.migrationsTable,
-      scheduler: SCHEDULER_MIGRATIONS.migrationsTable,
-      credentials: CREDENTIALS_MIGRATIONS.migrationsTable,
       bookings: BOOKINGS_MIGRATIONS.migrationsTable,
-      adjustments: ADJUSTMENTS_MIGRATIONS.migrationsTable,
-      staffing: STAFFING_MIGRATIONS.migrationsTable,
     });
   });
 });
@@ -163,10 +211,11 @@ describe("ALL_MODULES backup contribution", () => {
   it("image bytes belong to classified database state, not non-DB state", () => {
     const core = ALL_MODULES.find((m) => m.name === "core");
     expect(core?.backup?.nonDbState).toBeUndefined();
+    expect(ALL_MODULES.find((module) => module.name === "media")?.tablesIn).toBe("core");
     expect(
-      ALL_MODULES.find((module) => module.name === "media")?.classification?.map(
-        (table) => table.table,
-      ),
+      core?.classification
+        ?.map((table) => table.table)
+        .filter((table) => (MEDIA_TABLES as readonly string[]).includes(table)),
     ).toEqual(["media_images", "media_image_data", "media_image_blobs", "media_image_edits"]);
   });
   it("identity declares its offline verification owner", () => {
@@ -316,7 +365,20 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
   it("adjustments is mandatory and declares its tables, route, permission and transfer seats", () => {
     const adjustments = ALL_MODULES.find((module) => module.name === "adjustments");
     expect(adjustments?.tier).toBe("mandatory");
-    expect(adjustments?.classification).toBe(ADJUSTMENTS_CLASSIFICATION);
+    expect(adjustments?.tablesIn).toBe("core");
+    const adjustmentTables = [
+      "adjustment_reasons",
+      "adjustments",
+      "adjustment_settings",
+      "adjustment_refunds",
+      "adjustment_lines",
+    ];
+    expect([...ADJUSTMENTS_TABLES]).toEqual(adjustmentTables);
+    expect(
+      ALL_MODULES.find((module) => module.name === "core")
+        ?.classification?.map((c) => c.table)
+        .filter((table) => adjustmentTables.includes(table)),
+    ).toEqual(adjustmentTables);
     expect(adjustments?.changes).toBe(ADJUSTMENTS_CHANGE_SOURCES);
     expect(adjustments?.routes).toBe(ADJUSTMENTS_ROUTES);
     expect(adjustments?.permissions).toBe(ADJUSTMENTS_PERMISSIONS);
@@ -335,12 +397,13 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
       core: "*",
       modules: { identity: "*", "venue-service": "*", workforce: "*" },
     });
-    expect(staffing?.migrations).toEqual({
-      name: "staffing",
-      table: "__drizzle_migrations_staffing",
-      from: "../staffing/drizzle",
-    });
-    expect(staffing?.classification).toBe(STAFFING_CLASSIFICATION);
+    expect(staffing?.migrations).toBeUndefined();
+    expect(staffing?.tablesIn).toBe("workforce");
+    expect(
+      ALL_MODULES.find((module) => module.name === "workforce")
+        ?.classification?.map((c) => c.table)
+        .filter((table) => (STAFFING_TABLES as readonly string[]).includes(table)),
+    ).toEqual([...STAFFING_TABLES]);
     expect(staffing?.changes).toBe(STAFFING_CHANGE_SOURCES);
     expect(staffing?.routes).toBe(STAFFING_ROUTES);
     expect(staffing?.describeShifts).toBe(describeShifts);

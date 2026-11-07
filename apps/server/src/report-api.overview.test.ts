@@ -23,7 +23,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -139,7 +139,7 @@ async function seedDiningTables(db: Database): Promise<void> {
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     // Default time_zone (Europe/Madrid) + day_cutover (06:00:00) — resolveVenueClock reads them back

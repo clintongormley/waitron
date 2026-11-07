@@ -2,19 +2,14 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  getCredential,
-  loadKeyRing,
-  type KeyRing,
-} from "@waitron/credentials";
+import { getCredential, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
 import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-secret.js";
 
 const NODE_ID = "node-a";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 120_000,
 });
 

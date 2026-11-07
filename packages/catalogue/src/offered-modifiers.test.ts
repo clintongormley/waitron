@@ -3,7 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, products as productRows, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -36,7 +35,7 @@ expectTypeOf<OfferedExtraItem["unit"]>().toEqualTypeOf<{
   hardwareUnit: "kg" | "g" | "mg" | null;
 }>();
 
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const RARE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

@@ -8,7 +8,6 @@ import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
@@ -24,7 +23,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
   hashSessionToken,
-  IDENTITY_MIGRATIONS,
   managementSessions,
   persons,
   registerModulePermissions,
@@ -37,7 +35,6 @@ import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { WEEK_DISPLAY_ORDER } from "./hours-types.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
@@ -47,12 +44,7 @@ import { setStationToday } from "./station-times.js";
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(() => {

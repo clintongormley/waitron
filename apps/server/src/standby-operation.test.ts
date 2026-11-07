@@ -15,12 +15,7 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  readNodeSigningKey,
-  tryGetCredential,
-} from "@waitron/credentials";
+import { loadKeyRing, readNodeSigningKey, tryGetCredential } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import {
   readOperationAuthority,
@@ -43,7 +38,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 let LOCATION: string;
 const PRIMARY = "e0000000-0000-4000-8000-000000000002";

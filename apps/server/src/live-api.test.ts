@@ -16,7 +16,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  IDENTITY_MIGRATIONS,
   hashPin,
   hashSessionToken,
   managementSessions,
@@ -29,7 +28,7 @@ import type { ResourceChange } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function fixture() {
   await seedTenant(suite.db);

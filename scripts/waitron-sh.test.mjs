@@ -1589,7 +1589,7 @@ describe("waitron.sh database_ahead advice", () => {
     });
     const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
-    expect(r.stderr).toMatch(/newer ref/i);
+    expect(r.stderr).toMatch(/install the version that wrote the database/i);
     expect(r.stderr).not.toMatch(/waitron\.sh (--reset|reset)\b/);
   });
 });

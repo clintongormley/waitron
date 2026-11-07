@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import * as layouts from "@waitron/layouts";
 import type { PrintedDepartmentReceipt } from "@waitron/module";
 import { WAITRON_CHOICES } from "@waitron/ui-core/theme";
@@ -16,7 +15,7 @@ import {
 import { THEME_LOGO, putThemeInUse, saveThemeThroughRoute } from "./testing/theme-logo.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   setup: seedTenant,
 });
 

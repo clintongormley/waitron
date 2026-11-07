@@ -4,9 +4,8 @@ import { CORE_MIGRATIONS, catalogues, products, withTransaction } from "@waitron
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import * as catalogue from "./index.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 describe("the venue's new-product defaults", () => {
   it("uses general before provisioning has stored a preset", async () => {

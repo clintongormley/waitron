@@ -99,9 +99,14 @@ describe("preserveBaseline", () => {
   it("swaps in the old stored text and appends the old triggers in old creation order", () => {
     const result = preserveBaseline({ reference, folder, from: ["beta", "alpha"] });
     expect(result.changed).toBe(true);
+    // A table's name keeps the generator's backticks; the rest is the old stored text.
     expect(baseline()).toBe(
-      ["b", "a", "a_x", "z_first", "a_second", "b_guard"]
-        .map((name) => `${storedSql(name)};`)
+      [
+        storedSql("b").replace("CREATE TABLE b ", "CREATE TABLE `b` "),
+        storedSql("a").replace("CREATE TABLE a ", "CREATE TABLE `a` "),
+        ...["a_x", "z_first", "a_second", "b_guard"].map(storedSql),
+      ]
+        .map((sql) => `${sql};`)
         .join("\n--> statement-breakpoint\n"),
     );
   });
@@ -262,5 +267,49 @@ describe("preserveBaseline", () => {
       expected,
     );
     expect(baseline()).toBe(written);
+  });
+});
+
+// The old history rebuilt `r` the way drizzle does, so the engine stores its header as `"r"`.
+const REBUILT: FixtureSet = {
+  name: "rebuilt",
+  sql: `
+CREATE TABLE r (id integer PRIMARY KEY);
+CREATE TABLE __new_r (id integer PRIMARY KEY, v text NOT NULL);
+DROP TABLE r;
+ALTER TABLE __new_r RENAME TO r;
+`,
+};
+const GENERATED_R = "CREATE TABLE `r` (\n\t`id` integer PRIMARY KEY,\n\t`v` text NOT NULL\n);";
+
+describe("preserveBaseline on a table the old history rebuilt", () => {
+  let rebuiltReference: string;
+
+  beforeEach(() => {
+    const at = join(dir, "rebuilt");
+    rebuiltReference = writeReference(at, [fixtureEntry(at, [REBUILT])]);
+    writeBaseline(GENERATED_R);
+  });
+
+  it("keeps the generator's quoting of the table's name and the old text after it", () => {
+    preserveBaseline({ reference: rebuiltReference, folder, from: ["rebuilt"] });
+    expect(baseline()).toBe("CREATE TABLE `r` (id integer PRIMARY KEY, v text NOT NULL);");
+  });
+
+  it("changes nothing when it runs a second time", () => {
+    preserveBaseline({ reference: rebuiltReference, folder, from: ["rebuilt"] });
+    const first = baseline();
+    expect(
+      preserveBaseline({ reference: rebuiltReference, folder, from: ["rebuilt"] }).changed,
+    ).toBe(false);
+    expect(baseline()).toBe(first);
+  });
+
+  it("still refuses a generated header whose name differs from the old one", () => {
+    writeBaseline(GENERATED_R.replace("`r`", "`R`"));
+    expect(() =>
+      preserveBaseline({ reference: rebuiltReference, folder, from: ["rebuilt"] }),
+    ).toThrow("generated but not in the old sets: table R");
+    expect(baseline()).toBe(GENERATED_R.replace("`r`", "`R`"));
   });
 });

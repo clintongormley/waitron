@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   generateNodeKeyPair,
   signDocumentBody,
@@ -62,7 +62,7 @@ function chart(
 
 describe("POST /api/node/membership", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   async function boxes(options: { selling?: boolean; fullStart?: boolean } = {}) {
@@ -365,7 +365,7 @@ describe("POST /api/node/membership", () => {
 
 describe("POST /api/node/membership with the real stepdown", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   async function sellingBox() {

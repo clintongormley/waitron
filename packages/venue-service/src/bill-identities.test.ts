@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   billIdentities,
   billNumberAllocations,
@@ -20,10 +19,9 @@ import {
   rescopeBillNumbers,
   setBillName,
 } from "./bill-identities.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const actor = randomUUID();
 const tx = <T>(fn: (t: Transaction) => Promise<T>) => withTransaction(suite.db, fn);

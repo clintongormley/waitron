@@ -56,9 +56,7 @@ it("accepting control preserves every captured row through every real owner", as
   });
   const result = await verify(f);
   expect(result.status).toBe("passed");
-  expect(comparisons).toBe(
-    f.request.target.modules.filter((m) => f.request.archive.modules[m.name]! > 0).length,
-  );
+  expect(comparisons).toBe(ownersComparedFor(f));
   expect(f.logical.registros_facturacion).toHaveLength(4);
   expect(f.logical.registro_sif).toHaveLength(3);
   expect(f.logical.fiscal_allocations).toHaveLength(3);
@@ -251,3 +249,16 @@ it("complete read-only barrier refuses UPDATE inside a genuine owner callback", 
   expect(denied).toBe(true);
   expect(answer.status).toBe("unavailable");
 });
+
+/** Every module whose tables are in a set the archive has migrated: its own set's, or its host's
+ * (`tablesIn`), since a set's check runs its host's and each hosted module's comparison. */
+function ownersComparedFor(f: BackupVerificationFixture): number {
+  const migrated = new Set(
+    f.request.target.modules
+      .filter((m) => f.request.archive.modules[m.name]! > 0)
+      .map((m) => m.name),
+  );
+  return f.deps.modules.filter((m) =>
+    migrated.has(m.migrations === undefined ? m.tablesIn! : m.name),
+  ).length;
+}

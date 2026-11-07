@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { expectedSchemaVersion } from "@waitron/migrations";
+import { expectedSchemaVersion, manifestSets } from "@waitron/migrations";
 import {
   BackupVerificationUnsupported,
   type BackupVerificationContribution,
@@ -13,6 +13,9 @@ import {
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
 import { readBackupVerificationRequest } from "./backup-verification-protocol.js";
 import * as targetExports from "./backup-verification-target.js";
+
+const shippedSetNames = new Set(manifestSets().map((set) => set.name));
+const setOwners = ALL_MODULES.filter((m) => shippedSetNames.has(m.name));
 
 const runtime = { release: "2026.10.20", revision: "e".repeat(40), fingerprint: "f".repeat(64) };
 function policy(): BackupVerificationContribution {
@@ -214,8 +217,8 @@ describe("bound backup target", () => {
       backup: { ...m.backup, verification: policy() },
     }));
     const actual = buildBackupVerificationTarget({ modules, migrationsRoot: null, runtime });
-    expect(actual.modules.map((m) => m.name)).toEqual(ALL_MODULES.map((m) => m.name).sort());
-    for (const m of modules) {
+    expect(actual.modules.map((m) => m.name)).toEqual(setOwners.map((m) => m.name).sort());
+    for (const m of setOwners) {
       expect(actual.modules.find((x) => x.name === m.name)!.schema).toBe(
         expectedSchemaVersion(m.migrations!, null),
       );
@@ -379,7 +382,7 @@ describe("current binary backup target", () => {
     try {
       const current = targetExports.currentBackupVerificationTarget();
       expect(current.runtime).toEqual(runtime);
-      expect(current.modules.map((m) => m.name)).toEqual(ALL_MODULES.map((m) => m.name).sort());
+      expect(current.modules.map((m) => m.name)).toEqual(setOwners.map((m) => m.name).sort());
       expect(current.modules.find((m) => m.name === "core")!.schema).toBe(
         expectedSchemaVersion(ALL_MODULES.find((m) => m.name === "core")!.migrations!, null),
       );
@@ -408,14 +411,18 @@ describe("current binary backup target", () => {
   });
 });
 
-it("gives today's real modules, none of them hosted in another's set, the target they had before sets could host modules", () => {
+it("gives today's real modules, set-less ones hosted in core's and workforce's sets, the target of the squash into eight sets", () => {
+  expect([...new Set(ALL_MODULES.flatMap((m) => m.tablesIn ?? []))].sort()).toEqual([
+    "core",
+    "workforce",
+  ]);
   const actual = buildBackupVerificationTarget({
     modules: ALL_MODULES,
     migrationsRoot: null,
     runtime,
   });
   expect(createHash("sha256").update(JSON.stringify(actual)).digest("hex")).toBe(
-    "fb6b620594af5d7f35cb7f1a63a98bf6ab5927f926fc8f19f9d6bc927bdc3825",
+    "c8a9b6ea4dfea22415444be2a81994b41ac3fa4b6c609d14d2c651e828d529ec",
   );
 });
 

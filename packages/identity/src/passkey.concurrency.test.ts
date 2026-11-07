@@ -17,7 +17,6 @@ import {
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
 vi.mock("@simplewebauthn/server", async (orig) => ({
@@ -51,7 +50,7 @@ function authVerified(
   };
 }
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 beforeEach(async () => {
   mockVerifyAuth.mockReset();

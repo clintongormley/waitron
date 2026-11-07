@@ -3,7 +3,6 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { checkPin, verifyPersonCredential, verifyThrottledCredential } from "./credential.js";
 import { loginWithPin } from "./login.js";
 import { authorize } from "./authorize.js";
@@ -38,7 +37,7 @@ vi.mock("./verify-password.js", async (importOriginal) => {
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 // `Promise<T> | T`: `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter

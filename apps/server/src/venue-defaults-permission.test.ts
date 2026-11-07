@@ -4,8 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -36,7 +35,7 @@ let supervisorCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
     [managerCookie, supervisorCookie] = await withTransaction(db, async (tx) => {
       const cookieFor = async (role: "manager" | "supervisor") => {

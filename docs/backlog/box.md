@@ -2274,8 +2274,6 @@ earlier one's could (read, not run). Left open by A798-B slice 9b, Task 15.
 - A node promoted while running gets no start-up window, so no till's time can set its clock, until
   it restarts; and a start-up window stays open while every read of the stop keeps failing
   (decision 14; stated, not fixed).
-- The go-live migration squash folds slice 9b's table rebuild (Task 8-0) in with slice 9's
-  migration.
 
 Left open by A798-B slice 9b.
 
@@ -2305,7 +2303,10 @@ AEAT agreeing with the box restarts payments even if two
   so restarting the server forgets it (kept that way: owner, 2026-11-06, under Decisions). Slice 8's own ways out remain: the clock put right, or real
   time passing the record. The owner may prefer it to lapse at a step (owner FYI 6). Left open by A798-B slice 9 (#2025).
 
-## `clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the go-live migration squash (A760).
+## `clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when A1308 rewrites the starting migrations.
+
+A760 kept every table's shape, so the table survived the squash; A1308's slices edit the starting
+migrations ([design](../superpowers/specs/2026-11-02-rationalisation/README.md)).
 
 Slice 9 kept the shipped append-only table rather than
   rebuild or drop it; the backup check still checks its links to `nodes` and

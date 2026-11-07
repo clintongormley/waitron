@@ -70,7 +70,7 @@ const historical = [
   "docs/compliance/verifactu-findings.md",
   "docs/compliance/asesor-questions.md",
   "docs/research/2026-07-20-pglite-throughput.md",
-  "packages/fiscal-verifactu/drizzle/0002_registro_lose_till.sql",
+  "packages/fiscal-verifactu/drizzle/0000_baseline.sql",
 ];
 it.each(historical)("accepts the historical record %s", (file) => {
   expect(inspectSource(file, command)).toEqual([]);

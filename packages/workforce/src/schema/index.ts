@@ -22,3 +22,6 @@ export {
 } from "./attendance.js";
 
 export { attendanceResponseCommands } from "./attendance-responses.js";
+
+// Staffing's tables, which live in workforce's set.
+export * from "./staffing/index.js";

@@ -1,11 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,
   personStaffRoles,
@@ -18,7 +15,6 @@ import {
 import { persons } from "@waitron/identity";
 import { createLabelComparator } from "@waitron/shared";
 import { seedVenueWithStaff } from "../test/seed.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
 import {
   createStaffRole,
   deleteStaffRole,
@@ -32,14 +28,7 @@ import {
 } from "./staff-roles.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);

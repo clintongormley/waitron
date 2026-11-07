@@ -1050,7 +1050,7 @@ describe("startServer, against a migrated venue directory", () => {
       // `expected > 0` is the control: an empty journal would make `0 === 0` pass. `fiscal-none`
       // ships no migrations, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(17);
+      expect(sets).toHaveLength(manifestSets().length);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);
@@ -1071,10 +1071,10 @@ describe("startServer, against a migrated venue directory", () => {
     // migration seam, so the assertion is on the resulting journals, not on boot success.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-modules-filter-state-"));
-    // `scheduler` is toggleable and owns `__drizzle_migrations_scheduler`.
+    // `bookings` is toggleable and owns `__drizzle_migrations_bookings`.
     await writeFile(
       join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { scheduler: false } }),
+      JSON.stringify({ modules: { bookings: false } }),
     );
     const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-filter-venue-"));
     let server: StartedServer | undefined;
@@ -1096,12 +1096,12 @@ describe("startServer, against a migrated venue directory", () => {
       probe = await openVenueDatabase(venueDir);
       // A scalar subquery answers one row whose column is NULL when the table is missing, where an
       // empty result would also be what a query selecting nothing at all returns.
-      const schedulerReg = await probe.venue.execute<{ reg: string | null }>(
+      const bookingsReg = await probe.venue.execute<{ reg: string | null }>(
         sql.raw(
-          `select (select name from sqlite_master where type = 'table' and name = '__drizzle_migrations_scheduler') as reg`,
+          `select (select name from sqlite_master where type = 'table' and name = '__drizzle_migrations_bookings') as reg`,
         ),
       );
-      expect(schedulerReg.rows[0]!.reg).toBeNull();
+      expect(bookingsReg.rows[0]!.reg).toBeNull();
       // The filter kept every enabled set: `payments` is enabled by default.
       const payments = modulesWithSets(ALL_MODULES).find((m) => m.name === "payments")!;
       const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);
@@ -1129,7 +1129,7 @@ describe("startServer, against a migrated venue directory", () => {
     // `fiscal-none` disabled too, so the fiscal slot resolves to the seeded node's Veri*Factu.
     await writeFile(
       join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { scheduler: false, "fiscal-none": false } }),
+      JSON.stringify({ modules: { bookings: false, "fiscal-none": false } }),
     );
     let server: StartedServer | undefined;
     try {
@@ -1150,7 +1150,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
       server = started;
       await awaitListening(httpPort());
-      expect(reconcileLine.softDisabled).toEqual(["scheduler"]);
+      expect(reconcileLine.softDisabled).toEqual(["bookings"]);
       expect(reconcileLine.toMigrate).toEqual([]);
     } finally {
       if (server !== undefined) await server.close();
@@ -1158,16 +1158,16 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("refuses a trading boot whose enabled set drops a dependency (identity off, workforce on) BEFORE migrating (SP-1c)", async () => {
+  it("refuses a trading boot whose enabled set drops a dependency (workforce off, staffing on) BEFORE migrating (SP-1c)", async () => {
     // Boot must refuse an enabled set that is not dependency-complete before `applyMigrations`, not
-    // fail mid-migration. `workforce` requires `identity`, and both are toggleable. `...KEY_ENV` keeps
+    // fail mid-migration. `staffing` requires `workforce`, and both are toggleable. `...KEY_ENV` keeps
     // this in trading mode; setup mode migrates the full set and never filters.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-depmissing-state-"));
     try {
       await writeFile(
         join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { identity: false } }),
+        JSON.stringify({ modules: { workforce: false } }),
       );
       await expect(
         startServer({
@@ -1181,7 +1181,7 @@ describe("startServer, against a migrated venue directory", () => {
         }),
       ).rejects.toMatchObject({
         code: "module.dependency_missing",
-        params: { module: "workforce", requires: "identity" },
+        params: { module: "staffing", requires: "workforce" },
       });
     } finally {
       await rm(stateDir, { recursive: true, force: true });
@@ -1212,6 +1212,69 @@ describe("startServer, against a migrated venue directory", () => {
         }),
       ).rejects.toMatchObject({ code: "module.fiscal_slot_empty" });
     } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it.each(["identity", "credentials"])(
+    "refuses a trading boot whose modules.json switches %s off — module.mandatory_not_disableable",
+    async (name) => {
+      // Their tables live in core's set, so the module cannot be switched off.
+      const port = await freePort();
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-mandatory-state-"));
+      let started: Promise<StartedServer> | undefined;
+      try {
+        await writeFile(
+          join(stateDir, "modules.json"),
+          JSON.stringify({ modules: { [name]: false, "fiscal-none": false } }),
+        );
+        started = startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
+        });
+        await expect(started).rejects.toMatchObject({
+          code: "module.mandatory_not_disableable",
+          params: { module: name },
+        });
+      } finally {
+        // A start that wrongly succeeds is still closed.
+        await started?.then(
+          (server) => server.close(),
+          () => undefined,
+        );
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+
+  it("starts a trading boot whose modules.json switches staffing off", async () => {
+    // Staffing's tables live in workforce's set, so switching the module off leaves them in place.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staffing-off-state-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { staffing: false, "fiscal-none": false } }),
+    );
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_ENV: "preproduction",
+        WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
+      });
+      await awaitListening(httpPort());
+    } finally {
+      if (server !== undefined) await server.close();
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);

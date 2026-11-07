@@ -12,7 +12,6 @@ import {
 } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { addMember } from "./sections.js";
@@ -25,7 +24,7 @@ import {
 import type { TranslationCellRef } from "./content-translation-types.js";
 
 type Edit = TranslationCellRef & { expected: string; text: string | null };
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const context = { fallbackLanguage: "es", required: ["es"] };
 function baseline() {
   return {

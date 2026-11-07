@@ -14,7 +14,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { addMember } from "./sections.js";
@@ -24,7 +23,7 @@ import { listTranslationItems } from "./content-translation-pages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import type { TranslationCellRef } from "./content-translation-types.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const context = { fallbackLanguage: "es", required: ["es"] };
 
 async function fixture(tx: Transaction) {

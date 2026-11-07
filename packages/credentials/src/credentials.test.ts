@@ -3,7 +3,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "./keyring.js";
-import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { credentialProvisioned, getCredential, putCredential } from "./store.js";
 
 const RING = loadKeyRing({
@@ -18,7 +17,7 @@ const STRIPE = {
   cancelUrl: "https://example.test/no",
 };
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 describe("the vault through the venue store", () => {
   it("round-trips a sealed credential", async () => {

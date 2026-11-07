@@ -2,12 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  putCredential,
-  type Purpose,
-} from "@waitron/credentials";
+import { loadKeyRing, putCredential, type Purpose } from "@waitron/credentials";
 import { openBackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -15,10 +10,10 @@ import * as api from "./index.js";
 import * as store from "./store.js";
 import * as reconcile from "./reconcile.js";
 
-const migrations = [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, PAYMENTS_MIGRATIONS];
+const migrations = [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });
-const absent = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const absent = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const key = Buffer.alloc(32, 7).toString("base64");
 const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: key, WAITRON_CREDENTIALS_KEY_VERSION: "1" });
 const stripe = {

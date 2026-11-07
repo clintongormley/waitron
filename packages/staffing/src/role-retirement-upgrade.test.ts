@@ -4,9 +4,6 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,
   shiftAssignments,
@@ -16,17 +13,10 @@ import {
   staffRoles,
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 it("keeps assignments, both swap legs and templates across the free-text role drop", async () => {
@@ -80,7 +70,7 @@ it("keeps assignments, both swap legs and templates across the free-text role dr
       .foreign_keys,
   ).toBe(1);
   const migration = readFileSync(
-    join(WORKFORCE_MIGRATIONS.migrationsFolder, "0009_real_lockheed.sql"),
+    join(historicalSet("workforce").migrationsFolder, "0009_real_lockheed.sql"),
     "utf8",
   );
   for (const statement of migration.split("--> statement-breakpoint"))

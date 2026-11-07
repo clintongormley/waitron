@@ -68,9 +68,11 @@ import {
   storedUnitId,
   useCatalogueDb,
 } from "../test/fixtures.js";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 // Query behaviour. Each case starts with empty authoring tables.
 const fx = useCatalogueDb();
+beforeEach(() => seedLibraryImages(fx.db, "x.webp", "y.png"));
 
 describe("catalogue operations", () => {
   it("round-trips independent product description and kitchen name, and clears both", async () => {
@@ -672,9 +674,9 @@ describe("catalogue operations", () => {
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
-        image: "x.webp",
+        image: libraryImageName("x.webp"),
       });
-      expect(withImage.image).toBe("x.webp");
+      expect(withImage.image).toBe(libraryImageName("x.webp"));
       // Omitting `image` leaves it null (no picture — distinct from allergens' PENDING null).
       const noImage = await createProduct(tx, {
         catalogueId: cat.id,
@@ -686,12 +688,12 @@ describe("catalogue operations", () => {
       });
       expect(noImage.image).toBeNull();
       const listed = await listProducts(tx, cat.id);
-      expect(listed.find((p) => p.id === withImage.id)!.image).toBe("x.webp");
+      expect(listed.find((p) => p.id === withImage.id)!.image).toBe(libraryImageName("x.webp"));
       expect(listed.find((p) => p.id === noImage.id)!.image).toBeNull();
       // updateProduct sets a new image reference…
-      await updateProduct(tx, noImage.id, { image: "y.png" });
+      await updateProduct(tx, noImage.id, { image: libraryImageName("y.png") });
       const afterSet = (await listProducts(tx, cat.id)).find((p) => p.id === noImage.id)!;
-      expect(afterSet.image).toBe("y.png");
+      expect(afterSet.image).toBe(libraryImageName("y.png"));
       // …and `null` clears it back to no-picture.
       await updateProduct(tx, noImage.id, { image: null });
       const afterClear = (await listProducts(tx, cat.id)).find((p) => p.id === noImage.id)!;

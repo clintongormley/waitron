@@ -21,7 +21,6 @@ export const GENERIC_PACKAGES = [
   "payments",
   "payments-stripe",
   "payments-sumup",
-  "scheduler",
   "credentials",
   "workforce",
   "identity",

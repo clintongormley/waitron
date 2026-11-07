@@ -3,15 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { menuPublications, menuVersionImages, menuVersions, sections } from "@waitron/catalogue";
 import {
-  CATALOGUE_MIGRATIONS,
-  menuPublications,
-  menuVersionImages,
-  menuVersions,
-  sections,
-} from "@waitron/catalogue";
-import {
-  CORE_MIGRATIONS,
   catalogues,
   installChangeFeed,
   openVenueDatabase,
@@ -20,7 +13,7 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { applyMigrations, type VenueMigrationOptions } from "@waitron/migrations";
-import { MEDIA_MIGRATIONS } from "../migrations.js";
+import { historicalSet } from "../../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { MEDIA_CHANGE_SOURCES } from "../module.js";
 
 /**
@@ -57,16 +50,16 @@ const db = (): Database => store!.venue;
 
 function setsUpTo(mediaFolder: string): VenueMigrationOptions[] {
   return [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    { ...MEDIA_MIGRATIONS, migrationsFolder: mediaFolder },
+    historicalSet("core"),
+    historicalSet("catalogue"),
+    { ...historicalSet("media"), migrationsFolder: mediaFolder },
   ];
 }
 
 /** Media's folder as it stood at `tag`: the same files, with the journal cut there. */
 function stageMediaAt(into: string, tag: string): string {
   const folder = join(into, `media-${tag}`);
-  cpSync(MEDIA_MIGRATIONS.migrationsFolder, folder, { recursive: true });
+  cpSync(historicalSet("media").migrationsFolder, folder, { recursive: true });
   const journalPath = join(folder, "meta", "_journal.json");
   const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
     entries: { idx: number; tag: string }[];
@@ -396,7 +389,7 @@ describe("then upgrading to the end of media's folder", () => {
     const venueDir = join(root!, "venue");
     await store!.close();
     store = undefined;
-    await applyMigrations(venueDir, setsUpTo(MEDIA_MIGRATIONS.migrationsFolder));
+    await applyMigrations(venueDir, setsUpTo(historicalSet("media").migrationsFolder));
     store = await openVenueDatabase(venueDir);
     latest = (await snapshot(store.venue)).triggers as Trigger[];
   });

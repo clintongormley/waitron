@@ -1,4 +1,3 @@
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -13,7 +12,6 @@ import {
   activateDueMenuPublications,
   addMember,
   cancelMenuPublication,
-  CATALOGUE_MIGRATIONS,
   createCatalogue,
   createProduct,
   createSectionIn,
@@ -32,18 +30,14 @@ import {
 } from "@waitron/catalogue";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
  * `products.image`, `sections.image`, `section_members.folder_overrides`'s `image` key and
  * `menu_version_images.filename` may only name a photo that exists, and a photo one of the first
  * three still names cannot be deleted or renamed. Nor can a photo a LIVE menu version or a queued
- * edition names. The rules are triggers, not keys
- * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why,
- * `0002_section_image_references.sql` for `sections.image`,
- * `0003_published_image_references.sql` for a published version's photos,
- * `0008_queued_edition_image_references.sql` for a queued edition's, and
- * `0009_include_folder_image_references.sql` for the photo an include's folder names).
+ * edition names. The rules are triggers in core's set (`packages/db/drizzle/0000_baseline.sql`),
+ * not keys; what a trigger is not, compared with a key, is in the header of the old migration that
+ * first made them, `scripts/fixtures/a760-history/media/0001_image_references.sql`.
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real
  * offending write with an ACCEPTING control in the other direction — without the control a trigger
@@ -54,7 +48,7 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  * itself and returns them rather than reaching the delete trigger.
  */
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 const PRESENT = `${"a".repeat(64)}.jpg`;

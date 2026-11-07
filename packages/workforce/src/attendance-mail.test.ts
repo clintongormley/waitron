@@ -3,14 +3,14 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { seedLocation } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { attendanceMail, attendanceQuestions } from "./schema/attendance.js";
 import { upsertAttendanceQuestion } from "./attendance-questions.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const now = new Date("2026-01-07T06:00:00.000Z");
 let id: string, questionId: string;

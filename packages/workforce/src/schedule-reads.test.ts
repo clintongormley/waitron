@@ -3,7 +3,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { describe, expect, it } from "vitest";
 import {
   listAbsencesForPerson,
@@ -25,7 +24,7 @@ let publishedVersionId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);

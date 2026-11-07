@@ -12,7 +12,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +34,7 @@ import {
   type ProfilePrinterRole,
 } from "./device-printers.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);

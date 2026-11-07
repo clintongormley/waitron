@@ -7,7 +7,7 @@ export const billEditStates = table(
   "bill_edit_states",
   {
     billId: id("bill_id").primaryKey().notNull(),
-    // No key: persons belongs to the identity module's migration set.
+    // No key yet.
     editorId: id("editor_id"),
     editorVersion: count("editor_version").notNull().default(0),
   },

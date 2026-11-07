@@ -1,12 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  CATALOGUE_MIGRATIONS,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/catalogue";
+import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import {
   captureError,
   CHECK_VIOLATION,
@@ -25,14 +20,13 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import type { RouteTarget } from "./routing.js";
 import type { CellAddress } from "./routing-types.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

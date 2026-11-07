@@ -301,9 +301,13 @@ It demonstrates a gap in the scanner, not a failing download in the current work
 - **No run has exercised the `hold` answer** — an older run publishing after a newer one — which
   needs two merges close enough together to overlap and is not worth forcing.
 - **Two states stop publishing until a person intervenes:** a `:main` carrying no
-  `WAITRON_BUILD_ID`, and one built from a commit this repository's history does not contain (an
-  image built outside CI, or a rewritten history). Both wedge every later publish identically; the
-  `sha-` tags keep coming. The repair is to delete or retag `:main` by hand. Nothing alerts on it.
+  `WAITRON_BUILD_ID`, and one built from a commit GitHub's comparison cannot place against the
+  commit being published. Both wedge every later publish, the `sha-` tags included (read from
+  `.github/workflows/ci.yml`, not run: the guard's step fails and the publish steps after it have
+  no `if:`). A rewritten history reaches the second state whenever GitHub refuses the comparison:
+  no common ancestor, or an old tip it no longer holds
+  ([dated probes](../developers/ci-and-gates.md#separated-pushes-overlap-so-publishing-asks-before-it-takes-main)). The repair is
+  to delete or retag `:main` by hand. Nothing alerts on it.
 - **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
   for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
   exactly the broadening that would publish a backwards tag. It matters only to a fork.
@@ -531,22 +535,24 @@ infer either from the missing outcome alone.
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI**
   [Detail](ci.md#a-pull-request-that-changes-only-front-end-code-gets-no-spa-bundle-built-anywhere-in-ci).
 
-## Bundle: Get ready for A760's history rewrite (A1306 and CI's concurrency groups)
+## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-Planned as Task 19 of [A760's plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md), with the
-guard's two wrong sentences corrected in its Task 17.
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+except A1306's timing and the guard's corrected sentences (2026-11-07). The owner kept A1306 as the last step of A1308 (2026-11-06), so Task 19 of
+[A760's plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) did not run in A760's
+freeze. A760 part 3 corrected the guard's two wrong sentences.
 
 - **A1306. Rewrite git history to drop the development artifacts** (owner, 2026-11-02: "there is
   no point in keeping these development artifacts as history"). Rewrite `main` with them removed,
-  at a moment when the lanes are paused, such as beside A760's squash.
+  at a moment when the lanes are paused, as the last step of A1308 (owner, 2026-11-06).
   [Detail](ci.md#a1306-rewrite-git-history-to-drop-the-development-artifacts).
 - **What the per-push CI concurrency groups (#384) left open:** two states stop publishing until a
   person intervenes; the repair is to delete or retag `:main` by hand. Nothing alerts on it. [Detail](ci.md#what-the-per-push-ci-concurrency-groups-384-left-open)
 
 ## Bundle: One repeated-run rig, then each named test
 
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+except the last, added on 2026-11-07.
 
 - **A local four-file till browser run ended without a completed-file report.**
   Capture per-case and file progress plus a process snapshot on recurrence; a serial pass does
@@ -567,6 +573,11 @@ guard's two wrong sentences corrected in its Task 17.
   runs (A1126)**: "shows a wrong PIN on the app's line when the dialog was closed while it was
   sent, and asks afresh next time". **Next action:** reproduce it under load, keep the failure
   output, and fix at the root. [Detail](ci.md#a-till-late-send-pin-test-failed-once-twice-in-two-days-a1126)
+- **`apps/server/src/fiscal-certificate-diagnosis-process.test.ts`, "resolves only after its exact
+  child exits…", failed once in 15 runs on a busy machine** (2026-11-07). The test's
+  `cleanupMs = 200` gives a child 150 ms to exit after its result. Fix in the test (a larger budget,
+  or a child that exits once its result is flushed), to be proved by a reproduction that delays the
+  child's exit.
 
 ## Bundle: Replace 15 "if it happens again" entries with one table in `docs/backlog/ci
 
@@ -887,17 +898,6 @@ Raw logs remain in Lane F's local
 `d2f9bc3de08c2a3c0d2284a03efcc342319809a1`. Its controlled 200 ms thread pause reproduced this
 failure, and the revised test limits passed the same pause. The original run's delay remains
 unobserved. See [the retained experiment](../developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in).
-
-## A624. The upgrade walk cannot step a new set whose first migration names another set's later table
-
-`scripts/migration-upgrade.test.ts` applies every set's first migration together at its
-first step, so a set added now whose first migration has a foreign key to a table another set
-created later fails there ("no such table: main.special_day_dates", found building A585-1). A585-1
-fitted the walk by generating `staffing`'s tables in two migrations: `0000` holds the two tables
-whose targets every first migration creates, `0001` the other three, among them `staffing_days`,
-whose keys name venue-service's seasons and special days' dates. Next: teach the walk to apply a
-first migration dated after its floor at its own date (a change to how the guard walks, so the owner
-decides), then a set like staffing could keep one baseline.
 
 ## The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed one
 
@@ -1235,7 +1235,7 @@ also repeat the list of sharded packages. Do it on its own branch.
   [Detail](#p7s-leftovers-533)
 - A few suites still build engine-shaped refusals by hand rather than through `refusalError`
   (`packages/db/src/testing/refusals.ts`, P10, #527), among them
-  `packages/provisioning/src/cli.test.ts` and `packages/scheduler/src/store.concurrency.test.ts`.
+  `packages/provisioning/src/cli.test.ts` and `packages/payments/src/reconciliation-schedule/store.concurrency.test.ts`.
 
 
 ## Task 2's review found no test that fails when `device_profile_admission_roles` or `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`
@@ -1537,7 +1537,7 @@ Owner, 2026-11-02: "there is no point in keeping these development artifacts as 
 Mock-ups and screenshots left the tree on 2026-11-02, but history still holds 2,327 image
 versions, about 300 MB compressed of a 584 MB pack (measured that day with `git rev-list
 --objects --all` and `git cat-file --batch-check`). Rewrite `main` with them removed, at a moment
-when the lanes are paused, such as beside A760's squash. Every clone, worktree, lane and open pull
+when the lanes are paused, as the last step of A1308 (owner, 2026-11-06). Every clone, worktree, lane and open pull
 request then restarts from the rewritten `main`, and old commit links stop resolving. Decide then
 whether other development artifacts (finished specs and plans, look reports) go too.
 

@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  IDENTITY_MIGRATIONS,
   hashSessionToken,
   managementSessions,
   persons,
@@ -21,7 +20,7 @@ import { seedAttendanceExport } from "../test/attendance-export-fixture.js";
 import { mountManagementAttendanceApi } from "./management-attendance-api.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 let fixture: Awaited<ReturnType<typeof seedAttendanceExport>>;
 let staffCookie: string, managerCookie: string, app: Hono;

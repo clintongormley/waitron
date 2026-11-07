@@ -5,16 +5,16 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { runMigrations } from "../migrate.js";
-import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { venueLocationId } from "../venue.js";
 import { printers } from "./printers.js";
+import { historicalSet } from "../../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 async function beforeRefundDrawer(db: Database): Promise<void> {
   const folder = mkdtempSync(join(tmpdir(), "wt-refund-drawer-upgrade-"));
   try {
-    cpSync(CORE_MIGRATIONS.migrationsFolder, folder, { recursive: true });
+    cpSync(historicalSet("core").migrationsFolder, folder, { recursive: true });
     const path = join(folder, "meta", "_journal.json");
     const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: { tag: string }[] };
     const index = journal.entries.findIndex(({ tag }) =>
@@ -23,7 +23,7 @@ async function beforeRefundDrawer(db: Database): Promise<void> {
     expect(index).toBeGreaterThan(0);
     journal.entries = journal.entries.slice(0, index);
     writeFileSync(path, JSON.stringify(journal));
-    await runMigrations(db, { ...CORE_MIGRATIONS, migrationsFolder: folder });
+    await runMigrations(db, { ...historicalSet("core"), migrationsFolder: folder });
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -61,7 +61,7 @@ it("adds the refund drawer target without changing existing audit facts", async 
         .filter((key) => key.table === "drawer_opens"),
     );
   expect(inbound).toEqual([]);
-  await runMigrations(db, CORE_MIGRATIONS);
+  await runMigrations(db, historicalSet("core"));
   expect(db.all(sql`select * from drawer_opens order by id`)).toEqual(
     before.map((row) => ({ ...row, tender_refund_id: null })),
   );

@@ -679,9 +679,9 @@ report_unhealthy() {
   printf '%s\n' "$logs" >&2
   if printf '%s' "$logs" | grep -q 'provisioning.database_ahead'; then
     if is_production; then
-      die "the database is newer than this image. On a box with real records install a NEWER ref — do NOT reset, it would destroy the fiscal ledger."
+      die "the database was made by a different version of Waitron from this image (provisioning.database_ahead). On a box with real records install the version that wrote the database — do NOT reset, it would destroy the fiscal ledger."
     fi
-    die "the database is newer than this image (provisioning.database_ahead). Wipe the box and install again in one step: 'waitron.sh --reset install [ref]'"
+    die "the database was made by a different version of Waitron from this image (provisioning.database_ahead). Wipe the box and install again in one step: 'waitron.sh --reset install [ref]'"
   fi
   die "the box did not come up healthy — see the log lines above"
 }

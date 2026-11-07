@@ -47,6 +47,18 @@ function unsupported(
   expect(body).toThrow(expect.objectContaining({ reason }));
 }
 
+/** Every module an inventory covers: each set's own module and the modules whose tables it holds. */
+function coveredNames(inventory: ReturnType<typeof backupVerificationInventory>): string[] {
+  return inventory.flatMap((entry) => [entry.module.name, ...entry.hosted.map((m) => m.name)]);
+}
+
+/** The entry covering `name`: its own set's, or the one whose set holds its tables. */
+function entryCovering(inventory: ReturnType<typeof backupVerificationInventory>, name: string) {
+  return inventory.find(
+    (entry) => entry.module.name === name || entry.hosted.some((m) => m.name === name),
+  )!;
+}
+
 describe("backup verification inventory", () => {
   it.each(ALL_MODULES.map((module) => module.name))(
     "refuses each missing owner independently: %s",
@@ -55,8 +67,14 @@ describe("backup verification inventory", () => {
         ...module,
         backup: { ...module.backup, verification: semantics() },
       }));
-      expect(backupVerificationInventory(modules).map((entry) => entry.module.name)).toEqual(
-        ALL_MODULES.map((module) => module.name),
+      const inventory = backupVerificationInventory(modules);
+      expect(inventory.map((entry) => entry.module.name)).toEqual(
+        ALL_MODULES.filter((module) => module.migrations !== undefined).map(
+          (module) => module.name,
+        ),
+      );
+      expect(coveredNames(inventory).sort()).toEqual(
+        ALL_MODULES.map((module) => module.name).sort(),
       );
       const missing = modules.map((module) =>
         module.name === name ? { ...module, backup: undefined } : module,
@@ -171,11 +189,7 @@ it("admits the actual fiscal descriptor only with its complete verification owne
     ["core", "credentials", "fiscal-verifactu"].includes(module.name),
   );
   const inventory = backupVerificationInventory(owners);
-  expect(inventory.map((owner) => owner.module.name).sort()).toEqual([
-    "core",
-    "credentials",
-    "fiscal-verifactu",
-  ]);
+  expect(coveredNames(inventory).sort()).toEqual(["core", "credentials", "fiscal-verifactu"]);
   const fiscal = inventory.find((owner) => owner.module.name === "fiscal-verifactu")!.verification;
   expect(fiscal.data.checks).toEqual(["chain", "history", "secret", "entries"]);
 });
@@ -183,25 +197,34 @@ it("admits the actual fiscal descriptor only with its complete verification owne
 it("admits the actual identity descriptor with all authenticator and ceremony obligations", () => {
   const owners = ALL_MODULES.filter((module) => ["core", "identity"].includes(module.name));
   const inventory = backupVerificationInventory(owners);
-  const owner = inventory.find((entry) => entry.module.name === "identity")!.verification;
+  const entry = entryCovering(inventory, "identity");
+  const owner = [entry.module, ...entry.hosted].find((m) => m.name === "identity")!.backup!
+    .verification!;
   expect(owner.data.tables).toContain("totp_enrollments");
   expect(owner.data.tables).toContain("google_oidc_states");
   expect(owner.data.checks).toEqual(["data", "secret"]);
+  for (const table of owner.data.tables) expect(entry.verification.data.tables).toContain(table);
+  expect(entry.verification.data.checks).toEqual(expect.arrayContaining(["data", "secret"]));
 });
 
-it.each(["scheduler", "bookings", "fiscal-none", "handover"])(
+it.each(["payments", "bookings", "fiscal-none", "handover"])(
   "registers the real %s verification owner without an activation hook",
   (name) => {
     const modules = ALL_MODULES.filter((module) => module.name === "core" || module.name === name);
     expect(() => backupVerificationInventory(modules)).not.toThrow();
     const inventory = backupVerificationInventory(modules);
-    expect(inventory.map((entry) => entry.module.name).sort()).toEqual(["core", name].sort());
-    const item = inventory.find((entry) => entry.module.name === name)!;
-    expect(item.verification.data.tables).toEqual(
-      (item.module.classification ?? []).map((row) => row.table),
-    );
-    expect(item.verification.effects).toEqual([]);
-    expect(item.module.backup?.restore).toBeUndefined();
+    expect(coveredNames(inventory).sort()).toEqual(["core", name].sort());
+    const item = entryCovering(inventory, name);
+    const module = [item.module, ...item.hosted].find((m) => m.name === name)!;
+    const own = module.backup!.verification!;
+    if (item.module === module)
+      expect(item.verification.data.tables).toEqual(
+        (module.classification ?? []).map((row) => row.table),
+      );
+    else
+      for (const table of own.data.tables) expect(item.verification.data.tables).toContain(table);
+    expect(own.effects).toEqual([]);
+    expect(module.backup?.restore).toBeUndefined();
   },
 );
 
@@ -235,13 +258,19 @@ describe("a set's entry covers every module whose tables it holds", () => {
     expect(inventory[0]!.hosted.map((m) => m.name)).toEqual(["alpha", "mid", "zeta"]);
   });
 
-  it("is each module's own verification, unchanged, for today's real modules", () => {
+  it("folds today's real hosted modules into their hosts' entries", () => {
     const inventory = backupVerificationInventory(ALL_MODULES);
-    expect(inventory.map((entry) => entry.module.name)).toEqual(ALL_MODULES.map((m) => m.name));
     for (const entry of inventory) {
-      expect(entry.hosted).toEqual([]);
-      expect(entry.verification.data).toEqual(entry.module.backup!.verification!.data);
+      const hosted = ALL_MODULES.filter((m) => m.tablesIn === entry.module.name);
+      expect(entry.hosted.map((m) => m.name)).toEqual(hosted.map((m) => m.name).sort());
+      const parts = [entry.module, ...hosted].map((m) => m.backup!.verification!);
+      expect([...entry.verification.data.tables].sort()).toEqual(
+        parts.flatMap((part) => part.data.tables).sort(),
+      );
+      if (hosted.length === 0)
+        expect(entry.verification.data).toEqual(entry.module.backup!.verification!.data);
     }
+    expect(coveredNames(inventory).sort()).toEqual(ALL_MODULES.map((m) => m.name).sort());
   });
 
   it.each([

@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -19,7 +18,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import * as routing from "./routing.js";
 import { previewRoutingChange } from "./routing-store.js";
@@ -34,7 +32,7 @@ vi.mock("./routing.js", async (importOriginal) => {
 });
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

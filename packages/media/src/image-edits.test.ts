@@ -10,10 +10,9 @@ import {
   mediaImageEdits,
   mediaImages,
 } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { departmentReceipts, departments, VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
+import { departmentReceipts, departments } from "@waitron/venue-service";
 import type { ReceiptLogoRasters } from "@waitron/shared";
 import { DEFAULT_FRAMING } from "./framing.js";
 import { readCurrentImage, saveImage } from "./image-edits.js";
@@ -25,11 +24,10 @@ import {
   updateImage,
   uploadImage,
 } from "./images.js";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const first = await samplePreparedImage({ width: 18 });
 const second = await samplePreparedImage({ width: 29 });

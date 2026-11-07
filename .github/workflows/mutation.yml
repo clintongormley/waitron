@@ -382,10 +382,10 @@ jobs:
 
   # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates thousands of
   # database-backed mutants (every suite here opens a venue database and applies a schema), which on
-  # ONE 2-vCPU runner was ~10h — past GitHub's 6h job limit, so the job never once completed.
+  # ONE runner was ~10h — past GitHub's 6h job limit, so the job never once completed.
   #
-  # EVERY TIMING IN THIS NOTE below this paragraph, except the dry-run figure dated 2026-11-02, and
-  # the shard count they argue for, was measured while that database was PGlite — a WASM PostgreSQL
+  # EVERY TIMING IN THIS NOTE below this paragraph, except the figures dated 2026-11-02, was
+  # measured while that database was PGlite — a WASM PostgreSQL
   # booted per suite. The storage switch replaced it with SQLite files on disk. On SQLite, run 38206876422 (2026-10-12) took 5m00s to 11m41s per
   # shard, shard 10 the longest (job wall times from `gh run view`); on 2026-11-02 shard 10 reached
   # the 25-minute limit (docs/developers/ci-and-gates.md, "db's mutation shards are packed by
@@ -398,17 +398,16 @@ jobs:
   # working), but the mutation phase's own ETA was ~10h and it was cancelled at the wall.
   #
   # The fix is parallelism, not a faster suite: mutation cost is mutants ÷ concurrency, and a matrix
-  # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs gives each range of a file it
+  # gives each shard its OWN runner. scripts/mutation-shard.mjs gives each range of a file it
   # splits a shard of its own and packs the other source files into the rest by their estimated
   # seconds in packages/db/mutation-costs.json, one `--mutate` slice per shard;
   # `strategy.job-total` feeds the COUNT to the script, so N is defined once — here in the matrix
   # list — and the two cannot drift. Refreshing the table: docs/developers/ci-and-gates.md, "db's
   # mutation shards are packed by estimated cost".
   #
-  # TEN shards, not fewer, because the per-mutant cost is WILDLY uneven and clusters. Measured on run
-  # 32380395996 (an N=6 attempt): shards ran 53min → 4h50. A surviving mutant in a widely-covered
-  # file — the core-table schema (orders/tenants/sales/daily-closes/incidents), exercised by nearly
-  # every test — reruns a huge covering set, while a leaf-file mutant is cheap.
+  # THIRTEEN shards: the three `sales.ts` ranges and ten for the other files. Why ten, and the
+  # margin under the 25-minute limit: docs/developers/ci-and-gates.md, "db's mutation shards are packed by
+  # estimated cost".
   #
   # Each shard re-pays the dry run (1m38s to 2m45s on the 2026-11-02 nightly's shards): Stryker maps
   # per-test coverage over the WHOLE suite before it mutates anything, and that map cannot be shared
@@ -422,7 +421,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -506,9 +505,9 @@ jobs:
           overwrite: true
 
   # The PACKAGE's gate. Each shard above publishes `mutation.json` beside its html report;
-  # this job adds the ten together and fails below 90, the score the owner set for every package
+  # this job adds the thirteen together and fails below 90, the score the owner set for every package
   # on 2026-09-19. It refuses to score at all when a shard's report is missing, because a shard
-  # that crashed takes its own survivors with it and the remaining nine read higher than the truth.
+  # that crashed takes its own survivors with it and the remaining twelve read higher than the truth.
   # `if: always()` so a red shard still gets its slice counted rather than skipping the gate.
   mutation-db-aggregate:
     needs: mutation-db
@@ -580,7 +579,7 @@ jobs:
           path: mutation-reports
 
       - name: Score the package
-        run: node scripts/mutation-aggregate.mjs mutation-reports --package db --shards 10 --break 90
+        run: node scripts/mutation-aggregate.mjs mutation-reports --package db --shards 13 --break 90
 
   # packages/node-db is small enough to run unsharded, so its break: 90 lives in its own
   # stryker.config.json and this one job gates it.

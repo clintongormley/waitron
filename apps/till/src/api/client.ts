@@ -1364,7 +1364,6 @@ export interface HeldExtra {
   kitchenName: string | null;
   price: string;
   quantity: number;
-  /** Null only on a child older than `0014_order_edit_columns.sql`. */
   listId: string | null;
 }
 

@@ -3,7 +3,7 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { compareBackupTables, type BackupTablePolicy } from "@waitron/db";
 import type { BackupModuleStatus, BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
-import { CATALOGUE_CLASSIFICATION } from "./classification.js";
+import { CATALOGUE_TABLES } from "./classification.js";
 import { documentImages, menuDocumentHash, MENU_DOCUMENT_FORMAT } from "./menu-document.js";
 import type { MenuDocument } from "@waitron/shared";
 import * as schema from "@waitron/db/schema/catalogue.js";
@@ -14,7 +14,7 @@ export const CATALOGUE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   publicEvidenceDigest: null,
   data: {
     kind: "custom",
-    tables: CATALOGUE_CLASSIFICATION.map((c) => c.table),
+    tables: [...CATALOGUE_TABLES],
     immutableTables,
     checks: ["data"],
   },
@@ -27,7 +27,7 @@ export const CATALOGUE_BACKUP_VERIFICATION: BackupVerificationContribution = {
     const equal = await compareBackupTables({
       before: context.before,
       after: context.after,
-      policies: CATALOGUE_CLASSIFICATION.map(({ table }): BackupTablePolicy => ({
+      policies: CATALOGUE_TABLES.map((table): BackupTablePolicy => ({
         table,
         immutable: immutableTables.includes(table),
         addedColumns:

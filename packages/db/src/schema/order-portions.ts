@@ -79,7 +79,7 @@ const portionEventKind = enumType(ORDER_PORTION_EVENT_KINDS);
 /**
  * A portion moved to another order, or cancelled with its charge. The order ids are plain ids with
  * no key: a row nothing may change must not refuse a later delete of a working order. The actor is a
- * plain person id because `persons` is in @waitron/identity's migration set, not the core one.
+ * plain person id: no key yet.
  */
 export const orderPortionEvents = table(
   "order_portion_events",

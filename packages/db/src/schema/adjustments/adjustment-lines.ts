@@ -6,7 +6,7 @@ import { adjustments } from "./adjustments.js";
  * What one comp or discount took off one working-order line, and the line's quantity then.
  * `line_id` has no key, as `adjustments.line_id` has none: a cancel deletes the line, and a key from
  * a row nothing may change would refuse that delete. Declared `appendOnly()` in
- * `packages/adjustments/src/classification.ts`.
+ * `../../classification.ts`.
  */
 export const adjustmentLines = table(
   "adjustment_lines",

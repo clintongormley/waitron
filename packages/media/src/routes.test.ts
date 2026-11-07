@@ -1,33 +1,23 @@
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { Hono } from "hono";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
-  IDENTITY_MIGRATIONS,
   persons,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 import { prepareImage } from "./prepare.js";
 import { sampleImage } from "./testing/sample-image.js";
 
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    MEDIA_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 const photo = await sampleImage({ width: 8, height: 6, format: "jpeg" });
 /** `maxUploadBytes: null` names no limit, and `contentDefaultLanguage: null` no default language,

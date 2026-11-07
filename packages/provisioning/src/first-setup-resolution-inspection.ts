@@ -6,6 +6,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { AppError } from "@waitron/shared";
 import { lockVenueDatabase } from "@waitron/db";
+import { migrationSetsHolding, type WaitronModule } from "@waitron/module";
 import { executeTarget } from "./read-only-database.js";
 import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
 import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
@@ -117,6 +118,8 @@ export function createFirstSetupResolutionInspection(
     store: FirstSetupStore;
     migrationsRoot?: string | null;
     expectedMigrationSets?: readonly string[];
+    /** Maps an attempt's module names to the sets holding their tables. */
+    modules: readonly WaitronModule[];
     publicEvidencePaths?: readonly string[];
     publicEvidenceDirectories?: readonly string[];
   },
@@ -263,7 +266,10 @@ export function createFirstSetupResolutionInspection(
       // SQLite can create an empty WAL while inspecting a closed WAL-mode database.
       // Fingerprint the files after that connection closes so its own read does not stale the ID.
       const { database, emptyDatabase } = await service.inspectFirstSetupDatabase(
-        repair?.state.frozen.modules.map((entry) => entry.module),
+        migrationSetsHolding(
+          options.modules,
+          repair?.state.frozen.modules.map((entry) => entry.module) ?? [],
+        ),
       );
       const artifacts: FirstSetupArtifact[] = [];
       const physicalSources: (string | null)[] = [];

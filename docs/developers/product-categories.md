@@ -559,12 +559,13 @@ sending the removed `categoryIds` or `labelIds`, is refused with `product.invali
 
 ## Storage and development reset
 
-`categories` in core holds the name; `category_details` in catalogue holds the parent and, since
-W92, the colour (`category_details.color`, added by catalogue `0025_category_color.sql`). The label
+Both tables are in core's set: `categories` holds the name, and `category_details`, whose code is
+the catalogue module's, holds the parent and, since W92, the colour (`category_details.color`, added by catalogue `0025_category_color.sql`). The label
 tables and the category image and colour columns of the old schema were dropped by the folder
-migrations. Catalogue drops
-media's category-image triggers before dropping the column, and media drops them again after its
-baseline on a fresh database. The section-image triggers remain part of media's own migration set.
+migrations. In that old history, catalogue dropped media's category-image triggers before dropping
+the column, and media dropped them again after its baseline on a fresh database. Since A760 the
+section-image triggers are in core's set (`packages/db/drizzle/0000_baseline.sql`), and the old
+migrations are frozen in `scripts/fixtures/a760-history/`.
 
 Before opening a development venue on this branch, run `wa-wt reset demo <worktree-name>`.
 The folder migration does not convert old JSON names or preserve the removed fields. A venue

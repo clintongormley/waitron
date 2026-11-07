@@ -13,7 +13,6 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { deactivatePerson, resetPersonLogin } from "./staff.js";
 import { generateSync } from "otplib";
 import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
@@ -87,7 +86,7 @@ function authVerified(
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);

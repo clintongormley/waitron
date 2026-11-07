@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -18,7 +18,7 @@ import {
 } from "./index.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, f);
 let locationId: string, personId: string, other: string, nodeId: string;

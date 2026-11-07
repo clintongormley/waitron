@@ -59,7 +59,7 @@ export const serviceStepCompletions = table(
     partyId: id("party_id").notNull(),
     stepId: id("step_id").notNull(),
     doneAt: tsString("done_at").notNull(),
-    // The signed-in caller's person id; persons is in @waitron/identity's migration set.
+    // The signed-in caller's person id. No key yet.
     doneBy: id("done_by").notNull(),
   },
   (t) => [

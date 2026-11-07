@@ -2,7 +2,6 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createUnit } from "./units.js";
 import {
   addProductToMenu,
@@ -13,7 +12,7 @@ import {
   listProducts,
 } from "./operations.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 it.each(["products", "available", "offers"] as const)(
   "%s carries the staff pair separately from customer translations",

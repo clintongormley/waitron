@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { seedLocation } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
@@ -14,7 +14,7 @@ import {
 } from "./index.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 let locationId: string;
 const day = () => ({

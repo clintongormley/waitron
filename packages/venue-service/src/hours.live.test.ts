@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, expect, it, onTestFinished } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
@@ -22,12 +21,11 @@ import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { saveHolidayArea } from "./holidays.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
 import { setStationToday } from "./station-times.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(async () => {

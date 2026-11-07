@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   buildMenuDocument,
   createCatalogue,
   menuDocumentHash,
@@ -29,7 +28,6 @@ import { starterName } from "@waitron/country-packs";
 import { type CalendarColour } from "@waitron/shared";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { saveMenuPeriod } from "./menu-timetable.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import {
   DEFAULT_SEASONS,
@@ -54,7 +52,7 @@ import type { ServiceRange } from "./service-day.js";
 import { STARTER_SEASON_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

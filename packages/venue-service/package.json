@@ -27,9 +27,7 @@
     "test:shard": "vitest run --coverage --reporter=default --reporter=blob --coverage.thresholds.statements=0 --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0",
     "test:merge": "vitest --merge-reports .vitest-reports --coverage --coverage.provider=custom --coverage.customProviderModule=../../scripts/vitest-shard-coverage-merge.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "db:generate": "drizzle-kit generate",
-    "db:generate:custom": "drizzle-kit generate --custom"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@waitron/catalogue": "workspace:*",
@@ -55,7 +53,6 @@
     "@types/node": "^26.6.6",
     "@vitest/browser-playwright": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
-    "drizzle-kit": "^0.31.11",
     "playwright": "^1.64.1",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"

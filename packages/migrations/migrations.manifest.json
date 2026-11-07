@@ -23,7 +23,15 @@
       "order_portion_events",
       "order_amendments",
       "order_group_events",
-      "order_draft_events"
+      "order_draft_events",
+      "handover_activations",
+      "menu_versions",
+      "menu_version_images",
+      "sale_receipt_headers",
+      "bill_number_allocations",
+      "adjustments",
+      "adjustment_refunds",
+      "adjustment_lines"
     ]
   },
   {
@@ -31,36 +39,6 @@
     "table": "__drizzle_migrations_node",
     "from": "../node-db/drizzle",
     "database": "node",
-    "appendOnlyTables": []
-  },
-  {
-    "name": "handover",
-    "table": "__drizzle_migrations_handover",
-    "from": "../handover/drizzle",
-    "appendOnlyTables": ["handover_activations"]
-  },
-  {
-    "name": "catalogue",
-    "table": "__drizzle_migrations_catalogue",
-    "from": "../catalogue/drizzle",
-    "appendOnlyTables": ["menu_versions", "menu_version_images"]
-  },
-  {
-    "name": "venue-service",
-    "table": "__drizzle_migrations_venue_service",
-    "from": "../venue-service/drizzle",
-    "appendOnlyTables": ["sale_receipt_headers", "bill_number_allocations"]
-  },
-  {
-    "name": "media",
-    "table": "__drizzle_migrations_media",
-    "from": "../media/drizzle",
-    "appendOnlyTables": []
-  },
-  {
-    "name": "identity",
-    "table": "__drizzle_migrations_identity",
-    "from": "../identity/drizzle",
     "appendOnlyTables": []
   },
   {
@@ -80,18 +58,6 @@
     "table": "__drizzle_migrations_payments",
     "from": "../payments/drizzle",
     "appendOnlyTables": ["payment_resolutions", "payment_holds", "payment_hold_outcomes"]
-  },
-  {
-    "name": "scheduler",
-    "table": "__drizzle_migrations_scheduler",
-    "from": "../scheduler/drizzle",
-    "appendOnlyTables": []
-  },
-  {
-    "name": "credentials",
-    "table": "__drizzle_migrations_credentials",
-    "from": "../credentials/drizzle",
-    "appendOnlyTables": []
   },
   {
     "name": "fiscal-verifactu",
@@ -122,18 +88,6 @@
     "name": "bookings",
     "table": "__drizzle_migrations_bookings",
     "from": "../bookings/drizzle",
-    "appendOnlyTables": []
-  },
-  {
-    "name": "adjustments",
-    "table": "__drizzle_migrations_adjustments",
-    "from": "../adjustments/drizzle",
-    "appendOnlyTables": ["adjustments", "adjustment_refunds", "adjustment_lines"]
-  },
-  {
-    "name": "staffing",
-    "table": "__drizzle_migrations_staffing",
-    "from": "../staffing/drizzle",
     "appendOnlyTables": []
   }
 ]

@@ -6,14 +6,14 @@ import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, locations, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
 import { decimal, deviceOrigin } from "@waitron/shared";
 import { TradingAdmission } from "./trading-admission.js";
 import { mountWebhook, settleWebhook, type WebhookDeps } from "./webhook.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
 });
 const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 19).toString("base64"),

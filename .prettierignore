@@ -40,3 +40,7 @@ packages/country-es/test-fixtures/demo/madrid-before-move.en.json
 packages/country-es/test-fixtures/demo/madrid-before-move.es.json
 packages/country-es/test-fixtures/demo/madrid-before-move.manifest.json
 packages/country-es/test-fixtures/demo/original-exporter.ts.txt
+
+# The migration history before the A760 squash, copied byte for byte from drizzle-kit's output; its
+# manifest hashes each journal (scripts/fixtures/a760-history/README.md).
+scripts/fixtures/a760-history/*/

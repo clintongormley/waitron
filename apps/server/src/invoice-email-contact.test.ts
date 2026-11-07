@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
@@ -14,7 +13,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
-  VENUE_SERVICE_MIGRATIONS,
   departments,
   orderServiceContexts,
   saleReceiptHeaders,
@@ -23,7 +21,7 @@ import {
 import { resolveInvoiceEmailContact } from "./invoice-email-contact.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 async function fixture(nullHeader = false) {
   await seedVenue(suite.db, {

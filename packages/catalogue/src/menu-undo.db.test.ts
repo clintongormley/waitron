@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import {
   menuItems,
   menuItemVariantOverrides,
@@ -21,8 +21,10 @@ import { updateMenuDetails, updateMenuItem, updateProduct } from "./operations.j
 import { setIncludeFolder } from "./include-folder.js";
 import { createSectionIn, updateSection } from "./sections.js";
 import { setMenuVariantPrice, setProductVariants } from "./variants.js";
+import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useCatalogueDb();
+beforeEach(() => seedLibraryImages(fx.db, "large.jpg"));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 /** Each command through the catalogue function its route calls. */
@@ -488,7 +490,7 @@ describe("variant price Undo", () => {
     name: "Large",
     customerName: { en: "A big glass" },
     kitchenName: "LRG",
-    image: "large.jpg",
+    image: libraryImageName("large.jpg"),
     unitPrice,
     available: true,
   });

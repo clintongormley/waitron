@@ -16,12 +16,7 @@ import type { FiledReceipt, FiscalBackend } from "@waitron/fiscal";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  putCredential,
-  deleteCredential,
-} from "@waitron/credentials";
+import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
 
@@ -40,7 +35,7 @@ const tls = mintSelfSignedServerCert({
   now: new Date(),
 });
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

@@ -754,3 +754,59 @@ approval as clearance of the execution freeze or reset roster.
 > green review/CI. Permit pre-live resets only after the watcher records named venues/operators;
 > inaccessible boxes stay offline. The actual reset roster is still outstanding. No unidentified
 > venue or production reset is authorised.
+
+## Part 3 as built, 7 November 2026
+
+This records what part 3 built. It does not record a reset: those happen after landing, by the
+roster above.
+
+**The base.** Part 3 branched from `main` at `59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. The old
+history, every SQL file and journal of every populated set the base shipped, is kept byte for byte under
+`scripts/fixtures/a760-history/`.
+
+**The epoch.** Each populated set starts again from one migration, `0000_baseline`. The tag, date
+and SQL hash of each are committed in `scripts/migration-baseline-epoch.json`, which the upgrade
+walk in `scripts/migration-upgrade.test.ts` reads and checks; that file governs where this copy
+differs. On 7 November it held (dates converted from the file's milliseconds, UTC):
+
+| Set | Tag | Date (UTC) | SHA-256 of the SQL |
+| --- | --- | --- | --- |
+| core | `0000_baseline` | 2026-11-06 18:50:15.388 | `6b1799a5609433ec00f571f26fdd99692094182c234de042a3fe8135b7162f5c` |
+| node | `0000_baseline` | 2026-11-06 18:50:17.686 | `522d328650fbd3dbf9ab80d72c56418bdd7295b168df3baa4d7ac533546e3f2b` |
+| workforce | `0000_baseline` | 2026-11-06 18:50:20.788 | `5a04ca1d4880d883cd326f5570e4e66e7409183c8c0e77327470225cf54fb4e2` |
+| workforce-es | `0000_baseline` | 2026-11-06 18:50:23.230 | `afd0644f982c7c5600aa80812700aff36c86cc9b566529807e535074291aeb89` |
+| payments | `0000_baseline` | 2026-11-06 18:50:25.633 | `c0f0ce129ae13a6dc7d777f758b96fbedaafbe841304c8639a3db27497d59aed` |
+| bookings | `0000_baseline` | 2026-11-06 18:50:27.693 | `4d05174018588975f9f672e330e60a18cd9eccd3dc512498eaacf3175e8731d6` |
+| fiscal-verifactu | `0000_baseline` | 2026-11-06 18:50:29.907 | `d33f7467513a1cd15f2f8a5b5268f3cc17af4ee57dbd0a6b30ed763bdf3e151a` |
+
+`fiscal-none` is listed as an empty set and has no migration. The `RESETS` list in
+`scripts/migration-upgrade.test.ts` starts empty for this epoch.
+
+**The reset target** is this pull request's merge commit on `main`. Its SHA is not known until it
+lands; the operator adds it here, with its own CI and image-publish run, when landing.
+
+**Old backups need the old image.** Anything made before the squash is refused by the new image,
+and nothing in it is changed by the refusal:
+
+- A backup file or Cloud snapshot (an archive restore, `apps/server/src/restore.ts:356`) is
+  refused with `restore.schema_too_new`, by core's count: the backup lists the old applied count
+  for each set, core's is far above the new image's 1, and the gate skips names this image has no
+  set for. Case: `apps/server/src/restore-gate.test.ts`. For a backup file the setup screen says
+  "This backup file was made by a different version of Waitron. This server's version cannot
+  restore it. Install that version on this server and try again, or choose another file."; the
+  Cloud screen says the same of "the snapshot", ending "or choose another copy".
+- A copy in a bucket (a stream restore) is refused with `provisioning.database_ahead`, by
+  `assertNotAhead` on the restored database (`apps/server/src/restore-stream.ts:252`). The setup
+  screen says "The copy in the bucket was made by a different version of Waitron. … or choose
+  another copy."
+- A database made by the old image meets `provisioning.database_ahead`, naming core. `waitron.sh`
+  says "the database was made by a different version of Waitron from this image
+  (provisioning.database_ahead)". Case: `packages/provisioning/src/schema-ahead.epoch.test.ts`.
+- A configuration bundle that names a set this image no longer has (catalogue, for one) is refused
+  with `setup.request_invalid` on the field `modules`, before anything is written. Case:
+  `apps/server/src/configuration-import.test.ts`.
+
+To restore such a backup, run the base commit's image, which CI published as
+`ghcr.io/clintongormley/waitron:sha-59be31e` (seen with `docker buildx imagetools inspect` on
+7 November), and do not upgrade that box to the new image without a reset. Never use an old backup
+as the new baseline's seed.

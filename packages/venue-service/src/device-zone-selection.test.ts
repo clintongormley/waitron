@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   deviceProfiles,
@@ -14,13 +13,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { readProfileServiceScopes, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE } from "./service.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 

@@ -3,7 +3,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
 import { createExtraList, updateExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
@@ -14,7 +13,7 @@ import { createUnit } from "./units.js";
 
 const UNKNOWN_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 /**
  * Six products, every one with a DIFFERENT name and a DIFFERENT unit price, so a read that pairs an

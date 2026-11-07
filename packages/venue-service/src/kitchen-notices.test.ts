@@ -1,7 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   EACH_UNIT,
   EACH_UNIT_ID,
   addProductToMenu,
@@ -26,7 +25,6 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   acknowledgeKitchenNotice,
   listStationNotices,
@@ -36,7 +34,7 @@ import {
 } from "./kitchen-notices.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

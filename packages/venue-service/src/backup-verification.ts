@@ -3,10 +3,10 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { compareBackupTables } from "@waitron/db";
 import type { BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
-import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
+import { VENUE_SERVICE_TABLES } from "./classification.js";
 import * as schema from "@waitron/db/schema/venue-service.js";
 
-const tables = VENUE_SERVICE_CLASSIFICATION.map((c) => c.table);
+const tables = [...VENUE_SERVICE_TABLES];
 const immutableTables = ["sale_receipt_headers", "bill_number_allocations"];
 export const VENUE_SERVICE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,

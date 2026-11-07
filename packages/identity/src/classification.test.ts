@@ -1,19 +1,11 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { tablesCreatedBy } from "@waitron/sync-enrolment";
-import { IDENTITY_CLASSIFICATION } from "./classification.js";
+import { CORE_CLASSIFICATION } from "@waitron/db";
+import { IDENTITY_TABLES } from "./classification.js";
 
-const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
-
-function tablesInDrizzle(): Set<string> {
-  return tablesCreatedBy(
-    readdirSync(DRIZZLE)
-      .filter((f) => f.endsWith(".sql"))
-      .sort()
-      .map((f) => readFileSync(join(DRIZZLE, f), "utf8")),
-  );
-}
+/** This module's share of the classification of the set that holds its tables. */
+const IDENTITY_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (IDENTITY_TABLES as readonly string[]).includes(table),
+);
 
 describe("IDENTITY_CLASSIFICATION", () => {
   it("has a valid class and a non-empty reason for every entry", () => {
@@ -26,13 +18,9 @@ describe("IDENTITY_CLASSIFICATION", () => {
     const names = IDENTITY_CLASSIFICATION.map((c) => c.table);
     expect(new Set(names).size).toBe(names.length);
   });
-  it("classifies exactly the tables this module's migrations create", () => {
-    const classified = new Set(IDENTITY_CLASSIFICATION.map((c) => c.table));
-    const created = tablesInDrizzle();
-    // The control: the assertion below, which catches a NEW table nobody classified, passes
-    // against an empty `created`.
-    expect(created.size).toBeGreaterThan(0);
-    expect([...created].filter((t) => !classified.has(t)).sort()).toEqual([]);
-    expect([...classified].filter((t) => !created.has(t)).sort()).toEqual([]);
+  it("lists only tables the set holding them classifies", () => {
+    const classified = new Set(CORE_CLASSIFICATION.map((c) => c.table));
+    expect(IDENTITY_TABLES.length).toBeGreaterThan(0);
+    expect(IDENTITY_TABLES.filter((t) => !classified.has(t))).toEqual([]);
   });
 });

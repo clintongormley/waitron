@@ -6,8 +6,7 @@ import type { SignedHandoverEnvelope } from "@waitron/shared";
 export const handoverScenario = enumType(["controlled", "emergency"]);
 
 /**
- * One row for each box that took over filing. Declared `appendOnly()` in
- * `packages/handover/src/classification.ts`.
+ * One row for each box that took over filing. Declared `appendOnly()` in `../../classification.ts`.
  */
 export const handoverActivations = table(
   "handover_activations",
@@ -20,7 +19,7 @@ export const handoverActivations = table(
     destinationNodeId: id("destination_node_id").notNull(),
     /** The signed relinquishment, or the signed declaration. */
     evidence: json<SignedHandoverEnvelope<unknown>>("evidence").notNull(),
-    /** A plain id with no foreign key: `persons` is in `@waitron/identity`'s set, which is optional. */
+    /** No key yet. */
     personId: id("person_id").notNull(),
     activatedAt: tsString("activated_at").notNull(),
   },

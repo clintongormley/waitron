@@ -23,7 +23,7 @@ import { parties } from "./parties.js";
 
 export const orderDraftState = enumType(["open", "submitted", "discarded"]);
 
-// owner_id has no key because persons belongs to the identity module's migration set.
+// owner_id: no key yet.
 export const orderDrafts = table(
   "order_drafts",
   {
@@ -61,7 +61,7 @@ export const orderDraftLines = table(
     id: id("id").primaryKey().$defaultFn(newId),
     draftId: id("draft_id").notNull(),
     position: count("position").notNull(),
-    // No key: `menu_items` is in the catalogue module's migration set.
+    // No key yet.
     menuItemId: id("menu_item_id").notNull(),
     variantId: id("variant_id"),
     menuVersionId: id("menu_version_id"),

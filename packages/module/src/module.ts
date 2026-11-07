@@ -1549,7 +1549,7 @@ export interface WaitronModule {
   readonly handover?: ModuleHandoverContribution;
   readonly routes?: ModuleRoutes;
   readonly timeRecordExport?: ModuleTimeRecordExport;
-  /** Read only from enabled modules: a disabled module's tables are not migrated. */
+  /** Read only from enabled modules: a disabled module with a set of its own is not migrated. */
   readonly personalData?: ModulePersonalData;
   readonly describeShifts?: (
     tx: Transaction,
@@ -1559,11 +1559,11 @@ export interface WaitronModule {
   readonly tableRemoval?: TableRemoval;
   readonly venueService?: VenueServiceContribution;
   /** Incident codes this module claims for the dashboard alerts, and its ongoing checks. Claims are
-   * read from every module; sources only from enabled modules, since a disabled module's tables are
-   * not migrated. */
+   * read from every module; sources only from enabled modules, since a disabled module with a set
+   * of its own is not migrated. */
   readonly alerts?: ModuleAlerts;
   /** Checks whose notices are for the staff on every device that sells. Ask only enabled
-   * modules' sources: a disabled module's tables are not migrated. */
+   * modules' sources: a disabled module with a set of its own is not migrated. */
   readonly staffNotices?: readonly StaffNoticeSource[];
   readonly backup?: ModuleBackupContribution;
   readonly configurationTransfer?: ModuleConfigurationTransfer;
@@ -1579,6 +1579,28 @@ export function modulesWithSets(
   return modules.filter(
     (m): m is WaitronModule & { migrations: MigrationSetSource } => m.migrations !== undefined,
   );
+}
+
+/** The migration set holding `module`'s tables: its own, or its host's (`tablesIn`). */
+export function migrationSetOf(module: WaitronModule): string {
+  return module.tablesIn ?? module.name;
+}
+
+/** The migration sets holding the named modules' tables, de-duplicated in first-seen order. A
+ * name `modules` does not list is kept as it is, so a reader of set names still refuses it. */
+export function migrationSetsHolding(
+  modules: readonly WaitronModule[],
+  names: readonly string[],
+): string[] {
+  const byName = new Map(modules.map((module) => [module.name, module]));
+  return [
+    ...new Set(
+      names.map((name) => {
+        const module = byName.get(name);
+        return module === undefined ? name : migrationSetOf(module);
+      }),
+    ),
+  ];
 }
 
 /** Why `m` breaks "its tables live in exactly one set", or null when they do. A set-less module's

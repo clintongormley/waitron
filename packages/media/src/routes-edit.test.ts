@@ -3,13 +3,10 @@ import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, mediaImageData, mediaImageEdits } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
-  IDENTITY_MIGRATIONS,
   managementSessions,
   persons,
   registerModulePermissions,
@@ -18,7 +15,6 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import { type ReceiptLogoRasters } from "@waitron/shared";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 import { DEFAULT_FRAMING } from "./framing.js";
 import { readImage, readImageBytes, updateImage, uploadImage } from "./images.js";
@@ -27,13 +23,7 @@ import * as renditionRendering from "./renditions.js";
 
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    MEDIA_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 const first = await samplePreparedImage({ width: 20, height: 12 });
 const replacement = await sampleImage({ width: 30, height: 20, format: "png" });

@@ -64,3 +64,12 @@ export * from "./business-day-clock.js";
 export * from "./tender-refunds.js";
 
 export * from "./bill-edit-states.js";
+
+// The tables of the modules whose tables live in core's set.
+export * from "./credentials/index.js";
+export * from "./media/index.js";
+export * from "./handover/index.js";
+export * from "./identity/index.js";
+export * from "./catalogue/index.js";
+export * from "./adjustments/index.js";
+export * from "./venue-service/index.js";

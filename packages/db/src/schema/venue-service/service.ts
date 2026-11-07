@@ -271,8 +271,8 @@ export const workingLineContexts = table(
     dietDerivation: json<unknown>("diet_derivation"),
     dietOverride: json<unknown>("diet_override"),
     latePeriodName: label("late_period_name"),
-    // No foreign key: people live in identity's migration set; the writer takes the id from the
-    // same request's session or its manager authorisation.
+    // No key yet; the writer takes the id from the same request's session or its manager
+    // authorisation.
     lateConfirmedBy: id("late_confirmed_by"),
   },
   (t) => [

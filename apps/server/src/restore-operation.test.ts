@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, locations, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { hashPassword, persons } from "@waitron/identity";
 import {
   readOperationAuthority,
   withOperationAuthority,
@@ -15,7 +15,7 @@ import { runRestoreHooks } from "./restore.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const target = {
   locationId: "c0000000-0000-4000-8000-000000000001",
   nodeId: nodeId("c0000000-0000-4000-8000-000000000002"),

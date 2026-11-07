@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
+import { CORE_CLASSIFICATION } from "@waitron/db";
+import { VENUE_SERVICE_TABLES } from "./classification.js";
+
+/** This module's share of core's classification, which holds its tables. */
+const VENUE_SERVICE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (VENUE_SERVICE_TABLES as readonly string[]).includes(table),
+);
 
 describe("VENUE_SERVICE_CLASSIFICATION", () => {
   it("copies today's zone extensions as state", () => {
@@ -10,9 +16,7 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
     ).toEqual([["zone_extensions", "state"]]);
   });
   it("does not copy the retired local-holiday table", () => {
-    expect(VENUE_SERVICE_CLASSIFICATION.map((entry) => entry.table)).not.toContain(
-      "local_holidays",
-    );
+    expect(CORE_CLASSIFICATION.map((entry) => entry.table)).not.toContain("local_holidays");
   });
   it("copies a period's staff-only menu choices as state", () => {
     expect(

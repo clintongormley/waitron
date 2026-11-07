@@ -16,7 +16,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   listContentTranslationGaps,
   readContentLanguages,
@@ -33,7 +32,7 @@ import { setIncludeFolder } from "./include-folder.js";
 import { addMember, createSectionIn } from "./sections.js";
 import { setProductVariants } from "./variants.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // A Barcelona venue whose default is Spanish: Catalan is the region's other required language and
 // English is an extra one.

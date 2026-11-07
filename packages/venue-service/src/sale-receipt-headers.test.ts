@@ -1,25 +1,13 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, invoiceSeries, sales, venueLocationId } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { appendOnlyTablesIn } from "@waitron/sync-enrolment";
-import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 
-const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    {
-      ...VENUE_SERVICE_MIGRATIONS,
-      appendOnlyTables: appendOnlyTablesIn(VENUE_SERVICE_CLASSIFICATION),
-    },
-  ],
-});
+// Core's set carries `sale_receipt_headers` among its append-only tables.
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let db: Database;
 beforeAll(() => {
   db = suite.db;

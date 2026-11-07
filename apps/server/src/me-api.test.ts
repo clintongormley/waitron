@@ -6,7 +6,6 @@ import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  IDENTITY_MIGRATIONS,
   hashPin,
   registerModulePermissions,
   startManagementSession,
@@ -59,7 +58,7 @@ let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedVenue(db, {

@@ -5,7 +5,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPassword,
   hashSessionToken,
-  IDENTITY_MIGRATIONS,
   managementSessions,
   verifyPassword,
 } from "@waitron/identity";
@@ -22,7 +21,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 /** A password throttle that also records each outcome its attempts finish with. */

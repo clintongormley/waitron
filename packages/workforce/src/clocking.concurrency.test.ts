@@ -12,14 +12,13 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError, jobOrigin } from "@waitron/shared";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
 import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
 import { readChain } from "./chain.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 const backend = new WorkforceBackend();

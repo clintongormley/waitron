@@ -37,7 +37,6 @@ export const unitSeedStates = table(
   (t) => [check("unit_seed_states_singleton_ck", sql`${t.id} = 1`)],
 );
 
-/** Catalogue-owned assignment avoids a core migration depending on the catalogue migration set. */
 export const productUnits = table(
   "product_units",
   {

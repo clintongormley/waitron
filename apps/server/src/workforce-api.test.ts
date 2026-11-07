@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import {
   WORKFORCE_MIGRATIONS,
   absences,
@@ -27,7 +27,7 @@ let staffCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     const seeded = await withTransaction(db, async (tx) => {

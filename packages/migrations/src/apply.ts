@@ -117,8 +117,8 @@ async function runSet(db: Database, set: VenueMigrationOptions): Promise<void> {
  * Drizzle decides what to apply from `max(created_at)` alone, so a migration whose `when` sits below
  * a value the database already recorded is skipped, and nothing is raised.
  *
- * `applied < expected`, not `!==`: a journal holding MORE rows than this image ships is a database
- * migrated by a NEWER image, a different fault with its own code (`provisioning.database_ahead`).
+ * `applied < expected`, not `!==`: a journal holding MORE rows than this image ships was written by
+ * a different version, a fault with its own code (`provisioning.database_ahead`).
  *
  * `expected` is read from `set.migrationsFolder` exactly as drizzle's migrator reads it, not through
  * `expectedSchemaVersion`, which would resolve a relative folder against the parent of this

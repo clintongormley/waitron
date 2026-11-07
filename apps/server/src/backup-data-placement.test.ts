@@ -1,5 +1,5 @@
 import { nodeDumpEntry } from "./testing/node-copy.js";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,8 +10,9 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { tenants, locations, nodes, invoiceSeries, catalogues } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
-import { migrationOptionsFor, expectedSchemaVersion } from "@waitron/migrations";
+import { expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
+import { migrationsRootWith } from "./testing/migrations-ahead.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { buildManifest } from "./backup-manifest.js";
@@ -45,37 +46,28 @@ async function syncs(run: () => Promise<unknown>): Promise<string[]> {
 }
 
 const modules = ALL_MODULES.filter((m) => ["core", "catalogue"].includes(m.name));
-const options = migrationOptionsFor(orderedMigrationSets(modules), null);
-const catalogue = options.find((s) => s.migrationsTable === "__drizzle_migrations_catalogue")!;
-const journal = JSON.parse(
-  readFileSync(join(catalogue.migrationsFolder, "meta/_journal.json"), "utf8"),
-) as {
-  entries: { tag: string }[];
+const sets = orderedMigrationSets(modules);
+// The backup's database stands one core step behind the code that places it: its own last
+// step drops the two columns the code's next step adds back.
+const withoutCursor = {
+  tag: "9998_drop_collect_cursor",
+  sql: "ALTER TABLE `content_suggestion_jobs` DROP COLUMN `collect_cursor`;--> statement-breakpoint\nALTER TABLE `content_suggestion_jobs` DROP COLUMN `collected_refs`;",
 };
-const boundary = journal.entries.findIndex(
-  (e) => e.tag === "0034_content_suggestion_collect_cursor",
-);
-if (boundary < 0) throw new Error("catalogue predecessor boundary missing");
-let predecessor: string | undefined;
-afterAll(() => {
-  if (predecessor !== undefined) rmSync(predecessor, { recursive: true, force: true });
+const withCursor = {
+  tag: "9999_content_suggestion_collect_cursor",
+  sql: "ALTER TABLE `content_suggestion_jobs` ADD `collect_cursor` integer;--> statement-breakpoint\nALTER TABLE `content_suggestion_jobs` ADD `collected_refs` text DEFAULT '[]' NOT NULL;",
+};
+const scratchRoot = mkdtempSync(join(tmpdir(), "a850-catalogue-predecessor-"));
+afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
+const olderRoot = migrationsRootWith(join(scratchRoot, "older"), { core: [withoutCursor] });
+const codeRoot = migrationsRootWith(join(scratchRoot, "code"), {
+  core: [withoutCursor, withCursor],
 });
-try {
-  predecessor = mkdtempSync(join(tmpdir(), "a850-catalogue-predecessor-"));
-  cpSync(catalogue.migrationsFolder, predecessor, { recursive: true });
-  writeFileSync(
-    join(predecessor, "meta/_journal.json"),
-    JSON.stringify({ ...journal, entries: journal.entries.slice(0, boundary) }),
-  );
-} catch (error) {
-  if (predecessor !== undefined) rmSync(predecessor, { recursive: true, force: true });
-  throw error;
-}
 const node = "20000000-0000-4000-8000-000000000002";
 const location = "10000000-0000-4000-8000-000000000001";
 const capturedAt = "2026-10-20T08:00:00.000Z";
 const suite = useVenueDb({
-  migrations: options.map((s) => (s === catalogue ? { ...s, migrationsFolder: predecessor! } : s)),
+  migrations: migrationOptionsFor(sets, olderRoot),
   resetPerTest: false,
   setup: async (db) => {
     await db
@@ -162,7 +154,7 @@ async function fixture() {
     venueDir,
     artifactPath: join(root, "input.enc"),
     recoveryKey: "archive-key",
-    migrationsRoot: null,
+    migrationsRoot: codeRoot,
     environment: "preproduction" as const,
     modules: modules.map<WaitronModule>((m) => ({
       ...m,
@@ -287,8 +279,8 @@ it("migrates the populated catalogue predecessor and preserves every original co
   expect(after.foreignKeys).toEqual([]);
   const db = new DatabaseSync(join(f.venueDir, "venue.db"));
   try {
-    expect(db.prepare("select count(*) as n from __drizzle_migrations_catalogue").get()).toEqual({
-      n: expectedSchemaVersion(modules[1]!.migrations!, null),
+    expect(db.prepare("select count(*) as n from __drizzle_migrations_db").get()).toEqual({
+      n: expectedSchemaVersion(modules[0]!.migrations!, f.migrationsRoot),
     });
     expect(() => db.exec("update menu_versions set published_at = null")).toThrow(/append.only/i);
   } finally {

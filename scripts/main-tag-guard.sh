@@ -7,8 +7,7 @@
 # `concurrency:` block), so two merges landing close together build at the same time and the run
 # that finishes LAST is not always the one carrying the newest commit. A registry tag is
 # last-write-wins, so the older run would retag `:main` and pull every box following that tag back
-# onto an older image. The immutable `sha-` tag is never affected: it names one commit and is always
-# published.
+# onto an older image. The immutable `sha-` tag names one commit, and a `hold` still publishes it.
 #
 # WHAT IT DOES NOT BUY. This is a question asked before the build, not a compare-and-swap at the
 # registry. It covers the case this repository actually hits — a newer run that has ALREADY
@@ -24,9 +23,13 @@
 #
 # It fails rather than guessing. For a transient registry error the next merge repairs it. Two
 # states are NOT self-repairing and need a person: a `:main` carrying no `WAITRON_BUILD_ID`, and one
-# built from a commit this repository's history does not contain (an image built outside CI, or a
-# rewritten history). Both wedge every later publish identically until `:main` is deleted or retagged
-# by hand. Publishing stops; the `sha-` tags keep coming.
+# built from a commit GitHub's comparison cannot place against the commit being published: any
+# comparison GitHub refuses fails the script, including one against an old tip GitHub no longer
+# holds. A rewritten history that keeps a commit in common with the old tip can still compare and
+# move. Either state wedges every later publish until `:main` is deleted or retagged by hand. Read
+# from ci.yml, not run: this script runs inside its "Work out the tags to publish" step and the steps
+# after it carry no `if:`, so while it fails nothing is published, `sha-` tag included. The dated
+# probes are in docs/developers/ci-and-gates.md.
 set -eu
 
 IMAGE=${1:-}

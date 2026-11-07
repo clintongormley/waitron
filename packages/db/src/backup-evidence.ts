@@ -5,7 +5,7 @@ import { createPrivateKey, createPublicKey } from "node:crypto";
 import { isTable } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import type { DeploymentEnvironment } from "./deployment.js";
-import { CORE_CLASSIFICATION } from "./classification.js";
+import { CORE_OWN_CLASSIFICATION } from "./classification.js";
 import { computeAmendmentHash } from "./order-amendment-hash.js";
 import * as schema from "./schema/index.js";
 
@@ -93,7 +93,7 @@ export async function compareBackupTables(input: {
   return true;
 }
 
-export const CORE_BACKUP_TABLE_POLICIES: readonly BackupTablePolicy[] = CORE_CLASSIFICATION.map(
+export const CORE_BACKUP_TABLE_POLICIES: readonly BackupTablePolicy[] = CORE_OWN_CLASSIFICATION.map(
   (entry) => ({
     table: entry.table,
     immutable:

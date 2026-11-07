@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  CREDENTIALS_MIGRATIONS,
   loadKeyRing,
   putCredential,
   sealNodeSigningKeyTx,
@@ -61,7 +60,7 @@ const generationOf = (view: ReturnType<StreamHost["status"]>): string =>
 
 describe("the live copy's wiring", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
     timeoutMs: 60_000,
   });
   let db: Database;

@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { captureError, CORE_CLASSIFICATION, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { CATALOGUE_CLASSIFICATION } from "./classification.js";
+import { CATALOGUE_TABLES } from "./classification.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import {
   createOptionList,
@@ -22,7 +21,12 @@ import {
 // Nothing is seeded at the suite level: with no `content_languages` row, `readContentLanguages`
 // falls back to the language passed in. The tests that create products seed the taxpayer row
 // themselves.
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+/** This module's share of core's classification, which holds its tables. */
+const CATALOGUE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (CATALOGUE_TABLES as readonly string[]).includes(table),
+);
+
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
 

@@ -13,7 +13,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -24,7 +23,7 @@ import {
   type ProfilePrinterLists,
 } from "./device-printers.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 function lists(partial: Partial<ProfilePrinterLists>): ProfilePrinterLists {
   return {

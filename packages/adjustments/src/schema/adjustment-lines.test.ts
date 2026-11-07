@@ -14,12 +14,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
-import { ADJUSTMENTS_MIGRATIONS } from "../migrations.js";
 import { policySnapshotOf } from "../policy.js";
 import { recordAdjustment } from "../record.js";
 import { seedReason, seedWorkingOrder } from "../../test/seed.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let db: Database;
 beforeAll(() => {

@@ -4,15 +4,8 @@ import { CORE_MIGRATIONS, locations, kitchenStations, type Database } from "@wai
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import {
-  VENUE_SERVICE_MIGRATIONS,
-  departments,
-  seasons,
-  specialDays,
-  specialDayDates,
-} from "@waitron/venue-service";
+import { persons } from "@waitron/identity";
+import { departments, seasons, specialDays, specialDayDates } from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,
   personStaffRoles,
@@ -21,20 +14,25 @@ import {
   staffingBlocks,
   staffingDays,
   staffRoles,
+  WORKFORCE_CLASSIFICATION,
 } from "@waitron/workforce";
 import { STAFFING_BACKUP_VERIFICATION as OWNER } from "./index.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
-import { STAFFING_CLASSIFICATION } from "./classification.js";
-const prerequisites = [
-  CORE_MIGRATIONS,
-  CATALOGUE_MIGRATIONS,
-  VENUE_SERVICE_MIGRATIONS,
-  IDENTITY_MIGRATIONS,
-  WORKFORCE_MIGRATIONS,
-];
-const original = useVenueDb({ migrations: [...prerequisites, STAFFING_MIGRATIONS] });
-const restored = useVenueDb({ migrations: [...prerequisites, STAFFING_MIGRATIONS] });
-const absent = useVenueDb({ migrations: prerequisites });
+import { STAFFING_TABLES } from "./classification.js";
+
+/** This module's share of workforce's classification, which holds its tables. */
+const STAFFING_CLASSIFICATION = WORKFORCE_CLASSIFICATION.filter(({ table }) =>
+  (STAFFING_TABLES as readonly string[]).includes(table),
+);
+const prerequisites = [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS];
+const original = useVenueDb({ migrations: prerequisites });
+const restored = useVenueDb({ migrations: prerequisites });
+const absent = useVenueDb({
+  migrations: prerequisites,
+  // A source from before these tables existed: workforce's set now creates them, so they are dropped.
+  setup: async (db) => {
+    for (const table of [...STAFFING_TABLES].reverse()) db.run(sql.raw(`drop table "${table}"`));
+  },
+});
 beforeEach(async () => {
   for (const suite of [original, restored]) {
     const db = suite.db;

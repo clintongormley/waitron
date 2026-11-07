@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import {
-  CORE_MIGRATIONS,
   captureError,
   engineErrorMessage,
   installChangeFeed,
@@ -14,22 +13,21 @@ import {
 } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 import { computeEntryHash } from "./chain-hash.js";
-import { WORKFORCE_MIGRATIONS } from "./migrations.js";
+import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const previousFolder = mkdtempSync(join(tmpdir(), "a10-workforce-before-"));
 mkdirSync(join(previousFolder, "meta"));
 const journal = JSON.parse(
-  readFileSync(join(WORKFORCE_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
+  readFileSync(join(historicalSet("workforce").migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as { entries: { tag: string }[] };
 journal.entries = journal.entries.slice(0, 4);
 writeFileSync(join(previousFolder, "meta/_journal.json"), JSON.stringify(journal));
 for (const { tag } of journal.entries) {
   copyFileSync(
-    join(WORKFORCE_MIGRATIONS.migrationsFolder, `${tag}.sql`),
+    join(historicalSet("workforce").migrationsFolder, `${tag}.sql`),
     join(previousFolder, `${tag}.sql`),
   );
 }
@@ -39,10 +37,10 @@ describe("populated automatic-author upgrade", () => {
   const suite = useVenueDb({
     resetPerTest: false,
     migrations: [
-      CORE_MIGRATIONS,
-      IDENTITY_MIGRATIONS,
+      historicalSet("core"),
+      historicalSet("identity"),
       {
-        ...WORKFORCE_MIGRATIONS,
+        ...historicalSet("workforce"),
         migrationsFolder: previousFolder,
         appendOnlyTables: ["time_entries"],
       },
@@ -103,7 +101,7 @@ describe("populated automatic-author upgrade", () => {
     const headBefore = suite.db.execute(sql`select * from workforce_chains`).rows;
     await installChangeFeed(suite.db, [{ table: "time_entries", type: "time_entries" }]);
     removeChangeFeed(suite.db);
-    const error = await captureError(() => runMigrations(suite.db, WORKFORCE_MIGRATIONS));
+    const error = await captureError(() => runMigrations(suite.db, historicalSet("workforce")));
     expect(engineErrorMessage(error)).toContain("FOREIGN KEY constraint failed");
     expect((error as Error).message).toContain("DROP TABLE `time_entries`");
     expect(suite.db.execute(sql`select * from time_entries order by sequence_no`).rows).toEqual(
@@ -120,10 +118,10 @@ describe("empty automatic-author upgrade", () => {
   const suite = useVenueDb({
     resetPerTest: false,
     migrations: [
-      CORE_MIGRATIONS,
-      IDENTITY_MIGRATIONS,
+      historicalSet("core"),
+      historicalSet("identity"),
       {
-        ...WORKFORCE_MIGRATIONS,
+        ...historicalSet("workforce"),
         migrationsFolder: previousFolder,
         appendOnlyTables: ["time_entries"],
       },
@@ -132,7 +130,7 @@ describe("empty automatic-author upgrade", () => {
 
   it("stores an explicit automatic author without attributing it to a person on an empty upgrade", async () => {
     removeChangeFeed(suite.db);
-    await runMigrations(suite.db, WORKFORCE_MIGRATIONS);
+    await runMigrations(suite.db, historicalSet("workforce"));
     await seedTenant(suite.db);
     const personId = await seedPerson(suite.db);
     const locationId = await seedLocation(suite.db);

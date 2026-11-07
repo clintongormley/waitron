@@ -12,10 +12,8 @@ import {
   zoneDayRanges,
   zoneDays,
 } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import * as closures from "./zone-closed-times.js";
@@ -28,7 +26,7 @@ import { readSpecialDay, saveSpecialDay } from "./special-days.js";
 import { starterSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const at = new Date("2030-10-07T10:00:00Z");
 const night = [{ startsAt: "23:00", endsAt: "06:00" }];

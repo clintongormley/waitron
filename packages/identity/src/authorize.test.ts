@@ -3,7 +3,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it, vi } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { authorize, authorizeByPin } from "./authorize.js";
 import { registerModulePermissions } from "./permissions.js";
 import { checkPin } from "./credential.js";
@@ -13,7 +12,7 @@ import { codeOf, openSession, refusalOf, seedPerson, seedSessionDevice } from ".
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

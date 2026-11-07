@@ -39,6 +39,11 @@ describe("readModuleConfig", () => {
     const err = await readModuleConfig(dir).catch((e) => e);
     expect(isAppError(err) && err.code).toBe("module.config_unknown");
   });
+  it("a file naming scheduler throws module.config_unknown: it is part of payments, not a module", async () => {
+    writeFileSync(join(dir, "modules.json"), JSON.stringify({ modules: { scheduler: false } }));
+    const err = await readModuleConfig(dir).catch((e) => e);
+    expect(isAppError(err) && err.code).toBe("module.config_unknown");
+  });
   it("rethrows a non-ENOENT read error (e.g. modules.json is a directory)", async () => {
     mkdirSync(join(dir, "modules.json"));
     const err = await readModuleConfig(dir).catch((e) => e);

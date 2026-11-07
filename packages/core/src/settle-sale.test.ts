@@ -19,14 +19,13 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
 

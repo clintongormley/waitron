@@ -218,7 +218,7 @@ describe("section details", () => {
       [{ color: "#ABCDEF" }, { field: "color" }],
       [{ color: "red" }, { field: "color" }],
       [{ image: 7 as unknown as string }, { field: "image" }],
-      // No media module is migrated here, so no image can exist.
+      // No media row holds this file.
       [{ image: `${"a".repeat(64)}.jpg` }, { field: "image" }],
     ];
     for (const [patch, params] of refused) {

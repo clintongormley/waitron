@@ -54,7 +54,7 @@ export type StagedInvoiceDelivery =
  * or change its invoice choice, recipient and receipt language with a revision advance before a
  * sale exists, or only take its handover stamp; `settled` and `abandoned` are terminal,
  * save the handover stamp on a settled order and, before that stamp, a settled order
- * leaving its party (`0185_settled_order_to_counter.sql`). In any state, an order holding a
+ * leaving its party. In any state, an order holding a
  * `delivery_table_id` and no `delivery_table_label` may let go of the id,
  * keeping the name in the label; the label is otherwise free only while the
  * order is open or as a placed order is settled or abandoned.
@@ -214,8 +214,7 @@ export const workingOrderLines = table(
     // The party's group the line is released with; an extras child carries its dish's. Null on a
     // bill with no party.
     groupId: id("group_id"),
-    // Whose sale the line counts as. A plain person id with no key: `persons` is in
-    // @waitron/identity's migration set, not the core one.
+    // Whose sale the line counts as. A plain person id: no key yet.
     creditedTo: id("credited_to"),
     // The unit price the line had when an adjustment first touched it, never changed after; null
     // on a line no adjustment has touched. Filing reads `unit_price_gross`, never this.

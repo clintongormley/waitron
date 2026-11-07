@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { VENUE_SERVICE_MIGRATIONS, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,
   personStaffRoles,
@@ -12,19 +10,11 @@ import {
   staffRoles,
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_PERSONAL_DATA } from "./personal-data.js";
 import * as staffing from "./index.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 const subject = (personId: string) => ({

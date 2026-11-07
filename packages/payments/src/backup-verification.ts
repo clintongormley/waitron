@@ -12,7 +12,7 @@ import {
   type BackupVerificationContribution,
 } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
-import { PAYMENTS_CLASSIFICATION } from "./classification.js";
+import { PAYMENTS_OWN_CLASSIFICATION } from "./classification.js";
 import * as schema from "./schema/index.js";
 import type { CardProviderContribution } from "./card-provider.js";
 
@@ -21,10 +21,10 @@ type BackupProvider = Pick<
   "providerId" | "credentialPurpose" | "verifyBackupCredential"
 >;
 
-const tables = PAYMENTS_CLASSIFICATION.map((entry) => entry.table);
-const immutableTables = PAYMENTS_CLASSIFICATION.filter((entry) => entry.appendOnly === true).map(
-  (entry) => entry.table,
-);
+const tables = PAYMENTS_OWN_CLASSIFICATION.map((entry) => entry.table);
+const immutableTables = PAYMENTS_OWN_CLASSIFICATION.filter(
+  (entry) => entry.appendOnly === true,
+).map((entry) => entry.table);
 export function paymentsBackupVerification(
   providers: readonly BackupProvider[],
 ): BackupVerificationContribution {

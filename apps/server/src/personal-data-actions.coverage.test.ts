@@ -168,7 +168,7 @@ const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }>
 
 const ROOT_UNEXPORTED = ["change_log", "node_membership"];
 
-// Module tables the root also exports; each module's own migration set creates them.
+// Module tables the root also exports; the core migration set creates them with the rest.
 const MODULE_SCHEMAS = [
   adjustmentsSchema,
   catalogueSchema,
@@ -179,6 +179,11 @@ const MODULE_SCHEMAS = [
   venueServiceSchema,
 ];
 const moduleTables = new Set<unknown>(MODULE_SCHEMAS.flatMap((schema) => Object.values(schema)));
+const moduleTableNames = new Set(
+  [...moduleTables].flatMap((value) =>
+    is(value, SQLiteTable) ? [getTableConfig(value).name] : [],
+  ),
+);
 
 const tables = Object.values(db).flatMap((value) =>
   is(value, SQLiteTable) && !moduleTables.has(value) ? [getTableConfig(value)] : [],
@@ -221,7 +226,7 @@ describe("actions personal-data classification", () => {
     const walked = tables.map((config) => config.name).sort();
     const expected = newestSnapshot()
       .map((table) => table.name)
-      .filter((name) => !ROOT_UNEXPORTED.includes(name))
+      .filter((name) => !ROOT_UNEXPORTED.includes(name) && !moduleTableNames.has(name))
       .sort();
     expect(walked).toEqual(expected);
   });

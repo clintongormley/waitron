@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedEmployment } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -19,7 +19,7 @@ import { recordInPeriod } from "./record-period.js";
 const backend = new WorkforceBackend(),
   origin = jobOrigin("dashboard");
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 let personId: string, manager: string, other: string, locationId: string, nodeId: string;

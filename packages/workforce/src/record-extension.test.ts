@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { computeEntryHash, verifyChain, type EntryHashInput } from "./chain-hash.js";
@@ -67,7 +66,7 @@ describe("record extension hash", () => {
 });
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 let personId: string;
 let locationId: string;

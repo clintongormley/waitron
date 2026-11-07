@@ -34,9 +34,8 @@ export const paymentHoldOutcomes = table(
     holdId: id("hold_id").notNull(),
     outcome: paymentHoldOutcome("outcome").notNull(),
     note: label("note"),
-    // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require. The outcome route takes the id from `authorizeManager`, which resolves it from the
-    // management session in the same transaction.
+    // No key yet. The outcome route takes the id from `authorizeManager`, which resolves it from
+    // the management session in the same transaction.
     personId: id("person_id").notNull(),
     recordedAt: tsString("recorded_at").notNull(),
   },

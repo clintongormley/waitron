@@ -11,7 +11,7 @@ CREATE TABLE `bookings` (
 	`tab_id` text,
 	`status` text DEFAULT 'booked' NOT NULL,
 	`created_by` text NOT NULL,
-	`created_at` text NOT NULL,
+	`created_at` text NOT NULL, `table_label` text,
 	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`tab_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE no action,
@@ -19,5 +19,6 @@ CREATE TABLE `bookings` (
 	CONSTRAINT "bookings_status_ck" CHECK("bookings"."status" in ('booked', 'seated', 'completed', 'no_show', 'cancelled'))
 );
 --> statement-breakpoint
-CREATE INDEX `bookings_location_date_idx` ON `bookings` (`location_id`,`booking_date`);--> statement-breakpoint
+CREATE INDEX `bookings_location_date_idx` ON `bookings` (`location_id`,`booking_date`);
+--> statement-breakpoint
 CREATE INDEX `bookings_table_status_date_time_idx` ON `bookings` (`table_id`,`status`,`booking_date`,`booking_time`);

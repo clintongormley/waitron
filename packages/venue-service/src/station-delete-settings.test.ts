@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS, createProduct } from "@waitron/catalogue";
+import { createProduct } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
@@ -27,7 +27,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import * as module from "./index.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   readDeviceKitchenScreens,
   readProfileKitchenScreens,
@@ -44,7 +43,7 @@ import {
 import { stationServiceTimes } from "./station-service-times.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(() => {

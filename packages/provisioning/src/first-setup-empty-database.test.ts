@@ -83,7 +83,7 @@ it.each([
   ["unknown journal", 'create table "__drizzle_migrations_unknown" (hash text)'],
   ["missing module table", 'drop table "scheduled_runs"'],
   ["missing module column", 'alter table "scheduled_runs" drop column "summary"'],
-  ["missing module journal", 'drop table "__drizzle_migrations_scheduler"'],
+  ["missing module journal", 'drop table "__drizzle_migrations_bookings"'],
   ["view", 'create view "retained_view" as select * from catalogues'],
 ])("refuses a %s instead of certifying an incomplete or unknown schema", async (_name, edit) => {
   expect(await inspect((connection) => connection.exec(edit))).toBe(false);
@@ -95,11 +95,11 @@ it("refuses a completely missing required module, including its journal", async 
   expect(
     await inspect(
       (connection) => {
-        connection.exec('drop table "scheduled_runs"');
-        connection.exec('drop table "__drizzle_migrations_scheduler"');
+        connection.exec('drop table "bookings"');
+        connection.exec('drop table "__drizzle_migrations_bookings"');
       },
       null,
-      ["core", "scheduler"],
+      ["core", "bookings"],
     ),
   ).toBe(false);
 });

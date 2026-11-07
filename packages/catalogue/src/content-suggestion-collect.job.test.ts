@@ -17,7 +17,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCategory } from "./categories.js";
 import {
   createCatalogue,
@@ -41,7 +40,7 @@ import {
   type SuggestionJobDraft,
 } from "./content-suggestion-collect.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const THREE: ContentLanguages = { defaultLanguage: "ca", languages: ["ca", "es", "en"] };
 const context = { fallbackLanguage: "ca", required: [] };
 const LUNCH_NAMES = { ca: "CLIENT-CA Dinar", es: "CLIENT-ES Dinar", en: "CLIENT-EN Dinar" };

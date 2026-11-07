@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import { ALL_MODULES } from "@waitron/composition";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { join } from "node:path";
@@ -66,7 +67,11 @@ async function fixture(phase: "active" | "claim" | "abandon" = "active") {
     await fs.writeFile(markerPath, JSON.stringify(marker));
   }
   await database.db.archiveTo(join(roots.venueDir, "venue.db"));
-  const resolution = createFirstSetupResolutionInspection({ ...roots, store });
+  const resolution = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
+    ...roots,
+    store,
+  });
   const recover = async (password = PASSWORD) => {
     const inspection = await resolution.inspectFirstSetupResolution();
     const nonce = randomBytes(32).toString("base64url");

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   buildMenuDocument,
   createCatalogue,
   menuDocumentHash,
@@ -33,7 +32,6 @@ import { resolveDepartmentDays } from "./day-resolver.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { readRoutingUses, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 import { ensureDefaultSeasons } from "./seasons.js";
@@ -41,7 +39,7 @@ import { saveSpecialDay } from "./special-days.js";
 import { starterSeasonName, type StarterSeason } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

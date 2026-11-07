@@ -1,4 +1,5 @@
 import * as filesystem from "node:fs/promises";
+import { ALL_MODULES } from "@waitron/composition";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
@@ -39,6 +40,7 @@ it.each(["local", "outside-file", "receipt"])(
       coordinator: createFirstSetupCoordinator(),
     });
     const service = createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
       stateDir,
       venueDir,
       store,
@@ -96,6 +98,7 @@ it.each([
     coordinator: createFirstSetupCoordinator(),
   });
   const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
     stateDir,
     venueDir,
     store,
@@ -144,6 +147,7 @@ it.each(["local", "outside"])(
       coordinator: createFirstSetupCoordinator(),
     });
     const service = createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
       stateDir,
       venueDir,
       store,

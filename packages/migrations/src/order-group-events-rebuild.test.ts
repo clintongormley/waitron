@@ -5,7 +5,8 @@ import { sql } from "drizzle-orm";
 import { afterAll, expect, it } from "vitest";
 import { captureError, openVenueDatabase, triggerRaised, type Database } from "@waitron/db";
 import { applyMigrations } from "./apply.js";
-import { manifestSets, migrationOptionsFor, type VenueMigrationOptions } from "./manifest.js";
+import type { VenueMigrationOptions } from "./manifest.js";
+import { historicalSets } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 
 const PARTY = "cccccccc-0000-4000-8000-000000000001";
 const EVENT = "cccccccc-0000-4000-8000-000000000002";
@@ -33,7 +34,7 @@ function coreCut(
   const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: { tag: string }[] };
   journal.entries = journal.entries.slice(0, cut(journal.entries));
   writeFileSync(path, JSON.stringify(journal));
-  // Today's append-only list names tables later migrations create; keep only the cut's own.
+  // The set's append-only list names tables later migrations create; keep only the cut's own.
   const created = new Set(
     journal.entries.flatMap(({ tag }) =>
       [...readFileSync(join(staged, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE `(\w+)`/g)].map(
@@ -59,7 +60,7 @@ function coreBeforeRebuild(core: VenueMigrationOptions): VenueMigrationOptions {
 }
 
 /** Core cut before `0201_retire_main_bill_triggers`: a box holding a party cannot take its
- * `0202_retire_main_bill` without a venue reset (`RESETS` in `scripts/migration-upgrade.test.ts`). */
+ * `0202_retire_main_bill` without a venue reset. */
 function coreBeforeMainBillRetired(core: VenueMigrationOptions): VenueMigrationOptions {
   return coreCut(core, (entries) => {
     const retired = entries.findIndex(({ tag }) => tag.endsWith("_retire_main_bill_triggers"));
@@ -78,8 +79,8 @@ async function inVenue<T>(directory: string, body: (db: Database) => Promise<T> 
 }
 
 it("keeps an event written before the rebuild, and a start's migrate still refuses its update and delete", async () => {
-  const sets = migrationOptionsFor(manifestSets(), null);
-  const core = sets.find((set) => set.migrationsTable === "__drizzle_migrations_db")!;
+  const sets = historicalSets();
+  const core = sets.find((set) => set.name === "core")!;
   const directory = scratchDir("wt-order-group-events-venue-");
   await applyMigrations(directory, [coreBeforeRebuild(core)]);
   const now = new Date().toISOString();

@@ -7,7 +7,6 @@ import {
 } from "../test/attendance-export-fixture.js";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { renderAttendancePdf } from "./attendance-export-pdf.js";
 import { renderAttendanceCsv } from "./attendance-export-csv.js";
@@ -161,7 +160,7 @@ describe("working-time PDF", () => {
 
 describe("real provider document bytes", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   });
   it("keeps names and provenance but omits profile data and representatives live and frozen reasons in both formats", async () => {
     const fixture = await seedAttendanceExport(suite.db);

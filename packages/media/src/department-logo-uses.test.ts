@@ -1,6 +1,5 @@
 import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, tenantReceipts, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -9,14 +8,12 @@ import {
   deleteDepartment,
   departmentReceipts,
   departments,
-  VENUE_SERVICE_MIGRATIONS,
 } from "@waitron/venue-service";
 import { deleteImage, listImages, listImageUsages, readImage, uploadImage } from "./images.js";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const photo = await samplePreparedImage({ width: 19 });
 

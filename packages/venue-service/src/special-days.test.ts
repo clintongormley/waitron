@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   buildMenuDocument,
   createCatalogue,
   menuDocumentHash,
@@ -25,7 +24,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import {
   deleteSpecialDay,
@@ -35,7 +33,7 @@ import {
 } from "./special-days.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

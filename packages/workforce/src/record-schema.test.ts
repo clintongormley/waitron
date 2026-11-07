@@ -3,12 +3,11 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, newId, captureError, engineErrorMessage } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 let personId: string, otherPersonId: string, locationId: string, nodeId: string;
 beforeEach(async () => {

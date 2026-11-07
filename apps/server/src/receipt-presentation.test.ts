@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
@@ -12,20 +11,15 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  VENUE_SERVICE_MIGRATIONS,
-  departments,
-  departmentReceipts,
-  saleReceiptHeaders,
-} from "@waitron/venue-service";
+import { departments, departmentReceipts, saleReceiptHeaders } from "@waitron/venue-service";
 import { readReceiptPresentation } from "./receipt-presentation.js";
-import { MEDIA_MIGRATIONS, uploadImage, saveImage, readPresentations } from "@waitron/media";
+import { uploadImage, saveImage, readPresentations } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import * as media from "@waitron/media";
 import { putThemeInUse, UNTRUSTED_CASES, type UntrustedCase } from "./testing/theme-logo.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 async function fixture(header: "department" | "null" | "absent" = "department") {
   await seedVenue(suite.db, {

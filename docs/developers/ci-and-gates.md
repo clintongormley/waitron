@@ -397,7 +397,7 @@ nothing notices is behaviour no test is checking. `thresholds.break` turns that 
 Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 `packages/shared` since July 2026, `packages/fiscal` under the owner's 2026-09-19 decision that
 the target is 90 everywhere, and `packages/node-db` and `packages/handover` from their first commits. `packages/db`, `packages/ui` and `packages/ui-core` carry no `break` in
-their own configs, deliberately: CI splits each run into shards (ten for db, thirty for ui, four for
+their own configs, deliberately: CI splits each run into shards (thirteen for db, thirty for ui, four for
 ui-core), each passed its own `--mutate` list, so a `thresholds.break` there would gate one slice
 rather than the package. Their bars live in the `mutation-db-aggregate`, `mutation-ui-aggregate`
 and `mutation-ui-core-aggregate` jobs instead, each of which merges its package's shard reports and
@@ -413,7 +413,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
-| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
+| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 | `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
 | `handover` | the unsharded `mutation-handover` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/handover mutation` fails below 90 too, because the bar is in its own config |
 
@@ -421,12 +421,9 @@ Five hedges worth carrying. `packages/node-db`'s score is taken over the mutants
 `ignoreStatic` keeps: a local `pnpm --filter @waitron/node-db exec stryker run --force` on
 2026-11-01 instrumented 153 mutants, and its report marked 50 of them `Ignored` as static and 103
 `Killed`, a score of 100.00. `packages/fiscal`'s `mutate` list names only some of its source files, so its floor
-is not a package-wide one. Neither is `packages/db`'s: one file and seven folders are out of its
-`mutate` set. The file is `src/english-only.ts`, whose only suite lives in the root vitest project and
-which nothing under `packages/db` imports, so every one of its mutants survives by construction. The
-folders are the module table definitions under `src/schema/` (`credentials`, `media`, `handover`,
-`identity`, `catalogue`, `adjustments`, `venue-service`), whose suites stay in the module packages
-until A760's Task 11 moves them. The receipt is `packages/db/stryker.config.json`'s `mutate` list;
+is not a package-wide one. Neither is `packages/db`'s: one file is out of its `mutate` set. The file
+is `src/english-only.ts`, whose only suite lives in the root vitest project and which nothing under
+`packages/db` imports, so every one of its mutants survives by construction. The receipt is `packages/db/stryker.config.json`'s `mutate` list;
 `scripts/mutation-shard.mjs` reads each sharded package's `mutate` list from that config rather than
 keeping its own copy, and `scripts/mutation-shard.test.mjs` names exactly the files db's selection
 leaves out. Nor do ui's and db's merged scores count every mutant: one whose
@@ -531,12 +528,12 @@ scheduled run was created at 05:11.
 
 ### Reading `packages/db`'s score by hand
 
-The ten shard reports are artifacts of the run, so the number can be read without waiting for the
+The shard reports are artifacts of the run, so the number can be read without waiting for the
 job:
 
 ```
 gh run download <run-id> -D /tmp/db-mut -p "mutation-report-db-shard-*"
-node scripts/mutation-aggregate.mjs /tmp/db-mut --package db --shards 10 --break 90
+node scripts/mutation-aggregate.mjs /tmp/db-mut --package db --shards 13 --break 90
 ```
 
 Two things that script does deliberately, each because the obvious version was wrong. It keys a
@@ -628,8 +625,7 @@ uncovered branches of slack, and a change that adds a few unreached `??` or `?.`
 redden the job on its own.
 
 **The mutation half, which is invisible until the nightly run.** `packages/db/stryker.config.json` mutates
-`src/**/*.ts` minus `*.test.ts`, minus `src/english-only.ts` and, until A760's Task 16, minus the
-seven module-table folders under `src/schema/`, so the moved code enters the
+`src/**/*.ts` minus `*.test.ts` and minus `src/english-only.ts`, so the moved code enters the
 mutation subject set too. On that branch `packages/db/src/testing/schema-conformance.ts` became the
 largest mutation-eligible file in the package, about half as long again as
 `packages/db/src/schema/sales.ts`. Recompute rather than trusting a figure written here:
@@ -705,14 +701,32 @@ gh run download <nightly run> -p 'mutation-report-db-shard-*' -D <scratch dir>
 node scripts/mutation-costs.mjs db packages/db/mutation-costs.json <scratch dir>/*/mutation.json
 ```
 
-Several runs can be given at once; each file takes its median. The table committed with A1309 came
-from the three runs above, so `src/testing/venue-db.ts` still carries its three old timeouts
-(about 246 s) until the next refresh.
+Several runs can be given at once; each file takes its median. A report made locally can be given too, cut as
+below. Whether a mutant timed out depends on the machine that ran it, and each timeout weighs
+82.2 s; the four local reports of 7 November had the same timeout counts the CI logs showed for
+those jobs. Before using one from a run
+that followed another in the same checkout, keep only the files its own `config.mutate` names:
+Stryker's incremental file carries the earlier run's files into the later report.
 
-The job logs, the reports, the fit and the replay are in `/Users/clintongormley/waitron-campaign-b/a1309/`,
+**The 2026-11-07 refresh (A760 part 3).** At ten shards, dispatched run 42344158863 had whole-file
+shards 4, 8, 9 and 10 cancelled at the limit, without a report. The table was rebuilt from that
+run's six reports (shards 1 to 3 and 5 to 7) and four reports of shards 4, 8, 9 and 10 made locally
+on 7 November 2026 with that shard's file list (`pnpm exec stryker run --mutate "<files>"
+--concurrency 10 --force` in `packages/db`). Against that run's job logs (from "Initial test run
+succeeded" to "MutationTestExecutor Done" or, in a cancelled shard, its last progress line), the
+model under-read the cancelled shards: shard 10 had tested 856 of its 998 mutants after 1,370 s
+against 1,078 estimated for all of them, about 1.5 times the estimate if the rest ran at the same
+pace, and shards 4 and 8 about 1.3 and 1.4 times. It over-read shards 5 and 6 (483 and 675 s
+against 752 and 1,050). The refreshed table puts about 1,065 estimated seconds in each of the
+seven whole-file shards at ten, and about 746 in each of ten at thirteen shards: about 19 minutes of
+mutation at 1.5 times, after the up to 2 min 38 s each job spent before mutating.
+
+A1309's job logs, reports, fit and replay are in `/Users/clintongormley/waitron-campaign-b/a1309/`,
+and this refresh's reports and scripts in `/Users/clintongormley/waitron-campaign/a760-p3/mut/`, both
 outside the repository.
 
-**Limits.** The model is a fit over three nights, not a measurement of any one file. The guard in
+**Limits.** The model is a fit over three nights, not a measurement of any one file, and on the
+2026-11-07 tree a shard's mutation time ran from 0.64 to about 1.5 times its estimate. The guard in
 `scripts/mutation-shard.test.mjs` checks only that db's table exists, holds positive seconds for
 unsplit `src/` files and names only files db's Stryker config still mutates, never that it is fresh. Nothing guards against another condition, in code
 that every test runs, that its own guard already implies.
@@ -1558,10 +1572,30 @@ Three things that came out of those commands and are easy to get wrong:
   on that decision.
 
 The script fails rather than guessing. A transient registry error is repaired by the next merge, but
-two states are NOT self-repairing: a `:main` carrying no build id, and one built from a commit this
-repository's history does not contain (an image built outside CI, or a rewritten history). Both
-wedge every later publish identically until `:main` is deleted or retagged by hand. Its suite,
-`scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
+two states are NOT self-repairing: a `:main` carrying no build id, and one built from a commit
+GitHub's comparison cannot place against the commit being published. Both wedge every later publish
+until `:main` is deleted or retagged by hand. While the guard fails, nothing is published, the
+commit's `sha-` tag included: the guard runs inside the step "Work out the tags to publish", and the
+steps after it carry no `if:`. That last part was read from `.github/workflows/ci.yml`, not run.
+
+What a rewritten history does depends on what GitHub's comparison answers. Three probes, run on
+7 November 2026 (the first two first checked on 6 November):
+
+- `gh api repos/clintongormley/waitron/compare/main...f8b36a6086 --jq .status` printed `diverged`,
+  which the guard answers with `move`. `f8b36a6086` is #2442's head before its rebase: no branch
+  holds it, but it shares history with `main`.
+- `gh api repos/clintongormley/ha-fado/compare/v0.0.2...main --jq .status` answered HTTP 404, "No
+  common ancestor between v0.0.2 and main." The guard fails on that.
+- `gh api repos/clintongormley/waitron/compare/0123456789abcdef0123456789abcdef01234567...main --jq .status`,
+  with a commit GitHub does not hold in the published (first) place, as an old `:main` would be,
+  answered HTTP 404, "Not Found". The script, run on 7 November with a stand-in `docker` reporting
+  that commit as `:main`'s build id and the real `gh`, printed "cannot place … against the published
+  0123456789abcdef0123456789abcdef01234567" and exited 1.
+
+So any comparison GitHub refuses stops publishing, including one against an old `:main` commit
+GitHub no longer holds after a rewrite.
+
+Its suite, `scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
 
 ### Compare database files as bytes
 
@@ -3548,7 +3582,8 @@ whose value is null), and core `0012_printer_calibration`, which rebuilds `drawe
 copying its rows (`drawer_opens: 2 rows before, 0 after`). These were the first steps `RESETS`
 listed; C107 then added core `0055_drop_printer_character_set` (the `printers` rebuild, refused
 with `FOREIGN KEY constraint failed` the way `0044` is), and `RESETS` in
-`scripts/migration-upgrade.test.ts` holds the whole list. At each step it lists, the guard
+`scripts/migration-upgrade.test.ts` held the whole list until A760 (November 2026) left it empty. At
+each step it lists, the guard
 checks the failure is still the listed one, then migrates an empty database to that point and
 carries on. A reset that expects a
 row loss must lose exactly the listed tables, so a second table losing rows at the same step fails

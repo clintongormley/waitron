@@ -33,7 +33,7 @@ export interface AdjustmentSplit {
 
 /**
  * One cancellation, comp or discount taken off a bill, with the line and the reason copied as they
- * were. Declared `appendOnly()` in `packages/adjustments/src/classification.ts`. A row with no
+ * were. Declared `appendOnly()` in `../../classification.ts`. A row with no
  * `line_id` is a discount on the whole bill.
  */
 export const adjustments = table(
@@ -54,8 +54,7 @@ export const adjustments = table(
     lineQuantity: quantity("line_quantity"),
     /** The line's unit price before any adjustment touched it. */
     lineListUnitPrice: money("line_list_unit_price"),
-    // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require. The same holds for `requested_by` and `approved_by`.
+    // No key yet, nor on `requested_by` and `approved_by`.
     creditedTo: id("credited_to"),
     // No foreign key: the configuration import deletes every reason; `reason_name` and
     // `policy_snapshot` keep the history, and this id only groups rows.

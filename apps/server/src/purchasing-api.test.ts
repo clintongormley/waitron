@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -18,7 +18,7 @@ let staffCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);

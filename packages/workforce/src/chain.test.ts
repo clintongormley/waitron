@@ -24,14 +24,13 @@ import {
   type TimeEntryAppend,
 } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 // Concurrent appenders are ./chain.concurrency.test.ts's subject, not this suite's.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 let personId: string;

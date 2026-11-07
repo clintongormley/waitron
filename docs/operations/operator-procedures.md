@@ -32,11 +32,12 @@ removing that day's override.
 
 ## The approved one-time migration squash
 
-A760 is a future maintenance job with a separately recorded freeze and named reset roster.
-Its [retained procedure](a760-migration-squash.md) and
-[inventory](a760-migration-squash-inventory.md) preserve the approved 16 October instructions.
-Refresh their dated facts at execution. Publishing these copies starts no freeze, reset,
-migration or deployment.
+A760 ran under a separately recorded freeze and named reset roster. Its
+[retained procedure](a760-migration-squash.md) and
+[inventory](a760-migration-squash-inventory.md) preserve the approved 16 October instructions; the
+procedure's "Part 3 as built, 7 November 2026" section records the new starting migrations, the
+reset target and why a backup made before the squash needs the old image. Publishing these copies
+starts no reset, migration or deployment.
 
 ## Before deleting planning files at go-live
 

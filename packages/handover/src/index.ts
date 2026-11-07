@@ -5,7 +5,7 @@ export {
 } from "./activations.js";
 export type { HandoverActivation, HandoverActivationRow } from "./activations.js";
 export { HANDOVER_BACKUP_VERIFICATION } from "./backup-verification.js";
-export { HANDOVER_CLASSIFICATION } from "./classification.js";
+export { HANDOVER_TABLES } from "./tables.js";
 export {
   HANDOVER_KINDS,
   envelopeDigest,
@@ -25,7 +25,6 @@ export type {
   SchemaEntry,
 } from "./indicator.js";
 export { NODE_LOCAL_MANIFEST } from "./manifest.js";
-export { HANDOVER_MIGRATIONS } from "./migrations.js";
 export { handoverActivations, handoverScenario } from "@waitron/db";
 export type { NodeLocalItem, NodeLocalManifestRow, RetainedRevision } from "./manifest.js";
 export {

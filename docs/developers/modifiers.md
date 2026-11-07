@@ -487,19 +487,20 @@ the kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage
 
-Five tables carry the feature, all in the catalogue migration set, plus two columns in the core
-set that hold what an order froze.
+Five tables carry the feature, plus two columns that hold what an order froze. All of them are in
+core's migration set: the five tables are the catalogue module's, whose tables have lived there
+since A760.
 
 | Table or column | Set | What it holds |
 | --- | --- | --- |
-| `option_lists`, `option_labels` | catalogue | an options list and its labels |
-| `extra_lists`, `extra_list_items` | catalogue | an extras list and the products it offers |
-| `product_modifiers` | catalogue | a dish's one ordered attachment list |
+| `option_lists`, `option_labels` | core (catalogue's) | an options list and its labels |
+| `extra_lists`, `extra_list_items` | core (catalogue's) | an extras list and the products it offers |
+| `product_modifiers` | core (catalogue's) | a dish's one ordered attachment list |
 | `working_order_lines.option_snapshots` | core | an open order line's frozen options answers |
 | `sale_lines.option_snapshots` | core | a filed line's frozen options answers |
 
-All five catalogue tables are classified `state` in `CATALOGUE_CLASSIFICATION`
-(`packages/catalogue/src/classification.ts`); none is declared `appendOnly()`, so none carries the
+All five catalogue tables are classified `state` in `CORE_CLASSIFICATION`
+(`packages/db/src/classification.ts`); none is declared `appendOnly()`, so none carries the
 `RAISE(ABORT)` trigger pair `applyMigrations` installs after each set migrates
 (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`).
 
@@ -520,7 +521,7 @@ not one of them.
 **Nothing at all guards the row locks staying gone here.** The clause is banned by
 `scripts/postgres-sql-residue.test.ts`, whose `ROOTS` are `apps/server/src`,
 `packages/reporting/src`, `packages/reporting/test`, `packages/workforce/src` and
-`packages/scheduler/src` — `packages/catalogue` is not one of them, a gap that guard's own pattern
+`packages/payments/src/reconciliation-schedule` — `packages/catalogue` is not one of them, a gap that guard's own pattern
 comment and `catalogue-engine-neutral`'s header both state. So a `for update` written back into
 these files is caught by review, or by the engine when the statement is prepared, and by no guard
 in between.

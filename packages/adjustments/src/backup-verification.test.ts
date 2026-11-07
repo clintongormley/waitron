@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, type Database } from "@waitron/db";
+import { CORE_CLASSIFICATION, CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
@@ -10,12 +10,22 @@ import {
   seedTenderRefund,
 } from "@waitron/reporting/test/tender-refund-fixtures.js";
 import { ADJUSTMENTS_BACKUP_VERIFICATION as OWNER } from "./index.js";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
-import { ADJUSTMENTS_CLASSIFICATION } from "./classification.js";
-const migrations = [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS];
+import { ADJUSTMENTS_TABLES } from "./classification.js";
+
+/** This module's share of core's classification, which holds its tables. */
+const ADJUSTMENTS_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (ADJUSTMENTS_TABLES as readonly string[]).includes(table),
+);
+const migrations = [CORE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });
-const absent = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const absent = useVenueDb({
+  migrations: [CORE_MIGRATIONS],
+  // A source from before these tables existed: core's set now creates them, so they are dropped.
+  setup: async (db) => {
+    for (const table of [...ADJUSTMENTS_TABLES].reverse()) db.run(sql.raw(`drop table "${table}"`));
+  },
+});
 beforeEach(() => {
   for (const db of [original.db, restored.db]) {
     db.run(

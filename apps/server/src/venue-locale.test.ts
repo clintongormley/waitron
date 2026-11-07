@@ -7,7 +7,6 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { getCountryPack } from "@waitron/country-packs";
 import {
   saleLanguageFor,
@@ -22,7 +21,7 @@ let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     // `seedVenue` writes the taxpayer row through `seedTenant`: country 'ES' (and legal_name

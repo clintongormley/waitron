@@ -202,7 +202,7 @@ const entry = await import(${JSON.stringify(output)});
 const first = entry.currentBackupVerificationTarget();
 process.env.WAITRON_BUILD_ID = 'forged';
 const second = entry.currentBackupVerificationTarget();
-console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringify(second), keys: Object.keys(entry).sort(), owners: entry.BACKUP_VERIFICATION_MODULES?.map(m => m.name).sort() ?? null, canVerify: typeof entry.verifyBackupArtifact === "function" }));
+console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringify(second), keys: Object.keys(entry).sort(), owners: entry.BACKUP_VERIFICATION_MODULES?.filter(m => m.migrations !== undefined).map(m => m.name).sort() ?? null, hostedIn: entry.BACKUP_VERIFICATION_MODULES?.filter(m => m.migrations === undefined && m.tablesIn !== undefined).map(m => m.tablesIn) ?? null, canVerify: typeof entry.verifyBackupArtifact === "function" }));
 `;
       const loaded = spawnSync(process.execPath, ["--input-type=module", "-e", probe], {
         cwd: directory,
@@ -216,22 +216,15 @@ console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringi
       expect(result.same).toBe(true);
       expect(result.canVerify).toBe(true);
       expect(result.owners).toEqual(result.first.modules.map((m) => m.name));
+      expect(result.hostedIn.length).toBeGreaterThan(0);
+      for (const host of result.hostedIn) expect(result.owners).toContain(host);
       expect(result.first.modules.map((m) => m.name)).toEqual([
-        "adjustments",
         "bookings",
-        "catalogue",
         "core",
-        "credentials",
         "fiscal-none",
         "fiscal-verifactu",
-        "handover",
-        "identity",
-        "media",
         "node",
         "payments",
-        "scheduler",
-        "staffing",
-        "venue-service",
         "workforce",
         "workforce-es",
       ]);

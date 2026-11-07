@@ -1,7 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   createCatalogue,
   createCategory,
   createProduct,
@@ -22,11 +21,10 @@ import {
 import { randomUUID } from "node:crypto";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 async function venue() {

@@ -1,11 +1,4 @@
-import {
-  categories,
-  categoryDetails,
-  now,
-  products,
-  tableExists,
-  type Transaction,
-} from "@waitron/db";
+import { categories, categoryDetails, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
@@ -264,7 +257,6 @@ async function summarise(
   const counts = new Map(
     subtrees.flat().map((id) => [id, { products: 0, activeProducts: 0, routes: 0 }]),
   );
-  const cellsPresent = await tableExists(tx, "routing_cells");
   for (const batch of batches([...counts.keys()])) {
     for (const row of await tx
       .select({
@@ -283,12 +275,10 @@ async function summarise(
       batch.map((folder) => sql`${folder}`),
       sql`, `,
     );
-    if (cellsPresent) {
-      const routes = await tx.execute<{ category_id: string; n: number }>(
-        sql`select category_id, count(*) as n from routing_cells where category_id in (${inBatch}) group by category_id`,
-      );
-      for (const row of routes.rows) counts.get(row.category_id)!.routes += Number(row.n);
-    }
+    const routes = await tx.execute<{ category_id: string; n: number }>(
+      sql`select category_id, count(*) as n from routing_cells where category_id in (${inBatch}) group by category_id`,
+    );
+    for (const row of routes.rows) counts.get(row.category_id)!.routes += Number(row.n);
   }
   return subtrees.map((subtree) => {
     const summary = {

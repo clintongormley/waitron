@@ -15,7 +15,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   readContentLanguages,
   writeContentLanguages,
@@ -32,7 +31,7 @@ import { createUnit } from "./units.js";
 // Every row below is written through its drizzle table: an `id` comes from the table's own
 // `$defaultFn` rather than from a SQL default. The serialisation cases are in
 // content-languages.concurrency.test.ts.
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 describe("site content languages", () => {
   it("reports a variant's missing customer name without copying the product's staff name", async () => {

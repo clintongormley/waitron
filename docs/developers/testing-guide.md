@@ -366,19 +366,13 @@ trigger body does not stop a set migrating on this engine — a foreign key nami
 not exist is refused at the first write, not at migrate time — so a clean migrate alone would not
 have told you, and an existing `useVenueDb` call in the package is a place to start reading, not an
 answer. `packages/workforce/src/schema/schema-conformance.test.ts` is the worked example, and it
-states the reason for a two-set list in the comment beside it: core because the set's foreign keys
-point at its `locations`, `devices` and `nodes`, and identity because they point at its `persons`.
-That is the database those keys resolve in, not something the migration needs — the suite also
-passes with an empty list (measured 2026-09-23) — which is why each call site writes the reason
+states the reason for its list in the comment beside it: core, because the set's foreign keys point
+at core's tables. That is the database those keys resolve in, not something the migration needs —
+the suite also passed with an empty list (measured 2026-09-23, when the list was core and the old
+identity set) — which is why each call site writes the reason
 down rather than just the list. A package's suites can apply MORE than its set's tables need,
 though: `packages/workforce/src/migrations.test.ts` applies core also for the `tenants` row its
-setup seeds and the `locations` and `nodes` rows its cases seed (`seedLocation`, `seedNode`), and
-most of `packages/credentials`'s database suites apply core — `credentials.test.ts` because
-`credentialProvisioned` reads `tenants` — while its migrations point at nothing in core, so its
-`migrations.test.ts` and its schema-conformance call site pass no prerequisites.
-`packages/media/src/schema/schema-conformance.test.ts` is the case of the trigger: its set puts
-triggers on core's and catalogue's tables, and the migration fails with `no such table` without
-them.
+setup seeds and the `locations` and `nodes` rows its cases seed (`seedLocation`, `seedNode`).
 
 **Adding a call site can turn a module's own suite red, and that is the point.** A set getting its
 first check may report real drift. Treat that as its own piece of work rather than something to fix
@@ -400,8 +394,9 @@ pnpm --filter @waitron/staffing exec vitest run --project node src/schema/schema
 
 The unchanged checkout passed all eight cases. Removing only `ON DELETE restrict` from the
 `shift_assignments.staff_role_id` reference to `staff_roles.id` in
-`packages/staffing/drizzle/0001_staffing_days_blocks_assignments.sql`, leaving the declaration and
-test unchanged, made the `shift_assignments` comparison fail with this difference:
+staffing's `0001_staffing_days_blocks_assignments.sql` (then in `packages/staffing/drizzle/`, frozen
+since A760 in `scripts/fixtures/a760-history/staffing/`), leaving the declaration and test
+unchanged, made the `shift_assignments` comparison fail with this difference:
 
 ```diff
 - staff_role_id -> staff_roles(id) on delete restrict on update no action
@@ -3329,8 +3324,12 @@ report as well, as above.) None runs in CI; their unit tests run in `apps/server
   old one (a different column order alone is allowed), an old set that owns nothing, and a
   reference whose compositions disagree about the old objects, their text or their owners, or the
   order in which they create the triggers that share a table, timing and event. It never writes
-  the journal or snapshot, and a second run changes nothing. So far it has run only on the
-  small fixtures in `preserve.test.ts`, not on the real schema.
+  the journal or snapshot, and a second run changes nothing. The table name in each `CREATE TABLE`
+  header keeps the quoting of the file it rewrites, so a table the old history rebuilt, which the
+  engine stores as `"name"`, still reads `` `name` `` as drizzle wrote it; a run over a file an
+  earlier run already rewrote keeps that file's spelling. Index statements are copied whole: every
+  index in the seven sets A760 part 3 preserved already named its table in backticks. In that part,
+  generating the seven sets afresh and preserving them again gave the committed files byte for byte.
 - **`controls --reference <list dir> --out <empty dir>`** copies the reference's databases under
   `--out`, makes one change in each copy (dropping or editing a trigger, index, CHECK or foreign key,
   changing a column's type or default or a key's columns, adding a table, changing a seeded value)

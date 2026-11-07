@@ -15,7 +15,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
@@ -25,7 +24,7 @@ import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 // Every raw `insert into product_modifiers` below supplies its own `id`: the column's value comes
 // from drizzle's `$defaultFn`, which a raw statement never reaches. Raw because these cases prove
 // what the DATABASE refuses, for a write that goes through no write path at all.
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
 

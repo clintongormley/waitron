@@ -8,13 +8,17 @@ import {
   listOpenHolds,
   recordHoldOutcome,
 } from "@waitron/payments";
-import type { PaymentReconcileResult, PaymentReconciler } from "@waitron/payments";
+import type {
+  PaymentReconcileResult,
+  PaymentReconciler,
+  RunPeriod,
+  TickResult,
+} from "@waitron/payments";
 import { FakeReconciler } from "@waitron/payments/src/testing/fake-reconciler.js";
 import { FakeSettlementReport } from "@waitron/payments/src/testing/fake-settlement-report.js";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
-import type { RunPeriod } from "@waitron/scheduler";
 import { decimal, deviceOrigin } from "@waitron/shared";
-import { reconcilerAsDuty } from "./reconcile-duty.js";
+import { NOTHING_TO_RECONCILE, reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
 
 function emptyResult(period: RunPeriod): PaymentReconcileResult {
   return {
@@ -216,5 +220,56 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
       new Date("2026-07-26T04:00:00Z"),
     );
     expect(outcome.resweepAfter).toBeUndefined();
+  });
+});
+
+describe("the reconciliation pass follows the payments module's switch", () => {
+  const ran: TickResult = { ran: [], deferred: 0, beyondHorizon: 0, skipped: [], nextDueAt: NOW };
+
+  it("with payments switched off, asks for no credential and runs no reconciliation duty", async () => {
+    let asked = 0;
+    let runs = 0;
+    const reconcile = reconcilePassFor({
+      paymentsEnabled: false,
+      credentialProvisioned: () => {
+        asked += 1;
+        return Promise.resolve(true);
+      },
+      runDue: () => {
+        runs += 1;
+        return Promise.resolve(ran);
+      },
+    });
+    expect(await reconcile(NOW)).toEqual(NOTHING_TO_RECONCILE);
+    expect(asked).toBe(0);
+    expect(runs).toBe(0);
+  });
+
+  it("with payments on and the credential provisioned, runs the duty", async () => {
+    let runs = 0;
+    const reconcile = reconcilePassFor({
+      paymentsEnabled: true,
+      credentialProvisioned: () => Promise.resolve(true),
+      runDue: () => {
+        runs += 1;
+        return Promise.resolve(ran);
+      },
+    });
+    expect(await reconcile(NOW)).toBe(ran);
+    expect(runs).toBe(1);
+  });
+
+  it("with payments on but no credential, runs nothing", async () => {
+    let runs = 0;
+    const reconcile = reconcilePassFor({
+      paymentsEnabled: true,
+      credentialProvisioned: () => Promise.resolve(false),
+      runDue: () => {
+        runs += 1;
+        return Promise.resolve(ran);
+      },
+    });
+    expect(await reconcile(NOW)).toEqual(NOTHING_TO_RECONCILE);
+    expect(runs).toBe(0);
   });
 });

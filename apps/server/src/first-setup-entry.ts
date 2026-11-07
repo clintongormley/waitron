@@ -31,9 +31,7 @@ import { START_FREE_SPACE_FLOOR, lowestFreeBytes } from "./start-space.js";
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
   if (pair === null) return { claimed: false, unresolved: false };
-  const inspection = await host.resolution.inspectFirstSetupDatabase(
-    pair.state.frozen.modules.map((entry) => entry.module),
-  );
+  const inspection = await host.resolution.inspectFirstSetupDatabase();
   const unresolved = pair.publicationComplete
     ? inspection.database !== "occupied"
     : inspection.database !== "no-venue-rows" ||

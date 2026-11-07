@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -31,7 +31,7 @@ import {
 } from "../test/fixtures.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 const subject = (personId: string) => ({

@@ -1,4 +1,3 @@
-import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
@@ -9,7 +8,7 @@ import { CORE_BACKUP_VERIFICATION } from "./core-backup-verification.js";
 import { ALL_MODULES } from "./modules.js";
 
 describe("core backup contribution", () => {
-  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   async function verify() {
     const path = suite.db

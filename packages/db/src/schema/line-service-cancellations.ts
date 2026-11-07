@@ -10,7 +10,7 @@ export const lineServiceCancellations = table(
     quantity: quantity("quantity").notNull(),
     cancelledAt: tsString("cancelled_at").notNull(),
     wasStarted: flag("was_started").notNull(),
-    // No key: persons belongs to identity's migration set, not core.
+    // No key yet.
     actorId: id("actor_id").notNull(),
   },
   (t) => [

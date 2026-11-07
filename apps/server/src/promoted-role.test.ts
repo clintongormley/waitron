@@ -3,12 +3,7 @@ import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership, type Database } 
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode, setSingletonRole } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  readNodeSigningKey,
-  type KeyRing,
-} from "@waitron/credentials";
+import { loadKeyRing, readNodeSigningKey, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
   generateNodeKeyPair,
@@ -28,7 +23,7 @@ type LogEntry = { level: string; event: string; detail: unknown };
 
 describe("finishPromotedRole", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
     timeoutMs: 60_000,
   });
 

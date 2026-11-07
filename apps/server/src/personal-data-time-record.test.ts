@@ -4,7 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import {
   personalDataParts,
   selectTimeRecordExport,
@@ -22,7 +22,7 @@ import { mountAttendanceExportApi } from "./attendance-export-api.js";
 import { TIME_RECORD_FILES, timeRecordPersonalData } from "./personal-data-time-record.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
 });
 /** The venue's date is 2026-03-10; Marta's last entry is on 2026-03-20, after it. */
 const AT = new Date("2026-03-10T12:00:00Z");

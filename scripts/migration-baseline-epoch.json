@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "name": "core",
+      "tag": "0000_baseline",
+      "when": 1793991015388,
+      "sha256": "6b1799a5609433ec00f571f26fdd99692094182c234de042a3fe8135b7162f5c"
+    },
+    {
+      "name": "node",
+      "tag": "0000_baseline",
+      "when": 1793991017686,
+      "sha256": "522d328650fbd3dbf9ab80d72c56418bdd7295b168df3baa4d7ac533546e3f2b"
+    },
+    {
+      "name": "workforce",
+      "tag": "0000_baseline",
+      "when": 1793991020788,
+      "sha256": "5a04ca1d4880d883cd326f5570e4e66e7409183c8c0e77327470225cf54fb4e2"
+    },
+    {
+      "name": "workforce-es",
+      "tag": "0000_baseline",
+      "when": 1793991023230,
+      "sha256": "afd0644f982c7c5600aa80812700aff36c86cc9b566529807e535074291aeb89"
+    },
+    {
+      "name": "payments",
+      "tag": "0000_baseline",
+      "when": 1793991025633,
+      "sha256": "c0f0ce129ae13a6dc7d777f758b96fbedaafbe841304c8639a3db27497d59aed"
+    },
+    {
+      "name": "bookings",
+      "tag": "0000_baseline",
+      "when": 1793991027693,
+      "sha256": "4d05174018588975f9f672e330e60a18cd9eccd3dc512498eaacf3175e8731d6"
+    },
+    {
+      "name": "fiscal-verifactu",
+      "tag": "0000_baseline",
+      "when": 1793991029907,
+      "sha256": "d33f7467513a1cd15f2f8a5b5268f3cc17af4ee57dbd0a6b30ed763bdf3e151a"
+    }
+  ],
+  "emptySets": ["fiscal-none"]
+}

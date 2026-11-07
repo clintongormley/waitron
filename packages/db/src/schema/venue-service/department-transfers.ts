@@ -73,7 +73,7 @@ export const departmentTransferRequests = table(
     tabId: id("tab_id").notNull(),
     sourceDepartmentId: id("source_department_id").notNull(),
     destinationDepartmentId: id("destination_department_id").notNull(),
-    // Person ids have no key into identity's migration set.
+    // Person ids: no key yet.
     senderId: id("sender_id").notNull(),
     resolvedBy: id("resolved_by"),
     destinationZoneId: id("destination_zone_id"),

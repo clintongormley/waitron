@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   captureError,
@@ -18,7 +17,6 @@ import {
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
 import { clearServiceDeleteSettings } from "./service-delete-settings.js";
 import {
@@ -30,7 +28,7 @@ import {
 import { STARTER_STEP_NAMES } from "./starter-content.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

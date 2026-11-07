@@ -789,7 +789,7 @@ describe("compareFinalCopy", () => {
 
     it("a set this box does not switch on may be behind: no start migrates it", async () => {
       const r = await rig();
-      const off = "staffing";
+      const off = "bookings";
       alter(r.path, `delete from ${setNamed(off).table} where hash = '${lastMigration(off)}'`);
       const envelope = await r.resignedForFile((body) => {
         body.snapshot.modules = body.snapshot.modules.filter((one) => one.name !== off);
@@ -810,7 +810,7 @@ describe("compareFinalCopy", () => {
 
     it("a toggleable set this box switches on is held to its journal too", async () => {
       const r = await rig();
-      const on = "staffing";
+      const on = "bookings";
       expect(ALL_MODULES.find((module) => module.name === on)?.tier).toBe("toggleable");
       alter(r.path, `drop table ${setNamed(on).table}`);
       expect(await r.compareRow(await r.resignedForFile())).toEqual(

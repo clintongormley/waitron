@@ -15,9 +15,8 @@ import {
   type HandoverActivationRow,
 } from "./activations.js";
 import type { SignedHandoverEnvelope } from "./envelope.js";
-import { HANDOVER_MIGRATIONS } from "./migrations.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, HANDOVER_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const OP_X = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OP_Y = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";

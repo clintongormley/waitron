@@ -21,7 +21,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
@@ -47,7 +47,7 @@ let staffSessionId: string;
 
 const suite = useVenueDb({
   // `authorize` reads identity's tables.
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
 });

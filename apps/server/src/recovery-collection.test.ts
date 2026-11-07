@@ -8,13 +8,13 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret, IDENTITY_MIGRATIONS, managementSessions, persons } from "@waitron/identity";
+import { hashSecret, managementSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const binding = {

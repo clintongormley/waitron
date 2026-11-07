@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
-import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 const RING = loadKeyRing({
@@ -28,7 +27,7 @@ const STRIPE_JSON = JSON.stringify({
   cancelUrl: "https://example.test/no",
 });
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {

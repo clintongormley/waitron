@@ -76,7 +76,6 @@ import { join } from "node:path";
 import { afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import {
-  CORE_MIGRATIONS,
   deviceApprovedProfiles,
   deviceProfilePrinters,
   devices,
@@ -84,12 +83,15 @@ import {
   openVenueDatabase,
   type Database,
 } from "@waitron/db";
-import { ADJUSTMENTS_MIGRATIONS } from "@waitron/adjustments";
 import { deviceProfileAdmissionPersons, deviceProfileAdmissionRoles } from "@waitron/identity";
 import { cardReaders, deviceProfileCardReaders } from "@waitron/payments";
 import * as service from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { applyMigrations } from "@waitron/migrations";
+import {
+  historicalSet,
+  historicalSets,
+} from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { provisionOrderVenue, billlessSale } from "./testing/order-venue.js";
 import { seatedWith } from "./testing/bill-venue.js";
 import { priceTabRound, insertTabRound, bumpRevision } from "./working-order.js";
@@ -109,7 +111,7 @@ afterAll(() => {
 // code needs their tables. A run that gets past the cut would apply them a second time.
 function predecessor(root: string, ahead: readonly string[] = []) {
   const core = join(root, "core-prefix");
-  cpSync(CORE_MIGRATIONS.migrationsFolder, core, { recursive: true });
+  cpSync(historicalSet("core").migrationsFolder, core, { recursive: true });
   const journalPath = join(core, "meta", "_journal.json");
   const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
     entries: { tag: string; when: number }[];
@@ -127,9 +129,9 @@ function predecessor(root: string, ahead: readonly string[] = []) {
   writeFileSync(journalPath, JSON.stringify(journal));
   const kept = journal.entries.map((entry) => entry.tag);
   const leftOut = tags.filter((tag) => !kept.includes(tag));
-  const { migrationsTable } = CORE_MIGRATIONS;
+  const { migrationsTable } = historicalSet("core");
   return beforeMissingCoreTables(
-    migrationOptionsFor(manifestSets(), null),
+    historicalSets(),
     { migrationsTable, folder: core, kept, leftOut },
     root,
   ).map((option) =>
@@ -420,7 +422,7 @@ it("refuses the populated predecessor for reset and retains every row after roll
   } finally {
     await opened.close();
   }
-  const failure = await applyMigrations(venue, migrationOptionsFor(manifestSets(), null)).then(
+  const failure = await applyMigrations(venue, historicalSets()).then(
     () => undefined,
     (error: unknown) => error,
   );
@@ -437,7 +439,7 @@ it("refuses the populated predecessor for reset and retains every row after roll
     expect(actual).toEqual(before!);
     expect(failure).toMatchObject({
       code: "migrations.apply_failed",
-      params: { set: CORE_MIGRATIONS.migrationsTable },
+      params: { set: historicalSet("core").migrationsTable },
       cause: {
         message: expect.stringContaining("DROP TABLE `device_profiles`"),
         cause: { errcode: 1811, message: "FOREIGN KEY constraint failed" },
@@ -469,7 +471,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
   } finally {
     await first.close();
   }
-  await applyMigrations(venue, migrationOptionsFor(manifestSets(), null));
+  await applyMigrations(venue, historicalSets());
   const after = await openVenueDatabase(venue);
   try {
     const actual = snapshot(after.venue);
@@ -477,7 +479,11 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     expect(before!.device_profile_admission_roles).toHaveLength(1);
     expect(actual.device_profile_admission_roles).toEqual([]);
     const journals: Record<string, unknown[]> = {};
-    for (const set of [CORE_MIGRATIONS, service.VENUE_SERVICE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS]) {
+    for (const set of [
+      historicalSet("core"),
+      historicalSet("venue-service"),
+      historicalSet("adjustments"),
+    ]) {
       const journal = set.migrationsTable;
       const oldJournal = before![journal]! as { created_at: number }[];
       const oldTimes = new Set(oldJournal.map((row) => row.created_at));

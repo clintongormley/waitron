@@ -84,8 +84,7 @@ export interface FiredItem {
   stationId: string;
   /**
    * The ticket item's fired quantity, as thousandths, printed in place of the line's current
-   * quantity. Absent or null prints the line's, as a ticket item older than
-   * `0014_order_edit_columns.sql` carries none.
+   * quantity. Absent or null prints the line's.
    */
   quantity?: number | null;
   /**
@@ -900,8 +899,8 @@ export function isStarted(state: TicketState | null): boolean {
 }
 
 /**
- * What the kitchen was asked to make: the ticket item's fired quantity. A ticket item with none (every
- * row older than `0014_order_edit_columns.sql`) reads its line's current quantity instead. For a
+ * What the kitchen was asked to make: the ticket item's fired quantity. A ticket item with none
+ * reads its line's current quantity instead. For a
  * query joining `ticket_items` to its `working_order_lines` row.
  */
 export const firedQuantity = sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`;

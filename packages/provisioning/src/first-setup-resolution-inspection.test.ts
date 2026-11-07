@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   mkdtemp,
   mkdir,
@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFirstSetupCoordinator, createFirstSetupStore } from "./index.js";
@@ -25,7 +26,11 @@ const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
-async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
+async function fixture(
+  phase: "claim" | "abandon" | "active" = "claim",
+  frozenModules: readonly string[] = [],
+  serviceOptions: Partial<Parameters<typeof createFirstSetupResolutionInspection>[0]> = {},
+) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "first-resolution-")));
   dirs.push(root);
   const roots = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
@@ -48,7 +53,12 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
       sourceId: `first-setup:${ids.attemptId}`,
       request: venue,
       environment,
-      modules: [],
+      modules: frozenModules.map((module) => ({
+        module,
+        version: "1.0.0",
+        eventId: randomUUID(),
+        request: null,
+      })),
     }),
   };
   const owner = createFirstSetupOwner(ownerOptions);
@@ -64,7 +74,12 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
     await writeFile(markerPath, JSON.stringify(marker));
   }
   await suite.db.archiveTo(join(roots.venueDir, "venue.db"));
-  const service = createFirstSetupResolutionInspection({ ...roots, store });
+  const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
+    ...roots,
+    store,
+    ...serviceOptions,
+  });
   const recovering = createFirstSetupOwner({ ...ownerOptions, resolution: service });
   return {
     root,
@@ -270,6 +285,7 @@ it("binds an independently configured outside file and receipt directory without
   await writeFile(outside, '{"position":42}');
   await writeFile(join(receipts, "receipt.json"), '{"signed":"original"}');
   const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
     stateDir: f.stateDir,
     venueDir: f.venueDir,
     store: f.store,
@@ -314,6 +330,7 @@ it("throttles repeated wrong-password recovery across fresh nonces", async () =>
 it("does not treat an absent independently configured register as proof of no register", async () => {
   const f = await fixture();
   const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
     stateDir: f.stateDir,
     venueDir: f.venueDir,
     store: f.store,
@@ -386,6 +403,7 @@ it("retains outside receipt filename identity when the same bytes move to a diff
   await mkdir(receipts);
   await writeFile(join(receipts, "first.json"), '{"signed":"same"}');
   const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
     stateDir: f.stateDir,
     venueDir: f.venueDir,
     store: f.store,
@@ -409,7 +427,11 @@ it("describes absent roots without creating a workspace", async () => {
   const roots = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
   const store = createFirstSetupStore({ ...roots, coordinator: createFirstSetupCoordinator() });
   expect(
-    await createFirstSetupResolutionInspection({ ...roots, store }).inspectFirstSetupResolution(),
+    await createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
+      ...roots,
+      store,
+    }).inspectFirstSetupResolution(),
   ).toMatchObject({
     pair: "missing",
     database: "missing",
@@ -480,6 +502,7 @@ it.each(["missing", "symlink", "invalid-file"] as const)(
       await writeFile(join(directory, "invalid.json"), "{incomplete");
     }
     const service = createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
       stateDir: f.stateDir,
       venueDir: f.venueDir,
       store: f.store,
@@ -523,6 +546,7 @@ it.each(["delivery", "outside"] as const)(
       Array.from({ length: 1025 }, (_, i) => writeFile(join(directory, `${i}.json`), "{}")),
     );
     const service = createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
       stateDir: f.stateDir,
       venueDir: f.venueDir,
       store: f.store,
@@ -549,6 +573,7 @@ it("captures exact configured evidence once and retains missing sources explicit
   await writeFile(join(delivery, "one.json"), '{"delivery":1}');
   const missing = join(f.root, "missing.json");
   const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
     ...f,
     publicEvidencePaths: [evidence, evidence, missing],
     publicEvidenceDirectories: [receipts, receipts, join(f.root, "missing-receipts")],
@@ -575,14 +600,30 @@ it("captures exact configured evidence once and retains missing sources explicit
   );
 });
 
+it("sees an attempt's modules whose tables live in the core set as an empty core-only database", async () => {
+  const hosted = ALL_MODULES.filter((module) => module.tablesIn === "core").map((m) => m.name);
+  expect(hosted).toEqual(expect.arrayContaining(["catalogue", "identity"]));
+  const f = await fixture("active", hosted, { modules: ALL_MODULES });
+  expect(await f.service.inspectFirstSetupResolution()).toMatchObject({
+    database: "no-venue-rows",
+    emptyDatabase: true,
+  });
+  const withBookings = await fixture("active", [...hosted, "bookings"], { modules: ALL_MODULES });
+  expect(await withBookings.service.inspectFirstSetupResolution()).toMatchObject({
+    database: "no-venue-rows",
+    emptyDatabase: false,
+  });
+});
+
 it("rechecks a real empty database against the caller's required migration sets", async () => {
   const f = await fixture("active");
   await expect(f.service.recheckEmptyDatabase(f, ["core"])).resolves.toBe(true);
-  await expect(f.service.recheckEmptyDatabase(f, ["catalogue"])).resolves.toBe(false);
+  await expect(f.service.recheckEmptyDatabase(f, ["bookings"])).resolves.toBe(false);
   await expect(
     createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
       ...f,
-      expectedMigrationSets: ["catalogue"],
+      expectedMigrationSets: ["bookings"],
     }).recheckEmptyDatabase(f, []),
   ).resolves.toBe(false);
 });
@@ -605,7 +646,12 @@ it.each(["file", "symlink"] as const)(
       venueDir,
       coordinator: createFirstSetupCoordinator(),
     });
-    const service = createFirstSetupResolutionInspection({ stateDir, venueDir, store });
+    const service = createFirstSetupResolutionInspection({
+      modules: ALL_MODULES,
+      stateDir,
+      venueDir,
+      store,
+    });
     const inspected = await service.inspectFirstSetupResolution();
     expect(inspected.artifacts).toContainEqual({ name: "first-setup.json", status: "unreadable" });
     expect(inspected.repairEligible).toBe(false);

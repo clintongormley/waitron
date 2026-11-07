@@ -1,43 +1,32 @@
-import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { ChangeSource } from "@waitron/shared";
 
-const STATE = "menu configuration; copied to a standby, never drained back";
-const SUGGESTIONS =
-  "translation suggestions waiting for a person's review; copied to a standby, never drained back";
+/** The tables this module's code owns. They live in core's set, which classifies them. */
+export const CATALOGUE_TABLES = [
+  "category_details",
+  "catalogue_settings",
+  "content_languages",
+  "unit_seed_states",
+  "units",
+  "product_units",
+  "menu_items",
+  "menu_item_variant_overrides",
+  "option_lists",
+  "option_labels",
+  "extra_lists",
+  "extra_list_items",
+  "product_modifiers",
+  "sections",
+  "section_members",
+  "menu_details",
+  "menu_versions",
+  "menu_version_images",
+  "menu_publications",
+  "menu_scheduled_publications",
+  "content_suggestion_jobs",
+  "content_suggestions",
+] as const;
 
-export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
-  classify("category_details", "state", STATE),
-  classify("catalogue_settings", "state", STATE),
-  classify("content_languages", "state", STATE),
-  classify("unit_seed_states", "state", STATE),
-  classify("units", "state", STATE),
-  classify("product_units", "state", STATE),
-  classify("menu_items", "state", STATE),
-  classify("menu_item_variant_overrides", "state", STATE),
-  classify("option_lists", "state", STATE),
-  classify("option_labels", "state", STATE),
-  classify("extra_lists", "state", STATE),
-  classify("extra_list_items", "state", STATE),
-  classify("product_modifiers", "state", STATE),
-  classify("sections", "state", STATE),
-  classify("section_members", "state", STATE),
-  classify("menu_details", "state", STATE),
-  appendOnly(
-    "menu_versions",
-    "state",
-    "menu versions, published or queued, never changed once written; copied to a standby, never drained back",
-  ),
-  appendOnly(
-    "menu_version_images",
-    "state",
-    "the photos each menu version names, published or queued; copied to a standby, never drained back",
-  ),
-  classify("menu_publications", "state", STATE),
-  classify("menu_scheduled_publications", "state", STATE),
-  classify("content_suggestion_jobs", "state", SUGGESTIONS),
-  classify("content_suggestions", "state", SUGGESTIONS),
-];
-
-export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_CLASSIFICATION.map(
-  ({ table }) => ({ table, type: table }),
-);
+export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_TABLES.map((table) => ({
+  table,
+  type: table,
+}));

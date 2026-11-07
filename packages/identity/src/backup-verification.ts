@@ -10,14 +10,14 @@ import {
 } from "@waitron/module";
 import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
 import { decryptTotpSecret, type TotpKeyRing } from "./mfa.js";
-import { IDENTITY_CLASSIFICATION } from "./classification.js";
+import { IDENTITY_TABLES } from "./classification.js";
 
 export const IDENTITY_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,
   data: {
     kind: "custom",
-    tables: IDENTITY_CLASSIFICATION.map((c) => c.table),
+    tables: [...IDENTITY_TABLES],
     immutableTables: [],
     checks: ["data", "secret"],
   },
@@ -40,7 +40,7 @@ export const IDENTITY_BACKUP_VERIFICATION: BackupVerificationContribution = {
     const equal = await compareBackupTables({
       before: context.before,
       after: context.after,
-      policies: IDENTITY_CLASSIFICATION.map(({ table }) => ({
+      policies: IDENTITY_TABLES.map((table) => ({
         table,
         immutable: false,
         addedColumns: {},
@@ -184,7 +184,7 @@ async function checkIdentity(query: BackupQuery, ring: TotpKeyRing) {
       secret = merge(secret, totp(row.totp_secret, ring));
     }
   }
-  for (const { table } of IDENTITY_CLASSIFICATION) {
+  for (const table of IDENTITY_TABLES) {
     if (table === "persons" || !tables.has(table)) continue;
     const identifier = '"' + table.replaceAll('"', '""') + '"';
     for await (const row of query.rows(`select * from ${identifier}`)) {
