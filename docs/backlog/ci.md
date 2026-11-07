@@ -85,13 +85,6 @@ cache export #1427 removed. Whether the builds still need it (for example for `l
 print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no
 action queued.
 
-## `bundle-smoke` builds only the credentials and server bundles
-
-A change to
-`scripts/bundle-node.mjs` selects print-agent and provisioning for typecheck and tests (#593,
-through `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`) but builds neither of their bundles
-in CI.
-
 ## `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe
 
 The
@@ -408,15 +401,6 @@ in `packages/ui`'s coverage and `mutate` lists, loaded only by `packages/venue-s
 config, so no ui test reaches it. Excluding it also needs a change to the exclusion list
 `scripts/mutation-shard.test.mjs` pins.
 
-## A pull request that changes only front-end code gets no SPA bundle built anywhere in CI
-
-  `bundle-smoke` builds esbuild bundles only. The only thing that runs `vite build` is
-  `deploy/Dockerfile`, which the `image` job runs — on a pull request only when an image input has
-  changed (`.github/workflows/ci.yml`, the `image` job's `if`), and on main when its code/deploy gate
-  selects it, including when verified equal-tree PR CI is reused; it never
-  OPENS one, so a bundle that builds and renders nothing passes there too. This is the work item
-  `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
-
 ## P7's leftovers (#533)
 
 - `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
@@ -525,15 +509,6 @@ infer either from the missing outcome alone.
   [Detail](ci.md#the-other-sharded-packages-still-use-vitests-file-count-split)
 - **Nothing checks, on every CI run, that each server test file ran in exactly one shard.**
   [Detail](ci.md#nothing-checks-on-every-ci-run-that-each-server-test-file-ran-in-exactly-one-shard)
-
-## Bundle A1402: Build the front-end and the other Node bundles in CI, and open one
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **`bundle-smoke` builds only the credentials and server bundles**
-  [Detail](ci.md#bundle-smoke-builds-only-the-credentials-and-server-bundles).
-- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI**
-  [Detail](ci.md#a-pull-request-that-changes-only-front-end-code-gets-no-spa-bundle-built-anywhere-in-ci).
 
 ## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 
