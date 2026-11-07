@@ -2321,10 +2321,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 16, 8 important, size M, waits for the A1308 table hold to lift). Holds A1368, A1351, A1366. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
-- **Cloud's shared UI release still needs its first automatic publication and portal qualification.**
+- **Cloud's shared UI release still needs dependency updates and portal qualification.**
   Waitron's [release workflow](../.github/workflows/publish-ui.yml) checks and publishes
-  the private package on main pushes changing `packages/ui-core`; the first real run
-  must establish publication to the existing Cloud-associated package. The
+  the private package on main pushes changing `packages/ui-core`. Its
+  [first publication](https://github.com/clintongormley/waitron/actions/runs/42376444927)
+  released `@waitron-io/ui-core@0.2.1` from `47dda656b641794051c64d3752937ea7f2929f51`.
+  The downloaded registry tarball records that source commit and carries both licence files;
+  package metadata still reports private visibility and the Cloud repository association. The
   [release guide](developers/shared-ui-preparation.md) explains local inspection.
   Cloud's D579 owns dependency updates, the seven-day lag check and portal/image
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).

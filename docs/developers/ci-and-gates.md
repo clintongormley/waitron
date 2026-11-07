@@ -58,8 +58,14 @@ The workflow tests read trigger, queue, credential and check wiring as text. The
 execute the source-check, consumer and publish shells with controlled package-manager
 boundaries, and the real selection/deadline helpers. Missing scripts and failed
 checks must stop execution. Existing preparation and independent-consumer checks cover the tarball.
-These local checks do not establish hosted Actions behavior or registry authority;
-retain the first real publication result after landing.
+These local checks do not establish hosted Actions behavior or registry authority.
+The [first hosted publication](https://github.com/clintongormley/waitron/actions/runs/42376444927)
+succeeded on 7 November 2026, publishing `@waitron-io/ui-core@0.2.1` from
+`47dda656b641794051c64d3752937ea7f2929f51`. The downloaded registry tarball's SHA-512
+matches its registry integrity value, its manifest records that source commit, and
+its `dist/LICENSE` and `dist/LICENSE-GRANTS.md` match the source files. The package
+API reports private visibility and association with `waitron-io/waitron-cloud`.
+Cloud's authenticated installation and portal/image qualification remain separate.
 
 External provenance, read 2026-11-06:
 

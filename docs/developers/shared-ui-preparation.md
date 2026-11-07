@@ -20,9 +20,14 @@ Elastic License 2.0 and `LICENSE-GRANTS.md`.
 Check the workflow result after a qualifying merge. A publication error fails the
 run; the next qualifying merge attempts a new numbered version. An older run can
 be refused if a higher package version has already been published. There is no
-scheduled publisher or catch-up process. The first real publication from this
-workflow must still establish that its token can publish to the existing private
-package. Cloud owns authenticated installation, dependency updates and portal/image
+scheduled publisher or catch-up process.
+
+The [first publication on 7 November 2026](https://github.com/clintongormley/waitron/actions/runs/42376444927)
+released private `@waitron-io/ui-core@0.2.1`. Its downloaded registry tarball records
+`47dda656b641794051c64d3752937ea7f2929f51` in `waitronSource.commit`; its SHA-512 integrity
+and both licence files were checked against the registry metadata and source files.
+That run established upload to the existing Cloud-associated package. Cloud owns
+authenticated installation, dependency updates and portal/image
 qualification under its [approved release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
 
 ## Inspect a package locally
