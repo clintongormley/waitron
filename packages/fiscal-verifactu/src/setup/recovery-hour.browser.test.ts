@@ -1361,6 +1361,37 @@ it("says in Spanish that the series code already exists, with the countdown", as
     vi.useRealTimers();
   }
 });
+it.each([
+  [
+    "en",
+    "The series cannot be made: the minute for these series is already in this box's records. This is a fault in Waitron. Reload this page and start the restore again: a new restore chooses a new series name.",
+  ],
+  [
+    "es",
+    "No se pueden crear las series: el minuto de estas series ya está en los registros de este equipo. Es un fallo de Waitron. Recarga esta página y vuelve a empezar la restauración: una restauración nueva elige otro nombre de serie.",
+  ],
+] as const)(
+  "a stored pick found taken names the fault and how to start the restore again (%s)",
+  async (locale, words) => {
+    const { prepare } = scripted([
+      { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } },
+    ]);
+    const { el } = await mount(prepare);
+    el.locale = locale;
+    await el.updateComplete;
+    await ready(el);
+    await compare(el);
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(
+        el
+          .shadowRoot!.querySelector("[data-test=minute-in-use]")
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim(),
+      ).toBe(words),
+    );
+  },
+);
 it("says in Spanish that the series cannot be made yet", async () => {
   const { prepare } = scripted([
     {
