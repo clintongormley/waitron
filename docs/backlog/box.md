@@ -1673,8 +1673,8 @@ The owner's four answers: no reserved
   on the first read and lent to every later one; it shares nothing with the running backup's
   clients. A destination whose settings differ by value from the client's (any field, the secret
   included) gets a new client at its next read. A destination no longer configured loses its
-  client at the reload, and every destination does when a reload finds the settings unusable or
-  switched off, or cannot open the venue: then status reads no destination. While status still
+  client at the reload, and every destination does when a reload finds no usable settings, or
+  settings switched off, or cannot open the venue: then status reads no destination. While status still
   reads one (on a box that is not the primary, without a recovery key, or after a destination
   failed to build) its client is kept. All are closed when the supervisor stops, and reads after
   that build a client each and close it. A replaced or removed client is closed only once
@@ -1686,11 +1686,11 @@ The owner's four answers: no reserved
   reads was not measured.
 
 - **A stored bucket-copy record is not re-checked for a user name, password, query or fragment in
-  its address (A1391, plan D1).** Every save path refuses one (`readBucketConfig`,
-  `packages/stream/src/bucket-config.ts`), but the stored record is read field by field
-  (`readStreamSettingsIn`, `apps/server/src/stream-host.ts`), so a record written by
-  `waitron-credentials set`, which checks no shape, is sent back by `GET /api/backup/stream` as
-  stored.
+  its address (A1391 plan D1; the lane's decision of 2026-11-07, open to the owner).** Every save
+  path but one refuses one (`readBucketConfig`, `packages/stream/src/bucket-config.ts`). The
+  exception, `waitron-credentials set`, checks only that each named field is non-empty text, and
+  the stored record is read field by field (`readStreamSettingsIn`, `apps/server/src/stream-host.ts`),
+  so a record it wrote is sent back by `GET /api/backup/stream` as stored.
 
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and

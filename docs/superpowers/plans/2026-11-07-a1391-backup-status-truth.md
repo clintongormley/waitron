@@ -102,6 +102,7 @@ _2026-11-07, 11:36: a smaller form of Task 3 was built instead; see D4's last no
 
 _As built 2026-11-07: the Backups form refuses the same parts with its own check, sharing
 `isPlainWebAddress`, now in `apps/dashboard/src/screens/backup-destination-model.ts`._
+_2026-11-07, finish-branch review: `isPlainWebAddress` moved to `packages/shared/src/web-address.ts`, where the server's `readBucketConfig` uses it too, and it now refuses a bare `?` or `#`._
 
 ## Tasks
 
