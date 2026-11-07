@@ -226,10 +226,9 @@ export class SetupEmailScreen extends LitElement {
       name=${`smtp-${field}`}
       data-test=${field}
       label=${t(`email.${field}.label`)}
-      hint=${t(`email.${field}.hint`)}
+      hint=${field === "port" ? (this.values.encryption === "tls" ? "465" : "587") : t(`email.${field}.hint`)}
       .value=${this.values[field]}
       type=${field === "password" ? (this.passwordVisible ? "text" : "password") : field === "from" ? "email" : "text"}
-      placeholder=${field === "port" ? (this.values.encryption === "tls" ? "465" : "587") : ""}
       inputmode=${field === "port" ? "numeric" : "text"}
       autocomplete="off"
       ?required=${["server", "port", "from"].includes(field)}

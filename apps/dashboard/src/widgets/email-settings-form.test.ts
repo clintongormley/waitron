@@ -541,3 +541,32 @@ it("renders a certificate refusal in Spanish beside the native server field", as
     "Corrige los campos marcados para continuar.",
   );
 });
+
+it("clears a test-result field marker after another connection setting changes", async () => {
+  const client = api();
+  vi.mocked(client.testEmailSettings).mockResolvedValue({
+    accepted: false,
+    code: "email.test_connection_refused",
+  });
+  const { el } = await mount(stored, client);
+  await credentials(el);
+  button(el, "test").click();
+  await vi.waitFor(() => expect(field(el, "port").error).not.toBe(""));
+  el.shadowRoot!.querySelector("[data-test=encryption]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "starttls" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(field(el, "port").error).toBe("");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error,
+  ).toBe("");
+});
+it.each([
+  ["en-GB", "/help/en/email#test-results"],
+  ["es-ES", "/help/es/email#test-results"],
+])("links to the SMTP test guide in %s", async (locale, href) => {
+  setLocale(locale);
+  const { el } = await mount();
+  expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(href);
+});

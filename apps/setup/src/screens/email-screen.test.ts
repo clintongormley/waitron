@@ -354,6 +354,22 @@ it("suggests a port for the encryption without replacing the entered port", asyn
     expect(port.value).toBe("587");
   }
 });
+it("shows one consistent port example for the selected encryption", async () => {
+  const { el } = await mount();
+  await change(el, "encryption", "tls");
+  const port = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=port]")!;
+  await port.updateComplete;
+  expect(port.shadowRoot!.textContent).not.toContain("587");
+  expect(port.shadowRoot!.querySelector("input")!.placeholder).toBe("465");
+});
+it.each([
+  ["en-GB", "/help/en/email#test-results"],
+  ["es-ES", "/help/es/email#test-results"],
+])("links to the SMTP test guide in %s", async (locale, href) => {
+  setLocale(locale);
+  const { el } = await mount();
+  expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(href);
+});
 it("describes acceptance without promising delivery", async () => {
   const { el } = await mount();
   await test(el);

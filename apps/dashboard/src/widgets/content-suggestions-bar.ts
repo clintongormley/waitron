@@ -74,7 +74,9 @@ export class ContentSuggestionsBar extends LitElement {
   }
 
   #waiting(run: SuggestionRunView): TemplateResult {
-    return html`<p>${fill("suggestions.waiting", { count: String(run.waiting) })}</p>`;
+    return html`<p>
+      ${fill(run.waiting === 1 ? "suggestions.waiting_one" : "suggestions.waiting", { count: String(run.waiting) })}
+    </p>`;
   }
 
   #refusal(run: SuggestionRunView, code: string): TemplateResult {

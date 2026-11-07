@@ -157,7 +157,12 @@ export class EmailSettingsForm extends LitElement {
     this.values = { ...this.values, [field]: event.detail.value };
     ++this.#revision;
     this.accepted = false;
-    if (!this.refusal?.field || this.refusal.field === field) this.refusal = undefined;
+    if (
+      !this.refusal?.field ||
+      this.refusal.field === field ||
+      SMTP_TEST_CODES.some((code) => code === this.refusal?.code)
+    )
+      this.refusal = undefined;
     this.#scope?.changed();
   }
   #errors(): Set<Field> {
