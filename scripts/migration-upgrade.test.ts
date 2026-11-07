@@ -57,21 +57,21 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * literals, a column's default and {@link CANDIDATES}. A nullable column outside every unique
  * index is null wherever its constraints allow, except that a second row points a self-reference
  * at the first. So a migration that fails only on values the product writes and these rows lack
- * passes. The reference check reads the SQL as text, with comments removed and quoted identifiers
- * not parsed: a `--` inside a double-quoted name, or a `'` inside a backtick or double-quoted name,
- * can hide a later key on that line, and a string literal holding `REFERENCES <table>` is refused
- * as if it were a key. A reference is to the latest migration in run order, at or before it, whose
- * `CREATE TABLE` or `RENAME TO` names the table; drops are not followed, so a key to a table
- * dropped before it is caught only when the fill writes rows; a table named only in a trigger body
- * or a view is not checked, and a set's requirements count through other sets. A lost trigger is
- * judged by name alone: one recreated with another body passes. A change-feed trigger counts as
- * lost only when today's change-feed source names a column the step drops, since the feed then
- * leaves it out. The tables {@link ONE_ROW} names, and a singleton (`CHECK (id = 1)`), hold one
- * row. Steps a walk's resets list names cannot carry the rows, and the walk restarts from an empty
- * database at each. Between steps rows are counted, not compared, so a migration that rewrites a
- * value passes; only the epoch's repeat compares values. After the final step it also pins the nine
- * product triggers and the append-only triggers of every table the sets declare; no trigger is
- * compared across the initial checkpoint, which starts empty.
+ * passes. The reference check reads the SQL as text, with comments removed and quoted names not
+ * parsed: a `--`, `/*` or `'` inside a quoted name can hide a later key, and a string literal
+ * holding `REFERENCES <table>` or `CREATE TABLE <table>` is read as if it were SQL. A reference is
+ * to the latest migration in run order, at or before it, whose `CREATE TABLE` or `RENAME TO` names
+ * the table; drops are not followed, so a key to a table dropped before it is caught only when the
+ * fill writes rows; a table named only in a trigger body or a view is not checked, and a set's
+ * requirements count through other sets. A lost trigger is judged by name alone: one recreated with
+ * another body passes. A change-feed trigger counts as lost only when today's change-feed source
+ * names a column the step drops, since the feed then leaves it out. The tables {@link ONE_ROW}
+ * names, and a singleton (`CHECK (id = 1)`), hold one row. Steps a walk's resets list names cannot
+ * carry the rows, and the walk restarts from an empty database at each. Between steps rows are
+ * counted, not compared, so a migration that rewrites a value passes; only the epoch's repeat
+ * compares values. After the final step it also pins the nine product triggers and the append-only
+ * triggers of every table the sets declare; no trigger is compared across the initial checkpoint,
+ * which starts empty.
  */
 
 type ChangeSource = NonNullable<(typeof ALL_MODULES)[number]["changes"]>[number];
