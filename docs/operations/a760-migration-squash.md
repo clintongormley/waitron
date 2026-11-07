@@ -78,6 +78,14 @@ touch no venue.
   script had already emptied the venue folder, so **Santet is stopped and holds no venue** until
   its two local scripts are brought up to date with `dev-setup.ts` and the seed files; the old copy
   is kept for reference only, since the new image cannot open it.
+- **Santet, rebuilt later on 7 November.** Lane A fast-forwarded it to `de9ee3bac5` and brought
+  its local `santet-setup.ts`, `santet-sales.ts` and `local/square/import.mjs` up to date (none of
+  them in git), then ran `local/square/reset.sh` without `--fetch`. It exited 0: the import added
+  every item in the snapshot (358 products, 24 tables, 15 staff, 6 discount reasons) and the replay
+  recorded 4,008 of 4,008 bills. Afterwards: health answered 200 over HTTPS; each of the six
+  populated sets in `venue.db` and node's set in `node.db` held exactly one migration row;
+  `__drizzle_migrations_fiscal_none` held none; `pragma integrity_check` printed `ok` and
+  `pragma foreign_key_check` printed nothing in either file. The stack was left running.
 - **Other laptop venue folders.** `~/workspace/.waitron-dev/instances/` also holds venue folders for
   worktrees that no longer exist. `wa-wt` cannot reset them by name, so they were left untouched and
   count as old-version data: a worktree recreated under one of those names needs
