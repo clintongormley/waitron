@@ -79,12 +79,31 @@ describe("readBucketConfig", () => {
     expect(refusedField({ ...INPUT, endpoint })).toBe("endpoint");
   });
 
+  // `new URL` reads each of these as `https://s3.example.net/`, so only the raw text shows the
+  // address does not start the way the refusal's words say it must.
+  it.each([
+    "https:s3.example.net",
+    "https:/s3.example.net",
+    "https:\\\\s3.example.net",
+    "https:///s3.example.net",
+    "https://\\s3.example.net",
+  ])("refuses %s as endpoint: it does not start with https:// or http://", (endpoint) => {
+    expect(refusedField({ ...INPUT, endpoint })).toBe("endpoint");
+  });
+
+  it("refuses an endpoint with a tab inside, which `new URL` would drop", () => {
+    expect(refusedField({ ...INPUT, endpoint: "https://s3.exa\tmple.net" })).toBe("endpoint");
+  });
+
   // `https://@host` is accepted: `new URL` reports an empty user name and password, so the address
-  // carries nothing that could be a secret.
+  // carries nothing that could be a secret. A scheme in capitals is accepted: `new URL` reads it as
+  // lower case.
   it.each([
     "https://s3.example.net:9000/path",
     "https://s3.example.net",
     "https://@s3.example.net",
+    "HTTPS://s3.example.net",
+    "Http://s3.example.net",
   ])("accepts %s", (endpoint) => {
     expect(readBucketConfig({ ...INPUT, endpoint }, refuse).endpoint).toBe(endpoint);
   });
