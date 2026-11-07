@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
@@ -169,5 +170,40 @@ describe("till-floor-screen: an empty floor says why", () => {
     expect(find(el, "wt-floor-map")).not.toBeNull();
     expect(find(el, "[data-floor-no-tables]")).toBeNull();
     expect(find(el, "[data-floor-read-failed]")).toBeNull();
+  });
+});
+
+// The List/Map button is the wider screen's; a phone's is in the zone menu.
+describe("till-floor-screen: the List/Map button on an empty floor", () => {
+  const startWidth = innerWidth,
+    startHeight = innerHeight;
+  beforeEach(async () => {
+    await page.viewport(1280, 844);
+  });
+  afterEach(async () => {
+    await page.viewport(startWidth, startHeight);
+  });
+
+  it.each([
+    ["a zone with no tables", { selectedZoneId: "z2", tablesAnswered: true }],
+    [
+      "a zone whose tables are all off today's plan",
+      {
+        tables: [terraceTable, table("t2", "z2", true)],
+        selectedZoneId: "z2",
+        tablesAnswered: true,
+      },
+    ],
+    ["a failed read", { tables: [], floorReadFailed: true }],
+  ])("%s offers no Map/List button, and keeps the help badge and zone menu", async (_, props) => {
+    const el = await mount({ ...props, canChangeToday: true, viewMemory: remembered("map") });
+    expect(find(el, "[data-view-toggle]")).toBeNull();
+    expect(find(el, ".actions wt-help-tooltip")).not.toBeNull();
+    expect(find(el, "till-floor-zone-menu")).not.toBeNull();
+  });
+
+  it("a zone with tables to draw keeps its Map/List button", async () => {
+    const el = await mount({ selectedZoneId: "z1", tablesAnswered: true });
+    expect(find(el, "[data-view-toggle]")).not.toBeNull();
   });
 });

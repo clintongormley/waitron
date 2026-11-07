@@ -2465,7 +2465,7 @@ export class TillFloorScreen extends LitElement {
           }
           <div class="actions help-anchor">
             ${
-              this.#phone.matches
+              this.#phone.matches || empty !== nothing
                 ? nothing
                 : html`<wt-button
                     class="view-toggle"
