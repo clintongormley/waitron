@@ -6,19 +6,20 @@ their full text.
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17).**
-  [Plan](../superpowers/plans/2026-11-07-a646-modules-page.md) written 2026-11-07; build remains open and waits for A739.
+  [Plan](../superpowers/plans/2026-11-07-a646-modules-page.md) drafted 2026-11-07; publication awaits the watcher's shared-settings/Google storage decision from Claude's review. Build waits for A739.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
-  static mockups (removed from the repository on 2026-11-02). Build waits for A739. The
+  static mockups (removed from the repository on 2026-11-02). The
   first independent build PR must repair retained disabled-module append-only protection before
   any UI state controls; [that defect remains OPEN](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
-  The revision proposes one complete optional catalogue, initially Enabled; Add a module filters
+  The agreed revision uses one complete optional catalogue, initially Enabled; Add a module filters
   that same list to Disabled. Category is independent, and Card payments links to Card providers
   with All states. Row kebabs offer Configure plus Enable/Disable, with persistent red reasons
   when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
-  separate confirmation and server checks. Google remains proposed; Stripe/SumUp remain Payments
+  separate confirmation and server checks. Google becomes an optional module; Stripe/SumUp remain Payments
   contributions. Runtime, credentials, payment history, migration-slot/H2 and first-repair limits
   remain. Google disable protects every active administrator: the actor gives fresh non-Google
   proof, and every other active administrator needs supported recorded password/passkey enrollment.
+  **Owner, 2026-11-06 23:03 (A1384 export answer, copied into Lane K queue):** an export from a box with a module off must load on a new box, and “that module starts on and empty”. Google keeps its explicit default Off and credentials stay excluded.
 
   **What exists today**, read 2026-10-14, not tried on a box:
   - Google login is part of the identity package, not a module. Its OAuth client ID and secret come
@@ -1645,8 +1646,7 @@ reasoning is in `docs/superpowers/plans/2026-10-27-a918-starter-content-translat
 Enabled-default catalogue, Add a module selects Disabled, row-menu Configure/Disable, a Configure
 modal, red in-row reasons and settings saves separate from Enable/Disable. Disabling Google
 protects every active administrator: the applying administrator gives fresh non-Google proof;
-every other active administrator needs supported recorded password/passkey enrollment. Plan
-and build wait for A739 and start with retained disabled-module protection.
+every other active administrator needs supported recorded password/passkey enrollment. Planning is authorised by the watcher's 2026-11-01 note; build waits for A739 and starts with retained disabled-module protection.
 
 **Practice-sales operation descriptions (owner, 2026-10-23).** Under the owner's approval,
 the demo-test provisioner's practice-sales golden now uses the English operation description
