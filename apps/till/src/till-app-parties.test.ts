@@ -9146,14 +9146,11 @@ describe("till-app: Current orders", () => {
       expect(vi.mocked(api.listDrafts).mock.calls.length).toBe(reads);
     });
 
-    it.each([
-      ["the next person", "p2", "Luis"],
-      ["the same person again", "p1", "Ana"],
-    ])("leaves %s signed in when the refusal lands after a sign-out", async (_who, id, name) => {
+    it("leaves the same person signed in when the refusal lands after a sign-out", async () => {
       const { el, refuse } = await splitOut();
       emit(shell(el), "logout");
       await flush(el, 6);
-      emit(lock(el), "logged-in", { personId: id, displayName: name, permissions: [] });
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el, 6);
 
       refuse();
@@ -9163,6 +9160,27 @@ describe("till-app: Current orders", () => {
       expect(shell(el)).not.toBeNull();
       expect(banner(el)).toBeNull();
     });
+
+    it.each([
+      ["the next person", "p2", "Luis"],
+      ["the same person", "p1", "Ana"],
+    ])(
+      "leaves %s signed in when the refusal lands after a restart with no sign-out",
+      async (_who, id, name) => {
+        const { el, refuse } = await splitOut();
+        emit(shell(el), "device-unauthorized");
+        await flush(el, 6);
+        emit(lock(el), "logged-in", { personId: id, displayName: name, permissions: [] });
+        await flush(el, 6);
+
+        refuse();
+        await flush(el, 6);
+
+        expect(lock(el)).toBeNull();
+        expect(shell(el)).not.toBeNull();
+        expect(banner(el)).toBeNull();
+      },
+    );
   });
 
   it.each(["editor version", "draft identity", "draft revision", "API replacement"])(

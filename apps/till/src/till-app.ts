@@ -13147,6 +13147,7 @@ export class TillApp extends LitElement {
     }
     const composition = this.#billComposition([billId]);
     if (composition === null) return;
+    const signIns = this.#signIns;
     const live = () =>
       this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
     await this.#onGroupRequest(async (party, command) => {
@@ -13159,10 +13160,7 @@ export class TillApp extends LitElement {
       } catch (error) {
         const refusal = asRefusal(error);
         // A later sign-in, even the same person's, is not what the server refused.
-        if (
-          refusal?.refused === DRAFT_PERSON_REFUSAL &&
-          composition.session === this.#operatorSession
-        )
+        if (refusal?.refused === DRAFT_PERSON_REFUSAL && signIns === this.#signIns)
           this.#onDraftRefused(composition.sync!, refusal);
         throw error;
       }
