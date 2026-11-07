@@ -1024,52 +1024,27 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
-**Owner decision, 6 November 2026: A951-S replaces the earlier build.** The old private branch
-stays parked. Use the existing Cloud gateway and one outbound WireGuard container. Staff use
-password sign-in on the box; staff-host passkeys enrol separately. Venue devices keep using
-`.local`, and local sales never depend on Cloud or the internet. Customer pages stay later.
+The owner asked for A951-S on a new branch on 6 November; the earlier private A951 branch stays
+parked. The dashboard-only entrance ([#2525](https://github.com/clintongormley/waitron/pull/2525))
+and certificate worker ([#2530](https://github.com/clintongormley/waitron/pull/2530)) are separate
+open cuts, outside this runtime tree. The [optional tunnel runtime](../../deploy/tunnel/README.md)
+is manual until its signed connection and Settings wiring lands.
 
-The first cut adds an optional dashboard-only HTTPS listener, using the existing staff key and
-certificate files. It excludes the setup and recovery pages, till, device, print and machine-operation routes and marks requests
-remote before the box's own-device check. Password guessing keeps the existing backoff. The local
-listener and its passkey hostname keep their configuration.
+Remaining work:
 
-On 6 November a manual Chromium session used the public gateway to sign in to the test box
-with its ordinary password and normal certificate trust, then opened its overview. Installing
-an issued replacement changed new TLS connections without restarting the server. This was a Mac
-client on the home network using the public Internet path. A fresh Chromium session then
-repeated the password sign-in through the rented server's outside-home exit with normal trust.
-The bounded test app and peer were stopped afterwards. At the owner's request a separate
-managed demo then replaced them: the unprivileged app and its separate tunnel recovered from
-controlled process exits, and the public page returned 200. Both are enabled for startup; a
-physical box reboot remains untested. The owner's containers were untouched.
-[Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
+- Land the entrance, worker and runtime after A760's freeze. Qualify automatic certificate work
+  on the managed public demo.
+- Send the box's details over the existing signed connection, publish the tunnel image and start
+  it automatically from Settings on/off/status. Retire `@waitron/tunnel`.
+- Qualify public reconnect, a physical reboot, renewal, wrong-venue refusal, revocation, a sale
+  without the internet, and isolation from other venues and LAN addresses.
+- Try Translate all, then address completion, on the test box with owner-supplied provider keys.
 
-Remaining work, following the owner's certificate-first order:
-
-- Qualify the certificate worker on the managed public demo. The worker uses the existing signed
-  submit/status exchange, resumes pending requests after restart and renews before expiry. A local
-  TLS handshake observed the renewed chain without restarting the listener; no new public
-  certificate was issued for that synthetic test.
-- Wire the optional tunnel runtime to the existing signed connection, publish its image and
-  start it automatically from Settings on/off/status, then retire `@waitron/tunnel`. The
-  [runtime](../../deploy/tunnel/README.md) stays off without its control file; its private
-  WireGuard key is held in a separate container volume. The Linux container check covers
-  traffic to the fixed staff upstream, refused source/port, disconnect, reconnect and restart.
-  This does not qualify public automatic connection or a physical reboot.
-- Qualify the managed demo across a physical reboot.
-- Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
-  internet and separation from other venues and LAN addresses.
-- Once the browser path works, try Translate all and the existing address fields with a Cloud
-  provider on the test box. Provider keys stay on the gateway host and come from the owner.
-
-The owner accepts that a compromised Cloud could obtain a staff certificate and intercept logins,
-that the sign-in page and a bug in the remote entrance face the internet, and that this version
-has no protected owner service, strict instant shutdown or independent protection against a
-compromised box server. The A760 landing freeze and no-new-tables hold remain in force.
-
-The [old plan](../superpowers/plans/2026-10-22-a951-connection.md) and its linked protocol and host
-artifacts describe the parked implementation. They do not add work or gates to A951-S.
+The owner accepts a compromised Cloud obtaining a staff certificate and intercepting logins,
+internet-facing sign-in and entrance bugs, and no separate protected owner service, strict instant
+shutdown or independent protection from a compromised server. The A760 freeze and no-new-tables
+hold still apply. The [older plan](../superpowers/plans/2026-10-22-a951-connection.md) and its
+protocol/host artifacts describe the parked build; they add no steps to A951-S.
 
 ## A mirror keeps a renamed server's old chart (A917)
 

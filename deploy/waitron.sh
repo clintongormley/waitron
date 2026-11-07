@@ -789,7 +789,7 @@ confirm_reset() {
 
 # Run from $WAITRON_DIR. Leaves the box down; the caller starts it.
 wipe_box() {
-  docker compose down --remove-orphans
+  COMPOSE_PROFILES=staff-tunnel docker compose down --remove-orphans
   # A failed removal ABORTS the reset before the volumes further down this loop or state are touched,
   # so a box whose wipe half-failed is never restarted against surviving data with its settings
   # already gone. logs is simply first; nothing depends on the order beyond that. A volume that is
@@ -797,7 +797,7 @@ wipe_box() {
   # no database server, and the volume one used to fill is left on disk rather than removed here (no
   # backwards-compatibility code before production, CLAUDE.md §3).
   local v
-  for v in logs backups mailpit print_agent; do
+  for v in logs backups mailpit print_agent tunnel_control tunnel_keys; do
     rm_volume "waitron_${v}"
   done
   if [ "$RESET_ALL" -eq 1 ]; then
