@@ -5,8 +5,9 @@ container keeps the network permission and private key separate from the app. It
 bytes to `host.docker.internal:8443`, so TLS still ends at the box's staff listener.
 
 This is the optional runtime of A951-S. The signed connection submits the public key and writes
-the peer configuration when the Cloud receiver is enabled. Settings controls and automatic
-image publication remain to be connected. The default installation does not start it. The
+the peer configuration when the Cloud receiver is enabled. On a paired installation, Settings
+lets you turn remote access off and on without pairing again. Off removes the peer configuration;
+automatic image publication remains to be connected. The default installation does not start it. The
 staff listener from PR #2525 must already be running and reachable from the Docker bridge;
 its loopback-only default is not reachable from this container.
 

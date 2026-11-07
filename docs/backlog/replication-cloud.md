@@ -1059,10 +1059,13 @@ Remaining work, following the owner's certificate-first order:
   submit/status exchange, resumes pending requests after restart and renews before expiry. A local
   TLS handshake observed the renewed chain without restarting the listener; no new public
   certificate was issued for that synthetic test.
-- Qualify the Settings remote-access choice on the managed deployment. The private integration
-  branch can persist on/off without revoking Cloud pairing; off removes the peer configuration
-  without contacting Cloud. The screen labels its saved choice separately from connection health.
-  Managed deployment and retiring `@waitron/tunnel` remain.
+- Finish review and publication of the combined build and its installation path. Its normal
+  server bundle passed a bounded systemd run: Settings off survived an app restart and Cloud
+  refresh, local sign-in worked, and on restored trusted public access with the same registration,
+  key and certificate. Systemd app recovery and a peer-container restart also passed. The temporary
+  unit, peer and network were removed; the earlier persistent demo is unchanged.
+  [Receipt and limits](../operations/a951-host-evidence.md#bounded-managed-server-restart-7-november-2026).
+  Retiring `@waitron/tunnel` remains.
 - Qualify the managed demo across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.

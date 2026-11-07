@@ -2105,8 +2105,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   now resumes pending requests, renews before expiry and opens the listener after first issuance;
   a fresh isolated test venue completed automatic key submission, tunnel configuration, certificate
   installation and trusted public browser sign-in on 7 November. Its peer restart also recovered.
-  Left: managed deployment, Settings on/off/status, remaining isolation
-  qualification and retirement of `@waitron/tunnel`. Translate all and address completion remain
+  A bounded run of the normal bundled server under systemd also retained Settings off across
+  an app restart and Cloud refresh; on restored trusted public access. Managed process and peer
+  recovery passed with the same keys and certificate. Left: publication and installation of the
+  combined build, physical reboot, public renewal, remaining isolation qualification and retirement
+  of `@waitron/tunnel`. Translate all and address completion remain
   test-box trials.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
