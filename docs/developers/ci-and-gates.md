@@ -1605,6 +1605,10 @@ Keep that result distinct from a run proving publication after this correction.
 
 ### Smaller job-list pages after HTTP 502 responses (A1340)
 
+> 7 November 2026, A1427: the reuse verifier and its test were retired. This section keeps their
+> historical measurements. Run `pnpm exec vitest run scripts/ci-workflow.test.mjs` for the remaining
+> aggregate and watchdog API guards; the old two-file command below is no longer a current command.
+
 On 5 November 2026, [main run 42051923779](https://github.com/clintongormley/waitron/actions/runs/42051923779),
 attempt 2, reached its twelve-minute summary limit while the jobs API returned HTTP 502.
 The retained paired driver requests show `per_page=100` returning `Server Error (HTTP 502)`
@@ -3450,15 +3454,11 @@ same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=pa
 `packages=@waitron/server`; and `pnpm --filter "...@waitron/server" ls --depth -1 --json | node
 scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
 every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for `code` and
-`server` both true. On `main` the `changes` job forces `scope=global`, whose gate step prints every gate true. On a real pull
-request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
-installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
-that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
-in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven from A801, sixteen from A938, twenty from A1137, twenty-four since A1297),
-`test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
-`code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
-the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless
-`scripts/main-tag-guard.sh` holds it for a newer commit.
+`server` both true. PR and ordinary main ranges now select those server jobs without package
+coverage; their merge job runs only in full verification. Type checks and bundle checks also run
+when code is selected. Full scheduled/manual verification selects all packages and image smoke,
+then publishes main images through the existing tag guard. The PR #682 runs above record the
+older job layout, before A1427 scoped main landings and moved full coverage to the nightly run.
 
 **What the guard does not see.** `scripts/ci-workflow.test.mjs` is weaker than its name for the
 `TMPDIR=/dev/shm` setting: it reads `ci.yml` as text, so a step an `if:` switches off, or a `run:`

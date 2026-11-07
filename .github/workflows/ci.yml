@@ -176,7 +176,7 @@ jobs:
           # `packages=`, `root=` and `deploy=` — from ONE classifier call, which is also the one
           # `.husky/pre-push` makes. Four become job outputs: `root=` is emitted for the record and
           # read by no consumer today — the hook routes a root-only push on `scope=root` — while
-          # `deploy=` is read by the `image` job. Reuse leaves these publishing inputs intact.
+          # `deploy=` is read by the `image` job.
           # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
@@ -201,7 +201,6 @@ jobs:
           scope=$(printf '%s\n' "$out" | sed -n 's/^scope=//p')
           packages=$(printf '%s\n' "$out" | sed -n 's/^packages=//p')
           # Whether the box image's inputs (deploy/, and the files image-smoke runs that IMAGE_SMOKE_FILES names) changed.
-          # The `image` job runs on it; a main push also runs it on `code` alone.
           deploy=$(printf '%s\n' "$out" | sed -n 's/^deploy=//p')
 
           if [ "$FULL" = "true" ]; then
@@ -688,12 +687,9 @@ jobs:
   # WHEN IT RUNS. Whenever an image input changed (`needs.changes.outputs.deploy`, fed by
   # `isImageInputPath` in scripts/changed-scope.mjs: `deploy/`, plus the files image-smoke runs that
   # `IMAGE_SMOKE_FILES` names, such as scripts/fake-bluez.py) — on its own, because a change to such a file under `scripts/` is
-  # root scope, which answers `code=false`. Otherwise, most PRs skip it. On a PUSH to `main` or a
-  # `v*` tag it also runs on `code` alone, because `publish` ships the image off this smoke
-  # passing, so every published image was booted first. Drift on quiet days, and an edit to the image
-  # workflow itself, are covered by the full nightly CI run and manual image-nightly.yml dispatches.
-  # ONE `if:` line, so the line-based guard in scripts/ci-workflow.test.mjs reads it — that guard
-  # pins the deploy wiring and this pull-request-only event split.
+  # root scope, which answers code=false. Full verification also smokes before publication.
+  # Guard: scripts/ci-workflow.test.mjs reads the condition as text and evaluates its truth table.
+
   image:
     needs: changes
     if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.full == 'true'
@@ -1485,8 +1481,6 @@ jobs:
       - name: Run the fiscal-verifactu shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:shard
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
           node scripts/run-with-deadline.mjs 420 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \

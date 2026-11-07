@@ -1718,11 +1718,11 @@ describe("the `ci` aggregate's verdict", () => {
     return needs;
   };
 
-  it(
-    "refuses a skipped shared mutation score when shared was selected",
-    () => {
+  it.each(["false", "true"])(
+    "refuses a skipped shared mutation score when shared was selected with full=%s",
+    (full) => {
       const { status, output } = runVerdict(
-        scoped({ code: "true", shared: "true" }, "mutation-shared-aggregate"),
+        scoped({ full, code: "true", shared: "true" }, "mutation-shared-aggregate"),
       );
       expect(status).toBe(JQ_REFUSED);
       expect(output).toContain(
@@ -3158,7 +3158,7 @@ describe("the scope gates", () => {
 
 describe("the image smoke's scoping", () => {
   // A pull request runs the image smoke only when an image input changed; a push to `main` still
-  // smokes on `code` alone, because `publish` ships the image off this smoke passing.
+  // Full verification smokes its image before publication.
   it("declares a `deploy` output on the `changes` job", () => {
     expect(outputsOf(job("changes").body)).toContain("deploy");
   });

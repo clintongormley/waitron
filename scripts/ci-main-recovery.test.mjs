@@ -35,11 +35,17 @@ git("config", "commit.gpgsign", "false");
 mkdirSync(join(fixture, "apps/server/src"), { recursive: true });
 mkdirSync(join(fixture, "docs"));
 writeFileSync(join(fixture, "package.json"), JSON.stringify({ name: "fixture", private: true }));
-writeFileSync(join(fixture, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n");
+writeFileSync(join(fixture, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n  - packages/*\n");
 writeFileSync(
   join(fixture, "apps/server/package.json"),
   JSON.stringify({ name: "@waitron/server", private: true }),
 );
+mkdirSync(join(fixture, "packages/payments/src"), { recursive: true });
+writeFileSync(
+  join(fixture, "packages/payments/package.json"),
+  JSON.stringify({ name: "@waitron/payments", private: true }),
+);
+writeFileSync(join(fixture, "packages/payments/src/status.ts"), "export const ready = false;\n");
 writeFileSync(join(fixture, "apps/server/src/mail.ts"), "export const ready = false;\n");
 git("add", ".");
 git("commit", "-m", "successful baseline");
@@ -63,6 +69,12 @@ git("add", ".");
 git("commit", "-m", "path with leading whitespace");
 const unsafeHead = git("rev-parse", "HEAD");
 git("reset", "--hard", nextCodeHead);
+git("checkout", "-b", "payments-change", docsHead);
+writeFileSync(join(fixture, "packages/payments/src/status.ts"), "export const ready = true;\n");
+git("add", ".");
+git("commit", "-m", "payment change after unchecked server code");
+const paymentsHead = git("rev-parse", "HEAD");
+git("checkout", "main");
 git("remote", "add", "origin", fixture);
 git("fetch", "origin", "main");
 symlinkSync(join(root, "scripts"), join(fixture, "scripts"));
@@ -336,6 +348,19 @@ describe("main CI recovery", () => {
     expect(
       classifyRun({ runs: [successful(codeHead, { event: "workflow_dispatch" })] }).values.code,
     ).toBe("false");
+  });
+  it("keeps a failed server change when a later push changes a different package", () => {
+    const result = classifyRun({
+      sha: paymentsHead,
+      runs: [successful(codeHead, { conclusion: "failure" }), successful(baseline)],
+    });
+    expect(result.values).toMatchObject({
+      code: "true",
+      scope: "packages",
+      packages: "@waitron/payments @waitron/server",
+      deploy: "false",
+    });
+    expect(result.stderr).toContain(`main CI baseline: ${baseline}`);
   });
   it("uses a completed successful scheduled main run as a baseline", () => {
     const result = classifyRun({ runs: [successful(codeHead, { event: "schedule" })] });
