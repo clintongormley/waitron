@@ -12172,10 +12172,9 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1); // basket intact
     });
 
-    it("place: a fresh-basket park network failure shows place.error, not sale.unconfirmed", async () => {
+    it("place: a fresh-basket park network failure shows place.error, not place.unconfirmed", async () => {
       // `parkOrder` is the preliminary save on a fresh basket; a network failure of it means the
-      // `placeOrder` fiscal request was never made, so this is the free-to-retry `place.error`, not the
-      // "did it file?" `sale.unconfirmed`. `placeOrder` is never reached.
+      // `placeOrder` request was never made. `placeOrder` is never reached.
       const parkOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -12194,12 +12193,11 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1); // basket kept
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("place.error"));
-      expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+      expect(banner.textContent).not.toContain(t("place.unconfirmed"));
     });
 
-    it("place: the placeOrder fiscal request network-failing shows sale.unconfirmed (the request was reached)", async () => {
-      // The other side: park succeeded and `placeOrder` IS called, so a network failure of THAT
-      // request is `sale.unconfirmed` — the placement / deferred invoice may have filed.
+    it("place: the placeOrder request network-failing shows place.unconfirmed (the request was reached)", async () => {
+      // The other side: park succeeded and `placeOrder` IS called, so the reply to THAT request was lost.
       const placeOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -12217,7 +12215,7 @@ describe("till-app", () => {
       expect(placeOrder).toHaveBeenCalled();
       expect(tenderPay(el).stage).toBe("order"); // never advanced — the place failed
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
-      expect(banner.textContent).toContain(t("sale.unconfirmed"));
+      expect(banner.textContent).toContain(t("place.unconfirmed"));
     });
 
     it("place single-flight: a second place-order while the first is pending places EXACTLY ONCE", async () => {
@@ -16914,7 +16912,7 @@ describe("a failed list refresh after a successful write", () => {
     expect(message(el, "held")).toBe(t("refresh.held_after_sale"));
   });
 
-  it("place: the collect stage stands and the queue refresh failure never shows sale.unconfirmed", async () => {
+  it("place: the collect stage stands and the queue refresh failure never shows place.unconfirmed", async () => {
     const getStationQueue = failingAfterLogin<StationQueue>({
       items: [],
       notices: [],
@@ -16934,7 +16932,7 @@ describe("a failed list refresh after a successful write", () => {
 
     expect(currentApi.placeOrder).toHaveBeenCalledOnce();
     expect(tenderPay(el).stage).toBe("collect");
-    expect(alertText(el)).not.toContain(t("sale.unconfirmed"));
+    expect(alertText(el)).not.toContain(t("place.unconfirmed"));
     expect(alertText(el)).not.toContain(t("place.error"));
     expect(message(el, "station")).toBe(t("refresh.station_after_place"));
 

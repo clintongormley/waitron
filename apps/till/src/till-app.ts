@@ -7826,7 +7826,7 @@ export class TillApp extends LitElement {
         this.errorKey = isPermanentSaleRefusal(error)
           ? "place.refused"
           : reachedPlace && isNetworkFailure(error)
-            ? "sale.unconfirmed"
+            ? "place.unconfirmed"
             : counterError(error, "place.error");
     } finally {
       this.placing = false;
