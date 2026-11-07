@@ -81,7 +81,7 @@ it("claims the frozen Live identity before certificate/readiness and mounts its 
 it.each(["demo", "prepare"])("keeps %s free of custody claims", async (mode) => {
   const { app, requests } = await mount();
   await liveVenue(app, mode);
-  await screen(app, "review");
+  await screen(app, mode === "prepare" ? "email" : "review");
   expect(
     requests.filter((r) => r.path.endsWith("/claim") || r.path.endsWith("/offerings")),
   ).toEqual([]);
