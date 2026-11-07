@@ -106,7 +106,8 @@ export async function unpackBundleToDir(
   destDir: string,
   // `false` for a copy that is thrown away: the backup verifier's runs under Node's permission
   // mode, which refuses every fsync.
-  { durable = true }: { durable?: boolean } = {},
+  // `suffix` is appended to each target after the path guard has checked it.
+  { durable = true, suffix = "" }: { durable?: boolean; suffix?: string } = {},
 ): Promise<void> {
   if (Object.keys(files).some((name) => isFirstSetupHostPath(posix.normalize(name)))) {
     throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
@@ -135,7 +136,7 @@ export async function unpackBundleToDir(
     ) {
       await chmod(dir, 0o700);
     }
-    if (durable) await writeFileDurable(target, contents, 0o600);
-    else await writeFileAtomic(target, contents, 0o600);
+    if (durable) await writeFileDurable(`${target}${suffix}`, contents, 0o600);
+    else await writeFileAtomic(`${target}${suffix}`, contents, 0o600);
   }
 }
