@@ -32,7 +32,7 @@ const bases = [
 const operator = "administrator";
 const input = () => ({
   environments: ["preproduction"] as const,
-  taxpayerNif: "89890001K",
+  taxId: "89890001K",
   bases: structuredClone(bases),
   nodeId: node.nodeId,
   administratorId: operator,

@@ -238,7 +238,7 @@ describe("staged configuration import", () => {
     expect(await response.json()).toEqual({
       error:
         _label === "future version"
-          ? { code: "setup.request_invalid", params: { field: "version" } }
+          ? { code: "setup.configuration_newer", params: {} }
           : { code: "setup.configuration_outdated", params: {} },
     });
     expect((await readdir(stateDir)).sort()).toEqual([
@@ -248,6 +248,42 @@ describe("staged configuration import", () => {
     ]);
     for (const name of await readdir(stateDir))
       expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
+  });
+
+  it("answers an export running other parts with both lists, before replacing staged files", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
+    dirs.push(stateDir);
+    await writeFile(join(stateDir, "configuration-import.json"), "retained");
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        stageConfiguration: (artifact, passphrase) =>
+          stageConfigurationImport(stateDir, ring, artifact, passphrase, validate),
+      },
+      () => {},
+    );
+    const artifact = encodeConfigurationBundle(
+      { ...bundle, modules: { "fiscal-verifactu": 1, bookings: 1 } },
+      "a strong passphrase",
+    );
+    const response = await app.request("/setup-api/configuration", {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-export-passphrase": "a strong passphrase",
+      },
+      body: new Uint8Array(artifact).buffer,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "setup.configuration_parts_differ",
+        params: { exportOnly: ["bookings", "fiscal-verifactu"], serverOnly: ["core"] },
+      },
+    });
+    expect(await readdir(stateDir)).toEqual(["configuration-import.json"]);
   });
 
   it.each(["department_sale_policies", "zone_sale_policies"])(
@@ -913,7 +949,7 @@ describe("routing cells in a staged import", () => {
     expect(await readdir(rejected.stateDir)).toEqual([]);
   });
 
-  it("refuses a bundle whose core version differs from this box's, before any write", async () => {
+  it("refuses a bundle whose core version is older than this box's as outdated, before any write", async () => {
     const { bundle, versions } = await exported();
     const journal = JSON.parse(
       await readFile(
@@ -929,15 +965,13 @@ describe("routing cells in a staged import", () => {
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({
-      code: "setup.request_invalid",
-      params: { field: "module:core" },
+      code: "setup.configuration_outdated",
+      params: {},
     });
     expect(await readdir(stateDir)).toEqual([]);
   });
 
-  // Catalogue lost its own migration set in the A760 squash, so a bundle exported before it names
-  // a module this box no longer versions.
-  it("refuses a bundle from before the migration squash that names catalogue, before any write", async () => {
+  it("refuses a bundle naming a part this box does not run as parts that differ, before any write", async () => {
     const { bundle, versions } = await exported();
     expect(versions).not.toHaveProperty("catalogue");
     const old: ConfigurationBundle = {
@@ -947,8 +981,8 @@ describe("routing cells in a staged import", () => {
     };
     const { stateDir, result } = await staged(old, versions);
     await expect(result).rejects.toMatchObject({
-      code: "setup.request_invalid",
-      params: { field: "modules" },
+      code: "setup.configuration_parts_differ",
+      params: { exportOnly: ["catalogue"], serverOnly: [] },
     });
     expect(await readdir(stateDir)).toEqual([]);
   });

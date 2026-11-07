@@ -51,7 +51,7 @@ async function seedStampedVenue(stamp: "preproduction" | "production") {
 function prepareFor(environments: readonly ("production" | "preproduction")[]) {
   return seat().prepare({
     environments,
-    taxpayerNif: TAXPAYER,
+    taxId: TAXPAYER,
     bases,
     nodeId: node.nodeId,
     administratorId: randomUUID(),
@@ -80,7 +80,7 @@ async function activate(prepared: ReturnType<ThrowawayAllocation["prepare"]>, op
 function signFor(administratorId: string) {
   return seat().prepare({
     environments: ["preproduction"],
-    taxpayerNif: TAXPAYER,
+    taxId: TAXPAYER,
     bases,
     nodeId: node.nodeId,
     administratorId,
@@ -156,7 +156,7 @@ describe("the throwaway allocation seat", () => {
       const sign = () =>
         counted.prepare({
           environments: ["preproduction"],
-          taxpayerNif: TAXPAYER,
+          taxId: TAXPAYER,
           bases,
           nodeId: node.nodeId,
           administratorId: randomUUID(),
@@ -206,7 +206,7 @@ describe("the throwaway allocation seat", () => {
       expect(() =>
         counted.prepare({
           environments,
-          taxpayerNif: TAXPAYER,
+          taxId: TAXPAYER,
           bases,
           nodeId: node.nodeId,
           administratorId: randomUUID(),
@@ -240,7 +240,7 @@ describe("the throwaway allocation seat", () => {
         expect(() =>
           counted.prepare({
             environments: environments as unknown as readonly "preproduction"[],
-            taxpayerNif: TAXPAYER,
+            taxId: TAXPAYER,
             bases,
             nodeId: node.nodeId,
             administratorId: randomUUID(),
@@ -271,7 +271,7 @@ describe("the throwaway allocation seat", () => {
       });
       counted.prepare({
         environments: ["preproduction"],
-        taxpayerNif: TAXPAYER,
+        taxId: TAXPAYER,
         bases,
         nodeId: node.nodeId,
         administratorId: randomUUID(),

@@ -20,7 +20,7 @@ export function createHourThrowawayAllocation(
   options: { now?: () => Date } = {},
 ): ThrowawayAllocation {
   return {
-    prepare({ environments, taxpayerNif, bases: suppliedBases, nodeId, administratorId }) {
+    prepare({ environments, taxId, bases: suppliedBases, nodeId, administratorId }) {
       if (environments.length === 0)
         throw new AppError("sif.throwaway_allocation_refused", { environment: "none" });
       const refused = environments.findIndex((environment) => environment !== "preproduction");
@@ -48,7 +48,7 @@ export function createHourThrowawayAllocation(
         allocation: {
           version: 1,
           allocationId: `throwaway-${randomUUID()}`,
-          taxpayerNif,
+          taxpayerNif: taxId,
           softwareId: WAITRON_ID_SISTEMA,
           environment: "preproduction",
           installationIdentity: identity,

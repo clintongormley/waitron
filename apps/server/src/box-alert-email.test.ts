@@ -67,6 +67,16 @@ describe("boxEmailMessage", () => {
   });
 });
 
+describe("the full-disk email", () => {
+  it("sends nobody elsewhere, and names the page that frees space", () => {
+    const { en, es } = BOX_EMAIL_WORDS["storage.disk_full"];
+    expect(en.text).not.toMatch(/install|support/i);
+    expect(es.text).not.toMatch(/instal|soporte/i);
+    expect(en.text).toContain("Settings → Box status");
+    expect(es.text).toContain("Ajustes → Estado del equipo");
+  });
+});
+
 describe("the clock stop emails", () => {
   it.each(["clock.unusable", "clock.behind_chain"] as const)(
     "%s sends nobody to whoever installed the box, and names the pages and button that fix it",

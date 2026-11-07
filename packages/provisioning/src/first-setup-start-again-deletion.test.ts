@@ -42,7 +42,10 @@ async function refusal(promise: Promise<unknown>) {
     (thrown: unknown) => thrown,
   );
   if (!isAppError(error)) throw new Error(`expected a refusal, got ${String(error)}`);
-  return { code: error.code, reason: error.reason };
+  const params = error.params as Record<string, unknown>;
+  return Object.keys(params).length === 0
+    ? { code: error.code, reason: error.reason }
+    : { code: error.code, params, reason: error.reason };
 }
 
 async function box() {
@@ -74,6 +77,7 @@ it("reports a first-setup record folder it cannot read as a failed check, naming
   try {
     expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
       code: "setup.not_ready",
+      params: { cause: "unreadable" },
       reason: `check failed: EACCES ${record}`,
     });
   } finally {
@@ -95,7 +99,32 @@ it("with held, the disk check accepts the setup's modules.json; without it, refu
   await assertStartAgainAllowedOnDisk(roots, { held: true });
   expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
     code: "setup.not_ready",
+    params: { cause: "unexpected" },
     reason: "refused artifact: state/modules.json",
+  });
+});
+
+it.each([
+  ["a node.db-wal holding pages", "node.db-wal holds pages", "unexpected"],
+  ["a node.db that is not a database", "node.db unreadable", "unreadable"],
+] as const)("the disk check refuses %s and names its cause", async (name, reason, cause) => {
+  const roots = await box();
+  await writeFile(join(roots.venueDir, "node.db"), "not a database");
+  if (name.includes("-wal")) await writeFile(join(roots.venueDir, "node.db-wal"), "pages");
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
+    code: "setup.not_ready",
+    params: { cause },
+    reason,
+  });
+});
+
+it("the disk check refuses an unexpected folder in the venue's documents as an unexpected layout", async () => {
+  const roots = await box();
+  await mkdir(join(roots.stateDir, "first-fiscal-documents", "inner"), { recursive: true });
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
+    code: "setup.not_ready",
+    params: { cause: "unexpected" },
+    reason: "layout unexpected: first-fiscal-documents/inner",
   });
 });
 

@@ -136,7 +136,12 @@ export async function buildConfigurationBundle(
     },
     defaultCatalogueId,
     privacyContact: { privacyNoticeUrl, privacyEmail },
-    modules: moduleVersions,
+    // A trading box's versions also name its switched-off modules, which setup refuses.
+    modules: Object.fromEntries(
+      Object.entries(moduleVersions).filter(([name]) =>
+        modulesWithSets(modules).some((module) => module.name === name),
+      ),
+    ),
     ...transferred,
   };
 }
@@ -466,7 +471,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
   if (typeof value.version === "number" && value.version > 10) {
-    throw new AppError("setup.request_invalid", { field: "version" });
+    throw new AppError("setup.configuration_newer", {});
   }
   if (value.version !== 10) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
@@ -575,14 +580,25 @@ export function validateConfigurationBundle(
 ): void {
   const timeZone = requireCountryTimeZone(bundle.venue.country, bundle.venue.timeZone);
   const versioned = modulesWithSets(modules);
-  const expectedModules = new Set(versioned.map((module) => module.name));
-  if (Object.keys(bundle.modules).some((name) => !expectedModules.has(name))) {
-    throw new AppError("setup.request_invalid", { field: "modules" });
+  const serverSets = new Set(versioned.map((module) => module.name));
+  const exportSets = new Set(Object.keys(bundle.modules));
+  const exportOnly = [...exportSets].filter((name) => !serverSets.has(name)).sort();
+  const serverOnly = [...serverSets].filter((name) => !exportSets.has(name)).sort();
+  if (exportOnly.length > 0 || serverOnly.length > 0) {
+    throw new AppError("setup.configuration_parts_differ", { exportOnly, serverOnly });
   }
-  for (const module of versioned) {
-    if (bundle.modules[module.name] !== targetVersions[module.name]) {
-      throw new AppError("setup.request_invalid", { field: `module:${module.name}` });
-    }
+  const unrecorded = versioned.find((module) => targetVersions[module.name] === undefined);
+  if (unrecorded !== undefined) {
+    throw new AppError("setup.request_invalid", { field: `module:${unrecorded.name}` });
+  }
+  const differences = versioned.map(
+    (module) => bundle.modules[module.name]! - targetVersions[module.name]!,
+  );
+  if (differences.some((difference) => difference > 0)) {
+    throw new AppError("setup.configuration_newer", {});
+  }
+  if (differences.some((difference) => difference < 0)) {
+    throw new AppError("setup.configuration_outdated", {});
   }
   checkedRows(bundle, modules);
   for (const field of PRIVACY_CONTACT_FIELDS) {

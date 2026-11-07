@@ -57,22 +57,23 @@ vi.mock("../src/first-setup-database-holdings.js", async (importOriginal) => {
   };
 });
 
-const copyFails = vi.hoisted(() => ({ on: false, calls: 0 }));
+/** `code`: the error code every copy of the venue files fails with; unset, copies run. */
+const copyFails = vi.hoisted(() => ({ code: undefined as string | undefined, calls: 0 }));
 
 vi.mock("../src/venue-private-copy.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/venue-private-copy.js")>();
   return {
     ...actual,
     copyVenueFiles: (...args: Parameters<typeof actual.copyVenueFiles>) => {
-      if (!copyFails.on) return actual.copyVenueFiles(...args);
+      if (copyFails.code === undefined) return actual.copyVenueFiles(...args);
       copyFails.calls += 1;
-      return Promise.reject(Object.assign(new Error("no space"), { code: "ENOSPC" }));
+      return Promise.reject(Object.assign(new Error("copy failed"), { code: copyFails.code }));
     },
   };
 });
 
 afterEach(() => {
-  copyFails.on = false;
+  copyFails.code = undefined;
   copyFails.calls = 0;
 });
 
@@ -152,7 +153,11 @@ async function keptRecordsLogReason(f: Held) {
   return refusal?.fields?.logReason;
 }
 
-const notReady = { code: "setup.not_ready" };
+/** Start again's `setup.not_ready`, with the cause the setup page words. */
+const notReadyBecause = (cause: "may-have-filed" | "unexpected" | "too-large" | "unreadable") => ({
+  code: "setup.not_ready",
+  params: { cause },
+});
 
 /** Signs the owner in and asks for the summary; `run` sends Start again confirming it. */
 async function askStartAgain(f: Held, host: Held["host"] = f.host) {
@@ -343,7 +348,7 @@ export {
   copyFails,
   expectRefused,
   keptRecordsLogReason,
-  notReady,
+  notReadyBecause,
   askStartAgain,
   LEFT_VENUE,
   damageRecoveryRecord,

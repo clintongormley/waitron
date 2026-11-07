@@ -1823,6 +1823,10 @@ the default menu to the top-level `defaultCatalogueId` and dropped the location'
 `fireControl`; a format-9 export is refused as outdated. `configuration-transfer.test.ts` now pins
 format 10, and older files are refused as `setup.configuration_outdated`.
 
+From go-live, retiring a module also ships a way for an older export that names it to load (owner,
+2026-11-07), because setup answers an export refused as `setup.configuration_parts_differ` by
+telling the person to update this server. Until go-live a server is reset instead (CLAUDE.md §3).
+
 ### A configuration bundle value that is not a setup field stays out of the venue's own keys
 
 The setup app copies into the claim only the preview's `country`, the taxpayer fields (`TAXPAYER_FIELDS`) and `CLAIM_VENUE_FIELDS`

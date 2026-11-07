@@ -6368,7 +6368,7 @@ describe("public holidays in a configuration transfer", () => {
     expect(persisted.rows).toEqual([{ tenants: 0 }]);
   });
 
-  it("refuses a bundle whose core version differs from this box's", async () => {
+  it("refuses a bundle whose core version is older than this box's as outdated", async () => {
     const { versions, transferred } = await preparedWithHolidays("B45003311");
     const journal = JSON.parse(
       await readFile(
@@ -6383,10 +6383,7 @@ describe("public holidays in a configuration transfer", () => {
       modules: { ...transferred.modules, core: versions.core! - 1 },
     };
     expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: "module:core" },
-      }),
+      expect.objectContaining({ code: "setup.configuration_outdated", params: {} }),
     );
   });
 });

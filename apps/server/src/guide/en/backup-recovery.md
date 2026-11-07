@@ -28,7 +28,7 @@ the settings the box sells with (continue with your setup password to finish it)
 already finished, or if the setup database holds an invoice or another record Waitron never
 deletes. If the box cannot confirm that deleting the setup is safe, the page says so and offers
 neither. That includes a setup whose own record cannot be read: then the only way out is to
-reinstall Waitron.
+reinstall Waitron. Over a plain connection neither works: set up the secure connection first.
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore a backup** or **Restore from my

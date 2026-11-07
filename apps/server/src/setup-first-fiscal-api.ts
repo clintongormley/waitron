@@ -30,6 +30,7 @@ const boundary = createErrorBoundary(
     "setup.not_ready": 503,
     "setup.certificate_refused": 422,
     "setup.owner_required": 403,
+    "setup.connection_insecure": 403,
     "password.throttled": 429,
     "setup.attempt_conflict": 409,
     "setup.attempt_invalid": 409,
@@ -835,7 +836,7 @@ export function mountFirstSetupResolutionApi(
   const assertHttps = (c: Context) => {
     const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
     if (!(socket instanceof TLSSocket) || !socket.encrypted)
-      throw new AppError("setup.owner_required", {});
+      throw new AppError("setup.connection_insecure", {});
   };
   if (options.summary !== undefined)
     app.post(START_AGAIN_ROUTES.summary.path, (c) =>

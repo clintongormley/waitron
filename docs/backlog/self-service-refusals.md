@@ -406,7 +406,7 @@ State: Free space in the staging filesystem is below the estimated need. A full 
 
 _2026-10-28, A1167 slice 1: these words are gone. The bell now draws the owner's «Backup not made: it needs {needed} free and the disk has {available}.» (the `spaceLow` variant of `backup.run_stopped`), and a run first deletes its oldest deletable backups on the disk before it is refused; see [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies). The rest of this entry records the earlier tree._
 
-Route: Existing: Box status shows disk use; the boot recovery wording names an installer freeing space or fitting a bigger disk. (2026-10-28, A1127: the full-disk page's action now names nobody; it says what fills the disk, that Waitron cannot free more by itself, and what reinstalling costs. The `storage.disk_full` email in `apps/server/src/i18n/box-emails.ts` still names the installer.) Missing: a supported self-service cleanup path for a person without a terminal. Never delete fiscal data or unrelated shared state.
+Route: Existing: Box status shows disk use; the boot recovery wording names an installer freeing space or fitting a bigger disk. (2026-10-28, A1127: the full-disk page's action now names nobody; it says what fills the disk, that Waitron cannot free more by itself, and what reinstalling costs. 2026-11-06, A1384: the `storage.disk_full` email in `apps/server/src/i18n/box-emails.ts` now says the same and names nobody.) Missing: a supported self-service cleanup path for a person without a terminal. Never delete fiscal data or unrelated shared state.
 
 ### `recovery.state_incomplete`
 
@@ -652,9 +652,11 @@ not verify that every provider, device or process eventually recovers.
 ## Server pages and guides
 
 `apps/server/src/recovery-surface.ts` has no literal “contact support”. Its database-ahead/schema
-rows name backup/reinstall, its disk-full row names freeing space or a bigger disk (2026-10-28, A1127: the full-disk page's action now names nobody; it says what fills the disk, that Waitron cannot free more by itself, and what reinstalling costs. The `storage.disk_full` email in `apps/server/src/i18n/box-emails.ts` still names the installer), and its unknown
+rows name backup/reinstall, its disk-full row names freeing space or a bigger disk (2026-10-28, A1127: the full-disk page's action now names nobody; it says what fills the disk, that Waitron cannot free more by itself, and what reinstalling costs. 2026-11-06, A1384: the `storage.disk_full` email in `apps/server/src/i18n/box-emails.ts` now says the same and names nobody), and its unknown
 boot row names a retry followed by the installer. Those are already distinct instructions rather
-than an endless wait. The page's rendered action is a boot retry (`:563`); a restore or reinstall
+than an endless wait. _2026-11-07: the database-ahead, schema and unknown-boot rows, and others, but not the disk-full
+row, also send the person to whoever installed the box, against CLAUDE.md §3's first rule
+([setup.md](setup.md#the-recovery-pages-operator-texts-send-the-person-to-whoever-installed-the-box))._ The page's rendered action is a boot retry (`:563`); a restore or reinstall
 is an operator procedure, not a second button. The actual accessibility of each installer procedure
 was not exercised by this audit. Do not describe this as qualified end-user recovery.
 
@@ -701,8 +703,8 @@ damaged recovery-key record.
 
 Left open by A1099. Since A1131bc slice 2 a present `venue.db` the box finds damaged (SQLite code 11
 or 26, or a table a reader expects missing) is deleted after the page says "The previous setup
-process was unsuccessful.". These still refuse `setup.not_ready`, which the page draws as "cannot
-confirm that deleting this setup is safe" (plan, N1):
+process was unsuccessful.". These still refuse `setup.not_ready` (plan, N1); since A1384 (2026-11-06) the page words the
+cause the box gives with it:
 
 - a `venue.db` the box may not open, or one over 128 MiB;
 - a damaged read while a `-journal` file sits beside the database;

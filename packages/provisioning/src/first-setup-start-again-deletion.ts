@@ -322,13 +322,14 @@ export async function startAgainMarkerFor(
   options: Options = {},
 ): Promise<StartAgainMarker> {
   const canonical = await canonicalFirstSetupRoots(roots);
-  const items = await itemsOnDisk(canonical, options).catch((error: unknown) => {
+  const rethrow = (error: unknown): never => {
     throw error instanceof AppError ? error : checkFailed(error);
-  });
+  };
+  const items = await itemsOnDisk(canonical, options).catch(rethrow);
   const files: StartAgainMarkedFile[] = [];
   for (const item of items)
     if (item.kind === "file")
-      files.push({ root: item.root, name: item.name, ...(await sha256(item.path)) });
+      files.push({ root: item.root, name: item.name, ...(await sha256(item.path).catch(rethrow)) });
   const wal = async (name: string) => {
     const path = join(canonical.venueDir, name);
     return (await present(path)) ? sha256(path) : null;
@@ -338,7 +339,10 @@ export async function startAgainMarkerFor(
     ...attempt,
     ...canonical,
     files,
-    wal: { "venue.db-wal": await wal("venue.db-wal"), "node.db-wal": await wal("node.db-wal") },
+    wal: {
+      "venue.db-wal": await wal("venue.db-wal").catch(rethrow),
+      "node.db-wal": await wal("node.db-wal").catch(rethrow),
+    },
   });
 }
 
@@ -371,6 +375,8 @@ export async function assertNoStartAgainDeletion(venueDir: string): Promise<void
 }
 
 export async function writeStartAgainMarker(roots: Roots, marker: StartAgainMarker): Promise<void> {
+  // No cause: the server refuses an oversized marker first, as "too-large", so only a fault in
+  // Waitron reaches this.
   if (markerSize(marker) > MARKER_LIMIT) throw new AppError("setup.not_ready", {});
   const value = parseMarker(marker);
   const canonical = await canonicalFirstSetupRoots(roots);
@@ -463,14 +469,15 @@ export async function assertStartAgainAllowedOnDisk(
   roots: Roots,
   options: Options = {},
 ): Promise<Roots> {
-  const notReady = (reason: string) => new AppError("setup.not_ready", {}, { reason });
+  const notReady = (reason: string, cause: "unexpected" | "unreadable") =>
+    new AppError("setup.not_ready", { cause }, { reason });
   const canonical = await canonicalFirstSetupRoots(roots);
   const rootOf = (root: Root) => (root === "venue" ? canonical.venueDir : canonical.stateDir);
   const exists = async (path: string) => {
     try {
       return await present(path);
     } catch (error) {
-      throw notReady(`check failed: ${codeOf(error)} ${path}`);
+      throw notReady(`check failed: ${codeOf(error)} ${path}`, "unreadable");
     }
   };
   if (Object.values(canonical).some(insideFirstSetupWorkspace))
@@ -489,33 +496,34 @@ export async function assertStartAgainAllowedOnDisk(
         (await exists(join(rootOf(root), name))) &&
         !(root === "state" && name === MODULES && options.held === true)
       )
-        throw notReady(`refused artifact: ${root}/${name}`);
+        throw notReady(`refused artifact: ${root}/${name}`, "unexpected");
   await assertNoStartAgainDeletion(canonical.venueDir);
   try {
     await itemsOnDisk(canonical, options);
   } catch (error) {
-    if (error instanceof AppError) throw notReady(error.reason ?? error.code);
-    throw notReady(`check failed: ${codeOf(error)} ${pathOf(error) ?? ""}`);
+    if (error instanceof AppError) throw notReady(error.reason ?? error.code, "unexpected");
+    throw notReady(`check failed: ${codeOf(error)} ${pathOf(error) ?? ""}`, "unreadable");
   }
   const node = join(canonical.venueDir, "node.db");
   if (await exists(node)) {
     const opened = await openImmutableWhenWalEmpty(node);
-    if (opened.kind === "wal") throw notReady("node.db-wal holds pages");
+    if (opened.kind === "wal") throw notReady("node.db-wal holds pages", "unexpected");
     if (opened.kind === "failed")
       throw notReady(
         opened.stage === "wal"
           ? `check failed: ${codeOf(opened.error)} ${node}-wal`
           : "node.db unreadable",
+        "unreadable",
       );
     let refusal: string | null;
     try {
       refusal = nodeRefusal(opened.connection, options.nodeId);
     } catch {
-      throw notReady("node.db unreadable");
+      throw notReady("node.db unreadable", "unreadable");
     } finally {
       opened.connection.close();
     }
-    if (refusal !== null) throw notReady(refusal);
+    if (refusal !== null) throw notReady(refusal, "unexpected");
   }
   return canonical;
 }

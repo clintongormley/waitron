@@ -8,6 +8,9 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "setup.configuration_outdated": Record<string, never>;
+    "setup.configuration_newer": Record<string, never>;
+    /** Sorted migration-set names: the export's sets this box does not run, and the reverse. */
+    "setup.configuration_parts_differ": { exportOnly: string[]; serverOnly: string[] };
     "recovery.passphrase_invalid": Record<string, never>;
     "backup.artifact_invalid": { reason: string };
     "backup.archive_invalid": { reason: string };
@@ -18,7 +21,8 @@ declare module "@waitron/shared" {
     "setup.fiscal_test_required": { module: string };
     "setup.email_required": { field: "email" };
     "setup.already_provisioned": Record<string, never>;
-    "setup.not_ready": Record<string, never>;
+    /** Why the box refused, as a fixed log-safe name; the repair page words it only for Start again. */
+    "setup.not_ready": { cause?: "may-have-filed" | "unexpected" | "too-large" | "unreadable" };
     "setup.operation_conflict": Record<string, never>;
     "setup.already_provisioning": Record<string, never>;
     "password.throttled": { retryAfterSeconds: number };

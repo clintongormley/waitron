@@ -261,6 +261,17 @@ describe("renderStartAgainSection", () => {
     }
   });
 
+  it("the full-disk and forgotten-password words end with the restore-a-backup clause, in both languages", () => {
+    for (const key of ["diskFull", "forgotten"] as const) {
+      expect(START_AGAIN_PAGE_TEXT["en-GB"][key], key).toMatch(
+        /these files included, unless a backup is restored afterwards\.$/,
+      );
+      expect(START_AGAIN_PAGE_TEXT["es-ES"][key], key).toMatch(
+        /también estos archivos, salvo que después se restaure una copia de seguridad\.$/,
+      );
+    }
+  });
+
   it("shows each message in both languages in its place", () => {
     const fieldOf = (html: string, id: string) =>
       html.match(new RegExp(`<p id="${id}">([^<]*)</p>`))?.[1];

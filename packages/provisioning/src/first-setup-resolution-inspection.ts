@@ -157,9 +157,10 @@ export function createFirstSetupResolutionInspection(
         try {
           file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
           const info = await file.stat();
-          if (!info.isFile() || info.size > limit) throw new AppError("setup.not_ready", {});
+          if (!info.isFile()) throw new AppError("setup.not_ready", { cause: "unexpected" });
+          if (info.size > limit) throw new AppError("setup.not_ready", { cause: "too-large" });
           const bytes = await file.readFile();
-          if (bytes.length > limit) throw new AppError("setup.not_ready", {});
+          if (bytes.length > limit) throw new AppError("setup.not_ready", { cause: "too-large" });
           if (expected?.digest !== digest(bytes)) throw new AppError("setup.attempt_conflict", {});
           originals.push({ name, bytes });
         } catch (error) {
@@ -192,9 +193,9 @@ export function createFirstSetupResolutionInspection(
         try {
           const info = await lstat(path);
           if (!info.isDirectory() || info.isSymbolicLink())
-            throw new AppError("setup.not_ready", {});
+            throw new AppError("setup.not_ready", { cause: "unexpected" });
           const names = (await readdir(path)).sort();
-          if (names.length > 1024) throw new AppError("setup.not_ready", {});
+          if (names.length > 1024) throw new AppError("setup.not_ready", { cause: "too-large" });
           if (
             observed(prefix)?.status !== "present" ||
             names.length !== entries.length ||

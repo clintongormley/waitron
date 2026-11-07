@@ -33,8 +33,13 @@ export type SetupDatabaseRead =
   | { kind: "damaged"; code: Damage; seen: SetupDatabaseHoldings };
 
 // Reasons are log-only codes: they never carry a path or a value read from the database.
-const notReady = (reason: string): never => {
-  throw new AppError("setup.not_ready", {}, { reason });
+const notReady = (reason: string, cause: "unexpected" | "unreadable" = "unreadable"): never => {
+  throw new AppError("setup.not_ready", { cause }, { reason });
+};
+const copyFailed = (error: unknown): never => {
+  if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOSPC")
+    throw new AppError("storage.disk_full", {});
+  return notReady(`copy failed: ${codeOf(error)}`);
 };
 /**
  * SQLite's primary code 11 (corrupt) or 26 (not a database), or a table a reader expects missing
@@ -88,15 +93,11 @@ export async function readSetupDatabase(
       notReady(`database unreadable: ${opened.stage} ${codeOf(opened.error)}`);
     } else if (opened.kind === "open") connection = opened.connection;
     else {
-      scratch = await mkdtemp(join(tmpdir(), "waitron-setup-holdings-")).catch((error: unknown) =>
-        notReady(`copy failed: ${codeOf(error)}`),
-      );
+      scratch = await mkdtemp(join(tmpdir(), "waitron-setup-holdings-")).catch(copyFailed);
       const present = await copyVenueFiles(roots.venueDir, scratch, () =>
-        notReady("copy refused: not a plain file"),
+        notReady("copy refused: not a plain file", "unexpected"),
       ).catch((error: unknown) =>
-        error instanceof AppError
-          ? Promise.reject(error)
-          : notReady(`copy failed: ${codeOf(error)}`),
+        error instanceof AppError ? Promise.reject(error) : copyFailed(error),
       );
       if (!present) notReady("database missing");
       // Read-write so SQLite can roll back a leftover -journal; `query_only` refuses any other write.
@@ -114,7 +115,11 @@ export async function readSetupDatabase(
     return { kind: "damaged", code: damage, seen: holdings };
   } catch (error) {
     failed = true;
-    if (error instanceof AppError && error.code === "setup.not_ready") throw error;
+    if (
+      error instanceof AppError &&
+      (error.code === "setup.not_ready" || error.code === "storage.disk_full")
+    )
+      throw error;
     // A module seat's own reason is free text, so only its code is passed on.
     return notReady(`read failed: ${error instanceof AppError ? error.code : codeOf(error)}`);
   } finally {

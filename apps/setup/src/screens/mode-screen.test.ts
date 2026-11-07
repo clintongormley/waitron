@@ -210,6 +210,27 @@ describe("setup-mode-screen", () => {
     expect(q(el, "[data-test=production-warning]")).toBeNull();
   });
 
+  it("a production box draws Live and Already have a restaurant only", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      environment: "production",
+    });
+    expect(q(el, "[data-test=choose-demo]")).toBeNull();
+    expect(q(el, "[data-test=choose-prepare]")).toBeNull();
+    expect(q(el, "[data-test=choose-live]")).not.toBeNull();
+    expect(q(el, "[data-test=choose-existing]")).not.toBeNull();
+    expect(q(el, "[data-test=production-warning]")).not.toBeNull();
+  });
+
+  it.each([{ environment: "preproduction" as const }, {}])(
+    "a box that is not production draws all four choices (%o)",
+    async (props) => {
+      const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", props);
+      for (const choice of ["demo", "prepare", "live", "existing"]) {
+        expect(q(el, `[data-test=choose-${choice}]`)).not.toBeNull();
+      }
+    },
+  );
+
   it("never prints the box environment as a word of its own", async () => {
     for (const environment of ["production", "preproduction"] as const) {
       const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", { environment });
@@ -232,7 +253,10 @@ describe("setup-mode-screen in Spanish", () => {
     expect(text(q(el, "[data-test=production-warning]")!)).toBe(
       "Este servidor está marcado para producción: al configurarlo se envían registros reales a la AEAT.",
     );
-    expect(q(el, "[data-test=choose-demo]")!.getAttribute("heading")).toBe("Demostración");
+    const { el: practice } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      environment: "preproduction",
+    });
+    expect(q(practice, "[data-test=choose-demo]")!.getAttribute("heading")).toBe("Demostración");
     expect(q(el, "[data-test=choose-existing]")!.getAttribute("heading")).toBe(
       "Unirse o recuperar",
     );

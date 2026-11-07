@@ -103,7 +103,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1382. Till refusals that say the wrong thing or nothing useful](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
-- [A1384. Words on setup's refusals](backlog/setup.md#bundle-a1384-words-on-setups-refusals)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1387. Till sentences during the clock stop, with money in hand](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
 - [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
@@ -429,7 +428,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   open by A1099; needs an owner decision.
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
-- **A1384. Words on setup's refusals** (bundle of 6, 3 important, size S). [Detail](backlog/setup.md#bundle-a1384-words-on-setups-refusals)
+- **The recovery page's operator texts send the person to whoever installed the box**, which a
+  test still requires against CLAUDE.md §3's first rule. Left open by A1384 (#2527).
+  [Detail](backlog/setup.md#the-recovery-pages-operator-texts-send-the-person-to-whoever-installed-the-box)
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
@@ -2444,10 +2445,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
   transaction while another is still running.
 
-- **`declarations` in `apps/server/src/configuration-transfer.ts` uses `module:<name>` when a local
-  module lacks its transfer declaration** — left open by A261-2e's review (#1277). Reachability with
-  the installed module list is unverified; distinguish that local build defect from an incompatible
-  artifact if it can reach setup.
+- **A module this server runs with no transfer declaration, or no recorded version, is refused as
+  `setup.request_invalid` field `module:<name>`** (`packages/provisioning/src/configuration-transfer.ts`),
+  which setup words, when the export is uploaded, as "The configuration export could not be opened.
+  Check the file and passphrase." That blames the file for a fault in this server's own build. An
+  export from a box running other modules now has its own code, `setup.configuration_parts_differ`
+  (A1384). Left open by A261-2e's review (#1277); whether a shipped build can reach it is unverified.
 
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off

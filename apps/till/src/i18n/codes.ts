@@ -772,6 +772,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That request isn't valid",
     es: "Esa solicitud no es válida",
   },
+  // Its "Tell a manager" is the owner's stated exception to never sending the person elsewhere: a
+  // waiter at a stopped till has no step of their own (2026-11-06, A1384).
   "storage.disk_full": {
     en: "Not saved: the box is out of disk space. Tell a manager.",
     es: "No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.",

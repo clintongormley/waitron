@@ -36,7 +36,7 @@ export function throwawayApplyInput(
   const initialAdministratorId = randomUUID();
   const { eventId, sourceId, input, operations } = seat.provisioning!.throwawayAllocation!.prepare({
     environments,
-    taxpayerNif: taxpayer.taxId,
+    taxId: taxpayer.taxId,
     bases,
     nodeId: initialNodeId,
     administratorId: initialAdministratorId,

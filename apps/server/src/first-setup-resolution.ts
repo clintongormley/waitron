@@ -43,8 +43,10 @@ export interface StartAgainSummaryRequest {
   revision: number;
   ownerGeneration: number;
 }
-function unavailable(): never {
-  throw new AppError("setup.not_ready", {});
+type NotReadyCause = "may-have-filed" | "unexpected" | "too-large" | "unreadable";
+/** No cause: only a fault in Waitron reaches it. */
+function unavailable(cause?: NotReadyCause): never {
+  throw new AppError("setup.not_ready", cause === undefined ? {} : { cause });
 }
 function refused(
   cause: "setup-finished" | "kept-records" | "trading-settings",
@@ -81,7 +83,7 @@ function assertHeldStartAgainOffered(
     inspection.database === "occupied" ||
     (inspection.database === "no-venue-rows" && !inspection.emptyDatabase) ||
     DAMAGED_LABELS.includes(inspection.database);
-  if (!holdsRecords) unavailable();
+  if (!holdsRecords) unavailable("may-have-filed");
   if (
     inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !== "missing"
   )
@@ -177,6 +179,14 @@ const PRESENT_START_AGAIN_STATUSES: readonly string[] = [
   "consumption-intent",
   "abandoned",
 ];
+/** Start again's failure to build its deletion marker, as the repair page words it. */
+export function markerRefusal(error: unknown): unknown {
+  if (!(error instanceof AppError) || error.code !== "setup.start_again_incomplete") return error;
+  const reason = error.reason ?? error.code;
+  const cause = reason.startsWith("layout unexpected") ? "unexpected" : "unreadable";
+  return new AppError("setup.not_ready", { cause }, { reason });
+}
+
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
     host: Pick<FirstFiscalHost, "resolution" | "owner" | "store" | "coordinator"> & {
@@ -220,11 +230,10 @@ export function createFirstSetupResolutionActions(
       { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
       markerOptions,
     ).catch((error: unknown) => {
-      throw error instanceof AppError && error.code === "setup.start_again_incomplete"
-        ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
-        : error;
+      throw markerRefusal(error);
     });
-    if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT)) unavailable();
+    if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT))
+      unavailable("too-large");
     return marker;
   };
   /**
@@ -247,7 +256,7 @@ export function createFirstSetupResolutionActions(
     if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
     const label = inspection.database;
     const presentStatus = PRESENT_START_AGAIN_STATUSES.includes(state.status);
-    if (label === "unreadable") unavailable();
+    if (label === "unreadable") unavailable("unreadable");
     const held = !missing && (label === "occupied" || !presentStatus);
     // An unused setup's database the inspection could not show empty (D3 row c).
     const readFirst = !missing && !held && !(label === "no-venue-rows" && inspection.emptyDatabase);
@@ -272,10 +281,10 @@ export function createFirstSetupResolutionActions(
       if (request.register?.kind === "no-current-master") unavailable();
     } else {
       if (request.register?.kind === "no-current-master" && !present.emptyWorkspace) unavailable();
-      if (!missing && !present.eligible) unavailable();
+      if (!missing && !present.eligible) unavailable("may-have-filed");
     }
     if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
-      unavailable();
+      unavailable("may-have-filed");
     const heldOption = held ? { held: true as const } : {};
     // Before the read, which may copy the whole database: a refusal here costs nothing.
     const box = await assertStartAgainAllowedOnDisk(roots, {
@@ -287,12 +296,13 @@ export function createFirstSetupResolutionActions(
       if (host.modules === undefined) unavailable();
       const read = await readSetupDatabase(roots, host.modules);
       // An unused setup's database read whole is not empty, so it is not unused.
-      if (readFirst && read.kind === "read") unavailable();
+      if (readFirst && read.kind === "read") unavailable("unexpected");
       assertNoKeptRecords(read);
       if (read.kind === "read") {
         // Not empty yet no rows (a view, a part-applied setup), or read whole where the
         // inspection could not: not what the held state names.
-        if (read.holdings.rows === 0 || DAMAGED_LABELS.includes(label)) unavailable();
+        if (read.holdings.rows === 0) unavailable("may-have-filed");
+        if (DAMAGED_LABELS.includes(label)) unavailable("unreadable");
       } else databaseUnreadable = true;
     }
     const recordDamaged = recoveryRecordDamagedOf(state, snapshot.originals, host.modules);

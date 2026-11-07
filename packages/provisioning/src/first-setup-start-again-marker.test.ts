@@ -989,3 +989,17 @@ it("while a deletion is pending, a marker repair is refused and the marked files
   await expect(store.repairMarker(expected, async () => {})).rejects.toMatchObject(incomplete);
   expect(await snapshot(roots)).toEqual(before);
 });
+
+it("a listed file the marker cannot hash is refused as a failed check, naming the file", async () => {
+  const roots = await attemptFolders();
+  const file = join(roots.stateDir, "module-operation-public.json");
+  await fs.chmod(file, 0o000);
+  try {
+    await expect(startAgainMarkerFor(roots, ATTEMPT)).rejects.toMatchObject({
+      ...incomplete,
+      reason: `check failed: EACCES ${join(await fs.realpath(roots.stateDir), "module-operation-public.json")}`,
+    });
+  } finally {
+    await fs.chmod(file, 0o600);
+  }
+});
