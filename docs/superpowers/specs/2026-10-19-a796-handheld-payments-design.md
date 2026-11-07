@@ -1,5 +1,13 @@
 # A796 — Paying at the table from a handheld (payments slice 2)
 
+**2026-11-06, A1399:** First server errors and code-less bill-payment errors now keep the existing
+locked confirmation and **Check again** until the box answers. An empty balance does not release
+the payment. This replaces the unheld server-error rule in default 7 below. The status title is
+now **Payment not confirmed** / **Cobro sin confirmar**, covering both network and server errors.
+
+The full-disk boundaries and reader-release limit clarified on 2026-11-07 are in
+[Payments — Decisions and deliberate limits](../../backlog/payments.md#decisions-and-deliberate-limits).
+
 Status: **design decided; no owner questions open (§9).**
 
 Built: #1921, 2026-10-20.

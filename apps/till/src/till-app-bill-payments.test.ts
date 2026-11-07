@@ -3280,29 +3280,18 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
   });
 
-  it("keeps the locked confirmation when the payment settled the bill, and Check again shows the ticket", async () => {
+  it("reads a recorded settled payment's receipt without a card resend", async () => {
     const { el, original } = await mountUnanswered();
     shows = { state: "received" };
     showsBill = { status: "settled", received: "120.00", outstanding: "0.00" };
+    const before = sent().length;
+    api.getFiledTicket = vi.fn().mockResolvedValueOnce(invoiceOf("120.00"));
 
     await reopen(el);
 
-    expect(dialog(el)!.confirmationLocked).toBe(true);
-    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
-    const confirm = inDialog(el, "[data-pay-confirm]")!;
-    expect(text(confirm)).toBe(t("bill_pay.recheck"));
-    vi.mocked(api.takeBillPayment).mockResolvedValueOnce(
-      takenOf(
-        { applied: "40.00", change: "10.00" },
-        { status: "settled", received: "120.00", outstanding: "0.00" },
-        invoiceOf("120.00"),
-      ),
-    );
-    await press(el, "[data-pay-confirm]");
-    await flush(el);
-
     expect(sent().at(-1)).toEqual(original);
+    expect(sent()).toHaveLength(before);
+    expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
     expect(dialog(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
   });
@@ -5318,6 +5307,457 @@ describe("till-app: a bill payment on the card reader", () => {
     return el;
   }
 
+  it.each([
+    { code: "server.internal", status: 502 },
+    { code: "server.internal", status: 404 },
+    { status: 500 },
+    {},
+  ])(
+    "A1399: keeps the same complete card confirmation after an uncertain server answer %j",
+    async (error) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce(error)
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        )
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "80.00", outstanding: "40.00" }),
+        );
+      const el = await takeOnReader(takeBillPayment);
+
+      expect(dialog(el)!.confirmationLocked).toBe(true);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+      expect(inDialog(el, "[data-pay-confirm]")!.textContent).toContain(t("bill_pay.recheck"));
+      expect(sent()).toHaveLength(1);
+
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(2);
+      expect(sent()[1]).toEqual(sent()[0]);
+      expect(dialog(el)!.confirmationLocked).toBe(true);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(3);
+      expect(sent()[2]).toEqual(sent()[0]);
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+
+      await type(el, "amount", "40");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(4);
+      expect(sent()[3]!.submissionId).not.toBe(sent()[0]!.submissionId);
+      expect(sent()[3]!.amount).toBe(sent()[0]!.amount);
+    },
+  );
+
+  it("A1399: checks a cash payment under its original id after a server error", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal", status: 502 })
+      .mockResolvedValueOnce(takenOf({}, { received: "40.00", outstanding: "80.00" }));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "40");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+
+    await press(el, "[data-pay-confirm]");
+    expect(sent()).toHaveLength(2);
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
+  it("A1399: keeps known-charge advice while checking the same payment after a full disk", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "sale.charged_not_recorded",
+        reason: "disk_full",
+        status: 507,
+      })
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      );
+    const el = await takeOnReader(takeBillPayment);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      `${t("sale.charged_disk_full")} ${t("bill_pay.card_recovery")}`,
+    );
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(sent()).toHaveLength(1);
+    expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
+
+    await press(el, "[data-pay-confirm]");
+    expect(sent()).toHaveLength(2);
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
+  it("A1399: a pending balance row does not erase known-charge advice", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "sale.charged_not_recorded",
+        reason: "disk_full",
+        status: 507,
+      })
+      .mockResolvedValueOnce(
+        onReader("pending", "pending", { reserved: "40.00", outstanding: "80.00" }),
+      )
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      );
+    const getBillBalance = vi.fn(async () => {
+      const original = sent().at(-1);
+      return original === undefined
+        ? balanceOf()
+        : balanceOf({
+            reserved: "40.00",
+            outstanding: "80.00",
+            payments: [
+              paymentOf({
+                submissionId: original.submissionId,
+                method: "card",
+                entry: "reader",
+                state: "pending",
+                applied: "40.00",
+                tip: "0.00",
+                tendered: null,
+                change: null,
+              }),
+            ],
+          });
+    });
+    const el = await takeOnReader(takeBillPayment, { getBillBalance });
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      `${t("sale.charged_disk_full")} ${t("bill_pay.card_recovery")}`,
+    );
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      `${t("sale.charged_disk_full")} ${t("bill_pay.card_recovery")}`,
+    );
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[2]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
+  it.each([
+    { code: "payment.provider_credential_rejected", status: 400 },
+    { code: "clock.unusable", status: 409 },
+  ])("A1399: a coded refusal with a pending row holds that submission %j", async (error) => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce(
+        onReader("pending", "pending", { reserved: "40.00", outstanding: "80.00" }),
+      )
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      )
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "80.00", outstanding: "40.00" }),
+      );
+    const getBillBalance = vi.fn(async () => {
+      const original = sent().at(-1);
+      return original === undefined
+        ? balanceOf()
+        : balanceOf({
+            reserved: "40.00",
+            outstanding: "80.00",
+            payments: [
+              paymentOf({
+                submissionId: original.submissionId,
+                method: "card",
+                entry: "reader",
+                state: "pending",
+                applied: "40.00",
+                tip: "0.00",
+                tendered: null,
+                change: null,
+              }),
+            ],
+          });
+    });
+    const el = await takeOnReader(takeBillPayment, { getBillBalance });
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+    expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[2]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    await type(el, "amount", "40");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[3]!.submissionId).not.toBe(sent()[0]!.submissionId);
+  });
+
+  it("A1399: a cash full-disk refusal without a row keeps the form unlocked", async () => {
+    const { el } = await mountApp({
+      takeBillPayment: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "40");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full"));
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+  });
+
+  it("A1399: reopening a held payment keeps its known-charge advice", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue({
+      code: "sale.charged_not_recorded",
+      reason: "disk_full",
+      status: 507,
+    });
+    const el = await takeOnReader(takeBillPayment);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      `${t("sale.charged_disk_full")} ${t("bill_pay.card_recovery")}`,
+    );
+
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    await openDialog(el, "share");
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      `${t("sale.charged_disk_full")} ${t("bill_pay.card_recovery")}`,
+    );
+    expect(sent()).toHaveLength(1);
+  });
+
+  it.each([
+    { code: "server.internal", status: 500 },
+    { code: "storage.disk_full", status: 507 },
+  ])("A1399: a failed recheck cannot replace an earlier known-charge warning %j", async (error) => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "sale.charged_not_recorded",
+        reason: "disk_full",
+        status: 507,
+      })
+      .mockRejectedValueOnce(error);
+    const el = await takeOnReader(takeBillPayment);
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      `${t("sale.charged_disk_full")} ${t("bill_pay.card_recovery")}`,
+    );
+  });
+
+  it.each(["reader.not_held", "reader.payment_in_progress", "device.profile_changed"])(
+    "A1399: a known charge keeps its pending hold after a recheck refused %s",
+    async (code) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce({
+          code: "sale.charged_not_recorded",
+          reason: "disk_full",
+          status: 507,
+        })
+        .mockRejectedValueOnce({ code, status: 409 })
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        );
+      const getBillBalance = vi.fn(async () => {
+        const original = sent()[0];
+        return original === undefined
+          ? balanceOf()
+          : balanceOf({
+              reserved: "40.00",
+              outstanding: "80.00",
+              payments: [
+                paymentOf({
+                  submissionId: original.submissionId,
+                  method: "card",
+                  entry: "reader",
+                  state: "pending",
+                  applied: "40.00",
+                  tip: "0.00",
+                  tendered: null,
+                  change: null,
+                }),
+              ],
+            });
+      });
+      const el = await takeOnReader(takeBillPayment, { getBillBalance });
+      await press(el, "[data-pay-confirm]");
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(
+        `${t("sale.charged_disk_full")} ${t("bill_pay.card_recovery")}`,
+      );
+      expect(dialog(el)!.confirmationLocked).toBe(true);
+      expect(sent()[1]).toEqual(sent()[0]);
+      await press(el, "[data-pay-confirm]");
+      expect(sent()[2]).toEqual(sent()[0]);
+      expect(dialog(el)!.confirmationLocked).toBe(false);
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    },
+  );
+
+  it("A1399: a received balance row ends a known-charge hold without another send", async () => {
+    let received = false;
+    const getBillBalance = vi.fn(async () => {
+      const original = sent()[0];
+      return original === undefined
+        ? balanceOf()
+        : balanceOf({
+            received: received ? "40.00" : "0.00",
+            reserved: received ? "0.00" : "40.00",
+            outstanding: "80.00",
+            payments: [
+              paymentOf({
+                submissionId: original.submissionId,
+                method: "card",
+                entry: "reader",
+                state: received ? "received" : "pending",
+                applied: "40.00",
+                tip: "0.00",
+                tendered: null,
+                change: null,
+              }),
+            ],
+          });
+    });
+    const el = await takeOnReader(
+      vi
+        .fn()
+        .mockRejectedValue({ code: "sale.charged_not_recorded", reason: "disk_full", status: 507 }),
+      { getBillBalance },
+    );
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    received = true;
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    await openDialog(el, "share");
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe("");
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(sent()).toHaveLength(1);
+  });
+
+  async function knownChargeCompleted(getFiledTicket: unknown) {
+    let received = false;
+    const older = paymentOf({
+      id: "older-payment",
+      submissionId: "older-submission",
+      applied: "80.00",
+    });
+    const getBillBalance = vi.fn(async () => {
+      const original = sent()[0];
+      return balanceOf({
+        status: received ? "settled" : "open",
+        received: received ? "120.00" : "80.00",
+        reserved: original !== undefined && !received ? "40.00" : "0.00",
+        outstanding: original === undefined ? "40.00" : "0.00",
+        payments:
+          original === undefined
+            ? [older]
+            : [
+                older,
+                paymentOf({
+                  id: "original-payment",
+                  submissionId: original.submissionId,
+                  method: "card",
+                  entry: "reader",
+                  state: received ? "received" : "pending",
+                  applied: "40.00",
+                  tip: "0.00",
+                  tendered: null,
+                  change: null,
+                }),
+              ],
+      });
+    });
+    const el = await takeOnReader(
+      vi
+        .fn()
+        .mockRejectedValue({ code: "sale.charged_not_recorded", reason: "disk_full", status: 507 }),
+      { getBillBalance, getFiledTicket },
+    );
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    return {
+      el,
+      async finish() {
+        received = true;
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+        await openDialog(el, "share");
+      },
+    };
+  }
+
+  it("A1399: a fully settled known charge reads its ticket without a card resend", async () => {
+    const getFiledTicket = vi.fn().mockResolvedValue(invoiceOf("120.00"));
+    const { el, finish } = await knownChargeCompleted(getFiledTicket);
+    await finish();
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(getFiledTicket).toHaveBeenCalledWith("wo-4");
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("A1399: a settled known charge stays recorded when reading its receipt fails", async () => {
+    const { el, finish } = await knownChargeCompleted(
+      vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+    );
+    await finish();
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent).toContain(
+      t("bill_pay.ticket_unread"),
+    );
+    expect(sent()).toHaveLength(1);
+  });
+
+  it.each(["received", "refused"] as const)(
+    "A1399: a receipt read answered %s after another sign-in stays off that screen",
+    async (outcome) => {
+      let answer: (value: TillSaleResult) => void = () => {};
+      let refuse: (error: unknown) => void = () => {};
+      const getFiledTicket = vi.fn(
+        () =>
+          new Promise<TillSaleResult>((resolve, reject) => {
+            answer = resolve;
+            refuse = reject;
+          }),
+      );
+      const { el, finish } = await knownChargeCompleted(getFiledTicket);
+      await finish();
+      expect(getFiledTicket).toHaveBeenCalledOnce();
+      emit(shell(el), "logout");
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+      await flush(el);
+      if (outcome === "received") answer(invoiceOf("120.00"));
+      else refuse({ code: "server.internal", status: 500 });
+      await flush(el);
+      expect(dialog(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".error")?.textContent ?? "").not.toContain(
+        t("bill_pay.ticket_unread"),
+      );
+      expect(sent()).toHaveLength(1);
+    },
+  );
+
   it("A532 leaves cash payment waits subject to the ordinary idle sign-out", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 30 }),
@@ -5482,45 +5922,75 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
   });
 
-  // The server refuses a reader it cannot reach before it looks the submission id up, so the
-  // refusal says nothing of whether the card that got no answer was charged.
-  it("sends a card that got no answer under the same submission id after the reader is refused", async () => {
+  it.each(["en-GB", "es-ES"])(
+    "A1399: a replay recorded as failed does not claim the bank declined it in %s",
+    async (locale) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockResolvedValueOnce(onReader("failed", "failed", {}))
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        );
+      const el = await takeOnReader(takeBillPayment);
+      try {
+        setLocale(locale);
+        await flush(el);
+
+        expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.payment_failed"));
+        expect(inDialog(el, "[data-pay-taken]")).toBeNull();
+        expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
+
+        await press(el, "[data-pay-confirm]");
+        expect(sent()).toHaveLength(2);
+        expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
+        expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+      } finally {
+        setLocale("en");
+      }
+    },
+  );
+
+  it("keeps the same card confirmation after a network failure followed by a server error", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await takeOnReader(takeBillPayment);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
 
-    takeBillPayment.mockRejectedValueOnce({ code: "reader.provider_disconnected", status: 503 });
+    takeBillPayment.mockRejectedValueOnce({ code: "server.internal", status: 503 });
     await press(el, "[data-pay-confirm]");
-    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+    expect(inDialog(el, "[data-pay-confirm]")!.textContent).toContain(t("bill_pay.recheck"));
     takeBillPayment.mockResolvedValueOnce(
       onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
     );
-    await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
 
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
     expect(new Set(sent().map((request) => request.submissionId)).size).toBe(1);
   });
 
-  it("tries the card again as a new payment after the device changed profile while it was starting", async () => {
-    const takeBillPayment = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "device.profile_changed", status: 409 })
-      .mockResolvedValueOnce(
-        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
-      );
-    const el = await takeOnReader(takeBillPayment);
-    expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("device.profile_changed"));
+  it.each([409, 500])(
+    "tries the card again as a new payment after a definitive profile-change refusal with status %s",
+    async (status) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.profile_changed", status })
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        );
+      const el = await takeOnReader(takeBillPayment);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("device.profile_changed"));
 
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
 
-    expect(sent()).toHaveLength(2);
-    expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
-    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
-  });
+      expect(sent()).toHaveLength(2);
+      expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    },
+  );
 
   it.each(["reader.not_held", "reader.payment_in_progress"])(
     "tries the card again as a new payment after the reader refused to start it with %s",
@@ -5661,6 +6131,7 @@ describe("till-app: a bill payment on the card reader", () => {
 
     expect(sent()[0]!.entry).toBe("manual");
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full_manual_card"));
+    expect(dialog(el)!.confirmationLocked).toBe(false);
   });
 
   /** A handheld whose profile declares the integrated reader, taking a card on the second reader. */
@@ -5982,17 +6453,15 @@ describe("till-app: a bill payment on the card reader", () => {
       await takenAsANewPayment(el, takeBillPayment);
     });
 
-    it("a resend under the id a kept refusal answered, refused reader.not_held, says the server could not check it", async () => {
+    it("an uncertain server answer checked again, then refused reader.not_held, says the server could not check it", async () => {
       const takeBillPayment = vi
         .fn()
-        .mockRejectedValueOnce({ code: "payment.provider_credential_rejected", status: 502 })
+        .mockRejectedValueOnce({ code: "server.internal", status: 502 })
         .mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
       const el = await takeOnReader(takeBillPayment);
-      expect(inDialog(el, "wt-form-actions")!.error).toBe(
-        codeMessage("payment.provider_credential_rejected"),
-      );
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+      expect(dialog(el)!.confirmationLocked).toBe(true);
 
-      await press(el, "[data-pay-continue]");
       await press(el, "[data-pay-confirm]");
       expect(sent()).toHaveLength(2);
       expect(sent()[1]!.submissionId).toBe(sent()[0]!.submissionId);

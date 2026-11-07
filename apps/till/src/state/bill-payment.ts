@@ -205,7 +205,22 @@ export function unansweredAfter<S extends { unconfirmed?: boolean }>(
   const code = (error as { code?: unknown }).code;
   if (typeof code === "string" && FRESH_ID_AFTER.has(code)) return null;
   if ("billId" in sent && paymentNotRecorded(error)) return null;
-  return isNetworkFailure(error) ? { ...sent, unconfirmed: true } : sent;
+  return isNetworkFailure(error) || ("billId" in sent && billPaymentUnconfirmed(error))
+    ? { ...sent, unconfirmed: true }
+    : sent;
+}
+
+function billPaymentUnconfirmed(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  if ((typeof code === "string" && FRESH_ID_AFTER.has(code)) || paymentNotRecorded(error))
+    return false;
+  const status = (error as { status?: unknown } | null)?.status;
+  return (
+    isNetworkFailure(error) ||
+    typeof code !== "string" ||
+    code === "server.internal" ||
+    (typeof status === "number" && status >= 500)
+  );
 }
 
 /** Whether `turn` is still the latest send on the bill: an answer to a send a newer one replaced
@@ -218,9 +233,6 @@ export function isLatestSend(
   return turns.get(billId) === turn;
 }
 
-/** A refusal's code and the request field it names, as the refund and unpaid departure dialogs
- * show it. The app's own codes: `network`, a request that got no answer; `approvers`, a list of who
- * can approve that could not be read. */
 export interface DialogRefusal {
   code: string;
   field?: string;

@@ -121,7 +121,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1396. A save refused after the person left must say so](backlog/dashboard.md#bundle-a1396-a-save-refused-after-the-person-left-must-say-so)
 - [A1397. Replace short random table labels](backlog/ci.md#bundle-a1397-replace-short-random-table-labels)
 - [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
-- [A1399. What happens when a bill payment is sent again under one id](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 - [A1401. Find out why the failover bench reports a corrupt database](backlog/replication-cloud.md#bundle-a1401-find-out-why-the-failover-bench-reports-a-corrupt-database)
 - [A1402. Build the front-end and the other Node bundles in CI, and open one](backlog/ci.md#bundle-a1402-build-the-front-end-and-the-other-node-bundles-in-ci-and-open-one)
@@ -1398,7 +1397,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A user guide for the till's payment sheet** (left open by A796). No guide under
   `apps/server/src/guide/` covers it.
 
-- **A1399. What happens when a bill payment is sent again under one id** (bundle of 2, 1 important, size S). [Detail](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
 
 - **A796 does not hold a bill across phones while a payment is out.** The hold is the phone's own:
   "no new payment … can be started on that bill from this phone" (A796 design §4, "The phone loses

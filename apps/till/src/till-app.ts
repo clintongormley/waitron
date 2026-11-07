@@ -1270,6 +1270,7 @@ interface WholePayment {
 }
 
 interface PendingBillPayment extends Submission {
+  pendingRefusal?: PayRefusal;
   shown: {
     asked: PayRequest;
     preview: AllocationPreview;
@@ -3569,7 +3570,6 @@ export class TillApp extends LitElement {
   #shownBalanceAt = 0;
   #pendingReread: PendingReread | null = null;
 
-  /** No payment may start on a bill while one is out on it, or one A773-1 holds has no answer. */
   #billPaymentHeld(billId: string): boolean {
     return (
       this.#unansweredPayments.get(billId)?.unconfirmed === true || this.#paymentsOut.has(billId)
@@ -18829,7 +18829,8 @@ export class TillApp extends LitElement {
       preview: null,
       expectedEdit: null,
       ...(pending?.unconfirmed === true ? pending.shown : {}),
-      refusal: pending?.unconfirmed === true ? { code: "network" } : null,
+      refusal:
+        pending?.unconfirmed === true ? (pending.pendingRefusal ?? { code: "network" }) : null,
       taken: null,
       refunded: null,
       busy: false,
@@ -18882,7 +18883,8 @@ export class TillApp extends LitElement {
       this.#shownBalanceAt = Math.max(this.#shownBalanceAt, sentAt);
     }
     const freed =
-      sentAt > (this.#sendEndedAt.get(billId) ?? 0) && this.#freeShownPayment(billId, balance);
+      sentAt > (this.#sendEndedAt.get(billId) ?? 0) &&
+      (await this.#freeShownPayment(billId, balance));
     if (freed && order !== undefined) await this.#rereadPayingOrder(order, balance);
   }
 
@@ -19022,21 +19024,70 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  /**
-   * A payment A773-1 holds that a balance read shows frees its bill, answering true, and an open
-   * dialog on the bill goes to the form saying what the bill records of it. One that settled the
-   * bill stays held: its Check again replays it and shows the ticket. A read sent while a send was
-   * out may show the payment as it stood before that send settled it, so the caller passes only
-   * reads sent after.
-   */
-  #freeShownPayment(billId: string, balance: BillBalance): boolean {
+  // Only reads sent after the last send ended can resolve its retained confirmation.
+  async #freeShownPayment(billId: string, balance: BillBalance): Promise<boolean> {
     const entry = this.#unansweredPayments.get(billId);
-    if (entry?.unconfirmed !== true || this.#paymentsOut.has(billId)) return false;
+    if (entry === undefined || this.#paymentsOut.has(billId)) return false;
     const payment = balance.payments.find(
       (shown) => shown.submissionId === entry.request.submissionId,
     );
     if (payment === undefined) return false;
-    if (payment.state === "received" && balance.status === "settled") return false;
+    if (payment.state === "received" && balance.status === "settled") {
+      this.#unansweredPayments.delete(billId);
+      const open = this.billPaying;
+      if (open === null || open.billId !== billId) return true;
+      const api = this.api;
+      const session = this.#operatorSession;
+      this.billPaying = { ...open, busy: true };
+      // The native dialog's queued open must run while its host is still connected.
+      await this.updateComplete;
+      const dialog = this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog");
+      await dialog?.updateComplete;
+      await dialog?.shadowRoot?.querySelector<HTMLElement & { updateComplete: Promise<boolean> }>(
+        "wt-dialog",
+      )?.updateComplete;
+      if (
+        this.api !== api ||
+        this.#operatorSession !== session ||
+        this.#billPayingNow(open.id) === null
+      )
+        return true;
+      dialog?.paymentAccepted();
+      this.#closeBillPaying();
+      const current = () =>
+        this.api === api &&
+        this.#operatorSession === session &&
+        this.billPaying === null &&
+        (open.surface === "counter"
+          ? !this.#hasLeftCounterOrder(billId, open.visit)
+          : !this.#hasLeftOrder(billId, open.visit));
+      try {
+        const ticket = await api.getFiledTicket(billId);
+        if (current()) await this.#showPaidTicket(open, ticket, balance.payments);
+      } catch {
+        if (current()) this.errorKey = "bill_pay.ticket_unread";
+      }
+      return true;
+    }
+    if (
+      payment.state === "pending" &&
+      (entry.pendingRefusal !== undefined || entry.unconfirmed !== true)
+    ) {
+      const refusal: PayRefusal = entry.pendingRefusal ?? { code: "network" };
+      const held = {
+        ...entry,
+        unconfirmed: true,
+        pendingRefusal: {
+          ...refusal,
+          recoveryUrl: refusal.recoveryUrl ?? "/manage/payments",
+        },
+      };
+      this.#unansweredPayments.set(billId, held);
+      const open = this.billPaying;
+      if (open?.billId === billId)
+        this.billPaying = { ...open, ...held.shown, taken: null, refusal: held.pendingRefusal };
+      return false;
+    }
     this.#unansweredPayments.delete(billId);
     const open = this.billPaying;
     if (open === null || open.billId !== billId) return true;
@@ -19092,7 +19143,11 @@ export class TillApp extends LitElement {
     if (open.busy) return;
     const pending = this.#unansweredPayments.get(open.billId);
     if (pending?.unconfirmed === true) {
-      this.billPaying = { ...open, ...pending.shown, refusal: { code: "network" } };
+      this.billPaying = {
+        ...open,
+        ...pending.shown,
+        refusal: pending.pendingRefusal ?? { code: "network" },
+      };
       return;
     }
     if (this.#refusedUnsent(open)) return;
@@ -19184,10 +19239,35 @@ export class TillApp extends LitElement {
       if (!isLatestSend(this.#paymentSends, key, turn) || !this.#paymentsOut.delete(key)) return;
       void this.#afterPaymentOut(open.id, key);
     };
-    const settle = (error?: unknown) => {
+    const settle = (error?: unknown, pending = false) => {
       if (!isLatestSend(this.#paymentSends, key, turn)) return;
       this.#sendEndedAt.set(key, ++this.#payTicks);
-      const unanswered = unansweredAfter(submission, error);
+      let unanswered =
+        pending && submission.pendingRefusal !== undefined
+          ? submission
+          : unansweredAfter(submission, error);
+      if (error !== undefined && submission.pendingRefusal?.code === "sale.charged_not_recorded")
+        unanswered = { ...submission, unconfirmed: true };
+      const code = (error as { code?: unknown } | undefined)?.code;
+      if (
+        unanswered !== null &&
+        (code === "storage.disk_full" || code === "sale.charged_not_recorded")
+      ) {
+        const refusal =
+          submission.pendingRefusal?.code === "sale.charged_not_recorded"
+            ? submission.pendingRefusal
+            : refusalOf(error, true);
+        const manual = asked.pay.method === "card" && asked.card?.entry === "manual";
+        if (manual) refusal.manualCard = true;
+        if (refusal.code === "sale.charged_not_recorded")
+          refusal.recoveryUrl ??= "/manage/payments";
+        unanswered = {
+          ...unanswered,
+          pendingRefusal: refusal,
+          unconfirmed:
+            refusal.code === "sale.charged_not_recorded" || asked.card?.entry === "reader",
+        };
+      }
       if (unanswered === null) this.#unansweredPayments.delete(key);
       else this.#unansweredPayments.set(key, unanswered);
       release();
@@ -19208,7 +19288,7 @@ export class TillApp extends LitElement {
           ),
         );
         if (card && result.outcome === "timeout") this.#unknownCardOutcome.add(key);
-        settle();
+        settle(undefined, result.payment.state === "pending");
         await this.#onBillPaid(open, result, readerName);
       } catch (error) {
         const notChecked =
@@ -19236,7 +19316,12 @@ export class TillApp extends LitElement {
     if (that === null || that.id === senderId || that.billId !== billId) return;
     const entry = this.#unansweredPayments.get(billId);
     if (entry?.unconfirmed === true) {
-      this.billPaying = { ...that, ...entry.shown, busy: false, refusal: { code: "network" } };
+      this.billPaying = {
+        ...that,
+        ...entry.shown,
+        busy: false,
+        refusal: entry.pendingRefusal ?? { code: "network" },
+      };
       return;
     }
     this.billPaying = { ...that, busy: false, asked: null, preview: null, refusal: null };
@@ -19258,11 +19343,31 @@ export class TillApp extends LitElement {
     const now = this.#billPayingNow(open.id);
     if (now === null) return;
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
+    const held = this.#unansweredPayments.get(open.billId);
+    if (result.payment.state === "pending" && held?.pendingRefusal !== undefined) {
+      this.billPaying = {
+        ...now,
+        ...held.shown,
+        balance: result.balance,
+        refusal: held.pendingRefusal,
+        taken: null,
+        busy: false,
+      };
+      await this.#rereadPayingOrder(open, result.balance);
+      return;
+    }
     if (NOT_CHARGED_OUTCOMES.has(result.outcome)) {
       this.billPaying = {
         ...now,
         balance: result.balance,
-        refusal: { code: result.outcome === "network_unavailable" ? "card_network" : "declined" },
+        refusal: {
+          code:
+            result.outcome === "network_unavailable"
+              ? "card_network"
+              : result.outcome === "failed"
+                ? "payment_failed"
+                : "declined",
+        },
         busy: false,
       };
       return;
@@ -19313,13 +19418,6 @@ export class TillApp extends LitElement {
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
   }
 
-  /**
-   * A refusal shows above the dialog's action, or under the field it names, and the bill is read
-   * again, unless it was a preview refused for a field typed into the dialog.
-   * `bill.allocation_changed` reopens the confirmation with the amounts the server now gives, and
-   * sends nothing; a payment that got no answer stays on its confirmation, to be taken again under
-   * the same submission id. Any other refusal goes back to the form.
-   */
   async #onBillPayRefused(
     id: number,
     error: unknown,
@@ -19328,14 +19426,23 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const now = this.#billPayingNow(id);
     if (now === null) return;
-    const refusal = refusalOf(error, stage === "take");
+    const retained = stage === "take" ? this.#unansweredPayments.get(now.billId) : undefined;
+    const unconfirmed = retained?.unconfirmed === true;
+    const refusal =
+      (unconfirmed ? retained.pendingRefusal : undefined) ?? refusalOf(error, stage === "take");
+    if (
+      unconfirmed &&
+      refusal.code !== "storage.disk_full" &&
+      refusal.code !== "sale.charged_not_recorded"
+    )
+      refusal.code = "network";
     if (asked.pay.method === "card" && asked.card?.entry === "manual") refusal.manualCard = true;
     if (refusal.unsent !== undefined)
       refusal.billLabel = this.#paymentBillLabel(refusal.unsent.billId);
     const { preview } = error as { preview?: unknown };
     // A send that may have been recorded arrives here as `not_checked`, so this is a first send.
     const readerLost = stage === "take" && this.handheldMode && refusal.code === "reader.not_held";
-    if (refusal.code === "network") {
+    if (unconfirmed || refusal.code === "network") {
       this.billPaying = { ...now, refusal, busy: false };
     } else if (refusal.code === "bill.allocation_changed" && preview !== undefined) {
       this.billPaying = {
@@ -19395,7 +19502,11 @@ export class TillApp extends LitElement {
     const open = this.billPaying!;
     const pending = this.#unansweredPayments.get(open.billId);
     if (pending?.unconfirmed === true) {
-      this.billPaying = { ...open, ...pending.shown, refusal: { code: "network" } };
+      this.billPaying = {
+        ...open,
+        ...pending.shown,
+        refusal: pending.pendingRefusal ?? { code: "network" },
+      };
       return;
     }
     this.billPaying = { ...this.billPaying!, asked: null, preview: null, refusal: null };

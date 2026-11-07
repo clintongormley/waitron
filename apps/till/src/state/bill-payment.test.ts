@@ -166,6 +166,35 @@ describe("the submission id of a confirmation", () => {
   };
   const noAnswer = new TypeError("Failed to fetch");
 
+  it.each([
+    { code: "server.internal", status: 502 },
+    { code: "server.internal", status: 404 },
+    { status: 500 },
+    {},
+  ])("holds a first uncertain server answer %j before another identical payment", (error) => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+    const unanswered = unansweredAfter(first, error);
+
+    expect(submissionFor("wo-1", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(
+      "sub-1",
+    );
+    expect(unanswered?.unconfirmed).toBe(true);
+  });
+
+  it("keeps an ordinary coded refusal editable without treating a refund's server error as a bill hold", () => {
+    const sent = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+    expect(unansweredAfter(sent, { code: "bill.tip_not_allowed", status: 409 })).toEqual(sent);
+    expect(unansweredAfter(sent, { code: "bill.tip_not_allowed", status: "502" })).toEqual(sent);
+    const refund = refundSubmissionFor(
+      "wo-1",
+      "payment-1",
+      { appliedAmount: "10.00", tipAmount: "0.00", reason: "Wrong bill" },
+      null,
+      () => "refund-1",
+    );
+    expect(unansweredAfter(refund, { code: "server.internal", status: 502 })).toEqual(refund);
+  });
+
   it("is fresh for a first confirmation, and travels with it", () => {
     const sent = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
 
@@ -198,7 +227,7 @@ describe("the submission id of a confirmation", () => {
 
   it("is kept after a refusal, which does not say what became of the send that got no answer", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
-    const kept = unansweredAfter(first, { code: "reader.provider_disconnected", status: 503 });
+    const kept = unansweredAfter(first, { code: "server.internal", status: 503 });
 
     expect(submissionFor("wo-1", tenEuros, kept, ids("sub-2")).request.submissionId).toBe("sub-1");
   });
