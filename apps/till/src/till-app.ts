@@ -19262,6 +19262,7 @@ export class TillApp extends LitElement {
     if (now === null) return;
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
     if (result.outcome === "capture_mismatch") {
+      this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
       this.billPaying = {
         ...now,
         balance: result.balance,

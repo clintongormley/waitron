@@ -274,7 +274,11 @@ describe("the card reader on a bill whose every line was given away", () => {
       tip: "not-money",
     });
 
-    expect(answer.json).toMatchObject({ code: "shared.invalid_decimal" });
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "tip" },
+    });
     expect(await statusOf(venue, tabId)).toBe("open");
     expect(registroCount(venue, tabId)).toBe(0);
   });
