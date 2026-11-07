@@ -1072,8 +1072,12 @@ Remaining work, following the owner's certificate-first order:
   `@waitron/tunnel`, its boot worker and its four relay settings. The staff listener is the
   remote entrance; it supplies no relay for standby adoption.
 - Qualify the managed demo across a physical reboot.
-- Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
-  internet and separation from other venues and LAN addresses.
+- Complete public renewal, revocation, a sale through the managed server with the internet disabled,
+  and separation from another allocated venue. The managed public check rejected foreign Host
+  headers and eight authenticated non-staff paths, and password guessing reached its wait window.
+  A controlled Compose LAN forwarding probe and one existing cash/F1 route case in a network
+  namespace with no external route passed; their scope is recorded in the
+  [receipt](../operations/a951-host-evidence.md#staff-hostname-and-network-isolation-7-november-2026).
 - Once the browser path works, try Translate all and the existing address fields with a Cloud
   provider on the test box. Provider keys stay on the gateway host and come from the owner.
 

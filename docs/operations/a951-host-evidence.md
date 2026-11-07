@@ -159,6 +159,47 @@ The review's full root run reached its 480-second limit without a test count; it
 These later repairs were not part of the bounded managed run above. The report, triage,
 failing control and final checks remain in the same local receipt directory.
 
+## Staff hostname and network isolation, 7 November 2026
+
+Source `01772954f3ca0ed4755a9f027ac83e947ed397f2` passed a fresh bounded managed run
+on Debian. All 112 changed paths matched the local checkout, including absence of the 15 removed
+files. The server and dashboard built before the run. Through the real gateway, normal-trust HTTPS
+returned the staff page, password sign-in succeeded and the administrator session answered.
+
+Keeping the correct TLS hostname but sending another venue's HTTP Host header returned 404 for
+`/manage`, `/management-api/session/me` and `/api/box/health`, even with the administrator's
+cookie. The correct hostname continued to answer 200. An unallocated staff hostname failed before
+an HTTP response; that probe did not retain its error code, so it does not establish the reason.
+Eight authenticated requests to setup, recovery, till, device, print, membership, mirror-bundle and
+promotion paths returned 404. Four wrong passwords for a synthetic unknown email returned
+`password.invalid`; the next returned HTTP 429 with `password.throttled` and a two-second wait in
+the error body. The existing signed-in session kept working.
+
+A separate run of the real Compose tunnel profile used disposable gateway, peer and echo containers.
+Its normal source/port, disconnect, reconnect and restart checks passed. A controlled LAN target
+answered directly from the gateway but timed out when routed through the tunnel peer. Enabling
+forwarding, accepting forwarded packets and adding return-address translation inside that disposable
+peer made the same target answer. Restoring the shipped settings blocked it again while the staff
+destination still answered. This qualifies that controlled forwarding boundary; it is not a test
+against a second allocated venue on the rented gateway.
+
+The existing `bill-payments-api.test.ts` case, **issues a saved F1 bill offline when its cash payment
+completes**, passed inside a fresh Linux network namespace with no external IPv4 or IPv6 route.
+It checked the payment, sale and F1 fiscal record in its real temporary database. Only that case ran;
+180 cases were skipped by the name filter. The case already rejects outbound fetches and uses a
+fiscal client resolver that refuses inline submission. This is route-level evidence, not a sale
+through the managed server bundle or a till browser.
+
+Commands, source comparison, failed probe assumptions and final results are retained in Lane E's
+local `receipts/a951s-isolation-20261107/`: `isolation-smoke.sh`, `isolation-final.log`,
+`run-http.sh`, `run-http-resume.sh`, `http-managed-final.log`, `http-isolation-result.json`,
+`run-offline.sh`, `offline-sale.log` and `source-match.json`. All three disposable smoke resource
+sets and the managed unit, peer and network were absent after cleanup; the box lock was free.
+The earlier demo's real service remained active and returned trusted public HTTP 200, and the
+owner's three containers were healthy. No certificate was issued, registration revoked or host
+rebooted. Public renewal, revocation, a bundled-server offline sale, another allocated venue,
+physical reboot and publication/installation remain open.
+
 # Current addendum: returned Debian box, 5 November 2026
 
 > 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol

@@ -2108,7 +2108,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   A bounded run of the normal bundled server under systemd also retained Settings off across
   an app restart and Cloud refresh; on restored trusted public access. Managed process and peer
   recovery passed with the same keys and certificate. Left: publication and installation of the
-  combined build, physical reboot, public renewal and remaining isolation qualification.
+  combined build, physical reboot, public renewal, revocation, a bundled-server offline sale and
+  separation from another allocated venue. The later bounded check rejected foreign Host headers,
+  eight authenticated non-staff paths and repeated password guesses. A controlled Compose LAN
+  forwarding probe and one cash/F1 route case without an external network route also passed.
+  [Receipt and limits](operations/a951-host-evidence.md#staff-hostname-and-network-isolation-7-november-2026).
   The private combined build removes the old `@waitron/tunnel` TCP relay and its settings.
   Its repaired remote-only dialog passed a fresh public browser run: Stop retained access,
   confirmed off disconnected it and local on restored it.
