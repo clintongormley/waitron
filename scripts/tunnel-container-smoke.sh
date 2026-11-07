@@ -23,7 +23,7 @@ wait_for() {
 docker build -f deploy/tunnel/Dockerfile -t "$image" .
 docker network create "$name" >/dev/null
 docker run -d --name "$name-staff" --network "$name" --entrypoint socat "$image" \
-  TCP4-LISTEN:8443,reuseaddr,fork 'SYSTEM:printf staff-only' >/dev/null
+  TCP4-LISTEN:8443,reuseaddr,fork 'EXEC:/bin/cat' >/dev/null
 staff_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$name-staff")
 docker run -d --name "$name-gateway" --network "$name" --cap-add NET_ADMIN --entrypoint sh "$image" -c '
   umask 077
@@ -61,7 +61,7 @@ docker exec "$name-gateway" sh -c '
 ' sh "$peer_key"
 printf '{"address":"10.77.17.2","gatewayPublicKey":"%s","endpoint":"%s:51820"}\n' "$gateway_key" "$gateway_ip" > "$scratch/peer.json"
 docker cp "$scratch/peer.json" "$name-peer:/control/peer.json" >/dev/null
-request() { docker exec "$name-gateway" sh -c 'printf request | timeout 3 socat - TCP4:10.77.17.2:443,connect-timeout=2'; }
+request() { docker exec "$name-gateway" sh -c 'printf staff-only | timeout 3 socat - TCP4:10.77.17.2:443,connect-timeout=2'; }
 connected() { [ "$(request)" = staff-only ]; }
 wait_for connected
 printf '%s\n' 'PASS gateway TCP stream reaches only staff upstream'
@@ -73,11 +73,18 @@ local_port() { [ "$(docker exec "$name-peer" sh -c 'printf probe | timeout 3 soc
 wait_for local_port
 if docker exec "$name-gateway" sh -c 'printf denied | timeout 3 socat - TCP4:10.77.17.2:8443,connect-timeout=1'; then exit 1; fi
 printf '%s\n' 'PASS another source address and another tunnel port are refused'
+docker exec -d "$name-gateway" sh -c '
+  socat -d -d TCP4:10.77.17.2:443,connect-timeout=2 OPEN:/dev/null,ignoreeof > /tmp/held.log 2>&1
+  touch /tmp/held.closed
+'
+held_ready() { docker exec "$name-gateway" grep -q 'starting data transfer' /tmp/held.log; }
+wait_for held_ready
 docker exec "$name-peer" rm /control/peer.json
 off() { ! docker exec "$name-peer" ip link show wg-cloud >/dev/null 2>&1; }
 wait_for off
+wait_for docker exec "$name-gateway" test -f /tmp/held.closed
 if request; then exit 1; fi
-printf '%s\n' 'PASS removing configuration disconnects the peer'
+printf '%s\n' 'PASS removing configuration closes an existing stream and disconnects the peer'
 docker cp "$scratch/peer.json" "$name-peer:/control/peer.json" >/dev/null
 wait_for connected
 docker restart "$name-peer" >/dev/null
