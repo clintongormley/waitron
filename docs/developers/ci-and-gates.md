@@ -397,7 +397,7 @@ nothing notices is behaviour no test is checking. `thresholds.break` turns that 
 Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 `packages/shared` since July 2026, `packages/fiscal` under the owner's 2026-09-19 decision that
 the target is 90 everywhere, and `packages/node-db` and `packages/handover` from their first commits. `packages/db`, `packages/ui` and `packages/ui-core` carry no `break` in
-their own configs, deliberately: CI splits each run into shards (ten for db, thirty for ui, four for
+their own configs, deliberately: CI splits each run into shards (thirteen for db, thirty for ui, four for
 ui-core), each passed its own `--mutate` list, so a `thresholds.break` there would gate one slice
 rather than the package. Their bars live in the `mutation-db-aggregate`, `mutation-ui-aggregate`
 and `mutation-ui-core-aggregate` jobs instead, each of which merges its package's shard reports and
@@ -528,12 +528,12 @@ scheduled run was created at 05:11.
 
 ### Reading `packages/db`'s score by hand
 
-The ten shard reports are artifacts of the run, so the number can be read without waiting for the
+The shard reports are artifacts of the run, so the number can be read without waiting for the
 job:
 
 ```
 gh run download <run-id> -D /tmp/db-mut -p "mutation-report-db-shard-*"
-node scripts/mutation-aggregate.mjs /tmp/db-mut --package db --shards 10 --break 90
+node scripts/mutation-aggregate.mjs /tmp/db-mut --package db --shards 13 --break 90
 ```
 
 Two things that script does deliberately, each because the obvious version was wrong. It keys a
@@ -701,8 +701,10 @@ gh run download <nightly run> -p 'mutation-report-db-shard-*' -D <scratch dir>
 node scripts/mutation-costs.mjs db packages/db/mutation-costs.json <scratch dir>/*/mutation.json
 ```
 
-Several runs can be given at once; each file takes its median. A report made locally serves as
-well as a CI one, because the model reads only what the report records. Before using one from a run
+Several runs can be given at once; each file takes its median. A report made locally can be given too, cut as
+below. Whether a mutant timed out depends on the machine that ran it, and each timeout weighs
+82.2 s; the four local reports of 7 November had the same timeout counts the CI logs showed for
+those jobs. Before using one from a run
 that followed another in the same checkout, keep only the files its own `config.mutate` names:
 Stryker's incremental file carries the earlier run's files into the later report.
 
@@ -714,10 +716,10 @@ on 7 November 2026 with that shard's file list (`pnpm exec stryker run --mutate 
 succeeded" to "MutationTestExecutor Done" or, in a cancelled shard, its last progress line), the
 model under-read the cancelled shards: shard 10 had tested 856 of its 998 mutants after 1,370 s
 against 1,078 estimated for all of them, about 1.5 times the estimate if the rest ran at the same
-pace, and shards 4 and 8 about 1.3 and 1.4 times. It over-read shards 5 and 6 (480 and 670 s
+pace, and shards 4 and 8 about 1.3 and 1.4 times. It over-read shards 5 and 6 (483 and 675 s
 against 752 and 1,050). The refreshed table puts about 1,065 estimated seconds in each of the
 seven whole-file shards at ten, and about 746 in each of ten at thirteen shards: about 19 minutes of
-mutation at 1.5 times, after the up to about 2.5 minutes each job spent before mutating.
+mutation at 1.5 times, after the up to 2 min 38 s each job spent before mutating.
 
 A1309's job logs, reports, fit and replay are in `/Users/clintongormley/waitron-campaign-b/a1309/`,
 and this refresh's reports and scripts in `/Users/clintongormley/waitron-campaign/a760-p3/mut/`, both
