@@ -23,9 +23,9 @@ containers, volumes, network and tagged image. It checks the fixed staff destina
 another source and port, disconnection, reconnection and a container restart. It does not reboot
 the host, issue a certificate or touch a running Waitron installation.
 
-After the entrance and certificate-worker cuts land and the staff certificate is installed,
-set `WAITRON_STAFF_ORIGIN` to the exact HTTPS staff address Cloud assigned. On a Linux box,
-bind the staff listener to Docker's bridge address so this container can reach it:
+On a connected test installation, set `WAITRON_STAFF_ORIGIN` to the exact HTTPS staff address
+Cloud assigned. The certificate worker opens that listener after installing its first certificate.
+On a Linux box, bind it to Docker's bridge address so this container can reach it:
 
 ```sh
 export WAITRON_STAFF_ORIGIN=https://staff-v-your-assigned-venue.test.waitron.io
