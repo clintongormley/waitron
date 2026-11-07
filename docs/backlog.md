@@ -884,9 +884,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   open by A1382).** The owner chooses words on the lock screen or a recorded exception.
   [Detail](backlog/till.md#a-till-request-refused-for-naming-someone-not-signed-in-locks-the-screen-with-no-sentence)
 
-- **Other till sentences still send the person to a manager, against the refusal rule (left open by
-  A1382).** Listed by code in the detail.
-  [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-a-manager-against-the-refusal-rule)
+- **Other till sentences still send the person to somebody else, against the refusal rule (left open
+  by A1382).** Listed by code in the detail.
+  [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-somebody-else-against-the-refusal-rule)
 
 - **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).**
   Decide whether Merge bills goes too.
