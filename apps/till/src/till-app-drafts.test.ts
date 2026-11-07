@@ -706,6 +706,7 @@ describe("W69 unassigned table draft", () => {
     oldDiscard.click();
     await flush(el);
     expect(api.logout).toHaveBeenCalledTimes(1);
+    expect(api.logout).toHaveBeenCalledWith("p1");
     expect(server.saveDraft).not.toHaveBeenCalled();
     expect(server.submitDraft).not.toHaveBeenCalled();
   });
@@ -3237,6 +3238,57 @@ describe("till-app: signing out while a save is out", () => {
 
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(api.logout).toHaveBeenCalledOnce();
+  });
+
+  it("names the person signing out, with the next person's sign-in under way, once the save answers", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      listStaff: vi.fn().mockResolvedValue([
+        { personId: "p1", displayName: "Ana" },
+        { personId: "p2", displayName: "Sam" },
+      ]),
+      login: vi.fn(() => new Promise<never>(() => {})),
+    });
+    await openTable(el);
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return server.snapshot(server.save(partyId, save));
+    });
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    const signingIn = lock(el);
+    await signingIn.updateComplete;
+    signingIn.shadowRoot!.querySelector<HTMLElement>('[data-person="p2"]')!.click();
+    await signingIn.updateComplete;
+    emit(signingIn.shadowRoot!.querySelector("till-numeric-pad")!, "wt-change", { value: "5555" });
+    await signingIn.updateComplete;
+    signingIn.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
+    await flush(el);
+    expect(api.login).toHaveBeenCalledWith("p2", "5555");
+    expect(api.logout).not.toHaveBeenCalled();
+
+    answer();
+    await flush(el);
+
+    expect(api.logout).toHaveBeenCalledOnce();
+    expect(api.logout).toHaveBeenCalledWith("p1");
+  });
+
+  it("names whoever signed in last, on a tab with no sign-out between them", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    emit(shell(el), "device-unauthorized");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+
+    emit(shell(el), "logout");
+    await flush(el);
+
+    expect(api.logout).toHaveBeenCalledOnce();
+    expect(api.logout).toHaveBeenCalledWith("p2");
   });
 
   it("leaves the next person in when the save is refused for its person after sign-out", async () => {

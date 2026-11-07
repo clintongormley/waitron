@@ -282,6 +282,33 @@ describe("the full-disk gate on the till's routes", () => {
     expect(signOut.status).toBe(200);
   });
 
+  it("answers a sign-out that names someone else, and then one that names the person", async () => {
+    const app = venue.appWith({ disk: notedState() });
+    const deviceCookie = venue.cookie
+      .split("; ")
+      .find((part) => part.startsWith(`${DEVICE_COOKIE}=`));
+    const signIn = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: deviceCookie! },
+      body: JSON.stringify({ personId: venue.operatorId, pin: "5555" }),
+    });
+    const session = signIn.headers.get("set-cookie")!.split(";")[0]!;
+    const signOutNaming = (personId: string) =>
+      app.request("/api/session", {
+        method: "DELETE",
+        headers: { "content-type": "application/json", cookie: `${session}; ${deviceCookie!}` },
+        body: JSON.stringify({ personId }),
+      });
+
+    const other = await signOutNaming(randomUUID());
+    expect(other.status).toBe(200);
+    expect(other.headers.get("set-cookie")).toBeNull();
+
+    const own = await signOutNaming(venue.operatorId);
+    expect(own.status).toBe(200);
+    expect(own.headers.get("set-cookie")).toMatch(/waitron_till_session=;/);
+  });
+
   it("refuses no route mounted after the till's", async () => {
     const app = venue.appWith({ disk: notedState() });
     mountThemesApi(app, { db: venue.db }, quiet);

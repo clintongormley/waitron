@@ -60,6 +60,18 @@ export function readSessionToken(c: Context): string | null {
   return getCookie(c, SESSION_COOKIE) ?? null;
 }
 
+/** The person whose open session `token` names, or `null` when it names none. */
+export async function openSessionPerson(
+  db: Database | Transaction,
+  token: string,
+): Promise<string | null> {
+  const [found] = await db
+    .select({ personId: sessions.personId })
+    .from(sessions)
+    .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
+  return found?.personId ?? null;
+}
+
 /** The person of the request's open session on `deviceId`, or `null` when there is none: a
  * missing, unknown or ended session, or one opened on another device. */
 export async function signedInPersonOn(
