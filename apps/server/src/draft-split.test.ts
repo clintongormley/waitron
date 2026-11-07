@@ -165,10 +165,16 @@ async function withSource(
     venue.cookie,
     "POST",
     recallPath,
-    await observedDraftCommandBody(venue.db, "POST", recallPath, {
-      submissionId: randomUUID(),
-      expectedPartyRevision: party!.revision,
-    }),
+    await observedDraftCommandBody(
+      venue.db,
+      "POST",
+      recallPath,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party!.revision,
+      },
+      venue.operatorId,
+    ),
   );
   expect(recalled.status).toBe(200);
   const snapshot = recalled.json as unknown as BillDraftSnapshot & { revision: number };

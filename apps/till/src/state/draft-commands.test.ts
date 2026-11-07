@@ -134,6 +134,7 @@ describe("draft source commands", () => {
       {
         draftId: server.drafts[0]!.id,
         revision: 1,
+        personId: "p1",
         aborted: false,
         expectedEdit: {
           billId: "bill-1",

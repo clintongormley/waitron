@@ -22,6 +22,7 @@ import {
   expectNoA11yViolations,
   draftServer,
   mountWidget,
+  openedSyncs,
   servedMenus,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -7552,6 +7553,24 @@ describe("till-app: the order's groups", () => {
       ]);
     });
 
+    it("names the draft sync's person on a held split, not the person the screen shows", async () => {
+      const { syncs, restore } = openedSyncs();
+      try {
+        const server = editServer("2.000");
+        const { el } = await mountApp(server);
+        await openGroups(el);
+        Object.assign(syncs.at(-1)!, { personId: "p-sync" });
+        requestHeldSplit(el, "2.000");
+        await flush(el);
+        expect(server.splitHeldLineIntoUnits).toHaveBeenCalledOnce();
+        expect(server.splitHeldLineIntoUnits.mock.calls[0]![2]).toMatchObject({
+          personId: "p-sync",
+        });
+      } finally {
+        restore();
+      }
+    });
+
     it.each([2, 3, 4])(
       "the retained split command splits Steak ×%s once and keeps the resulting rows separate",
       async (quantity) => {
@@ -7566,6 +7585,7 @@ describe("till-app: the order's groups", () => {
             "line-steak",
             {
               ...command(3),
+              personId: "p1",
               expectedEdit: {
                 billId: "wo-4",
                 editorVersion: 0,
@@ -7615,6 +7635,7 @@ describe("till-app: the order's groups", () => {
           "line-steak",
           {
             ...command(3),
+            personId: "p1",
             expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
           },
         ],
@@ -7702,6 +7723,7 @@ describe("till-app: the order's groups", () => {
           "line-steak",
           {
             ...command(3),
+            personId: "p1",
             expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
           },
         ],
@@ -7743,6 +7765,7 @@ describe("till-app: the order's groups", () => {
           "line-steak",
           {
             ...command(3),
+            personId: "p1",
             expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
           },
         ],
@@ -7788,6 +7811,7 @@ describe("till-app: the order's groups", () => {
           "line-steak",
           {
             ...command(3),
+            personId: "p1",
             expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
           },
         ],
@@ -7910,6 +7934,7 @@ describe("till-app: the order's groups", () => {
           type === "split-group-line"
             ? {
                 ...command(3),
+                personId: "p1",
                 expectedEdit: {
                   billId: "wo-4",
                   editorVersion: 0,
@@ -9075,6 +9100,7 @@ describe("till-app: Current orders", () => {
       expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
+        personId: "p1",
         expectedEdit: { billId, editorVersion, draftId: null, draftRevision: null },
       });
       expect(order.orderId).toBe("wo-4");
@@ -9082,6 +9108,80 @@ describe("till-app: Current orders", () => {
       expect(drafts.takeOverDraft).not.toHaveBeenCalled();
     },
   );
+
+  describe("a held dish's split refused for its person", () => {
+    /** A held dish on the bill on screen, whose split stays out until `refuse` is called. */
+    async function splitOut() {
+      const current = structuredClone(orders);
+      current.groups[0]!.state = "held";
+      current.groups[0]!.rows[0]!.workingOrderId = "wo-4";
+      let refuse!: () => void;
+      const split = vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            refuse = () => reject({ code: "draft.person_not_signed_in", status: 409 });
+          }),
+      );
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(current),
+        splitHeldLineIntoUnits: split,
+      });
+      emit(await openMesa(el), "split-group-line", { lineId: "line-1" });
+      await flush(el);
+      expect(split).toHaveBeenCalledOnce();
+      return { el, refuse: () => refuse() };
+    }
+
+    it("locks the screen with no message, ending no server session and sending no read", async () => {
+      const { el, refuse } = await splitOut();
+      const reads = vi.mocked(api.listDrafts).mock.calls.length;
+
+      refuse();
+      await flush(el, 6);
+
+      expect(lock(el)).not.toBeNull();
+      expect(shell(el)).toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(vi.mocked(api.listDrafts).mock.calls.length).toBe(reads);
+    });
+
+    it("leaves the same person signed in when the refusal lands after a sign-out", async () => {
+      const { el, refuse } = await splitOut();
+      emit(shell(el), "logout");
+      await flush(el, 6);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el, 6);
+
+      refuse();
+      await flush(el, 6);
+
+      expect(lock(el)).toBeNull();
+      expect(shell(el)).not.toBeNull();
+      expect(banner(el)).toBeNull();
+    });
+
+    it.each([
+      ["the next person", "p2", "Luis"],
+      ["the same person", "p1", "Ana"],
+    ])(
+      "leaves %s signed in when the refusal lands after a restart with no sign-out",
+      async (_who, id, name) => {
+        const { el, refuse } = await splitOut();
+        emit(shell(el), "device-unauthorized");
+        await flush(el, 6);
+        emit(lock(el), "logged-in", { personId: id, displayName: name, permissions: [] });
+        await flush(el, 6);
+
+        refuse();
+        await flush(el, 6);
+
+        expect(lock(el)).toBeNull();
+        expect(shell(el)).not.toBeNull();
+        expect(banner(el)).toBeNull();
+      },
+    );
+  });
 
   it.each(["editor version", "draft identity", "draft revision", "API replacement"])(
     "does not renew a held split's observation after %s while its kitchen note saves",
@@ -9239,6 +9339,7 @@ describe("till-app: Current orders", () => {
     expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
       submissionId: expect.any(String),
       expectedPartyRevision: 4,
+      personId: "p1",
       expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     });
     expect(order.groupCommandBusy).toBe(false);
@@ -9271,6 +9372,7 @@ describe("till-app: Current orders", () => {
     expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
       submissionId: expect.any(String),
       expectedPartyRevision: 3,
+      personId: "p1",
       expectedEdit: { billId: "wo-check", editorVersion: 8, draftId: null, draftRevision: null },
     });
   });

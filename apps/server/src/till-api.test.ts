@@ -559,9 +559,9 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A stale or garbage cookie is never an error: the route clears it and answers 200. Weaker than
-    // its name: it does not pin the `isUuid` screen, since `endSession` hashes the value and matches
-    // no row either way.
+    // A stale or garbage cookie is never an error: naming nobody, the route clears it and answers
+    // 200. Weaker than its name: it does not pin the `isUuid` screen, since `endSession` hashes the
+    // value and matches no row either way.
     const del = await app.request("/api/session", {
       method: "DELETE",
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
@@ -573,12 +573,12 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(cleared).toMatch(/Max-Age=0/);
   });
 
-  it("DELETE naming an ALREADY-ended session is still an idempotent 200 that clears the cookie", async () => {
+  it("DELETE with an ALREADY-ended session's cookie, naming nobody, is still an idempotent 200 that clears the cookie", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A cookie naming a session that was already closed: `endSession` matches nothing, but logout
-    // still answers 200 and clears the cookie.
+    // A cookie naming a session that was already closed: `endSession` matches nothing, but a logout
+    // naming nobody still answers 200 and clears the cookie.
     const token = await openSession(suite.db);
     await closeSession(suite.db, token);
 
@@ -592,6 +592,213 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const cleared = del.headers.get("set-cookie")!;
     expect(cleared).toMatch(/waitron_till_session=;/);
     expect(cleared).toMatch(/Max-Age=0/);
+  });
+
+  describe("DELETE naming a person", () => {
+    function signOutApp(): Hono {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      app.get("/whoami", (c) =>
+        run(c, collect([]), async () =>
+          c.json({ personId: (await requireSession({ db: suite.db }, c)).personId }),
+        ),
+      );
+      return app;
+    }
+
+    async function signOut(app: Hono, token: string, body?: string): Promise<Response> {
+      return app.request("/api/session", {
+        method: "DELETE",
+        headers: { cookie: `${SESSION_COOKIE}=${token}`, "content-type": "application/json" },
+        ...(body === undefined ? {} : { body }),
+      });
+    }
+
+    async function isOpen(app: Hono, token: string): Promise<boolean> {
+      const res = await app.request("/whoami", {
+        headers: { cookie: `${SESSION_COOKIE}=${token}` },
+      });
+      return res.status === 200;
+    }
+
+    it("ends nothing and keeps the cookie when the session is someone else's", async () => {
+      const app = signOutApp();
+      const token = await openSession(suite.db);
+
+      const del = await signOut(app, token, JSON.stringify({ personId: abel.id }));
+
+      expect(del.status).toBe(200);
+      expect(await del.json()).toEqual({ ok: true });
+      expect(del.headers.get("set-cookie")).toBeNull();
+      expect(await isOpen(app, token)).toBe(true);
+    });
+
+    it.each([
+      ["their own id", () => ana.id],
+      ["their own id in capitals", () => ana.id.toUpperCase()],
+    ])("ends the session of the person named by %s", async (_how, named) => {
+      expect(ana.id.toUpperCase()).not.toBe(ana.id);
+      const app = signOutApp();
+      const token = await openSession(suite.db);
+
+      const del = await signOut(app, token, JSON.stringify({ personId: named() }));
+
+      expect(del.status).toBe(200);
+      expect(await del.json()).toEqual({ ok: true });
+      expect(del.headers.get("set-cookie")).toBeNull();
+      expect(await isOpen(app, token)).toBe(false);
+    });
+
+    it.each([
+      ["a word", "not-a-uuid"],
+      ["an empty string", ""],
+      ["a number", 5],
+      ["null", null],
+    ])("answers 400 naming personId for %s, and ends nothing", async (_what, personId) => {
+      const app = signOutApp();
+      const token = await openSession(suite.db);
+
+      const del = await signOut(app, token, JSON.stringify({ personId }));
+
+      expect(del.status).toBe(400);
+      expect(await del.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "personId" } },
+      });
+      expect(del.headers.get("set-cookie")).toBeNull();
+      expect(await isOpen(app, token)).toBe(true);
+    });
+
+    it.each([
+      ["no body at all", undefined],
+      ["an empty body", ""],
+      ["an object naming nobody", "{}"],
+      ["a body that is not JSON", "{"],
+    ])(
+      "ends the session behind the cookie for %s, as a sign-out always has",
+      async (_what, body) => {
+        const app = signOutApp();
+        const token = await openSession(suite.db);
+
+        const del = await signOut(app, token, body);
+
+        expect(del.status).toBe(200);
+        expect(await del.json()).toEqual({ ok: true });
+        expect(del.headers.get("set-cookie")).toMatch(/waitron_till_session=;/);
+        expect(await isOpen(app, token)).toBe(false);
+      },
+    );
+
+    it("leaves a closed session's cookie in place, whoever it names", async () => {
+      const app = signOutApp();
+      const token = await openSession(suite.db);
+      await closeSession(suite.db, token);
+
+      const del = await signOut(app, token, JSON.stringify({ personId: abel.id }));
+
+      expect(del.status).toBe(200);
+      expect(del.headers.get("set-cookie")).toBeNull();
+    });
+
+    it("answers 200 with no session cookie, whoever it names", async () => {
+      const del = await signOutApp().request("/api/session", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ personId: abel.id }),
+      });
+
+      expect(del.status).toBe(200);
+      expect(await del.json()).toEqual({ ok: true });
+      expect(del.headers.get("set-cookie")).toBeNull();
+    });
+
+    describe("a sign-out naming a person, with the next person's sign-in", () => {
+      async function signIn(
+        app: Hono,
+        deviceCookie: string,
+        person: { id: string },
+        pin: string,
+        held = "",
+      ): Promise<Response> {
+        const res = await app.request("/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: `${held}${deviceCookie}` },
+          body: JSON.stringify({ personId: person.id, pin }),
+        });
+        expect(res.status).toBe(200);
+        return res;
+      }
+
+      function tokenOf(answer: Response): string {
+        return /waitron_till_session=([^;]+)/.exec(answer.headers.get("set-cookie")!)![1]!;
+      }
+
+      /** What a browser keeps of the session cookie after these answers, taken in this order. */
+      function sessionCookieAfter(...answers: Response[]): string | null {
+        let kept: string | null = null;
+        for (const answer of answers) {
+          const header = answer.headers.get("set-cookie");
+          if (header === null) continue;
+          const pair = /^waitron_till_session=([^;]*)/.exec(header);
+          if (pair === null) continue;
+          kept = /Max-Age=0/i.test(header) ? null : `${SESSION_COOKIE}=${pair[1]!}`;
+        }
+        return kept;
+      }
+
+      async function read(app: Hono, cookie: string | null): Promise<Response> {
+        return app.request("/whoami", cookie === null ? {} : { headers: { cookie } });
+      }
+
+      it("leaves that person signed in", async () => {
+        const app = signOutApp();
+        const device = await enrolTillDeviceCookie(suite.db);
+        const anaIn = await signIn(app, device, ana, "5555");
+        const anaOut = await signOut(app, tokenOf(anaIn), JSON.stringify({ personId: ana.id }));
+        const benIn = await signIn(app, device, abel, "1111");
+
+        const held = await read(app, sessionCookieAfter(anaIn, benIn, anaOut));
+
+        expect(held.status).toBe(200);
+        expect(await held.json()).toEqual({ personId: abel.id });
+      });
+
+      it("still ends her session when nobody follows, so her token answers as no cookie does", async () => {
+        const app = signOutApp();
+        const device = await enrolTillDeviceCookie(suite.db);
+        const anaIn = await signIn(app, device, ana, "5555");
+        const token = tokenOf(anaIn);
+        expect((await read(app, `${SESSION_COOKIE}=${token}`)).status).toBe(200);
+
+        const anaOut = await signOut(app, token, JSON.stringify({ personId: ana.id }));
+        expect(anaOut.status).toBe(200);
+        expect(anaOut.headers.get("set-cookie")).toBeNull();
+
+        const withDeadToken = await read(app, sessionCookieAfter(anaIn, anaOut));
+        const withNoCookie = await read(app, null);
+        expect(withDeadToken.status).toBe(401);
+        expect(withNoCookie.status).toBe(401);
+        const refusal = await withDeadToken.json();
+        expect(refusal).toMatchObject({ error: { code: "session.required" } });
+        expect(refusal).toEqual(await withNoCookie.json());
+      });
+
+      it("lets the next sign-in replace the dead cookie it was sent with", async () => {
+        const app = signOutApp();
+        const device = await enrolTillDeviceCookie(suite.db);
+        const anaIn = await signIn(app, device, ana, "5555");
+        const deadToken = tokenOf(anaIn);
+        const anaOut = await signOut(app, deadToken, JSON.stringify({ personId: ana.id }));
+        const dead = sessionCookieAfter(anaIn, anaOut);
+        expect(dead).toBe(`${SESSION_COOKIE}=${deadToken}`);
+
+        const benIn = await signIn(app, device, abel, "1111", `${dead!}; `);
+
+        expect(tokenOf(benIn)).not.toBe(deadToken);
+        const after = await read(app, sessionCookieAfter(anaIn, anaOut, benIn));
+        expect(after.status).toBe(200);
+        expect(await after.json()).toEqual({ personId: abel.id });
+      });
+    });
   });
 });
 

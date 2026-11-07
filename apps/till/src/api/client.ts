@@ -834,6 +834,7 @@ export interface PartyDraftSnapshot {
 
 export interface DraftTakeover {
   revision: number;
+  personId: string;
   expectedEdit: BillEditExpected;
   submissionId: string;
 }
@@ -2743,8 +2744,10 @@ export class TillApi {
     return this.#request<SessionResult>("/api/session", "POST", { personId, pin });
   }
 
-  async logout(): Promise<void> {
-    await this.#request<{ ok: boolean }>("/api/session", "DELETE");
+  /** `personId` is the person this tab believes is signed in. The server ends nothing when the
+   * session behind the device's cookie is someone else's. */
+  async logout(personId: string): Promise<void> {
+    await this.#request<{ ok: boolean }>("/api/session", "DELETE", { personId });
   }
 
   getClockState(options: ReadOptions = {}): Promise<TillClockState> {
@@ -4250,7 +4253,7 @@ export class TillApi {
   splitHeldLineIntoUnits(
     partyId: string,
     lineId: string,
-    command: GroupCommand & { expectedEdit: BillEditExpected },
+    command: GroupCommand & { personId: string; expectedEdit: BillEditExpected },
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4373,7 +4376,7 @@ export class TillApi {
   recallToDraft(
     partyId: string,
     lineId: string,
-    command: GroupCommand & { expectedEdit: BillEditExpected },
+    command: GroupCommand & { personId: string; expectedEdit: BillEditExpected },
     options: ReadOptions = {},
   ): Promise<{ revision: number; draft: Draft; edit: BillEditState }> {
     return this.#request(

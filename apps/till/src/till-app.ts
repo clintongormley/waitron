@@ -536,7 +536,9 @@ interface RefreshRetry {
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
 /** How long a floor poll's read may stay out before it is cancelled: longer than the floor screen's
- * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. */
+ * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. A
+ * bill's refresh waits this long for a save that is out, so one with no answer holds up what follows
+ * the refresh, such as the tables after Move guests, by no more than a floor poll's limit. */
 const FLOOR_POLL_LIMIT_MS = 25_000;
 /** A refusal's reads hold a waiter at a closed panel with nothing said, and failing one costs no more
  * than the last answer kept, so they take a floor poll's limit rather than a request's. */
@@ -5400,7 +5402,7 @@ export class TillApp extends LitElement {
     this.#clockAccessLost = false;
     this.clockedOut = false;
     this.#loginPending = true;
-    if (personId !== this.operatorPersonId) this.#dropOthersDrafts(personId);
+    this.#dropOthersDrafts(personId);
     this.#sessionPersonId = personId;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
@@ -10232,9 +10234,10 @@ export class TillApp extends LitElement {
     this.profileBusy = true;
     const sync = this.#draftSync;
     if (sync !== undefined) {
+      const ownEditWaiting = sync.ownEditWaiting;
       const saved = await sync.flush();
       if (session !== this.#operatorSession) return;
-      if (saved !== "saved") {
+      if (saved !== "saved" && !lostNothing(saved, ownEditWaiting)) {
         this.profileBusy = false;
         this.profileNotice =
           saved !== "failed" && DRAFT_REFUSALS.has(saved.refused)
@@ -11863,7 +11866,9 @@ export class TillApp extends LitElement {
     const before = sync.edit;
     this.#billDraftReading = sync;
     try {
-      const loaded = await sync.load(this.#draftReadBounds());
+      const loaded = await sync.load(
+        this.#draftReadBounds() ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
+      );
       if (
         !loaded ||
         sync !== this.#draftSync ||
@@ -11939,9 +11944,8 @@ export class TillApp extends LitElement {
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
     if (refusal.refused === DRAFT_PERSON_REFUSAL) {
-      // The device's session belongs to someone else now; ending it would sign them out too.
-      if (sync.personId === this.#sessionPersonId && this.operatorName !== "")
-        void this.#onLogout(false);
+      // The device's session belongs to someone else now, so this person has none to end.
+      if (this.operatorName !== "") void this.#onLogout(false);
       return;
     }
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
@@ -13142,13 +13146,24 @@ export class TillApp extends LitElement {
     }
     const composition = this.#billComposition([billId]);
     if (composition === null) return;
+    const signIns = this.#signIns;
     const live = () =>
       this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
-    await this.#onGroupRequest(
-      (party, command) =>
-        composition.api.splitHeldLineIntoUnits(party.id, lineId, { ...command, expectedEdit }),
-      live,
-    );
+    await this.#onGroupRequest(async (party, command) => {
+      try {
+        return await composition.api.splitHeldLineIntoUnits(party.id, lineId, {
+          ...command,
+          personId: composition.sync!.personId,
+          expectedEdit,
+        });
+      } catch (error) {
+        const refusal = asRefusal(error);
+        // A later sign-in, even the same person's, is not what the server refused.
+        if (refusal?.refused === DRAFT_PERSON_REFUSAL && signIns === this.#signIns)
+          this.#onDraftRefused(composition.sync!, refusal);
+        throw error;
+      }
+    }, live);
   }
 
   async #onSplitDraftSource(event: Event): Promise<void> {
@@ -13188,6 +13203,7 @@ export class TillApp extends LitElement {
           {
             submissionId: crypto.randomUUID(),
             expectedPartyRevision: party.revision,
+            personId: state.personId,
             expectedEdit: state.expectedEdit,
           },
           options,
@@ -13533,6 +13549,7 @@ export class TillApp extends LitElement {
             {
               submissionId: crypto.randomUUID(),
               expectedPartyRevision: party.revision,
+              personId: state.personId,
               expectedEdit: state.expectedEdit,
             },
             options,
@@ -19774,6 +19791,7 @@ export class TillApp extends LitElement {
 
   /** Keeps the basket: it belongs to the till. */
   async #onLogout(endServerSession = true): Promise<void> {
+    const personId = this.#sessionPersonId;
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
@@ -19829,7 +19847,7 @@ export class TillApp extends LitElement {
     if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
     if (endServerSession)
       try {
-        await api.logout();
+        await api.logout(personId);
       } catch {
         // The device is already locked locally.
       }

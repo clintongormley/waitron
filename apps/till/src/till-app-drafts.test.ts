@@ -18,6 +18,7 @@ import {
   draftServer,
   floorPartyBills,
   mountWidget,
+  openedSyncs,
   partyBillOf,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -705,6 +706,7 @@ describe("W69 unassigned table draft", () => {
     oldDiscard.click();
     await flush(el);
     expect(api.logout).toHaveBeenCalledTimes(1);
+    expect(api.logout).toHaveBeenCalledWith("p1");
     expect(server.saveDraft).not.toHaveBeenCalled();
     expect(server.submitDraft).not.toHaveBeenCalled();
   });
@@ -1846,6 +1848,74 @@ describe("till-app: switching the device's profile with a table order open", () 
     expect(rows(el)).toEqual([]);
   });
 
+  describe("with another person holding the bill", () => {
+    /** Alex's draft on Table 4, saved straight into the server from another till. */
+    function alexHoldsTheBill(): void {
+      const [signedIn, name] = [server.personId, server.personName];
+      server.personId = "p-alex";
+      server.personName = "Alex";
+      server.save("v1", {
+        billId: "wo-4",
+        draftId: null,
+        revision: 0,
+        lines: [
+          {
+            slot: 0,
+            joinGroupId: null,
+            afterGroupId: null,
+            menuItemId: "offer-steak",
+            variantId: null,
+            menuVersionId: "v1",
+            options: [],
+            extras: [],
+            note: null,
+            quantity: "1",
+            courseId: null,
+            noMerge: false,
+          },
+        ],
+      });
+      server.personId = signedIn;
+      server.personName = name;
+    }
+
+    it("switches when the person is only viewing the other person's draft, having nothing of their own to lose", async () => {
+      const switchDeviceProfile = switchStub();
+      alexHoldsTheBill();
+      const { el } = await mountApp({ ...profiles, switchDeviceProfile });
+      await openTable(el);
+
+      await askToSwitch(el);
+
+      expect(profileDialog(el)?.notice ?? null).toBeNull();
+      expect(switchDeviceProfile).toHaveBeenCalledOnce();
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      expect(profileDialog(el)).toBeNull();
+    });
+
+    it("sends no switch, and says so, when the person has an edit of their own waiting and the same refusal comes back", async () => {
+      const switchDeviceProfile = switchStub();
+      const { el } = await mountApp({
+        ...profiles,
+        switchDeviceProfile,
+        saveDraft: vi.fn(server.saveDraft).mockRejectedValueOnce({
+          code: "draft.taken_over",
+          status: 409,
+          ownerName: "Alex",
+        }),
+      });
+      await openTable(el);
+      press(el, "Beer");
+
+      await askToSwitch(el);
+
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(switchDeviceProfile).not.toHaveBeenCalled();
+      expect(profileDialog(el)!.notice).toBe("draft_replaced");
+      expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    });
+  });
+
   it("refuses to switch while an order with no party holds lines, which are never saved", async () => {
     const switchDeviceProfile = switchStub();
     const unseated = table("t9", "9", null);
@@ -2504,6 +2574,37 @@ describe("till-app: sending the draft", () => {
       expect(banner(el)).not.toBeNull();
     });
 
+    it("sends no second save of the refused lines when a read lands while the send repairs their places", async () => {
+      const { el, store, detail, listGroups } = await raced("save");
+      const saves = api.saveDraft!.mock.calls.length;
+      let answerGroups!: (groups: unknown) => void;
+      listGroups.mockImplementationOnce(() => new Promise((resolve) => (answerGroups = resolve)));
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(answerGroups).toBeDefined());
+      expect(api.saveDraft).toHaveBeenCalledTimes(saves + 1);
+
+      window.dispatchEvent(new Event("focus"));
+      await flush(el, 6);
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+
+      expect(store.sending).toBe(true);
+      expect(api.saveDraft).toHaveBeenCalledTimes(saves + 1);
+      answerGroups({
+        revision: 4,
+        groups: [{ ...mains, state: "fired", firedAt: "2026-10-17T12:00:00.000Z" }, desserts],
+        printProblems: [],
+      });
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      expect(api.saveDraft).toHaveBeenCalledTimes(saves + 2);
+      expect(
+        server.drafts[0]!.lines.map((line) => [line.slot, line.joinGroupId, line.afterGroupId]),
+      ).toEqual([
+        [0, null, null],
+        [0, null, null],
+        [8, null, "held-desserts"],
+      ]);
+    });
+
     it("keeps corrected dishes locally when their recovery save goes offline", async () => {
       const { el, store, detail } = await raced("submit");
       api
@@ -3137,6 +3238,138 @@ describe("till-app: signing out while a save is out", () => {
 
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(api.logout).toHaveBeenCalledOnce();
+  });
+
+  it("names the person signing out, with the next person's sign-in under way, once the save answers", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      listStaff: vi.fn().mockResolvedValue([
+        { personId: "p1", displayName: "Ana" },
+        { personId: "p2", displayName: "Sam" },
+      ]),
+      login: vi.fn(() => new Promise<never>(() => {})),
+    });
+    await openTable(el);
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return server.snapshot(server.save(partyId, save));
+    });
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    const signingIn = lock(el);
+    await signingIn.updateComplete;
+    signingIn.shadowRoot!.querySelector<HTMLElement>('[data-person="p2"]')!.click();
+    await signingIn.updateComplete;
+    emit(signingIn.shadowRoot!.querySelector("till-numeric-pad")!, "wt-change", { value: "5555" });
+    await signingIn.updateComplete;
+    signingIn.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
+    await flush(el);
+    expect(api.login).toHaveBeenCalledWith("p2", "5555");
+    expect(api.logout).not.toHaveBeenCalled();
+
+    answer();
+    await flush(el);
+
+    expect(api.logout).toHaveBeenCalledOnce();
+    expect(api.logout).toHaveBeenCalledWith("p1");
+  });
+
+  it("names whoever signed in last, on a tab with no sign-out between them", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    emit(shell(el), "device-unauthorized");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+
+    emit(shell(el), "logout");
+    await flush(el);
+
+    expect(api.logout).toHaveBeenCalledOnce();
+    expect(api.logout).toHaveBeenCalledWith("p2");
+  });
+
+  it("leaves the next person in when the save is refused for its person after sign-out", async () => {
+    let refuse!: () => void;
+    const { el } = await mountApp();
+    await openTable(el);
+    server.saveDraft.mockImplementationOnce(
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          refuse = () => reject({ code: "draft.person_not_signed_in", status: 409 });
+        }),
+    );
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+
+    refuse();
+    await flush(el, 6);
+
+    expect(lock(el)).toBeNull();
+    expect(shell(el)).not.toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+  });
+
+  describe("and the save gets no answer", () => {
+    afterEach(() => vi.useRealTimers());
+
+    async function settleTimers(el: TillApp, ms: number): Promise<void> {
+      await vi.advanceTimersByTimeAsync(ms);
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+      }
+    }
+
+    async function signOutWithSaveUnanswered(el: TillApp): Promise<void> {
+      await openTable(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      press(el, "Beer");
+      await settleTimers(el, DRAFT_SAVE_DELAY_MS);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      emit(tableOrder(el)!, "logout");
+      await settleTimers(el, 0);
+      expect(lock(el)).not.toBeNull();
+    }
+
+    it("locks at once and tells the server only when the save's 150-second limit has passed", async () => {
+      const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+      await signOutWithSaveUnanswered(el);
+
+      await settleTimers(el, 150_000 - DRAFT_SAVE_DELAY_MS - 1);
+      expect(api.logout).not.toHaveBeenCalled();
+      await settleTimers(el, DRAFT_SAVE_DELAY_MS + 1);
+
+      expect(api.logout).toHaveBeenCalledOnce();
+    });
+
+    // The same person is the case that matters: the old sign-out names them, so it would end their
+    // new session.
+    it.each([
+      ["the next person", "p2", "Sam"],
+      ["the same person", "p1", "Ana"],
+    ])("lets %s in at once, and never sends the old sign-out", async (_who, id, name) => {
+      const { el } = await mountApp({ saveDraft: vi.fn(noAnswer) });
+      await signOutWithSaveUnanswered(el);
+
+      await settleTimers(el, 1_000);
+      server.personId = id;
+      server.personName = name;
+      emit(lock(el), "logged-in", { personId: id, displayName: name, permissions: [] });
+      await settleTimers(el, 0);
+      expect(lock(el)).toBeNull();
+      expect(shell(el)).not.toBeNull();
+
+      await settleTimers(el, 150_000);
+
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(lock(el)).toBeNull();
+    });
   });
 });
 
@@ -4761,6 +4994,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       alexs.id,
       {
         revision: alexs.revision,
+        personId: SAM,
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -4820,6 +5054,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       alexs.id,
       {
         revision: alexs.revision,
+        personId: SAM,
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -4999,6 +5234,39 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(banner(el)).toBeNull();
   });
 
+  it("locks the screen, ends no server session, and keeps Sam's lines for Sam, when a take-over is refused for Sam", async () => {
+    let refuse!: (error: unknown) => void;
+    const { el } = await mountApp({
+      takeOverDraft: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    });
+    await openAs(el, SAM, "Sam");
+    await tap(el, "Flan");
+    savedBy(ALEX, "Alex", "offer-beer");
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
+    await takeOver(el);
+    expect(api.takeOverDraft).toHaveBeenCalledOnce();
+    const reads = api.listDrafts.mock.calls.length;
+
+    refuse({ code: "draft.person_not_signed_in", status: 409 });
+    await flush(el, 6);
+
+    expect(lock(el)).not.toBeNull();
+    expect(shell(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+    expect(api.listDrafts.mock.calls.length).toBe(reads);
+
+    await openAs(el, "p-kim", "Kim");
+    expect(retainedCandidate(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    await openAs(el, SAM, "Sam");
+    await flush(el, 6);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+  });
+
   it("sends no takeover as the next person when it was waiting on Sam's already-sent save at sign-out", async () => {
     const { el } = await mountApp();
     await openAs(el, SAM, "Sam");
@@ -5009,7 +5277,8 @@ describe("till-app: other people's drafts and taking one over", () => {
     const alex = savedBy(ALEX, "Alex", "offer-beer");
     window.dispatchEvent(new Event("focus"));
     await flush(el, 6);
-    await takeOver(el);
+    emit(shell(el), "take-over-draft", { draftId: alex.id, revision: alex.revision });
+    await flush(el, 6);
     expect(api.takeOverDraft).not.toHaveBeenCalled();
 
     emit(shell(el), "logout");
@@ -8116,6 +8385,34 @@ describe("recalled draft source splitting", () => {
     return { ...mounted, order, button };
   }
 
+  it("names the person the draft sync hands it on a split, not the person the screen shows", async () => {
+    const runCommand = DraftSync.prototype.runCommand;
+    const command = vi.spyOn(DraftSync.prototype, "runCommand").mockImplementation(async function <
+      T,
+    >(
+      this: DraftSync,
+      send: (state: DraftCommandState, options: { signal: AbortSignal }) => Promise<T>,
+    ): Promise<DraftCommandOutcome<T>> {
+      return (runCommand<T>).call(this, (state, options) =>
+        send({ ...state, personId: "p-sync" }, options),
+      );
+    });
+    try {
+      const split = vi.fn(async () => {
+        saveSplit();
+        return { revision: 4 };
+      });
+      const { el, button } = await opening(split);
+      await userEvent.click(button);
+      await flush(el);
+      expect(split.mock.calls).toEqual([
+        ["v1", "source-7", expect.objectContaining({ personId: "p-sync" }), expect.anything()],
+      ]);
+    } finally {
+      command.mockRestore();
+    }
+  });
+
   it("keeps the original family until the server splits and hydrates distinct recorded charges", async () => {
     let answer!: () => void;
     const split = vi.fn(async () => {
@@ -8136,6 +8433,7 @@ describe("recalled draft source splitting", () => {
       {
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
+        personId: "p1",
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -8227,6 +8525,21 @@ describe("recalled draft source splitting", () => {
     answer();
     await flush(el, 6);
     expect(rows(el)).toEqual(["Recorded steak ×1", "Recorded steak ×1"]);
+  });
+
+  it("locks the screen and ends no server session when a recalled line's split is refused for its person", async () => {
+    const split = vi.fn().mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 });
+    const { el, button } = await opening(split);
+    const reads = api.listDrafts.mock.calls.length;
+
+    await userEvent.click(button);
+    await flush(el, 6);
+
+    expect(split).toHaveBeenCalledOnce();
+    expect(lock(el)).not.toBeNull();
+    expect(banner(el)).toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+    expect(api.listDrafts.mock.calls.length).toBe(reads);
   });
 
   it("rereads ownership after a refused split and names the new owner without retrying", async () => {
@@ -8544,13 +8857,100 @@ describe("recalled draft source splitting", () => {
       return { ...mounted, order };
     }
 
+    it("names the draft sync's person on a recall, not the person the screen shows", async () => {
+      const { syncs, restore } = openedSyncs();
+      try {
+        const { el, order } = await recallOpening();
+        Object.assign(syncs.at(-1)!, { personId: "p-sync" });
+        emit(order, "recall-lines", { lineNos: [7] });
+        await flush(el, 6);
+        expect(api.recallToDraft.mock.calls[0]![2].personId).toBe("p-sync");
+      } finally {
+        restore();
+      }
+    });
+
+    it("locks the screen, ends no server session, and leaves the saved lines for the person, when a recall is refused for them", async () => {
+      const { el, order } = await recallOpening({
+        recallToDraft: vi
+          .fn()
+          .mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 }),
+      });
+      await tap(el, "Beer");
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      await flush(el);
+      const reads = api.listDrafts.mock.calls.length;
+
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+
+      expect(api.recallToDraft).toHaveBeenCalledOnce();
+      expect(lock(el)).not.toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(api.listDrafts.mock.calls.length).toBe(reads);
+
+      await signIn(el, "p1", "Ana");
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el, 6);
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(banner(el)).toBeNull();
+    });
+
+    it("locks the screen with no message, sending no recall, and keeps the lines for the person, when the save before a recall is refused for them", async () => {
+      const { el, order } = await recallOpening();
+      await tap(el, "Beer");
+      api.saveDraft.mockRejectedValueOnce({ code: "draft.person_not_signed_in", status: 409 });
+
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      expect(lock(el)).not.toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.logout).not.toHaveBeenCalled();
+
+      await signIn(el, "p1", "Ana");
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el, 6);
+      expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    });
+
+    it("sends no recall as the next person when it was waiting on the person's already-sent save at sign-out", async () => {
+      const { el, order } = await recallOpening();
+      const answer = holdNextSave();
+      await tap(el, "Beer");
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+
+      emit(shell(el), "logout");
+      await flush(el);
+      await signIn(el, "p-kim", "Kim");
+      answer();
+      await flush(el, 8);
+
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(banner(el)).toBeNull();
+      expect(lock(el)).toBeNull();
+    });
+
     it("recalls the recorded family into its bill's draft and reads it before allowing edits", async () => {
       const { el, order } = await recallOpening();
-      const reads = api.listDrafts.mock.calls.length;
       await openSentDish(order, "source-7");
       await openSentMore(order);
       const button = order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-recall]");
       expect(button).not.toBeNull();
+      // Counted after the taps above: a page's first click gives it focus, and focus reads the drafts.
+      const reads = api.listDrafts.mock.calls.length;
       await userEvent.click(button!);
       await flush(el, 6);
       expect(api.recallToDraft).toHaveBeenCalledWith(
@@ -8558,6 +8958,7 @@ describe("recalled draft source splitting", () => {
         "source-7",
         {
           expectedPartyRevision: 3,
+          personId: "p1",
           submissionId: expect.any(String),
           expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         },
@@ -9056,6 +9457,7 @@ describe("recalled draft source splitting", () => {
             "source-7",
             {
               expectedPartyRevision: 4,
+              personId: "p1",
               submissionId: expect.any(String),
               expectedEdit: {
                 billId: "wo-4",
@@ -9636,7 +10038,7 @@ describe("A773 retained bill candidates in the app", () => {
     expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
   });
 
-  it("still signs the order's person out on this screen when the bill changed elsewhere while their refused save was out", async () => {
+  it("still signs the order's person out on this screen when their save is refused and the bill's other change has not reached this till", async () => {
     let reject!: (error: unknown) => void;
     const { el } = await mountApp({
       saveDraft: vi.fn(() => new Promise<never>((_resolve, fail) => (reject = fail))),
@@ -9644,7 +10046,6 @@ describe("A773 retained bill candidates in the app", () => {
     await openTable(el);
     await tap(el, "Beer");
     await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
-    const reads = api.listDrafts.mock.calls.length;
     server.personId = "p2";
     server.personName = "Luis";
     const sent = api.saveDraft.mock.calls[0]![1];
@@ -9654,9 +10055,6 @@ describe("A773 retained bill candidates in the app", () => {
       revision: 0,
       lines: [{ ...sent.lines[0], menuItemId: "offer-steak" }],
     });
-    window.dispatchEvent(new Event("focus"));
-    await vi.waitFor(() => expect(api.listDrafts.mock.calls.length).toBeGreaterThan(reads));
-    await flush(el, 6);
 
     reject({ code: "draft.person_not_signed_in", status: 409 });
     await flush(el, 6);

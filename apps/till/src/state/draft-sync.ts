@@ -143,6 +143,7 @@ export type DraftCommandOutcome<T> =
 export interface DraftCommandState {
   draftId: string | null;
   revision: number;
+  personId: string;
   expectedEdit: BillEditExpected;
 }
 
@@ -162,7 +163,8 @@ export interface DraftSyncOptions {
   personId: string;
   /** The saved lines as the till shows them, from the table's offers. */
   rebuild: (lines: readonly DraftLine[]) => OrderLine[];
-  /** A save was refused. When the draft itself was, the drafts have been read again first. */
+  /** A save was refused, or a take-over, recall or split was refused for its person. When a save's
+   * draft itself was refused, the drafts have been read again first; a person refusal reads nothing. */
   onRefused: (code: string, ownerName?: string) => void;
   /** The server's draft has replaced what the store held. */
   onReplaced?: () => void;
@@ -180,10 +182,13 @@ export interface DraftSyncOptions {
  */
 export const TABLE_REQUEST_LIMIT_MS = 150_000;
 
-/** A read shorter than a request's limit, which `stop` ends early. */
 export interface DraftReadBounds {
-  limitMs: number;
-  stop: AbortSignal;
+  /** Instead of a request's limit: the read and its waits for any save that is out, together. */
+  limitMs?: number;
+  /** Each wait for a save, alone: past it the read answers false with nothing sent. */
+  waitLimitMs?: number;
+  /** Ends the waits and the read early. */
+  stop?: AbortSignal;
 }
 
 /** A signal that aborts after `ms`, or with `also`; `done` clears the timer. */
@@ -310,20 +315,24 @@ export class DraftSync {
   /** An edit not yet sent in a save. */
   #unsaved = false;
   #queue: Promise<DraftSaveOutcome> = Promise.resolve("saved");
+  #savesQueued = 0;
+  /** The read after a refused save is out inside the queue, so that save no longer holds reads back. */
+  #readingInQueue = false;
+  /** Aborted when a read waiting for a save has reason to look again. */
+  #readWake = new AbortController();
   /** A save is out. */
   #saving = false;
   /** Signing out: no save starts after this. */
   #closed = false;
   #timer?: ReturnType<typeof setTimeout>;
-  /** Moved on by each read, so a save answering after it is not taken. */
   #reads = 0;
   #muted = false;
   #dropped = false;
   #commanding = false;
-  #commandsStarted = 0;
   #commandAbort?: AbortController;
   #recoveryRequired = false;
   #correctingPlaces = false;
+  #saveAfterSend = false;
   #unlockRecovery?: () => void;
   readonly #unsubscribe: () => void;
 
@@ -371,6 +380,7 @@ export class DraftSync {
   }
 
   retainCandidate(): void {
+    if (this.candidate !== null) return;
     const base = this.expectedEdit;
     if (base === null || (!this.#unsaved && !this.#saving)) return;
     this.#candidates.set(this.#candidateKey, {
@@ -381,6 +391,7 @@ export class DraftSync {
       lines: structuredClone([...this.store.lines]),
       localGeneration: this.#localGeneration,
     });
+    this.#lockAuthority();
   }
 
   resolveCandidate(reviewedLines: readonly OrderLine[] | null): void {
@@ -405,7 +416,8 @@ export class DraftSync {
       }
     }
     this.#candidates.delete(this.#candidateKey);
-    if (reviewedLines === null && this.#recoveryRequired) this.#show(this.#authoritative);
+    if (reviewedLines === null && (this.#recoveryRequired || this.#unsaved))
+      this.#show(this.#authoritative);
     this.#lockAuthority();
     if (reviewedLines !== null) {
       this.#quietly(() => this.store.loadFrom(this.store.id, structuredClone([...reviewedLines])));
@@ -474,11 +486,7 @@ export class DraftSync {
     if (status === this.store.billStatus) return;
     this.#cancelTimer();
     this.store.billStatus = status;
-    if (status === "open" && this.#unsaved && !this.#ended)
-      this.#timer = setTimeout(() => {
-        this.#timer = undefined;
-        void this.#save();
-      }, DRAFT_SAVE_DELAY_MS);
+    if (status === "open" && this.#unsaved) this.#scheduleSaveOfEdit();
   }
 
   get #billRefusal(): DraftRefused | undefined {
@@ -517,14 +525,59 @@ export class DraftSync {
     return positions.map((position) => this.#lineIds[position]!);
   }
 
-  /** A read never turns a retained local candidate into saved work. */
+  /** A read never turns a retained local candidate into saved work. Its answer counts only if no
+   * save was queued while it was out: one answering after the server took a save but before that
+   * save's answer would look like someone else's change. */
   async load(bounds?: DraftReadBounds): Promise<boolean> {
-    if (this.#commanding || this.#correctingPlaces) return false;
-    return this.#load(bounds);
+    const limitMs = bounds?.limitMs ?? this.#options.requestLimitMs;
+    const limit = limited(limitMs, bounds?.stop);
+    try {
+      const read = await this.#loadBetweenSaves(
+        limitMs,
+        bounds?.waitLimitMs ?? limitMs,
+        limit.signal,
+      );
+      if (!read && this.#unsaved) this.#scheduleSave();
+      return read;
+    } finally {
+      limit.done();
+    }
   }
 
-  async #load(bounds?: DraftReadBounds): Promise<boolean> {
-    const command = this.#commandsStarted;
+  async #loadBetweenSaves(
+    limitMs: number,
+    waitLimitMs: number,
+    stop: AbortSignal,
+  ): Promise<boolean> {
+    for (;;) {
+      const wait = limited(waitLimitMs, stop);
+      while (this.#saveAhead && !this.#readDeclined && !wait.signal.aborted)
+        await Promise.race([
+          this.#queue,
+          pause(AbortSignal.any([wait.signal, this.#readWake.signal])),
+        ]);
+      wait.done();
+      if (stop.aborted || this.#saveAhead || this.#readDeclined) return false;
+      const queue = this.#queue;
+      const read = await this.#load({ limitMs, stop }, () => queue !== this.#queue);
+      if (queue === this.#queue) return read;
+    }
+  }
+
+  get #saveAhead(): boolean {
+    return this.#savesQueued > (this.#readingInQueue ? 1 : 0);
+  }
+
+  get #readDeclined(): boolean {
+    return this.#ended || this.#commanding || this.#correctingPlaces;
+  }
+
+  #wakeWaitingReads(): void {
+    this.#readWake.abort();
+    this.#readWake = new AbortController();
+  }
+
+  async #load(bounds?: DraftReadBounds, stale?: () => boolean): Promise<boolean> {
     const read = ++this.#reads;
     this.#cancelTimer();
     const stops = [this.#commandAbort?.signal, bounds?.stop].filter((stop) => stop !== undefined);
@@ -550,7 +603,7 @@ export class DraftSync {
       this.#dropped ||
       (this.#commanding && this.#closed) ||
       read !== this.#reads ||
-      command !== this.#commandsStarted
+      stale?.() === true
     )
       return false;
     const edit = answer.billEdits.find((edit) => edit.billId === this.billId);
@@ -578,7 +631,7 @@ export class DraftSync {
     this.#unlockRecovery?.();
     this.#unlockRecovery = undefined;
     this.#lockAuthority();
-    if (this.#unsaved && !this.store.editsLocked) this.#scheduleSave();
+    if (this.#unsaved) this.#scheduleSave();
     return true;
   }
 
@@ -603,6 +656,7 @@ export class DraftSync {
     this.#cancelTimer();
     this.#closed = true;
     this.#lockAuthority();
+    this.#wakeWaitingReads();
     return this.#queue.then(() => (this.#unsaved || this.#saving ? "failed" : "saved"));
   }
 
@@ -649,6 +703,7 @@ export class DraftSync {
         draftId,
         {
           revision,
+          personId: this.personId,
           expectedEdit: this.expectedEdit!,
           submissionId: crypto.randomUUID(),
         },
@@ -657,11 +712,17 @@ export class DraftSync {
         },
       );
     } catch (error) {
-      if (this.#ended || read !== this.#reads) return "failed";
+      if (this.#ended) return "failed";
+      const refusal = asRefusal(error);
+      if (refusal?.refused === DRAFT_PERSON_REFUSAL) {
+        this.#recoveryRequired = true;
+        this.#lockAuthority();
+        return this.#refusedPerson(refusal);
+      }
+      if (read !== this.#reads) return "failed";
       this.#recoveryRequired = true;
       await this.#load();
       this.#lockAuthority();
-      const refusal = asRefusal(error);
       return refusal ?? "failed";
     } finally {
       limit.done();
@@ -688,20 +749,28 @@ export class DraftSync {
       taken = await this.#options.api.takeOverDraft(
         this.partyId,
         draftId,
-        { revision, expectedEdit, submissionId: crypto.randomUUID() },
+        { revision, personId: this.personId, expectedEdit, submissionId: crypto.randomUUID() },
         { signal: limit.signal },
       );
     } catch (error) {
       if (this.#ended) return "failed";
-      await this.#readAfterTakeOver();
-      return this.#ended ? "failed" : (asRefusal(error) ?? "failed");
+      const refusal = asRefusal(error);
+      if (refusal?.refused === DRAFT_PERSON_REFUSAL) return this.#refusedPerson(refusal);
+      await this.load();
+      return this.#ended ? "failed" : (refusal ?? "failed");
     } finally {
       limit.done();
     }
     if (this.#ended) return "failed";
     this.#recordTakeOver(taken, draftId);
-    const reloaded = await this.#readAfterTakeOver();
+    const reloaded = await this.load();
     return this.#ended ? "failed" : { taken: true, reloaded };
+  }
+
+  /** The device's session is someone else's, so a read now would run as them: none is sent. */
+  #refusedPerson(refusal: DraftRefused): DraftRefused {
+    this.#options.onRefused(refusal.refused);
+    return refusal;
   }
 
   #recordTakeOver({ draft, edit }: BillDraftSnapshot, draftId: string): void {
@@ -711,12 +780,6 @@ export class DraftSync {
       ...this.partyDrafts.filter((row) => row.id !== draftId),
       ...(draft === null ? [] : [draft]),
     ];
-  }
-
-  /** A read overtaking a save's answer would take the till's own save for someone else's change. */
-  async #readAfterTakeOver(): Promise<boolean> {
-    await this.#queue;
-    return this.#ended ? false : this.load();
   }
 
   /** Source commands change stored bill rows and their draft together. No edit or save may use
@@ -733,9 +796,9 @@ export class DraftSync {
     )
       return "failed";
     this.#commanding = true;
-    this.#commandsStarted++;
     this.#cancelTimer();
     this.store.sending = true;
+    this.#wakeWaitingReads();
     const abort = new AbortController();
     this.#commandAbort = abort;
     const limit = limited(this.#options.requestLimitMs, abort.signal);
@@ -747,13 +810,20 @@ export class DraftSync {
       let applied: T;
       try {
         applied = await send(
-          { draftId: this.#draftId, revision: this.#revision, expectedEdit: this.expectedEdit! },
+          {
+            draftId: this.#draftId,
+            revision: this.#revision,
+            personId: this.personId,
+            expectedEdit: this.expectedEdit!,
+          },
           { signal: limit.signal },
         );
       } catch (error) {
         if (this.#ended) return "failed";
+        const refusal = asRefusal(error);
+        if (refusal?.refused === DRAFT_PERSON_REFUSAL) return this.#refusedPerson(refusal);
         await this.#load();
-        return asRefusal(error) ?? "failed";
+        return refusal ?? "failed";
       }
       if (this.#ended) return "failed";
       const reloaded = await this.#load();
@@ -778,6 +848,7 @@ export class DraftSync {
       return "failed";
     this.#correctingPlaces = true;
     this.#cancelTimer();
+    this.#wakeWaitingReads();
     const read = this.#reads;
     try {
       await this.#queue;
@@ -817,6 +888,7 @@ export class DraftSync {
     this.#cancelTimer();
     this.#unsubscribe();
     this.#lockAuthority();
+    this.#wakeWaitingReads();
   }
 
   get #ended(): boolean {
@@ -824,16 +896,32 @@ export class DraftSync {
   }
 
   #onChange(): void {
-    if (this.#muted || this.#dropped || !this.store.dirty) return;
-    this.store.markPersisted();
-    this.#unsaved = true;
-    this.#localGeneration++;
+    if (this.#muted || this.#dropped) return;
+    if (this.store.dirty) {
+      this.store.markPersisted();
+      this.#unsaved = true;
+      this.#localGeneration++;
+      this.#scheduleSaveOfEdit();
+    } else if (this.#saveAfterSend && !this.#sendUnderWay) {
+      this.#saveAfterSend = false;
+      if (this.#unsaved) this.#scheduleSave();
+    }
+  }
+
+  get #sendUnderWay(): boolean {
+    return this.store.sending || this.#correctingPlaces;
+  }
+
+  /** For a new edit, or an edit on a bill that reopens: during a send it waits for the send's end.
+   * An edit a read finds still waiting needs no such wait, because the next read tries it again. */
+  #scheduleSaveOfEdit(): void {
+    this.#saveAfterSend = this.#sendUnderWay;
     this.#scheduleSave();
   }
 
   #scheduleSave(): void {
     this.#cancelTimer();
-    if (this.#ended || this.store.editsLocked) return;
+    if (this.#ended || this.store.editsLocked || this.#sendUnderWay) return;
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
       void this.#save();
@@ -846,9 +934,11 @@ export class DraftSync {
   }
 
   #save(signal?: AbortSignal): Promise<DraftSaveOutcome> {
+    this.#savesQueued++;
     this.#queue = this.#queue
       .then(() => this.#saveNow(signal))
-      .catch((): DraftSaveOutcome => "failed");
+      .catch((): DraftSaveOutcome => "failed")
+      .finally(() => this.#savesQueued--);
     return this.#queue;
   }
 
@@ -888,10 +978,6 @@ export class DraftSync {
       if (!this.#invalidateSave(expectedEdit)) return await this.#refused(error);
       const refusal = asRefusal(error);
       if (refusal?.refused !== DRAFT_PERSON_REFUSAL) return "failed";
-      // onRefused can close this sync (the till does while this person is still signed in), and
-      // closing while a save is out keeps the lines on screen, which can be a newer edit's, over the
-      // kept lines holding this person's.
-      this.#saving = false;
       this.#options.onRefused(refusal.refused);
       return refusal;
     } finally {
@@ -936,7 +1022,7 @@ export class DraftSync {
       this.retainCandidate();
       this.#recoveryRequired = true;
       this.#lockAuthority();
-      await this.#load();
+      await this.#readInQueue();
       return "failed";
     }
     if (DRAFT_REFUSALS.has(refusal.refused)) {
@@ -944,10 +1030,20 @@ export class DraftSync {
       this.retainCandidate();
       this.#recoveryRequired = true;
       this.#lockAuthority();
-      await this.#load();
+      await this.#readInQueue();
     } else this.#unsaved = true;
     this.#options.onRefused(refusal.refused, refusal.ownerName);
     return refusal;
+  }
+
+  async #readInQueue(): Promise<void> {
+    this.#readingInQueue = true;
+    this.#wakeWaitingReads();
+    try {
+      await this.#load();
+    } finally {
+      this.#readingInQueue = false;
+    }
   }
 
   #take(draft: Draft | null): void {

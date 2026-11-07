@@ -62,7 +62,12 @@ describe("TillApi draft source commands", () => {
     const fetcher = vi.fn().mockResolvedValue(json({ revision: 10 }));
     const api = new TillApi("", fetcher);
     const signal = new AbortController().signal;
-    const command = { submissionId: "split-source-1", expectedPartyRevision: 9, expectedEdit };
+    const command = {
+      submissionId: "split-source-1",
+      expectedPartyRevision: 9,
+      personId: "person-1",
+      expectedEdit,
+    };
     expect(await api.splitHeldLineIntoUnits("party-1", "source-7", command, { signal })).toEqual({
       revision: 10,
     });
@@ -79,7 +84,12 @@ describe("TillApi draft source commands", () => {
     const fetcher = vi.fn().mockResolvedValue(json({ revision: 9, draft }));
     const api = new TillApi("https://venue.test", fetcher);
     const signal = new AbortController().signal;
-    const command = { submissionId: "recall-1", expectedPartyRevision: 8, expectedEdit };
+    const command = {
+      submissionId: "recall-1",
+      expectedPartyRevision: 8,
+      personId: "person-1",
+      expectedEdit,
+    };
     expect(await api.recallToDraft("party-1", "source-7", command, { signal })).toEqual({
       revision: 9,
       draft,
@@ -164,6 +174,7 @@ describe("TillApi draft source commands", () => {
           ? api.recallToDraft("party-1", "source-7", {
               submissionId: "recall-1",
               expectedPartyRevision: 8,
+              personId: "person-1",
               expectedEdit,
             })
           : api.discardDraft("party-1", "draft-1", {

@@ -11,6 +11,7 @@ import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import { createStation } from "./kitchen.js";
 import { mountThemesApi } from "./themes-api.js";
+import { openSessionPerson } from "./till-session.js";
 import {
   inTx,
   provisionBillVenue,
@@ -280,6 +281,36 @@ describe("the full-disk gate on the till's routes", () => {
       headers: { cookie: `${session}; ${deviceCookie!}` },
     });
     expect(signOut.status).toBe(200);
+  });
+
+  it("answers a sign-out that names someone else, and then one that names the person", async () => {
+    const app = venue.appWith({ disk: notedState() });
+    const deviceCookie = venue.cookie
+      .split("; ")
+      .find((part) => part.startsWith(`${DEVICE_COOKIE}=`));
+    const signIn = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: deviceCookie! },
+      body: JSON.stringify({ personId: venue.operatorId, pin: "5555" }),
+    });
+    const session = signIn.headers.get("set-cookie")!.split(";")[0]!;
+    const token = session.slice(session.indexOf("=") + 1);
+    const signOutNaming = (personId: string) =>
+      app.request("/api/session", {
+        method: "DELETE",
+        headers: { "content-type": "application/json", cookie: `${session}; ${deviceCookie!}` },
+        body: JSON.stringify({ personId }),
+      });
+
+    const other = await signOutNaming(randomUUID());
+    expect(other.status).toBe(200);
+    expect(other.headers.get("set-cookie")).toBeNull();
+    expect(await openSessionPerson(venue.db, token)).toBe(venue.operatorId);
+
+    const own = await signOutNaming(venue.operatorId);
+    expect(own.status).toBe(200);
+    expect(own.headers.get("set-cookie")).toBeNull();
+    expect(await openSessionPerson(venue.db, token)).toBeNull();
   });
 
   it("refuses no route mounted after the till's", async () => {

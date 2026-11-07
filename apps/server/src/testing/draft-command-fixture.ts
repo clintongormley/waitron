@@ -105,6 +105,12 @@ export async function expectedDraftEditForTest(
 
 const httpObservations = new WeakMap<Database, Map<string, BillEditExpected>>();
 
+const ROUTES_NAMING_THE_PERSON: readonly (readonly [method: string, path: RegExp])[] = [
+  ["PUT", /^\/api\/parties\/[^/]+\/drafts$/],
+  ["POST", /^\/api\/parties\/[^/]+\/drafts\/[^/]+\/take-over$/],
+  ["POST", /^\/api\/parties\/[^/]+\/lines\/[^/]+\/recall$/],
+];
+
 // Content-route fixtures keep the first command observation on completed retries.
 export async function observedDraftCommandBody(
   db: Database,
@@ -115,8 +121,11 @@ export async function observedDraftCommandBody(
 ): Promise<unknown> {
   if (given === null || typeof given !== "object" || Array.isArray(given)) return given;
   const save = method === "PUT" && /^\/api\/parties\/[^/]+\/drafts$/.test(path);
+  const namesPerson = ROUTES_NAMING_THE_PERSON.some(
+    ([routeMethod, route]) => routeMethod === method && route.test(path),
+  );
   const ask: Record<string, unknown> =
-    save && personId !== undefined && !Object.hasOwn(given, "personId")
+    namesPerson && personId !== undefined && !Object.hasOwn(given, "personId")
       ? { ...given, personId }
       : (given as Record<string, unknown>);
   if (Object.hasOwn(ask, "expectedEdit")) return ask;

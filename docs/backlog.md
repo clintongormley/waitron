@@ -102,7 +102,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 
 - A1218: a counter with two zones cannot get back to its menu.
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
-- [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1381. A manager's stuck-payment actions cover placed orders and only this box's own payments](backlog/payments.md#bundle-a1381-a-managers-stuck-payment-actions-cover-placed-orders-and-only-this-boxs-own-payments)
 - [A1382. Till refusals that say the wrong thing or nothing useful](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
 - [A1383. Tests for four guards a review deleted with nothing failing](backlog/fiscal.md#bundle-a1383-tests-for-four-guards-a-review-deleted-with-nothing-failing)
@@ -843,7 +842,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which no longer
+  picker, has landed; it leaves open A1347–A1352, A1358–A1360, A1362, A1365 and A1366. Remaining: pre-bills through A446, which no longer
   waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
@@ -856,8 +855,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `Paid` (`bill_pay.paid`) or "{amount} is already paid on this bill" (`table.move_dishes_floor`),
   because `paidQuantitiesOf` counts pending item payments. The row's words came with slice 4a.
   [Detail](backlog/till.md#a1350-a-row-can-read-paid-on-money-a-card-in-progress-has-only-reserved)
-
-- **A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person** (bundle of 5, 1 go-live, 2 important, size M). Holds A1357, A1263, A792. [Detail](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 
 - **A1358. A number stepper's − and + are 24 by 32 px, against the 44 px tap size (seen in A803
   slice 4c's LOOK; predates it).** Measured on Split a table's guest steppers at 390 wide. The
@@ -892,7 +889,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   slice 3's LOOK fix review 3; predates it, `c8487cba5`).** Clear both when the question changes.
   [Detail](backlog/till.md#a1269-a-dead-end-question-that-replaces-another-keeps-the-first-ones-picks)
 
-- **A1382. Till refusals that say the wrong thing or nothing useful** (bundle of 7, 5 important, size M). Holds A1286, A1298, A1200, A1029. [Detail](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
+- **A1382. Till refusals that say the wrong thing or nothing useful** (bundle of 8, 5 important, size M). Holds A1286, A1298, A1200, A1029. [Detail](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
 
 - **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).**
   Decide whether Merge bills goes too.

@@ -150,6 +150,70 @@ async function frozen(partyId: string) {
 }
 
 describe("party Recall to draft", () => {
+  it("refuses 409 draft.person_not_signed_in for a recall naming someone else, changing nothing, and goes through once it names the session's person", async () => {
+    const p = await setup("fire");
+    const recallNaming = async (personId: string) =>
+      recall(p.partyId, p.line.id, { ...(await command(p.partyId)), personId });
+    const before = await frozen(p.partyId);
+
+    for (const named of [venue.adminId, venue.adminId.toUpperCase()]) {
+      const refused = await recallNaming(named);
+      expect(refused.status).toBe(409);
+      expect(refused.json).toEqual({
+        code: "draft.person_not_signed_in",
+        params: { personId: venue.adminId },
+      });
+    }
+    expect(await frozen(p.partyId)).toEqual(before);
+
+    const taken = await recallNaming(venue.operatorId);
+    expect(taken.status).toBe(200);
+    const after = await frozen(p.partyId);
+    expect(after).not.toEqual(before);
+    expect(after.drafts.map((draft) => draft.ownerId)).toContain(venue.operatorId);
+    expect(after.commands.length).toBe(before.commands.length + 1);
+  });
+
+  it("goes through when the session's person is named with a capitalised id", async () => {
+    const p = await setup("fire");
+
+    const taken = await recall(p.partyId, p.line.id, {
+      ...(await command(p.partyId)),
+      personId: venue.operatorId.toUpperCase(),
+    });
+
+    expect(taken.status).toBe(200);
+    expect((taken.json as unknown as { draft: Draft }).draft.ownerId).toBe(venue.operatorId);
+  });
+
+  it.each([
+    ["missing", {}],
+    ["not an id", { personId: "ana" }],
+    ["a number", { personId: 7 }],
+    ["null", { personId: null }],
+    ["empty", { personId: "" }],
+  ] as const)(
+    "refuses a recall 400 management.request_invalid naming personId when it is %s",
+    async (_, person) => {
+      const p = await setup("fire");
+      const path = `/api/parties/${p.partyId}/lines/${p.line.id}/recall`;
+      const body = await observedDraftCommandBody(venue.db, "POST", path, {
+        ...(await command(p.partyId)),
+        ...person,
+      });
+      const before = await frozen(p.partyId);
+
+      const refused = await send(venue.app, venue.cookie, "POST", path, body);
+
+      expect(refused.status).toBe(400);
+      expect(refused.json).toEqual({
+        code: "management.request_invalid",
+        params: { field: "personId" },
+      });
+      expect(await frozen(p.partyId)).toEqual(before);
+    },
+  );
+
   it.each(["retained context", "no retained context"] as const)(
     "saves recalled note, course and station edits with %s without changing the charged family",
     async (context) => {
