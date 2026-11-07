@@ -31,6 +31,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "person.suspended": 403,
       "authorization.not_permitted": 403,
       "cloud.unavailable": 503,
+      "cloud.tunnel_unavailable": 422,
       "cloud.request_unavailable": 409,
       "cloud.state_invalid": 409,
       "cloud.binding_conflict": 409,
