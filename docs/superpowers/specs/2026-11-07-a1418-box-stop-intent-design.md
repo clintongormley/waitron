@@ -133,7 +133,7 @@ What the box does with the answers:
 | --- | --- | --- |
 | `restart` | The existing check, unchanged | Sells at once; asks alongside |
 | none | The existing check, unchanged | Waits for the answers, at most 60 seconds; then sells and files, and keeps asking |
-| `shutdown` | The existing check, then the admin's answer (§5) | Waits for the admin (§5) |
+| `shutdown` | The existing check; **(default)** the other box's answer stands in for the admin's, since it knows whether a handover happened | Waits for the admin (§5) |
 
 - **Replaced means stopped, on every row.** Sells nothing, files nothing, and says why. Trusting the
   answer is safe in the sense that it can only stop a box. The cost is in §7, question 1.
@@ -156,10 +156,17 @@ An action on the dashboard's box status screen, for someone holding the permissi
 
 1. **(default)** The screen says what will happen, and what is needed to restore: the backup and the
    recovery key.
-   **Open, the owner's (§7 question 3):** the action is wanted on two-box venues too, "either on the
-   primary or the mirror". Backups and the stream run only on the main box
-   (`apps/server/src/boot.ts`, around 2905, read), and the spare hosts the store the main box streams
-   to (A947 §3), so what steps 2 to 5 mean on each box depends on the answer.
+   On a two-box venue it is offered on both boxes **(owner)**: "either on the primary or the mirror".
+   Backups and the stream run only on the main box (`apps/server/src/boot.ts`, around 2905, read),
+   and the spare hosts the store the main box streams to (A947 §3):
+   - **On the main box, two choices (owner):** "hand over to the secondary, or shut down". Handing
+     over is A1018's controlled handover, then this box stops. Shutting down stops only this box:
+     "the mirror doesn't need to shut down as well, but selling will stop until the primary is
+     rebooted". Steps 2 to 6 run here; step 4 waits for the stream into the spare's store.
+   - **On the spare (default):** the main box first moves its stream straight to the bucket, as it
+     already does when the spare stops answering (A947 §6.2, "the spare is not answering"). The spare
+     then finishes copying its store up to the bucket, and says it is safe to unplug. The main box
+     keeps selling throughout. Steps 2, 3 and 5 do not apply.
 2. Work stops, and this stop must be one that can be lifted. Handover's stop cannot: `stepDown`
    answers only three requests and stops background work, including backups and the stream, and its
    record is never cleared (`apps/server/src/handover-stepdown.ts:20-27`,
@@ -221,12 +228,10 @@ already handles (read, not run for this case).
    changed in the last few minutes unless someone confirms the old box is gone
    (`apps/server/src/restore-stream.ts`, read). The builder confirms that is enough, and whether the
    old box can verify the newer pointer's signature, or is taking the bucket's word for it.
-2. **(owner, open)** Whether a box already selling stops when the bucket says it was replaced. The
-   owner, on the mistaken-restore example: "the admin should never do this"; which way that settles
-   the question is being confirmed.
-3. **(owner, open)** What "Shut down this box" does on the main box and on the spare of a two-box
-   venue.
-4. **Replaced while selling.** What happens to orders in progress follows A1018 §2 and A1342 (a selling
+2. **A box already selling stops** when the bucket says it was replaced **(owner)**: asked about a
+   mistaken restore of the live venue, "the admin should never do this", then "a selling box
+   stopping mid-service is acceptable". So a late "replaced" stops a running box (§3).
+3. **Replaced while selling.** What happens to orders in progress follows A1018 §2 and A1342 (a selling
    box told of a newer main box must stop).
 
 ## 8. Earlier designs and rules this changes
