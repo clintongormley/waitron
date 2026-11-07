@@ -10,8 +10,17 @@ import { stageSecrets } from "./restore-secrets.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
-afterEach(() => {
+const tempDirs: string[] = [];
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(async () => {
   for (const spy of [fs.rename, fs.open, fs.rm, fs.stat]) vi.mocked(spy).mockReset();
+  const real = await vi.importActual<typeof fs>("node:fs/promises");
+  for (const dir of tempDirs.splice(0)) await real.rm(dir, { recursive: true, force: true });
 });
 
 async function failing<T>(code: string): Promise<T> {
@@ -30,7 +39,7 @@ const OLD = {
 
 /** A state folder holding the old secrets, with no `tls/ca.crt`. */
 async function seedState(): Promise<string> {
-  const stateDir = mkdtempSync(join(tmpdir(), "restore-secrets-"));
+  const stateDir = tempDir("restore-secrets-");
   await mkdir(join(stateDir, "tls"));
   for (const [rel, text] of Object.entries(OLD)) await writeFile(join(stateDir, rel), text);
   return stateDir;
@@ -99,7 +108,7 @@ describe("stageSecrets", () => {
   });
 
   it("refuses a target that exists as a folder before writing any staged file", async () => {
-    const stateDir = mkdtempSync(join(tmpdir(), "restore-secrets-folder-"));
+    const stateDir = tempDir("restore-secrets-folder-");
     await mkdir(join(stateDir, "tls/server.key"), { recursive: true });
     await expect(
       stageSecrets({
@@ -115,7 +124,7 @@ describe("stageSecrets", () => {
   });
 
   it("refuses a target that is a link to a folder before writing any staged file", async () => {
-    const stateDir = mkdtempSync(join(tmpdir(), "restore-secrets-folder-link-"));
+    const stateDir = tempDir("restore-secrets-folder-link-");
     await mkdir(join(stateDir, "elsewhere"));
     await symlink(join(stateDir, "elsewhere"), join(stateDir, "secrets.env"));
     await expect(
@@ -169,7 +178,7 @@ describe("stageSecrets", () => {
   });
 
   it("refuses an entry that escapes the state folder, removing what it had staged", async () => {
-    const parent = mkdtempSync(join(tmpdir(), "restore-secrets-escape-"));
+    const parent = tempDir("restore-secrets-escape-");
     const stateDir = join(parent, "state");
     await mkdir(stateDir);
     await expect(
@@ -402,7 +411,7 @@ describe("stageSecrets", () => {
   });
 
   it("stages, publishes and finishes through a tls folder that is a link, keeping the link", async () => {
-    const stateDir = mkdtempSync(join(tmpdir(), "restore-secrets-link-"));
+    const stateDir = tempDir("restore-secrets-link-");
     await mkdir(join(stateDir, "real-tls"));
     await writeFile(join(stateDir, "real-tls/server.key"), OLD["tls/server.key"]);
     await symlink(join(stateDir, "real-tls"), join(stateDir, "tls"));

@@ -381,10 +381,15 @@ async function validateEntryMetadata(
     const prefix = entry.name.startsWith(SECRETS_PREFIX) ? SECRETS_PREFIX : "";
     const root = prefix === SECRETS_PREFIX ? deps.stateDir : deps.stagingDir;
     const target = await assertSafeEntryName(entry.name.slice(prefix.length), root);
-    if (destinations.has(target)) {
+    // Two names for one file would share one staged and one set-aside copy, and the second publish
+    // would set the first one's new file aside over the box's old one. Resolved through links (the
+    // guard has made the parent), and in lower case because a case-insensitive filesystem treats
+    // `TLS` and `tls` as one folder.
+    const location = join(await realpath(dirname(target)), basename(target)).toLowerCase();
+    if (destinations.has(location)) {
       throw new AppError("restore.unsafe_entry_path", { name: entry.name });
     }
-    destinations.add(target);
+    destinations.add(location);
     entry.name = posix.normalize(entry.name);
   }
 
