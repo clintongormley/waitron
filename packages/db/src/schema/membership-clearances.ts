@@ -6,8 +6,7 @@ import { bigCount, id, newId, now, table, ts } from "./columns.js";
  * (`apps/server/src/membership-removal.ts`).
  *
  * `cleared_node_id` names an id from the chart, which need not have a `nodes` row here
- * (`judgeClearance` reads only the chart), so it has no FK; nor has `person_id`, as none was added
- * when A760 moved `persons` into core's set, which changed no table's shape.
+ * (`judgeClearance` reads only the chart), so it has no FK. `person_id` has no key yet.
  */
 export const membershipClearances = table("membership_clearances", {
   id: id("id").primaryKey().$defaultFn(newId),

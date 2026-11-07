@@ -184,7 +184,7 @@ describe("the late-send storage", () => {
   });
 });
 
-describe("the venue-service migration set carries no tenant column", () => {
+describe("the venue-service tables carry no tenant column", () => {
   it("has no tenant_id column on any table in the set", async () => {
     const carrying: string[] = [];
     for (const table of TABLES) {

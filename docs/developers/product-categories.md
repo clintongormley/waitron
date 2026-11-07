@@ -559,8 +559,8 @@ sending the removed `categoryIds` or `labelIds`, is refused with `product.invali
 
 ## Storage and development reset
 
-`categories` in core holds the name; `category_details` in catalogue holds the parent and, since
-W92, the colour (`category_details.color`, added by catalogue `0025_category_color.sql`). The label
+Both tables are in core's set: `categories` holds the name, and `category_details`, whose code is
+the catalogue module's, holds the parent and, since W92, the colour (`category_details.color`, added by catalogue `0025_category_color.sql`). The label
 tables and the category image and colour columns of the old schema were dropped by the folder
 migrations. In that old history, catalogue dropped media's category-image triggers before dropping
 the column, and media dropped them again after its baseline on a fresh database. Since A760 the

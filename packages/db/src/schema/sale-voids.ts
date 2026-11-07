@@ -16,8 +16,7 @@ export const saleVoids = table(
     reason: label("reason").notNull(),
     // tsString rather than ts, for the reason given at `sales.issuedAt`.
     voidedAt: tsString("voided_at").notNull(),
-    /** The person who authorised the void. Nullable, no FK: none was added when A760 moved
-     * `persons` into core's set, which changed no table's shape. */
+    /** The person who authorised the void. Nullable; no key yet. */
     voidedBy: id("voided_by"),
   },
   (t) => [

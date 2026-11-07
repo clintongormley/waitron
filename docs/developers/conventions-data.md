@@ -373,10 +373,11 @@ name forbidden sits beside the derived one, and it is empty.
 ## A module that can be switched off or swapped keeps a migration set of its own; any other adds its tables to core's set, and the commit says which
 
 Since A760 (November 2026), a module that can be switched off or swapped keeps its own migration
-set (`migrations.from`), so a box without it carries none of its tables; every other module adds its
-tables to core's set and names core in `tablesIn`. Staffing is the stated exception: it can be
-switched off, but its tables live in workforce's set (`tablesIn: "workforce"`,
-`packages/composition/src/modules.ts`), so they are present whenever workforce is on. Either way the
+set (`migrations.from`); every other module adds its tables to core's set and names core in
+`tablesIn`. Two exceptions are stated. Staffing can be switched off, but its tables live in
+workforce's set (`tablesIn: "workforce"`, `packages/composition/src/modules.ts`), so they are
+present whenever workforce's are. `node` cannot be switched off and keeps its own set, because that
+set is applied to `node.db` rather than `venue.db` (`database: "node"` on its descriptor). Either way the
 append-only declaration travels with the set that holds the table — the table is declared with
 `appendOnly()` in that set's classification, and `MigrationSet.appendOnlyTables` carries the names
 to `applyMigrations` (`packages/migrations/src/manifest.ts`). The commit that adds a table says
@@ -443,9 +444,10 @@ outside the table holds a key into it, so the rows may lose their identity — a
 `extra_list_items` that is being rewritten, so what matters is who references THAT table. The grep
 had to be respelled for the storage switch: the generated SQLite baselines quote with backticks and
 name no schema, so the old `REFERENCES "public"."extra_l` pattern matches nothing at all now. Run
-``grep -rn 'REFERENCES `extra_l' --include='*.sql' packages`` — three lines on 2026-09-22, all in
-`scripts/fixtures/a760-history/catalogue/0000_baseline.sql` and all naming `extra_lists`, the PARENT. None names
-`extra_list_items`, so the condition still holds; the count does not stand on its own, because the
+``grep -rn 'REFERENCES `extra_l' --include='*.sql' packages`` — two lines on 2026-11-07,
+`packages/db/drizzle/0000_baseline.sql:2004` and `:2034`, both naming `extra_lists`, the PARENT (three
+on 2026-09-22, then in catalogue's own baseline). None names `extra_list_items`, so the condition
+still holds; the count does not stand on its own, because the
 pattern matches the parent's name as well. Scope it to `packages` rather than `packages apps`:
 `apps/server/dist/drizzle` holds built copies of the same baselines, and it is git-ignored build
 output rather than a second place a key could live. A table something else references cannot be
@@ -496,9 +498,9 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 with no paint on that date follows the season's day, and each painted stretch replaces only its
 own stretch of it (`layerPaint`, `layerZonePaint` in `packages/venue-service/src/day-paint.ts`;
 `resolveDepartmentDays` and `resolveZoneClosedDays` in `day-resolver.ts`). A date Closed all day
-closes every department. Venue-service migration `0051_wakeful_loa.sql` drops `special_dates`,
+closes every department. Venue-service migration `0051_wakeful_loa.sql` dropped `special_dates`,
 `menu_day_timetables`, `menu_slots` and `zone_closed_times`, and their rows with them, so this
-change requires a venue reset.
+change required a venue reset.
 
 Public holidays come only from the shipped country calendar; the venue is not a holiday source
 (`readHolidays`, `holidays.ts`; see [public-holidays.md](public-holidays.md)).
@@ -564,7 +566,7 @@ ignores today's station closures and kept-open extensions. The default station a
 station's id is refused (`station.not_found`). The default station's staffing guides show
 scheduled demand from period menus and untimed routes.
 
-Venue-service migration `0047_retire_station_hours_fallbacks.sql` drops `hours_week_cells`,
+Venue-service migration `0047_retire_station_hours_fallbacks.sql` dropped `hours_week_cells`,
 `hours_week_periods`, `special_date_hours`, `special_date_hours_periods` and `station_fallbacks`.
 The old Station hours page, client, wire types, readers and writers are removed. Configuration
 exports omit those tables; import refuses them with `setup.request_invalid`, field `tables`.
@@ -1649,8 +1651,8 @@ serves would also look covered.
 ## A migration set depends on another through a foreign key, a trigger on its table, or a trigger body naming its table
 
 FK `REFERENCES`, and a `CREATE TRIGGER … ON <table>` where the TABLE is owned by a different
-migration set. Since A760 (November 2026) only the first exists in the tree: every trigger is in
-core's set (`packages/db/drizzle/0000_baseline.sql`) and names only tables core's set creates.
+migration set. Since A760 (November 2026) only the first exists in the tree: every trigger a
+migration creates is in core's set (`packages/db/drizzle/0000_baseline.sql`) and names only tables core's set creates.
 
 Until A760 the live instance of the trigger edge was `packages/media`, whose migrations are now
 frozen in `scripts/fixtures/a760-history/media/`; the account below describes that old set in the
@@ -2306,7 +2308,7 @@ tables; it holds no change feed, which `bootServer` installs.
 
 Slice 5's rebuild uses `0137_floor_retire_drop_table_triggers.sql`,
 `0138_floor_retire_old_table_columns.sql` and `0139_floor_retire_recreate_table_triggers.sql` in
-core's old history (`scripts/fixtures/a760-history/core/`). Every venue needs a reset for this change. Running
+core's old history (`scripts/fixtures/a760-history/core/`). Every venue needed a reset for that change. Running
 `pnpm exec vitest run scripts/migration-upgrade.test.ts` before adding its declared reset failed
 with `NOT NULL constraint failed: __new_dining_tables.zone_id`; the same guard then passed with
 that reset declared. In a disposable checkout, replacing the trigger drop with `SELECT 1;`
@@ -4150,7 +4152,8 @@ branch writes. Only `writeClosing` (`clock-checks.ts`), `confirmClockStop`
 `clock_confirmations` (`git grep -n 'insert(clockChecks)\|insert(clockConfirmations)'` over the
 non-test sources, re-run 2026-11-01).
 `clock_stop_restarts`, the restart's table, stays in the schema and the append-only list, written
-by nothing, for the go-live migration squash to drop.
+by nothing; A760's squash kept it, and dropping it waits for A1308's rewrite of the starting
+migrations.
 
 **One latest record** (plan decision 8a). `latestRecord` (`packages/fiscal-verifactu/src/clock-behind.ts`)
 orders by `fecha_hora_huso_gen_registro desc, id desc`, and it is the only way the stop and a
@@ -4910,7 +4913,7 @@ overrides; its inherited values then follow the destination. Real-row preservati
 `packages/venue-service/src/routes.test.ts`; order-flow checks are in
 `packages/venue-service/src/operations.test.ts` and
 `apps/server/src/till-api.service-periods.test.ts`. The old department and zone style columns
-are retired without data conversion; this pre-live change requires a venue reset.
+were retired without data conversion; that pre-live change required a venue reset.
 
 
 ## Latest station move follows insertion order

@@ -98,10 +98,10 @@ changing enforcement, keeping each legitimate mutation path.
 | `card_readers`           | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |
 | `catalogues`             | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `change_log`             | `UPDATE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
-| `content_languages`      | `DELETE`             | [packages/catalogue/src/classification.ts](../../packages/catalogue/src/classification.ts)               |
+| `content_languages`      | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `convenio_config`        | `DELETE`             | [packages/workforce-es/src/classification.ts](../../packages/workforce-es/src/classification.ts)         |
 | `daily_close_chain`      | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
-| `departments`            | `DELETE`             | [packages/venue-service/src/classification.ts](../../packages/venue-service/src/classification.ts)       |
+| `departments`            | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `devices`                | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `drawer_opens`           | `UPDATE`, `DELETE`   | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `employments`            | `DELETE`             | [packages/workforce/src/classification.ts](../../packages/workforce/src/classification.ts)               |
@@ -115,21 +115,21 @@ changing enforcement, keeping each legitimate mutation path.
 | `kitchen_stations`       | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `location_catalogues`    | `UPDATE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `locations`              | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
-| `management_sessions`    | `DELETE`             | [packages/identity/src/classification.ts](../../packages/identity/src/classification.ts)                 |
-| `menu_items`             | `DELETE`             | [packages/catalogue/src/classification.ts](../../packages/catalogue/src/classification.ts)               |
+| `management_sessions`    | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
+| `menu_items`             | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `media_image_data`       | `UPDATE`, `DELETE`   | [packages/media/src/module.ts](../../packages/media/src/module.ts)                                       |
 | `node_membership`        | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `payment_policy`         | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |
 | `payment_refunds`        | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |
 | `payments`               | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |
-| `persons`                | `DELETE`             | [packages/identity/src/classification.ts](../../packages/identity/src/classification.ts)                 |
+| `persons`                | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `print_agents`           | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `print_jobs`             | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `printers`               | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `products`               | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `registro_sif`           | `DELETE`             | [packages/fiscal-verifactu/src/classification.ts](../../packages/fiscal-verifactu/src/classification.ts) |
 | `scheduled_runs`         | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |
-| `sessions`               | `DELETE`             | [packages/identity/src/classification.ts](../../packages/identity/src/classification.ts)                 |
+| `sessions`               | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `station_printers`       | `UPDATE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `table_service_statuses` | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `tenant_receipts`        | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |

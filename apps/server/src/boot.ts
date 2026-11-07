@@ -2295,7 +2295,8 @@ async function bootServer(
       liveEvents,
       clock: tillClock,
       cfg: tradingContext,
-      // From the ENABLED set: a disabled module's table is not migrated, so its annotator must not run.
+      // From the ENABLED set: a disabled module with a set of its own is not migrated, so its
+      // annotator must not run.
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
       tableRemovals,
       secureCookies,

@@ -33,7 +33,7 @@ const RUN_KEY = {
   columns: ["duty", "period_from", "generation"],
 } as const;
 
-describe("the scheduler migration set", () => {
+describe("the scheduled-runs table in payments' set", () => {
   // Raw inserts, so each case proves the constraint the MIGRATION declares. `id` is a `$defaultFn`
   // too, and an insert omitting it is refused on `NOT NULL` before any constraint under test.
   it("rejects a period whose end does not follow its start", async () => {

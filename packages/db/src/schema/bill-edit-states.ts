@@ -7,8 +7,7 @@ export const billEditStates = table(
   "bill_edit_states",
   {
     billId: id("bill_id").primaryKey().notNull(),
-    // No key: none was added when A760 moved `persons` into core's set, which changed no table's
-    // shape.
+    // No key yet.
     editorId: id("editor_id"),
     editorVersion: count("editor_version").notNull().default(0),
   },

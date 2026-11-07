@@ -5,8 +5,7 @@ import { bigCount, id, label, newId, now, table, ts } from "./columns.js";
  * transaction as the chart that marks it `evicted` (`apps/server/src/membership-removal.ts`).
  *
  * `removed_node_id` and `person_id` are plain ids with no FK: the removed node has no `nodes` row
- * here by the rule that allows its removal, and no key to `persons` was added when A760 moved it
- * into core's set, which changed no table's shape.
+ * here by the rule that allows its removal; `person_id` has no key yet.
  */
 export const membershipRemovals = table("membership_removals", {
   id: id("id").primaryKey().$defaultFn(newId),

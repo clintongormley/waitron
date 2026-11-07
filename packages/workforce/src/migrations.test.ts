@@ -45,7 +45,7 @@ function rowIdentity() {
   return sql`${newId()}, ${nowIso()}`;
 }
 
-describe("persons, from the identity migration set layered under workforce", () => {
+describe("persons, from core's set layered under workforce", () => {
   it("stores a person and defaults role to staff and status to active", async () => {
     await suite.db.execute(sql`
       insert into persons (id, created_at, display_name, pin_hash)

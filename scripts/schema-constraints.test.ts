@@ -22,11 +22,12 @@ import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js"
  * under a kept name passes. It reads a check's name out of the built schema's `CREATE TABLE` TEXT.
  * And it says nothing about indexes that are not unique.
  *
- * TWO KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)` and
- * `sections(image)`, both referencing `media_images`. `packages/media`
- * depends on `@waitron/catalogue` and `@waitron/db`, so neither owning package may depend on media
- * to name the column: that dependency would close a loop `scripts/workspace-cycles.test.ts` refuses, and that
- * guard reads each `package.json`, not source imports.
+ * TWO KEYS ARE ABSENT from the foreign-key list: `products(image)` and `sections(image)`, both
+ * naming a `media_images` filename, are held by triggers instead. The package-dependency reason
+ * the triggers were first written for is gone: all three tables are declared in `packages/db`. The
+ * other reason recorded then, in the header of
+ * `scripts/fixtures/a760-history/media/0001_image_references.sql`, still holds for a later
+ * migration: adding a key to an existing table means rebuilding it. No other reason is recorded.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");

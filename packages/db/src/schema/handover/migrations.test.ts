@@ -36,7 +36,7 @@ function insertRaw(values: { scenario?: string; source: string; destination: str
             ${values.destination}, '{}', 'person-1', ${ACTIVATED_AT})`);
 }
 
-describe("the handover migration set", () => {
+describe("the handover table in core's set", () => {
   it("creates the table in venue.db", () => {
     expect(migratedTableNames(suite.db)).toContain("handover_activations");
     expect(migratedTableNames(suite.node)).not.toContain("handover_activations");

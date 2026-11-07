@@ -90,7 +90,7 @@ async function refusedBy(row: Row, constraint: string): Promise<void> {
   expect(engineErrorMessage(error), constraint).toContain(constraint);
 }
 
-describe("the adjustments migration set", () => {
+describe("the adjustments tables in core's set", () => {
   it("creates adjustment_reasons with the kind and both role lists, and no single-role columns", async () => {
     const columns = await db.execute<{ name: string; notnull: number; pk: number }>(
       sql`select name, "notnull", pk from pragma_table_info('adjustment_reasons')`,

@@ -30,8 +30,7 @@ export const orderAmendments = table(
     // 1-based position within THIS order's amendment chain; contiguous and hashed.
     sequenceNo: count("sequence_no").notNull(),
     kind: orderAmendmentKind("kind").notNull(),
-    // The accountable actor (the operator from the open session). Plain uuid, no FK: none was
-    // added when A760 moved `persons` into core's set, which changed no table's shape.
+    // The accountable actor (the operator from the open session). No key yet.
     actorId: id("actor_id").notNull(),
     // NULL on the genesis `order_placed`; required by the app for `order_cancelled`.
     reason: label("reason"),

@@ -21,7 +21,7 @@ async function columnsOf(table: string) {
   return Object.fromEntries(columns.rows.map((c) => [c.name, { notNull: c.notnull, pk: c.pk }]));
 }
 
-describe("the staffing migration set", () => {
+describe("the staffing tables in workforce's set", () => {
   it("keeps its tables in workforce's set, which classifies them", () => {
     expect(WORKFORCE_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_workforce");
     expect(WORKFORCE_CLASSIFICATION.map(({ table }) => table)).toEqual(

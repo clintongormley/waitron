@@ -105,7 +105,7 @@ it("gives menu_details the six display settings, each required with its default 
   // of the six would add an entry that case refuses.
 });
 
-describe("the catalogue migration set carries no tenant column", () => {
+describe("the catalogue tables carry no tenant column", () => {
   it("has no tenant_id column on any table in the set", async () => {
     const found: string[] = [];
     for (const table of TABLES)
@@ -323,7 +323,7 @@ describe("the catalogue migration set carries no tenant column", () => {
   });
 });
 
-describe("the catalogue set keeps no category membership table", () => {
+describe("core's set keeps no category membership table", () => {
   it("leaves no product_categories behind: a product's one main category is products.category_id", async () => {
     const left = (
       await db.execute<{ name: string }>(
@@ -334,7 +334,7 @@ describe("the catalogue set keeps no category membership table", () => {
   });
 });
 
-describe("the catalogue set keeps no per-menu section table", () => {
+describe("core's set keeps no per-menu section table", () => {
   it("leaves no menu_sections behind: a menu's structure is sections the menu owns", async () => {
     const left = (
       await db.execute<{ name: string }>(
@@ -345,7 +345,7 @@ describe("the catalogue set keeps no per-menu section table", () => {
   });
 });
 
-describe("the catalogue set keeps no product labels", () => {
+describe("core's set keeps no product labels", () => {
   it("leaves no labels tables", async () => {
     const { rows } = await db.execute<{ name: string }>(
       sql`select name from sqlite_master where type = 'table' and name in ('labels', 'product_labels')`,
@@ -354,7 +354,7 @@ describe("the catalogue set keeps no product labels", () => {
   });
 });
 
-describe("the catalogue set keeps no variant table of its own", () => {
+describe("core's set keeps no variant table of its own", () => {
   it("leaves neither product_variants nor menu_item_variants behind: a variant is a products row", async () => {
     const left = (
       await db.execute<{ name: string }>(

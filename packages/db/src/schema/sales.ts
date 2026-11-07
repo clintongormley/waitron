@@ -107,8 +107,7 @@ export const sales = table(
     counterpartyAddress: label("counterparty_address"),
     taxpayerDomicile: label("taxpayer_domicile"),
     // The person who AUTHORISED this row's creation, recorded on privileged writes and NULL on an
-    // ordinary sale. Plain uuid, no FK: none was added when A760 moved `persons` into core's set,
-    // which changed no table's shape.
+    // ordinary sale. No key yet.
     authorizedBy: id("authorized_by"),
     // The operator who rang this sale, from their open session. Plain uuid, no FK, as above.
     operatorId: id("operator_id"),
@@ -280,8 +279,7 @@ export const tenders = table(
       name: "tenders_sale_fk",
     }).onDelete("restrict"),
     // No delete rule: the column's `REFERENCES` in `drizzle/0000_baseline.sql` names none, so the
-    // table holds `no action`, and a declared
-    // `restrict` would not match it.
+    // table holds `no action`, and a declared `restrict` would not match it.
     foreignKey({
       columns: [t.billPaymentId],
       foreignColumns: [billPayments.id],

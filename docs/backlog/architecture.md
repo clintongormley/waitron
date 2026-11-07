@@ -1207,7 +1207,7 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   [Detail](catalogue.md#what-1151-left-open-2026-10-03)
 - **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
   and only the editor's parser refuses a blank; `option_lists.name`, `option_labels.name` and
-  `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
+  `extra_lists.name` share the pattern (`packages/db/drizzle/0000_baseline.sql`). **Next
   action:** decide whether the columns want a check constraint and the write paths a domain refusal.
 - **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** At the counter the dish
   leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
@@ -1311,9 +1311,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
   folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
   until the venue reset that permits the rebuild.
-- **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the
-  go-live migration squash (A760).**
-  [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-in-the-go-live-migration-squash-a760)
+- **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when
+  A1308 rewrites the starting migrations.**
+  [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-when-a1308-rewrites-the-starting-migrations)
 - **A person row written from outside `packages/identity` still folds its key ASCII-only** — OPEN.
   [Detail](dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
 - **Task 1b** (#554, session cookies stored only as hashes).

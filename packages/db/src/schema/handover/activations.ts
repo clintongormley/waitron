@@ -20,8 +20,7 @@ export const handoverActivations = table(
     destinationNodeId: id("destination_node_id").notNull(),
     /** The signed relinquishment, or the signed declaration. */
     evidence: json<SignedHandoverEnvelope<unknown>>("evidence").notNull(),
-    /** A plain id with no foreign key: none was added when A760 moved `persons` into core's set,
-     * which changed no table's shape. */
+    /** No key yet. */
     personId: id("person_id").notNull(),
     activatedAt: tsString("activated_at").notNull(),
   },

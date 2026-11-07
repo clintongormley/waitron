@@ -23,7 +23,8 @@ export function modulesNamed(names: readonly string[]): readonly WaitronModule[]
 export const VENUE_SERVICE: VenueServiceContribution = selectVenueService(ALL_MODULES);
 
 /** Every ENABLED module's floor-read annotator, for `listTablesWithState`. This MUST be the ENABLED
- * set: the always-on floor read reaches the annotator, and a disabled module's table is not migrated. */
+ * set: the always-on floor read reaches the annotator, and a disabled module with a set of its own
+ * is not migrated. */
 export function enabledFloorAnnotators(
   modules: readonly WaitronModule[],
 ): readonly FloorAnnotator[] {

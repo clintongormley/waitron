@@ -214,8 +214,7 @@ export const workingOrderLines = table(
     // The party's group the line is released with; an extras child carries its dish's. Null on a
     // bill with no party.
     groupId: id("group_id"),
-    // Whose sale the line counts as. A plain person id with no key: none was added when A760 moved
-    // `persons` into core's set, which changed no table's shape.
+    // Whose sale the line counts as. A plain person id: no key yet.
     creditedTo: id("credited_to"),
     // The unit price the line had when an adjustment first touched it, never changed after; null
     // on a line no adjustment has touched. Filing reads `unit_price_gross`, never this.

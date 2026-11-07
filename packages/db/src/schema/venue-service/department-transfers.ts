@@ -73,8 +73,7 @@ export const departmentTransferRequests = table(
     tabId: id("tab_id").notNull(),
     sourceDepartmentId: id("source_department_id").notNull(),
     destinationDepartmentId: id("destination_department_id").notNull(),
-    // Person ids have no key: none was added when A760 moved `persons` into core's set, which
-    // changed no table's shape.
+    // Person ids: no key yet.
     senderId: id("sender_id").notNull(),
     resolvedBy: id("resolved_by"),
     destinationZoneId: id("destination_zone_id"),

@@ -24,9 +24,8 @@ export type OrderGroupRequestKind = "new_order" | "next_course" | "added";
  * A line names its group in `working_order_lines.group_id`, whichever of the party's bills it sits
  * on. A group emptied while held is `removed`, never deleted, because its events point at it.
  *
- * `fired_by` and `submitted_by` are plain person ids with no key: none was added when A760 moved
- * `persons` into core's set, which changed no table's shape. A group fired by a kitchen display
- * names the device in `fired_by_device_id` instead; a held group names neither.
+ * `fired_by` and `submitted_by` are plain person ids: no key yet. A group fired by a kitchen
+ * display names the device in `fired_by_device_id` instead; a held group names neither.
  */
 export const orderGroups = table(
   "order_groups",

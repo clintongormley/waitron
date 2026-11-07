@@ -516,7 +516,8 @@ two painted (dark and pale) sold-out tiles and a weighed product's tile, has no 
 A variant is a `products` row whose `parent_id` names its parent product — "125 ml" and
 "175 ml" under "Wine by the glass". There is no separate variant table. A variant's parent is a
 top-level product in the same catalogue, is fixed when the variant is created, and a variant has no
-variants of its own (the one-level rule is the core migration `scripts/fixtures/a760-history/core/0004_variant_one_level.sql`). A product
+variants of its own (the one-level rule is the `products_variant_one_level_insert` trigger in
+`packages/db/drizzle/0000_baseline.sql`). A product
 may have any number of variants, one included.
 
 ### What a variant reads from its parent

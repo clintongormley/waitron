@@ -48,8 +48,8 @@ export const bookings = table(
     // Set on seat.
     tabId: id("tab_id"),
     status: bookingStatus("status").notNull().default("booked"),
-    // No key: none was added when A760 moved `persons` into core's set, which changed no table's
-    // shape. The route stamps it from `authorizeManager`, whose session lookup joins `persons`.
+    // No key yet. The route stamps it from `authorizeManager`, whose session lookup joins
+    // `persons`.
     createdBy: id("created_by").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },

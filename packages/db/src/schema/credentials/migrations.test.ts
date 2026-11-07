@@ -31,7 +31,7 @@ const OK = {
  */
 const stamp = () => sql`${nowIso()}`;
 
-describe("the credentials migration set", () => {
+describe("the credentials table in core's set", () => {
   it("stores and returns a row round-trip", async () => {
     await suite.db.execute(sql`
       insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version, updated_at)

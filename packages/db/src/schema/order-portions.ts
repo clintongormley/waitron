@@ -79,8 +79,7 @@ const portionEventKind = enumType(ORDER_PORTION_EVENT_KINDS);
 /**
  * A portion moved to another order, or cancelled with its charge. The order ids are plain ids with
  * no key: a row nothing may change must not refuse a later delete of a working order. The actor is a
- * plain person id: no key was added when A760 moved `persons` into core's set, which changed no
- * table's shape.
+ * plain person id: no key yet.
  */
 export const orderPortionEvents = table(
   "order_portion_events",

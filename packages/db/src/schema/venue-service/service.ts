@@ -271,8 +271,7 @@ export const workingLineContexts = table(
     dietDerivation: json<unknown>("diet_derivation"),
     dietOverride: json<unknown>("diet_override"),
     latePeriodName: label("late_period_name"),
-    // No foreign key: none was added when A760 moved `persons` into core's set, which changed no
-    // table's shape; the writer takes the id from the same request's session or its manager
+    // No key yet; the writer takes the id from the same request's session or its manager
     // authorisation.
     lateConfirmedBy: id("late_confirmed_by"),
   },

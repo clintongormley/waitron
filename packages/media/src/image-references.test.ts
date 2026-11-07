@@ -36,8 +36,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
  * `menu_version_images.filename` may only name a photo that exists, and a photo one of the first
  * three still names cannot be deleted or renamed. Nor can a photo a LIVE menu version or a queued
  * edition names. The rules are triggers in core's set (`packages/db/drizzle/0000_baseline.sql`),
- * not keys; why is in the header of the old migration that first made them,
- * `scripts/fixtures/a760-history/media/0001_image_references.sql`.
+ * not keys; why is in `scripts/schema-constraints.test.ts`'s header.
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real
  * offending write with an ACCEPTING control in the other direction — without the control a trigger

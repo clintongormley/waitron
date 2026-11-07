@@ -64,9 +64,10 @@ import {
  * The other triggers a fully migrated venue carries: they stand in for the two foreign keys
  * `products.image` and `sections.image`, for `menu_version_images.filename`, keeping a photo a live
  * menu version or a queued edition names, and for the photo an include's folder names in
- * `section_members.folder_overrides`. Why they are triggers and not foreign keys is in the header
+ * `section_members.folder_overrides`. What a trigger is not, compared with a key, is in the header
  * of the old migration that first made them,
- * `scripts/fixtures/a760-history/media/0001_image_references.sql`.
+ * `scripts/fixtures/a760-history/media/0001_image_references.sql`; why they are not keys is in
+ * `scripts/schema-constraints.test.ts`'s header.
  * Named here only because the assertion below is an EQUALITY over every non-append-only trigger.
  */
 const IMAGE_REFERENCE_TRIGGERS = [

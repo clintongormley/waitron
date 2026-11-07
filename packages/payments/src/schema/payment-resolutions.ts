@@ -27,8 +27,7 @@ export const paymentResolutions = table(
     id: id("id").primaryKey().$defaultFn(newId),
     paymentId: id("payment_id").notNull(),
     workingOrderId: id("working_order_id").notNull(),
-    // No foreign key: none was added when A760 moved `persons` into core's set, which changed no
-    // table's shape. The resolve route takes the id from `authorizeManager`, which read it through
+    // No key yet. The resolve route takes the id from `authorizeManager`, which read it through
     // a join to `persons` in an earlier transaction.
     /** Null for an automatic resolution; a manual one keeps its authorizing manager. */
     personId: id("person_id"),

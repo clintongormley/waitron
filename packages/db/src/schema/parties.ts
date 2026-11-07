@@ -21,8 +21,7 @@ export const partyState = enumType(["open", "closed"]);
  * One seated party, from seating until its table is finished: it holds the party's tab, every bill
  * split from it (`working_orders.party_id`) and the tables it sits at (`party_tables`).
  *
- * `opened_by` and `closed_by` are plain person ids with no key: none was added when A760 moved
- * `persons` into core's set, which changed no table's shape.
+ * `opened_by` and `closed_by` are plain person ids: no key yet.
  *
  * A party merged into another is closed and names the survivor in `merged_into_party_id`; its
  * bills that could no longer move stay here and count as the survivor's (`partyFamily`,
