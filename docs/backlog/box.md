@@ -490,8 +490,9 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
   the owner's alert (`backup.stream_refused`) still says another box is writing.
   [Detail](../backlog/box.md#a-pointer-write-from-a-process-that-has-since-died-landing-after-the-restart-can-still-make-the-box-refuse-itself)
 - The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a
-  large database Litestream may not finish its last upload (it is still told to stop and does
-  not outlive the server).
+  large database Litestream may not finish its last upload (it is still told to stop). Since
+  0.5.18 a stop against a bucket that does not answer takes the 5-second grace and ends in the
+  forced kill, and that counts against the 8.
 - `pnpm setup:litestream` skips the download when the installed binary already reports the
   pinned version, so the checksum protects fresh downloads only.
 
@@ -515,7 +516,13 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
   owner's Mac. A venue's real rate and the box's disk were not measured.
 - Whether the side file grows, and the pause fires, in a real network outage was not run. A549
   stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
-  errors and drops its read transaction to retry (`db.go` v0.5.17, `init`).
+  errors and drops its read transaction to retry (`db.go`, `init`, the same in v0.5.17 and
+  v0.5.18). On 0.5.18 a refused connection gets there after about 7 seconds, so a Litestream
+  started during such an outage did not bring the side file to the limit in the rig's paced runs
+  (87 and 134 MB after 40,000 sales, with SQLite's automatic fold-back on); selling flat out
+  reached 236 MB in a shorter run. A connection accepted and never answered gave no error in 200
+  seconds on either version, and the side file kept growing
+  ([measured 2026-11-06](../research/2026-09-16-sqlite-failover-prototype.md#re-run-on-litestream-0518-2026-11-06)).
 
 ## Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
 

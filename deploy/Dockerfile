@@ -145,10 +145,10 @@ LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
 FROM node:26 AS litestream
 ARG TARGETARCH
 RUN set -eux; \
-  version=0.5.17; \
+  version=0.5.18; \
   case "${TARGETARCH}" in \
-    amd64) asset="litestream-${version}-linux-x86_64.tar.gz"; sum="cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d" ;; \
-    arm64) asset="litestream-${version}-linux-arm64.tar.gz"; sum="f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5" ;; \
+    amd64) asset="litestream-${version}-linux-x86_64.tar.gz"; sum="d3687b9fd0f2e9426bbd3da828429ff3f1dfc5c9b74d54fdf028e4ee510e7dea" ;; \
+    arm64) asset="litestream-${version}-linux-arm64.tar.gz"; sum="922a09e6a7ac67f2095571894dc6382e94e1dd4cdd9674883ddf1a8e74ab982d" ;; \
     *) echo "no pinned litestream ${version} for '${TARGETARCH}'" >&2; exit 1 ;; \
   esac; \
   curl -fsSL -o /tmp/litestream.tar.gz \

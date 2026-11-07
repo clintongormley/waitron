@@ -164,9 +164,9 @@ font and the table derived from it are licensed under the SIL Open Font License,
 
 ## Litestream
 
-The server streams the venue's database to the owner's storage bucket with Litestream 0.5.17,
+The server streams the venue's database to the owner's storage bucket with Litestream 0.5.18,
 which it runs as a separate program, `/usr/local/bin/litestream` in the image. It is the
-unmodified release binary the Litestream project publishes for its tag `v0.5.17`
+unmodified release binary the Litestream project publishes for its tag `v0.5.18`
 (<https://github.com/benbjohnson/litestream>), and the image build checks it against that
 release's published SHA-256 before installing it. Litestream is licensed under the Apache License,
 Version 2.0.
@@ -184,7 +184,7 @@ the SHA-256 values `deploy/Dockerfile`'s `litestream` stage pins for the `x86_64
 assets, then run this from the repository root:
 
 ```sh
-v=0.5.17
+v=0.5.18
 sum_x86_64=<the x86_64 sum from deploy/Dockerfile's litestream stage>
 sum_arm64=<the arm64 sum from deploy/Dockerfile's litestream stage>
 d=$(mktemp -d)

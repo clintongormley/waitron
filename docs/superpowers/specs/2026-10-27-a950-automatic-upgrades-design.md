@@ -535,7 +535,7 @@ prune their generations. The freeze is intentional protection unavailability, sh
 Supervisor opening in the historical inventory (§1) does not qualify resuming an old local
 LTX/WAL position under a newer image. **Approved design:** use a fresh generation prefix after closure, and after rollback
 if continuity has not been independently qualified for that exact restored set/version. No
-in-place rewrite/reuse of a published prefix. At the same node/term, qualify the actual 0.5.17
+in-place rewrite/reuse of a published prefix. At the same node/term, qualify the actual pinned Litestream
 adapter, full-copy readiness and conditional pointer handoff, including crash/retry. A new
 generation is a backup namespace, not a new fiscal chain or membership term.
 

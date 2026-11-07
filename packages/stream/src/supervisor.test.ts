@@ -653,7 +653,7 @@ describe("opening a generation", () => {
   });
 
   it("refuses to run a Litestream that is not the pinned version, and touches no bucket", async () => {
-    const h = await harness({ version: "0.5.18" });
+    const h = await harness({ version: "0.0.0" });
     await h.supervisor.start();
     await vi.waitFor(() => expect(h.supervisor.status().reason).toBe("litestream_unavailable"));
     expect(h.supervisor.status().state).toBe("off");
@@ -2433,7 +2433,7 @@ describe("freshness once the supervisor has stopped by itself", () => {
     [
       "litestream_unavailable",
       async () => {
-        const h = await harness({ version: "0.5.18" });
+        const h = await harness({ version: "0.0.0" });
         await h.supervisor.start();
         await vi.waitFor(() => expect(h.supervisor.status().reason).toBe("litestream_unavailable"));
         return h;

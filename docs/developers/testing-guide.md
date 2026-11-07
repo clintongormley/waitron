@@ -1182,7 +1182,7 @@ test stops versitygw with `SIGSTOP`), and a listing sent to it is checked to be 
 kills Litestream (`SIGKILL`, by the PID the supervisor records in
 `<stateDir>/stream/litestream.pid`) and waits until the supervisor has started another and logged
 `stream.litestream_exited`. The new Litestream takes its read transaction and then waits on the
-frozen bucket in its start-up check (`init` in Litestream 0.5.17's `db.go`), so nothing can restart the side file and every sale grows it. A
+frozen bucket in its start-up check (`init` in Litestream's `db.go`), so nothing can restart the side file and every sale grows it. A
 Litestream left running keeps checkpointing locally without the bucket and restarts the side file
 every second or so at CI's sale rate (below, "Why the fill used to time out"). Before the fill, the
 test posts one sale at a time and, from a connection of its own, runs `pragma wal_checkpoint(passive)`
