@@ -12,11 +12,12 @@ const SECRETS_PREFIX = "secrets/";
 const TRADING_ENV_FILE = "trading.env";
 
 export const STAGED_SECRET_SUFFIX = ".incoming";
-/** A killed restore can leave `.incoming`, `.incoming.tmp` and `.previous` files beside the
- * secrets, and one killed while publishing a target absent with its old file as `.previous`. The
- * next restore replaces only those of the names its own archive carries, so a `tls/*.previous`
- * copy of an old private key can survive. */
-export const PREVIOUS_SECRET_SUFFIX = ".previous";
+/** Not `.previous`: the certificate reissue keeps its own `tls/server.crt.previous`
+ * (`box-secrets.ts`). A killed restore can leave `.incoming`, `.incoming.tmp` and
+ * `.restore-previous` files beside the secrets, and one killed while publishing a target absent
+ * with its old file as `.restore-previous`. The next restore replaces only those of the names its
+ * own archive carries, so a `tls/*.restore-previous` copy of an old private key can survive. */
+export const PREVIOUS_SECRET_SUFFIX = ".restore-previous";
 /** The set-aside identity's name, `trading.env.replaced`, in `restore.ts`. */
 const REPLACED_IDENTITY_SUFFIX = ".replaced";
 
@@ -31,10 +32,10 @@ const WORKING_FILE_SUFFIXES = [
 
 export interface StagedSecrets {
   /** Renames each staged file over its target, trading.env last, setting a replaced one aside as
-   * `<target>.previous`; on a failure, puts back what it renamed, removes the staged files, then
-   * throws the failure. */
+   * `<target>.restore-previous`; on a failure, puts back what it renamed, removes the staged
+   * files, then throws the failure. */
   publish(): Promise<void>;
-  /** After publish: removes the `.previous` copies. Logs, never throws. */
+  /** After publish: removes the `.restore-previous` copies. Logs, never throws. */
   finish(): Promise<void>;
   /** Instead of publish: removes the staged files. Logs, never throws. */
   discard(): Promise<void>;

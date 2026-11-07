@@ -56,7 +56,6 @@ import {
   readArtifactIdentity,
   readArtifactNode,
   clearReplacedDatabases,
-  placementLeftNothingChanged,
   putIdentityBack,
   restoreDatabase as placeDatabaseFile,
   restoreFromArtifact,
@@ -272,7 +271,7 @@ async function expectOldBox(): Promise<void> {
 /** Every staged secret, its working copy, or kept previous copy under the state folder. */
 async function stagedOrPrevious(): Promise<string[]> {
   const names = await readdir(stateDir, { recursive: true });
-  return names.filter((name) => /\.(incoming|previous)(\.tmp)?$/.test(name)).sort();
+  return names.filter((name) => /\.(incoming|restore-previous)(\.tmp)?$/.test(name)).sort();
 }
 
 /** Runs `run` with `nativeFs[method]` failing with `failure` on the calls `matches` picks, and
@@ -1087,44 +1086,48 @@ describe("restore hooks (identity phase)", () => {
     async (name) => {
       await seedOldBox();
       const migrate = vi.fn(async () => {});
+      const onDatabasePlaced = vi.fn();
       const thrown = await restoreFromArtifact(
         makeRestoreDeps({
           artifact: buildArtifact([...FULL_ENTRIES, { name, bytes: Buffer.from("UNCHECKED") }]),
           migrate,
+          onDatabasePlaced,
         }),
       ).catch((error: unknown) => error);
       expect(thrown).toMatchObject({ code: "restore.unsafe_entry_path", params: { name } });
       expect(migrate).not.toHaveBeenCalled();
       await expectOldBox();
       expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
-      expect(placementLeftNothingChanged(thrown)).toBe(true);
+      expect(onDatabasePlaced).not.toHaveBeenCalled();
     },
   );
 
   it("a disk or write failure while writing the secrets leaves the box's database, identity and secrets", async () => {
     await seedOldBox();
     const migrate = vi.fn(async () => {});
+    const onDatabasePlaced = vi.fn();
     const failure = Object.assign(new Error("injected secrets write failure"), { code: "ENOSPC" });
     const thrown = await failingOn(
       "open",
       (path) => path === join(stateDir, "secrets.env.incoming.tmp"),
       failure,
-      () => restoreFromArtifact(makeRestoreDeps({ migrate })),
+      () => restoreFromArtifact(makeRestoreDeps({ migrate, onDatabasePlaced })),
     );
     expect(thrown).toBe(failure);
     expect(migrate).not.toHaveBeenCalled();
     await expectOldBox();
     expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
-    expect(placementLeftNothingChanged(thrown)).toBe(true);
+    expect(onDatabasePlaced).not.toHaveBeenCalled();
   });
 
-  it("a database that could not all be put back is not reported as nothing changed", async () => {
+  it("a database that could not all be put back is not reported as placed", async () => {
     await seedOldBox();
+    const onDatabasePlaced = vi.fn();
     const thrown = await failingOn(
       "rename",
       (_from, to) => to === venueFile(),
       Object.assign(new Error("injected placement failure"), { code: "EIO" }),
-      () => restoreFromArtifact(makeRestoreDeps()),
+      () => restoreFromArtifact(makeRestoreDeps({ onDatabasePlaced })),
     );
     expect(thrown).toMatchObject({
       code: "restore.placement_failed",
@@ -1132,7 +1135,57 @@ describe("restore hooks (identity phase)", () => {
     });
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(OLD_IDENTITY);
     expect(await stagedOrPrevious()).toEqual([]);
-    expect(placementLeftNothingChanged(thrown)).toBe(false);
+    expect(onDatabasePlaced).not.toHaveBeenCalled();
+  });
+
+  it("an older trading.env.replaced does not survive a database move that put the old database back", async () => {
+    await seedOldBox();
+    await writeFile(join(stateDir, "trading.env.replaced"), "OLDER IDENTITY\n");
+    const thrown = await failingOn(
+      "rename",
+      (from, to) => from === incomingFile() && to === venueFile(),
+      Object.assign(new Error("injected placement failure"), { code: "EIO" }),
+      () => restoreFromArtifact(makeRestoreDeps()),
+    );
+    expect(thrown).toMatchObject({
+      code: "restore.placement_failed",
+      params: { kept: "previous" },
+    });
+    expect(await readFile(venueFile())).toEqual(OLD_VENUE);
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(OLD_IDENTITY);
+    await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("a restore whose migration failed finishes when it is run again, the old identity still set aside", async () => {
+    await seedOldBox();
+    const failing = vi.fn(async () => {
+      throw new Error("injected migration failure");
+    });
+    await expect(restoreFromArtifact(makeRestoreDeps({ migrate: failing }))).rejects.toThrow(
+      "injected migration failure",
+    );
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    await restoreFromArtifact(makeRestoreDeps());
+    await expectVenueRestored();
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+    expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(OLD_IDENTITY);
+    expect(await stagedOrPrevious()).toEqual([]);
+  });
+
+  it("reports the database placed once, before migrating it, so a later failure is not a fresh start", async () => {
+    await seedOldBox();
+    const events: string[] = [];
+    const onDatabasePlaced = vi.fn(() => events.push("placed"));
+    const migrate = vi.fn(async () => {
+      events.push("migrate");
+      throw new Error("injected migration failure");
+    });
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ migrate, onDatabasePlaced })),
+    ).rejects.toThrow("injected migration failure");
+    expect(events).toEqual(["placed", "migrate"]);
   });
 
   it("putIdentityBack never replaces a trading.env that took the identity's place", async () => {
@@ -1163,6 +1216,7 @@ describe("restore hooks (identity phase)", () => {
   it("a publish that fails after the hooks keeps the restored database and puts back the secrets it renamed", async () => {
     await seedOldBox();
     const failure = Object.assign(new Error("injected publish failure"), { code: "EIO" });
+    const onDatabasePlaced = vi.fn();
     const thrown = await failingOn(
       "rename",
       (_from, to) => to === join(stateDir, "tls/server.key"),
@@ -1174,6 +1228,7 @@ describe("restore hooks (identity phase)", () => {
               ...FULL_ENTRIES,
               { name: "secrets/tls/server.key", bytes: Buffer.from("KEY") },
             ]),
+            onDatabasePlaced,
           }),
         ),
     );
@@ -1183,7 +1238,7 @@ describe("restore hooks (identity phase)", () => {
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(OLD_IDENTITY);
     expect(await stagedOrPrevious()).toEqual([]);
-    expect(placementLeftNothingChanged(thrown)).toBe(false);
+    expect(onDatabasePlaced).toHaveBeenCalledOnce();
   });
 
   it("a finished restore leaves no staged or previous files", async () => {
@@ -1265,6 +1320,7 @@ describe("restore hooks (identity phase)", () => {
     await mkdir(join(blocker, "venue"), { recursive: true });
     const migrate = vi.fn(async () => {});
     const lockVenue = async () => ({ release: () => {} });
+    const onDatabasePlaced = vi.fn();
     const realMkdir = nativeFs.mkdir;
     const duringPlacement: { live: boolean; aside: string }[] = [];
     const placement = vi.spyOn(nativeFs, "mkdir").mockImplementation(async (...args) => {
@@ -1283,7 +1339,7 @@ describe("restore hooks (identity phase)", () => {
     let thrown: unknown;
     try {
       await restoreFromArtifact(
-        makeRestoreDeps({ venueDir: join(blocker, "venue"), migrate, lockVenue }),
+        makeRestoreDeps({ venueDir: join(blocker, "venue"), migrate, lockVenue, onDatabasePlaced }),
       );
     } catch (error) {
       thrown = error;
@@ -1298,7 +1354,7 @@ describe("restore hooks (identity phase)", () => {
     await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-    expect(placementLeftNothingChanged(thrown)).toBe(true);
+    expect(onDatabasePlaced).not.toHaveBeenCalled();
   });
 
   it("a note that cannot be deleted refuses the restore with the identity where it was", async () => {

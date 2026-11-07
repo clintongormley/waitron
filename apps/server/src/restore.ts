@@ -17,7 +17,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, posix, sep } from "node:path";
 import { eq } from "drizzle-orm";
-import { AppError, hasCode, isAppError, nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, isAppError, nodeId as brandNodeId } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
@@ -133,6 +133,9 @@ export interface RestoreDeps extends ValidationDeps {
   readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
   readonly withModuleOperations?: RestoreOperationRunner;
   readonly resumeOperation?: OperationBinding;
+  /** Called once the archive's database is in the venue folder, or at once when resuming: until
+   * then no module step has run on it, so a failure leaves nothing a retry must check. */
+  readonly onDatabasePlaced?: () => void;
   readonly log: Logger;
 }
 
@@ -384,22 +387,11 @@ async function validateEntryMetadata(
   return { manifest, dumpEntry, nodeDump: nodeEntry.bytes, secretEntries };
 }
 
-const nothingChanged = new WeakSet<object>();
-
-/** Whether {@link placeValidated} threw `error` after putting back everything it had changed,
- * leaving the box's database, identity and secrets as they were (the backup room note aside). */
-export function placementLeftNothingChanged(error: unknown): boolean {
-  return typeof error === "object" && error !== null && nothingChanged.has(error);
-}
-
-function markNothingChanged(error: unknown): void {
-  if (typeof error === "object" && error !== null) nothingChanged.add(error);
-}
-
 /**
- * The secrets are staged before anything is replaced, so a full disk is met while the box is as it
- * was. The hooks' commit is the point of no return: after it a failure keeps the placed database
- * and leaves the box's identity set aside, so a staged restore's resume can finish.
+ * The secrets are staged before anything is replaced, so a full disk met during staging leaves the
+ * box as it was. Placing the database is the point of no return for the box's files: after it a
+ * failure keeps the placed database with the box's identity set aside. The hooks' commit is what a
+ * staged restore resumes from.
  */
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
@@ -418,18 +410,8 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     }
   }
   let staged: StagedSecrets | undefined;
-  if (!deps.skipSecrets) {
-    try {
-      staged = await stageSecrets({
-        entries: validated.secretEntries,
-        stateDir: deps.stateDir,
-        log,
-      });
-    } catch (error) {
-      markNothingChanged(error);
-      throw error;
-    }
-  }
+  if (!deps.skipSecrets)
+    staged = await stageSecrets({ entries: validated.secretEntries, stateDir: deps.stateDir, log });
   if (deps.resumeOperation === undefined) {
     let identityMoved = false;
     try {
@@ -444,16 +426,11 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
       });
     } catch (error) {
       await staged?.discard();
-      const identityBack = !identityMoved || (await putIdentityBack(deps.stateDir, log));
-      const databaseKept = !(
-        isAppError(error) &&
-        hasCode(error, "restore.placement_failed") &&
-        error.params.kept === "set_aside"
-      );
-      if (identityBack && databaseKept) markNothingChanged(error);
+      if (identityMoved) await putIdentityBack(deps.stateDir, log);
       throw error;
     }
   }
+  deps.onDatabasePlaced?.();
   try {
     // The gate admits an OLDER schema; a hook written against today's must not run against
     // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.

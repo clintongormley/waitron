@@ -6,7 +6,8 @@ import {
   verifyPaperEvidence,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import nativeFs, { readFile, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -347,16 +348,23 @@ it("refuses a fresh recovery of the older backup whose settle wait would land on
 });
 it("replays its exact committed result after trading-settings publication is interrupted", async () => {
   const f = await stage("archive");
-  await expect(
-    f.run((_level, event) => {
-      if (event === "restore.hook.done")
-        mkdirSync(join(f.stateDir, "trading.env"), { recursive: true });
-    }),
-  ).rejects.toMatchObject({ code: "EISDIR" });
+  const target = join(f.stateDir, "trading.env");
+  const originalRename = nativeFs.rename;
+  const publication = vi.spyOn(nativeFs, "rename").mockImplementation(async (from, to) => {
+    if (String(from) === `${target}.incoming` && String(to) === target)
+      throw Object.assign(new Error("injected publication failure"), { code: "EIO" });
+    return originalRename(from, to);
+  });
+  syncBuiltinESMExports();
+  try {
+    await expect(f.run()).rejects.toMatchObject({ code: "EIO" });
+  } finally {
+    publication.mockRestore();
+    syncBuiltinESMExports();
+  }
   await f.advanceCounters();
   const before = await f.snapshot();
   expect(before.allocations).toHaveLength(2);
-  await rm(join(f.stateDir, "trading.env"), { recursive: true });
   expect(await f.run()).toBe(true);
   expect(await f.snapshot()).toEqual(before);
   expect(before.records).toEqual(f.original);
