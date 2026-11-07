@@ -294,7 +294,7 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "es-ES": {
       title: "El equipo no pudo crear sus nuevas series de facturas.",
       action:
-        "Primero comprueba su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal». Si el equipo está conectado y esta página vuelve a aparecer, es un fallo de Waitron.",
+        "El equipo comprueba primero su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal». Si el equipo está conectado y esta página vuelve a aparecer, es un fallo de Waitron.",
     },
   },
   "server.config_missing": {

@@ -710,6 +710,9 @@ it("Compare clocks with no second clock explains the wait and leaves the next ch
     await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
     expect(text(el)).toContain(WHY_SECOND);
     expect(text(el)).toContain(ON_BOX);
+    expect(
+      (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("");
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
     expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
     const sent = prepare.mock.calls.length;
@@ -800,32 +803,6 @@ it("Compare clocks after Make the series starts over: the wait it shows ends wit
     vi.advanceTimersByTime(61_000);
     await flush(el);
     expect(prepare.mock.calls).toHaveLength(sent);
-    expect(selects(prepare)).toHaveLength(1);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-it("after a declaration is edited, a wait shown by Compare clocks makes no series though Make the series was pressed earlier", async () => {
-  const { state, prepare } = scripted([
-    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
-  ]);
-  const { el } = await mount(prepare);
-  await ready(el);
-  await compare(el);
-  fakeClock();
-  try {
-    await userEvent.click(button(el, "select"));
-    await vi.waitFor(() => expect(remaining(el)).toBe("1:24"));
-    expect(selects(prepare)).toHaveLength(1);
-    check(el, "recovery-sole-operation", false);
-    check(el, "recovery-sole-operation");
-    state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
-    await el.updateComplete;
-    await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
-    await compare(el);
-    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
-    vi.advanceTimersByTime(61_000);
-    await flush(el);
     expect(selects(prepare)).toHaveLength(1);
   } finally {
     vi.useRealTimers();

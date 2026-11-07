@@ -569,7 +569,7 @@ describe("curated operator text", () => {
     expect(spanish).toContain(escapeHtml("El equipo no pudo crear sus nuevas series de facturas."));
     expect(spanish).toContain(
       escapeHtml(
-        "Primero comprueba su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal». Si el equipo está conectado y esta página vuelve a aparecer, es un fallo de Waitron.",
+        "El equipo comprueba primero su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal». Si el equipo está conectado y esta página vuelve a aparecer, es un fallo de Waitron.",
       ),
     );
   });
