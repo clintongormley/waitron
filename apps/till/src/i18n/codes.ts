@@ -571,6 +571,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
   },
+  "station.no_default": {
+    en: "No station can make one of these dishes. Make a station the default in the dashboard, under Prep stations.",
+    es: "Ninguna estación puede preparar uno de estos platos. Haz predeterminada una estación en el panel, en Estaciones de preparación.",
+  },
   "ticket.already_started": {
     en: "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
     es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",

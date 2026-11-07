@@ -1219,6 +1219,23 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
+  it.each([
+    ["send-lines", "sendLines"],
+    ["submit-draft", "submitDraft"],
+  ] as const)("a %s refused because no station can make a dish says so", async (type, method) => {
+    const { el } = await mountApp({
+      ...seatedFloor(),
+      [method]: vi.fn().mockRejectedValue({ code: "station.no_default", status: 409 }),
+    });
+    const screen = await toTableOrder(el);
+
+    emit(screen, type, type === "submit-draft" ? await ringCoffee(el, screen) : { lineNos: [1] });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("station.no_default"));
+    expect(banner(el)!.textContent).not.toContain(t("table.error"));
+  });
+
   it("a cancel refused because a card payment of the order is running says so", async () => {
     const { el } = await mountApp({
       ...seatedFloor(),

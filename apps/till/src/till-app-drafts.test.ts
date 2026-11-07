@@ -10812,6 +10812,18 @@ describe("direct New order actions", () => {
     expect(server.drafts[0]!.billId).toBe("wo-4");
     expect(savedLines()).toEqual(["offer-beer ×1"]);
   });
+  it("a direct send refused station.no_default says no station can make the dish", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue({ code: "station.no_default", status: 409 }),
+    });
+    await openTable(el);
+    await tap(el, "Beer");
+    await direct(el, "send-all");
+    await expect
+      .poll(() => banner(el)?.textContent ?? "")
+      .toContain(codeMessage("station.no_default"));
+  });
+
   it("refreshes routing warnings after a refused direct send, without preview or automatic resubmission", async () => {
     let refused = false;
     const submitDraft = vi.fn(async () => {
