@@ -43,7 +43,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { DEFAULT_PROFILE_CAPABILITIES } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -1887,7 +1887,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it.each(["F1", "F2"] as const)(
-    "refuses to change another node's %s invoice choice without changing its bill",
+    "changes another box's %s invoice choice here, and files the bill on this box's series and SIF",
     async (invoiceType) => {
       const billId = await tabWith("Chuletón");
       await inTx(async (tx) => {
@@ -1897,7 +1897,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       const before = await inTx((tx) =>
         tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
       );
-      const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      const changed = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
         revision: before[0]!.revision,
         invoiceType,
         recipient:
@@ -1910,14 +1910,56 @@ describe("the invoice at full payment (design §8 test 8)", () => {
                 countryCode: "ES",
               },
       });
-      expect(refused).toEqual({
-        status: 409,
-        json: { code: "working_order.not_open", params: { workingOrderId: billId } },
+      expect(changed).toEqual({ status: 200, json: { revision: before[0]!.revision + 1 } });
+      const [after] = await inTx((tx) =>
+        tx
+          .select({
+            nodeId: workingOrders.nodeId,
+            invoiceType: workingOrders.invoiceType,
+            recipientTaxId: workingOrders.recipientTaxId,
+            revision: workingOrders.revision,
+          })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, billId)),
+      );
+      expect(after).toEqual({
+        nodeId: before[0]!.nodeId,
+        invoiceType,
+        recipientTaxId: invoiceType === "F1" ? "B12345674" : null,
+        revision: before[0]!.revision + 1,
       });
-      expect(
-        await inTx((tx) => tx.select().from(workingOrders).where(eq(workingOrders.id, billId))),
-      ).toEqual(before);
-      expect(await paymentRows(billId)).toEqual([]);
+
+      const paid = await contribute(billId, "25.00");
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      const filed = await inTx(async (tx) => {
+        const saleRows = await tx
+          .select({
+            id: sales.id,
+            nodeId: sales.nodeId,
+            seriesNode: invoiceSeries.nodeId,
+            seriesPurpose: invoiceSeries.purpose,
+          })
+          .from(sales)
+          .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+          .where(eq(sales.workingOrderId, billId));
+        const records = await tx
+          .select({ nodeId: registrosFacturacion.nodeId, sifNode: registroSif.nodeId })
+          .from(registrosFacturacion)
+          .innerJoin(registroSif, eq(registroSif.id, registrosFacturacion.sifId))
+          .where(eq(registrosFacturacion.saleId, saleRows[0]?.id ?? ""));
+        return { saleRows, records };
+      });
+      const here = venue.cfg.nodeId;
+      expect(here).not.toBe(before[0]!.nodeId);
+      expect(filed.saleRows).toEqual([
+        {
+          id: expect.any(String),
+          nodeId: here,
+          seriesNode: here,
+          seriesPurpose: invoiceType === "F1" ? "full" : "standard",
+        },
+      ]);
+      expect(filed.records).toEqual([{ nodeId: here, sifNode: here }]);
     },
   );
 
