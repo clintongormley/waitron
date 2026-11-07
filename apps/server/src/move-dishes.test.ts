@@ -19,7 +19,7 @@ import { decimalToCents } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "@waitron/venue-service";
-import { moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
+import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { insertPartyBill, partyRevision } from "./parties.js";
@@ -1102,6 +1102,34 @@ describe("A803 move dishes refuses, and changes nothing", () => {
       tabId: p.bill1,
       lineId: foreign,
     });
+  });
+
+  it("A803 move dishes refuses: two dishes asked for under a fresh revision, one already on another bill, is tab.line_not_found and neither moves", async () => {
+    const p = await party([dish("Caña"), dish("Flan")]);
+    const [cana, flan] = await dishIds(p.bill1);
+    await move(p.partyId, p.bill1, p.bill2, [flan!]);
+    const third = await inTx(v, (tx) => insertPartyBill(tx, v.cfg, p.partyId));
+    await refused(() => move(p.partyId, p.bill1, third, [cana!, flan!]), "tab.line_not_found", {
+      tabId: p.bill1,
+      lineId: flan,
+    });
+    expect(await dishIds(p.bill1)).toEqual([cana]);
+    expect(await dishIds(p.bill2)).toEqual([flan]);
+    expect(await dishIds(third)).toEqual([]);
+  });
+
+  it("A803 move dishes refuses: two dishes asked to go, under a fresh revision, to a bill merged away is tab.not_open and neither moves", async () => {
+    const p = await party([dish("Caña"), dish("Flan")]);
+    const [cana, flan] = await dishIds(p.bill1);
+    const third = await inTx(v, (tx) => insertPartyBill(tx, v.cfg, p.partyId));
+    const command = await commandFor(v, p.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, third, p.bill2, command));
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [cana!, flan!]), "tab.not_open", {
+      tabId: p.bill2,
+    });
+    expect(await dishIds(p.bill1)).toEqual([cana, flan]);
+    expect(await dishIds(p.bill2)).toEqual([]);
+    expect(await dishIds(third)).toEqual([]);
   });
 
   it("A803 move dishes refuses: an extra's id is tab.transfer_modifier_line", async () => {
