@@ -289,12 +289,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "The box could not make its new invoice series.",
       action:
-        "It checks its time against the internet first. Connect the box to the internet, then press “Retry a normal boot”. If the box is connected and this page comes back, this is a fault in Waitron.",
+        "It checks its time against the internet first. Connect the box to the internet, then press “Retry a normal boot”.",
     },
     "es-ES": {
       title: "El equipo no pudo crear sus nuevas series de facturas.",
       action:
-        "El equipo comprueba primero su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal». Si el equipo está conectado y esta página vuelve a aparecer, es un fallo de Waitron.",
+        "El equipo comprueba primero su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal».",
     },
   },
   "server.config_missing": {
