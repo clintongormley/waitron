@@ -25,7 +25,6 @@ describe("the package barrel", () => {
       "nextState",
       "parseBinding",
       "parseIndicator",
-      "readActivationRows",
       "readHandoverActivation",
       "refuseRequest",
       "sha256Hex",

@@ -4,9 +4,9 @@ import type { Database, Transaction } from "./client.js";
 import { handoverActivations } from "./schema/index.js";
 
 /**
- * This box, then every box it took over from, then every box each of those took over from: nearest
- * first, each once. A box that handed over and later took back meets itself in the walk, and the walk
- * ends there rather than listing it again.
+ * This box, then the boxes it took over from, then the boxes those took over from: fewest handovers
+ * back first, and the boxes one box took over from in the order it took over from them. A box
+ * already listed is skipped, so a box that handed over and took back appears once and the walk ends.
  */
 export async function readHistoryNodes(
   db: Database | Transaction,
