@@ -1059,6 +1059,51 @@ describe("restore hooks (identity phase)", () => {
     });
   });
 
+  describe("two secret names for one file", () => {
+    const OLD_KEY = "old-key";
+    const aliased = (second: string) =>
+      buildArtifact([
+        ...FULL_ENTRIES,
+        { name: "secrets/tls/server.key", bytes: Buffer.from("first-key") },
+        { name: second, bytes: Buffer.from("second-key") },
+      ]);
+
+    it.each([
+      ["through a folder link", "secrets/real-tls/server.key"],
+      ["differing only in case", "secrets/TLS/server.key"],
+    ])("are refused %s before anything changes", async (_, second) => {
+      await seedOldBox();
+      await mkdir(join(stateDir, "real-tls"));
+      await symlink(join(stateDir, "real-tls"), join(stateDir, "tls"));
+      await writeFile(join(stateDir, "real-tls/server.key"), OLD_KEY);
+      const migrate = vi.fn(async () => {});
+      const onDatabasePlaced = vi.fn();
+      const deps = makeRestoreDeps({ artifact: aliased(second), migrate, onDatabasePlaced });
+      const refusal = { code: "restore.unsafe_entry_path", params: { name: second } };
+      await expect(validateArtifact(deps)).rejects.toMatchObject(refusal);
+      await expect(restoreFromArtifact(deps)).rejects.toMatchObject(refusal);
+      expect(migrate).not.toHaveBeenCalled();
+      expect(onDatabasePlaced).not.toHaveBeenCalled();
+      await expectOldBox();
+      expect(await readFile(join(stateDir, "real-tls/server.key"), "utf8")).toBe(OLD_KEY);
+      expect(await readdir(join(stateDir, "real-tls"))).toEqual(["server.key"]);
+      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
+    });
+
+    it("are both restored when they name two separate folders", async () => {
+      await seedOldBox();
+      await mkdir(join(stateDir, "real-tls"));
+      await mkdir(join(stateDir, "tls"));
+      await writeFile(join(stateDir, "real-tls/server.key"), OLD_KEY);
+      await restoreFromArtifact(
+        makeRestoreDeps({ artifact: aliased("secrets/real-tls/server.key") }),
+      );
+      expect(await readFile(join(stateDir, "tls/server.key"), "utf8")).toBe("first-key");
+      expect(await readFile(join(stateDir, "real-tls/server.key"), "utf8")).toBe("second-key");
+      expect(await stagedOrPrevious()).toEqual([]);
+    });
+  });
+
   it("a secret whose target is a folder is refused before anything changes", async () => {
     await seedOldBox();
     await mkdir(join(stateDir, "tls/server.key"), { recursive: true });

@@ -14,9 +14,8 @@ const TRADING_ENV_FILE = "trading.env";
 export const STAGED_SECRET_SUFFIX = ".incoming";
 /** Not `.previous`: the certificate reissue keeps its own `tls/server.crt.previous`
  * (`box-secrets.ts`). A killed restore can leave `.incoming`, `.incoming.tmp` and
- * `.restore-previous` files beside the secrets, and one killed while publishing a target absent
- * with its old file as `.restore-previous`. The next restore replaces only those of the names its
- * own archive carries, so a `tls/*.restore-previous` copy of an old private key can survive. */
+ * `.restore-previous` files beside the secrets. The next restore replaces only those of the names
+ * its own archive carries, so a `tls/*.restore-previous` copy of an old private key can survive. */
 export const PREVIOUS_SECRET_SUFFIX = ".restore-previous";
 /** The set-aside identity's name, `trading.env.replaced`, in `restore.ts`. */
 const REPLACED_IDENTITY_SUFFIX = ".replaced";
