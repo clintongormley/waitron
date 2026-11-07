@@ -5,7 +5,10 @@ import {
   createRequest,
   type DashboardRequest,
 } from "@waitron/dashboard-kit";
-import { VenueServiceApi } from "./client.js";
+import { VenueServiceApi, type DepartmentSettingsInput } from "./client.js";
+
+import { departmentSettingsAnswer } from "../testing/department-edit-fixture.js";
+import { zonesModel } from "../testing/department-zones-fixture.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -280,10 +283,7 @@ describe("VenueServiceApi", () => {
 
 describe("combined settings requests", () => {
   it("sends every department field and optional transfers in one active PUT", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }))
-      .background;
-    await api.saveDepartmentSettings("d1", {
+    const input: DepartmentSettingsInput = {
       name: "Dining",
       tradingName: "Receipt",
       orderStart: "table",
@@ -293,7 +293,12 @@ describe("combined settings requests", () => {
       lateSendNeedsManager: false,
       releaseReminderMinutes: null,
       transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
-    });
+    };
+    const answer = departmentSettingsAnswer(zonesModel, "d1", input);
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }))
+      .background;
+    await expect(api.saveDepartmentSettings("d1", input)).resolves.toEqual(answer);
     expect(
       fetchImpl.mock.calls.map(([path, init]) => [
         path,
@@ -320,13 +325,11 @@ describe("combined settings requests", () => {
   });
 
   it("saveDepartmentSettings sends the steps when given", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
     const serviceSteps = [
       { id: "s1", name: "Set up", start: "seated" as const, courseId: null, minutes: 0 },
       { name: "Dessert?", start: "course_served" as const, courseId: "c1", minutes: 10 },
     ];
-    await api.saveDepartmentSettings("d1", {
+    const input: DepartmentSettingsInput = {
       name: "Dining",
       tradingName: "Receipt",
       orderStart: "table",
@@ -336,7 +339,11 @@ describe("combined settings requests", () => {
       lateSendNeedsManager: false,
       releaseReminderMinutes: null,
       serviceSteps,
-    });
+    };
+    const answer = departmentSettingsAnswer(zonesModel, "d1", input);
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await expect(api.saveDepartmentSettings("d1", input)).resolves.toEqual(answer);
     const [[, init]] = fetchImpl.mock.calls as unknown as [string, RequestInit][];
     expect(JSON.parse(init!.body as string).serviceSteps).toEqual(serviceSteps);
   });
