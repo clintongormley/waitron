@@ -20460,6 +20460,7 @@ export class TillApp extends LitElement {
         return html`<till-schedule-screen
           slot="drill"
           .api=${this.api}
+          .backKey=${this.#resolveScreen("counter") === "counter" ? "schedule.back" : "action.back"}
           .staff=${this.staff}
           .operatorPersonId=${this.operatorPersonId}
         ></till-schedule-screen>`;
@@ -20468,6 +20469,7 @@ export class TillApp extends LitElement {
           .operatorSession=${this.#operatorSession}
           slot="drill"
           .api=${this.api}
+          .backKey=${this.#resolveScreen("counter") === "counter" ? "station.back" : "action.back"}
           .canMoveStation=${this.capabilities.includes("take-orders")}
           .canEditKitchenNote=${this.capabilities.includes("take-orders")}
           .deviceMode=${this.deviceMode}
@@ -20480,6 +20482,7 @@ export class TillApp extends LitElement {
           .operatorSession=${this.#operatorSession}
           slot="drill"
           .api=${this.api}
+          .backKey=${this.#resolveScreen("counter") === "counter" ? "expo.back" : "action.back"}
           .runsPass=${this.capabilities.includes("run-the-pass")}
           .deviceId=${this.deviceId}
           .serverOrigin=${this.#serverOrigin()}

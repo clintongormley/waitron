@@ -596,9 +596,7 @@ Open:
   560 px wide in English and 602 px in Spanish, so the overflow predates C130 (the overflow
   PF6 Task 9 recorded; that entry, near the top of this file, is done under lane C's W27); with
   the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
-  wholly off-screen (fixed by lane C's W27, below). On the handheld, the station screen's back
-  button says "Back to counter" though a handheld on the built-in phone layout lands on the
-  floor plan.
+  wholly off-screen (fixed by lane C's W27, below).
 - A staff list longer than the screen still makes the page scroll to reach the language button
   (since A187, 2026-10-02, the language chooser is at the top right of the lock screen).
   Left from C133's review, not changed there: the table-order screen's bottom bar still keeps

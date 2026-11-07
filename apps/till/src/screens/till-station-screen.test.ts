@@ -587,6 +587,25 @@ describe("till-station-screen", () => {
     expect(spy).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ["en-GB", "station.back", "Back to counter"],
+    ["es-ES", "station.back", "Volver al mostrador"],
+    ["en-GB", "action.back", "Back"],
+    ["es-ES", "action.back", "Atrás"],
+  ] as const)("in %s, the Back given %s reads %s", async (language, backKey, words) => {
+    setLocale(language);
+    try {
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api: stubApi(),
+        backKey,
+      } as Partial<TillStationScreen>);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-back]")!.textContent!.trim()).toBe(words);
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
   it("operator mode shows the per-order Reprint button on its card (deviceMode === false, R-K)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });

@@ -185,6 +185,7 @@ export class TillScheduleScreen extends LitElement {
   @property({ attribute: false }) api!: TillApi;
   @property({ attribute: false }) staff: StaffMember[] = [];
   @property() operatorPersonId = "";
+  @property({ attribute: false }) backKey: "schedule.back" | "action.back" = "schedule.back";
 
   /** The three lists: `undefined` until a load succeeds, then the (possibly empty) rows. */
   @state() private shifts?: MyShift[];
@@ -441,7 +442,7 @@ export class TillScheduleScreen extends LitElement {
         <header class="head">
           <h1 class="title">${t("schedule.title")}</h1>
           <wt-button class="back" variant="secondary" @click=${() => this.#back()}>
-            ${t("schedule.back")}
+            ${t(this.backKey)}
           </wt-button>
         </header>
         ${

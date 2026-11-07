@@ -1894,6 +1894,22 @@ describe("A773 pass screen", () => {
       expect(seen).toHaveBeenCalledOnce();
     });
 
+    it.each([
+      ["en-GB", "expo.back", "Back to counter"],
+      ["es-ES", "expo.back", "Volver al mostrador"],
+      ["en-GB", "action.back", "Back"],
+      ["es-ES", "action.back", "Atrás"],
+    ] as const)("in %s, the Back given %s reads %s", async (language, backKey, words) => {
+      const previous = currentLocale();
+      try {
+        setLocale(language);
+        const el = await mount({ backKey } as Partial<TillPassScreen>);
+        expect(el.shadowRoot!.querySelector("[data-back]")!.textContent!.trim()).toBe(words);
+      } finally {
+        setLocale(previous);
+      }
+    });
+
     it("an embedded card draws no title and no Back", async () => {
       const el = await mount({ embedded: true });
       expect(boardOf(el)).not.toBeNull();
