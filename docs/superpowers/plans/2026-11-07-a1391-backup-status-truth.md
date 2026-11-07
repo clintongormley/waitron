@@ -92,6 +92,12 @@ FULL with two Codex angles.
   concurrency risk. The watcher's decision: do not build it; record "a status
   read keeps its own client" under the box area's `## Decisions and deliberate limits` with these
   figures, and delete the entry.
+  _2026-11-07, finish-branch: the read rates above are wrong. Each open Backups screen reads status
+  every 10 seconds; the Box status page does not read it. The corrected figures are in the decision
+  entry in `docs/backlog/box.md`._
+
+_As built 2026-11-07: the Backups form refuses the same parts with its own check, sharing
+`isPlainWebAddress`, now in `apps/dashboard/src/screens/backup-destination-model.ts`._
 
 ## Tasks
 
@@ -164,6 +170,8 @@ Not built: the watcher decided 2026-11-07 08:58 (questions.md). Task 4 records t
    decide whether that line is still true (records written before this change; the evidence
    answer's own masking stays) and keep or cut it accordingly. No guide text mentions the address
    field (plan review grepped `apps/server/src/guide/{en,es}`).
+   _As built: the evidence answer's masking was cut too, because a stored archive record is re-read
+   through `readBucketConfig` (`archive-settings.ts:175`), so the line was cut._
 
 ## Out of scope
 

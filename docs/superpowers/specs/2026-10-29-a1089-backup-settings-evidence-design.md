@@ -94,7 +94,9 @@ The panel has three parts:
      newest failure, the panel says so first: the facts below then describe the new record, not
      the one that failed.
    - Only when the record reads cleanly now: the folder path and/or the bucket's address (a
-     password in its URL masked as `user:***@host`, by `redactSecrets`), region,
+     password in its URL masked as `user:***@host`, by `redactSecrets`; _2026-11-07, A1391: a saved
+     address holding a password now reads as unreadable (`archive-settings.ts:175`), so the answer
+     never shows one and no longer masks it_), region,
      bucket name, access key id and archive folder (the status reply already shows the access key
      id, `apps/server/src/backup-supervisor.ts:66`, and the form needs it to keep a saved secret).
      For a folder, whether it exists and is a folder, or "could not be checked" when the look

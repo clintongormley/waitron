@@ -106,7 +106,8 @@ new code is needed (none expected).
    (`statusReadTimeoutMs`, `apps/server/src/backup-supervisor.ts:147`); a timeout or a permission
    error is `unknown`.
    _2026-10-29, as built: a password in the endpoint's URL is masked as `user:***@host` by
-   `redactSecrets`._
+   `redactSecrets`._ _2026-11-07, A1391: a saved address holding a password now reads as
+   unreadable (`archive-settings.ts:175`), so the answer never shows one and no longer masks it._
 3. Mount `GET /api/backup/settings-evidence` with the existing `authorize` (`system.manage`), and
    no backup turn.
 4. Tests on a real venue database (`useVenueDb`) with real key rings, one per design row: key

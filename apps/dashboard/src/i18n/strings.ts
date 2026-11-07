@@ -2086,7 +2086,7 @@ export const en = {
   "stream.form.show_secret": "Show the secret access key",
   "stream.form.hide_secret": "Hide the secret access key",
   "stream.form.endpoint_invalid":
-    "Enter the full address, starting with https:// or http://, with no user name, password, ? or # in it",
+    "Enter the full address, starting with https:// or http://, with no user name, password, ? or # in it.",
   "stream.form.test": "Test",
   "stream.form.save": "Save and turn on",
   "stream.form.cancel": "Cancel",
@@ -5909,7 +5909,7 @@ export const es: Record<StringKey, string> = {
   "stream.form.show_secret": "Mostrar la clave de acceso secreta",
   "stream.form.hide_secret": "Ocultar la clave de acceso secreta",
   "stream.form.endpoint_invalid":
-    "Escribe la dirección completa, empezando por https:// o http://, sin usuario, contraseña, ? ni #",
+    "Escribe la dirección completa, empezando por https:// o http://, sin usuario, contraseña, ? ni #.",
   "stream.form.test": "Probar",
   "stream.form.save": "Guardar y activar",
   "stream.form.cancel": "Cancelar",
