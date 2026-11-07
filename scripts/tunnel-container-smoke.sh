@@ -40,6 +40,15 @@ docker run -d --name "$name-peer" --network "$name" --cap-drop ALL --cap-add NET
   -v "$name-control:/control" -v "$name-keys:/keys" "$image" >/dev/null
 wait_for docker exec "$name-peer" test -s /control/public-key
 peer_key=$(docker exec "$name-peer" cat /control/public-key)
+docker exec --user 10001:10001 "$name-peer" sh -c '
+  set -e
+  test -r /control/public-key
+  test ! -r /keys/private-key
+  umask 022
+  printf probe > /control/app-write-probe
+'
+[ "$(docker exec "$name-peer" cat /control/app-write-probe)" = probe ]
+docker exec --user 10001:10001 "$name-peer" rm /control/app-write-probe
 ! docker exec "$name-peer" ip link show wg-cloud 2>/dev/null
 [ "$(docker exec "$name-peer" stat -c %a /keys/private-key)" = 600 ]
 docker exec "$name-peer" sh -c 'test "$(ls /control)" = public-key'

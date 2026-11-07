@@ -6,7 +6,7 @@ RUN set -eu; \
     bounded apt-get install -y --no-install-recommends wireguard-tools iproute2 iptables jq socat util-linux; \
     mkdir -p /app/third-party/system /keys /control; \
     chmod 700 /keys; \
-    chown 1000:0 /control; chmod 775 /control; \
+    chown 10001:0 /control; chmod 770 /control; \
     cp -a /usr/share/doc /app/third-party/system/; \
     cp -a /usr/share/common-licenses /app/third-party/system/; \
     dpkg-query -W > /app/third-party/system/PACKAGES.txt; \
