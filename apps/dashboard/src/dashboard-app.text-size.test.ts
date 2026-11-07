@@ -30,6 +30,7 @@ const OPEN_GROUP_ITEMS = [
   "Devices",
   "Printers",
   "Card payments",
+  "Email",
   "Device profiles",
   "Diagnostics",
   "Backups",
