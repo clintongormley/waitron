@@ -997,7 +997,6 @@ const ACTIONABLE_REFUSALS = new Set([
   "clock.behind_chain",
   "menu_period.ended",
   "station.no_default",
-  "ticket.already_started",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -7608,6 +7607,10 @@ export class TillApp extends LitElement {
         await this.#reloadChangedOrder(id);
         return false;
       }
+      if (code === "ticket.already_started") {
+        await this.#reloadChangedOrder(id, true);
+        return false;
+      }
       if (code !== "working_order.not_open") throw error;
       return true;
     }
@@ -8971,14 +8974,20 @@ export class TillApp extends LitElement {
   /**
    * A save refused `working_order.out_of_date` was made from a copy another till has since
    * changed: the order is loaded again as it now stands, and staff are told, so they make their
-   * change again on it. An order closed meanwhile reads as a stale retrieve.
+   * change again on it. An order closed meanwhile reads as a stale retrieve. `started`: the save was
+   * refused for a dish the kitchen has started, so staff are told that instead, and the way out names
+   * Cancel, which is on screen only once the order's lines are read.
    */
-  async #reloadChangedOrder(id: string): Promise<void> {
+  async #reloadChangedOrder(id: string, started = false): Promise<void> {
     const session = this.#operatorSession;
     try {
-      await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
+      const listed = await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
       if (session !== this.#operatorSession) return;
-      this.errorKey = "held.changed_elsewhere";
+      this.errorKey = !started
+        ? "held.changed_elsewhere"
+        : listed
+          ? "held.started_reloaded"
+          : "held.reread_failed";
     } catch {
       if (session !== this.#operatorSession) return;
       this.errorKey = "held.stale";

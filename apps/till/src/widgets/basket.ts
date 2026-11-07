@@ -43,6 +43,7 @@ import { lineTotal, priceWasStyles } from "./price-was.js";
 import {
   adjustableListing,
   billGross,
+  isStarted,
   lineAdjustTarget,
   rowAdjustTarget,
   storedListing,
@@ -353,8 +354,8 @@ export class TillBasket extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
-      /* Unseen copies of the − and × a dish the kitchen has does not offer, so its count, total and
-         Note line up with the rows that keep them whatever width the font gives those buttons. */
+      /* Unseen copies of the −, + and × a dish the kitchen has does not offer, so its count, total
+         and Note line up with the rows that keep them whatever width the font gives those buttons. */
       .step-gap,
       .remove-gap {
         visibility: hidden;
@@ -946,7 +947,8 @@ export class TillBasket extends LitElement {
                         : nothing
                     }</span
                   >
-                  ${this.#quantityCell(line, index, sent)} ${this.#dishTotal(line, listed)}
+                  ${this.#quantityCell(line, index, sent, this.#kitchenStarted(line, listing))}
+                  ${this.#dishTotal(line, listed)}
                   ${
                     this.lineDetails
                       ? html`<wt-button
@@ -1198,8 +1200,9 @@ export class TillBasket extends LitElement {
   }
 
   /** `−` is disabled at 1: removing a line is the × control's job, never the stepper's. A dish the
-   * kitchen has has no `−`: less of it leaves only through Cancel. */
-  #quantityCell(line: OrderLine, index: number, sent: boolean) {
+   * kitchen has has no `−`: less of it leaves only through Cancel. One it has started has no `+`
+   * either: the server refuses any change to it. */
+  #quantityCell(line: OrderLine, index: number, sent: boolean, started: boolean) {
     if (this.readOnly) return html`<span class="qty">${quantityLabel(line)}</span>`;
     const unit = productUnit(line.product);
     if (unit.hardwareUnit !== null || unit.precision > 0) {
@@ -1226,18 +1229,36 @@ export class TillBasket extends LitElement {
               </wt-button>`
         }
         <span class="count">${line.quantity}</span>
-        <wt-button
-          class="step step-inc"
-          ?disabled=${this.store.editsLocked || this.orderInFlight || this.store.canSelectProduct?.(line.product) === false}
-          variant="ghost"
-          size="sm"
-          aria-label=${`${t("basket.increase")} ${name}`}
-          @click=${() => this.store.setLineQuantity(index, String(count + 1))}
-        >
-          <span aria-hidden="true">+</span>
-        </wt-button>
+        ${
+          started
+            ? html`<wt-button class="step-gap" variant="ghost" size="sm" inert
+                ><span aria-hidden="true">+</span></wt-button
+              >`
+            : html`<wt-button
+                class="step step-inc"
+                ?disabled=${this.store.editsLocked || this.orderInFlight || this.store.canSelectProduct?.(line.product) === false}
+                variant="ghost"
+                size="sm"
+                aria-label=${`${t("basket.increase")} ${name}`}
+                @click=${() => this.store.setLineQuantity(index, String(count + 1))}
+              >
+                <span aria-hidden="true">+</span>
+              </wt-button>`
+        }
       </span>
     `;
+  }
+
+  /** The kitchen has started a dish the line stands for, or an extra of one. */
+  #kitchenStarted(line: OrderLine, listing: StoredLines | null): boolean {
+    if (listing === null) return false;
+    return (line.portionLineIds ?? [line.workingOrderLineId]).some((id) => {
+      const dish = id === undefined ? undefined : this.#listedById.get(id);
+      return (
+        dish !== undefined &&
+        (isStarted(dish) || (this.#listedExtras.get(dish.lineNo) ?? []).some(isStarted))
+      );
+    });
   }
 
   /** The dish as listed, by the stored line it came from. */

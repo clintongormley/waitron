@@ -6522,36 +6522,44 @@ describe("till-app", () => {
       expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 4]);
     });
 
-    it("saving a raised dish the kitchen has started says so, and the basket stays", async () => {
+    it("saving a raised dish the kitchen has started reloads the order, says so and offers Cancel", async () => {
       const updateWorkingOrder = vi
         .fn()
         .mockRejectedValue({ code: "ticket.already_started", status: 409 });
+      const sentAt = "2026-09-30T09:00:00.000Z";
+      const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Mesa 4",
+        revision: 3,
+        lines: [
+          {
+            workingOrderLineId: "wl-1",
+            menuItemId: "menu-item-cafe-0",
+            productId: "cafe",
+            quantity: "2.000",
+          },
+        ],
+      });
       const { el } = await mountApp({
         updateWorkingOrder,
-        retrieveWorkingOrder: vi.fn().mockResolvedValue({
-          kitchenNote: {
-            scope: { workingOrderId: "wo-1" },
-            note: null,
-            revision: 0,
-            ownerRevision: 3,
-          },
-          id: "wo-1",
-          orderNumber: 5,
-          label: "Mesa 4",
-          revision: 3,
-          lines: [
-            {
-              workingOrderLineId: "wl-1",
-              menuItemId: "menu-item-cafe-0",
-              productId: "cafe",
-              quantity: "2.000",
-            },
-          ],
-        }),
-        getTabLines: vi.fn().mockResolvedValue({
-          revision: 3,
-          lines: [listedCafe({ sentAt: "2026-09-30T09:00:00.000Z", state: "preparing" })],
-        }),
+        retrieveWorkingOrder,
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce({
+            revision: 3,
+            lines: [listedCafe({ sentAt, state: "queued" })],
+          })
+          .mockResolvedValue({
+            revision: 3,
+            lines: [listedCafe({ sentAt, state: "preparing" })],
+          }),
       });
       const c = await toCounter(el);
       emit(c, "retrieve-order", { id: "wo-1" });
@@ -6562,11 +6570,17 @@ describe("till-app", () => {
       await flush(el);
 
       expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
       const alert = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
-      expect(alert).toBe(codeMessage("ticket.already_started"));
-      expect(alert).not.toBe(t("held.park_error"));
+      expect(alert).toBe(t("held.started_reloaded"));
       expect(c.store.id).toBe("wo-1");
-      expect(c.store.lines.map((line) => line.quantity)).toEqual(["3"]);
+      expect(c.store.dirty).toBe(false);
+      expect(c.store.lines.map((line) => line.quantity)).toEqual(["2"]);
+      expect(
+        c
+          .shadowRoot!.querySelector("till-basket")!
+          .shadowRoot!.querySelector('[data-cancel-line="0"]'),
+      ).not.toBeNull();
     });
 
     it("reads the order back after raising it once a comp has repriced it, as the added cafés go on a line of their own", async () => {
