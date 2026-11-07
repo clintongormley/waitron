@@ -149,6 +149,16 @@ public certificate renewal, wrong-venue refusal, revocation, offline sale or the
 cross-venue and LAN cases. Publication and the installation path remain open during the A760
 freeze. The earlier demo remains the persistent try-out.
 
+The retirement's single Claude review took 1,465 seconds. Its five findings were repaired:
+setup wording now describes the refused join and offers restore, misleading comments were
+removed, a real-boot test pins the no-relay refusal, an unused relay HTTP helper was removed,
+and stale receipts and backlog claims were corrected. Post-repair checks passed 325 server,
+80 setup and 498 selected root cases, both typechecks, focused lint and both package builds.
+Sixteen final setup views were inspected in English and Spanish, both themes and widths.
+The review's full root run reached its 480-second limit without a test count; it is unverified.
+These later repairs were not part of the bounded managed run above. The report, triage,
+failing control and final checks remain in the same local receipt directory.
+
 # Current addendum: returned Debian box, 5 November 2026
 
 > 7 November 2026: the owner asked for A951-S on a new branch. The earlier A951 native-protocol

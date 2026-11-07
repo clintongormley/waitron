@@ -58,7 +58,7 @@ export const shellEn = {
     "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.",
 
   "shell.adopt.bundle_fetch_failed":
-    "Couldn't join the primary server: it couldn't be reached, it refused the request, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server, then try again.",
+    "The primary couldn't supply a mirror setup. Adding a mirror is unavailable in this version. Go back and choose Restore a backup or Restore from my bucket.",
   "shell.adopt.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
   "shell.adopt.vault_not_empty":
@@ -222,7 +222,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "La configuración ha fallado. Comprueba que el servidor está encendido y que tu dispositivo está conectado a su red, e inténtalo de nuevo. Si ves un aviso de certificado, usa la ayuda sobre el certificado de abajo.",
 
   "shell.adopt.bundle_fetch_failed":
-    "No se ha podido unir al servidor principal: no se ha podido contactar con él, ha rechazado la solicitud o su respuesta no se ha podido usar. Comprueba que la dirección es la del servidor principal de Waitron de tu restaurante e inténtalo de nuevo.",
+    "El servidor principal no ha podido proporcionar la configuración de una réplica. Añadir una réplica no está disponible en esta versión. Vuelve y elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
   "shell.adopt.request_invalid":
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.vault_not_empty":

@@ -485,6 +485,8 @@ shard 6, at port 46869. The controlled reproduction establishes that an occupied
 can cause that failure; it does not identify the competing process in the historical run.
 The in-process boot siblings use this fixture except cases that assert configured-port,
 advertised-origin, tunnel-target, paired landing-listener, distinct unused-peer or exact listener-release contracts.
+7 November 2026: A951-S retires the old TCP relay and its tunnel-target case; the other
+configured-binding checks remain.
 The process-started fixtures and unused-peer reservations remain separate work in
 [the CI backlog](../backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 

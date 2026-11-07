@@ -18,7 +18,7 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
-import { persons, resolveManagementSession } from "@waitron/identity";
+import { hashPassword, persons, resolveManagementSession } from "@waitron/identity";
 import { strFromU8, unzipSync } from "fflate";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -413,6 +413,44 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       sql`select estado from envios where registro_id = ${seeded.registroId}`,
     );
     expect(afterPrimary.rows[0]?.estado).toBe("pendiente");
+  }, 60_000);
+
+  it("refuses standby adoption at the real primary without using retired relay settings", async () => {
+    beforeServerStarts();
+    const personId = "88888888-8888-4888-8888-888888888888";
+    await withTransaction(db.primary, async (tx) => {
+      await tx.insert(persons).values({
+        id: personId,
+        displayName: "Standby administrator",
+        role: "admin",
+        passwordHash: hashPassword("Standby fixture password"),
+      });
+    });
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: venueDir.primary,
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
+      WAITRON_TUNNEL_BOX_ID: "retired-box",
+      WAITRON_TUNNEL_TOKEN: "retired-fixture-token",
+    });
+    try {
+      const reply = await fetch(`http://127.0.0.1:${httpPort()}/management-api/mirror-bundle`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          personId,
+          password: "Standby fixture password",
+          standbyNodeId: "99999999-9999-4999-8999-999999999999",
+          standbyPublicKey: "standby-fixture-key",
+          standbyContactUrl: "",
+        }),
+      });
+      expect(reply.status).toBe(400);
+      expect(await reply.json()).toEqual({ error: { code: "mirror.no_relay", params: {} } });
+    } finally {
+      await server.close();
+    }
   }, 60_000);
 
   it("primary boot of the same identity mounts the mirror-bundle endpoint + operational groups (control: the mirror's absence is real)", async () => {

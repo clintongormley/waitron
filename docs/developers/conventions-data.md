@@ -3434,6 +3434,10 @@ and throwing-undo cases close a listener that has not bound yet — its close re
 `ERR_SERVER_NOT_RUNNING`, which the unwind drops — so only the trading and tunnel cases close a
 bound one.
 
+7 November 2026: A951-S removes the old TCP relay and its failed-start connection case.
+The tunnel deletion controls above describe the historical client. Current listener and
+change-feed cleanup remain covered by `boot.failed-start.test.ts`.
+
 On 2026-10-03, W3 added failed-start cases for a rejecting cloud worker and a throwing change-feed
 unsubscribe. Against the changed suite, removing `.reverse()` timed out in the trading and cloud
 cases, and removing `liveEvents.close()` failed its assertion. Removing `await loop` still passed

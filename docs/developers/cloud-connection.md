@@ -30,7 +30,8 @@ settings from your environment; boot no longer reads them. `WAITRON_TUNNEL_CONTR
 still selects the WireGuard container's control directory.
 
 The staff entrance carries dashboard requests only. It supplies no standby relay to the
-mirror-bundle route, which refuses adoption with `mirror.no_relay`. A staff connection
+mirror-bundle route, which answers `mirror.no_relay`. The adopting server's fetcher reports
+that refusal as `mirror.bundle_fetch_failed` before saving its setup. A staff connection
 does not enable the parked cloud-standby work.
 
 For the A951-S trial, set `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control
