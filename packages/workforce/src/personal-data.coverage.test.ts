@@ -9,6 +9,7 @@ import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema/index.js";
+import { WORKFORCE_OWN_CLASSIFICATION } from "./classification.js";
 
 type Classification =
   { readonly in: readonly string[]; readonly out: readonly string[] } | "working-time record";
@@ -133,8 +134,10 @@ const CLASSIFIED: Record<string, Classification> = {
   },
 };
 
+/** Workforce's own tables; staffing's, which its schema also exports, are classified by staffing's test. */
+const OWN = new Set(WORKFORCE_OWN_CLASSIFICATION.map(({ table }) => table));
 const tables = Object.values(schema as Record<string, unknown>).flatMap((value) =>
-  is(value, SQLiteTable) ? [value] : [],
+  is(value, SQLiteTable) && OWN.has(getTableConfig(value).name) ? [value] : [],
 );
 
 /** Whether a foreign key leads from `table` to `persons`, directly or through other tables. */

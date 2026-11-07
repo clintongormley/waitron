@@ -11,7 +11,7 @@ import {
 } from "@waitron/module";
 import { jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { WORKFORCE_CLASSIFICATION } from "./classification.js";
+import { WORKFORCE_OWN_CLASSIFICATION } from "./classification.js";
 import { WORKFORCE_BACKUP_VERIFICATION as OWNER } from "./index.js";
 import { appendToChain, type TimeEntryAppend } from "./chain.js";
 import { closePayPeriod } from "./pay-period-close.js";
@@ -353,7 +353,7 @@ describe("complete captured workforce backup evidence", () => {
   );
   it("registers explicit obligations for every classified table", () => {
     const owner = validateBackupVerificationContribution(OWNER);
-    expect(owner.data.tables).toEqual(WORKFORCE_CLASSIFICATION.map((c) => c.table));
+    expect(owner.data.tables).toEqual(WORKFORCE_OWN_CLASSIFICATION.map((c) => c.table));
     expect(owner.data.immutableTables).toEqual([
       "time_entries",
       "pay_period_closures",
