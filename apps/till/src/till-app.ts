@@ -5906,6 +5906,17 @@ export class TillApp extends LitElement {
   async #onCounterZoneSelected(event: Event): Promise<void> {
     const { zoneId } = (event as CustomEvent<{ zoneId: string }>).detail;
     if (this.#store.lines.length > 0 || this.#counterOrderInFlight()) {
+      // The zone the counter is already on changes no service area, so it acts as the Counter tab.
+      if (zoneId === this.counterServiceZoneId) {
+        if (this.errorKey === "service_zone.basket_active") this.errorKey = undefined;
+        if (
+          this.activeTabKey !== "counter" ||
+          this.drill !== undefined ||
+          this.counterOrderList !== null
+        )
+          this.#onTabSelect("counter");
+        return;
+      }
       this.errorKey = "service_zone.basket_active";
       this.requestUpdate();
       return;

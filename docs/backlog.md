@@ -100,7 +100,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
 
-- A1218: a counter with two zones cannot get back to its menu.
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1381. A manager's stuck-payment actions cover placed orders and only this box's own payments](backlog/payments.md#bundle-a1381-a-managers-stuck-payment-actions-cover-placed-orders-and-only-this-boxs-own-payments)
@@ -871,10 +870,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   main's (`apps/till/src/i18n/codes.ts`); why it shows was not looked into.
 
 - **The pay window, after A739** (bundle of 4, 2 go-live, 2 important, size M, waits for another entry). Holds A1191, A1266, A1300, A1291. [Detail](backlog/till.md#bundle-the-pay-window-after-a739)
-
-- **A1218. A counter device showing two counter zones cannot get back to its menu after a
-  retrieve.** With one counter zone the plain Counter tab brings the menu back.
-  [Detail](backlog/till.md#a1218-a-counter-device-showing-two-counter-zones-cannot-get-back-to-its-menu-after-a-retrieve)
 
 - **One answer to "where is this order"** (bundle of 3, size S, needs the owner). Holds A1235, A1032, A678. [Detail](backlog/till.md#bundle-one-answer-to-where-is-this-order)
 
