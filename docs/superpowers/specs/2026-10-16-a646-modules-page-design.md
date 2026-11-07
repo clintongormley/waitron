@@ -1,6 +1,6 @@
 # A646: configure optional modules without stopping service
 
-**2026-11-07 planning note:** the dated A646 decisions in [the backlog](../../backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up) supersede the historical pending-approval wording below; [the plan](../plans/2026-11-07-a646-modules-page.md) records a later shared-settings conflict awaiting the watcher.
+**2026-11-07 planning note:** the dated A646 decisions in [the backlog](../../backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up) supersede the historical pending-approval wording below; [the plan](../plans/2026-11-07-a646-modules-page.md) records the watcher's 21:38 answer applying the later shared-settings and Google storage decisions.
 
 
 **DESIGN PROPOSED, 2026-10-16. Awaiting owner agreement.** This is the design author's
