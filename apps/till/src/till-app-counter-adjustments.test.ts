@@ -1003,6 +1003,27 @@ describe("till-app: comping a stored counter order", () => {
     expect(offered(el)).toBe(0);
   });
 
+  it.each([
+    ["en", "The server did not answer. Send again: the kitchen will not get the order twice."],
+    [
+      "es",
+      "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",
+    ],
+  ] as const)("a lost Send reply says to send again, in %s", async (language, sentence) => {
+    const el = await placeCounter({
+      placeOrder: vi.fn().mockRejectedValue(new TypeError("Network reply lost")),
+    });
+    const previous = currentLocale();
+    setLocale(language);
+    try {
+      emit(counter(el), "place-order");
+      await flush(el);
+      expect(banner(el)!.textContent!.trim()).toBe(sentence);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("moves on as placed when an unchanged retry answers the original placement", async () => {
     const placeOrder = vi
       .fn()
@@ -1012,7 +1033,7 @@ describe("till-app: comping a stored counter order", () => {
     emit(counter(el), "place-order");
     await flush(el);
     expect(counter(el).stage).toBe("order");
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
 
     emit(counter(el), "place-order");
     await flush(el);
@@ -1081,7 +1102,7 @@ describe("till-app: comping a stored counter order", () => {
     await flush(el);
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
 
     emit(counter(el), "place-order");
@@ -1105,7 +1126,7 @@ describe("till-app: comping a stored counter order", () => {
     const el = await placeCounter({ placeOrder, updateWorkingOrder });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     const store = counter(el).store;
     store.addProduct(store.lines[1]!.product, "1");
 
@@ -1164,7 +1185,7 @@ describe("till-app: comping a stored counter order", () => {
       await confirm();
       emit(counter(el), "place-order");
       await flush(el);
-      expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+      expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
       await confirm(true);
 
       emit(counter(el), "place-order");
@@ -1200,7 +1221,7 @@ describe("till-app: comping a stored counter order", () => {
     store.addProduct(store.lines[1]!.product, "1");
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
     emit(counter(el), "place-order");
     await flush(el);
@@ -1235,7 +1256,7 @@ describe("till-app: comping a stored counter order", () => {
     });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     emit(counter(el), "choose-receipt-language");
     await flush(el);
     emit(
@@ -1265,7 +1286,7 @@ describe("till-app: comping a stored counter order", () => {
     const el = await placeCounter({ placeOrder });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     const replacement = {
       ...api,
       updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 5 }),
@@ -1331,10 +1352,10 @@ describe("till-app: comping a stored counter order", () => {
             expect(send().disabled).toBe(false);
             await userEvent.click(send());
             await vi.waitFor(() =>
-              expect(banner(el)?.textContent).toContain(t("sale.unconfirmed")),
+              expect(banner(el)?.textContent).toContain(t("place.unconfirmed")),
             );
             await flush(el);
-            expect(el.shadowRoot!.textContent).toContain(t("sale.unconfirmed", language));
+            expect(el.shadowRoot!.textContent).toContain(t("place.unconfirmed", language));
             await page.screenshot({
               path: `__screenshots__/a983-place-replay/lost-${language}-${theme}-${width}.png`,
             });

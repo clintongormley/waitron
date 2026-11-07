@@ -1495,6 +1495,8 @@ export const en = {
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
   "place.error": "Could not send the order, try again",
+  "place.unconfirmed":
+    "The server did not answer. Send again: the kitchen will not get the order twice.",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
@@ -3382,6 +3384,8 @@ export const es: Record<StringKey, string> = {
   "held.changed_elsewhere":
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
+  "place.unconfirmed":
+    "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",
   "place.refused":
     "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja.",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
