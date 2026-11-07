@@ -103,9 +103,13 @@ The box asks everything configured that could know it was replaced:
 
 - **The other box**, if its chart lists one that finished joining. Built (`boot-peer-check.ts`, read;
   rule in `CLAUDE.md` §5). That box says which role this one has.
-- **A Cloud mirror**, if the box has a mirror link: built. `reconcileMembershipOnBoot`
-  (`apps/server/src/boot.ts:1932-1956`, read) fetches the mirror's signed chart, can only stop the box,
-  and carries on if the mirror does not answer. It counts as an answer for the wait below.
+- **Not a Cloud mirror.** The owner: "normally the cloud mirror won't be running. we only start it
+  when we need it to become the primary." The built start-up chart fetch, `reconcileMembershipOnBoot`
+  (`apps/server/src/boot.ts:1932-1956`, read), does not cover that: it runs only on a box holding a
+  mirror link, which `adopt.ts` writes on the MIRROR, naming the box it was adopted from
+  (`packages/node-db/src/mirror-link.ts`, read). It also carries on when the other side does not
+  answer, and refuses a chart signed by a key it does not trust (`packages/membership/src/accept.ts`),
+  as a Cloud copy's would be (A1188 §6). Asking Cloud's own service, below, is what covers it.
 - **The bucket.** A restored box takes a term above its own copy's chart and above the bucket's
   pointer (`apps/server/src/rebuild-first-start.ts:124-137`, read), but not necessarily above the old
   box's own term: a rebuild reuses the dead box's node id. An older box starting with the bucket
@@ -120,6 +124,8 @@ The box asks everything configured that could know it was replaced:
   - The pointer moves only after the new box's first full copy lands
     (`packages/stream/src/supervisor.ts:444-465`), so until then the old box hears nothing.
 - **Cloud**, for a box with a Cloud account: A1188 §6 and answer 15, approved 2026-10-29, not built.
+  The box asks Cloud's service with its own installation credential, so it gets an answer whether or
+  not a copy is running.
 
 What the box does with the answers:
 
@@ -131,6 +137,10 @@ What the box does with the answers:
 
 - **Replaced means stopped, on every row.** Sells nothing, files nothing, and says why. Trusting the
   answer is safe in the sense that it can only stop a box. The cost is in §7, question 1.
+- **Carrying on after "replaced".** An admin may choose to carry on selling on this box, but must first
+  confirm the other box has been shut down **(owner)**: "they need to confirm that the other box has
+  been shut down first". **(default)** The box then claims the bucket at a higher term, as a restore
+  does, so the other box learns that it has been replaced.
 - **(default)** "A minute or so" **(owner)** is 60 seconds. The wait ends as soon as everything
   configured has answered, so a box whose internet is up starts in seconds.
 - **(default)** A box with no bucket and no Cloud account has nobody to ask, so it does not wait.
@@ -145,9 +155,11 @@ An action on the dashboard's box status screen, for someone holding the permissi
 (`node.promote`), signing in afresh over HTTPS.
 
 1. **(default)** The screen says what will happen, and what is needed to restore: the backup and the
-   recovery key. If the venue has two boxes and this is the main one, the action is not offered and
-   the screen points to handover. It is offered only on a box that is the venue's only box:
-   backups and the stream run only on the main box (`apps/server/src/boot.ts`, around 2905, read).
+   recovery key.
+   **Open, the owner's (§7 question 3):** the action is wanted on two-box venues too, "either on the
+   primary or the mirror". Backups and the stream run only on the main box
+   (`apps/server/src/boot.ts`, around 2905, read), and the spare hosts the store the main box streams
+   to (A947 §3), so what steps 2 to 5 mean on each box depends on the answer.
 2. Work stops, and this stop must be one that can be lifted. Handover's stop cannot: `stepDown`
    answers only three requests and stops background work, including backups and the stream, and its
    record is never cleared (`apps/server/src/handover-stepdown.ts:20-27`,
@@ -165,8 +177,9 @@ An action on the dashboard's box status screen, for someone holding the permissi
    (`apps/server/src/backup-verification.ts`, read: exported for Cloud recovery; not yet traced whether
    a box can run it on its own backup, which the builder must establish first). It refuses a check
    that runs past 30 seconds or needs more than 256 MiB of scratch space
-   (`apps/server/src/backup-verification.ts:64, 158`, read); a large venue's backup may need more,
-   and the plan must cover it.
+   (`apps/server/src/backup-verification.ts:64, 158`, read). The owner: "30s may not be enough".
+   **(default)** For this check the time limit is set by progress, not a fixed number: it stops only
+   when the check has made no progress for a while, and the scratch space is sized to the backup.
 6. It writes `shutdown` and says it is safe to unplug. It does not power the machine off.
 
 If step 3, 4 or 5 cannot finish, the screen says what happened and offers: keep waiting, shut down
@@ -208,7 +221,12 @@ already handles (read, not run for this case).
    changed in the last few minutes unless someone confirms the old box is gone
    (`apps/server/src/restore-stream.ts`, read). The builder confirms that is enough, and whether the
    old box can verify the newer pointer's signature, or is taking the bucket's word for it.
-2. **Replaced while selling.** What happens to orders in progress follows A1018 §2 and A1342 (a selling
+2. **(owner, open)** Whether a box already selling stops when the bucket says it was replaced. The
+   owner, on the mistaken-restore example: "the admin should never do this"; which way that settles
+   the question is being confirmed.
+3. **(owner, open)** What "Shut down this box" does on the main box and on the spare of a two-box
+   venue.
+4. **Replaced while selling.** What happens to orders in progress follows A1018 §2 and A1342 (a selling
    box told of a newer main box must stop).
 
 ## 8. Earlier designs and rules this changes
