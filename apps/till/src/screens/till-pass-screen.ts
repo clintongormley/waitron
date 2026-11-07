@@ -509,12 +509,9 @@ export class TillPassScreen extends LitElement {
     if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
   }
 
-  /** A till's board can list a card in a zone its profile refuses, where "doesn't show" is false. */
+  /** The pass offers no other area to choose, so this refusal skips the code's general sentence. */
   #leverSentence(code: string): string {
-    if (code !== "service_zone.not_allowed") return codeMessage(code);
-    return this.#onDevice()
-      ? codeMessage("kitchen_screen.zone_not_allowed")
-      : t("expo.zone_not_allowed");
+    return code === "service_zone.not_allowed" ? t("expo.zone_not_allowed") : codeMessage(code);
   }
 
   #leverRefused(card: PassCard | undefined, error: unknown): void {
