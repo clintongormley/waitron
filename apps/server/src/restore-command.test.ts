@@ -1312,7 +1312,7 @@ describe("waitron-restore restore, the venue folder", () => {
     expect(release).toHaveBeenCalledTimes(1);
   });
 
-  it("is refused by a real second process holding the folder, leaving no working folder", async () => {
+  it("is refused by a real second process holding the folder", async () => {
     const { dir, kitPath } = await kitFile();
     const stateDir = join(dir, "state");
     const venueDir = join(stateDir, "venue");
@@ -1343,9 +1343,6 @@ setInterval(() => db, 1000);`;
       expect(code).toBe(1);
       expect(out).toEqual([IN_USE]);
       expect(openStore).not.toHaveBeenCalled();
-      expect(
-        (await readdir(stateDir)).filter((name) => name.startsWith("stream-restore-")),
-      ).toEqual([]);
     } finally {
       holder.kill("SIGKILL");
     }

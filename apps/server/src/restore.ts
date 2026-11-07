@@ -523,7 +523,7 @@ export async function writeValidated(
  * The lock creates the folder when the restore is the first thing to write there, so it is created
  * here first, for the operator alone, as {@link restoreDatabase} would.
  */
-async function lockRestoreTarget(directory: string): Promise<VenueLock> {
+export async function lockRestoreTarget(directory: string): Promise<VenueLock> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   return lockVenueDatabase(directory);
 }
