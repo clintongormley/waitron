@@ -1034,6 +1034,45 @@ describe("another S3-compatible bucket", () => {
     expect(customField(el, "endpoint").error).toBe("");
   });
 
+  it.each(["https://user:secret@s3.example.test", "ftp://s3.example.test"])(
+    "a save with the address %s marks the address, no request goes, and Save waits until it is fixed",
+    async (endpoint) => {
+      const { el, api } = await openConfigure();
+      await setFolder(el, false);
+      await choose(el, "custom-s3");
+      await fillCustom(el, "SECRET-1");
+      await typeCustom(el, "endpoint", endpoint);
+      expect(customField(el, "endpoint").error).toBe("");
+      q(el, "[data-test=apply]")!.click();
+      await el.updateComplete;
+      await settle();
+      expect(api.applyBackup).not.toHaveBeenCalled();
+      expect(customField(el, "endpoint").error).toBe(t("stream.form.endpoint_invalid"));
+      expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+      expect(await buttonState(el, "apply")).toEqual(["primary", true]);
+      await typeCustom(el, "endpoint", "https://s3.example.test");
+      expect(customField(el, "endpoint").error).toBe("");
+      expect(await buttonState(el, "apply")).toEqual(["primary", false]);
+    },
+  );
+
+  it.each(["https://s3.example.test:9000/path", "HTTPS://S3.EXAMPLE.TEST"])(
+    "the address %s is accepted and sent",
+    async (endpoint) => {
+      const { el, api } = await openConfigure();
+      await setFolder(el, false);
+      await choose(el, "custom-s3");
+      await fillCustom(el, "SECRET-1");
+      await typeCustom(el, "endpoint", endpoint);
+      q(el, "[data-test=apply]")!.click();
+      await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+      expect(vi.mocked(api.applyBackup).mock.calls[0]![0].destinations[0]).toMatchObject({
+        endpoint,
+      });
+      expect(customField(el, "endpoint").error).toBe("");
+    },
+  );
+
   it("sends only this kind's fields, as strings, with the endpoint and folder trimmed of spaces", async () => {
     const { el, api } = await openConfigure();
     await setFolder(el, false);

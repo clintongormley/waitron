@@ -40,6 +40,7 @@ import {
   destinationsBody,
   hasUnusableFolder,
   heldBucket,
+  isPlainWebAddress,
   keepsHeldSecret,
   openingDestinations,
   sameStreamBucket,
@@ -656,6 +657,11 @@ export class BackupScreen extends LitElement {
     );
   }
 
+  get #endpointInvalid(): boolean {
+    const endpoint = this.custom.endpoint.trim();
+    return this.bucket === "custom-s3" && endpoint !== "" && !isPlainWebAddress(endpoint);
+  }
+
   get #streamGone(): boolean {
     return this.bucket === "stream-bucket" && (this.stream?.bucket ?? null) === null;
   }
@@ -664,17 +670,18 @@ export class BackupScreen extends LitElement {
     return !this.folderOn && this.bucket === "none";
   }
 
-  get #destinationMissing(): boolean {
+  get #destinationInvalid(): boolean {
     return (
       this.#nothingChosen ||
       this.#folderMissing ||
       this.#streamGone ||
+      this.#endpointInvalid ||
       CUSTOM_FIELDS.some((f) => this.#customMissing(f))
     );
   }
 
   get #destinationHeld(): boolean {
-    return this.attempted && this.#destinationMissing;
+    return this.attempted && this.#destinationInvalid;
   }
 
   get #applyDisabled(): boolean {
@@ -709,7 +716,7 @@ export class BackupScreen extends LitElement {
     this.folderRefused = false;
     this.customRefused = null;
     this.formRefusal = null;
-    if (!this.#retentionInvalid && !this.#destinationMissing) return true;
+    if (!this.#retentionInvalid && !this.#destinationInvalid) return true;
     this.#focusFirstInvalidBox();
     return false;
   }
@@ -1606,6 +1613,8 @@ export class BackupScreen extends LitElement {
 
   #customMessage(f: CustomFieldRow): string {
     if (this.customRefused === f.field) return this.#refusalMessage(f.field);
+    if (this.attempted && f.field === "endpoint" && this.#endpointInvalid)
+      return t("stream.form.endpoint_invalid");
     if (!this.attempted || !this.#customMissing(f)) return "";
     if (f.field === "secretAccessKey")
       return heldBucket(this.status) === null || this.secretDemanded
