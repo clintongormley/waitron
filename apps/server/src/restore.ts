@@ -791,6 +791,10 @@ async function removeIncoming(fs: PlacementFs, incoming: string, log: Logger): P
  * main file is one whose placement put the new file in. With no `venue.db`, a folder holding
  * anything may be the only copy of the venue's database, so it is kept and the start refused with
  * `restore.database_set_aside`; an empty one is removed.
+ *
+ * Only the box's entry (`node-entry.ts`) calls it, before the server opens `venue.db`; a server
+ * started from `bin.ts` (the dev stack) does not. Boot cannot call it instead: boot's first open
+ * creates `venue.db`, which would hide the missing-database case above.
  */
 export async function clearReplacedDatabases(
   venueDir: string,
