@@ -414,53 +414,16 @@ finishing, the connection closing, or a connection already over. For the Retry t
 run; pressing Retry again would ask for the restart again. Wanted: the Retry uses the same
 once-only restart, with a test that closes the connection before the answer is written.
 
-## A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series name
-
-Left open by A1042; the behaviour predates it. Taking an invoice series name needs a second clock,
-a time reading from somewhere other than the box, and a reading more than 30 seconds older than the
-box's own counts as stale (`packages/fiscal-verifactu/src/hour-clock.ts:81`). A1042's U4a review
-held a Waitron Cloud recovery's commit step before its download in the test host
-`apps/server/test/hour-recovery-host.ts`, whose internet clock answers "offline" (`:140-144`), so
-the only second clock was the browser's reading. Held 29 seconds, the commit finished; held 31
-seconds, it was refused `sif.allocation_invalid` with reason `second_clock_missing`. The same run on
-main at 21d01dfac gave the same result. A Cloud download may run for up to 14 minutes
-(`apps/server/src/cloud-recovery.ts:121`). Not measured: whether a real box takes a fresh internet
-reading when it places the recovery. (2026-11-04, A1131bc slice 4: that measurement held the old
-recovery from backup's commit step, which is deleted with the rest of that recovery; the fresh-box
-Cloud restore that Recover from backup now uses has not been measured the same way.) Next step: hold
-the fresh-box Cloud restore's download past 30 seconds in `apps/server/test/hour-recovery-host.ts`
-and see whether the series name is refused; then measure a real box.
-
 ## A1223. A stored series pick that turns out taken
 
 From A1207. An attempt whose chosen name is found taken before it finishes is refused
-(`minute_in_use`), and the person is not offered a way on. Start a new attempt by itself, and word
-the refusal where it shows at activation (the setup app's general message with the code,
-`apps/setup/src/setup-app.ts:2001-2008`).
-
-## A1224. Delete the time floors the series choice no longer reads
-
-From A1207. `recordedTimeFloorMs`, the backup's `backup-created` floor and
-`readHourHistoryWithRecordFloor` are still worked out but nothing in the choice reads them. A
-backup's record keeps accepting `timeFloorMs` (`packages/fiscal-verifactu/src/hour-backup-state.ts:20-21`)
-until a check of shipped backups says it may stop.
-
-## A1226. Compare clocks on the restore page can choose a series name by itself
-
-From the A1207 finish-branch review. When the page's preview is refused because there is no second
-clock, the page starts its 15-second second-clock check, and once a second clock answers, that check
-sends a real `select` although Make the series was never pressed. This happens at A1207's base
-(`61625b0ab`) too; the code is from #1990 (`3ba85c7a6`). Make the page's own re-checks after a
-preview read-only, as A1207 did for a taken minute (`#compare` in
-`packages/fiscal-verifactu/src/setup/recovery-hour.ts`).
-
-A related path (A1207's figure review, probe R1): when Compare clocks shows a wait the box has
-already recorded, the end of that countdown sends a real `select` although Make the series was not
-pressed on this page load (at A1207's base too, one `select`; since A1207, a lost one is
-repeated about every 15 seconds). The box records such a wait only after an earlier `select`, so
-this may be intended; decide it with the rest of this entry. The setup page has the same shape
-after a reload during the box's wait (read, not run: `#select(true)` in `first-hour.ts` skips
-`#canSelect`).
+(`minute_in_use`). Left: start a new attempt by itself (Q1 in the A1385 PR; the default there is not
+to). The refusal is already worded where it shows (A1385): both hour pages and the setup app at
+first setup's activation call it a fault in Waitron, and the restore page adds that reloading the
+page and starting the restore again makes a new restore with a new name
+(`packages/fiscal-verifactu/src/setup/clock-wait.ts`, `clockWaitStrings` `inUse`;
+`packages/fiscal-verifactu/src/setup/recovery-hour.ts`, its `inUse`; `apps/setup/src/setup-app.ts`,
+`firstSetupErrorKey`).
 
 ## A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).
 
@@ -555,23 +518,11 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle A1385: The A1207 leftovers in choosing a series name
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. The other three were built by the A1385 PR.
 
-- **A1223. A stored series pick that turns out taken** (from A1207): an attempt whose chosen name
-  is found taken before it finishes is refused (`minute_in_use`), and the person is not offered a
-  way on. Start a new attempt by itself, and word the refusal where it shows at activation.
+- **A1223. A stored series pick that turns out taken** (from A1207): start a new attempt by itself
+  (Q1 in the A1385 PR); the refusal is already worded where it shows (A1385).
   [Detail](setup.md#a1223-a-stored-series-pick-that-turns-out-taken)
-- **A1224. Delete the time floors the series choice no longer reads** (from A1207): they are still
-  worked out but nothing in the choice reads them.
-  [Detail](setup.md#a1224-delete-the-time-floors-the-series-choice-no-longer-reads)
-- **A1226. Compare clocks on the restore page can choose a series name by itself** (from the A1207
-  finish-branch review): once a second clock answers, the page's 15-second second-clock check sends
-  a real `select` although Make the series was never pressed. Make those re-checks read-only.
-  [Detail](setup.md#a1226-compare-clocks-on-the-restore-page-can-choose-a-series-name-by-itself)
-- **A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series
-  name.** Measured only on the old recovery from backup, now deleted; the fresh-box Cloud restore
-  has not been measured the same way. Left open by A1042.
-  [Detail](setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
 ## Bundle: The key ring after a join
 
@@ -641,6 +592,15 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   setup page first can set up either; the owner accepted this when dropping the setup code
   (2026-10-26, B3 design §12.5). A production box offers neither (§12.1; A1384).
 
+- **Older backups' hour records keep being accepted with `timeFloorMs`** (A1385): the field is
+  validated as a whole millisecond and never used. The acceptance may be removed once a check of
+  shipped backups, and of each box's retained
+  `<state>/module-evidence/fiscal-verifactu/hour-history.json` (read by
+  `apps/server/src/recovery-document-evidence.ts:26-31`), finds none carrying it.
+- **A page's own re-check never makes a series** (A1385, 2026-11-06): only a press of Make the
+  series on this page load, not cancelled since (Compare clocks, Check again, an edit or Clear cancel
+  it), lets the page check with the box by itself; a wait the page shows without a press ends with no
+  request.
 - **A reload between the deletion and Reconnect forgets which button was pressed (A1131bc slice 3,
   plan OQ2's default).** The page keeps the choice in memory only, so after a reload it opens its
   first screen, and the person chooses **Join or recover** there to restore.

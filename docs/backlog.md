@@ -100,7 +100,7 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
 
-- [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
+- [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name): only A1223's new attempt by itself is left, and it waits for the owner's answer to Q1 in the A1385 PR.
 - [A1398. Pack the other packages' test shards by measured time](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 
@@ -388,7 +388,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   dated after the real time (a restored backup from a box whose clock was fast). Nothing in Waitron
   corrects them, and what to do about them with AEAT is undesigned. Design first.
 
-- **A1385. The A1207 leftovers in choosing a series name** (bundle of 4, 3 important, size S). Holds A1223, A1224, A1226. [Detail](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
+- **A1385. The A1207 leftovers in choosing a series name** (bundle of 1, 1 important, size S). Holds A1223: start a new attempt by itself, waiting for the owner's answer to Q1 in the A1385 PR. [Detail](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
