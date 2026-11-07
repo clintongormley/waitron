@@ -49,11 +49,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
         const actor = await authorize(tx, c);
         const canEdit = editable && roleHasPermission(actor.role, "person.admin");
         if (!editable) return c.json({ mode: "local_capture", editable: false, settings: null });
-        const delivery = await resolveEmailDeliveryIn(
-          tx,
-          deps.ring,
-          deps.config.onboardingIntent === "prepare",
-        );
+        const delivery = await resolveEmailDeliveryIn(tx, deps.ring, false);
         const mode = deps.config.devMode ? "local_capture" : delivery.mode;
         if (delivery.mode !== "smtp") return c.json({ mode, editable: canEdit, settings: null });
         let url: URL;

@@ -263,10 +263,10 @@ describe("SMTP settings", () => {
       });
     },
   );
-  it("a preparing venue without credentials reports captured mail", async () => {
+  it("a preparing venue without credentials reports unconfigured mail", async () => {
     const venue = await setupVenue();
     expect(await (await request(mount("prepare"), venue.admin)).json()).toEqual({
-      mode: "local_capture",
+      mode: "unconfigured",
       editable: true,
       settings: null,
     });
@@ -717,7 +717,7 @@ it("lets a Prepare admin save, read and remove a sealed relay while managers onl
     expect(await removed.json()).toEqual({ removed: true });
     expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
     expect(await (await request(app, venue.admin)).json()).toEqual({
-      mode: "local_capture",
+      mode: "unconfigured",
       editable: true,
       settings: null,
     });
