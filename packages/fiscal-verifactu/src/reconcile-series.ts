@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { readTenant, type Transaction } from "@waitron/db";
 import type { Cabecera, RegistroConsultado } from "@waitron/verifactu";
-import type { ReconcileScope } from "./reconcile.js";
+import { inHistory, type ReconcileScope } from "./reconcile.js";
 import type { LookupConflictEvidence } from "./conflict-types.js";
 import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
 
@@ -42,7 +42,7 @@ export async function retainUnheldSeriesConflicts(
   const local = await tx.execute<{ number: string; date: string }>(sql`
     select r.num_serie_factura as number, r.fecha_expedicion_factura as date
     from registros_facturacion r
-    where r.node_id = ${scope.nodeId} and r.id_emisor_factura = ${scope.taxpayerId}
+    where ${inHistory(sql`r.node_id`, scope)} and r.id_emisor_factura = ${scope.taxpayerId}
       and r.entorno = ${scope.environment}
       and substr(r.fecha_expedicion_factura, 1, 7) = ${`${period.year}-${period.month}`}
   `);

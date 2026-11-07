@@ -68,7 +68,12 @@ function run(f: Fixture, client = f.client, period = PERIOD) {
       db: suite.db,
       clock: f.seeded.clock,
       resolveClient: staticResolver(client),
-      scope: { nodeId: f.seeded.nodeId, taxpayerId: f.seeded.nif, environment: "production" },
+      scope: {
+        nodeId: f.seeded.nodeId,
+        historyNodeIds: [f.seeded.nodeId],
+        taxpayerId: f.seeded.nif,
+        environment: "production",
+      },
     },
     period,
   );
@@ -345,7 +350,12 @@ it("observes a freshly allocated identity before its first local invoice", async
         },
         currentAnchor: () => null,
       },
-      scope: { nodeId: node.nodeId, taxpayerId: "89890001K", environment: "preproduction" },
+      scope: {
+        nodeId: node.nodeId,
+        historyNodeIds: [node.nodeId],
+        taxpayerId: "89890001K",
+        environment: "preproduction",
+      },
       retryMs: 300_000,
       includeCurrentPeriod: true,
       resolveClient: staticResolver(client),

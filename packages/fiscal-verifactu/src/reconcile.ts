@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import type { Database, DeploymentEnvironment, Transaction } from "@waitron/db";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
@@ -36,8 +36,17 @@ export interface ReconcileDeps {
 
 export interface ReconcileScope {
   readonly nodeId: string;
+  /** This box first, then the boxes it took over from: whose stored records the check covers. */
+  readonly historyNodeIds: readonly string[];
   readonly taxpayerId: string;
   readonly environment: DeploymentEnvironment;
+}
+
+export function inHistory(column: SQL, scope: ReconcileScope): SQL {
+  return sql`${column} in (${sql.join(
+    scope.historyNodeIds.map((id) => sql`${id}`),
+    sql`, `,
+  )})`;
 }
 
 /**
@@ -54,6 +63,8 @@ type PeriodRow = {
   /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
   anulacion_id: string | null;
   known_huellas: string;
+  /** Every installation that wrote a record of this invoice, on any box `known_huellas` reads. */
+  known_installations: string;
   huella: string;
   tipo_registro: string;
   sistema_informatico: string;
@@ -281,10 +292,20 @@ async function rowsForPeriod(
     scope === undefined
       ? sql``
       : sql`
-    and r.node_id = ${scope.nodeId}
+    and ${inHistory(sql`r.node_id`, scope)}
     and r.id_emisor_factura = ${scope.taxpayerId}
     and r.entorno = ${scope.environment}
   `;
+  // A box that took over may cancel an invoice another box in its history issued, so the same
+  // invoice's records sit on two boxes under two installations.
+  const knownNode =
+    scope === undefined ? sql`known.node_id = r.node_id` : inHistory(sql`known.node_id`, scope);
+  const sameInvoice = sql`
+        known.sale_id = r.sale_id and ${knownNode}
+          and known.id_emisor_factura = r.id_emisor_factura
+          and known.entorno is r.entorno
+          and known.num_serie_factura = r.num_serie_factura
+          and known.fecha_expedicion_factura = r.fecha_expedicion_factura`;
   const { rows } = await tx.execute<PeriodRow>(sql`
     select
       r.id, r.sale_id,
@@ -296,12 +317,15 @@ async function rowsForPeriod(
       (
         select json_group_array(known.huella order by known.secuencia)
         from registros_facturacion known
-        where known.sale_id = r.sale_id and known.node_id = r.node_id
-          and known.id_emisor_factura = r.id_emisor_factura
-          and known.entorno is r.entorno
-          and known.num_serie_factura = r.num_serie_factura
-          and known.fecha_expedicion_factura = r.fecha_expedicion_factura
+        where ${sameInvoice}
       ) as known_huellas,
+      (
+        select json_group_array(
+          json_extract(known.sistema_informatico, '$.NumeroInstalacion') order by known.secuencia
+        )
+        from registros_facturacion known
+        where ${sameInvoice}
+      ) as known_installations,
       r.huella, r.tipo_registro, r.sistema_informatico,
       e.estado, e.intentos, e.csv, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
@@ -429,6 +453,7 @@ async function fetchAuthority(
         const system = lookupSystem(data.SistemaInformatico);
         const local = JSON.parse(row.sistema_informatico) as Record<string, unknown>;
         const fingerprints = JSON.parse(row.known_huellas) as string[];
+        const installations = JSON.parse(row.known_installations) as unknown[];
         const externalCancellation =
           record.EstadoRegistro === "Anulado" &&
           row.tipo_registro === "alta" &&
@@ -444,7 +469,7 @@ async function fetchAuthority(
                   (system.softwareId !== null &&
                     system.softwareId !== local.IdSistemaInformatico) ||
                   (system.installation !== null &&
-                    system.installation !== local.NumeroInstalacion)))));
+                    !installations.includes(system.installation))))));
         if (different) {
           conflicts.set(row.id, {
             source: "consulta",

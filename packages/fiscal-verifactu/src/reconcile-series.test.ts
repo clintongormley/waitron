@@ -30,7 +30,12 @@ it("reads local invoice identities once while checking a complete returned month
     try {
       await retainUnheldSeriesConflicts(
         tx,
-        { nodeId: seeded.nodeId, taxpayerId: seeded.nif, environment: "production" },
+        {
+          nodeId: seeded.nodeId,
+          historyNodeIds: [seeded.nodeId],
+          taxpayerId: seeded.nif,
+          environment: "production",
+        },
         observations,
         new Set(),
         new Date("2026-07-21T00:01:00Z"),

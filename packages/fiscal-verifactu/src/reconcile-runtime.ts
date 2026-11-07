@@ -1,4 +1,5 @@
-import { readTenant, withTransaction } from "@waitron/db";
+import { readHistoryNodes, readTenant, withTransaction } from "@waitron/db";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalContribution } from "@waitron/fiscal";
 import {
   aeatClientResolver,
@@ -30,10 +31,11 @@ export const createRuntimeReconciliation: NonNullable<
       if (tenant === null) throw new Error("reconciliation requires the venue taxpayer");
       if (sweep === undefined || taxpayerId !== tenant.taxId) {
         taxpayerId = tenant.taxId;
+        const historyNodeIds = await readHistoryNodes(deps.db, brandNodeId(deps.nodeId));
         sweep = createReconciliationSweep({
           db: deps.db,
           clock: deps.clock,
-          scope: { nodeId: deps.nodeId, taxpayerId, environment: deps.environment },
+          scope: { nodeId: deps.nodeId, historyNodeIds, taxpayerId, environment: deps.environment },
           retryMs: deps.skipRetryMs,
           includeCurrentPeriod: true,
           now: () => deps.clock.now().instant,

@@ -4,7 +4,9 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
-import { newId, nowIso, withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { newId, nowIso, withTransaction, writeNodeMembership } from "@waitron/db";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -12,7 +14,14 @@ import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
 import { listFilingCases } from "./filing-cases.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { toAeatDate } from "./registro-row.js";
-import { consultaNames, seedPendingEnvios } from "../test/drain-fixtures.js";
+import {
+  appendCancellationOnChain,
+  consultaNames,
+  seedPendingEnvios,
+  seedSecondChain,
+} from "../test/drain-fixtures.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -815,6 +824,132 @@ describe("reconcile — period normalization", () => {
     expect(result.drift).toEqual([]);
     expect(result.year).toBe("2026");
     expect(result.month).toBe("07");
+  });
+});
+
+describe("reconcile — an invoice the old box issued and the box that took over cancelled", () => {
+  /**
+   * The old box issued the invoice and the box that took over cancelled it on its own chain, so
+   * AEAT holds one invoice whose two records carry different installations. The chart names the
+   * selling box `serving-primary`, so its own issuance check is live in these cases.
+   */
+  async function crossBox() {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const old = await seedPendingEnvios(suite.db, { count: 1 });
+    const head = await seedSecondChain(suite.db, old, 5);
+    await drain(drainDeps(staticResolver(aeat.client())), DRAIN_AT);
+    const [original] = old.registroIds;
+    const cancellation = await appendCancellationOnChain(suite.db, original!, head.registroId, 6);
+    await drain(drainDeps(staticResolver(aeat.client())), new Date("2026-07-21T00:02:00Z"));
+    expect([...(await estadosFor()).values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
+    const records = await suite.db.select().from(registrosFacturacion);
+    const issued = records.find((row) => row.id === original)!;
+    const selling = brandNodeId(records.find((row) => row.id === cancellation)!.nodeId);
+    await recordTakeover(suite.db, old.nodeId, selling);
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 2,
+        nodes: [
+          { nodeId: selling, contactUrl: "https://selling", standing: "serving-primary" },
+          { nodeId: old.nodeId, contactUrl: "https://old", standing: "sell-only" },
+        ],
+      },
+      signerNodeId: selling,
+      signature: "sig-2",
+      endorsements: [],
+    });
+    const deps = (client: VerifactuClient): ReconcileDeps => ({
+      db: suite.db,
+      resolveClient: staticResolver(client),
+      clock: old.clock,
+      scope: {
+        nodeId: selling,
+        taxpayerId: old.nif,
+        environment: "production",
+        historyNodeIds: [selling, old.nodeId],
+      },
+    });
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(aeat.client()),
+    });
+    return { aeat, issued, cancellation, selling, deps, backend };
+  }
+
+  it("raises no conflict when AEAT reports the cancelling box's installation", async () => {
+    const { aeat, issued, cancellation, selling, deps, backend } = await crossBox();
+    const reported = await aeat.client().consultar(
+      { ObligadoEmision: { NombreRazon: "Waitron SL", NIF: issued.idEmisorFactura } },
+      {
+        Ejercicio: "2026",
+        Periodo: "07",
+        DatosAdicionalesRespuesta: { MostrarSistemaInformatico: "S" },
+      },
+    );
+    const record = reported.registros.find(
+      (r) => r.IDFactura.NumSerieFactura === issued.numSerieFactura,
+    )!;
+    const [cancelled] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, cancellation));
+    // The control that this case is the one it names: AEAT reports the cancellation's own record.
+    expect(record.EstadoRegistro).toBe("Anulado");
+    expect(record.DatosRegistroFacturacion.Huella).toBe(cancelled!.huella);
+    expect(
+      (record.DatosRegistroFacturacion.SistemaInformatico as { NumeroInstalacion: string })
+        .NumeroInstalacion,
+    ).toBe((cancelled!.sistemaInformatico as { NumeroInstalacion: string }).NumeroInstalacion);
+
+    const result = await reconcile(deps(aeat.client()), PERIOD);
+
+    expect(result.checked).toBe(3);
+    expect(result.conflicts).toBeUndefined();
+    expect(result.deferred).toBeUndefined();
+    await expect(
+      withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
+    ).resolves.toBeUndefined();
+  });
+
+  it("raises no conflict when AEAT reports the issuing box's installation", async () => {
+    const { aeat, issued, selling, deps, backend } = await crossBox();
+    const client = aeat.client();
+    const issuing = issued.sistemaInformatico as { NumeroInstalacion: string };
+    const reportsTheIssuingRecord: VerifactuClient = {
+      submit: (...args) => client.submit(...args),
+      consultar: async (...args) => {
+        const response = await client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((r) =>
+            r.IDFactura.NumSerieFactura !== issued.numSerieFactura
+              ? r
+              : {
+                  ...r,
+                  DatosRegistroFacturacion: {
+                    ...r.DatosRegistroFacturacion,
+                    Huella: issued.huella,
+                    SistemaInformatico: {
+                      ...(r.DatosRegistroFacturacion.SistemaInformatico as object),
+                      NumeroInstalacion: issuing.NumeroInstalacion,
+                    },
+                  },
+                },
+          ),
+        };
+      },
+    };
+
+    const result = await reconcile(deps(reportsTheIssuingRecord), PERIOD);
+
+    expect(result.checked).toBe(3);
+    expect(result.conflicts).toBeUndefined();
+    expect(result.deferred).toBeUndefined();
+    await expect(
+      withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
+    ).resolves.toBeUndefined();
   });
 });
 

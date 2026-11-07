@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import type { ReconcileResult } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
@@ -52,7 +52,7 @@ export function createReconciliationSweep(
         .innerJoin(envios, eq(envios.registroId, registrosFacturacion.id))
         .where(
           and(
-            eq(registrosFacturacion.nodeId, deps.scope.nodeId),
+            inArray(registrosFacturacion.nodeId, [...deps.scope.historyNodeIds]),
             eq(registrosFacturacion.idEmisorFactura, deps.scope.taxpayerId),
             eq(registrosFacturacion.entorno, deps.scope.environment),
           ),
