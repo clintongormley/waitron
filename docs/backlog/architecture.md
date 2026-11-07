@@ -665,21 +665,6 @@ Keep the current `CLAUDE.md` rule, planning files and ignore settings until go-l
 The separate [A760 procedure](../operations/a760-migration-squash.md) retains its own freeze,
 reset and operator gates; this entry does not start that job.
 
-## A760. Squash every migration set before go-live
-
-The [operator procedure](../operations/a760-migration-squash.md)
-  and [inventory](../operations/a760-migration-squash-inventory.md) are approved
-  (owner, 2026-10-16), including fiscal SQL/meta and the named history-harness changes.
-  The watcher starts the sole job after big work and migration branches drain, with the full
-  Waitron/Cloud mutation freeze and named reset/operator roster recorded. Reset the laptop
-  dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
-  off/quarantined, image pinned, until A1308 ends, when it is reset once.
-  The [eight-set plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) replaces the
-  procedure where they differ, in three pull requests, only the last under the freeze. A790 Cut A,
-  A802, A799 and A739 do not hold it up: they land afterwards with regenerated migrations (owner,
-  2026-11-04). The owner approved setup-only edits to six named fiscal test files (2026-11-04).
-  Pull requests 1 and 2 landed on 2026-11-06 (#2512, #2516); pull request 3 remains.
-
 ## Loose ends left by A435's printer, reader and device delete (steps 2 to 4)
 
 - The till's status for an original whose printer was deleted uses the error code's sentence
@@ -1204,7 +1189,8 @@ product failures.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
-15 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+16 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+except the last, added on 2026-11-07.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
 
@@ -1251,6 +1237,11 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 - **Passkey name column after A760:** A403 keeps the column under the schema hold; new registrations
   use the detected password manager. Decide whether to remove it after the hold.
   [Detail](dashboard.md#passkey-name-column-after-a760)
+- **Person-id columns and `order_draft_items.menu_item_id` have no foreign key.** About 30 columns
+  holding a person's id, and that one, say at the column that no key was added because A760 changed
+  no table's shape; their old reason (`persons` sat in another migration set) ended when A760 moved
+  it into core. Declare the keys when A1308 rewrites the starting migrations (CLAUDE.md §3: declare
+  every foreign key).
 
 ## What A1308 retires
 
