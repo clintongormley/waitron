@@ -13,26 +13,31 @@ wait for A760's landing freeze; no database table changes or landing are allowed
    cases. Replace its prose action map with data for action cases elsewhere in this file or other suites (naming the
    case) and actionless routes (giving the reason). Record device proof separately from actions:
    matching request proof, device-cookie authority, session device only, public/bootstrap, or
-   undecided. “No action” exceptions do not decide request-device proof. Keep all existing
+   undecided until the approved repair is qualified. “No action” exceptions do not decide request-device proof. Keep all existing
    behavioral assertions and the independent zone map. Each classified row carries its proof field;
    rows sharing a route key must agree on it.
-2. Mount real till/device/staff schedule APIs in a separate inventory app, including workforce, attendance,
+2. Mount real till/device/staff schedule APIs in a separate inventory app, including workforce, attendance and live department events,
    simulator, development and box-clock routes (backend must offer `confirmClockStop`). Compare
    the set of registered `/api/` method/path keys with the classified set, normalising UUID and
    line-number samples and parameter names. Fail on missing/stale rows; exclude middleware and
    management routes. Start with the failing inventory comparison, then add classifications.
    This guards completeness, not execution of every stated check. Existing action cases test
    their action refusals; proof entries are source readings unless backed by a named test. Prove missing/new-route failures once in an installed disposable clone.
-3. The one watcher question was recorded at 06:08 on 2026-11-07, using A941's retained HTTP receipts and
-   the current source trace. The list includes receipt-handover, cleared, zone-extension,
-   device active-profile/zones/equipment, box-clock, schedule, station-day, locale and simulator
-   writes. Do not change their admission policy before the recorded answer. Any approved repair
-   gets a reviewed amendment, a failing real-route test, minimal boundary changes and passing
-   legitimate callers, including the development header. No global `requireSession` change or
-   new action. Until resolved, keep the relevant backlog work open and mark table rows undecided.
+3. Watcher 2026-11-07 06:11 approved matching device proof for all fourteen questioned writes,
+   retaining reads/bootstrap/logout and existing action/permission/zone exceptions. Add real
+   route regressions in `till-api.request-device.test.ts`: absent, invalid and foreign cookie
+   must refuse `device.unauthorized` before body/business checks; matching and development-header
+   calls must reach their legitimate existing outcomes. Observe every new refusal case fail first.
+   Add `assertRequestDevice` immediately after session resolution only on those handlers in
+   `till-api.ts`, `device-api.ts`, `keep-open-api.ts`, `station-today-api.ts`,
+   `till-box-clock-api.ts` and `schedule-api.ts`. Pass schedule `devMode` from `boot.ts`, and retain
+   each surface's error status convention (schedule gains 401). Update session-only fixtures
+   with matching cookies without dropping assertions. Do not change `requireSession` globally.
+   Test first, then make `device.unauthorized` EN/ES wording in the till's `i18n/codes.ts` explain
+   verification failed and say to reload this page to check this device's setup before retrying.
+   Run existing permission/zone/admission/schedule/clock suites as the successful-call controls.
 4. Run focused inventory/action/zone and affected route suites, scoped types, and one-time
    controls. Update `docs/developers/conventions-ui.md` with the guard's actual limits in both route-map passages; the watcher
    maintains the root `CLAUDE.md` pointer. The guard sees only the APIs it mounts, not theme/node
-   routes or a newly introduced API. Sign off commits. Finish the inventory branch with undecided
-   rows and the admission backlog left open; run finish-branch with one Claude run-it review, normal hook and current-head CI;
+   routes or a newly introduced API. Sign off commits. Once the approved checks pass, remove completed A1393 backlog work, retaining printer identity; run finish-branch with one Claude run-it review, normal hook and current-head CI;
    retain the branch under A760's freeze.
