@@ -91,12 +91,12 @@ export async function beginSettledTenderRefund(
       if (begun.replayed) {
         if (begun.refund.state === "pending") {
           await deps.backend.refuseWhileClockBehind(tx, reading);
-          await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+          await deps.backend.refuseNewRefund(tx, cfg.nodeId);
         }
         return toTenderRefundView(begun.refund);
       }
       await deps.backend.refuseWhileClockBehind(tx, reading);
-      await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+      await deps.backend.refuseNewRefund(tx, cfg.nodeId);
       let refund = begun.refund;
       if (refund.method === "card") {
         const capture = (await captureFor(tx, refund))!;

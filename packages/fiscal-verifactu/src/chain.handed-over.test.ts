@@ -141,6 +141,14 @@ describe("refuseNewIssuance after a handover", () => {
     expect((error as AppError).code).toBe("fiscal.chain_handed_over");
   });
 
+  it("lets a box the chart does not name primary refund", async () => {
+    await writeNodeMembership(suite.db, chart(2, m2.nodeId, m1.nodeId));
+
+    await expect(
+      withTransaction(suite.db, (tx) => backend().refuseNewRefund(tx, m1.nodeId)),
+    ).resolves.toBeUndefined();
+  });
+
   it("lets the box the chart names primary issue", async () => {
     await writeNodeMembership(suite.db, chart(2, m2.nodeId, m1.nodeId, "primary second"));
 

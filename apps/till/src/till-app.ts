@@ -993,7 +993,6 @@ const ACTIONABLE_REFUSALS = new Set([
   "device.unauthorized",
   "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
-  "fiscal.chain_handed_over",
   "bill.unsent_dishes",
   "service_zone.closed",
   "device.forbidden_action",

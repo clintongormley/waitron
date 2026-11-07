@@ -392,7 +392,13 @@ export interface FiscalBackend {
    * regime's record, or `null` when it sets no cap. */
   readonly recipientNameMaxLength: number | null;
 
+  /** Throws an `IssuanceRefusedError` when `nodeId` may not issue a new fiscal record: a sale, a
+   * payment that leads to one, a void or a correction. Called before money moves. */
   refuseNewIssuance(tx: Transaction, nodeId: NodeId): Promise<void>;
+
+  /** Throws an `IssuanceRefusedError` when `nodeId` may not give money back. A refund issues no
+   * fiscal record, so this refuses less than `refuseNewIssuance`. */
+  refuseNewRefund(tx: Transaction, nodeId: NodeId): Promise<void>;
 
   /**
    * Throws this regime's refusal when a record stamped with `reading` could never be accepted, so a

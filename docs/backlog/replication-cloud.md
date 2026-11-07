@@ -507,16 +507,17 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 - `scripts/handover-manifest-complete.test.ts` has no reverse check: a manifest row naming a table
   or file that no longer exists still passes.
 
-## A selling box that takes a newer chart naming another main box keeps selling and filing
+## A box the chart no longer names main keeps filing its earlier records
 
 A1342. The owner chose on 2026-11-05: settle it before A947 3b lands, and a box that sees another
 main box stops selling. Left open by A1018 Slice 5 (Ruling R42). `apps/server/src/node-membership-api.ts` and
 `apps/server/src/boot-peer-check.ts` stop a box only when the chart fences it (`isFencedStanding`),
 and a third box's promotion leaves a box `serving-secondary`, which does not fence. Since A1425 the
 Veri\*Factu backend's `refuseNewIssuance` and `appendToChain` refuse a box the held chart does not
-name `serving-primary` (`fiscal.chain_handed_over`), so such a box takes no new money and writes no
-new record; the filing loop (`packages/fiscal-verifactu/src/drain.ts`) does not read the chart, so it
-still sends the records it wrote before. Run through real
+name `serving-primary` (`fiscal.chain_handed_over`), so such a box writes no new record and refuses
+sales and bill payments before money moves; refunds call `refuseNewRefund`, which does not read the
+chart, so they still go through. The filing loop (`packages/fiscal-verifactu/src/drain.ts`) does not
+read the chart, so it still sends the records it wrote before. Run through real
 starts on the Slice 5 branch; on main since #2436. It needs a third box promoted over a running main
 box, so no real venue reaches it before 3b.
 

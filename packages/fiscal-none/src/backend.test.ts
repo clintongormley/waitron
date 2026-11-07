@@ -88,6 +88,7 @@ describe("NoneBackend records nothing", () => {
     const sale = sampleSale();
     const backend = make();
     await backend.refuseNewIssuance(tx, NODE);
+    await backend.refuseNewRefund(tx, NODE);
     const ref = await backend.recordSale(tx, sale);
     expect(ref).toEqual({
       backend: "none",

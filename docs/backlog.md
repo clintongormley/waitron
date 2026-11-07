@@ -1961,11 +1961,12 @@ Not in any track until the standalone primary is done.
 
 - **A1342. Before A947 3b lands: a selling box that takes a newer chart naming another main box
   must stop selling.** The owner chose this on 2026-11-05. Since A1425, once its held chart does
-  not name it main, it refuses new fiscal records and, before any money moves, every money path
-  that asks `refuseNewIssuance` (`fiscal.chain_handed_over`). It still sends AEAT the records it
-  wrote before: the filing loop does not read the chart, and a third box's promotion can leave it
-  `serving-secondary`, which does not fence it. Two boxes filing could not be repaired. Left open by A1018 Slice 5 (Ruling R42).
-  [Detail](backlog/replication-cloud.md#a-selling-box-that-takes-a-newer-chart-naming-another-main-box-keeps-selling-and-filing)
+  not name it main, it writes no new fiscal record, and refuses sales and bill payments before any
+  money moves (`fiscal.chain_handed_over`); refunds are not refused. It still sends AEAT the
+  records it wrote before: the filing loop does not read the chart, and a third box's promotion can
+  leave it `serving-secondary`, which does not fence it. Two boxes filing could not be repaired.
+  Left open by A1018 Slice 5 (Ruling R42).
+  [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 
 - **A1341. FISCAL, before A947 3b lands: after a handover the certificate's records and warnings must
   follow the new main box.** The owner chose this on 2026-11-05. Today the new main box gives no

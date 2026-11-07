@@ -184,6 +184,10 @@ export class VerifactuBackend implements FiscalBackend {
     await assertNoActiveConflict(tx, nodeId);
   }
 
+  refuseNewRefund(tx: Transaction, nodeId: NodeId): Promise<void> {
+    return assertNoActiveConflict(tx, nodeId);
+  }
+
   clockBehindLatestRecord(
     tx: Transaction,
     reading: { instant: Date; offsetMinutes: number },

@@ -161,6 +161,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     clockBehindLatestRecord: () => fake.clockBehindLatestRecord(),
     refuseWhileClockBehind: () => fake.refuseWhileClockBehind(),
     refuseNewIssuance: () => fake.refuseNewIssuance(),
+    refuseNewRefund: () => fake.refuseNewRefund(),
     registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
@@ -504,6 +504,26 @@ it.each([false, true])("rechecks writable admission on an HTTP replay: %s", asyn
   const res = await send();
   expect(res.status).toBe(409);
   expect(await res.json()).toMatchObject({ error: { code: "node.read_only" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("refuses a remedy on a box the held chart does not name primary without appending", async () => {
+  await writeNodeMembership(suite.db, {
+    body: {
+      term: 2,
+      nodes: [
+        { nodeId: node.nodeId, contactUrl: "https://this-box", standing: "sell-only" },
+        { nodeId: "new-box", contactUrl: "https://new-box", standing: "serving-primary" },
+      ],
+    },
+    signerNodeId: "new-box",
+    signature: "sig-2",
+    endorsements: [],
+  });
+  const before = await snapshot();
+  const res = await send();
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.chain_handed_over" } });
   expect(await snapshot()).toEqual(before);
 });
 

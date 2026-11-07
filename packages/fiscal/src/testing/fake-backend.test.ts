@@ -110,6 +110,7 @@ describe("recordSale", () => {
     const ref = await suite.db.transaction(async (tx) => {
       const fiscal: FiscalBackend = backend;
       await fiscal.refuseNewIssuance(tx, NODE_A);
+      await fiscal.refuseNewRefund(tx, NODE_A);
       return backend.recordSale(tx, saleOn(NODE_A, 1));
     });
     expect(ref.backend).toBe("fake");

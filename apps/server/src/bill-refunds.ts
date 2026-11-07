@@ -89,7 +89,7 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
 
 export async function issuanceStopsRefund(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
   try {
-    await deps.backend.refuseNewIssuance(tx, deps.cfg.nodeId);
+    await deps.backend.refuseNewRefund(tx, deps.cfg.nodeId);
     return false;
   } catch (error) {
     if (error instanceof IssuanceRefusedError) return true;
@@ -683,7 +683,7 @@ export async function refundBillPayment(
           }
           if (earlier.refund.state === "pending") {
             await deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
-            await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+            await deps.backend.refuseNewRefund(tx, cfg.nodeId);
             return { kind: "resume" as const, refundId: earlier.refund.id };
           }
           return {
@@ -696,7 +696,7 @@ export async function refundBillPayment(
         }
         const reading = deps.clock.now();
         await deps.backend.refuseWhileClockBehind(tx, reading);
-        await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+        await deps.backend.refuseNewRefund(tx, cfg.nodeId);
 
         await requireOpenBill(tx, workingOrderId);
         await refusePaymentInFlight(tx, [workingOrderId]);
