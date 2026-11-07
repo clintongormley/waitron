@@ -75,6 +75,7 @@ import { checkRestoreCompatibility } from "./restore-gate.js";
 import { assertSafeEntryName } from "./restore-entry-guard.js";
 import type { BundleFiles } from "./recovery-bundle.js";
 import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
+import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import "./errors.js";
@@ -270,7 +271,7 @@ export async function validateEntries(
   deps: EntryValidationDeps,
 ): Promise<ValidatedArtifact> {
   const { dumpEntry, ...metadata } = await validateEntryMetadata(entries, deps);
-  const scratch = await mkdtemp(join(deps.stagingDir, "archive-validate-"));
+  const scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
   const discard = () => rm(scratch, { recursive: true, force: true });
   const databasePath = join(scratch, VENUE_FILE);
   try {
@@ -468,7 +469,7 @@ export async function writeValidated(
     if (!deps.skipSecrets && check !== undefined) {
       let directory = deps.venueDir;
       if (deps.resumeOperation === undefined) {
-        admissionDirectory = await mkdtemp(join(deps.stagingDir, "restore-admission-"));
+        admissionDirectory = await mkdtemp(join(deps.stagingDir, RESTORE_ADMISSION_PREFIX));
         directory = admissionDirectory;
         admitted = {
           ...validated,
@@ -1041,7 +1042,7 @@ export async function validateArtifactFile(
   deps: ValidationFileDeps,
 ): Promise<ValidatedArtifact & { readonly sourceId: string }> {
   await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
-  const scratch = await mkdtemp(join(deps.stagingDir, "archive-validate-"));
+  const scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
   const discard = () => rm(scratch, { recursive: true, force: true });
   const plaintext = join(scratch, "plaintext");
   try {

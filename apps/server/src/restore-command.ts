@@ -600,7 +600,7 @@ const PACK_KEY_DOES_NOT_OPEN =
 
 /** Fixed words: the error would name the path and its cause. */
 const DOWNLOAD_LEFT_BEHIND =
-  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the state folder's restore-staging folder by hand";
+  "the downloaded archive could not be removed; the next server start removes it";
 
 /**
  * The recovery key and the bucket's secret come from the pack, never the environment; no printed

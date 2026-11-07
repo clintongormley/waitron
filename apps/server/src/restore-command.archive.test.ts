@@ -71,7 +71,7 @@ const COLD_RESTORE_NOTICE =
 const WRONG_KEY_LINE =
   "restore failed: the recovery key in this pack does not open the archive, or the archive is damaged";
 const LEFT_DOWNLOAD_LINE =
-  "the downloaded archive could not be removed: once no restore is running, delete the archive-download-* folder inside the state folder's restore-staging folder by hand";
+  "the downloaded archive could not be removed; the next server start removes it";
 const DISK_FULL_LINE =
   "restore failed: the disk filled during the restore; free some space and run it again";
 const HUELLA = "A".repeat(64);

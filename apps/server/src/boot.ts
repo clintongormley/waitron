@@ -5,7 +5,7 @@ import {
   type BoxHostRequests,
   type ClockServiceStatus,
 } from "./box-host-client.js";
-import { clearStagedRecoveries, createSetupRecoveryPreparation } from "./recovery-preparation.js";
+import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { createLiveModuleOperation } from "./live-module-operation.js";
 import type { WaitronModule } from "@waitron/module";
@@ -288,7 +288,7 @@ import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { validateArtifact } from "./restore.js";
-import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
+import { RESTORE_STAGING_DIR, clearRestoreLeftovers } from "./restore-staging-dirs.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
@@ -1199,7 +1199,7 @@ async function bootServer(
     }
     // Only once this process holds the venue folder: a second process must not delete the running
     // one's staged copy.
-    await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
+    await clearRestoreLeftovers(config.stateDir, log);
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,

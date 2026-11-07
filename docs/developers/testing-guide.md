@@ -1601,7 +1601,8 @@ the full-disk page's words quoted below are the ones that run asserted.
   `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts -t staged`. Before
   `freeSpaceAtStart` deleted that folder the box stuck: `serveRecovery` was called once and
   `startServer` never (`Tests  1 failed | 16 skipped (17)`). Now `startServer` is called once,
-  `staged-recovery` is gone, and `restore-staging` and its `archive-download-x` folder stay.
+  `staged-recovery` and `restore-staging`'s `archive-download-x` folder are gone, and
+  `restore-staging` stays.
 - A start with nothing to delete and no spare file serves the recovery page at once: over HTTPS, trusting the box's
   own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted the
   temporary copies, old logs and crash reports it can make again, and the disk is still full." and

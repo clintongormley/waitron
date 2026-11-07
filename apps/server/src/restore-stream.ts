@@ -34,6 +34,7 @@ import {
   type ValidatedArtifact,
 } from "./restore.js";
 import { readSealedStateRow, unsealNodeState } from "./sealed-state.js";
+import { STREAM_RESTORE_PREFIX } from "./restore-staging-dirs.js";
 import { readStreamSettings } from "./stream-host.js";
 import "./errors.js";
 
@@ -53,7 +54,7 @@ export function confirmsVenue(venue: RestoredVenue, confirmedTaxId: string | nul
 }
 
 /** A fresh folder keeps concurrent preparations from removing each other's copy. */
-const SCRATCH = "stream-restore-";
+const SCRATCH = STREAM_RESTORE_PREFIX;
 
 export interface PrepareStreamDeps {
   kit: RecoveryKit;
