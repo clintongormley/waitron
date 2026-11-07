@@ -13,7 +13,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
+import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
   restoreFromArtifactFile,
   validateArtifactFile,
@@ -506,7 +506,7 @@ export async function runStagedRestore(
       const copy =
         marker.kind === "stream"
           ? await (async () => {
-              const directory = await mkdtemp(join(deps.stateDir, "restore-entry-"));
+              const directory = await mkdtemp(join(deps.stateDir, RESTORE_ENTRY_PREFIX));
               const discard = () => rm(directory, { recursive: true, force: true });
               try {
                 const databasePath = join(directory, VENUE_FILE);

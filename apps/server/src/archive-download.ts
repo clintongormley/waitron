@@ -5,6 +5,7 @@ import { createS3FileStore, type BucketConfig, type S3FileStore } from "@waitron
 import type { ArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { parseBackupArchiveKey } from "./backup-keys.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
+import { ARCHIVE_DOWNLOAD_PREFIX } from "./restore-staging-dirs.js";
 import "./errors.js";
 
 export interface DownloadedArchive {
@@ -63,7 +64,7 @@ export async function downloadArchive(deps: {
     // Advisory: the download's own ENOSPC is what is relied on.
     const free = await freeBytes(stagingDir, deps.statfs);
     if (free !== null && free < found.size) throw new AppError("restore.archive_disk_full", {});
-    scratch = await mkdtemp(join(stagingDir, "archive-download-"));
+    scratch = await mkdtemp(join(stagingDir, ARCHIVE_DOWNLOAD_PREFIX));
     const path = join(scratch, "archive.backup.enc");
     downloading = true;
     await files.getFile(key, path, { signal });

@@ -311,7 +311,9 @@ them while another process, such as a running server, holds the database folder.
 cannot find that out, as on a disk with no room left for the note it writes while it holds the
 folder, it keeps them while that folder's holder note shows a heartbeat less than 30 seconds old.
 In the same step it deletes `restore-staging/staged-recovery` in the state folder, where the setup
-wizard keeps a backup uploaded for checking.
+wizard keeps a backup uploaded for checking, and the working folders a restore that was cut off
+left: `stream-restore-*` and `restore-entry-*` in the state folder, and `archive-download-*`,
+`archive-validate-*` and `restore-admission-*` in `restore-staging`.
 
 Every start also deletes, when the state folder or the database's folder has under 256 MiB free:
 
@@ -637,16 +639,13 @@ command against it treat that entrypoint differently:
   before it downloads, decrypts or changes anything. A restore holds the venue folder from then
   until it ends, so the server cannot start while one runs. On a box with no venue folder yet, a
   restore makes an empty one first, holding only its lock file `venue.lock`, and leaves it there
-  even when it is then refused. A run that downloads from the bucket, or checks a backup's bucket,
-  makes its own folder (`stream-restore-`, `archive-source-check-` or, inside `restore-staging`,
-  `archive-download-`, each followed by six random characters) and removes it when it ends; a run
-  that is killed leaves it, holding a full copy of the venue's database or the encrypted archive,
-  and the next run does not remove it. Once no restore is running, you can delete a leftover
-  `stream-restore-*` or `archive-source-check-*` folder from the top of the `state` volume
-  (`/var/lib/waitron/state` inside the container), or an `archive-download-*` folder from the
-  `restore-staging` folder there. A `--from-archive` run that downloaded the archive but cannot
-  remove its `archive-download-*` folder afterwards prints its result and then a line saying so;
-  delete that folder the same way. Break-glass is the exception by design: it runs beside the server
+  even when it is then refused. A run makes its own working folders (`stream-restore-` at the top
+  of the `state` volume or, inside its `restore-staging` folder, `archive-download-`,
+  `archive-validate-` or `restore-admission-`, each followed by six random characters) and removes
+  them when it ends. A run that is killed leaves them, holding a full copy of the venue's database
+  or the encrypted archive, and the next server start removes them. A `--from-archive` run that
+  downloaded the archive but cannot remove its `archive-download-*` folder afterwards prints its
+  result and then a line saying the next server start removes it. Break-glass is the exception by design: it runs beside the server
   and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of

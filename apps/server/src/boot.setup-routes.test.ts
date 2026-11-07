@@ -846,6 +846,30 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
+  it("removes the working folder a killed bucket restore left in the state folder", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const leftover = (stateDir: string) => join(stateDir, "stream-restore-left");
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ stateDir }) => {
+          await expect(readdir(leftover(stateDir))).rejects.toMatchObject({ code: "ENOENT" });
+        },
+        {
+          beforeStart: async (stateDir) => {
+            await mkdir(leftover(stateDir), { recursive: true });
+            await writeFile(join(leftover(stateDir), "venue.db"), "downloaded venue");
+          },
+        },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("leaves a staged decrypted copy for the next start when this one fails before holding the venue folder", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staged-early-"));
     const leftover = join(stateDir, "restore-staging", "staged-recovery", "archive-validate-left");
