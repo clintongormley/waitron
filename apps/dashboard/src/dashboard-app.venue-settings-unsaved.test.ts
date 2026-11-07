@@ -13,7 +13,7 @@ import { createRequest, LiveData, type DashboardContribution } from "@waitron/da
 import type { DashboardApi, VenueDefaults } from "./api/client.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import { DashboardApp } from "./dashboard-app.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { receiptLanguageName } from "./widgets/receipt-language.js";
 import {
   mountReceiptEditor,
@@ -769,7 +769,7 @@ it.each([
     const words =
       locale === "en-GB"
         ? "The legal-name change was not confirmed. Check the legal name in Venue settings before trying again."
-        : "No se ha confirmado el cambio de razón social. Comprueba la razón social en Ajustes del local antes de volver a intentarlo.";
+        : t("venue_details.legal_name_not_saved");
     await expect
       .poll(() => notice()?.shadowRoot?.querySelector("p")?.textContent?.trim())
       .toBe(words);
