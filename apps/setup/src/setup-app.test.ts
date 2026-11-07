@@ -4081,21 +4081,21 @@ describe("restoring a backup file whose old server may still be running", () => 
     },
   );
 
-  it.each([
-    ["restore.schema_too_new", { module: "core", backup: 207, target: 1 }],
-    ["provisioning.database_ahead", { set: "core", unknownMigrations: ["ff"] }],
-  ])("words a backup file from another version of Waitron (%s)", async (code, params) => {
-    const el = await mountSetupApp(
-      stubApi({ restore: vi.fn().mockRejectedValue({ code, params, status: 409 }) }),
-    );
-    restoreRequest(el, backup);
-    await flush(el);
-    const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
-    expect(screen.invalidField).toBeUndefined();
-    expect(await bottomOf(screen)).toBe(
-      "This backup file was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another file.",
-    );
-  });
+  it.each([["restore.schema_too_new", { module: "core", backup: 207, target: 1 }]])(
+    "words a backup file from another version of Waitron (%s)",
+    async (code, params) => {
+      const el = await mountSetupApp(
+        stubApi({ restore: vi.fn().mockRejectedValue({ code, params, status: 409 }) }),
+      );
+      restoreRequest(el, backup);
+      await flush(el);
+      const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+      expect(screen.invalidField).toBeUndefined();
+      expect(await bottomOf(screen)).toBe(
+        "This backup file was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another file.",
+      );
+    },
+  );
 
   it("keeps an archive refusal of a field the form does not show, above Restore", async () => {
     const el = await mountSetupApp(

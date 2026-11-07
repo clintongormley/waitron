@@ -255,7 +255,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.restore.environment_mismatch":
     "La copia viene del otro entorno. Elige el entorno del que viene.",
   "shell.restore.other_version":
-    "Este archivo de copia de seguridad lo hizo una versión de Waitron distinta. La versión de este servidor no puede restaurarlo. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otro archivo.",
+    "Este archivo de copia de seguridad se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarlo. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otro archivo.",
 
   "shell.bucket.no_answer":
     "No se ha podido restaurar la copia. Comprueba la conexión e inténtalo de nuevo.",
@@ -267,7 +267,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.bucket.key_does_not_open":
     "La clave de recuperación de este kit no abre la copia más reciente. Si se cambió la clave de recuperación, usa el último paquete de recuperación o el último kit.",
   "shell.bucket.other_version":
-    "La copia del bucket la hizo una versión de Waitron distinta. La versión de este servidor no puede restaurarla. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otra copia.",
+    "La copia del bucket se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarla. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otra copia.",
   "shell.bucket.pointer_missing":
     "El bucket de este kit no guarda ninguna copia de este restaurante.",
   "shell.bucket.pointer_unverified":
@@ -296,7 +296,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El servidor ha rechazado los datos. Revisa lo que has introducido e inténtalo de nuevo.",
 
   "shell.cloud.other_version":
-    "La instantánea la hizo una versión de Waitron distinta. La versión de este servidor no puede restaurarla. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otra copia.",
+    "La instantánea se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarla. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otra copia.",
   "shell.cloud.unopenable":
     "No se ha podido abrir esta instantánea. Está dañada, o la clave de recuperación que Waitron Cloud guarda para ella no la abre.",
   "shell.cloud.environment_mismatch":
