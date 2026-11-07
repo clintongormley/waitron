@@ -1138,9 +1138,9 @@ describe("a stop or a changed row while a request is out", () => {
     );
     await r.start({ compare, download });
     await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1), { timeout: 10_000 });
-    await settle();
+    await vi.waitFor(() => expect(download).toHaveResolvedTimes(1), { timeout: 10_000 });
+    await vi.waitFor(() => expect(existsSync(r.received())).toBe(false), { timeout: 10_000 });
     expect(compare).not.toHaveBeenCalled();
-    expect(existsSync(r.received())).toBe(false);
   });
 
   it("a stop during a comparison ends it by its signal, and that is not logged as a fault", async () => {
