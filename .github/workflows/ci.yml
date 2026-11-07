@@ -3869,7 +3869,7 @@ jobs:
             if grep -q 'HTTP 409' "$scratch/error" && request "$end" "repos/$REPO/actions/runs/$RUN_ID" &&
                jq -e '.id == ($ENV.RUN_ID | tonumber) and .run_attempt == ($ENV.RUN_ATTEMPT | tonumber) and .head_sha == $ENV.HEAD_SHA and .status == "completed"' "$scratch/response"; then exit 0; fi
           done
-          echo 'Could not request cancellation of the queued server jobs' >&2
+          echo "Could not request cancellation of the queued $waiting jobs" >&2
           exit 1
           WATCHDOG
 

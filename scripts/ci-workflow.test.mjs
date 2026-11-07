@@ -131,6 +131,7 @@ describe("disposable family routing", () => {
     const routing = job(`test-${family}`).body.find((line) => /^ {4}runs-on:/.test(line));
     const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
     const context = routingContext(family);
+    expect(expressionValue(watch, context)).toBe(true);
     if (matrixShards(job(`test-${family}`).body) === undefined) {
       delete context.matrix;
       expect(routing).not.toContain("matrix.");
@@ -442,7 +443,6 @@ exit "$status"
         RUN_ATTEMPT: "1",
         HEAD_SHA: "a".repeat(40),
         LABEL_PREFIX: "dt",
-        SHARD_COUNT: "24",
         FAMILIES: JSON.stringify([{ id: "test-server", count: 24, matrix: true, enabled: true }]),
         ...env,
       },
@@ -530,6 +530,22 @@ exit "$status"
     );
     expect(result.status, result.output).toBe(0);
     expect(cancellations(result)).toEqual([]);
+  });
+  it("names the waiting browser family when both cancellation requests fail", () => {
+    const ui = familyRows("test-ui", 1, false, 100);
+    const result = runWatch(
+      {
+        polls: [pages(ui)],
+        cancel: [
+          { status: 1, error: "HTTP 503" },
+          { status: 1, error: "HTTP 503" },
+        ],
+      },
+      familyEnvironment({ id: "test-ui", count: 1, matrix: false, enabled: true }),
+    );
+    expect(result.status, result.output).not.toBe(0);
+    expect(cancellations(result)).toHaveLength(2);
+    expect(result.output).toContain("Could not request cancellation of the queued test-ui jobs");
   });
   it.each(["name", "head", "attempt", "label", "missing"])(
     "does not hide a browser %s fault behind assigned server jobs",
