@@ -9,6 +9,7 @@ export async function installationFixture(
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
     billing?: MachineHandler;
+    tunnel?: MachineHandler;
     translationState?: () => ServiceState;
   } = {},
 ) {
@@ -52,6 +53,10 @@ export async function installationFixture(
   ];
   const f = await cloudFixture(async (values, saved, req, res, sent) => {
     requests.push(values);
+    if (values[2] === "tunnel-provision" && options.tunnel) {
+      await options.tunnel(values, saved, req, res, sent);
+      return;
+    }
     if (String(values[2]).startsWith("backup-") && capture) {
       await capture(values, saved, req, res, sent);
       return;
@@ -98,7 +103,7 @@ export async function installationFixture(
           randomUUID(),
           view.installationId,
           view.venueId,
-          "test",
+          saved.environment,
           saved.publicKey,
           now,
           now + 3600000,
@@ -112,7 +117,7 @@ export async function installationFixture(
       if (values[2] === "revoke") revoked = true;
       replies.set(operation, {
         ...view,
-        environment: "test",
+        environment: saved.environment,
         revision: 0,
         revokedAt: revoked ? new Date().toISOString() : null,
         lastContactAt: new Date().toISOString(),

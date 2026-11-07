@@ -28,6 +28,15 @@ function codeOf(error: unknown): string {
 }
 
 describe("loadConfig", () => {
+  it("enables the tunnel control directory only when explicitly configured", () => {
+    expect(loadConfig(MIN_ENV, ROOT, STATE_ROOT)).not.toHaveProperty("tunnelControlDir");
+    expect(
+      loadConfig({ ...MIN_ENV, WAITRON_TUNNEL_CONTROL_DIR: "" }, ROOT, STATE_ROOT),
+    ).not.toHaveProperty("tunnelControlDir");
+    expect(
+      loadConfig({ ...MIN_ENV, WAITRON_TUNNEL_CONTROL_DIR: "./tunnel" }, ROOT, STATE_ROOT),
+    ).toHaveProperty("tunnelControlDir", resolve("./tunnel"));
+  });
   it("defaults every optional value, and defaults the deployment environment to preproduction", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config).toEqual({
