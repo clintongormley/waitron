@@ -1996,7 +1996,7 @@ the code depends. _(2026-10-22: slice 4a added that test, `packages/fiscal-verif
 | The owner's four answers and their follow-ups | owner, watcher session 2026-10-21 ~09:25–11:45 | quoted from the campaign's questions file |
 | Approval of the second revision; the typed time on the box's own screen proposed (~03:05) and withdrawn (~03:10); every wait explained with a countdown (~03:12) | owner, watcher session 2026-10-22 | quoted from the campaign's owner-answers file in the brief for the amendment |
 | Litestream 0.5.17 refuses a second replica | `cmd/litestream/main.go:794-795` at tag v0.5.17 | `curl` of the raw file, 2026-10-21 |
-| Follow mode exists at the pin | `cmd/litestream/restore.go:39` at tag v0.5.17 (`fs.BoolVar(&opt.Follow, "f", …)`) | `curl` of the raw file, 2026-10-21; never run in this repository |
+| Follow mode exists at tag v0.5.17 | `cmd/litestream/restore.go:39` at tag v0.5.17 (`fs.BoolVar(&opt.Follow, "f", …)`) | `curl` of the raw file, 2026-10-21; never run in this repository |
 | versitygw is Apache-2.0 and maintained | GitHub API `repos/versity/versitygw` | `curl`, 2026-10-21 |
 | The conditional write holds on versitygw 1.8.0 | `apps/server/src/stream-loop.e2e.test.ts`; results note, "Standing obligations" | read |
 | The bundle carries the authority's public certificate only, no series under hour codes, and no data | `apps/server/src/mirror-bundle.ts` (`readFile(caCertPath(…))`, the `on-activation` refusal), `finish-adoption.ts` | read 2026-10-21 |

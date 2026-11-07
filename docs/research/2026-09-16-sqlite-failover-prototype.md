@@ -87,7 +87,7 @@ Three rules, each of which cost something on the way:
 - **A scenario is a MEASUREMENT, not a build gate.** A FAIL is a recorded outcome. Where a part's
   outcome *is* the finding, it measures and feeds the verdict instead of asserting.
 
-### The pins — every result below holds on these and no others
+### The pins
 
 | | pinned to | how it is pinned |
 | --- | --- | --- |
@@ -950,7 +950,7 @@ first native amd64 confirmation is the first CI job that runs the pinned binary.
 
 ## S2 re-run with A1018's return batch (2026-11-03)
 
-**Pins:** [the pins table](#the-pins--every-result-below-holds-on-these-and-no-others), except Node
+**Pins:** [the pins table](#the-pins), except Node
 v26.13.0 and SQLite 3.54.1.
 
 A947 §7.1, as A1018 amends it, made a re-run of S2 the gate for building the return batch: model
@@ -1133,7 +1133,7 @@ Litestream gave no error in 200 seconds on either version, and the side file kep
 Past `truncate-page-n` it did not shrink in the last three rounds of row 2 (`D-shrank-after-threshold=false`),
 as on 0.5.17, so what Litestream's emergency checkpoint does there is still not established.
 
-**A stop against a bucket that does not answer now ends in the forced kill.** Row 1b:
+**Without a `shutdown-timeout`, a stop against a bucket that does not answer ends in the forced kill.** Row 1b:
 `offline-stop-ms=5002 offline-exit=null`, and every sale was restored afterwards. The 5 seconds are
 the grace in `bench/sqlite-failover/src/litestream.ts`, the same as `KILL_GRACE_MS` in
 `packages/stream/src/litestream-process.ts`; through the real `spawnLitestream`, two stops took 5,000
