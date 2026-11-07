@@ -6522,12 +6522,75 @@ describe("till-app", () => {
       expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 4]);
     });
 
+    it("saving a raised dish the kitchen has started says so, and the basket stays", async () => {
+      const updateWorkingOrder = vi
+        .fn()
+        .mockRejectedValue({ code: "ticket.already_started", status: 409 });
+      const { el } = await mountApp({
+        updateWorkingOrder,
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          kitchenNote: {
+            scope: { workingOrderId: "wo-1" },
+            note: null,
+            revision: 0,
+            ownerRevision: 3,
+          },
+          id: "wo-1",
+          orderNumber: 5,
+          label: "Mesa 4",
+          revision: 3,
+          lines: [
+            {
+              workingOrderLineId: "wl-1",
+              menuItemId: "menu-item-cafe-0",
+              productId: "cafe",
+              quantity: "2.000",
+            },
+          ],
+        }),
+        getTabLines: vi.fn().mockResolvedValue({
+          revision: 3,
+          lines: [listedCafe({ sentAt: "2026-09-30T09:00:00.000Z", state: "preparing" })],
+        }),
+      });
+      const c = await toCounter(el);
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      c.store.setLineQuantity(0, "3");
+
+      emit(c, "park-order", {});
+      await flush(el);
+
+      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      const alert = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
+      expect(alert).toBe(codeMessage("ticket.already_started"));
+      expect(alert).not.toBe(t("held.park_error"));
+      expect(c.store.id).toBe("wo-1");
+      expect(c.store.lines.map((line) => line.quantity)).toEqual(["3"]);
+    });
+
     it("reads the order back after raising it once a comp has repriced it, as the added cafés go on a line of their own", async () => {
       const { retrieveWorkingOrder } = await raisedAndDeclined(
         listedCafe({ unitPriceGross: "0.00", listUnitPriceGross: "1.50" }),
       );
       expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("place-order refused station.no_default says no station can make the dish", async () => {
+    const { el } = await mountApp({
+      placeOrder: vi.fn().mockRejectedValue({ code: "station.no_default", status: 409 }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "place-order", {});
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      codeMessage("station.no_default"),
+    );
   });
 
   it("a held order parked from this till is saved from revision 0", async () => {
@@ -7514,6 +7577,7 @@ describe("till-app", () => {
 
   it.each([
     [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+    [{ code: "station.no_default", status: 409 }, () => codeMessage("station.no_default")],
     [{ code: "server.internal", status: 500 }, () => t("held.park_error")],
   ])("park-order refused %o shows that refusal's sentence", async (refused, shown) => {
     const { el } = await mountApp({ parkOrder: vi.fn().mockRejectedValue(refused) });

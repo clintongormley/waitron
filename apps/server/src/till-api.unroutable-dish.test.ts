@@ -859,6 +859,29 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     await expect(round(missing)).rejects.toMatchObject({ code: "station.no_default" });
   });
 
+  it("with an active default station, a table round sends a dish with no route and one whose route's station is off", async () => {
+    const stranded = await strandedDish("Pulpo");
+    const missing = await dish("Navajas");
+    const { partyId } = await seat(v, await v.table(`T-${randomUUID().slice(0, 8)}`));
+    const round = (d: Dish) =>
+      inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, partyId, {
+          groups: [{ lines: [{ menuItemId: d.tablesOffer, quantity: "1" }], release: "fire" }],
+          operatorId: OPERATOR,
+        }),
+      );
+    await expect(round(missing)).rejects.toMatchObject({ code: "station.no_default" });
+
+    await inTx(v, async (tx) =>
+      tx.run(
+        sql`update kitchen_stations set active = 1 where location_id = ${v.cfg.locationId} and is_default`,
+      ),
+    );
+
+    for (const sent of [await round(missing), await round(stranded)])
+      expect(sent.groups[0]!.lineIds).toHaveLength(1);
+  });
+
   it("stores a chosen station on a parked dish and refuses a switched-off station", async () => {
     const made = await dish("Chosen lager");
     const chosen = await station("Upstairs bar");

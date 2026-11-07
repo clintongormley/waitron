@@ -696,6 +696,7 @@ const TABLE_REFUSALS = new Set([
   "storage.disk_full",
   "clock.behind_chain",
   "menu_period.ended",
+  "station.no_default",
 ]);
 
 /** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
@@ -1005,6 +1006,8 @@ const ACTIONABLE_REFUSALS = new Set([
   "storage.disk_full",
   "clock.behind_chain",
   "menu_period.ended",
+  "station.no_default",
+  "ticket.already_started",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */

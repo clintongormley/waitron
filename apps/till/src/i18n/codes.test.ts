@@ -505,6 +505,15 @@ it("explains that unsupported published menus require a venue reset in both lang
   );
 });
 
+it("says no station can make a dish and where to make one the default, in both locales", () => {
+  expect(codeMessage("station.no_default", "en")).toBe(
+    "No station can make one of these dishes. Make a station the default in the dashboard, under Prep stations.",
+  );
+  expect(codeMessage("station.no_default", "es")).toBe(
+    "Ninguna estación puede preparar uno de estos platos. Haz predeterminada una estación en el panel, en Estaciones de preparación.",
+  );
+});
+
 it("says where a device's profile can be changed when it refuses an action, in both locales", () => {
   expect(codeMessage("device.forbidden_action", "en")).toBe(
     "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",

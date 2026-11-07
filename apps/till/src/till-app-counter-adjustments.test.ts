@@ -1383,6 +1383,14 @@ describe("till-app: comping a stored counter order", () => {
     });
   });
 
+  it("still offers Cancel on a dish the kitchen has started", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, state: "preparing" };
+    const el = await retrieved({ getTabLines: vi.fn().mockResolvedValue(lines) });
+
+    expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
+  });
+
   it("cancels a dish the kitchen has with a reason", async () => {
     const el = await retrieved();
 
