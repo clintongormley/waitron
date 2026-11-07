@@ -344,6 +344,43 @@ export async function appendCancellation(
   return id;
 }
 
+/** A pending cancellation of `originalId` appended to ANOTHER chain, after that chain's record
+ * `headId`: a box cancelling an invoice that another box's chain issued. */
+export async function appendCancellationOnChain(
+  db: Database,
+  originalId: string,
+  headId: string,
+  secuencia: number,
+): Promise<string> {
+  const records = await db.select().from(registrosFacturacion);
+  const original = records.find((row) => row.id === originalId)!;
+  const head = records.find((row) => row.id === headId)!;
+  const id = newId();
+  await db.insert(registrosFacturacion).values({
+    ...head,
+    id,
+    secuencia,
+    saleId: original.saleId,
+    tipoRegistro: "anulacion",
+    idEmisorFactura: original.idEmisorFactura,
+    numSerieFactura: original.numSerieFactura,
+    fechaExpedicionFactura: original.fechaExpedicionFactura,
+    tipoFactura: null,
+    descripcionOperacion: null,
+    desglose: null,
+    cuotaTotal: null,
+    importeTotal: null,
+    primerRegistro: false,
+    anteriorIdEmisorFactura: head.idEmisorFactura,
+    anteriorNumSerieFactura: head.numSerieFactura,
+    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
+    anteriorHuella: head.huella,
+    huella: "F".repeat(63) + String(secuencia % 10),
+  });
+  await db.insert(envios).values({ registroId: id, proximoIntentoEn: DUE_AT });
+  return id;
+}
+
 /** AEAT already holds another fingerprint under the record's identity: a Route B conflict. */
 export async function collideAtAeat(
   db: Database,

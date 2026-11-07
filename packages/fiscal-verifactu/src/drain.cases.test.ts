@@ -1,7 +1,8 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { newId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { createClient } from "@waitron/verifactu";
 import type { IDFactura, RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
@@ -9,6 +10,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
   consultaNames,
   appendCancellation,
+  appendCancellationOnChain,
   appendPendingAlta,
   collideAtAeat,
   seedIndependentChain,
@@ -19,7 +21,6 @@ import {
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
 import { heldRecords, listFilingCases, recordCaseEvent } from "./filing-cases.js";
-import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
@@ -120,41 +121,6 @@ async function incidentCodes(): Promise<string[]> {
 }
 
 const cases = () => withTransaction(suite.db, (tx) => listFilingCases(tx));
-
-/** A pending cancellation of `originalId` appended to ANOTHER chain, after that chain's record
- * `headId`: a box cancelling an invoice that another box's chain issued. */
-async function appendCancellationOnChain(
-  originalId: string,
-  headId: string,
-  secuencia: number,
-): Promise<string> {
-  const records = await suite.db.select().from(registrosFacturacion);
-  const original = records.find((row) => row.id === originalId)!;
-  const head = records.find((row) => row.id === headId)!;
-  const id = newId();
-  await suite.db.insert(registrosFacturacion).values({
-    ...head,
-    id,
-    secuencia,
-    tipoRegistro: "anulacion",
-    idEmisorFactura: original.idEmisorFactura,
-    numSerieFactura: original.numSerieFactura,
-    fechaExpedicionFactura: original.fechaExpedicionFactura,
-    tipoFactura: null,
-    descripcionOperacion: null,
-    desglose: null,
-    cuotaTotal: null,
-    importeTotal: null,
-    primerRegistro: false,
-    anteriorIdEmisorFactura: head.idEmisorFactura,
-    anteriorNumSerieFactura: head.numSerieFactura,
-    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
-    anteriorHuella: head.huella,
-    huella: "F".repeat(63) + String(secuencia % 10),
-  });
-  await suite.db.insert(envios).values({ registroId: id, proximoIntentoEn: FIRST });
-  return id;
-}
 
 /** `fiscal.estado_desconocido`'s params that ./errors.ts says are present only when the reply
  * gave no line that can be trusted to be the record's. */
@@ -983,7 +949,12 @@ describe("drain — a cancellation on another chain", () => {
     const other = await seedSecondChain(suite.db, seeded, 5);
     await drain(deps(aeat.client()), FIRST);
     const original = await appendPendingAlta(suite.db, seeded, 2);
-    const cancellation = await appendCancellationOnChain(original.registroId, other.registroId, 6);
+    const cancellation = await appendCancellationOnChain(
+      suite.db,
+      original.registroId,
+      other.registroId,
+      6,
+    );
     const wire = recording(aeat.client());
 
     await drain(deps(wire.client), SECOND);
@@ -999,6 +970,29 @@ describe("drain — a cancellation on another chain", () => {
     expect(aeat.stored().find((row) => row.key === original.facturaKey)?.estado).toBe("Anulado");
   });
 
+  it("sends a cancellation on another chain and the record after it together once its original is accepted", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const other = await seedSecondChain(suite.db, seeded, 5);
+    await drain(deps(aeat.client()), FIRST);
+    const [original] = seeded.registroIds;
+    expect(await envioOf(original!)).toMatchObject({ estado: "aceptado" });
+    const [head] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, other.registroId));
+    const otherChain = { ...seeded, nodeId: brandNodeId(head!.nodeId), sifId: head!.sifId };
+    const cancellation = await appendCancellationOnChain(suite.db, original!, other.registroId, 6);
+    const later = await appendPendingAlta(suite.db, otherChain, 7);
+    const wire = recording(aeat.client());
+
+    await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([[cancellation, later.registroId]]);
+    expect(await envioOf(cancellation)).toMatchObject({ estado: "aceptado" });
+    expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
+  });
+
   it("a cancellation on another chain whose original was refused is set aside", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
@@ -1008,7 +1002,12 @@ describe("drain — a cancellation on another chain", () => {
     aeat.reject(original.facturaKey, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), SECOND);
     expect(await envioOf(original.registroId)).toMatchObject({ estado: "rechazado" });
-    const cancellation = await appendCancellationOnChain(original.registroId, other.registroId, 6);
+    const cancellation = await appendCancellationOnChain(
+      suite.db,
+      original.registroId,
+      other.registroId,
+      6,
+    );
     const wire = recording(aeat.client());
 
     const result = await drain(deps(wire.client), THIRD);

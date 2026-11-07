@@ -665,7 +665,9 @@ async function claimBatch(
               select 1 from registros_facturacion replacement
               where replacement.corrects_registro_id = original.id
             )
-            and original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
+            -- A held original holds a cancellation on its own chain anyway; on another chain nothing would.
+            and (original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
+              or (original_envio.estado = 'detenido' and original.sif_id = r.sif_id))
         ))
         and not exists (
           select 1 from envios earlier
@@ -685,7 +687,8 @@ async function claimBatch(
                       select 1 from registros_facturacion replacement
                       where replacement.corrects_registro_id = prior_original.id
                     )
-                    and prior_original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
+                    and (prior_original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
+                      or (prior_original_envio.estado = 'detenido' and prior_original.sif_id = prior.sif_id))
                 )))))
         )
     ),
