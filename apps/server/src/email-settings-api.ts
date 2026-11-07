@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import { putCredential, type KeyRing } from "@waitron/credentials";
+import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
 import { authorizeManager, persons, roleHasPermission, type Permission } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
@@ -83,6 +83,16 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
         await putCredential(tx, deps.ring, { purpose: "email.smtp", value });
       });
       return c.json({ saved: true });
+    }),
+  );
+  app.delete("/management-api/email/settings", (c) =>
+    run(c, log, async () => {
+      await withTransaction(deps.db, async (tx) => {
+        await authorize(tx, c, "person.admin");
+        if (!editable) throw new AppError("email.settings_not_allowed", {});
+        await deleteCredential(tx, { purpose: "email.smtp" });
+      });
+      return c.json({ removed: true });
     }),
   );
   app.post("/management-api/email/settings/test", (c) =>

@@ -631,3 +631,97 @@ it("keeps SMTP settings read-only for a manager", async () => {
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ mode: "unconfigured", editable: false, settings: null });
 });
+
+describe("removing saved SMTP settings", () => {
+  const remove = (app: Hono, cookie?: string) =>
+    app.request(path, { method: "DELETE", headers: cookie === undefined ? {} : { cookie } });
+
+  it("removes only the mail credential, reports the new delivery mode and accepts a repeated removal", async () => {
+    const venue = await setupVenue();
+    const app = mount();
+    expect((await request(app, venue.admin, settings)).status).toBe(200);
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, { purpose: "backup.archive", value: { settings: "{}" } }),
+    );
+    const [archive] = await suite.db
+      .select()
+      .from(tenantCredentials)
+      .where(eq(tenantCredentials.purpose, "backup.archive"));
+
+    const response = await remove(app, venue.admin);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ removed: true });
+    expect(await suite.db.select().from(tenantCredentials)).toEqual([archive]);
+    expect(await (await request(app, venue.admin)).json()).toEqual({
+      mode: "unconfigured",
+      editable: true,
+      settings: null,
+    });
+    const repeated = await remove(app, venue.admin);
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toEqual({ removed: true });
+    expect(await suite.db.select().from(tenantCredentials)).toEqual([archive]);
+  });
+
+  it.each(["demo", "prepare", "live"] as const)(
+    "refuses manager removal in %s before changing the sealed credential",
+    async (intent) => {
+      const venue = await setupVenue();
+      expect((await request(mount(), venue.admin, settings)).status).toBe(200);
+      const before = await suite.db.select().from(tenantCredentials);
+      const response = await remove(mount(intent), venue.manager);
+      expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      });
+    },
+  );
+
+  it("refuses an admin removing the relay in Demo and preserves its sealed contents", async () => {
+    const venue = await setupVenue();
+    expect((await request(mount(), venue.admin, settings)).status).toBe(200);
+    const before = await suite.db.select().from(tenantCredentials);
+    const response = await remove(mount("demo"), venue.admin);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "email.settings_not_allowed", params: {} },
+    });
+    expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+  });
+
+  it.each(["unsigned", "staff", "supervisor", "suspended"] as const)(
+    "refuses %s removal without changing an existing relay",
+    async (role) => {
+      const venue = await setupVenue();
+      expect((await request(mount(), venue.admin, settings)).status).toBe(200);
+      if (role === "supervisor")
+        await withTransaction(suite.db, (tx) =>
+          tx.update(persons).set({ role: "supervisor" }).where(eq(persons.role, "staff")),
+        );
+      if (role === "suspended")
+        await withTransaction(suite.db, (tx) =>
+          tx.update(persons).set({ status: "suspended" }).where(eq(persons.role, "admin")),
+        );
+      const before = await suite.db.select().from(tenantCredentials);
+      const response = await remove(
+        mount(),
+        role === "unsigned" ? undefined : role === "suspended" ? venue.admin : venue.staff,
+      );
+      expect(response.status).toBe(role === "unsigned" ? 401 : 403);
+      const [admin] = await suite.db
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.role, "admin"));
+      expect(await response.json()).toEqual({
+        error:
+          role === "unsigned"
+            ? { code: "management_session.required", params: {} }
+            : role === "suspended"
+              ? { code: "person.suspended", params: { personId: admin!.id } }
+              : { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      });
+      expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+    },
+  );
+});

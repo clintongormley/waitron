@@ -390,11 +390,13 @@ install; see
 ["Installing or replacing the AEAT certificate after setup"](#installing-or-replacing-the-aeat-certificate-after-setup)
 for what that leaves out of date.
 
-For outgoing mail, the live trading server also accepts manager-authorised settings through
-`GET` and `PUT /management-api/email/settings`, with `POST /management-api/email/settings/test`
-sending a test to the signed-in person's address. These routes require `system.manage`; the read
-omits authentication secrets. Demo and Prepare refuse settings changes. The live setup test endpoint
-is `POST /setup-api/email-test`. A production Live provision also requires an `email` object with
+For outgoing mail, you can read the live trading server's redacted settings through
+`GET /management-api/email/settings` with `system.manage`. An admin can save settings with `PUT`
+or remove the saved relay with `DELETE` at the same address. Removal returns `{ removed: true }`,
+including when no relay is saved. `POST /management-api/email/settings/test` requires
+`system.manage` and sends a test to the signed-in person's address without saving the proposal.
+The read omits authentication secrets. Demo and Prepare refuse settings changes, including removal.
+The live setup test endpoint is `POST /setup-api/email-test`. A production Live provision also requires an `email` object with
 `server`, numeric `port`, `encryption` (`starttls` or `tls`), `from`, and optional `user` and
 `password`. Use the same values you tested. The server seals them under `email.smtp` before
 publishing the trading configuration. Missing settings answer `setup.email_required`, naming
