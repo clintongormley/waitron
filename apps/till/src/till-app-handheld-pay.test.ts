@@ -6377,7 +6377,6 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     getDeviceZones: vi.fn().mockResolvedValue({
       ...deviceZonesFixture(["bar"], ["z1"]),
       startingZoneId: "z1",
-      saved: true,
     }),
   };
 
@@ -6456,8 +6455,15 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
+    const app = el as unknown as { activeTabKey?: string; drill?: { kind: string } };
+    // Away from home first, so the check after Back shows that Back moved the till there.
+    if (device === tableStartTill) {
+      app.activeTabKey = "counter";
+      await flush(el);
+    }
     emit(shell(el), "find-bill");
     await flush(el);
+    expect(app.drill?.kind).toBe("find-bill");
     const back = el
       .shadowRoot!.querySelector("till-find-bill-screen")!
       .shadowRoot!.querySelector<HTMLElement>("header wt-button")!;
@@ -6465,9 +6471,8 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     expect(text(back)).toBe(toCounter ? "Back to counter" : "Back");
     back.click();
     await flush(el);
-    expect((el as unknown as { activeTabKey?: string }).activeTabKey).toBe(
-      toCounter ? "counter" : "floor",
-    );
+    expect(app.drill).toBeUndefined();
+    expect(app.activeTabKey).toBe(toCounter ? "counter" : "floor");
   });
 
   const screens = ["show-station", "show-expo", "show-schedule"] as CapabilityFlag[];
