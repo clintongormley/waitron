@@ -1730,7 +1730,7 @@ describe("a handheld's zones", () => {
     expect(store.lines).toHaveLength(0);
   });
 
-  describe("a profile that allows no zones (A1057)", () => {
+  describe("a profile that allows no zones", () => {
     const noZones = { ...selection([], null), zones: [] };
     const refusedOffers = () =>
       vi.fn().mockRejectedValue({ code: "device_profile.no_service_zone" });
