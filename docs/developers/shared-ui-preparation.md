@@ -1,57 +1,56 @@
-# Prepare the shared UI package
+# Publish the shared UI package
 
-Cloud needs a registry artifact it can trace to Waitron source. Keep using
-`@waitron/ui-core` with `workspace:*` in Waitron. Prepare a separate private
-`@waitron-io/ui-core` release for Cloud; its release number can differ from the
-source manifest's version.
+Cloud consumes a private registry release of Waitron's shared account controls.
+Keep using `@waitron/ui-core` with `workspace:*` in Waitron; the published package
+has the separate name `@waitron-io/ui-core`.
 
-Start with a clean, installed checkout at the exact source commit selected by
-Cloud's release process. Create an empty output directory outside that checkout:
+When a push to `main` changes `packages/ui-core/**`,
+[Publish shared UI](../../.github/workflows/publish-ui.yml) checks the source
+package, builds the merged commit and checks its tarball in an independent
+browser consumer. It publishes `0.2.<workflow run number>` to GitHub Packages.
+The source manifest keeps its workspace version. Publications share a concurrency
+queue and run one at a time.
+
+The owner stores `UI_PACKAGES_WRITE_TOKEN` as an Actions secret. Only the final
+publish step receives it. The prepared manifest keeps the existing Cloud
+repository association and records the full Waitron commit in `waitronSource.commit`.
+The package carries built JavaScript, declarations, CSS, the Lit peer dependency,
+Elastic License 2.0 and `LICENSE-GRANTS.md`.
+
+Check the workflow result after a qualifying merge. A publication error fails the
+run; the next qualifying merge attempts a new numbered version. An older run can
+be refused if a higher package version has already been published. There is no
+scheduled publisher or catch-up process. The first real publication from this
+workflow must still establish that its token can publish to the existing private
+package. Cloud owns authenticated installation, dependency updates and portal/image
+qualification under its [approved release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
+
+## Inspect a package locally
+
+To prepare a tarball without publishing, start with a clean, installed checkout
+at the commit you want to inspect. Create an empty output directory outside it:
 
 ```sh
-mkdir /tmp/waitron-ui-0.2.0
-node scripts/release/prepare-ui.mjs /path/to/clean/waitron /tmp/waitron-ui-0.2.0 \
-  --release-version 0.2.0 --source-commit "$SELECTED_SOURCE_SHA"
+mkdir /tmp/waitron-ui-inspection
+node scripts/release/prepare-ui.mjs /path/to/clean/waitron /tmp/waitron-ui-inspection \
+  --release-version 0.2.742 --source-commit "$(git rev-parse HEAD)"
 ```
 
-Take the release version from Cloud's durable reservation. The extra
-`--source-commit` argument binds preparation to the caller's selected full SHA;
-preparation refuses a different checkout, tracked or untracked source changes, hidden index flags, a nested source copy,
-and nonempty output. The utility runs the package's build explicitly, then packs with lifecycle hooks disabled, so an inherited `ignore-scripts` setting cannot skip compilation.
-Changes to tracked source or its commit during that build are refused too.
-Ignored files and installed dependencies are outside that cleanliness check, so
-use Cloud's isolated frozen-lockfile source job for release preparation. Give concurrent preparations separate source checkouts: each build writes `dist`.
+Preparation checks the selected commit and source cleanliness, builds the package
+and writes `waitron-io-ui-core-0.2.742.tgz` and `preparation.json`. The latter is
+local build evidence; the publisher does not upload it or use it to allocate a
+version. Give concurrent preparations separate checkouts because each build writes
+`dist`. Ignored files and installed dependencies are outside the cleanliness check.
 
-The output contains `waitron-io-ui-core-0.2.0.tgz` and `preparation.json`.
-The staged manifest records the original repository, commit and source version
-in `waitronSource`. It retains built JavaScript, declarations, export paths,
-CSS and the Lit peer, removes development and lifecycle metadata, and points at
-Cloud's existing restricted GitHub Packages association. Staged file modes are normalised so the file-creation mask does not change package bytes. CSS source labels use paths within the package; the consumer proof compares JavaScript builds from two different checkout directories. Both delivered notices
-must equal the selected source's `LICENSE` and `LICENSE-GRANTS.md` byte for byte.
-
-The build child receives only an explicit set of path, home, locale, temporary-directory and CI/display environment variables. This does not isolate the home directory or filesystem; Cloud must provide the credential-free build job and isolated configuration required by its plan.
-
-The receipt records the tarball hash and npm integrity value, manifest and notice
-hashes, preparation-script hash, tool versions and hashes of tracked UI-package,
-root build/lock/licence and workflow inputs. It is build evidence, not a source
-CI verdict or a version reservation. Cloud must independently select successful
-trusted main runs at that exact SHA, validate its complete build-input inventory,
-reserve the version, review these bytes and perform its upload/readback checks.
-This utility neither selects green source nor publishes a package.
-
-Commit your changes first: the staged variant requires a clean checkout. Exercise both workspace and staged identities with the same independent
-TypeScript, bundle, browser and accessibility checks:
+Run the independent consumer against these exact bytes:
 
 ```sh
-pnpm --filter @waitron/ui-core test:package
-```
-
-To test a particular prepared artifact, pass its absolute path:
-
-```sh
-UI_PACKAGE_TARBALL=/tmp/waitron-ui-0.2.0/waitron-io-ui-core-0.2.0.tgz \
+UI_PACKAGE_TARBALL=/tmp/waitron-ui-inspection/waitron-io-ui-core-0.2.742.tgz \
+  UI_PACKAGE_RELEASE_VERSION=0.2.742 \
+  UI_PACKAGE_SOURCE_COMMIT="$(git rev-parse HEAD)" \
   pnpm --filter @waitron/ui-core test:package
 ```
 
-That option tests only the supplied registry artifact. Its source commit must match this checkout by default. To verify an artifact built from another checkout, supply `UI_PACKAGE_SOURCE_COMMIT` with the selected full SHA. Pass `UI_PACKAGE_RELEASE_VERSION` to bind its version to Cloud's reservation. The proof checks the source version, repository association, homepage and private registry settings; compare tarball integrity with the selected release record too. Cloud's portal, image and authenticated registry-install
-qualification still belong to Cloud's release process.
+Without these variables, `test:package` checks both the workspace tarball and a
+locally staged `0.2.0` artifact. It checks declarations, bundling, browser behavior
+and accessibility. A local pass does not establish registry access.

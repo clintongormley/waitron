@@ -1,0 +1,107 @@
+name: Publish shared UI
+
+on:
+  push:
+    branches: [main]
+    paths: ["packages/ui-core/**"]
+
+concurrency:
+  group: ui-core-publication
+  queue: max
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Bounded checkout attempts: docs/developers/ci-and-gates.md, "Every checkout is bounded".
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          persist-credentials: false
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        with:
+          persist-credentials: false
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - run: bash scripts/ci-setup-pnpm.sh
+        timeout-minutes: 5
+      - id: setup-node
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://npm.pkg.github.com
+          scope: "@waitron-io"
+          package-manager-cache: false
+      - name: Set up Node, second attempt
+        if: steps.setup-node.outcome == 'failure'
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://npm.pkg.github.com
+          scope: "@waitron-io"
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: |
+          for attempt in 1 2 3; do
+            timeout 180 pnpm --filter @waitron/ui-core exec playwright install chromium && break
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep 5
+          done
+      - id: checks
+        name: Check the source package
+        run: |
+          set -euo pipefail
+          for check in typecheck lint test:coverage test:package; do
+            pnpm --filter @waitron/ui-core ls --depth -1 --json \
+              | node scripts/changed-packages.mjs runnable "$check"
+          done
+          pnpm --filter @waitron/ui-core typecheck
+          pnpm --filter @waitron/ui-core lint
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter @waitron/ui-core test:coverage \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+      - id: prepare
+        name: Prepare the numbered release
+        run: |
+          mkdir "$RUNNER_TEMP/ui-release"
+          node scripts/release/prepare-ui.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ui-release" \
+            --release-version "0.2.$GITHUB_RUN_NUMBER" --source-commit "$GITHUB_SHA"
+      - id: consumer
+        name: Check the prepared package in an independent browser consumer
+        env:
+          UI_PACKAGE_TARBALL: ${{ runner.temp }}/ui-release/waitron-io-ui-core-0.2.${{ github.run_number }}.tgz
+          UI_PACKAGE_RELEASE_VERSION: 0.2.${{ github.run_number }}
+          UI_PACKAGE_SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          pnpm --filter @waitron/ui-core test:package
+      - id: publish
+        name: Publish the private package
+        timeout-minutes: 2
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.UI_PACKAGES_WRITE_TOKEN }}
+        run: |
+          npm publish "$RUNNER_TEMP/ui-release/waitron-io-ui-core-0.2.$GITHUB_RUN_NUMBER.tgz" \
+            --registry=https://npm.pkg.github.com --access=restricted --ignore-scripts

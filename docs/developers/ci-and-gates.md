@@ -31,6 +31,43 @@ whose author and committer times differ. Image smoke exercises the real Docker b
 cases do not establish Docker's network isolation. The original network stall's cause remains
 unverified; the image no longer invokes the generator's optional source-fetch mode.
 
+## Automatic private UI releases
+
+`publish-ui.yml` runs on main pushes changing `packages/ui-core/**`. It checks
+package types, lint and coverage, prepares the numbered tarball from the event's
+full SHA and runs the independent browser consumer before publishing. Only the
+publish step receives `UI_PACKAGES_WRITE_TOKEN`. A failed upload fails the run;
+the next qualifying merge attempts a new `0.2.<run number>` version.
+
+The publisher uses its own concurrency group with `queue: max` and no cancellation
+of a running publication. This serializes uploads separately from `ci.yml`, whose
+main runs still have distinct groups. GitHub documents a maximum of 100 pending
+runs and ordering by when they begin waiting, so this is not an unlimited queue or
+a guarantee that release numbers execute in increasing order. If a lower-numbered
+run reaches npm after a newer release, npm can refuse its default `latest` tag
+before upload. Keep that run red and read the error; the next qualifying merge
+gets a new number. The local npm 11.20.0 probe accepted `0.2.742` above `0.2.0`
+and refused it above `0.2.743`, sending no upload in the refused case.
+
+Before running checks, the workflow verifies that the selected package declares
+all four required scripts with the existing `runnable` guard. Chromium setup
+matches the ordinary CI job without `--with-deps`; coverage uses its diagnostic
+deadline wrapper and file-progress reporter.
+
+The workflow tests read trigger, queue, credential and check wiring as text. They
+execute the source-check, consumer and publish shells with controlled package-manager
+boundaries, and the real selection/deadline helpers. Missing scripts and failed
+checks must stop execution. Existing preparation and independent-consumer checks cover the tarball.
+These local checks do not establish hosted Actions behavior or registry authority;
+retain the first real publication result after landing.
+
+External provenance, read 2026-11-06:
+
+| Claim | Source's words | Application here |
+| --- | --- | --- |
+| Uploads can queue without replacing the one pending run | [Actions concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency): “Up to 100 jobs or workflow runs” | `queue: max` permits multiple pending publications in one group. |
+| Packages start private | [GitHub npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry): “default visibility is private” | The existing private package keeps its Cloud repository association; publication requests restricted access. |
+
 ## The optional whole-workspace check
 
 Run focused behavior tests during implementation. Use this broader local command when investigating
