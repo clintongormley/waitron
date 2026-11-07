@@ -7346,18 +7346,7 @@ export async function markOrderPlaced(
   await captureOrderAmendment(tx, attendance, amendment.id, operatorId, now.instant);
 }
 
-/**
- * Cancel a placed order and append its reasoned amendment in one transaction. A second cancel reads
- * `abandoned` and is refused `working_order.not_placed`.
- *
- * An order whose invoice was issued has the whole invoice credited, under the request's device, and
- * settled owing nothing in the same transaction ({@link creditWholeInvoice}). The credit needs
- * `sale.rectify` from the operator or from `override`, checked before any payment refusal; only when
- * the operator lacks it is the override's PIN checked, under `operator.attempts`. It is then refused,
- * writing nothing, while its bill holds a payment, or while a card payment of the invoice is
- * unresolved or captured and not yet filed. Any placed order is refused while an integrated card
- * collection of it runs in this process.
- */
+/** Cancel a placed order, crediting an issued invoice only with `sale.rectify`. */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
@@ -7412,10 +7401,7 @@ async function cancelPlaced(
     }
     // A placed order's card collection writes no mark, and its provider may write no payment row
     // until the card resolves, so only this process's own record of the attempt shows it.
-    if (
-      paymentAttemptIsLive(deps.db, id) ||
-      (invoice !== undefined && (await ordersWithUnfiledPayment(tx, [id])).has(id))
-    ) {
+    if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {
       throw new AppError("order.payment_in_flight", { workingOrderId: id });
     }
     if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);

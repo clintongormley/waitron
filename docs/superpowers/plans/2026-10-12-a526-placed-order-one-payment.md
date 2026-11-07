@@ -1,5 +1,15 @@
 # A placed order takes one payment at a time — implementation plan (A526)
 
+> **2026-11-06 — A1395:** Task 7's duplicate-fallback leftover is addressed by removing
+> the fallback in `finalizeCapture`; its earlier settled-order replay stays. The real-database case in
+> `apps/server/src/placed-order-one-payment.test.ts` issues an invoice between capture and
+> finalization: the payment stays unassociated, the order stays placed, and no success ticket is
+> returned. This constructs that state with an invoice fixture; it does not establish a current
+> public route that can create it.
+
+> A1395 also includes forwarded offline payments in the charged-row readers and refuses a
+> placed-order cancellation over stored unresolved or unfiled card payments before an invoice.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Every task is test-first: write the failing test, run it, watch it fail

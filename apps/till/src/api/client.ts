@@ -3675,13 +3675,6 @@ export class TillApi {
     await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/ready`, "POST", {});
   }
 
-  /**
-   * Cancel a PLACED order → `POST /api/working-orders/:id/cancel`. What it writes and refuses is
-   * `cancelPlacedOrder`'s (`apps/server/src/working-order.ts`). An invoiced bill's cancel credits
-   * the invoice in full; an operator without that permission is refused
-   * `authorization.not_permitted` and the caller re-sends with the PIN of someone
-   * {@link listCancelCreditAuthorizers} lists.
-   */
   async cancelOrder(
     id: string,
     reason: string,

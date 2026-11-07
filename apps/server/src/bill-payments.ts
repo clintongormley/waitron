@@ -14,6 +14,7 @@ import {
   billPaymentRefunds,
   billPayments,
   insertInChunks,
+  isUniqueViolation,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -1276,7 +1277,7 @@ export async function afterCardCharged<T>(
 }
 
 function notRecordedReason(error: unknown): NotRecordedReason | null {
-  if (error instanceof IssuanceRefusedError) return "issuance_refused";
+  if (error instanceof IssuanceRefusedError || isUniqueViolation(error)) return "issuance_refused";
   if (diskFullIn(error)) return "disk_full";
   if (error instanceof AppError && error.code === "clock.behind_chain") return "clock_behind_chain";
   return null;

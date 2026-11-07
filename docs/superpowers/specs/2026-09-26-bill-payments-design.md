@@ -1,5 +1,9 @@
 # Several payments against one bill — the payment and billing design
 
+> **2026-11-06, A1395:** The charged-payment readers now include an offline payment forwarded to
+> `settled`, while it has no sale. The placed-order cancellation guard covers stored payments
+> with or without an invoice.
+
 > **2026-10-18, A773:** The later [per-bill ownership design, section 4](2026-10-17-a773-one-editor-design.md#4-transaction-version-and-refusal-contract)
 > requires an unanswered whole or partial payment to retain its complete original request and retry
 > key, including its observed editing state. A refreshed confirmation cannot replace that request.
