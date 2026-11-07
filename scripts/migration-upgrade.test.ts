@@ -961,9 +961,7 @@ describe("upgrading a venue one migration at a time", () => {
       const unreached = (list: object, seen: Set<string>) =>
         Object.keys(list).filter((entry) => !seen.has(entry));
       expect({
-        CANDIDATES: unreached(CANDIDATES, reached.candidates).filter(
-          (entry) => !FROZEN_CANDIDATES.includes(entry),
-        ),
+        CANDIDATES: unreached(CANDIDATES, reached.candidates),
         ONE_ROW: unreached(ONE_ROW, reached.oneRow),
       }).toEqual({ CANDIDATES: [], ONE_ROW: [] });
       const connection = openRaw(venueDir);
@@ -1426,14 +1424,10 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   // with none, in whichever order the two tables are filled.
   "sales.total": [0n],
   // The CHECK wants a bare `YYYY-MM-DD`, a shape none of the generic text values has.
-  "special_dates.date": ["2026-01-01", "2026-01-02"],
   "special_day_dates.date": ["2026-01-01", "2026-01-02"],
   // Its CHECK wants a bare `MM-DD` that is not `02-29`.
   "seasons.starts_on": ["03-01", "06-01"],
 };
-
-/** {@link CANDIDATES} entries for a table no shipped migration creates, so the walk never meets them. */
-const FROZEN_CANDIDATES: readonly string[] = ["special_dates.date"];
 
 /** Tables filled with one row rather than two, each with its reason. */
 const ONE_ROW: Record<string, string> = {
