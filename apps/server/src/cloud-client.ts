@@ -33,6 +33,7 @@ import {
 import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
+import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import "./errors.js";
 
 export interface CloudRegistration {
@@ -68,6 +69,7 @@ export interface CloudChoice {
 }
 export interface CloudConnectionOptions {
   stateDir: string;
+  tunnelDir?: string;
   origin: string;
   localVenueId: string;
   environment: "test" | "production";
@@ -561,17 +563,25 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     },
     async refresh(signal?: AbortSignal) {
       return run(async () => {
-        const state = await read();
-        if (!state?.view?.registration) return project(state);
-        await installationClient(state, save).refresh(signal);
-        return project(state);
+        let state: SavedCloudState | undefined;
+        try {
+          state = await read();
+          if (!state?.view?.registration) return project(state);
+          await installationClient(state, save).refresh(signal);
+          return project(state);
+        } finally {
+          await writeTunnelConfiguration(options.tunnelDir, state);
+        }
       });
     },
     async revoke(authorize: () => Promise<void>, signal?: AbortSignal) {
       return run(async () => {
         const state = await read();
         if (!state?.view?.registration) throw new AppError("cloud.binding_conflict", {});
-        await installationClient(state, save).revoke(authorize, signal);
+        await installationClient(state, save).revoke(async () => {
+          await authorize();
+          await writeTunnelConfiguration(options.tunnelDir);
+        }, signal);
         return project(state);
       }, true);
     },
