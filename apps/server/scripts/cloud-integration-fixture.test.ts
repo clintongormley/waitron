@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
 import { openVenueDatabase } from "@waitron/db";
+import { getCountryPack } from "@waitron/country-packs";
 
 const READY_DEADLINE_MS = 90_000;
 const HEALTH_DEADLINE_MS = 10_000;
@@ -113,13 +114,17 @@ it("the Cloud integration fixture provisions a preproduction venue and starts", 
 
   const store = await openVenueDatabase(join(fixture.root, "venue"));
   try {
-    expect(
-      store.venue.all(
-        sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`,
-      ),
-    ).toEqual([
+    const allocations = store.venue.all<{
+      taxpayer_nif: string;
+      environment: string;
+      allocation_key: string;
+    }>(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`);
+    expect(getCountryPack("ES")!.taxIdentifier!.validate(allocations[0]!.taxpayer_nif).valid).toBe(
+      true,
+    );
+    expect(allocations).toEqual([
       {
-        taxpayer_nif: "73000001K",
+        taxpayer_nif: "73000001W",
         environment: "preproduction",
         allocation_key: expect.stringMatching(/^throwaway-/),
       },
