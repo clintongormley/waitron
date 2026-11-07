@@ -778,7 +778,13 @@ interface PlacingSeen {
 interface CertificateCard {
   filing: boolean;
   revision: string | null;
-  installed: { source: string; kind: string } | null;
+  installed: {
+    source: string;
+    kind: string;
+    validFrom: string;
+    validUntil: string;
+    installedAt: string;
+  } | null;
 }
 
 async function certificateCard(boxes: Boxes, box: Box): Promise<CertificateCard> {
@@ -2110,7 +2116,16 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   });
 
   it("M2's certificate card shows that certificate", () => {
-    expect(sold().on.m2Certificate.installed).toMatchObject({ source: "setup", kind: "sello" });
+    const { run, on } = sold();
+    const m1 = run.m1Certificate.installed;
+    expect(m1).not.toBeNull();
+    expect(on.m2Certificate.installed).toMatchObject({
+      source: "setup",
+      kind: "sello",
+      validFrom: m1!.validFrom,
+      validUntil: m1!.validUntil,
+      installedAt: m1!.installedAt,
+    });
   });
 
   const inheritedRun = () => {

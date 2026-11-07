@@ -3,7 +3,7 @@ import { readHistoryNodes, type Transaction } from "@waitron/db";
 import type { NodeId } from "@waitron/shared";
 import { calendarDaysLeft, certificateStage, localDate } from "./certificate-dates.js";
 import { venueTimeZone } from "./certificate-install.js";
-import { latestInstall } from "./certificate-record.js";
+import { latestInstallAmong } from "./certificate-record.js";
 import { fiscalCertificateReminders } from "./schema/certificate-reminders.js";
 
 type Language = "en" | "es";
@@ -62,9 +62,9 @@ export async function claimReminder(
   recipients: readonly Recipient[],
   now: Date,
 ): Promise<Reminder | null> {
-  const install = await latestInstall(tx, deps.nodeId);
-  if (install === null) return null;
   const history = [...(await readHistoryNodes(tx, deps.nodeId as NodeId))];
+  const install = await latestInstallAmong(tx, history);
+  if (install === null) return null;
   const timeZone = await venueTimeZone(tx);
   const stage = certificateStage(install.kind, now, install.validUntil, timeZone);
   if (stage === null) return null;

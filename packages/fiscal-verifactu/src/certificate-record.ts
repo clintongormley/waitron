@@ -5,13 +5,20 @@ import { fiscalCertificateInstalls } from "./schema/index.js";
 
 export type InstallRow = typeof fiscalCertificateInstalls.$inferSelect;
 
-/**
- * The newest install on this box or any box it took over from. Ordering by `installed_at` across
- * boxes is sound because every install is stamped by `nextInstalledAt` against this read, so an
- * install made after a takeover always sorts above the ones it inherited.
- */
+/** The newest install on this box or any box it took over from. */
 export async function latestInstall(tx: Transaction, nodeId: string): Promise<InstallRow | null> {
-  const history = await readHistoryNodes(tx, nodeId as NodeId);
+  return latestInstallAmong(tx, await readHistoryNodes(tx, nodeId as NodeId));
+}
+
+/**
+ * The newest install among `history`, as `readHistoryNodes` lists it. Ordering by `installed_at`
+ * across boxes is sound because `recordInstall` stamps every install after the newest one this read
+ * finds.
+ */
+export async function latestInstallAmong(
+  tx: Transaction,
+  history: readonly NodeId[],
+): Promise<InstallRow | null> {
   const [row] = await tx
     .select()
     .from(fiscalCertificateInstalls)
@@ -22,18 +29,18 @@ export async function latestInstall(tx: Transaction, nodeId: string): Promise<In
 }
 
 /**
- * When a new install is stamped: `now`, but never at or below `latest`, because `latestInstall`
- * orders by `installed_at` alone and a clock stepped back, or a box whose clock runs behind the one
- * it took over from, must not sort the new install below the one it replaces.
+ * Writes an install, taking `installedAt` as the writer's clock: the row is stamped then, but never
+ * at or below the newest install `latestInstall` finds, so a clock stepped back, or a box whose
+ * clock runs behind the one it took over from, cannot sort the new install below the one it
+ * replaces.
  */
-export function nextInstalledAt(latest: InstallRow | null, now: Date): Date {
-  if (latest === null) return now;
-  return new Date(Math.max(now.getTime(), latest.installedAt.getTime() + 1));
-}
-
 export async function recordInstall(
   tx: Transaction,
   row: typeof fiscalCertificateInstalls.$inferInsert,
 ): Promise<void> {
-  await tx.insert(fiscalCertificateInstalls).values(row);
+  const latest = await latestInstall(tx, row.nodeId);
+  const now = row.installedAt.getTime();
+  const installedAt =
+    latest === null ? row.installedAt : new Date(Math.max(now, latest.installedAt.getTime() + 1));
+  await tx.insert(fiscalCertificateInstalls).values({ ...row, installedAt });
 }
