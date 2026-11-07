@@ -187,6 +187,7 @@ export function createStripeCardProvider(
 
     build(deps: CardProviderBuildDeps): PaymentProvider {
       return new StripeTerminalProvider({
+        captureAlerts: deps.captureAlerts,
         client: deferredStripeClient({
           db: deps.db,
           ring: deps.ring,

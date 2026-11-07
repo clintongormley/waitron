@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
@@ -74,7 +75,11 @@ async function retained(venue: BillVenue, manual = false, issued = false, placed
 }
 
 function recoveryDeps(venue: BillVenue) {
-  const provider = new StripeTerminalProvider({ db: venue.db, client: new FakeStripe() });
+  const provider = new StripeTerminalProvider({
+    captureAlerts,
+    db: venue.db,
+    client: new FakeStripe(),
+  });
   return {
     ...venue,
     pool: { get: async () => provider },
@@ -284,6 +289,7 @@ describe("automatic card capture recovery", () => {
       client.stallNext();
       const created = vi.spyOn(client, "createPaymentIntent");
       const provider = new StripeTerminalProvider({
+        captureAlerts,
         db: suite.db,
         client,
         poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -346,6 +352,7 @@ describe("automatic card capture recovery", () => {
     const client = new FakeStripe();
     client.stallNext();
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       db: suite.db,
       client,
       poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },

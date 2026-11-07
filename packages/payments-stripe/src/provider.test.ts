@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -60,6 +61,7 @@ function providerFor(client: StripeClient): StripeTerminalProvider {
   return new StripeTerminalProvider({
     client,
     db: suite.db,
+    captureAlerts,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: noSleep },
   });
 }
@@ -98,6 +100,32 @@ async function capturedPayment(externalRef: string): Promise<{ paymentRef: strin
 }
 
 describe("StripeTerminalProvider.collect", () => {
+  it.each([0, 1200, 1300])(
+    "does not report the requested amount as captured when Stripe received %s cents",
+    async (amountReceived) => {
+      const fake = new FakeStripe();
+      const process = fake.processPaymentIntent.bind(fake);
+      vi.spyOn(fake, "processPaymentIntent").mockImplementation(
+        async (readerId, paymentIntentId) => {
+          await process(readerId, paymentIntentId);
+          fake.setIntent(paymentIntentId, { status: "succeeded", amount: 1210, amountReceived });
+        },
+      );
+      const params = await collectParams();
+
+      const result = await providerFor(fake).collect(params);
+
+      expect
+        .soft(result)
+        .toMatchObject({ state: "attempting", amount: params.amount, settledAt: null });
+      expect(await rowFor(result.paymentRef)).toMatchObject({
+        state: "attempting",
+        settledAt: null,
+        amount: params.amount,
+      });
+    },
+  );
+
   it("captures: attempting -> captured, settledAt set, external_ref = the PI id", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();
@@ -312,9 +340,17 @@ describe("StripeTerminalProvider.collect", () => {
       cancelReaderAction: () => Promise.resolve(),
       refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
       ...UNUSED_CALLS,
+      retrievePaymentIntent: () =>
+        Promise.resolve({
+          id: "pi_default_sleep",
+          status: "succeeded",
+          amount: 1210,
+          amountReceived: 1210,
+        }),
     };
     const p = await collectParams();
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client,
       db: suite.db,
       poll: { maxAttempts: 3, intervalMs: 0 },
@@ -490,6 +526,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
 describe("StripeTerminalProvider.forward", () => {
   it("forward is a no-op for the server-driven provider (no device-local offline queue)", async () => {
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: new FakeStripe(),
       db: suite.db,
     });
@@ -505,6 +542,7 @@ describe("StripeTerminalProvider.forward", () => {
 describe("StripeTerminalProvider.resolvePending", () => {
   it("resolvePending is all-zeros when no row needs checking", async () => {
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: new FakeStripe(),
       db: suite.db,
     });
@@ -598,6 +636,7 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
       cancelReaderAction: (r) => fake.cancelReaderAction(r),
       refund: (params) => fake.refund(params),
       ...UNUSED_CALLS,
+      retrievePaymentIntent: (id) => fake.retrievePaymentIntent(id),
     };
     const result = await providerFor(client).collect(p);
     expect(seen).toHaveLength(1);

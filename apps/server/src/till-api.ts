@@ -211,7 +211,12 @@ import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-ca
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid, readBillBalance } from "./bill-payments.js";
-import { asObject, mountBillPaymentsApi, submissionIdOf } from "./bill-payments-api.js";
+import {
+  asObject,
+  mountBillPaymentsApi,
+  optionalMoney,
+  submissionIdOf,
+} from "./bill-payments-api.js";
 import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
@@ -563,6 +568,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.provider_disconnected": 409,
   "reader.not_held": 409,
   "reader.payment_in_progress": 409,
+  "payment.capture_mismatch_unresolved": 409,
   "table.not_found": 404,
   "table.inactive": 409,
   "table.not_on_today_plan": 409,
@@ -1860,6 +1866,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<IntegratedPayRequest>(c);
       // Screened before the provider guard, so a malformed body is a 400 whatever the card config.
       requireUuidParam(body.id, "WorkingOrderId");
+      optionalMoney(body.tip, "tip");
       if (
         body.simulationOutcome !== undefined &&
         (deps.cardProvider?.provider !== "simulator" ||

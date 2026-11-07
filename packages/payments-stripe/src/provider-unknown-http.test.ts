@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
@@ -50,6 +51,7 @@ describe("unknown Stripe payments through the installed HTTP client", () => {
         const { port } = server.address() as AddressInfo;
         const sdk = new Stripe("sk_test_local", { host: "127.0.0.1", port, protocol: "http" });
         const provider = new StripeTerminalProvider({
+          captureAlerts,
           db: suite.db,
           client: stripeClient(sdk),
           poll: { maxAttempts: 1, intervalMs: 0 },

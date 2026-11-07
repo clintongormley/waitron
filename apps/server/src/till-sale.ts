@@ -615,6 +615,7 @@ export type IntegratedPayOutcome =
   | { outcome: "captured"; ticket: TillSaleResult }
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
+  | { outcome: "capture_mismatch" }
   | { outcome: "network_unavailable" };
 
 /** {@link payWorkingOrderIntegrated}'s deps: the fiscal {@link TillSaleDeps} plus the card `provider`. */
@@ -1047,6 +1048,7 @@ async function fileImmediateSale(
       label: (await readReceiptOrder(tx, workingOrderId, { atIssuance: true })).orderLabel,
       status: "settled",
       settledAt: settledAt.toISOString(),
+      paymentAttemptAt: null,
     })
     .where(eq(workingOrders.id, workingOrderId));
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
@@ -1412,8 +1414,7 @@ async function payIntegrated(
         finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
       );
     }
-    // A timed-out reader leaves its payment `attempting`, which keeps the mark: the provider's
-    // sweep may still capture it.
+    // An unresolved attempt keeps the mark, including a mismatch that no later sweep may resolve.
     await releasePaymentAttempt(deps, req.id, attemptAt);
     return toPayOutcome(result, null);
   }
@@ -2095,8 +2096,8 @@ async function finalizeSettleRecovery(
 }
 
 /**
- * Map a provider result onto an {@link IntegratedPayOutcome}. `attempting` (a stall) maps to
- * `timeout`, so a stall is not mislabelled a hard decline; any other non-captured state but
+ * Map a provider result onto an {@link IntegratedPayOutcome}. `attempting` maps to
+ * `timeout` unless it carries a known amount mismatch; any other non-captured state but
  * `network_unavailable` maps to `declined`.
  */
 export function toPayOutcome(
@@ -2110,7 +2111,7 @@ export function toPayOutcome(
     return { outcome: "network_unavailable" };
   }
   if (result.state === "attempting") {
-    return { outcome: "timeout" };
+    return { outcome: result.captureMismatch === true ? "capture_mismatch" : "timeout" };
   }
   return {
     outcome: "declined",

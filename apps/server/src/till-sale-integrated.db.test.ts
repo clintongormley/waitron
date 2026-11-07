@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -266,6 +267,7 @@ function integratedDeps(
   client = new FakeStripe(),
 ): { deps: IntegratedPayDeps; client: FakeStripe } {
   const provider = new StripeTerminalProvider({
+    captureAlerts,
     client,
     db: app,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -1670,6 +1672,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     });
     const app = suite.db;
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: new FakeStripe(),
       db: app,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -2770,6 +2773,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       const t = await twoTabs();
       const client = new FakeSumUp();
       const provider = new SumUpCloudProvider({
+        captureAlerts,
         client,
         db: suite.db,
         incidents: () => Promise.resolve(false),
@@ -3051,6 +3055,47 @@ describe("an order being paid by card cannot be changed from another device (pla
     expect(await markOf(failed)).toBeNull();
     expect(await markOf(attempting)).toBe(mark);
     expect(await markOf(abandoned)).toBe(mark);
+  });
+
+  it("clears a stale payment mark when a free order settles by reader", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 0, lineTotal: 0 })
+        .where(eq(workingOrderLines.workingOrderId, id));
+      await tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: "2020-01-01T00:00:00.000Z" })
+        .where(eq(workingOrders.id, id));
+    });
+    const { deps, client } = integratedDeps(suite.db);
+
+    await expect(
+      payWorkingOrder(deps, cfg, {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "0.00" },
+      }),
+    ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
+    expect(await markOf(id)).toBe("2020-01-01T00:00:00.000Z");
+
+    expect((await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).outcome).toBe(
+      "captured",
+    );
+
+    expect(await markOf(id)).toBeNull();
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(client.lastCreateIntent).toBeUndefined();
+    expect(await paymentCount(id)).toBe(0);
+    expect(await tendersFor(id)).toEqual([]);
+    expect(await filedSaleTotal(id)).toBe("0.00");
   });
 
   it("never writes the mark on a placed order it collects", async () => {

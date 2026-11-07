@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -239,6 +240,7 @@ async function setup(
 
   const client = opts.client ?? new FakeStripe();
   const provider = new StripeTerminalProvider({
+    captureAlerts,
     client,
     db: suite.db,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -427,6 +429,37 @@ async function resolutionsFor(paymentId: string) {
 // --- the list -------------------------------------------------------------------------------
 
 describe("GET /management-api/payments/stuck", () => {
+  it("keeps a known amount mismatch visible and locked when a manager checks it again", async () => {
+    const v = await setup();
+    const id = await openOrder(v);
+    const { paymentId, piId } = await strandPayment(v, id, {
+      status: "succeeded",
+      amountReceived: 140,
+    });
+    const first = await send(v, "POST", resolvePath(paymentId), v.managerCookie);
+    expect(first.status).toBe(409);
+    expect(await errorOf(first)).toMatchObject({ code: "payment.capture_mismatch_unresolved" });
+    v.client.setIntent(piId, { status: "succeeded", amount: 150, amountReceived: 150 });
+    const read = vi.spyOn(v.client, "retrievePaymentIntent");
+    const second = await send(v, "POST", resolvePath(paymentId), v.managerCookie);
+    expect(second.status).toBe(409);
+    expect(await errorOf(second)).toMatchObject({ code: "payment.capture_mismatch_unresolved" });
+    const list = await send(v, "GET", "/management-api/payments/stuck");
+    expect(((await list.json()) as { paymentId: string }[]).map((row) => row.paymentId)).toEqual([
+      paymentId,
+    ]);
+    expect(read).not.toHaveBeenCalled();
+    const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(order!.paymentAttemptAt).not.toBeNull();
+    const [payment] = await suite.db.select().from(payments).where(eq(payments.id, paymentId));
+    expect(payment).toMatchObject({
+      state: "attempting",
+      saleId: null,
+      settledAt: null,
+      amount: 150,
+    });
+  });
+
   it("lists a stranded payment, and omits one on an order that carries no mark", async () => {
     const v = await setup();
     const stuckOrder = await openOrder(v);
@@ -810,7 +843,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(saleIdsFor(orderId)).toEqual([]);
   });
 
-  it("refuses outcome_unknown, naming Stripe's status, when Stripe's answer is ambiguous", async () => {
+  it("refuses a known amount mismatch without suggesting another processor check", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
     // Succeeded, but for a different amount from the row's.
@@ -823,8 +856,8 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
 
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
-      code: "payment.outcome_unknown",
-      params: { paymentId, reason: "ambiguous", providerStatus: "succeeded" },
+      code: "payment.capture_mismatch_unresolved",
+      params: { workingOrderId: orderId, recoveryUrl: "/manage/payments" },
     });
     expect((await paymentRow(paymentId)).state).toBe("attempting");
     expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
@@ -1476,9 +1509,10 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect(rows[0]).toMatchObject({ source: "device", device_id: rows[0]!.started_on });
   });
 
-  it("refuses outcome_unconfirmed, naming Stripe's status, when Stripe captured another amount", async () => {
+  it("refuses a known bill amount mismatch without suggesting another processor check", async () => {
     const v = await setup();
-    const id = await strandBillPayment(v, await openOrder(v), {
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, {
       kind: "attempting",
       intent: { status: "succeeded", amountReceived: 100 },
     });
@@ -1487,8 +1521,8 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
 
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
-      code: "bill.payment_outcome_unconfirmed",
-      params: { paymentId: id, reason: "ambiguous", providerStatus: "succeeded" },
+      code: "payment.capture_mismatch_unresolved",
+      params: { workingOrderId: orderId, recoveryUrl: "/manage/payments" },
     });
     expect((await billPaymentOf(id)).state).toBe("pending");
   });

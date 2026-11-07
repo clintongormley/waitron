@@ -105,7 +105,7 @@ import {
   type PaymentProvider,
   type ReaderStatus,
 } from "@waitron/payments";
-import { recordIncidentOnce } from "@waitron/core";
+import { recordIncidentOnce, markIncidentHandled } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
@@ -2271,6 +2271,7 @@ async function bootServer(
       ring,
       environment: config.environment,
       incidents: recordIncidentOnce,
+      captureAlerts: { raise: recordIncidentOnce, handle: markIncidentHandled },
     });
   const tillClock = systemClock();
   const boxHost = seams.boxHost ?? boxHostClient();

@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -84,6 +85,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     const backend = new FakeFiscalBackend(suite.db);
     const s = await seedForSale(suite.db, backend, freshNif());
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: new FakeStripe(),
       db: suite.db,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -130,6 +132,7 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
     const s = await seedForSale(suite.db, backend, freshNif());
     const client = new FakeStripe();
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client,
       db: suite.db,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },

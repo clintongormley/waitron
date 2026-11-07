@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -4927,6 +4928,7 @@ describe("a reader payment on a device that changes profile while it is starting
       }
     }
     const provider = new MovingProvider({
+      captureAlerts,
       client,
       db: suite.db,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },

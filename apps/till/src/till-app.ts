@@ -779,6 +779,7 @@ const PRESENTED_CARD_REFUSALS = {
   declined: "declined",
   network_unavailable: "card_network",
   timeout: "card_timeout",
+  capture_mismatch: "card_mismatch",
 } as const;
 
 /** The tables a seat holds: each one it named, with every member of that table's merge. */
@@ -18621,7 +18622,8 @@ export class TillApp extends LitElement {
             })
             .then(
               (answer) => {
-                if (answer.outcome === "timeout") this.#unknownCardOutcome.add(billId);
+                if (answer.outcome === "timeout" || answer.outcome === "capture_mismatch")
+                  this.#unknownCardOutcome.add(billId);
                 return answer;
               },
               (error: unknown) => {
@@ -19207,7 +19209,8 @@ export class TillApp extends LitElement {
             },
           ),
         );
-        if (card && result.outcome === "timeout") this.#unknownCardOutcome.add(key);
+        if (card && (result.outcome === "timeout" || result.outcome === "capture_mismatch"))
+          this.#unknownCardOutcome.add(key);
         settle();
         await this.#onBillPaid(open, result, readerName);
       } catch (error) {
@@ -19258,6 +19261,19 @@ export class TillApp extends LitElement {
     const now = this.#billPayingNow(open.id);
     if (now === null) return;
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
+    if (result.outcome === "capture_mismatch") {
+      this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
+      this.billPaying = {
+        ...now,
+        balance: result.balance,
+        asked: null,
+        preview: null,
+        refusal: { code: "card_mismatch" },
+        taken: null,
+        busy: false,
+      };
+      return;
+    }
     if (NOT_CHARGED_OUTCOMES.has(result.outcome)) {
       this.billPaying = {
         ...now,

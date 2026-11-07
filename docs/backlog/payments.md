@@ -314,15 +314,6 @@ The second pass throws partway instead of skipping the rows the first resolved. 
 provider's `resolvePending` also reads `listAttempting` (`packages/payments-stripe/src/provider.ts:258`)
 but skips a row another pass resolved first (`payment.not_found`, `:269`).
 
-## Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991)
-
-- The reader pay's `tipOf` (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip,
-  against CLAUDE.md §3's rule that a default applies only when the field is absent; it predates
-  B28, and paying a non-zero bill on the reader is believed to accept it the same way (read, not
-  run). Next: a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept.
-- After a free sale settles on the reader, a stale card-attempt mark on the order is left in
-  place; manual Pay is believed to leave it the same way (read, not run).
-
 ## A875. Check two writes the bill payments design says a pending card refund refuses
 
 The
@@ -374,29 +365,8 @@ keeping their own, chosen on a new Tips tab in Venue settings that also replaces
 `WAITRON_TILL_TIPS`; cash tips handed out at the day's close (once a close counts the drawer,
 A239, and the asesor's L6(g) allows it), card tips paid with wages; a Tips page under Team by day
 and by pay period, frozen when a pay period closes (once the product has a step that closes one).
-The first design had six build slices (its §7), the first a fix (next entry). Replaces the old "Tip-collection UI" entry: cash and
+The first design had six build slices (its §7). Replaces the old "Tip-collection UI" entry: cash and
 typed-card tips already arrived with bill payments (#956).
-
-## A whole-order card payment does not refuse a negative tip
-
-(found by A793's design, read, not
-run). With tips on, a request that did not come from the till's own form (which refuses it) can
-carry `tip: "-5.00"`: `POST /api/pay` never checks `tip` (`apps/server/src/till-api.ts:1682-1737`)
-and `decimal()` accepts it (`packages/shared/src/money.ts:14-25`), so the reader would be asked for
-the bill less €5.00 and the tender would then fail its `tip_amount >= 0` check after the card was
-charged.
-A tip with more than two decimals is not checked either; the bill payment routes refuse both
-(`apps/server/src/bill-payments-api.ts:32`). Next: a route case sending `tip: "-5.00"`, then refuse
-it before the reader is asked. A793's slice 1. Full review (money).
-
-## A whole-order payment records the amount it expected, not the amount captured
-
-(found by A793's
-design, read). A capture that differs from bill plus till tip is written as bill plus till tip
-(`apps/server/src/till-sale.ts:1647`, and `:1974` for an order already placed); only the recovery
-path reads the captured amount and calls the excess a tip. The only cause found is a reader whose
-own tip screen was switched on outside Waitron; other causes were not checked. Next: compare the captured amount at capture time, as the bill payment loop does
-(`payment.bill_capture_mismatch`).
 
 ## An offline card payment that forwarding moved to `settled` with no sale no longer holds its placed order
 
@@ -472,20 +442,15 @@ and shows a clear message.
 
 ## Bundle A1389: Refuse bad tips and compare the amount captured on the whole-order card path
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Remaining: the approved manager release, after the migration freeze. Detection compares processor
+amounts in both adapters, retains a mismatch as uncertain, and stops automatic reads immediately.
+The alert names both amounts. Handling the alert leaves the order and reader held.
 
-- **Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991).**
-  Next: a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept.
-  A stale card-attempt mark after a free sale also remains unchecked (read, not run).
-  [Detail](payments.md#loose-ends-left-by-b28s-review-1005-not-acted-on-under-service-task-17-991)
-- **A whole-order card payment does not refuse a negative tip** (found by A793's design, read,
-  not run). A tip with more than two decimals is not checked either. Next: a route case sending
-  `tip: "-5.00"`, then refuse it before the reader is asked. A793's slice 1. Full review (money).
-  [Detail](payments.md#a-whole-order-card-payment-does-not-refuse-a-negative-tip)
-- **A whole-order payment records the amount it expected, not the amount captured** (found by
-  A793's design, read). Next: compare the captured amount at capture time, as the bill payment
-  loop does (`payment.bill_capture_mismatch`).
-  [Detail](payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
+- Add the owner's `released_unpaid` outcome: record which amount is right and free the unpaid
+  order without filing, rewriting the recorded amount or moving money. Show what the card took.
+  Qualify with A1381 and A1395 before landing detection, and land release immediately after it.
+  Authority: watcher 2026-11-06 23:12 and 2026-11-07 02:53; implementation plan
+  [detection](../superpowers/plans/2026-11-07-a1389-card-mismatch-detection.md).
 
 ## Bundle A1394: SumUp's sweep and refund call stop throwing
 

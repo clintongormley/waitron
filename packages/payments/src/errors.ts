@@ -19,6 +19,18 @@ export type OrphanRemediation =
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "payment.capture_mismatch": {
+      payments: {
+        provider: string;
+        paymentRef: string;
+        workingOrderId: string;
+        externalRef: string;
+        requestedAmount: string;
+        reportedAmount: string;
+        orderNumber?: number;
+      }[];
+    };
+    "payment.capture_mismatch_unresolved": { workingOrderId: string; recoveryUrl: string };
     "payment.not_found": { provider: string; paymentRef: string };
     "payment.refund_exceeds_capture": {
       paymentRef: string;
@@ -107,7 +119,7 @@ declare module "@waitron/shared" {
     /** Paying on a card reader the starting device does not hold. */
     "reader.not_held": { readerId: string };
     /** Another device has a payment in progress on the card reader. */
-    "reader.payment_in_progress": { readerId: string };
+    "reader.payment_in_progress": { readerId: string; recoveryUrl?: string };
     /**
      * The provider's unpair call failed. `providerId` is the public provider token, never a
      * credential. Registered here because both the server and the SumUp client throw it.

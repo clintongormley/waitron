@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
@@ -790,6 +791,7 @@ describe("the provider refunds another refund of the payment already accounts fo
     // stamped when first read, so after that refund's send.
     let event: NonNullable<SumUpTransaction["refundEvents"]>[number] | undefined;
     const sumup = new SumUpCloudProvider({
+      captureAlerts,
       db: venue.db,
       incidents: () => Promise.resolve(true),
       client: {
@@ -898,6 +900,7 @@ describe("the provider's refunds read before the first send", () => {
   /** SumUp's own reading and lookup over a transaction whose refund events the test writes. */
   function sumupOver(events: NonNullable<SumUpTransaction["refundEvents"]>) {
     const sumup = new SumUpCloudProvider({
+      captureAlerts,
       db: venue.db,
       incidents: () => Promise.resolve(true),
       client: {
