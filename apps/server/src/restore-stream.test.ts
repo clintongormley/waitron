@@ -887,7 +887,7 @@ function integrityOf(dir: string): Promise<boolean> {
 }
 
 describe("checkIntegrity", () => {
-  it("keeps the main thread's timers turning while it checks a large copy, where a check on the main thread stops them", async () => {
+  it("keeps the main thread's timers turning while it checks a copy that takes the main thread over one timer period", async () => {
     const file = join(await fresh("waitron-integrity-large-"), "venue.db");
     const build = new DatabaseSync(file);
     try {
@@ -908,15 +908,15 @@ describe("checkIntegrity", () => {
         clearInterval(interval);
       }
     };
-    const control = await ticksDuring(() => {
-      const db = new DatabaseSync(file);
-      try {
-        return db.prepare("pragma integrity_check").all();
-      } finally {
-        db.close();
-      }
-    });
-    expect(control.ticks).toBe(0);
+    // The file is large enough only if checking it on the main thread outlasts the interval below.
+    const started = performance.now();
+    const db = new DatabaseSync(file);
+    try {
+      db.prepare("pragma integrity_check").all();
+    } finally {
+      db.close();
+    }
+    expect(performance.now() - started).toBeGreaterThanOrEqual(10);
     const threaded = await ticksDuring(() => checkIntegrity(file));
     expect(threaded.answer).toBe(true);
     expect(threaded.ticks).toBeGreaterThan(0);
@@ -933,6 +933,29 @@ describe("checkIntegrity", () => {
     const deps = await prepareDeps(await bucket(), {
       restoreGeneration: async (args) => {
         await writeFile(args.outPath, Buffer.alloc(8192, 0x5a));
+      },
+      log: (_level, event, fields) => {
+        if (event === "restore.stream_integrity_failed") problems.push(fields);
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_integrity_failed",
+    });
+    expect(problems).toEqual([{}]);
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("fails a copy whose rows name a missing parent, with the real check left in place", async () => {
+    const problems: unknown[] = [];
+    const deps = await prepareDeps(await bucket(), {
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const db = new DatabaseSync(args.outPath);
+        try {
+          db.exec("pragma foreign_keys = off; delete from locations");
+        } finally {
+          db.close();
+        }
       },
       log: (_level, event, fields) => {
         if (event === "restore.stream_integrity_failed") problems.push(fields);
