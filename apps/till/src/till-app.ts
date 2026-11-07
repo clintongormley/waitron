@@ -1837,6 +1837,16 @@ function saleRefusalOf(
   }
 }
 
+/** A tender the device's profile does not take, which no retry from this device will change. */
+function profileRefusalOf(
+  error: unknown,
+): { code: "device.cash_not_allowed" | "device.forbidden_action" } | undefined {
+  const code = (error as { code?: unknown } | undefined)?.code;
+  return code === "device.cash_not_allowed" || code === "device.forbidden_action"
+    ? { code }
+    : undefined;
+}
+
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
@@ -7910,7 +7920,12 @@ export class TillApp extends LitElement {
       });
       if (!current()) return;
       const pending = this.#unansweredWholePayments.get(row.workingOrderId);
-      if (row.collectionStatus !== null || pending !== undefined) {
+      // With no counter screen to load it into, a presented counter bill is collected here.
+      const presentedWithoutCounter =
+        this.#resolveScreen("counter") !== "counter" &&
+        row.orderStatus === "placed" &&
+        row.partyId === null;
+      if (row.collectionStatus !== null || pending !== undefined || presentedWithoutCounter) {
         this.#collectionObservation = {
           billId: row.workingOrderId,
           api,
@@ -8647,6 +8662,7 @@ export class TillApp extends LitElement {
       if (!current()) return;
       this.findBillError =
         saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
+        profileRefusalOf(error) ??
         (isPermanentSaleRefusal(error)
           ? "sale.refused"
           : isNetworkFailure(error)
@@ -20867,6 +20883,8 @@ export class TillApp extends LitElement {
                 .bill=${this.collectionBill}
                 .confirmationTender=${this.collectionBill === null ? undefined : this.#unansweredWholePayments.get(this.collectionBill.workingOrderId)?.tender}
                 .unconfirmed=${this.collectionBill !== null && this.#unansweredWholePayments.has(this.collectionBill.workingOrderId)}
+                .takesCash=${this.#takesCash()}
+                .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
                 .busy=${this.findBillBusy}
                 .error=${this.findBillError}
               ></till-find-bill-dialog>`

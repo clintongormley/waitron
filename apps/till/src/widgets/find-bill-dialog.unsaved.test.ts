@@ -29,6 +29,8 @@ class CollectionLeaveApp extends LitElement {
   override render() {
     return html`<till-find-bill-dialog
         .bill=${this.bill}
+        .takesCash=${true}
+        .takesManualCard=${true}
         @find-bill-close=${() => this.closes++}
         @find-bill-selection=${() => this.selections++}
         @find-bill-pay=${(event: CustomEvent<FindBillPayDetail>) => this.submitted.push(event.detail)}

@@ -29,6 +29,8 @@ import type { TillTenderPay } from "./widgets/tender-pay.js";
 import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { cameraFilming } from "../test/qr-camera.js";
+import { deviceZonesFixture } from "../test/device-zones.js";
+import type { BillRow } from "./api/find-bill-types.js";
 import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
   balanceOf,
@@ -6350,4 +6352,165 @@ describe("till-app: Finish table refused from the ⋮ on a handheld opened from 
       await page.viewport(viewport.width, viewport.height);
     }
   });
+});
+
+describe("a presented counter bill from Find a bill, on a device with no counter screen", () => {
+  const presentedCounter = billRow({
+    workingOrderId: "wo-presented",
+    orderStatus: "placed",
+    partyId: null,
+    collectionStatus: null,
+    state: "unpaid",
+    total: "9.90",
+    paid: "0.00",
+    stillOwed: "9.90",
+  });
+  const findDialog = (el: TillApp) => el.shadowRoot!.querySelector("till-find-bill-dialog");
+  const inFind = (el: TillApp, selector: string) =>
+    findDialog(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
+  const stage = (el: TillApp) => (el as unknown as { stage: string }).stage;
+  const noCounterTill = {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["z1"])),
+  };
+
+  async function openRow(
+    row: BillRow,
+    device: Record<string, unknown>,
+    overrides: Record<string, unknown> = {},
+  ) {
+    const { el } = await mountApp({
+      ...device,
+      findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listBills: vi.fn().mockResolvedValue(listPage([row])),
+      getFindBill: vi.fn().mockResolvedValue(row),
+      retrievePlacedOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
+      retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
+      getTabLines: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+      collectOrder: vi.fn().mockResolvedValue(saleOf("9.90")),
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValue({ status: "done", jobId: "job-1", canRetry: false }),
+      getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
+      ...overrides,
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    expect(stage(el)).toBe("order");
+    emit(shell(el), "find-bill");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", { row });
+    await flush(el);
+    return el;
+  }
+
+  const devices = [
+    ["a handheld", onPhone()],
+    ["a till with no counter zones", noCounterTill],
+  ] as const;
+
+  it.each(devices)(
+    "on %s, it opens Find a bill's collecting dialog on what it owes, reads no order into the basket, and cash collects it once",
+    async (_, device) => {
+      const el = await openRow(presentedCounter, device);
+      await vi.waitFor(() => expect(inFind(el, "[data-collect]")).not.toBeNull());
+      expect(text(findDialog(el)!.shadowRoot!.querySelector("strong"))).toContain(money("9.90"));
+      expect(el.shadowRoot!.querySelector("till-find-bill-screen")!.checkVisibility()).toBe(true);
+      expect(api.retrievePlacedOrder).not.toHaveBeenCalled();
+      expect(api.retrieveWorkingOrder).not.toHaveBeenCalled();
+      expect(api.getTabLines).not.toHaveBeenCalled();
+      expect(stage(el)).toBe("order");
+
+      inFind(el, "[data-collect]")!.click();
+      await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+      expect(api.collectOrder).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(api.collectOrder).mock.calls[0]!.slice(0, 2)).toEqual([
+        "wo-presented",
+        { method: "cash", amount: "9.90" },
+      ]);
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(api.retrievePlacedOrder).not.toHaveBeenCalled();
+      expect(api.getTabLines).not.toHaveBeenCalled();
+      expect(stage(el)).toBe("order");
+    },
+  );
+
+  it.each(devices)("on %s, a presented TABLE bill still opens its table", async (_, device) => {
+    const row = billRow({
+      workingOrderId: "wo-4",
+      orderStatus: "placed",
+      partyId: "v1",
+      collectionStatus: null,
+      state: "unpaid",
+    });
+    const el = await openRow(row, device);
+    await vi.waitFor(() => expect(tableOrder(el)).not.toBeNull());
+    expect(findDialog(el)).toBeNull();
+    expect(api.collectOrder).not.toHaveBeenCalled();
+  });
+
+  it("on a till with counter zones, it loads into the counter as before, with no collecting dialog", async () => {
+    const el = await openRow(presentedCounter, {});
+    await vi.waitFor(() => expect(api.retrievePlacedOrder).toHaveBeenCalledTimes(1));
+    await flush(el);
+    expect(findDialog(el)).toBeNull();
+    expect(api.collectOrder).not.toHaveBeenCalled();
+  });
+
+  it("a handheld that takes no cash offers only the card on the terminal", async () => {
+    const el = await openRow(
+      presentedCounter,
+      {},
+      {
+        ...onPhone({}, { capabilities: ["print-receipt", "hand-keyed-card-payment"] }),
+      },
+    );
+    await vi.waitFor(() => expect(inFind(el, "[data-collect]")).not.toBeNull());
+    expect(inFind(el, "[data-cash]")).toBeNull();
+    expect(inFind(el, "[data-card]")).not.toBeNull();
+  });
+
+  it("a departed bill on a handheld that takes no card on a terminal offers only cash", async () => {
+    const departed = billRow({
+      workingOrderId: "wo-departed",
+      collectionStatus: "left_without_paying",
+      departedAt: "2026-10-15T14:00:00Z",
+    });
+    const el = await openRow(
+      departed,
+      {},
+      {
+        ...onPhone({}, { capabilities: ["print-receipt", "take-cash"] }),
+      },
+    );
+    await vi.waitFor(() => expect(inFind(el, "[data-collect]")).not.toBeNull());
+    expect(inFind(el, "[data-cash]")).not.toBeNull();
+    expect(inFind(el, "[data-card]")).toBeNull();
+  });
+
+  it.each([
+    ["device.cash_not_allowed", "en"],
+    ["device.cash_not_allowed", "es"],
+    ["device.forbidden_action", "en"],
+    ["device.forbidden_action", "es"],
+  ] as const)(
+    "a collection refused with %s says so in its own words (%s)",
+    async (code, locale) => {
+      setLocale(locale);
+      const el = await openRow(presentedCounter, onPhone(), {
+        collectOrder: vi.fn().mockRejectedValue({ code, action: "hand-keyed-card-payment" }),
+      });
+      await vi.waitFor(() => expect(inFind(el, "[data-collect]")).not.toBeNull());
+      inFind(el, "[data-collect]")!.click();
+      await vi.waitFor(() => expect(api.collectOrder).toHaveBeenCalledTimes(1));
+      await flush(el);
+      const actions = inFind(el, "wt-form-actions") as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      await actions.updateComplete;
+      const shown = actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim();
+      expect(shown).toBe(codeMessage(code));
+      expect(shown).not.toBe(t("sale.error"));
+    },
+  );
 });

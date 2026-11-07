@@ -24,7 +24,7 @@ describe.each(["light", "dark"] as const)("Selected bill collection a11y (%s the
     async (stage) => {
       const { el, host } = await mountWidget<TillFindBillDialog>(
         "till-find-bill-dialog",
-        { bill: debt },
+        { bill: debt, takesCash: true, takesManualCard: true },
         theme,
       );
       if (stage === "card") el.shadowRoot!.querySelector<HTMLElement>("[data-card]")!.click();
