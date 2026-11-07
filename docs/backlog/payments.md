@@ -262,19 +262,6 @@ confirm the two do not touch before assuming they are independent. Start by read
 Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
 because if the reader owns the whole step there may be nothing for us to build.
 
-## `finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled
-
-When a card payment's last step tries to file the sale and finds a sale already
-on the order, it answers that sale's receipt instead of failing (`finalizeCapture`'s catch,
-`apps/server/src/till-sale.ts`). The receipt comes from `readSettledTicket`, which reads the sale
-and never the order's status (read). So if another writer filed a sale on an order that is still
-`placed`, the till is shown a receipt while the card's charge is recorded on no sale.
-
-A526 now refuses the unpaid departure used to reach the fallback before that change. No other
-way to reach it is known; it has not been re-run since A526. Next: decide what the fallback does
-when the order is not settled (for example, fail and leave the charge for reconciliation rather
-than show a receipt).
-
 ## Check how real Stripe answers a malformed reader id, and one from another Stripe account
 
 The add-reader route answers `reader.reference_unknown` when Stripe's
@@ -384,20 +371,6 @@ path reads the captured amount and calls the excess a tip. The only cause found 
 own tip screen was switched on outside Waitron; other causes were not checked. Next: compare the captured amount at capture time, as the bill payment loop does
 (`payment.bill_capture_mismatch`).
 
-## An offline card payment that forwarding moved to `settled` with no sale no longer holds its placed order
-
-Once no card payment of the order runs in this process, a collect is accepted
-(`ordersWithUnfiledPayment`, `apps/server/src/till-sale.ts`, counts no `settled` row). A526's
-review measured it with `FakePaymentProvider.forward`; of the adapters, only
-`StripeOnDeviceProvider`, which no app builds, settles forwarded rows.
-
-## A placed order with no invoice is not checked against stored card payments when it is cancelled
-
-Its cancel sees a card running at the reader in this process, but not a stored
-payment its provider has not resolved, nor one captured and not yet filed; the cancel had no
-payment check at all before C126. (Its collect, card payment and unpaid departure do check both
-since A526.) Left open by C126 (cancelling an order whose invoice was issued credits it, #1030).
-
 ## A payment whose read shows it settled the bill needs one press of Comprobar de nuevo to show the ticket
 
 A bill read that lists a held payment frees the bill, except when that payment
@@ -450,20 +423,12 @@ and shows a clear message.
   [Detail](payments.md#a-whole-order-card-payment-does-not-refuse-a-negative-tip)
 - **A whole-order payment records the amount it expected, not the amount captured** (found by
   A793's design, read). Next: compare the captured amount at capture time, as the bill payment
-  loop does (`payment.bill_capture_mismatch`).
+  loop does (`payment.bill_capture_mismatch`). A1395's review also constructed a stored €1.00
+  capture on a €3.00 placed order: Pay cannot file it, cancellation stays refused, and no second
+  charge is taken. No current public route producing this state was established. Watcher decision,
+  2026-11-06: keep that protection; add no automatic refund or manager action. Check the recovery
+  limit here, and bring any real route that produces it to the watcher.
   [Detail](payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
-
-## Bundle A1395: Cancelling or settling a placed order respects stored card payments
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A placed order with no invoice is not checked against stored card payments when it is
-  cancelled.** Left open by C126.
-  [Detail](payments.md#a-placed-order-with-no-invoice-is-not-checked-against-stored-card-payments-when-it-is-cancelled)
-- **`finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled**,
-  while the card's charge stays on no sale. Measured before A526 through an unpaid departure
-  that A526 now refuses; no other way to reach it is known. Left open by A526.
-  [Detail](payments.md#finalizecaptures-duplicate-fallback-can-show-a-receipt-for-an-order-that-is-not-settled)
 
 ## Bundle A1399: What happens when a bill payment is sent again under one id
 
@@ -500,16 +465,12 @@ and shows a clear message.
 
 ## Bundle: Tap to pay restore
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size M. Its text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Restore `stripe_on_device` (Tap-to-Pay) on the handheld** (left open by A796). It waits for
   the one-time native-app decision
   ([native app capabilities](../superpowers/specs/2026-08-30-native-app-capabilities.md), N1/N2;
   [A796 design §6](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md#6-tap-to-pay)).
-- **An offline card payment that forwarding moved to `settled` with no sale no longer holds its
-  placed order**: once no card payment of the order runs in this process, a collect is accepted.
-  Left open by A526.
-  [Detail](payments.md#an-offline-card-payment-that-forwarding-moved-to-settled-with-no-sale-no-longer-holds-its-placed-order)
 
 ## Bundle: No fiscal venue paid flow
 
@@ -602,9 +563,9 @@ and shows a clear message.
 
 - **A placed order takes one card payment at a time** (A526, 2026-10-12; defaults sent to the owner
   as an FYI the same day and built). While a card payment of a placed order is in flight — running
-  in this process, still `attempting` at its provider, or captured (or accepted offline) and not yet
-  on a sale — a cash or hand-keyed card collect of the order, a second card payment of it and an
-  unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
+  in this process, still `attempting` at its provider, or already charged and not yet
+  on a sale, including accepted or forwarded offline payments — a cash or hand-keyed card collect
+  of the order, a second card payment of it and an unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
   nothing. Pressing Pay again to file a card that was already charged is never refused, even from
   another till and even while that card's own payment has not yet filed it: it files that charge and
   asks no reader. A till on another payment provider is refused until the charge is filed, by the

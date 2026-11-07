@@ -380,9 +380,20 @@ describe("the spare fetches the old box's final copy", () => {
             res.writeHead(200, { "content-length": "1000" });
             res.write("the start, then nothing");
           }
-        : real,
+        : stalled === 2
+          ? (req, res) => {
+              setTimeout(() => {
+                if (!res.destroyed) real(req, res);
+              }, 250);
+            }
+          : real,
     );
-    await r.start({ compare, silenceLimitMs: 100 });
+    let downloads = 0;
+    await r.start({
+      compare,
+      download: (url, options, path) =>
+        boxDownload(url, { ...options, silenceLimitMs: downloads++ === 0 ? 100 : undefined }, path),
+    });
     await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
     expect(r.copyReads()).toBe(2);
   });

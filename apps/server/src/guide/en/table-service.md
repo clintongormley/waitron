@@ -1,5 +1,11 @@
 # Table service
 
+## Check a card before cancelling {#cancel-pending-card}
+
+If cancelling an order says a card payment is pending, wait for the reader to finish, then choose
+**Pay** to check that payment before cancelling again. If the card was charged, do not ask the
+customer to pay a second time.
+
 ## Issue a full invoice {#full-invoice}
 
 When a table customer needs an invoice in their name, choose **Full invoice** for the bill and

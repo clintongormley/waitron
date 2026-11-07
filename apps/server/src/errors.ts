@@ -510,7 +510,7 @@ declare module "@waitron/shared" {
      * A write reached an OPEN order a card payment is in flight on: an integrated payment between
      * pricing and filing (`working_orders.payment_attempt_at` is set), or a pending card payment
      * towards the bill. The payment settles what it was asked for, so the order is not changed under
-     * it. Also a cancel of a PLACED order whose invoice a card payment is paying: one its provider
+     * it. Also a cancel of any PLACED order with a card payment: one its provider
      * has not resolved, or one captured or accepted offline that no sale records yet
      * (`ordersWithUnfiledPayment`); or a cancel of any placed order while an integrated card
      * collection of it runs in this process (`paymentAttemptIsLive`). Also, while such a payment or
