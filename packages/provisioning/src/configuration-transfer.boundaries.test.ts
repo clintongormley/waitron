@@ -263,17 +263,17 @@ it.each([
   ).toThrow(expect.objectContaining(invalid(field)));
 });
 
-it.each([
-  { exported: { "synthetic-transfer": 2 }, code: "setup.configuration_newer" },
-  { exported: { "synthetic-transfer": 0 }, code: "setup.configuration_outdated" },
-])("names which side is newer when a module's version differs: $exported", ({ exported, code }) => {
-  const bundle = { ...configurationBundle(), modules: exported as Record<string, number> };
-  expect(() =>
-    validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
-      "synthetic-transfer": 1,
-    }),
-  ).toThrow(expect.objectContaining({ code, params: {} }));
-});
+it.each([{ "synthetic-transfer": 2 }, { "synthetic-transfer": 0 }])(
+  "refuses a module version that differs in either direction as another version: %j",
+  (exported) => {
+    const bundle = { ...configurationBundle(), modules: exported };
+    expect(() =>
+      validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
+        "synthetic-transfer": 1,
+      }),
+    ).toThrow(expect.objectContaining({ code: "setup.configuration_other_version", params: {} }));
+  },
+);
 
 it("refuses an export that lacks a module the box runs as a module mismatch, not an older export", () => {
   const bundle = { ...configurationBundle(), modules: {} };
@@ -312,7 +312,7 @@ it("checks an import's module version before replacing its existing rows", async
       importConfigurationTables(tx, bundle, [moduleWith([{ name: "zz_parents" }])], {
         "synthetic-transfer": 1,
       }),
-    ).rejects.toMatchObject({ code: "setup.configuration_newer", params: {} });
+    ).rejects.toMatchObject({ code: "setup.configuration_other_version", params: {} });
     expect((await tx.execute(sql`select id from zz_parents`)).rows).toEqual([{ id: "retained" }]);
   });
 });

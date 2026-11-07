@@ -175,6 +175,11 @@ is a version direction. Wording follows the
 existing "newer software" refusals (`shell.bucket.newer_software`, `shell.cloud.newer_software`,
 `shell.ts:101-102, :129-130`).
 
+2026-11-07, after the rebase onto A760 part 3 (eed41cc3c0): a module version that differs in either
+direction answers `setup.configuration_other_version` («made by a different version of Waitron»),
+since a migration squash resets the counts; `setup.configuration_newer` is the format version's
+alone, and `incompatible_version`'s words now also name another version.
+
 **Existing tests whose expected code flips** (a behaviour change; the PR names each):
 
 - `packages/provisioning/src/configuration-transfer.boundaries.test.ts:53` (`{ version: 11 }`):
@@ -373,6 +378,13 @@ Each has a recommended default; the PR is built with the default.
 | same form, password forgotten | `forgotten` | "If the password is forgotten, this page cannot go further. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included." / «Si se ha olvidado la contraseña, esta página no puede seguir. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.» | "If the password is forgotten, this page cannot go further. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included, unless a backup is restored afterwards." / «Si se ha olvidado la contraseña, esta página no puede seguir. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.» |
 | Managers' full-disk email, last sentence | `BOX_EMAILS["storage.disk_full"].text` | "If that is not enough, ask whoever installed the box to free more space or fit a bigger disk." / «Si no basta, pide a quien instaló el equipo que libere más espacio o ponga un disco mayor.» | "If that is not enough, Waitron cannot free more space by itself: the rest of the disk holds the venue's data, the backups kept on this box and files that are not Waitron's." / «Si no basta, Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron.» |
 | Till full-disk refusals | (unchanged) | «Tell a manager» endings | unchanged until the owner answers Owner question 1 |
+
+2026-11-07, after the rebase onto A760 part 3 (eed41cc3c0), for the three configuration-export rows
+above: a module version that differs in either direction answers `setup.configuration_other_version`
+with `shell.configuration.other_version` ("This export was made by a different version of Waitron,
+so this box cannot load it. …"), since a migration squash resets the counts;
+`shell.configuration.newer` answers the format version alone, and `incompatible_version`'s words now
+also name another version (the words are in `apps/setup/src/i18n/strings/shell.ts`).
 
 ## File structure
 

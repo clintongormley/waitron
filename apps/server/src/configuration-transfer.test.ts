@@ -6383,7 +6383,7 @@ describe("public holidays in a configuration transfer", () => {
       modules: { ...transferred.modules, core: versions.core! - 1 },
     };
     expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({ code: "setup.configuration_outdated", params: {} }),
+      expect.objectContaining({ code: "setup.configuration_other_version", params: {} }),
     );
   });
 });

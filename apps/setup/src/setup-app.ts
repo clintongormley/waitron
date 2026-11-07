@@ -465,6 +465,7 @@ function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
   if (code === "setup.configuration_newer") return say("shell.configuration.newer");
+  if (code === "setup.configuration_other_version") return say("shell.configuration.other_version");
   if (
     code === "setup.request_invalid" &&
     typeof params?.field === "string" &&

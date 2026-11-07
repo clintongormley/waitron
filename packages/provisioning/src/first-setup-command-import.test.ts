@@ -302,7 +302,7 @@ it.each([
     (bundle: ConfigurationBundle) => {
       bundle.modules.core = bundle.modules.core! - 1;
     },
-    { code: "setup.configuration_outdated", params: {} },
+    { code: "setup.configuration_other_version", params: {} },
   ],
 ] as const)(
   "command refuses retained %s mismatch before stamping",

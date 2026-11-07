@@ -929,7 +929,7 @@ describe("routing cells in a staged import", () => {
     };
     const { stateDir, result } = await staged(older, versions);
     await expect(result).rejects.toMatchObject({
-      code: "setup.configuration_outdated",
+      code: "setup.configuration_other_version",
       params: {},
     });
     expect(await readdir(stateDir)).toEqual([]);

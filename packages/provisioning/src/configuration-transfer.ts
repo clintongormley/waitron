@@ -591,10 +591,9 @@ export function validateConfigurationBundle(
     if (target === undefined || exported === undefined) {
       throw new AppError("setup.request_invalid", { field: `module:${module.name}` });
     }
-    if (exported > target) {
-      throw new AppError("setup.configuration_newer", {});
-    }
-    throw new AppError("setup.configuration_outdated", {});
+    // A migration squash resets a set's count, so the direction of a difference says nothing about
+    // which side is newer.
+    throw new AppError("setup.configuration_other_version", {});
   }
   checkedRows(bundle, modules);
   for (const field of PRIVACY_CONTACT_FIELDS) {

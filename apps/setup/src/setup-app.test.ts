@@ -3203,14 +3203,14 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "This export and this box do not use the same parts of Waitron, so the export cannot be loaded here.",
+      "This export was made by a different version of Waitron, or on a box that runs different parts of Waitron, so this box cannot load it. Make a new export on a box running this box's version, then load that.",
     ],
     [
       "es-ES",
-      "Esta exportación y este equipo no usan las mismas partes de Waitron, así que la exportación no se puede cargar aquí.",
+      "Esta exportación la hizo otra versión de Waitron, o un equipo que usa otras partes de Waitron, así que este equipo no puede cargarla. Haz una exportación nueva en un equipo con la versión de este y carga esa.",
     ],
   ] as const)(
-    "explains an export using different parts of Waitron (%s)",
+    "explains an export from another version or using different parts of Waitron (%s)",
     async (locale, sentence) => {
       try {
         for (const field of ["module:core", "modules"]) {
@@ -3241,6 +3241,37 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       }
     },
   );
+
+  it.each([
+    [
+      "en-GB",
+      "This export was made by a different version of Waitron, so this box cannot load it. Install that version on this box and try again, or make a new export on a box running this box's version.",
+    ],
+    [
+      "es-ES",
+      "Esta exportación la hizo otra versión de Waitron, así que este equipo no puede cargarla. Instala esa versión en este equipo y vuelve a intentarlo, o haz una exportación nueva en un equipo con la versión de este.",
+    ],
+  ] as const)("explains an export from a different version (%s)", async (locale, sentence) => {
+    try {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi.fn().mockRejectedValue({
+            code: "setup.configuration_other_version",
+            params: {},
+            status: 400,
+          }),
+        }),
+      );
+      setLocale(locale);
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+      expect(readDraft(el).configurationImport).toBeUndefined();
+      expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
+    } finally {
+      setLocale("en-GB");
+    }
+  });
 
   it.each([
     [
