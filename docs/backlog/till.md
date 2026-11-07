@@ -2100,7 +2100,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 
 ## Bundle A1380: Saves, reads and sign-outs that can lose a dish or act as the wrong person
 
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06), except the last, from A1382.
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A1357. The till's draft saves and reads can still pass each other (seen in A803 slice 4c's
   review; two of the three are the same on main).** A failed read leaves a waiting edit unsent until
@@ -2121,12 +2121,77 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 - **A792. Two smaller points A768's last review left (2026-10-17).** Read, not run: confirm each,
   then test or narrow it.
   [Detail](till.md#a792-two-smaller-points-a768s-last-review-left-2026-10-17)
-- **After a lost counter Send reply, a changed basket can never be sent, and the till says "Could not
-  send the order, try again" (left open by A1382).** The box answers
-  `working_order.not_open`, `#onPlaceOrder` shows `place.error`, and Park drops the change with no
-  sentence. On the demo stack, taking an added dish back off and pressing Send went through; a raised
-  sent dish has no `−`, so by reading it cannot be taken back. A review's proposal, not built: lock
-  the basket with `store.lockEdits()` while the answer is unknown.
+
+## A1416. A started dish whose option was renamed blocks every save of its order until it is cancelled
+
+Left open by A1382. The order holds a dish the kitchen has started, and that dish's options list or
+option is renamed and the menu published. Every change to the order is then refused, including a new
+dish, a change to another dish and the order's label, and nothing on screen says the rename is why.
+The run reached this on a table's bill moved to the counter and on the same bill saved whole while
+still at its table. A table's own routes are not affected: a note on another dish and a new round
+both saved. A counter order sent with Send did not reach it: once placed, a save answers
+`working_order.not_open`. Other routes to an open order holding a started dish were not looked for.
+
+**What the person sees.**
+
+- A customer or kitchen name changed: on main, "Could not park the order, try again", and "Could not
+  send the order, try again" or "Could not complete the sale, try again" from Send or Pay, with the
+  added dish left in an unsaved basket that hides Cancel. With #2542, "The kitchen has already
+  started a dish on this order, and a started dish can no longer be changed. The order has been
+  reloaded", the added dish gone and Cancel on screen, although nobody touched the started dish.
+  Adding the dish again gets the same answer.
+- A staff name changed: "An item's choices have changed — open the line and choose again". The line's
+  window is read-only on a dish already sent (run on a started dish; the check reads only whether it
+  was sent), so nobody can. The box refuses each save `options.label_required`, started or not, and
+  the till says "Could not park the order, try again".
+
+**The ways out that ran:** cancel the started dish, then save; or rename it back and publish. Sending
+the order unchanged still works, so a dish added meanwhile has to go on another order (not run).
+
+**Receipt.** A throwaway server test on main 59be31e3b7, `pnpm --filter @waitron/server exec vitest
+run src/working-order.test.ts -t "A1382 probe" --coverage.enabled=false`: seven saves after a
+kitchen-name rename, adding a dish or changing only the other dish or the label, all printed `refused
+ticket.already_started`, the last with the dish `ready`, and the save after cancelling it printed
+`saved`. Controls printed `saved`: no rename, renamed but not
+published, and renamed with nothing started. The till's half ran as a focused test with the refusal
+stubbed, on main and on #2542's 59636ee00e; no real till ran this case.
+
+**State of the fix.** None built, and it is not small: it needs a decision on what a started dish's
+saved answer means. A save sends every line's answers again and the box compares them by value with
+what the line holds. An answer stores names and no ids, so a rename cannot be told from a different
+answer, which `docs/developers/modifiers.md` records as a decision and the guide states
+(`apps/server/src/guide/en/modifiers.md`). Having the box keep a started dish's answer whatever a save
+sends would silently drop a real change from a till that could not read the lines, whose line window
+stays editable (`#lineReadOnly`, by reading). The other routes, such as a mark from the till that the
+line was not touched or an id on the answer, change what the till and the box agree on.
+
+## A1417. After a lost counter Send reply, a basket changed since cannot be sent and the till says only try again
+
+Left open by A1382. A counter Send reaches the box, so the kitchen has the order, but its reply is
+lost. The till says "The server did not answer. Send again: the kitchen will not get the order twice."
+If the person changes the basket first, the box answers `working_order.not_open` and `#onPlaceOrder`
+shows `place.error`: "Could not send the order, try again", on every Send.
+
+- A dish just added and taken back off: the next Send goes through.
+- A raised dish already sent: it has no `−`, so the change cannot be taken back.
+- Park: the basket empties with no sentence, so the change is dropped and nobody is told.
+
+**Why no sentence fixes it.** A1382's review refused "The order may already have been sent, so this
+change was not saved. Undo the change, then press Send" (`place.changed_after_send`, never landed). Its
+finding, in its own words: `"Undo the change" is impossible for several changes`. Those are `+` on a sent, unstarted
+dish; `×` on a stored dish ("Adding it back gives a line with no stored id, placed last"); `×` on any
+dish of a new order except the last ("because the order of lines is compared"); and a menu refresh
+that changes a line's version ("The person changed nothing and cannot undo it"). On those paths "Send
+repeats the same sentence forever. The only way out I found is Park, which swallows the
+`working_order.not_open` refusal ... and silently drops the change".
+
+**Receipt.** A focused till test with stubbed answers on #2542's 59636ee00e printed the sentences and
+the three results above. The `×` and menu-refresh paths are the review's own, not run here. A throwaway
+server test on main 59be31e3b7 printed `refused working_order.not_open` for a save of a placed order.
+Taking an added dish back off also went through on the demo stack, in A1382's live run.
+
+**State of the fix.** Not built. The review's proposal: lock the basket with `store.lockEdits()` while
+the answer is unknown, so no change can be made, and add no sentence.
 
 ## A till request refused for naming someone not signed in locks the screen with no sentence
 

@@ -856,7 +856,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   because `paidQuantitiesOf` counts pending item payments. The row's words came with slice 4a.
   [Detail](backlog/till.md#a1350-a-row-can-read-paid-on-money-a-card-in-progress-has-only-reserved)
 
-- **A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person** (bundle of 6, 1 go-live, 2 important, size M). Holds A1357, A1263, A792. [Detail](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
+- **A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person** (bundle of 5, 1 go-live, 2 important, size M). Holds A1357, A1263, A792. [Detail](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 
 - **A1358. A number stepper's − and + are 24 by 32 px, against the 44 px tap size (seen in A803
   slice 4c's LOOK; predates it).** Measured on Split a table's guest steppers at 390 wide. The
@@ -890,6 +890,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1269. A dead-end question that replaces another keeps the first one's picks (found in A803
   slice 3's LOOK fix review 3; predates it, `c8487cba5`).** Clear both when the question changes.
   [Detail](backlog/till.md#a1269-a-dead-end-question-that-replaces-another-keeps-the-first-ones-picks)
+
+- **A1416. A started dish whose option was renamed blocks every save of its order until it is
+  cancelled (left open by A1382).** Run on main; not small, since it needs a decision on what a
+  started dish's saved answer means.
+  [Detail](backlog/till.md#a1416-a-started-dish-whose-option-was-renamed-blocks-every-save-of-its-order-until-it-is-cancelled)
+
+- **A1417. After a lost counter Send reply, a basket changed since cannot be sent and the till says
+  only try again (left open by A1382).** A sentence failed review because not every change can be
+  undone; the proposal is to lock the basket while the answer is unknown.
+  [Detail](backlog/till.md#a1417-after-a-lost-counter-send-reply-a-basket-changed-since-cannot-be-sent-and-the-till-says-only-try-again)
 
 - **A till request refused for naming someone not signed in locks the screen with no sentence (left
   open by A1382).** The owner chooses words on the lock screen or a recorded exception.
