@@ -2103,7 +2103,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   replacement also worked without a server restart. A separate managed demo recovered its app
   and tunnel after controlled exits; physical reboot is untested. The certificate worker
   now resumes pending requests, renews before expiry and opens the listener after first issuance;
-  its automated public-demo deployment is not yet qualified. Left: the managed tunnel container, signed connection details, Settings on/off/status, remaining isolation
+  a fresh isolated test venue completed automatic key submission, tunnel configuration, certificate
+  installation and trusted public browser sign-in on 7 November. Its peer restart also recovered.
+  Left: managed deployment, Settings on/off/status, remaining isolation
   qualification and retirement of `@waitron/tunnel`. Translate all and address completion remain
   test-box trials.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)

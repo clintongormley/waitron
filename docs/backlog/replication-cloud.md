@@ -1045,11 +1045,13 @@ controlled process exits, and the public page returned 200. Both are enabled for
 physical box reboot remains untested. The owner's containers were untouched.
 [Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
 
-The five reviewed cuts are combined on private `feat/a951s-integration` for the fresh test-box
-trial. The combined Linux server and dashboard build, and the container creates its key while
-remaining off without a placement. The fresh signed pairing is awaiting Cloud approval; automatic
-provisioning, certificate installation and public sign-in on that fresh venue remain unverified.
-The earlier managed demo remains separate and running.
+On 7 November the five reviewed cuts on private `feat/a951s-integration` completed the fresh
+test-box path. After pairing, the boot worker submitted the container's saved public key, wrote
+its assigned placement, requested and installed the staff certificate, and opened the staff
+listener without restarting. Chromium signed in through the public gateway with normal certificate
+trust. A peer-container restart recovered the trusted public page. The bounded test stopped its
+own fixture and peer afterwards; the earlier managed demo remains separate and running.
+[Receipt and limits](../operations/a951-host-evidence.md#a951-s-automatic-staff-connection-7-november-2026).
 
 Remaining work, following the owner's certificate-first order:
 
@@ -1057,8 +1059,7 @@ Remaining work, following the owner's certificate-first order:
   submit/status exchange, resumes pending requests after restart and renews before expiry. A local
   TLS handshake observed the renewed chain without restarting the listener; no new public
   certificate was issued for that synthetic test.
-- Qualify the combined tunnel runtime, signed key submission and configuration writer on the fresh
-  venue, provide Settings on/off/status, and retire `@waitron/tunnel`.
+- Provide managed deployment and Settings on/off/status, and retire `@waitron/tunnel`.
 - Qualify the managed demo across a physical reboot.
 - Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
   internet and separation from other venues and LAN addresses.
