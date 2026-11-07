@@ -1,9 +1,9 @@
-import { link, lstat, rename, rm } from "node:fs/promises";
+import { rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import type { ArchiveEntry } from "./backup-archive.js";
 import { errnoOf } from "./errno.js";
-import { syncFolderHolding } from "./fs-atomic.js";
+import { stagedPath, syncFolderHolding } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import "./errors.js";
@@ -12,12 +12,25 @@ const SECRETS_PREFIX = "secrets/";
 const TRADING_ENV_FILE = "trading.env";
 
 export const STAGED_SECRET_SUFFIX = ".incoming";
-/** A killed restore can leave `.incoming` and `.previous` files beside the secrets; the next
- * restore's staging and publish replace them. */
+/** A killed restore can leave `.incoming`, `.incoming.tmp` and `.previous` files beside the
+ * secrets, and one killed while publishing a target absent with its old file as `.previous`. The
+ * next restore replaces only those of the names its own archive carries, so a `tls/*.previous`
+ * copy of an old private key can survive. */
 export const PREVIOUS_SECRET_SUFFIX = ".previous";
+/** The set-aside identity's name, `trading.env.replaced`, in `restore.ts`. */
+const REPLACED_IDENTITY_SUFFIX = ".replaced";
+
+/** A secret named with one of these could be written over another secret's working file, or over
+ * the set-aside identity. Lower case: a case-insensitive filesystem treats `.INCOMING` as the same. */
+const WORKING_FILE_SUFFIXES = [
+  STAGED_SECRET_SUFFIX,
+  PREVIOUS_SECRET_SUFFIX,
+  stagedPath(""),
+  REPLACED_IDENTITY_SUFFIX,
+];
 
 export interface StagedSecrets {
-  /** Renames each staged file over its target, trading.env last, keeping a replaced one as
+  /** Renames each staged file over its target, trading.env last, setting a replaced one aside as
    * `<target>.previous`; on a failure, puts back what it renamed, removes the staged files, then
    * throws the failure. */
   publish(): Promise<void>;
@@ -36,8 +49,9 @@ interface Secret {
 
 /**
  * Writes every `secrets/` entry beside its target as `<target>.incoming`, durably and 0600, and
- * changes no target. A target that exists as a folder is refused `restore.unsafe_entry_path` before
- * any file is written; any other failure removes what was staged and is thrown.
+ * changes no target. A target that exists as a folder, or a name ending in one of a restore's own
+ * working-file suffixes, is refused `restore.unsafe_entry_path` before any file is written; any
+ * other failure removes what was staged and is thrown.
  */
 export async function stageSecrets(args: {
   entries: readonly ArchiveEntry[];
@@ -50,13 +64,19 @@ export async function stageSecrets(args: {
     entryName: entry.name,
     contents: Buffer.from(entry.bytes).toString("utf8"),
   }));
-  secrets.sort((a, b) => Number(a.rel === TRADING_ENV_FILE) - Number(b.rel === TRADING_ENV_FILE));
+  const identity = secrets.find((secret) => secret.rel === TRADING_ENV_FILE);
+  const others = secrets.filter((secret) => secret !== identity);
   const target = (secret: Secret) => join(stateDir, secret.rel);
   const staged = (secret: Secret) => `${target(secret)}${STAGED_SECRET_SUFFIX}`;
   const previous = (secret: Secret) => `${target(secret)}${PREVIOUS_SECRET_SUFFIX}`;
 
   for (const secret of secrets) {
-    if ((await lstatOrUndefined(target(secret)))?.isDirectory())
+    const name = secret.rel.toLowerCase();
+    if (WORKING_FILE_SUFFIXES.some((suffix) => name.endsWith(suffix)))
+      throw new AppError("restore.unsafe_entry_path", { name: secret.entryName });
+  }
+  for (const secret of secrets) {
+    if ((await statOrUndefined(target(secret)))?.isDirectory())
       throw new AppError("restore.unsafe_entry_path", { name: secret.entryName });
   }
 
@@ -78,40 +98,60 @@ export async function stageSecrets(args: {
     written.push(secret);
   }
 
+  /** Syncs each folder holding one of `which` once; a failure is thrown unless `onFailure` takes it. */
+  const syncFolders = async (
+    which: readonly Secret[],
+    onFailure?: (secret: Secret, error: unknown) => void,
+  ) => {
+    const synced = new Set<string>();
+    for (const secret of which) {
+      const folder = dirname(target(secret));
+      if (synced.has(folder)) continue;
+      synced.add(folder);
+      try {
+        await syncFolderHolding(target(secret));
+      } catch (error) {
+        if (onFailure === undefined) throw error;
+        onFailure(secret, error);
+      }
+    }
+  };
+
   return {
     async publish() {
-      const renamed: { secret: Secret; hadPrevious: boolean }[] = [];
+      const replaced: { secret: Secret; setAside: boolean }[] = [];
+      const place = async (secret: Secret) => {
+        const setAside = await setAsidePrevious(target(secret), previous(secret));
+        replaced.push({ secret, setAside });
+        await rename(staged(secret), target(secret));
+      };
       try {
-        for (const secret of secrets) {
-          const hadPrevious = await keepPrevious(target(secret), previous(secret));
-          try {
-            await rename(staged(secret), target(secret));
-          } catch (error) {
-            if (hadPrevious)
-              await removeEach([secret], previous, log, "restore.secrets.previous_kept");
-            throw error;
-          }
-          renamed.push({ secret, hadPrevious });
-        }
-        const synced = new Set<string>();
-        for (const secret of secrets) {
-          const folder = dirname(target(secret));
-          if (synced.has(folder)) continue;
-          synced.add(folder);
-          await syncFolderHolding(target(secret));
+        for (const secret of others) await place(secret);
+        // On disk as well as in program order: the identity is never in place without the rest.
+        await syncFolders(others);
+        if (identity !== undefined) {
+          await place(identity);
+          await syncFolders([identity]);
         }
       } catch (error) {
-        for (const { secret, hadPrevious } of renamed.reverse()) {
+        const putBackFailed = (secret: Secret, putBackError: unknown) =>
+          log("warn", "restore.secrets.put_back_failed", {
+            file: secret.rel,
+            errno: errnoOf(putBackError),
+          });
+        const putBack = [...replaced].reverse();
+        for (const { secret, setAside } of putBack) {
           try {
-            if (hadPrevious) await rename(previous(secret), target(secret));
+            if (setAside) await rename(previous(secret), target(secret));
             else await rm(target(secret), { force: true });
           } catch (putBackError) {
-            log("warn", "restore.secrets.put_back_failed", {
-              file: secret.rel,
-              errno: errnoOf(putBackError),
-            });
+            putBackFailed(secret, putBackError);
           }
         }
+        await syncFolders(
+          putBack.map(({ secret }) => secret),
+          putBackFailed,
+        );
         await removeStaged(secrets);
         throw error;
       }
@@ -126,12 +166,11 @@ export async function stageSecrets(args: {
   };
 }
 
-/** Links `target`'s current file as `previous`, so `target` is never absent while it is replaced.
+/** Renames `target`'s current file to `previous`, replacing any `previous` a killed restore left.
  * False when there is no `target`. */
-async function keepPrevious(target: string, previous: string): Promise<boolean> {
-  await rm(previous, { force: true });
+async function setAsidePrevious(target: string, previous: string): Promise<boolean> {
   try {
-    await link(target, previous);
+    await rename(target, previous);
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
@@ -154,9 +193,10 @@ async function removeEach(
   }
 }
 
-async function lstatOrUndefined(path: string) {
+/** Follows a link, so a link to a folder counts as a folder. */
+async function statOrUndefined(path: string) {
   try {
-    return await lstat(path);
+    return await stat(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
