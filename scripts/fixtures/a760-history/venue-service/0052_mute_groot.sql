@@ -1,1 +1,0 @@
-ALTER TABLE `service_settings` ADD `print_moved_slips` integer DEFAULT true NOT NULL;

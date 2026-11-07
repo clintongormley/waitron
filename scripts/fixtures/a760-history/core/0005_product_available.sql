@@ -1,1 +1,0 @@
-ALTER TABLE `products` ADD `available` integer DEFAULT true NOT NULL;

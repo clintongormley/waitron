@@ -1,1 +1,0 @@
-ALTER TABLE `working_order_lines` ADD `vat_class` text;

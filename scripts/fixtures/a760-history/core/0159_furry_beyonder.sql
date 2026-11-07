@@ -1,1 +1,0 @@
-ALTER TABLE `sale_lines` ADD `list_unit_price_gross` integer;

@@ -1,1 +1,0 @@
-CREATE INDEX `sale_voids_voided_at_idx` ON `sale_voids` (`voided_at`);

@@ -1,1 +1,0 @@
-ALTER TABLE `sessions` ADD `device_id` text NOT NULL REFERENCES devices(id);

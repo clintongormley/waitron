@@ -1,1 +1,0 @@
-ALTER TABLE `kitchen_stations` ADD `colour` text DEFAULT 'red' NOT NULL;

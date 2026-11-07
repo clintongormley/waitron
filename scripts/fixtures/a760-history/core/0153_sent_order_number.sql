@@ -1,1 +1,0 @@
-ALTER TABLE `ticket_items` ADD `sent_order_number` integer;

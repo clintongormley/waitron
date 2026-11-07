@@ -1,1 +1,0 @@
-ALTER TABLE `kitchen_notices` ADD `rerouted_to` text;

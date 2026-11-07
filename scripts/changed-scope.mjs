@@ -89,22 +89,6 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
       "packages/venue-service",
     ],
   ],
-  // Only the reader is listed: entries match by exact path, and the fixture's data files are frozen,
-  // pinned byte for byte by `scripts/a760-history-fixture.test.ts`.
-  [
-    "scripts/fixtures/a760-history/historical-set.mjs",
-    [
-      "apps/server",
-      "packages/db",
-      "packages/fiscal-verifactu",
-      "packages/media",
-      "packages/migrations",
-      "packages/provisioning",
-      "packages/staffing",
-      "packages/venue-service",
-      "packages/workforce",
-    ],
-  ],
   ["scripts/setup-litestream.mjs", ["apps/server"]],
   ["scripts/mutation-shard.mjs", ["packages/shared"]],
   ["scripts/mutation-aggregate.mjs", ["packages/shared"]],

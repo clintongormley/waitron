@@ -1,1 +1,0 @@
-ALTER TABLE `bookings` ADD `table_label` text;

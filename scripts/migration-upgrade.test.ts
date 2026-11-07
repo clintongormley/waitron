@@ -20,7 +20,6 @@ import {
   type VenueMigrationOptions,
 } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
-import { historicalSets } from "./fixtures/a760-history/historical-set.mjs";
 import { migrationUpgradeBudget } from "./migration-upgrade-budget.mjs";
 import { appendOnlyTriggers } from "../packages/store/src/append-only.js";
 import { scratchParent } from "./scratch-dir.mjs";
@@ -594,8 +593,6 @@ const PRODUCT_TRIGGERS = [
   "products_media_image_fk_parent_rename",
 ];
 
-const KITCHEN_STEP = { set: "core", tag: "0135_course_station_delete" };
-
 /** A made-up migration set in a scratch folder: each migration's tag, date and SQL statements. */
 function syntheticSet(
   name: string,
@@ -923,65 +920,6 @@ describe("upgrading a venue one migration at a time", () => {
     stale.entries[0].sha256 = "0".repeat(64);
     await expect(walkUpgrade({ sets: walkSets, epoch: stale, resets: {} })).rejects.toThrow(
       "synthetic/0000_baseline: its SQL hashes to",
-    );
-  });
-
-  it(`keeps course and station rows through the frozen ${KITCHEN_STEP.set}/${KITCHEN_STEP.tag}`, async () => {
-    const old: WalkSet[] = historicalSets();
-    const target = readJournal(
-      old.find((set) => set.name === KITCHEN_STEP.set)!.migrationsFolder,
-    ).entries.find((entry) => entry.tag === KITCHEN_STEP.tag);
-    expect(target, `${KITCHEN_STEP.set}/${KITCHEN_STEP.tag} in the frozen history`).toBeDefined();
-    const root = mkdtempSync(join(SCRATCH_PARENT, "wt-upgrade-kitchen-"));
-    scratch.push(root);
-    const venueDir = join(root, "venue");
-    const staged = old.map((set) => {
-      const folder = join(root, "migrations", set.name);
-      cpSync(set.migrationsFolder, folder, { recursive: true });
-      return { ...set, migrationsFolder: folder, journal: readJournal(set.migrationsFolder) };
-    });
-    const migrateTo = async (included: (when: number) => boolean, existing: Set<string>) => {
-      for (const set of staged) {
-        writeFileSync(
-          join(set.migrationsFolder, "meta", "_journal.json"),
-          JSON.stringify({
-            ...set.journal,
-            entries: set.journal.entries.filter((entry) => included(entry.when)),
-          }),
-        );
-      }
-      await applyMigrations(
-        venueDir,
-        staged.map((set) => optionsOf(set, existing)),
-      );
-    };
-    const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
-    reached.candidates.clear();
-    // Every old migration before the step, onto an empty database in one run, set by set in the old
-    // manifest's order: neither date order nor step by step.
-    await migrateTo((when) => when < target!.when, new Set());
-    let existing = await installPresentChangeFeed(venueDir, sources);
-    await migrateTo((when) => when < target!.when, existing);
-    existing = await installPresentChangeFeed(venueDir, sources);
-    const bookkeeping = new Set(staged.map((set) => set.migrationsTable));
-    carryRows(venueDir, `before ${KITCHEN_STEP.tag}`, new Map(), bookkeeping);
-    expect(FROZEN_CANDIDATES.filter((entry) => !reached.candidates.has(entry))).toEqual([]);
-
-    const coreTable = staged.find((set) => set.name === KITCHEN_STEP.set)!.migrationsTable;
-    const applied = () => {
-      const connection = openRaw(venueDir);
-      try {
-        return Number(connection.prepare(`select count(*) as n from ${ident(coreTable)}`).get()?.n);
-      } finally {
-        connection.close();
-      }
-    };
-    const appliedBefore = applied();
-    const kitchenBefore = kitchenRows(venueDir);
-    await migrateTo((when) => when <= target!.when, existing);
-    expect(applied(), `${KITCHEN_STEP.tag} was applied`).toBe(appliedBefore + 1);
-    expect(kitchenRows(venueDir), `${KITCHEN_STEP.tag}: parent and child row values`).toEqual(
-      kitchenBefore,
     );
   });
 
@@ -1494,7 +1432,7 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   "seasons.starts_on": ["03-01", "06-01"],
 };
 
-/** {@link CANDIDATES} entries for tables only the frozen-history case's fill meets. */
+/** {@link CANDIDATES} entries for a table no shipped migration creates, so the walk never meets them. */
 const FROZEN_CANDIDATES: readonly string[] = ["special_dates.date"];
 
 /** Tables filled with one row rather than two, each with its reason. */

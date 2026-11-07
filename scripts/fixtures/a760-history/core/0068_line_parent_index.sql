@@ -1,1 +1,0 @@
-CREATE INDEX `working_order_lines_parent_idx` ON `working_order_lines` (`parent_line_id`);
