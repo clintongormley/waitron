@@ -46,6 +46,7 @@ async function mount() {
     writes.push({ path, method, body: structuredClone(body) });
     if (path === "/management-api/venue-service/departments/d1/settings") {
       Object.assign(stored.salePolicies.departments[0]!, body);
+      return structuredClone(stored);
     } else if (
       path === "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode"
     ) {

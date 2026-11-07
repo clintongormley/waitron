@@ -27,6 +27,7 @@ import type {
   DepartmentSettingsInput,
   DepartmentTransfersView,
   VenueServiceApi,
+  VenueServiceModel,
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
@@ -182,6 +183,7 @@ export class DepartmentSettings extends LitElement {
   ];
   @property({ attribute: false }) api?: VenueServiceApi;
   @property({ attribute: false }) model?: VenueServiceView;
+  @property({ attribute: false }) publishSaved?: (model: VenueServiceModel) => void;
   @property() departmentId = "";
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
@@ -683,20 +685,18 @@ export class DepartmentSettings extends LitElement {
     const submitted: DepartmentSettingsInput = stepsEqual(serviceSteps, this.baseline!.serviceSteps)
       ? unchanged
       : { ...unchanged, serviceSteps: toStepInputs(serviceSteps) };
+    const publish = this.publishSaved;
     this.busy = true;
     try {
-      await this.api.saveDepartmentSettings(id, submitted);
+      const answer = await this.api.saveDepartmentSettings(id, submitted);
+      publish?.(answer);
       if (this.current(id, generation)) {
         const committed = copy(kept);
         if (!kept.transfers && this.showsTransfers)
           committed.transfers = copy(this.baseline!).transfers;
         if (!this.showsTransfers) delete committed.transfers;
         this.baseline = committed;
-        // After a save that sent steps, the copy held now, unless it is the saved list with ids
-        // filled in, is recorded as seen and not taken back; a copy arriving later is still followed.
-        const steps = this.modelSteps(id);
-        if (submitted.serviceSteps && !withSavedIds(committed.serviceSteps, steps))
-          this.source = { ...this.source!, serviceSteps: steps };
+        this.model = { ...this.model!, ...answer };
         this.scope?.commit(committed);
         this.emit("saved", { departmentId: id });
       }

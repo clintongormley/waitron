@@ -2,7 +2,7 @@ import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, type LeaveReason } from "@waitron/ui";
-import type { VenueServiceApi, VenueServiceView } from "./client.js";
+import type { VenueServiceApi, VenueServiceModel, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import {
@@ -16,12 +16,17 @@ export class DepartmentEditDialog extends LitElement {
   static override styles = [baseStyles];
   @property({ attribute: false }) api!: VenueServiceApi;
   @property({ attribute: false }) model!: VenueServiceView;
+  @property({ attribute: false }) publishSaved?: (model: VenueServiceModel) => void;
   @property() departmentId = "";
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
   @property({ attribute: false }) receiptEditor: ReceiptEditorPanel;
   @state() private dismissed = false;
   private shownDepartment = "";
+  readonly #publishSaved = (answer: VenueServiceModel): void => {
+    this.model = { ...this.model, ...answer };
+    this.publishSaved?.(answer);
+  };
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
@@ -111,6 +116,7 @@ export class DepartmentEditDialog extends LitElement {
         <department-settings
           .api=${this.api}
           .model=${this.model}
+          .publishSaved=${this.#publishSaved}
           .departmentId=${department.id}
           .refreshing=${this.refreshing}
           .tab=${this.tab}

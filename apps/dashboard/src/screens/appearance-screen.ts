@@ -8,6 +8,7 @@ import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
+import { readAfterSave } from "../widgets/read-after-save.js";
 import "./look-card.js";
 import "./themes-card.js";
 import type { LookCard } from "./look-card.js";
@@ -66,24 +67,24 @@ export class AppearanceScreen extends LitElement {
   #generation = 0;
   #writes = 0;
   #loadedBefore = false;
+  #reads = new AbortController();
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
     (error) => {
       this.readError = codeMessage(codeOf(error));
     },
-    () => {
-      this.readError = "";
-    },
   );
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation++;
+    this.#reads = new AbortController();
     void this.#load();
   }
   override disconnectedCallback(): void {
     this.#generation++;
+    this.#reads.abort();
     super.disconnectedCallback();
   }
   async #load(): Promise<void> {
@@ -102,7 +103,12 @@ export class AppearanceScreen extends LitElement {
           key: `${query.key}:appearance-screen`,
           read: async () => {
             const writes = this.#writes;
-            return { writes, value: await query.read() };
+            try {
+              return { writes, value: await query.read() };
+            } catch (error) {
+              if (writes !== this.#writes) return { writes, value: this.list! };
+              throw error;
+            }
           },
         },
         ({ writes, value }) => {
@@ -116,6 +122,26 @@ export class AppearanceScreen extends LitElement {
   #changed(change: ThemesChanged): void {
     this.#writes++;
     if (this.list !== undefined) this.list = applied(this.list, change);
+    const generation = this.#generation,
+      writes = this.#writes;
+    const wanted = () => generation === this.#generation && writes === this.#writes;
+    void readAfterSave(
+      async () => {
+        try {
+          const list = await this.api.background.listThemes();
+          if (wanted()) {
+            this.list = list;
+            this.readError = "";
+          }
+          return true;
+        } catch (error) {
+          if (wanted()) this.readError = codeMessage(codeOf(error));
+          return false;
+        }
+      },
+      wanted,
+      this.#reads.signal,
+    );
   }
   override render() {
     return html`<h1>${t("appearance.title")}</h1>

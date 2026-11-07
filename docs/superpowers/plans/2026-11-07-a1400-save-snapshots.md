@@ -37,8 +37,8 @@ its write counter and add a passive follow-up through the existing `readAfterSav
   an added step followed by another save, disconnect while saving, and a manager read
   begun after the reply. Share the grown settings-response fixture through
   `src/testing/department-edit-fixture.ts`; keep its existing assertions.
-- [ ] **Appearance.** In `apps/dashboard/src/screens/appearance-screen.ts`, replace the
-  implementation's existing write-count admission check stays. After applying a change,
+- [ ] **Appearance.** In `apps/dashboard/src/screens/appearance-screen.ts`, the existing
+  write-count admission check stays. After applying a change,
   make a passive read returning `Promise<boolean>` through `readAfterSave`. Its abort
   controller is renewed on connect and aborted on disconnect. Add cases for the newer crossing list, an old answer after the fresh
   read, refresh failure/recovery, disconnect, and two changes while reads wait.

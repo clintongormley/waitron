@@ -590,20 +590,10 @@ plans to retire the editor.
 
 ## Bundle A1400: An older copy must not undo a save
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A905. The department dialog can take back another manager's older copy of the venue after a save
-  (found in A757 slice 7's review, 2026-10-19).**
-  [Detail](dashboard.md#a905-the-department-dialog-can-take-back-another-managers-older-copy-of-the-venue-after-a-save-found-in-a757-slice-7s-review-2026-10-19)
-- **A1168. The Appearance screen throws away a theme list read that answers after a change it
-  applied (left open by A1133, found by reading, not run, 2026-10-28).**
-  `apps/dashboard/src/screens/appearance-screen.ts`'s `#writes` counter drops every `listThemes`
-  answer whose read began before a theme change the screen applied locally and answered after
-  it, so a newer list another manager saved meanwhile shows only when a later read answers. The
-  Privacy and Defaults cards' fix (an order number per read and per applied answer, then a
-  background re-read, tried again through `readAfterSave` in
-  `apps/dashboard/src/widgets/read-after-save.ts`) is the pattern. Left out of A1133 because lane
-  A's A841 theme-editor slices own this screen.
+- **A department model read after the PUT commits but before its reply can be replaced by that
+  reply if the follow-up read fails.** A1400 returns the stored model and fences reads begun before
+  its reply; neither answer has a comparable server revision. The watcher approved this named
+  limit on 2026-11-07 at 23:12. No revision storage is included in A1400.
 
 ## Bundle: Slow key derivation off the main thread
 
@@ -1193,21 +1183,6 @@ A775 kept the button and named it by its label and its chosen value instead (des
   unfilled (`Table 3 is now {index} of 5.`). `git blame` puts these lines in
   524dbadd5 (2026-09-16) and 5b725d672 (2026-10-01), so I believe it predates A757 slice 7. Fix with
   a single-pass formatter like `format()` in `packages/venue-service/src/dashboard/hours-view.ts:5`.
-
-
-## A905. The department dialog can take back another manager's older copy of the venue after a save (found in A757 slice 7's review, 2026-10-19).
-
-The dialog orders the copies it receives by
-  content alone (`willUpdate`, `packages/venue-service/src/dashboard/department-settings.ts`), and
-  the save route answers 204. So when another manager's live change crosses this form's save, a copy
-  from before the save can replace what was just saved: seen in temporary browser tests on slice 7's
-  branch, the name field showed "Restaurant" again after "Restaurant revised" was saved, until the
-  screen's next refresh put it right; and an older copy arriving after the save answered took a
-  just-saved step "Coffee" out of the list, so a later step save would delete that row. The name
-  stays wrong if that refresh fails or is thrown away, or if another field is edited before it lands; the step stays gone until a copy with
-  different steps arrives. `git blame` on the branch's base puts the whole-copy replacement in
-  06772ee25 (2026-10-10), so I believe the name case predates slice 7; not run on `main`. A fix
-  needs the save to return what it stored (the steps' ids) or a version on the venue copy.
 
 
 ## An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look, 2026-10-19).
