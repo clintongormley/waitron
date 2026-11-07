@@ -4,11 +4,11 @@ Status: plan, 2026-11-07. Lane B. Branch `fix/a1391-backup-status-truth`. One PR
 Source: the bundle `docs/backlog/box.md#bundle-a1391-backup-status-tells-the-truth-and-leaks-nothing`
 (three entries). No table, column, index or trigger changes (the A1308 hold allows it).
 
-Revision 2 (2026-11-07): the fresh plan review's findings folded (I1–I5, M1–M6). Task 3 is held
-for the watcher (questions.md, 2026-11-07 ~09:05): the review says it should not exist.
+Revision 2 (2026-11-07): the fresh plan review's findings folded (I1–I5, M1–M6). Task 3 is not
+built: the watcher decided 2026-11-07 08:58 (questions.md); the review said it should not exist.
 
-Risk triggers: none if Task 3 is dropped (a secret's exposure is close to one, so the review stays
-FULL); concurrency if Task 3 is built. A review after every task either way, and `/finish-branch`
+Risk triggers: none, with Task 3 not built (a secret's exposure is close to one, so the review stays
+FULL). A review after every task, and `/finish-branch`
 FULL with two Codex angles.
 
 ## What is wrong today (read on main 59be31e3b7)
@@ -62,10 +62,10 @@ FULL with two Codex angles.
   the environment, a kit, a recovery pack or Cloud can hold a user name, password, query or
   fragment.
   `destinationView` is left as it is.
-- **D2 — the refusal's words reach both forms.** `stream.form.endpoint_invalid` ("Enter the full
-  address, starting with https:// or http://") gains "with no user name or password in it" (English
-  and Spanish, `apps/dashboard/src/i18n/strings.ts`). The Backups form already shows it for a server
-  `endpoint` refusal (`backup-screen.ts:1584-1585`). The stream panel does not: its own check
+- **D2 — the refusal's words reach both forms.** `stream.form.endpoint_invalid` now reads "Enter the
+  full address, starting with https:// or http://, with no user name, password, ? or # in it"
+  (English and Spanish, commit c58809701e, `apps/dashboard/src/i18n/strings.ts`). The Backups
+  form already shows it for a server `endpoint` refusal (`backup-screen.ts:1584-1585`). The stream panel does not: its own check
   (`stream-settings-panel.ts:329`, `/^https?:\/\/\S+$/`) passes `https://u:p@h`, and its `#fail`
   (`:303-309`) shows "Check this value." for a server `backup.request_invalid` on `endpoint`. So the
   panel's own check refuses the same parts inline (Forms rule: inline error, action disabled until
@@ -82,14 +82,14 @@ FULL with two Codex angles.
   `backup.destination_overdue` (`alert-sources.ts:207-216`), which is true: nothing is being copied.
   No new log code. Building is synchronous, so there is no `await` between the `#stopped` check at
   `:284` and adopting the handle.
-- **D4 — HELD for the watcher.** The third entry (a status read builds its own client per
-  destination) would be met by letting status reads borrow the running sweep's backends, closing a
+- **D4 — Not built: the watcher decided 2026-11-07 08:58 (questions.md).** The third entry (a
+  status read builds its own client per destination) would be met by letting status reads borrow the running sweep's backends, closing a
   borrowed backend only once its last read settles and never making a teardown wait. The plan review
-  measured how often status is read: the alert source caches it for 60 s (`boot.ts:2945-2949`), Box
+  read in the code how often status is read (not a measurement): the alert source caches it for 60 s (`boot.ts:2945-2949`), Box
   status reads once on opening (`boot.ts:3101`), the Backups screen on its own actions; building an
   S3 client does no network work. So the saving is at most one connection set-up per destination
   per minute, against reference counting in the supervisor, seven tests, and the branch's only
-  concurrency risk. Default unless the watcher says otherwise: do not build it; record "a status
+  concurrency risk. The watcher's decision: do not build it; record "a status
   read keeps its own client" under the box area's `## Decisions and deliberate limits` with these
   figures, and delete the entry.
 
@@ -148,11 +148,9 @@ Files: `apps/server/src/backup-supervisor.ts`, `apps/server/src/backup-superviso
    in a `try`, before `this.#db = venue`; on failure close what was built and the venue, rethrow.
 5. Prove by deletion (put the build back after `this.#db = venue`; see 1 fail).
 
-### Task 3 — HELD (D4)
+### Task 3 — not built (D4)
 
-Built only if the watcher says so; otherwise Task 4 records the decision. If built: the design
-in D4; the existing build-per-read cases at `backup-supervisor.network.test.ts:570,604,795` stay
-unchanged for reads with no sweep running.
+Not built: the watcher decided 2026-11-07 08:58 (questions.md). Task 4 records the decision.
 
 ### Task 4 — backlog and words that describe the old behaviour
 

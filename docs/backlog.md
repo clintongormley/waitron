@@ -113,7 +113,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 - [A1390. A restore is all or nothing, and its key always opens](backlog/box.md#bundle-a1390-a-restore-is-all-or-nothing-and-its-key-always-opens)
-- [A1391. Backup status tells the truth and leaks nothing](backlog/box.md#bundle-a1391-backup-status-tells-the-truth-and-leaks-nothing)
 - [A1392. Discard and Cancel fail on a table bill reached from the counter](backlog/till.md#bundle-a1392-discard-and-cancel-fail-on-a-table-bill-reached-from-the-counter)
 - [A1393. A table of every till route's device check, with a guard](backlog/till.md#bundle-a1393-a-table-of-every-till-routes-device-check-with-a-guard)
 - [A1394. SumUp's sweep and refund call stop throwing](backlog/payments.md#bundle-a1394-sumups-sweep-and-refund-call-stop-throwing)
@@ -1777,8 +1776,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Backups offers no administrator sign-in when it refuses for lack of `system.manage`.** It says
   "You don't have permission to do that" twice and names no next step.
   [Detail](backlog/self-service-refusals.md#backups-admin-sign-in)
-
-- **A1391. Backup status tells the truth and leaks nothing** (bundle of 3, 2 important, size M). [Detail](backlog/box.md#bundle-a1391-backup-status-tells-the-truth-and-leaks-nothing)
 
 - **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
   but a damaged linked folder or managed file cannot be repaired through the public guide. The
