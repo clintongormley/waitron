@@ -29,6 +29,24 @@ export const EMPTY_CUSTOM: CustomBucket = {
   secretAccessKey: "",
 };
 
+/** `https://` or `http://` in any letter case, then the host: no third slash or a backslash. */
+const WEB_ADDRESS_START = /^https?:\/\/[^/\\]/i;
+
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTER = /[\x00-\x1f\x7f]/;
+
+/** Mirrors the endpoint check in `readBucketConfig` in `packages/stream/src/bucket-config.ts`. */
+export function isPlainWebAddress(endpoint: string): boolean {
+  if (!WEB_ADDRESS_START.test(endpoint) || CONTROL_CHARACTER.test(endpoint)) return false;
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  return url.username === "" && url.password === "" && url.search === "" && url.hash === "";
+}
+
 /** Mirrors `normalisePrefix` in `packages/stream/src/names.ts`. */
 export function normalisePrefix(prefix: string): string {
   let start = 0;
