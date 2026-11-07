@@ -5292,14 +5292,12 @@ describe("Prepare and Live email setup journey", () => {
   it("development Prepare goes directly to review without an SMTP draft", async () => {
     const el = await mountSetupApp(
       stubApi({
-        getStatus: vi
-          .fn()
-          .mockResolvedValue({
-            provisioned: false,
-            environment: "preproduction",
-            developmentMode: true,
-            needs: ["venue"],
-          }),
+        getStatus: vi.fn().mockResolvedValue({
+          provisioned: false,
+          environment: "preproduction",
+          developmentMode: true,
+          needs: ["venue"],
+        }),
       }),
     );
     goto(el, "venue");
