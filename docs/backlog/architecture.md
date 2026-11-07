@@ -772,7 +772,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot,
-  counter-payment and split-selection fixtures; shared fixture names and private bindings in the
+  counter-payment and split-selection fixtures; shared fixture names in the
   server split suites; `registroCount` consumers in split-table, bill-editing, move-bill and other
   order suites; the till's moved-dish suite; accented bindings in
   `portion-selection.test.ts`, `counter-portion-rows.test.ts` and `till-ticket-view.test.ts`,
