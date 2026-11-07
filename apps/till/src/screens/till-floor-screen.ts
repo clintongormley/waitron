@@ -1016,6 +1016,11 @@ export class TillFloorScreen extends LitElement {
   /** Whether an overflowing strip is still to be rested: set while the strip fits its tabs or is not
    * drawn, cleared once one is rested or found already scrolled. */
   #restDue = true;
+  /** Whether the selected zone's tab is still to be brought into sight: set at the start and when
+   * `selectedZoneId` changes, cleared at the first check once the strip overflows, or by a tap. */
+  #revealDue = true;
+  /** Where the screen last left the strip, so a scroll the person made is not undone. */
+  #placedAt: number | undefined;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
   readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
@@ -1044,7 +1049,10 @@ export class TillFloorScreen extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("api") || changed.has("operatorSession") || changed.has("selectedZoneId"))
       this.#clearJoin();
-    if (changed.has("selectedZoneId")) this.activeZone = this.selectedZoneId;
+    if (changed.has("selectedZoneId")) {
+      this.activeZone = this.selectedZoneId;
+      this.#revealDue = true;
+    }
     if (changed.has("tables") && this.askingSeats === null && this.#joinWork === null)
       this.#pending = null;
     if (
@@ -1355,6 +1363,7 @@ export class TillFloorScreen extends LitElement {
   #selectZone(key: string): void {
     this.refusedZoneId = null;
     this.refusal = null;
+    this.#revealDue = false;
     this.activeZone = key;
     this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key });
   }
@@ -2579,7 +2588,10 @@ export class TillFloorScreen extends LitElement {
       data-tabs-edge=${side}
       data-zone-state=${mark.kind}
       aria-label=${t("floor.show_zone").replace("{zone}", () => tab.name)}
-      @click=${() => this.#showTab(tab.key, side)}
+      @click=${() => {
+        this.#revealDue = false;
+        this.#showTab(tab.key, side);
+      }}
     >
       ${renderFloorPulse(pulse, moving)}${side === "start" ? html`<span aria-hidden="true">‹</span>` : nothing}${this.#markIcon(mark)}${side === "end" ? html`<span aria-hidden="true">›</span>` : nothing}
     </button>`;
@@ -2650,14 +2662,37 @@ export class TillFloorScreen extends LitElement {
       this.#restDue = true;
       return;
     }
-    if (!this.#restDue) return;
+    if (!this.#restDue && !this.#revealDue) return;
     const style = getComputedStyle(strip);
     const room = parseFloat(style.paddingInlineStart) - parseFloat(style.paddingBlockStart);
     // Tabs not yet drawn leave nothing to scroll; the next #placeTabs or update tries again.
     if (strip.scrollWidth - strip.clientWidth < room) return;
-    this.#restDue = false;
-    // A person may have scrolled it before its tabs were drawn.
-    if (strip.scrollLeft === 0) strip.scrollTo({ left: room, behavior: "instant" });
+    if (this.#restDue) {
+      this.#restDue = false;
+      // A person may have scrolled it before its tabs were drawn.
+      if (strip.scrollLeft === 0) {
+        strip.scrollTo({ left: room, behavior: "instant" });
+        this.#placedAt = strip.scrollLeft;
+      } else this.#placedAt = undefined;
+    }
+    if (!this.#revealDue) return;
+    // Cleared first: #showTab comes back here through #placeTabs.
+    this.#revealDue = false;
+    if (strip.scrollLeft !== 0 && strip.scrollLeft !== this.#placedAt) return;
+    const activeKey = this.#zone.activeKey;
+    const tab = [...strip.querySelectorAll<HTMLElement>(".zone-tab")].find(
+      (zoneTab) => tabKey(zoneTab) === activeKey,
+    );
+    if (tab === undefined) return;
+    const span = stripSpan(strip);
+    const edge = (side: TabsEdge) =>
+      this.shadowRoot!.querySelector(`[data-tabs-edge="${side}"]`)?.getBoundingClientRect();
+    const left = Math.max(span.left, edge("start")?.right ?? span.left);
+    const right = Math.min(span.right, edge("end")?.left ?? span.right);
+    const box = tab.getBoundingClientRect();
+    if (box.left >= left && box.right <= right) return;
+    this.#showTab(activeKey!, box.left < left ? "start" : "end");
+    this.#placedAt = strip.scrollLeft;
   }
 
   #stopWatchingTabs(): void {
