@@ -13,7 +13,7 @@ import {
 } from "@waitron/workforce";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
-import { requireSession } from "./till-session.js";
+import { assertRequestDevice, requireSession } from "./till-session.js";
 import {
   requireBodyUuid,
   requireEnum,
@@ -28,6 +28,7 @@ import type { DiskFullState } from "./disk-full-state.js";
 
 export interface ScheduleApiDeps {
   db: Database;
+  devMode?: boolean;
   describeShifts?: WaitronModule["describeShifts"];
   /** While the full-disk stop holds (`DiskFullState.full()`), every write here answers 507. */
   disk?: DiskFullState;
@@ -36,6 +37,7 @@ export interface ScheduleApiDeps {
 /** The surface's whole 4xx contract; a registered code absent here defaults to 400. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "session.required": 401,
+  "device.unauthorized": 401,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "absence.invalid": 400,
@@ -91,7 +93,9 @@ export function mountScheduleApi(root: Hono, deps: ScheduleApiDeps, log: Logger)
   // `toShiftId` null = a one-sided give-away.
   app.post("/api/schedule/swaps", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
+      const { personId } = session;
       const body = await readJsonBody<Record<string, unknown>>(c);
       const fromShiftId = requireBodyUuid(body.fromShiftId, "fromShiftId");
       const toPersonId = requireBodyUuid(body.toPersonId, "toPersonId");
@@ -110,7 +114,9 @@ export function mountScheduleApi(root: Hono, deps: ScheduleApiDeps, log: Logger)
 
   app.post("/api/schedule/swaps/:swapId/accept", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
+      const { personId } = session;
       const swapId = requireUuidParam(c.req.param("swapId"), "SwapId");
       await asStaff((tx) => acceptSwap(tx, { swapId, acceptingPersonId: personId }));
       return c.body(null, 204);
@@ -127,7 +133,9 @@ export function mountScheduleApi(root: Hono, deps: ScheduleApiDeps, log: Logger)
 
   app.post("/api/schedule/absences", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
+      const { personId } = session;
       const body = await readJsonBody<Record<string, unknown>>(c);
       const kind = requireEnum(body.kind, "kind", absenceKind.enumValues);
       const startsOn = requirePeriod(body.startsOn, "startsOn");

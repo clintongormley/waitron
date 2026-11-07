@@ -317,7 +317,7 @@ describe("device delete routes", () => {
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     const { deviceId, jar } = await enrol(app, venue, mode);
-    const shift = await openTillSession(deviceId);
+    const shift = `${jar}; ${await openTillSession(deviceId)}`;
 
     expect((await send(app, "GET", "/api/device/me", { cookie: jar })).status).toBe(200);
     const profileId = (await deviceRow(deviceId)).deviceProfileId;

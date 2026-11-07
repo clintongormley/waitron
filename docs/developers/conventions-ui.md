@@ -593,7 +593,7 @@ the server checks each at the route, never trusting the till's copy:
   `apps/server/src/till-api.profile-actions.test.ts`; the zone each route acts in is the map at the
   top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds an inventory row, a zone-map row and a refusing case. The inventory
   comparison walks the mounted till, device and schedule APIs, including their optional routes;
-  it rejects missing and stale classifications. It does not inspect theme/node routes or a newly
+  it rejects missing and stale classifications, ignoring `ALL` registrations (middleware). It does not inspect theme/node routes or a newly
   introduced API. Device-proof labels are source readings unless a named test backs them. The
   existing action cases check their stated refusals; the inventory comparison alone does not
   prove enforcement, and the independent zone map remains a comment.
@@ -2211,7 +2211,7 @@ profile's action beside the person's permission, except the actionless routes cl
 zones bound where it serves, and its admission list who may sign in. A new till route adds a row
 to that inventory and to the zone map atop `apps/server/src/till-api.profile-zones.test.ts`, and a
 refusing case. The inventory guard covers only the APIs it mounts, not theme/node routes or a new
-API, and its device-proof labels are source readings unless backed by a named test. The zone map
+API, ignores `ALL` registrations, and its device-proof labels are source readings unless backed by a named test. The zone map
 remains a comment; inventory completeness does not prove a gate executes.
 
 ### A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`

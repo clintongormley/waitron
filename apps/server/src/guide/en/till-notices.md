@@ -5,6 +5,8 @@ to notice. So once someone has signed in, every till and handheld shows a line u
 when the box needs attention. The line does not show on the sign-in, clock-in or attendance pages.
 It says what is wrong and what to do. It never covers your work, and you never have to dismiss it.
 
+If Waitron cannot verify this device for an action, reload or reopen Waitron on this device, then try again.
+
 ## Read the notice line {#notice-line}
 
 The line shows the most serious notice first, in its main words and then its hint after " · ".

@@ -8,7 +8,7 @@ import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { overridePinAttempts, parseOverrideField, type Run, type TillApiDeps } from "./till-api.js";
-import { requireSession } from "./till-session.js";
+import { assertRequestDevice, requireSession } from "./till-session.js";
 import { gateZones } from "./zone-access.js";
 import "./errors.js";
 
@@ -32,6 +32,7 @@ export function mountKeepOpenApi(
   app.put("/api/service-zones/:zoneId/zone-extension", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       await gateZones(deps, session, [{ zoneId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
