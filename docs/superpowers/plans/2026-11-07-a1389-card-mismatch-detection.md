@@ -21,11 +21,13 @@ Preserve signed `8b2f940f4a`’s tip/free-sale fixes. No table, migration, payme
 
 ## Review repairs approved 2026-11-07 04:10
 
-Watcher, Lane F questions: “Yes: refuse further payment on that order while its mismatch is unresolved, refuse new payments through that reader from any till, and show a distinct mismatch result on the existing payment screen.” Other orders and readers keep working. The screen offers A1399's Card payments sign-in link. This adds no database state or release action.
+Watcher, Lane F questions: “Yes: refuse further payment on that order while its mismatch is unresolved, refuse new payments through that reader from any till, and show a distinct mismatch result on the existing payment screen. Taking more money against an amount we know is wrong is the harm this item exists to stop, so the holds must be real and not just promised. Other orders and readers keep working. The screen says what happened and offers the Card payments sign-in link you built for A1399; it does not send staff to somebody else. The other bounded findings are yours to fix. Short Claude read of the amended lines, then build.”
 
-- Test partial bills and every till before adding order/reader gates. Keep other orders/readers usable; trace every gate consumer.
-- Distinguish a known mismatch from an ordinary timeout through whole-order and bill responses and the existing payment screen; preserve ordinary checking. Trace result consumers and replays, including manual checks. Reuse the sign-in link, without its unrelated retry changes.
-- Check SumUp's row is still attempting before recording evidence. Pin collect-time races in both adapters. Inline the error parameter shape without a guard allowlist change. Show the processor reference and order number with provider names. Correct stale claims and remove the redundant Stripe precheck. Keep all repairs in this PR, test-first.
+- A recorded mismatch on a still-attempting payment holds its order and existing `payments.readerId` indefinitely in this slice. Alert handling and later processor answers never release it; only the later manager release ends it. No new database state or release action here.
+- Refuse every further payment method and route on that order, including cash and partial contributions. Refuse new charges through that reader from every till; other orders and readers remain usable. Trace gate consumers and test controls before adding gates.
+- Distinguish mismatch from ordinary timeout through whole-order and bill responses, replays and manual checks, on the existing payment screen. Say the amount differs and automatic checking stopped; offer the existing Card payments sign-in link, never “ask a manager”. Preserve ordinary checking. Carry only the needed link support from A1399.
+- SumUp's resolving transaction rechecks the row. If no longer attempting, it leaves the saved outcome and UI unchanged, writes no mismatch alert, and counts no new resolution. Pin this and both collect-time races. Inline the existing ids/amounts error shape; change no personal-data guard policy.
+- Show processor reference and existing order identity in the alert, with provider names. Correct the run-it's named stale claims. Remove only `resolvePending`'s duplicate Stripe precheck (full run-it finding 7/m07); `resolveOwnedAttempt` still checks evidence before processor reads, and the post-result check still suppresses retries. Keep all repairs in this PR, test-first.
 
 ## Verify and finish
 
