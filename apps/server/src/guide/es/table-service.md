@@ -224,10 +224,11 @@ anterior o siguiente, pasando de **Sala** a tus mesas y volviendo al principio a
 Inicio abre **Sala** y Fin abre la última mesa.
 
 Si tocas **Sala** después de una mesa, se abre la zona de esa mesa, si este dispositivo la muestra.
-Todo lo demás está en **Más** (☰): tu nombre y las acciones de fichaje cuando no caben en la barra,
-lo que en un móvil ocurre siempre, las pantallas que permite tu perfil, **Ajustes** (**Zonas en este
-dispositivo**, **Equipo**, **Idioma** y **Tema**) y **Salir** y, mientras el local tiene un
-logotipo, **Con la tecnología de Waitron** debajo.
+Todo lo demás está en **Más** (☰): tu nombre, con las acciones de fichaje si fichas en este
+dispositivo, cuando no cabe en la barra, lo que en un móvil ocurre siempre; las pantallas que
+permite tu perfil; **Zonas en este dispositivo**, **Equipo**, **Idioma** y **Tema** bajo el
+título **Ajustes**; **Salir**; y, mientras el local tiene un logotipo, **Con la tecnología de
+Waitron** debajo.
 
 ## Dar a una mesa un nombre corto {#short-names}
 

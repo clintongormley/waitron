@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import "./find-bill-dialog.js";
 import type { TillFindBillDialog } from "./find-bill-dialog.js";
 import type { BillLookupRow } from "../api/client.js";
@@ -18,8 +19,12 @@ const debt: BillLookupRow = {
   status: "left_without_paying",
   stillOwed: "30.00",
 };
+const takesBoth = { takesCash: true, takesManualCard: true };
 async function mount(bill = debt) {
-  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", { bill });
+  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {
+    bill,
+    ...takesBoth,
+  });
   return el;
 }
 function input(el: TillFindBillDialog, name: string) {
@@ -174,7 +179,10 @@ it("decimal input cash collection shows Spanish and refuses grouped or over-prec
 });
 
 it("a selected collector has no search, and clean Back closes to the page", async () => {
-  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", { bill: debt });
+  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {
+    bill: debt,
+    ...takesBoth,
+  });
   const closed = vi.fn();
   el.addEventListener("find-bill-close", closed);
   expect(el.shadowRoot!.querySelector("[name=bill-search]")).toBeNull();
@@ -235,6 +243,7 @@ it("A773 reopening an unanswered card collection restores its original shown con
 it("A773 initial unanswered collection renders the original locked card confirmation", async () => {
   const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {
     bill: debt,
+    ...takesBoth,
     unconfirmed: true,
     confirmationTender: { method: "card", amount: "30.00", externalRef: "original" },
   });
@@ -244,4 +253,61 @@ it("A773 initial unanswered collection renders the original locked card confirma
   expect(
     input(el, "terminal-reference").shadowRoot!.querySelector<HTMLInputElement>("input")!.disabled,
   ).toBe(true);
+});
+
+describe("only the methods the device takes", () => {
+  async function mountTaking(takes: { takesCash: boolean; takesManualCard: boolean }) {
+    const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {
+      bill: debt,
+      ...takes,
+    });
+    return el;
+  }
+  const shown = (el: TillFindBillDialog, selector: string) =>
+    el.shadowRoot!.querySelector(selector) !== null;
+
+  it("a device that takes no cash offers only the card on the terminal, and sends a card", async () => {
+    const el = await mountTaking({ takesCash: false, takesManualCard: true });
+    const paid: unknown[] = [];
+    el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
+    expect(shown(el, "[data-cash]")).toBe(false);
+    expect(shown(el, "[name=cash-received]")).toBe(false);
+    expect(shown(el, "[data-card]")).toBe(true);
+    await type(el, "terminal-reference", "777");
+    await click(el, "[data-collect]");
+    expect(paid).toEqual([
+      {
+        workingOrderId: "wo-1",
+        tender: { method: "card", amount: "30.00", externalRef: "777" },
+        invoiced: true,
+      },
+    ]);
+  });
+
+  it("a device that takes no card on a terminal offers only cash", async () => {
+    const el = await mountTaking({ takesCash: true, takesManualCard: false });
+    expect(shown(el, "[data-cash]")).toBe(true);
+    expect(shown(el, "[data-card]")).toBe(false);
+    expect(input(el, "cash-received").value).toBe("30.00");
+  });
+
+  it.each(["en", "es"] as const)(
+    "a device that takes neither says its profile does not allow it, in %s, and collects nothing",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mountTaking({ takesCash: false, takesManualCard: false });
+      const paid: unknown[] = [];
+      el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
+      expect(shown(el, "[data-cash]")).toBe(false);
+      expect(shown(el, "[data-card]")).toBe(false);
+      expect(shown(el, "[name=cash-received]")).toBe(false);
+      expect(shown(el, "[name=terminal-reference]")).toBe(false);
+      expect(shown(el, "[data-collect]")).toBe(false);
+      const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+      await actions.updateComplete;
+      expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
+        codeMessage("device.forbidden_action"),
+      );
+    },
+  );
 });

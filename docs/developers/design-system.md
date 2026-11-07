@@ -1146,7 +1146,10 @@ reach, so the ring is not cut off. While the tabs do not all fit, each end of th
 further `--wt-tap-min` of room, so the first and last tab can be scrolled clear of a button over
 that end; the strip first shows its first tab a ring's reach from its start, with the start's room
 scrolled out of sight until the person scrolls back to it (`#restStrip`,
-`apps/till/src/screens/till-floor-screen.ts`). When a tab carrying a state is cut off beyond either
+`apps/till/src/screens/till-floor-screen.ts`). Once the strip finds that its tabs overflow, it
+scrolls the selected zone's tab into sight, clear of a button over either end, and does so once more
+when the app selects another zone while the Floor shows; a strip the person has scrolled stays where
+they left it, and a tap on a tab or an end's button cancels a reveal still waiting. When a tab carrying a state is cut off beyond either
 end of the strip, that end shows a button at least `--wt-tap-min` square with the icon of the most
 urgent such tab and "‹" or "›", tinted and pulsing as that tab is and named "Show Terrace"; tapping
 it scrolls the tab into view (`#tabsEdge`, `apps/till/src/screens/till-floor-screen.ts`).
@@ -5738,8 +5741,16 @@ Language, Settings and Log out, then, while a venue logo is in use and has not f
 `wt-powered-by` with `login.powered_by` (A1096), last even when Testing shows. Settings holds Equipment and Zones on this device. Kitchen appears
 only under Testing on Demo or Preparation installs with the existing kitchen permission. Live tills
 keep Kitchen off their navigation; kitchen displays retain their own fixed primary screen. Find a
-bill opens Bills and Transactions. Its Back returns to Counter without replacing the basket; a
-transaction receipt keeps the page's tab, query and server page for its own Back action.
+bill opens Bills and Transactions. Its Back returns to the device's home screen without replacing
+the basket, and reads "Back to counter" only where that home is Counter; elsewhere it reads "Back".
+The Pass, the station screen and My schedule label their Back the same way. A transaction receipt
+keeps the page's tab, query and server page for its own Back action. On a device with no Counter (a
+handheld, or a till with no counter zones) a presented counter bill opens Find a bill's collecting
+dialog on what it owes, and a parked one opens the pay window, on the whole bill on a handheld
+while none of it is paid and otherwise on an amount, emptying the basket when that window closes or
+settles the bill. The collecting dialog offers only the ways of paying the profile allows: cash
+with take-cash, card on the terminal with hand-keyed card payment, though a payment still waiting
+for its answer keeps its own method; with neither it says so and offers no Collect.
 
 A handheld's bar (A797 slice 3) holds the brand mark while it fits, Floor, then one button for each
 table where the signed-in person has unsent dishes, then the person's name while it fits, the Help
@@ -5839,7 +5850,12 @@ where it always has, on the URL's zone or the first tab. Once a table has been o
 opens on that table's zone instead when this device shows that zone, as "Navigation and language controls" above says. A handheld whose zones read fails at
 sign-in says so, holds no choice and shows every permitted zone until a later read applies one.
 Floor's pills disappear with one zone. The pills, List/Map and zone menu share one toolbar,
-including at phone width. A till with no permitted zones shows an explanation, Settings and Retry. A
+including at phone width. When a zone has nothing to draw, a sentence stands in for the tables and
+List/Map is left out: "This zone has no tables", "No table in this zone is in today's plan", or,
+after a failed tables or zones read, "The tables could not be read. Try again." with Retry; while a
+read is still out it draws as before. A till with no permitted zones shows an explanation, Settings
+and Retry, and a handheld the same without Settings; a till whose zones read failed says the zones
+could not be read instead. A
 table in a zone the device does not show takes no new picks and cannot send or change its New order
 there. Saving a choice that hides the open table's zone while it holds unsent dishes is refused;
 other tables' unsent dishes are not checked. Live narrowing keeps the current order or payment in

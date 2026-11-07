@@ -107,7 +107,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1383. Tests for four guards a review deleted with nothing failing](backlog/fiscal.md#bundle-a1383-tests-for-four-guards-a-review-deleted-with-nothing-failing)
 - [A1384. Words on setup's refusals](backlog/setup.md#bundle-a1384-words-on-setups-refusals)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
-- [A1386. Blank or misleading Floor pages](backlog/till.md#bundle-a1386-blank-or-misleading-floor-pages)
 - [A1387. Till sentences during the clock stop, with money in hand](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
 - [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
@@ -822,7 +821,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Small till test renames** (bundle of 5, size S). Holds A1053, A1054, A1128. [Detail](backlog/till.md#bundle-small-till-test-renames)
 
-- **A1386. Blank or misleading Floor pages** (bundle of 5, 3 important, size M). Holds A1055, A1056, A1093, A1057, A1409. [Detail](backlog/till.md#bundle-a1386-blank-or-misleading-floor-pages)
+- **A1421. Three till oddities seen once and not looked into.** At phone width the Downstairs
+  bar's map is drawn tiny; a reload on a table's order lands on an empty order page; and a slow
+  first read at sign-in leaves the PIN pad up with no sign of waiting.
+  [Detail](backlog/till.md#a1421-three-till-oddities-seen-once-and-not-looked-into)
 
 - **The till top bar fits at phone width, 1024 and 1280** (bundle of 9, 1 important, size M). Holds A1082, A921, A1219. [Detail](backlog/till.md#bundle-the-till-top-bar-fits-at-phone-width-1024-and-1280)
 

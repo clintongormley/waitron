@@ -656,6 +656,18 @@ it("options can be retried without losing the full-page Back action", async () =
     "Back to counter",
   );
 });
+it.each([
+  ["en-GB", "find_page.back", "Back to counter"],
+  ["es-ES", "find_page.back", "Volver al mostrador"],
+  ["en-GB", "action.back", "Back"],
+  ["es-ES", "action.back", "Atrás"],
+] as const)("in %s, the back button given %s reads %s", async (language, backKey, words) => {
+  const { el } = await mount();
+  (el as Screen & { backKey: string }).backKey = backKey;
+  setLocale(language);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("header wt-button")!.textContent!.trim()).toBe(words);
+});
 it("a late refused list cannot overwrite the successful replacement page", async () => {
   let rejectOld!: (response: Response) => void;
   let count = 0;

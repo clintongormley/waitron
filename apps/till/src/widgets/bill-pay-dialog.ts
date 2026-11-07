@@ -1113,11 +1113,7 @@ export class TillBillPayDialog extends LitElement {
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.#active}
-      .heading=${
-        this.handheld && this.tableName !== ""
-          ? t("bill_pay.title_table").replace("{table}", () => this.tableName)
-          : t("bill_pay.title")
-      }
+      .heading=${this.#heading()}
       .dismissible=${!this.busy}
       .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
@@ -1125,6 +1121,15 @@ export class TillBillPayDialog extends LitElement {
       <div class="body">${view.body}</div>
       ${view.actions}
     </wt-dialog>`;
+  }
+
+  /** A handheld's window offers the whole bill as well as part of it, so its heading names no part;
+   * a till's offers only part of it. */
+  #heading(): string {
+    if (!this.handheld) return t("bill_pay.title");
+    return this.tableName === ""
+      ? t("action.pay")
+      : t("bill_pay.title_table").replace("{table}", () => this.tableName);
   }
 
   /** On a handheld, while a card it sent is at the reader, the sheet is this panel alone. */

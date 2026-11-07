@@ -228,6 +228,7 @@ export class TillStationScreen extends LitElement {
   @property({ attribute: false }) serverOrigin?: string;
   /** Mounted inside a card host, which supplies the header; the out-of-date banner stays. */
   @property({ type: Boolean }) embedded = false;
+  @property({ attribute: false }) backKey: "station.back" | "action.back" = "station.back";
   @property({ type: Boolean }) canMoveStation = false;
 
   @state() private stations: Station[] = [];
@@ -1080,7 +1081,7 @@ export class TillStationScreen extends LitElement {
                         variant="secondary"
                         @click=${() => this.#back()}
                       >
-                        ${t("station.back")}
+                        ${t(this.backKey)}
                       </wt-button>`
                     : nothing
                 }

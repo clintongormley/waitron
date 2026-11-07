@@ -1490,4 +1490,122 @@ describe("till-floor-screen: the zone strip's edge", () => {
       });
     });
   });
+
+  describe("opening on a zone whose tab the rest leaves out of sight", () => {
+    const openOn = async (
+      selectedZoneId: string,
+      tables: TableState[],
+      check: (el: TillFloorScreen, host: HTMLElement) => Promise<void>,
+      { width = 390, zoneList = many } = {},
+    ) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 844);
+      try {
+        const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+          zones: zoneList,
+          tables,
+          now,
+          reducedMotion: true,
+          selectedZoneId,
+        });
+        await check(el, host);
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    };
+
+    const boxOf = (el: TillFloorScreen, zoneId: string) =>
+      tabOf(el, zoneId).closest(".zone-tab")!.getBoundingClientRect();
+
+    const inSight = (el: TillFloorScreen, zoneId: string) => {
+      const tab = boxOf(el, zoneId);
+      const box = paddingBox(stripOf(el));
+      return tab.left >= box.left && tab.right <= box.right;
+    };
+
+    it("shows the selected tab whole, clear of the start edge the first tab's state draws", async () => {
+      await openOn("z6", [seated("t1", "z1", { readyToServe: 2 })], async (el) => {
+        await expect.poll(() => inSight(el, "z6")).toBe(true);
+        await expect.poll(() => edgeOf(el, "start")).not.toBeNull();
+        await nextFrames();
+        expect(inSight(el, "z6")).toBe(true);
+        expect(boxOf(el, "z6").left).toBeGreaterThanOrEqual(
+          edgeOf(el, "start")!.getBoundingClientRect().right,
+        );
+      });
+    });
+
+    it("brings a selected tab wider than the strip to its start, as an edge's tap does", async () => {
+      await openOn(
+        "z2",
+        [seated("t1", "z1"), seated("t2", "z2")],
+        async (el, host) => {
+          const strip = stripOf(el);
+          await expect.poll(() => strip.hasAttribute("data-overflows")).toBe(true);
+          const box = () => paddingBox(strip);
+          expect(boxOf(el, "z2").width).toBeGreaterThan(box().right - box().left);
+          const ring = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+          await expect
+            .poll(() => boxOf(el, "z2").left - ring)
+            .toBeGreaterThanOrEqual(box().left - 1);
+          expect(boxOf(el, "z2").left - ring).toBeLessThanOrEqual(box().left + 1);
+        },
+        {
+          width: 320,
+          zoneList: [
+            zone("z1", "Inside", 0),
+            zone("z2", "Upstairs private dining room and terrace", 1),
+          ],
+        },
+      );
+    });
+
+    it("leaves a strip the person scrolled before its overflow was measured where they put it", async () => {
+      await openOn("z6", [seated("t1", "z1")], async (el) => {
+        const strip = stripOf(el);
+        expect(strip.hasAttribute("data-overflows")).toBe(false);
+        strip.scrollLeft = 20;
+        const scrolled = strip.scrollLeft;
+        expect(scrolled).toBeGreaterThan(0);
+        await expect.poll(() => strip.hasAttribute("data-overflows")).toBe(true);
+        await nextFrames();
+        await nextFrames();
+        expect(strip.scrollLeft).toBe(scrolled);
+        expect(inSight(el, "z6")).toBe(false);
+      });
+    });
+
+    it("does not move the strip back on a later redraw once the person has scrolled it", async () => {
+      await openOn("z6", [seated("t1", "z1")], async (el) => {
+        const strip = stripOf(el);
+        await expect.poll(() => inSight(el, "z6")).toBe(true);
+        await nextFrames();
+        strip.scrollLeft = 0;
+        await nextFrames();
+        el.tables = [seated("t1", "z1"), seated("t2", "z2", { readyToServe: 1 })];
+        await el.updateComplete;
+        await nextFrames();
+        expect(strip.scrollLeft).toBe(0);
+        expect(inSight(el, "z6")).toBe(false);
+      });
+    });
+
+    it("shows a newly selected zone's tab once, then leaves the strip to the person", async () => {
+      await openOn("z1", [seated("t1", "z1")], async (el) => {
+        const strip = stripOf(el);
+        await expect.poll(() => strip.hasAttribute("data-overflows")).toBe(true);
+        await nextFrames();
+        expect(inSight(el, "z6")).toBe(false);
+        el.selectedZoneId = "z6";
+        await expect.poll(() => inSight(el, "z6")).toBe(true);
+        await nextFrames();
+        strip.scrollLeft = 0;
+        await nextFrames();
+        el.tables = [seated("t1", "z1"), seated("t2", "z2", { readyToServe: 1 })];
+        await el.updateComplete;
+        await nextFrames();
+        expect(strip.scrollLeft).toBe(0);
+      });
+    });
+  });
 });

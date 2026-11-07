@@ -422,6 +422,17 @@ export class TillFloorScreen extends LitElement {
         margin: 0;
       }
 
+      .read-failed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .read-failed p {
+        margin: 0;
+      }
+
       .tabs {
         display: flex;
         min-width: 0;
@@ -904,6 +915,9 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** When the read that drew `tables` started, numbered by `nextFloorMoment`. */
   @property({ attribute: false }) tablesReadAt = 0;
+  /** `tables` is a read's answer, not a list kept after a failed read; `tablesReadAt` moves on either. */
+  @property({ attribute: false }) tablesAnswered = false;
+  @property({ attribute: false }) floorReadFailed = false;
   /** Rooms' revisions a change the app sent was answered with, as `tablesReadAt` is numbered. */
   @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
     new Map();
@@ -1016,6 +1030,11 @@ export class TillFloorScreen extends LitElement {
   /** Whether an overflowing strip is still to be rested: set while the strip fits its tabs or is not
    * drawn, cleared once one is rested or found already scrolled. */
   #restDue = true;
+  /** Whether the selected zone's tab is still to be brought into sight: set at the start and when
+   * `selectedZoneId` changes, cleared at the first check once the strip overflows, or by a tap. */
+  #revealDue = true;
+  /** Where the screen last left the strip, so a scroll the person made is not undone. */
+  #placedAt: number | undefined;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
   readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
@@ -1044,7 +1063,10 @@ export class TillFloorScreen extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("api") || changed.has("operatorSession") || changed.has("selectedZoneId"))
       this.#clearJoin();
-    if (changed.has("selectedZoneId")) this.activeZone = this.selectedZoneId;
+    if (changed.has("selectedZoneId")) {
+      this.activeZone = this.selectedZoneId;
+      this.#revealDue = true;
+    }
     if (changed.has("tables") && this.askingSeats === null && this.#joinWork === null)
       this.#pending = null;
     if (
@@ -1355,6 +1377,7 @@ export class TillFloorScreen extends LitElement {
   #selectZone(key: string): void {
     this.refusedZoneId = null;
     this.refusal = null;
+    this.#revealDue = false;
     this.activeZone = key;
     this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key });
   }
@@ -2408,6 +2431,8 @@ export class TillFloorScreen extends LitElement {
   override render() {
     const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
       this.#zone;
+    // A read still out keeps the empty list or map.
+    const empty = listed.length === 0 && onMap.length === 0 ? this.#emptyFloor(activeKey) : nothing;
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -2440,7 +2465,7 @@ export class TillFloorScreen extends LitElement {
           }
           <div class="actions help-anchor">
             ${
-              this.#phone.matches
+              this.#phone.matches || empty !== nothing
                 ? nothing
                 : html`<wt-button
                     class="view-toggle"
@@ -2492,15 +2517,36 @@ export class TillFloorScreen extends LitElement {
         })()}
         ${this.#stationSummary()}
         ${
-          view === "list"
-            ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
-            : this.#plannedMap(onMap, unplaced, activeKey)
+          empty !== nothing
+            ? empty
+            : view === "list"
+              ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
+              : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
         ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()}
         ${this.#renameWindow()} ${this.#joinWith()} ${this.#readyBar()}
       </section>
     `;
+  }
+
+  /** Keyed on what would be drawn, not on `visible`: tables taken off today's plan are not drawn. */
+  #emptyFloor(activeKey: string | undefined): TemplateResult | typeof nothing {
+    if (this.tablesAnswered && activeKey !== undefined)
+      return html`<p data-floor-no-tables role="status">
+        ${t(this.#zone.visible.length === 0 ? "floor.no_tables" : "floor.no_tables_today")}
+      </p>`;
+    if (!this.floorReadFailed) return nothing;
+    return html`<div class="read-failed">
+      <p data-floor-read-failed role="status">${t("floor.read_failed")}</p>
+      <wt-button
+        data-floor-retry
+        variant="secondary"
+        @click=${() => this.#requestFloorRefresh({ zones: true })}
+      >
+        ${t("find_page.retry")}
+      </wt-button>
+    </div>`;
   }
 
   /** `fitKey` and `tables` change in one update, so a new zone is fitted to its own tables. */
@@ -2579,7 +2625,10 @@ export class TillFloorScreen extends LitElement {
       data-tabs-edge=${side}
       data-zone-state=${mark.kind}
       aria-label=${t("floor.show_zone").replace("{zone}", () => tab.name)}
-      @click=${() => this.#showTab(tab.key, side)}
+      @click=${() => {
+        this.#revealDue = false;
+        this.#showTab(tab.key, side);
+      }}
     >
       ${renderFloorPulse(pulse, moving)}${side === "start" ? html`<span aria-hidden="true">‹</span>` : nothing}${this.#markIcon(mark)}${side === "end" ? html`<span aria-hidden="true">›</span>` : nothing}
     </button>`;
@@ -2650,14 +2699,37 @@ export class TillFloorScreen extends LitElement {
       this.#restDue = true;
       return;
     }
-    if (!this.#restDue) return;
+    if (!this.#restDue && !this.#revealDue) return;
     const style = getComputedStyle(strip);
     const room = parseFloat(style.paddingInlineStart) - parseFloat(style.paddingBlockStart);
     // Tabs not yet drawn leave nothing to scroll; the next #placeTabs or update tries again.
     if (strip.scrollWidth - strip.clientWidth < room) return;
-    this.#restDue = false;
-    // A person may have scrolled it before its tabs were drawn.
-    if (strip.scrollLeft === 0) strip.scrollTo({ left: room, behavior: "instant" });
+    if (this.#restDue) {
+      this.#restDue = false;
+      // A person may have scrolled it before its tabs were drawn.
+      if (strip.scrollLeft === 0) {
+        strip.scrollTo({ left: room, behavior: "instant" });
+        this.#placedAt = strip.scrollLeft;
+      } else this.#placedAt = undefined;
+    }
+    if (!this.#revealDue) return;
+    // Cleared first: #showTab comes back here through #placeTabs.
+    this.#revealDue = false;
+    if (strip.scrollLeft !== 0 && strip.scrollLeft !== this.#placedAt) return;
+    const activeKey = this.#zone.activeKey;
+    const tab = [...strip.querySelectorAll<HTMLElement>(".zone-tab")].find(
+      (zoneTab) => tabKey(zoneTab) === activeKey,
+    );
+    if (tab === undefined) return;
+    const span = stripSpan(strip);
+    const edge = (side: TabsEdge) =>
+      this.shadowRoot!.querySelector(`[data-tabs-edge="${side}"]`)?.getBoundingClientRect();
+    const left = Math.max(span.left, edge("start")?.right ?? span.left);
+    const right = Math.min(span.right, edge("end")?.left ?? span.right);
+    const box = tab.getBoundingClientRect();
+    if (box.left >= left && box.right <= right) return;
+    this.#showTab(activeKey!, box.left < left ? "start" : "end");
+    this.#placedAt = strip.scrollLeft;
   }
 
   #stopWatchingTabs(): void {

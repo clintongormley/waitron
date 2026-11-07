@@ -3,7 +3,7 @@ import type { WtButton, WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { localIsoDate, scheduleWindow } from "./till-schedule-screen.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
 import type { MyAbsence, MyShift, MySwap, StaffMember, TillApi } from "../api/client.js";
@@ -382,6 +382,24 @@ describe("till-schedule-screen", () => {
     el.addEventListener("back-to-counter", seen);
     root(el).querySelector<HTMLElement>("wt-button.back")!.click();
     expect(seen).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["en-GB", "schedule.back", "Back to counter"],
+    ["es-ES", "schedule.back", "Volver a la caja"],
+    ["en-GB", "action.back", "Back"],
+    ["es-ES", "action.back", "Atrás"],
+  ] as const)("in %s, the Back given %s reads %s", async (language, backKey, words) => {
+    const previous = currentLocale();
+    try {
+      setLocale(language);
+      const { el } = await mount(stubApi());
+      (el as TillScheduleScreen & { backKey: string }).backKey = backKey;
+      await el.updateComplete;
+      expect(root(el).querySelector("wt-button.back")!.textContent!.trim()).toBe(words);
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("shows a load-failed status when the initial load rejects", async () => {

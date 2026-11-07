@@ -1837,6 +1837,16 @@ function saleRefusalOf(
   }
 }
 
+/** A tender the device's profile does not take. */
+function profileRefusalOf(
+  error: unknown,
+): { code: "device.cash_not_allowed" | "device.forbidden_action" } | undefined {
+  const code = (error as { code?: unknown } | undefined)?.code;
+  return code === "device.cash_not_allowed" || code === "device.forbidden_action"
+    ? { code }
+    : undefined;
+}
+
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
@@ -2168,6 +2178,12 @@ export class TillApp extends LitElement {
   #tablesRead = 0;
   /** When the read whose answer `tables` holds started, numbered by `nextFloorMoment`. */
   @state() private tablesReadAt = 0;
+  /** Whether the list in `tables` is one the box answered, not the empty one a failed
+   * {@link #reloadTables} leaves. */
+  @state() private tablesAnswered = false;
+  @state() private floorReadFailed = false;
+  /** Whether a zones read has answered, so a tables answer alone can end `floorReadFailed`. */
+  #zonesAnswered = false;
   /** What a change this app sent answered about its rooms, which a handheld's floor may not be
    * mounted to be told. */
   @state() private floorCarried: ReadonlyMap<string, CarriedRevision> = new Map();
@@ -3120,6 +3136,10 @@ export class TillApp extends LitElement {
   @state() private deviceZonesReadError = "";
   @state() private deviceZonesRefusal?: DeviceZonesRefusal;
   @state() private deviceZonesNotice = "";
+  /** Set where the sign-in read of the device's zones failed, so the no-zones section does not
+   * blame the profile. */
+  @state() private deviceZonesUnread = false;
+  @state() private deviceZonesRetrying = false;
   #deviceZonesOpening = 0;
   #deviceZonesRead = 0;
   #deviceZonesWrite = 0;
@@ -3785,6 +3805,14 @@ export class TillApp extends LitElement {
       );
   }
 
+  /** Also called where a table is opened: reopening the table still held across a sign-in changes
+   * no `activeTableId`, and sign-out clears the return zone. */
+  #rememberFloorReturnZone(): void {
+    if (this.activeTableId === undefined || this.formFactor === "till") return;
+    this.floorReturnZoneId =
+      this.barFloor.find((table) => table.id === this.activeTableId)?.zoneId ?? undefined;
+  }
+
   /** D12: {@link floorReturnZoneId} while the Floor shows that zone. */
   #floorReturnZone(): string | undefined {
     const zoneId = this.floorReturnZoneId;
@@ -4436,14 +4464,7 @@ export class TillApp extends LitElement {
       this.#syncDepartmentTransfers();
     if (changed.has("formFactor") || changed.has("capabilities") || changed.has("onboardingIntent"))
       this.#affordanceList = this.#affordances();
-    if (
-      changed.has("activeTableId") &&
-      this.activeTableId !== undefined &&
-      this.formFactor !== "till"
-    ) {
-      this.floorReturnZoneId =
-        this.barFloor.find((table) => table.id === this.activeTableId)?.zoneId ?? undefined;
-    }
+    if (changed.has("activeTableId")) this.#rememberFloorReturnZone();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
     if (changed.has("frontDoor")) this.#decideReload();
@@ -5434,6 +5455,7 @@ export class TillApp extends LitElement {
     this.drill = undefined;
     this.#floorLoaded = false;
     this.deviceZoneSelection = null;
+    this.deviceZonesUnread = false;
     let offerLoadFailed: CounterError | false = false;
     const retainedZone = this.#store.lines.length > 0 ? this.counterServiceZoneId : undefined;
     try {
@@ -5450,10 +5472,12 @@ export class TillApp extends LitElement {
           this.deviceZonesNotice = selection === null ? t("device_zones.read_failed") : "";
         }
       }
+      const navigation = this.#deviceNavigation();
+      const handheld = kindOfFormFactor(this.formFactor ?? "") === "handheld";
       if (
-        this.formFactor === "till" &&
-        !this.#deviceNavigation()?.counterZoneIds.length &&
-        retainedZone === undefined
+        retainedZone === undefined &&
+        ((this.formFactor === "till" && !navigation?.counterZoneIds.length) ||
+          (handheld && navigation?.floorZoneIds.length === 0))
       ) {
         this.#loadCounterOffers({
           offers: [],
@@ -5467,6 +5491,7 @@ export class TillApp extends LitElement {
             zoneKeepOpen: null,
           },
         });
+        if (handheld) this.profileServiceZones = [];
         this.counterServiceZoneId = "";
       } else {
         const catalogue =
@@ -5485,6 +5510,7 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (replaced()) return;
       offerLoadFailed = zoneLoadError(error);
+      if (this.#choosesZones() && this.deviceZoneSelection === null) this.deviceZonesUnread = true;
       if (
         ["device_profile.no_service_zone", "service_zone.default_missing"].includes(
           (error as { code?: string })?.code ?? "",
@@ -7894,7 +7920,12 @@ export class TillApp extends LitElement {
       });
       if (!current()) return;
       const pending = this.#unansweredWholePayments.get(row.workingOrderId);
-      if (row.collectionStatus !== null || pending !== undefined) {
+      // With no counter screen to load it into, a presented counter bill is collected here.
+      const presentedWithoutCounter =
+        this.#resolveScreen("counter") !== "counter" &&
+        row.orderStatus === "placed" &&
+        row.partyId === null;
+      if (row.collectionStatus !== null || pending !== undefined || presentedWithoutCounter) {
         this.#collectionObservation = {
           billId: row.workingOrderId,
           api,
@@ -7977,13 +8008,17 @@ export class TillApp extends LitElement {
             await this.#loadHeldOrder(row.workingOrderId, () => !current(), controller.signal);
             if (!current() || this.#store.id !== row.workingOrderId) return;
             this.#onBackToCounter();
-            if (row.state === "part-paid")
+            const unpaid = row.state !== "part-paid";
+            if (!unpaid || this.#resolveScreen("counter") !== "counter") {
+              // Only a handheld's pay window offers the whole bill as a way to pay.
+              const whole = unpaid && this.handheldMode;
               await this.#openBillPaying(
-                "contribution",
+                whole ? "whole" : "contribution",
                 payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
-                undefined,
+                unpaid && !whole ? row.stillOwed : undefined,
                 { surface: "counter", billId: row.workingOrderId, visit: session },
               );
+            }
           } else this.errorKey = "held.stale";
         },
       });
@@ -8512,6 +8547,7 @@ export class TillApp extends LitElement {
         .api=${this.api}
         .busy=${this.findBillBusy}
         .active=${this.drill?.kind === "find-bill"}
+        .backKey=${this.#homeScreen() === "counter" ? "find_page.back" : "action.back"}
         @find-bill-open=${(event: CustomEvent<{ row: BillRow }>) => void this.#onFindBillOpen(event)}
         @find-bill-back=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @find-transaction-open=${(event: CustomEvent<{ row: TransactionRow }>) => void this.#onFindTransactionOpen(event)}
@@ -8631,6 +8667,7 @@ export class TillApp extends LitElement {
       if (!current()) return;
       this.findBillError =
         saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
+        profileRefusalOf(error) ??
         (isPermanentSaleRefusal(error)
           ? "sale.refused"
           : isNetworkFailure(error)
@@ -10641,7 +10678,11 @@ export class TillApp extends LitElement {
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
-        @bill-pay-close=${() => this.#closeBillPaying()}
+        @bill-pay-close=${() => {
+          const open = this.billPaying;
+          this.#closeBillPaying();
+          if (open !== null) this.#releaseFoundCounterBill(open);
+        }}
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
@@ -10826,10 +10867,11 @@ export class TillApp extends LitElement {
       const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
       if (replaced()) return;
       this.#applyTables(tablesRead, tables);
-      if (zonesRead === this.#floorZonesRead) this.zones = zones;
+      if (zonesRead === this.#floorZonesRead) this.#applyZones(zones);
       this.#floorLoaded = true;
     } catch {
       // Non-fatal: the last-known floor stays.
+      if (!replaced()) this.floorReadFailed = true;
     }
   }
 
@@ -10887,10 +10929,18 @@ export class TillApp extends LitElement {
     const read = ++this.#floorZonesRead;
     try {
       const zones = await this.api.listZones();
-      if (session === this.#operatorSession && read === this.#floorZonesRead) this.zones = zones;
+      if (session === this.#operatorSession && read === this.#floorZonesRead)
+        this.#applyZones(zones);
     } catch {
       // A failed read must not erase the last known closure.
+      if (session === this.#operatorSession) this.floorReadFailed = true;
     }
+  }
+
+  #applyZones(zones: FloorZone[]): void {
+    this.zones = zones;
+    this.#zonesAnswered = true;
+    if (this.tablesAnswered) this.floorReadFailed = false;
   }
 
   #onFloorRefresh({ poll, zones }: FloorRefreshDetail = {}): void {
@@ -10910,8 +10960,16 @@ export class TillApp extends LitElement {
     const poll = new AbortController();
     this.#floorPoll = poll;
     const limit = limited(FLOOR_POLL_LIMIT_MS, poll.signal);
+    const session = this.#operatorSession;
     try {
-      await this.#refreshFloor({ signal: limit.signal });
+      const applied = await this.#refreshFloor({ signal: limit.signal });
+      if (
+        !applied &&
+        limit.signal.aborted &&
+        !poll.signal.aborted &&
+        session === this.#operatorSession
+      )
+        this.floorReadFailed = true;
     } finally {
       limit.done();
       if (this.#floorPoll === poll) this.#floorPoll = undefined;
@@ -10929,11 +10987,14 @@ export class TillApp extends LitElement {
    * equal to it. */
   async #refreshFloor(...options: [] | [ReadOptions]): Promise<boolean> {
     const read = this.#startTablesRead();
+    const session = this.#operatorSession;
     try {
       const tables = await this.api.getTablesState(...options);
       if (options[0]?.signal?.aborted !== true) this.#applyTables(read, tables);
     } catch {
-      // The last-known floor stays.
+      // The last-known floor stays. An aborted poll is judged by #pollFloor, which knows why.
+      if (options[0]?.signal?.aborted !== true && session === this.#operatorSession)
+        this.floorReadFailed = true;
     }
     return this.#tablesApplied >= read.number;
   }
@@ -10950,6 +11011,8 @@ export class TillApp extends LitElement {
     if (read.number <= this.#tablesApplied) return;
     this.#tablesApplied = read.number;
     this.tablesReadAt = read.startedAt;
+    this.tablesAnswered = answered;
+    if (answered && this.#zonesAnswered) this.floorReadFailed = false;
     if (answered) this.#forgetReleased((each) => (each.savedBefore ?? read.number) < read.number);
     const json = JSON.stringify(tables);
     const changed = json !== this.#tablesJson;
@@ -11231,6 +11294,7 @@ export class TillApp extends LitElement {
         this.tableSelectedCatalogueId = "";
       }
       this.activeTableId = tableId;
+      this.#rememberFloorReturnZone();
       this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
       this.finishRefused = false;
       this.nameRefusal = null;
@@ -11270,6 +11334,7 @@ export class TillApp extends LitElement {
           // only here.
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           this.activeTableId = tableId;
+          this.#rememberFloorReturnZone();
           this.#chooseBill(tabId);
           this.orderParty = {
             id: partyId,
@@ -15263,8 +15328,10 @@ export class TillApp extends LitElement {
         this.#splitPanel === undefined &&
         refusal === undefined &&
         this.#splitRefusalReading === undefined
-      )
+      ) {
         this.#applyTables(read, [], false);
+        this.floorReadFailed = true;
+      }
     }
   }
 
@@ -19316,6 +19383,7 @@ export class TillApp extends LitElement {
     payments: BillPaymentView[],
   ): Promise<void> {
     this.#closeBillPaying();
+    this.#releaseFoundCounterBill(open);
     this.result = invoice;
     // A counter order is no bill of the party a handheld may still hold.
     this.#showTicket(open.billId, true, open.surface === "table" ? payments : null);
@@ -19410,6 +19478,23 @@ export class TillApp extends LitElement {
       return;
     }
     this.billPaying = { ...this.billPaying!, asked: null, preview: null, refusal: null };
+  }
+
+  /** A device with no counter screen holds a counter bill only to pay it from Find a bill, so the
+   * basket lets it go when that pay window closes. */
+  #releaseFoundCounterBill(open: PayingOrder): void {
+    if (
+      open.surface !== "counter" ||
+      this.#resolveScreen("counter") === "counter" ||
+      this.#counterOrderInFlight() ||
+      this.#store.id !== open.billId
+    )
+      return;
+    this.#dismissStationChoices();
+    this.#clearBasket();
+    this.stage = "order";
+    this.collectFlow = undefined;
+    this.counterLines = null;
   }
 
   #closeBillPaying(): void {
@@ -19811,6 +19896,7 @@ export class TillApp extends LitElement {
     this.#setActiveTab(this.#homeScreen(), true);
     this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
+    this.floorReadFailed = false;
     this.errorKey = undefined;
     this.#stationsRead++;
     this.stations = [];
@@ -20018,6 +20104,8 @@ export class TillApp extends LitElement {
         }
         .tables=${this.tables}
         .tablesReadAt=${this.tablesReadAt}
+        .tablesAnswered=${this.tablesAnswered}
+        .floorReadFailed=${this.floorReadFailed}
         .carriedRevisions=${this.floorCarried}
         .api=${this.api}
         .operatorSession=${this.#operatorSession}
@@ -20156,23 +20244,52 @@ export class TillApp extends LitElement {
 
   #activeTabBody(): TemplateResult | typeof nothing {
     const tab = this.#activeTab();
-    return tab !== undefined
-      ? this.#tabBody(tab)
-      : html`<section data-device-zones-empty role="status">
-          <p>${codeMessage("device_profile.no_service_zone")}</p>
-          <wt-button
-            data-open-device-settings
-            variant="secondary"
-            @click=${() => (this.deviceSettingsOpen = true)}
-            >${t("device_zones.settings")}</wt-button
-          >
-          <wt-button
-            data-retry-device-zones
-            variant="secondary"
-            @click=${() => void this.#enterSignedIn({ personId: this.operatorPersonId, displayName: this.operatorName, permissions: this.permissions })}
-            >${t("find_page.retry")}</wt-button
-          >
-        </section>`;
+    const handheld = kindOfFormFactor(this.formFactor ?? "") === "handheld";
+    // A handheld's tab is always the Floor, so its empty selection is caught here; a Retry nulls the
+    // selection while it reads again, which would otherwise draw the Floor with every venue zone.
+    const noZones =
+      handheld &&
+      ((this.deviceZonesRetrying && this.deviceZoneSelection === null) ||
+        this.#deviceNavigation()?.floorZoneIds.length === 0);
+    if (tab !== undefined && !noZones) return this.#tabBody(tab);
+    const said =
+      this.deviceZoneSelection === null && this.deviceZonesUnread
+        ? t("device_zones.read_failed")
+        : codeMessage("device_profile.no_service_zone");
+    return html`<section data-device-zones-empty role="status">
+      <p>${said}</p>
+      ${
+        handheld
+          ? nothing
+          : html`<wt-button
+              data-open-device-settings
+              variant="secondary"
+              @click=${() => (this.deviceSettingsOpen = true)}
+              >${t("device_zones.settings")}</wt-button
+            >`
+      }
+      <wt-button
+        data-retry-device-zones
+        variant="secondary"
+        @click=${() => this.#retryDeviceZones()}
+        >${t("find_page.retry")}</wt-button
+      >
+    </section>`;
+  }
+
+  #deviceZonesRetry = 0;
+
+  // A newer Retry's sign-in replaces an older one's, so only the newest may clear the flag.
+  #retryDeviceZones(): void {
+    const retry = ++this.#deviceZonesRetry;
+    this.deviceZonesRetrying = true;
+    void this.#enterSignedIn({
+      personId: this.operatorPersonId,
+      displayName: this.operatorName,
+      permissions: this.permissions,
+    }).finally(() => {
+      if (retry === this.#deviceZonesRetry) this.deviceZonesRetrying = false;
+    });
   }
 
   /** Drill-ins mount non-embedded, so each keeps its own Back or Close; an `embedded` mount would trap
@@ -20343,6 +20460,7 @@ export class TillApp extends LitElement {
         return html`<till-schedule-screen
           slot="drill"
           .api=${this.api}
+          .backKey=${this.#homeScreen() === "counter" ? "schedule.back" : "action.back"}
           .staff=${this.staff}
           .operatorPersonId=${this.operatorPersonId}
         ></till-schedule-screen>`;
@@ -20351,6 +20469,7 @@ export class TillApp extends LitElement {
           .operatorSession=${this.#operatorSession}
           slot="drill"
           .api=${this.api}
+          .backKey=${this.#homeScreen() === "counter" ? "station.back" : "action.back"}
           .canMoveStation=${this.capabilities.includes("take-orders")}
           .canEditKitchenNote=${this.capabilities.includes("take-orders")}
           .deviceMode=${this.deviceMode}
@@ -20363,6 +20482,7 @@ export class TillApp extends LitElement {
           .operatorSession=${this.#operatorSession}
           slot="drill"
           .api=${this.api}
+          .backKey=${this.#homeScreen() === "counter" ? "expo.back" : "action.back"}
           .runsPass=${this.capabilities.includes("run-the-pass")}
           .deviceId=${this.deviceId}
           .serverOrigin=${this.#serverOrigin()}
@@ -20799,6 +20919,8 @@ export class TillApp extends LitElement {
                 .bill=${this.collectionBill}
                 .confirmationTender=${this.collectionBill === null ? undefined : this.#unansweredWholePayments.get(this.collectionBill.workingOrderId)?.tender}
                 .unconfirmed=${this.collectionBill !== null && this.#unansweredWholePayments.has(this.collectionBill.workingOrderId)}
+                .takesCash=${this.#takesCash()}
+                .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
                 .busy=${this.findBillBusy}
                 .error=${this.findBillError}
               ></till-find-bill-dialog>`

@@ -297,7 +297,10 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
         status: "left_without_paying",
         stillOwed: "5.00",
       } satisfies BillLookupRow;
-      const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", { bill });
+      const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {
+        bill,
+        takesCash: true,
+      });
       const asked = capture<FindBillPayDetail>(el, "find-bill-pay");
       await type(el, "cash-received", amount);
       await click(el, "[data-collect]");

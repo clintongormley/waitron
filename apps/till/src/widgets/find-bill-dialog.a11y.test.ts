@@ -19,27 +19,38 @@ const debt: BillLookupRow = {
 
 afterEach(cleanupWidgets);
 describe.each(["light", "dark"] as const)("Selected bill collection a11y (%s theme)", (theme) => {
-  it.each(["cash", "card", "loading", "refusal", "unconfirmed-cash", "unconfirmed-card"] as const)(
-    "%s has no violations",
-    async (stage) => {
-      const { el, host } = await mountWidget<TillFindBillDialog>(
-        "till-find-bill-dialog",
-        { bill: debt },
-        theme,
-      );
-      if (stage === "card") el.shadowRoot!.querySelector<HTMLElement>("[data-card]")!.click();
-      if (stage === "unconfirmed-cash" || stage === "unconfirmed-card") {
-        el.unconfirmed = true;
-        el.confirmationTender =
-          stage === "unconfirmed-cash"
-            ? { method: "cash", amount: "40.00" }
-            : { method: "card", amount: "30.00", externalRef: "original" };
-        el.error = "sale.unconfirmed";
-      }
-      if (stage === "loading") el.busy = true;
-      if (stage === "refusal") el.error = "sale.unconfirmed";
-      await el.updateComplete;
-      await expectNoA11yViolations(host);
-    },
-  );
+  it.each([
+    "cash",
+    "card",
+    "loading",
+    "refusal",
+    "unconfirmed-cash",
+    "unconfirmed-card",
+    "cash-only",
+    "card-only",
+    "neither",
+  ] as const)("%s has no violations", async (stage) => {
+    const { el, host } = await mountWidget<TillFindBillDialog>(
+      "till-find-bill-dialog",
+      {
+        bill: debt,
+        takesCash: stage !== "card-only" && stage !== "neither",
+        takesManualCard: stage !== "cash-only" && stage !== "neither",
+      },
+      theme,
+    );
+    if (stage === "card") el.shadowRoot!.querySelector<HTMLElement>("[data-card]")!.click();
+    if (stage === "unconfirmed-cash" || stage === "unconfirmed-card") {
+      el.unconfirmed = true;
+      el.confirmationTender =
+        stage === "unconfirmed-cash"
+          ? { method: "cash", amount: "40.00" }
+          : { method: "card", amount: "30.00", externalRef: "original" };
+      el.error = "sale.unconfirmed";
+    }
+    if (stage === "loading") el.busy = true;
+    if (stage === "refusal") el.error = "sale.unconfirmed";
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });

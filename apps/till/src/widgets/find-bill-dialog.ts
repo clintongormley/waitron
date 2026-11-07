@@ -69,6 +69,8 @@ export class TillFindBillDialog extends LitElement {
   @property({ attribute: false }) bill: BillLookupRow | null = null;
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) unconfirmed = false;
+  @property({ type: Boolean }) takesCash = false;
+  @property({ type: Boolean }) takesManualCard = false;
   @property({ attribute: false }) confirmationTender?: Tender;
   @property({ attribute: false }) error?:
     | StringKey
@@ -123,6 +125,8 @@ export class TillFindBillDialog extends LitElement {
       }
       this.cashError = false;
     }
+    const offered = this.#methods();
+    if (offered.length > 0 && !offered.includes(this.method)) this.method = offered[0]!;
     if (changed.has("busy") && this.busy && this.#baseline) this.#scope?.commit(this.#baseline);
     if (!this.isConnected || !this.active || this.selected === null || this.#scope) return;
     this.#baseline ??= this.#draft();
@@ -140,6 +144,15 @@ export class TillFindBillDialog extends LitElement {
       },
     });
     this.#scope?.commit(this.#baseline);
+  }
+
+  /** A payment awaiting its answer keeps its own method, so its retry can be sent as it was. */
+  #methods(): ("cash" | "card")[] {
+    const kept = this.unconfirmed ? this.confirmationTender?.method : undefined;
+    return [
+      ...(this.takesCash || kept === "cash" ? (["cash"] as const) : []),
+      ...(this.takesManualCard || kept === "card" ? (["card"] as const) : []),
+    ];
   }
 
   #draft(): CollectionDraft {
@@ -208,7 +221,7 @@ export class TillFindBillDialog extends LitElement {
       this.selected = row;
       this.cash = row.stillOwed;
       this.cashError = false;
-      this.method = "cash";
+      this.method = this.#methods()[0] ?? "cash";
       this.#emit("find-bill-selection");
     };
     if (this.#scope?.isDirty()) {
@@ -219,6 +232,7 @@ export class TillFindBillDialog extends LitElement {
   #collect(): void {
     const bill = this.selected;
     if (!this.isConnected || !this.active || bill === null || this.busy) return;
+    if (!this.#methods().includes(this.method)) return;
     if (this.method === "cash") {
       let enough = false;
       try {
@@ -248,6 +262,7 @@ export class TillFindBillDialog extends LitElement {
     const bill = this.selected;
     if (bill === null) return nothing;
     const amount = formatMoney(bill.stillOwed, currentLocale());
+    const methods = this.#methods();
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -262,82 +277,9 @@ export class TillFindBillDialog extends LitElement {
           ><span>${bill.tables.join(", ")} ${bill.partyName ?? ""}</span
           ><strong>${t("find_bill.owes").replace("{amount}", amount)}</strong>
         </div>
-        <div class="methods">
-          <wt-button
-            variant=${this.method === "cash" ? "primary" : "secondary"}
-            .disabled=${this.busy || this.unconfirmed}
-            @click=${() => {
-              if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
-              this.method = "cash";
-              this.#scope?.changed();
-            }}
-            >${t("find_bill.cash")}</wt-button
-          >
-          <wt-button
-            data-card
-            variant=${this.method === "card" ? "primary" : "secondary"}
-            .disabled=${this.busy || this.unconfirmed}
-            @click=${() => {
-              if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
-              this.method = "card";
-              this.#scope?.changed();
-            }}
-            >${t("find_bill.card")}</wt-button
-          >
-        </div>
-        ${
-          this.method === "cash"
-            ? html`<wt-price-input
-                name="cash-received"
-                decimal-locale=${currentLocale()}
-                .label=${t("find_bill.cash_received")}
-                unit="€"
-                .fixedUnit=${true}
-                .value=${live(this.cash)}
-                .disabled=${this.busy || this.unconfirmed}
-                .error=${this.cashError ? t("find_bill.cash_short").replace("{amount}", amount) : ""}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
-                  this.cash = event.detail.value;
-                  this.cashError = false;
-                  this.#scope?.changed();
-                }}
-              ></wt-price-input>`
-            : html`<wt-input
-                name="terminal-reference"
-                .label=${t("find_bill.card_reference")}
-                .value=${live(this.externalRef)}
-                .disabled=${this.busy || this.unconfirmed}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
-                  this.externalRef = event.detail.value;
-                  this.#scope?.changed();
-                }}
-              ></wt-input>`
-        }
+        ${methods.length === 0 ? nothing : this.#methodFields(methods, amount)}
         <wt-form-actions
-          .error=${
-            typeof this.error === "string"
-              ? t(this.error)
-              : this.error
-                ? "code" in this.error
-                  ? codeMessage(this.error.code)
-                  : "unsentBill" in this.error
-                    ? billUnsentText(bill.label ?? String(bill.orderNumber))
-                    : "clockUnusable" in this.error
-                      ? clockUnusableText(
-                          this.error.clockUnusable.clockAt,
-                          this.error.clockUnusable.offsetMinutes,
-                        )
-                      : "clockBehind" in this.error
-                        ? clockBehindText(this.error.clockBehind)
-                        : overLimitText(this.error.overLimit)
-                : this.cashError
-                  ? t("form.fix_fields")
-                  : ""
-          }
+          .error=${methods.length === 0 ? codeMessage("device.forbidden_action") : this.#errorText(bill)}
         >
           <wt-button
             slot="cancel"
@@ -347,18 +289,110 @@ export class TillFindBillDialog extends LitElement {
           >
             ${t("find_bill.back")}</wt-button
           >
-          <wt-button
-            data-collect
-            variant="primary"
-            .loading=${this.busy}
-            .disabled=${this.busy || this.cashError}
-            @click=${() => this.#collect()}
-          >
-            ${t("find_bill.confirm").replace("{amount}", amount)}</wt-button
-          >
+          ${
+            methods.length === 0
+              ? nothing
+              : html`<wt-button
+                  data-collect
+                  variant="primary"
+                  .loading=${this.busy}
+                  .disabled=${this.busy || this.cashError}
+                  @click=${() => this.#collect()}
+                >
+                  ${t("find_bill.confirm").replace("{amount}", amount)}</wt-button
+                >`
+          }
         </wt-form-actions>
       </div>
     </wt-dialog>`;
+  }
+
+  #methodFields(methods: readonly ("cash" | "card")[], amount: string) {
+    return html`<div class="methods">
+        ${
+          methods.includes("cash")
+            ? html`<wt-button
+                data-cash
+                variant=${this.method === "cash" ? "primary" : "secondary"}
+                .disabled=${this.busy || this.unconfirmed}
+                @click=${() => {
+                  if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
+                  this.method = "cash";
+                  this.#scope?.changed();
+                }}
+                >${t("find_bill.cash")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          methods.includes("card")
+            ? html`<wt-button
+                data-card
+                variant=${this.method === "card" ? "primary" : "secondary"}
+                .disabled=${this.busy || this.unconfirmed}
+                @click=${() => {
+                  if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
+                  this.method = "card";
+                  this.#scope?.changed();
+                }}
+                >${t("find_bill.card")}</wt-button
+              >`
+            : nothing
+        }
+      </div>
+      ${
+        this.method === "cash"
+          ? html`<wt-price-input
+              name="cash-received"
+              decimal-locale=${currentLocale()}
+              .label=${t("find_bill.cash_received")}
+              unit="€"
+              .fixedUnit=${true}
+              .value=${live(this.cash)}
+              .disabled=${this.busy || this.unconfirmed}
+              .error=${this.cashError ? t("find_bill.cash_short").replace("{amount}", amount) : ""}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
+                this.cash = event.detail.value;
+                this.cashError = false;
+                this.#scope?.changed();
+              }}
+            ></wt-price-input>`
+          : html`<wt-input
+              name="terminal-reference"
+              .label=${t("find_bill.card_reference")}
+              .value=${live(this.externalRef)}
+              .disabled=${this.busy || this.unconfirmed}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
+                this.externalRef = event.detail.value;
+                this.#scope?.changed();
+              }}
+            ></wt-input>`
+      } `;
+  }
+
+  #errorText(bill: BillLookupRow): string {
+    return typeof this.error === "string"
+      ? t(this.error)
+      : this.error
+        ? "code" in this.error
+          ? codeMessage(this.error.code)
+          : "unsentBill" in this.error
+            ? billUnsentText(bill.label ?? String(bill.orderNumber))
+            : "clockUnusable" in this.error
+              ? clockUnusableText(
+                  this.error.clockUnusable.clockAt,
+                  this.error.clockUnusable.offsetMinutes,
+                )
+              : "clockBehind" in this.error
+                ? clockBehindText(this.error.clockBehind)
+                : overLimitText(this.error.overLimit)
+        : this.cashError
+          ? t("form.fix_fields")
+          : "";
   }
 }
 

@@ -159,6 +159,7 @@ export class TillPassScreen extends LitElement {
   @property({ attribute: false }) reducedMotion?: boolean;
   /** Mounted inside a card host, which supplies the header. */
   @property({ type: Boolean }) embedded = false;
+  @property({ attribute: false }) backKey: "expo.back" | "action.back" = "expo.back";
   @property({ type: Boolean }) deviceMode = false;
   @property({ type: Boolean }) monitor = false;
   @property({ type: Boolean }) runsPass = false;
@@ -604,7 +605,7 @@ export class TillPassScreen extends LitElement {
         variant="secondary"
         @click=${() => this.#back()}
       >
-        ${t("expo.back")}
+        ${t(this.backKey)}
       </wt-button>`;
   }
 

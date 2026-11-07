@@ -596,9 +596,7 @@ Open:
   560 px wide in English and 602 px in Spanish, so the overflow predates C130 (the overflow
   PF6 Task 9 recorded; that entry, near the top of this file, is done under lane C's W27); with
   the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
-  wholly off-screen (fixed by lane C's W27, below). On the handheld, the station screen's back
-  button says "Back to counter" though a handheld on the built-in phone layout lands on the
-  floor plan.
+  wholly off-screen (fixed by lane C's W27, below).
 - A staff list longer than the screen still makes the page scroll to reach the language button
   (since A187, 2026-10-02, the language chooser is at the top right of the lock screen).
   Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
@@ -1256,14 +1254,16 @@ server's check; "Madrid" passed both). The address search writes a comma-free pr
 provider's locality could still hold one. Left open by A1171 part 3.
 
 
-## A1055. At phone width, a Floor that opens on a later zone leaves its tab scrolled out of sight.
+## A1421. Three till oddities seen once and not looked into
 
-Seen, 2026-10-24 (A797 slice 4's look, 390 px): a handheld whose "Opens first" is
-Upstairs bar opens there, but the zone tab strip stays at its start, so no highlighted tab shows;
-tapping the tab scrolls it into view. A handheld with no saved choice opened on that zone by its
-address does the same, and `apps/till/src/screens/till-floor-screen.ts` is unchanged by that
-slice, so I believe it predates it; the slice makes it the usual case. Fix: scroll the selected
-tab into view when the Floor opens on it.
+Each was seen once on `59be31e3b7` during A1386's investigation, in the demo venue (screenshots
+in `~/waitron-campaign-c/a1386-shots/`), and none was investigated:
+
+- At phone width (390 px), the Downstairs bar's map draws its tables as three 10-pixel dots in a
+  map 29 pixels tall (`e13-next-signin-390-light-en.png`).
+- Reloading the page while on a table's order lands on an empty order page reading "Review (0)",
+  with no table (`e3-order-390-light-en.png`).
+- A slow first read at sign-in leaves the PIN pad on screen with nothing saying the till is waiting.
 
 
 ## A1082. At 390 px the counter till's top bar is cut off.
@@ -1274,16 +1274,6 @@ Counter with its zone, reads "Counter: Do", and the buttons after it (Floor, Par
 are out of sight; the bar scrolls inside itself, while the page itself does not scroll sideways.
 A handheld's top bar fits at the same width. Slice 2 did not change the top bar,
 so I believe it predates it.
-
-
-## A1057. A handheld whose profile allows no zones shows a blank Floor.
-
-Seen, 2026-10-24 (A797
-slice 4's finish review, a browser probe on the branch): a till in that state shows the
-empty-zones page with Settings and Retry, but a handheld's home is always the Floor
-(`homeScreenFor`, `apps/till/src/till-app.ts`), so it draws an empty Floor with no message. On
-`main` before that slice a handheld's home was the Floor too, so I believe it predates it (read,
-not run). Fix: give a handheld the same explanation and Retry.
 
 
 ## A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).
@@ -2159,29 +2149,6 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 - **`apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown at six call sites;
   a helper would collapse it.** Cosmetic, and cheapest alongside A848 (the empty-order message) that
   touches `#onPayTab` (under _Payments and card readers_). Raised by the A1 review wave (A1d).
-
-## Bundle A1386: Blank or misleading Floor pages
-
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06); A1409 joined after it.
-
-- **A1055. At phone width, a Floor that opens on a later zone leaves its tab scrolled out of
-  sight.** Fix: scroll the selected tab into view when the Floor opens on it.
-  [Detail](till.md#a1055-at-phone-width-a-floor-that-opens-on-a-later-zone-leaves-its-tab-scrolled-out-of-sight)
-- **A1056. A zone with no tables shows the till's Floor as a blank page with no message.** Seen,
-  2026-10-24 (A797 slice 4's look): the demo's Upstairs bar, a counter zone with no tables, draws
-  nothing on a handheld's Floor whether it is tapped or opened first. Since that slice a handheld
-  can open there. Fix: say the zone has no tables.
-- **A1093. Handheld 1 sometimes shows its zone tabs with no floor map until a zone tab is
-  tapped**, after sign-in and after a send. Seen, 2026-10-25 (A789 slice 4's look, `x-hl-after.png`,
-  `10`, `11`, `49` and `50` in `~/waitron-campaign-c/a789-4-shots/`), also before any period had
-  ended. Origin not checked.
-- **A1057. A handheld whose profile allows no zones shows a blank Floor.** Fix: give a handheld the
-  same explanation and Retry.
-  [Detail](till.md#a1057-a-handheld-whose-profile-allows-no-zones-shows-a-blank-floor)
-- **A1409. On a handheld, Find a bill on a presented counter order lands on the Floor with no
-  message.** Seen 2026-11-06 (A1236's LOOK, `x-61-find-open-placed-390-light-en.png` in
-  `~/waitron-campaign-c/a1236-shots/`): the bill, its lines and the waiting orders are read, then
-  nothing opens. Believed to predate A1236; not run on main.
 
 ## Bundle A1392: Discard and Cancel fail on a table bill reached from the counter
 
