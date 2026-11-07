@@ -1436,8 +1436,8 @@ describe("till-app: comping a stored counter order", () => {
     };
 
     const sentence = {
-      en: "The kitchen has already started this item, so it can no longer be changed. The order has been reloaded: cancel the item if needed, or add more as a new dish",
-      es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Se ha vuelto a cargar el pedido: cancela el plato si hace falta, o añade más como un plato nuevo",
+      en: "The kitchen has already started this item, so it can no longer be changed. The order has been reloaded: cancel the item if needed",
+      es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Se ha vuelto a cargar el pedido: cancela el plato si hace falta",
     };
 
     describe.each(["en", "es"] as const)("in %s", (language) => {
