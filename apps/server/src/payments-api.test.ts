@@ -214,6 +214,7 @@ function mountApp(
   mountPaymentsApi(
     app,
     {
+      isPrimary: () => true,
       admission: testTradingAdmission(),
       db,
       ...saleDeps(),
@@ -884,6 +885,7 @@ describe("an injected fetch is threaded to the seat", () => {
     mountPaymentsApi(
       app,
       {
+        isPrimary: () => true,
         admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),
@@ -994,6 +996,7 @@ describe("add reader — races with a concurrent disconnect", () => {
     mountPaymentsApi(
       app,
       {
+        isPrimary: () => true,
         admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),
@@ -1056,6 +1059,7 @@ describe("unpair reader — retryable after a failed vendor unpair", () => {
     mountPaymentsApi(
       app,
       {
+        isPrimary: () => true,
         admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),

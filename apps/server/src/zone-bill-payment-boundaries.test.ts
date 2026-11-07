@@ -436,6 +436,7 @@ describe("bill payment admission and issue clocks", () => {
       mountPaymentsApi(
         app,
         {
+          isPrimary: () => true,
           ...v.deps,
           providers: [],
           ring: loadKeyRing({

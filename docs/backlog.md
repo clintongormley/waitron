@@ -102,7 +102,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
-- [A1381. A manager's stuck-payment actions cover placed orders and only this box's own payments](backlog/payments.md#bundle-a1381-a-managers-stuck-payment-actions-cover-placed-orders-and-only-this-boxs-own-payments)
 - [A1382. Till refusals that say the wrong thing or nothing useful](backlog/till.md#bundle-a1382-till-refusals-that-say-the-wrong-thing-or-nothing-useful)
 - [A1384. Words on setup's refusals](backlog/setup.md#bundle-a1384-words-on-setups-refusals)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
@@ -1336,7 +1335,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   to pay of the bill and optionally adds a tip, then hands it back or pays on the reader. Builds on
   A739's payment window (An amount) and the bill payments design's tips. Not designed.
 
-- **A1381. A manager's stuck-payment actions cover placed orders and only this box's own payments** (bundle of 2, 1 go-live, 1 important, size S). [Detail](backlog/payments.md#bundle-a1381-a-managers-stuck-payment-actions-cover-placed-orders-and-only-this-boxs-own-payments)
 
 - **A1394. SumUp's sweep and refund call stop throwing** (bundle of 2, 2 important, size S). [Detail](backlog/payments.md#bundle-a1394-sumups-sweep-and-refund-call-stop-throwing)
 
