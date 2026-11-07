@@ -270,9 +270,9 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     expect(flan.groupId).not.toBeNull();
     expect(flan.firedAt).toBeNull();
     expect((await groupRow(flan.groupId!)).state).toBe("held");
-    const agua = lines.find((line) => line.name === "Agua")!;
-    expect(agua.course).toBeUndefined();
-    expect((await groupRow(agua.groupId!)).state).toBe("fired");
+    const water = lines.find((line) => line.name === "Agua")!;
+    expect(water.course).toBeUndefined();
+    expect((await groupRow(water.groupId!)).state).toBe("fired");
   });
 
   describe("A803 waiting mark: the rows' own read says whether a dish waits, as the order screen's released does", () => {
@@ -2162,8 +2162,8 @@ describe("A803 waiting copy: kitchen paper", () => {
 
   it("A803 split: what the kitchen is told: a loose held dish on HOLD paper prints under HOLD with its copy's number", async () => {
     const t = await paperTable(true);
-    const mesa8 = `Mesa 8 (${t.n})`;
-    const tableId = await v.table(mesa8);
+    const table8 = `Mesa 8 (${t.n})`;
+    const tableId = await v.table(table8);
     const joining = { operatorId: OPERATOR, expectedPartyRevision: await revisionOf(v, t.partyId) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, t.partyId, tableId, joining));
     const marks = {
@@ -2198,7 +2198,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         t.grill.name,
         `${words.order} ${fromNumber} -> ${toNumber}`,
         `Mesa 5 (${t.n}), 8 (${t.n})`,
-        mesa8,
+        table8,
         ["1 x BURG", words.hold, `${words.group} 2 · DESSERTS`, "1 x TARTA"],
       ),
     ]);
@@ -2210,7 +2210,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     await fire(partyId, copyId);
 
     expect((await printed(t.grill.printer)).slice(beforeFire)).toEqual([
-      fireTicket(t.grill.name, mesa8, toNumber, 2, "1 x TARTA"),
+      fireTicket(t.grill.name, table8, toNumber, 2, "1 x TARTA"),
     ]);
   });
 

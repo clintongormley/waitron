@@ -91,9 +91,9 @@ interface SeededVenue {
   cfg: WithVenueRowId<DeviceRequestConfig>;
   available: AvailableProduct[];
   /** "Café" — each, 1.50 gross, general(21%). */
-  cafe: AvailableProduct;
+  coffee: AvailableProduct;
   /** "Agua" — each, 2.00 gross, general(21%). Same rate as café, so a two-line basket has one VAT group. */
-  agua: AvailableProduct;
+  water: AvailableProduct;
 }
 
 /**
@@ -136,10 +136,10 @@ async function setupVenue(): Promise<SeededVenue> {
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const available = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -147,7 +147,7 @@ async function setupVenue(): Promise<SeededVenue> {
     });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
@@ -156,9 +156,9 @@ async function setupVenue(): Promise<SeededVenue> {
     await assignCatalogueToVenue(tx, cat.id);
     return (await listAvailableProducts(tx)).products;
   });
-  const cafe = available.find((p) => p.name === "Café")!;
-  const agua = available.find((p) => p.name === "Agua")!;
-  return { cfg, available, cafe, agua };
+  const coffee = available.find((p) => p.name === "Café")!;
+  const water = available.find((p) => p.name === "Agua")!;
+  return { cfg, available, coffee, water };
 }
 
 /**
@@ -169,28 +169,28 @@ async function setupTwoTabs(): Promise<{
   cfg: DeviceRequestConfig;
   tabA: string;
   tabB: string;
-  cafe: AvailableProduct;
+  coffee: AvailableProduct;
 }> {
-  const { cfg, cafe } = await setupVenue();
+  const { cfg, coffee } = await setupVenue();
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const a = await createTable(tx, cfg, { label: "A", zoneId: offers.zoneId });
     const ta = await openPartyTab(tx, cfg, {
       tableId: a.id,
-      lines: [{ menuItemId: offers.offerFor(cafe.id), quantity: "4" }],
+      lines: [{ menuItemId: offers.offerFor(coffee.id), quantity: "4" }],
     });
     const tb = randomUUID();
     await createOpenOrder(
       tx,
       cfg,
       tb,
-      [{ menuItemId: offers.offerFor(cafe.id), quantity: "4" }],
+      [{ menuItemId: offers.offerFor(coffee.id), quantity: "4" }],
       null,
       { partyId: ta.partyId, zoneId: offers.zoneId },
     );
     return { tabA: ta.tabId, tabB: tb };
   });
-  return { cfg, tabA, tabB, cafe };
+  return { cfg, tabA, tabB, coffee };
 }
 
 /** How many `sales` rows reference this working order. */

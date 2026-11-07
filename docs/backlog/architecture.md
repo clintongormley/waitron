@@ -778,6 +778,9 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   `portion-selection.test.ts`, `counter-portion-rows.test.ts` and `till-ticket-view.test.ts`,
   shared helper consumers and file names.
   Shared fixture property names such as `cafeId` remain open.
+  Private drink bindings remain in `sale-till-source.receipt.test.ts`,
+  `issuance-pass.fiscal-identity.test.ts`, `list-unit-price.fiscal-identity.test.ts` and
+  `served-at-huella.test.ts`; audit their fiscal fixture boundaries before renaming.
   Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
   display samples under A976.
   Other fixture text stays with A976, including catalogue

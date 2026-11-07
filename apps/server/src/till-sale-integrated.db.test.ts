@@ -169,7 +169,7 @@ type OfferedProduct = AvailableProduct & { menuItemId: string; zoneId: string };
 interface SeededVenue {
   seriesId: ReturnType<typeof brandSeriesId>;
   cfg: WithVenueRowId<DeviceRequestConfig>;
-  cafe: OfferedProduct;
+  coffee: OfferedProduct;
 }
 
 /** A fresh venue with one "Café" (each, 1.50 gross, general 21%) product offered in the counter
@@ -219,10 +219,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     });
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -237,11 +237,11 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       }),
     };
   });
-  const cafe = available.find((p) => p.name === "Café")!;
+  const coffee = available.find((p) => p.name === "Café")!;
   return {
     cfg,
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    cafe: { ...cafe, menuItemId: offers.offerFor(cafe.id), zoneId: offers.zoneId },
+    coffee: { ...coffee, menuItemId: offers.offerFor(coffee.id), zoneId: offers.zoneId },
   };
 }
 
@@ -632,14 +632,14 @@ describe("active fiscal conflict stops new money", () => {
     });
   }
 
-  async function originalSale(cfg: DeviceRequestConfig, cafe: OfferedProduct) {
+  async function originalSale(cfg: DeviceRequestConfig, coffee: OfferedProduct) {
     return payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id: randomUUID(),
-        zoneId: cafe.zoneId,
-        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        zoneId: coffee.zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
     );
@@ -649,15 +649,15 @@ describe("active fiscal conflict stops new money", () => {
     it.each(["cash", "card"] as const)(
       `refuses %s before money for one historical resolved ${cause}`,
       async (method) => {
-        const { cfg, cafe } = await setupVenue();
-        await originalSale(cfg, cafe);
+        const { cfg, coffee } = await setupVenue();
+        await originalSale(cfg, coffee);
         await seedConflict(cfg, cause);
         const series = await suite.db.select().from(invoiceSeries);
         const records = await suite.db.execute(sql`select * from registros_facturacion`);
         const jobs = await suite.db.select().from(printJobs);
         const provider = new FakePaymentProvider(suite.db);
         const id = randomUUID();
-        const lines = [{ menuItemId: cafe.menuItemId, quantity: "1" }];
+        const lines = [{ menuItemId: coffee.menuItemId, quantity: "1" }];
         const pay =
           method === "cash"
             ? payWorkingOrder(
@@ -666,7 +666,7 @@ describe("active fiscal conflict stops new money", () => {
                 {
                   id,
                   lines,
-                  zoneId: cafe.zoneId,
+                  zoneId: coffee.zoneId,
                   tender: { method: "cash", amount: "1.50" },
                 },
               )
@@ -676,7 +676,7 @@ describe("active fiscal conflict stops new money", () => {
                 {
                   id,
                   lines,
-                  zoneId: cafe.zoneId,
+                  zoneId: coffee.zoneId,
                 },
               );
         await expect(pay).rejects.toMatchObject({
@@ -698,13 +698,13 @@ describe("active fiscal conflict stops new money", () => {
     it.each(["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const)(
       `refuses a parked connected-card order before collection in ${flow} after %s`,
       async (cause) => {
-        const { cfg, cafe } = await setupVenue(flow);
-        await originalSale(cfg, cafe);
+        const { cfg, coffee } = await setupVenue(flow);
+        await originalSale(cfg, coffee);
         const id = randomUUID();
         await parkOrder({ db: suite.db }, cfg, {
           id,
-          zoneId: cafe.zoneId,
-          lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+          zoneId: coffee.zoneId,
+          lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         });
         await seedConflict(cfg, cause);
         const series = await suite.db.select().from(invoiceSeries);
@@ -749,8 +749,8 @@ describe("active fiscal conflict stops new money", () => {
   }
 
   it("capture_finishes_after_conflict: keeps the charge unfiled and never charges the retry", async () => {
-    const { cfg, cafe } = await setupVenue();
-    await originalSale(cfg, cafe);
+    const { cfg, coffee } = await setupVenue();
+    await originalSale(cfg, coffee);
     const provider = new FakePaymentProvider(suite.db);
     const collect = provider.collect.bind(provider);
     provider.collect = async (params) => {
@@ -769,8 +769,8 @@ describe("active fiscal conflict stops new money", () => {
     };
     const request = {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     };
     await expect(payWorkingOrderIntegrated(deps, cfg, request)).rejects.toMatchObject({
       code: "sale.charged_not_recorded",
@@ -790,12 +790,12 @@ describe("active fiscal conflict stops new money", () => {
   });
 
   it("replays an issued sale while the same identity is stopped", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const id = randomUUID();
     const req = {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       tender: { method: "cash" as const, amount: "1.50" },
     };
     const ticket = await payWorkingOrder(
@@ -816,13 +816,13 @@ describe("active fiscal conflict stops new money", () => {
   });
 
   it("refuses an invoice-first issue while preserving the open order and counters", async () => {
-    const { cfg, cafe } = await setupVenue("ticket_then_pay");
-    await originalSale(cfg, cafe);
+    const { cfg, coffee } = await setupVenue("ticket_then_pay");
+    await originalSale(cfg, coffee);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     await seedConflict(cfg, "fiscal.huella_divergente");
     const before = await suite.db.select().from(invoiceSeries);
@@ -854,12 +854,12 @@ describe("walk-up invoice preparation", () => {
   it.each(["1", "2001"])(
     "saves a validated F1 recipient with %s coffees before money or filing",
     async (quantity) => {
-      const { cfg, cafe } = await setupVenue();
+      const { cfg, coffee } = await setupVenue();
       const id = randomUUID();
       const limited = { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") };
       await withTransaction(suite.db, async (tx) => {
-        await createOpenOrder(tx, limited, id, linesOf(cafe.menuItemId, quantity), null, {
-          zoneId: cafe.zoneId,
+        await createOpenOrder(tx, limited, id, linesOf(coffee.menuItemId, quantity), null, {
+          zoneId: coffee.zoneId,
           invoiceChoice: {
             invoiceType: "F1",
             recipient,
@@ -892,12 +892,12 @@ describe("walk-up invoice preparation", () => {
     },
     { invoiceType: "F1", recipient: { ...recipient, address: "Calle Mayor" }, field: "address" },
   ])("refuses invalid walk-up $field without leaving an order or lines", async (request) => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const id = randomUUID();
     await expect(
       withTransaction(suite.db, (tx) =>
-        createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {
-          zoneId: cafe.zoneId,
+        createOpenOrder(tx, cfg, id, [{ menuItemId: coffee.menuItemId, quantity: "1" }], null, {
+          zoneId: coffee.zoneId,
           invoiceChoice: { ...request, recipientNameMaxLength: backend.recipientNameMaxLength },
         }),
       ),
@@ -917,7 +917,7 @@ describe("walk-up invoice preparation", () => {
   it.each(["missing", "retired", "other-node"])(
     "refuses a %s full series during preparation and rolls back the basket",
     async (condition) => {
-      const { cfg, cafe } = await setupVenue();
+      const { cfg, coffee } = await setupVenue();
       const other = condition === "other-node" ? { id: await seedNode(suite.db) } : undefined;
       const full = and(eq(invoiceSeries.nodeId, cfg.nodeId), eq(invoiceSeries.purpose, "full"));
       if (condition === "missing") await suite.db.delete(invoiceSeries).where(full);
@@ -937,8 +937,8 @@ describe("walk-up invoice preparation", () => {
       const id = randomUUID();
       await expect(
         withTransaction(suite.db, (tx) =>
-          createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {
-            zoneId: cafe.zoneId,
+          createOpenOrder(tx, cfg, id, [{ menuItemId: coffee.menuItemId, quantity: "1" }], null, {
+            zoneId: coffee.zoneId,
             invoiceChoice: {
               invoiceType: "F1",
               recipient,
@@ -1007,12 +1007,12 @@ describe("walk-up invoice preparation", () => {
       params: { field: "recipient.countryCode" },
     },
   ])("refuses malformed or unsupported walk-up invoice input %#", async (request) => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const id = randomUUID();
     await expect(
       withTransaction(suite.db, (tx) =>
-        createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {
-          zoneId: cafe.zoneId,
+        createOpenOrder(tx, cfg, id, [{ menuItemId: coffee.menuItemId, quantity: "1" }], null, {
+          zoneId: coffee.zoneId,
           invoiceChoice: {
             invoiceType: request.invoiceType,
             recipient: request.recipient,
@@ -1025,17 +1025,17 @@ describe("walk-up invoice preparation", () => {
   });
 
   it("keeps explicit F2 at exactly the simplified ceiling without customer fields", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const id = randomUUID();
     await withTransaction(suite.db, (tx) =>
       createOpenOrder(
         tx,
         { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") },
         id,
-        linesOf(cafe.menuItemId, "2000"),
+        linesOf(coffee.menuItemId, "2000"),
         null,
         {
-          zoneId: cafe.zoneId,
+          zoneId: coffee.zoneId,
           invoiceChoice: {
             invoiceType: "F2",
             recipient: null,
@@ -1056,7 +1056,7 @@ describe("walk-up invoice preparation", () => {
   });
 
   it("still refuses an omitted invoice choice above the simplified ceiling", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const id = randomUUID();
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -1064,9 +1064,9 @@ describe("walk-up invoice preparation", () => {
           tx,
           { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") },
           id,
-          [{ menuItemId: cafe.menuItemId, quantity: "2001" }],
+          [{ menuItemId: coffee.menuItemId, quantity: "2001" }],
           null,
-          { zoneId: cafe.zoneId },
+          { zoneId: coffee.zoneId },
         ),
       ),
     ).rejects.toMatchObject({ code: "sale.total_exceeds_simplified_limit" });
@@ -1076,7 +1076,7 @@ describe("walk-up invoice preparation", () => {
 
 describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 2)", () => {
   it("snapshots the zone department's receipt header with a captured card sale", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     suite.db.run(
       sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
     );
@@ -1088,8 +1088,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       cfg,
       {
         id,
-        zoneId: cafe.zoneId,
-        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        zoneId: coffee.zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         simulationOutcome: "captured",
       },
     );
@@ -1111,7 +1111,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("runs a simulated approval through capture, fiscal filing and payment association", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const provider = new SimulatorPaymentProvider(app);
     const id = randomUUID();
@@ -1120,8 +1120,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       cfg,
       {
         id,
-        zoneId: cafe.zoneId,
-        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        zoneId: coffee.zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         simulationOutcome: "captured",
       },
     );
@@ -1135,7 +1135,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("credits a card walk-up's lines to the operator who rang it", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const provider = new SimulatorPaymentProvider(app);
     const id = randomUUID();
@@ -1145,8 +1145,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       cfg,
       {
         id,
-        zoneId: cafe.zoneId,
-        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        zoneId: coffee.zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         simulationOutcome: "captured",
       },
       operatorId,
@@ -1161,7 +1161,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("runs a simulated decline through payment handling without filing a sale", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const provider = new SimulatorPaymentProvider(app);
     const id = randomUUID();
@@ -1170,8 +1170,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       cfg,
       {
         id,
-        zoneId: cafe.zoneId,
-        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        zoneId: coffee.zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         simulationOutcome: "declined",
       },
     );
@@ -1183,15 +1183,15 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("walk-up: captures, files an immediate card sale, links the payment, settles the order", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const { deps } = integratedDeps(app);
     const id = randomUUID();
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
 
     expect(out.outcome).toBe("captured");
@@ -1216,7 +1216,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("a declined card files nothing and leaves the order open (retryable)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const client = new FakeStripe();
     client.declineNext();
@@ -1225,8 +1225,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
 
     expect(out.outcome).toBe("declined");
@@ -1238,7 +1238,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("reads the active series after a card capture that overlaps a series switch", async () => {
-    const { cfg, cafe, seriesId } = await setupVenue();
+    const { cfg, coffee, seriesId } = await setupVenue();
     await anotherNodeSeries();
     const { deps } = integratedDeps(suite.db);
     const provider = deps.provider;
@@ -1276,8 +1276,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     const result = await payWorkingOrderIntegrated({ ...deps, provider: switchingProvider }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     expect(result.outcome).toBe("captured");
     expect(activeId).toBeDefined();
@@ -1288,7 +1288,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("issues on a newly active series and replays that invoice after a later switch", async () => {
-    const { cfg, cafe, seriesId } = await setupVenue();
+    const { cfg, coffee, seriesId } = await setupVenue();
     await anotherNodeSeries();
     const id = randomUUID();
     const [fresh] = await withTransaction(suite.db, async (tx) => {
@@ -1309,8 +1309,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { deps } = integratedDeps(suite.db);
     const first = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     expect(first.outcome).toBe("captured");
     const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
@@ -1334,14 +1334,14 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("a settled order replays its ticket without re-collecting", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const { deps, client } = integratedDeps(app);
     const id = randomUUID();
     const req = {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     };
 
     const first = await payWorkingOrderIntegrated(deps, cfg, req);
@@ -1367,15 +1367,15 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   it("auto-prints the customer receipt on an integrated card sale (no kick, no drawer), and a REPLAY does not double-print", async () => {
     // An integrated card's receipt carries no drawer kick and records no `drawer_opens` row; a
     // replay prints nothing more.
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const printerId = await makeReceiptPrinter(cfg);
     const app = suite.db;
     const { deps } = integratedDeps(app);
     const id = randomUUID();
     const req = {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     };
 
     const first = await payWorkingOrderIntegrated(deps, cfg, req);
@@ -1398,7 +1398,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("tips on: charges total+tip, files the sale at the total, records the tip on the tender", async () => {
-    const { cfg: baseCfg, cafe } = await setupVenue();
+    const { cfg: baseCfg, coffee } = await setupVenue();
     const cfg = { ...baseCfg, tipsEnabled: true };
     const app = suite.db;
     const { deps, client } = integratedDeps(app);
@@ -1406,8 +1406,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       tip: "0.30",
     });
 
@@ -1418,15 +1418,15 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("tips off: a client-supplied tip is clamped to 0 — charges and settles at the exact total", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const { deps, client } = integratedDeps(app); // cfg.tipsEnabled: false (setupVenue's default)
     const id = randomUUID();
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       tip: "5.00", // ignored — tips are disabled on this till
     });
 
@@ -1436,13 +1436,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("retrieved (open) order: files the STORED locked lines at pay, links the payment, settles", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "2" }],
       label: "Mesa 4",
     });
 
@@ -1462,14 +1462,14 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("retrieved (open) order: a captured card stores each line's unit price before any discount", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
+      zoneId: coffee.zoneId,
       lines: [
-        { menuItemId: cafe.menuItemId, quantity: "1" },
-        { menuItemId: cafe.menuItemId, quantity: "2" },
+        { menuItemId: coffee.menuItemId, quantity: "1" },
+        { menuItemId: coffee.menuItemId, quantity: "2" },
       ],
     });
     setListUnitPrice(id, 1, 200);
@@ -1485,13 +1485,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("an open ticket_then_pay counter order paid by card sends its dish once, and a replay sends nothing more", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     const { deps } = integratedDeps(suite.db);
 
@@ -1508,14 +1508,14 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("placed (ticket_then_pay) order: ISSUES the invoice AT PAY from the frozen lines (ordering 2), records no handover, stays on the station queue", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const app = suite.db;
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     // Placing files no fiscal document under ticket_then_pay, and fires the order to the default
     // station.
@@ -1547,13 +1547,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("refuses an ABANDONED order (working_order.not_open) and never touches the reader", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     suite.db.run(sql`update working_orders set status = 'abandoned' where id = ${id}`);
 
@@ -1584,13 +1584,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("a second Pay that files the first card's charge before the first finalises makes P3 REPLAY it, filing nothing (settled-order replay)", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const app = suite.db;
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -1629,7 +1629,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("a capture whose payment cannot be associated rolls back the whole sale (P3 is atomic)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const id = randomUUID();
     // The provider reports `captured` but wrote no `payments` row, so the association throws
@@ -1646,8 +1646,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     await expect(
       payWorkingOrderIntegrated(deps, cfg, {
         id,
-        zoneId: cafe.zoneId,
-        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        zoneId: coffee.zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       }),
     ).rejects.toMatchObject({ code: "payment.not_found" });
 
@@ -1660,7 +1660,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   it("returns an empty qr when the fiscal backend offers no verification url", async () => {
     // `FakeFiscalBackend`'s records carry no verification link, so the ticket's `qr` default of ""
     // is exercised.
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     await FakeFiscalBackend.install(suite.db);
     const fake = new FakeFiscalBackend(suite.db);
     await withTransaction(suite.db, async (tx) => {
@@ -1683,8 +1683,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id: randomUUID(),
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
 
     expect(out.outcome).toBe("captured");
@@ -1701,7 +1701,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
    *  NULL. `capturedAmount` is the gross the card was charged. */
   async function seedLostCapture(
     cfg: DeviceRequestConfig,
-    cafe: OfferedProduct,
+    coffee: OfferedProduct,
     quantity: string,
     capturedAmount: string,
   ): Promise<{ id: string; externalRef: string }> {
@@ -1709,8 +1709,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     // Payment refs are unique per provider across the database.
     const externalRef = `pi_lost_${randomUUID()}`;
     await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, linesOf(cafe.menuItemId, quantity), null, {
-        zoneId: cafe.zoneId,
+      await createOpenOrder(tx, cfg, id, linesOf(coffee.menuItemId, quantity), null, {
+        zoneId: coffee.zoneId,
       });
       await insertCapturedPayment(tx, {
         origin: cfg.origin,
@@ -1734,14 +1734,14 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   ] as const)(
     "retains an unfiled F1 %s payment of %s coffees while public issuance is disabled",
     async (state, quantity, amount) => {
-      const { cfg, cafe } = await setupVenue();
+      const { cfg, coffee } = await setupVenue();
       suite.db.run(
         sql`update tenants set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid, Madrid, España'`,
       );
       const id = randomUUID();
       await withTransaction(suite.db, async (tx) => {
-        await createOpenOrder(tx, cfg, id, linesOf(cafe.menuItemId, quantity), null, {
-          zoneId: cafe.zoneId,
+        await createOpenOrder(tx, cfg, id, linesOf(coffee.menuItemId, quantity), null, {
+          zoneId: coffee.zoneId,
           invoiceChoice: {
             invoiceType: "F1",
             recipient: {
@@ -1799,11 +1799,11 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   );
 
   it("snapshots the original zone department when a captured card payment is recovered", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     suite.db.run(
       sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
     );
-    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
     const { deps } = integratedDeps(suite.db);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
@@ -1825,11 +1825,11 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("recovers a lost-T2 captured payment: files from locked lines, no re-charge, links the existing row", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const { deps, client } = integratedDeps(app);
     // Locked total 1.50; the captured charge was exactly the total (no tip).
-    const { id, externalRef } = await seedLostCapture(cfg, cafe, "1", "1.50");
+    const { id, externalRef } = await seedLostCapture(cfg, coffee, "1", "1.50");
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1856,7 +1856,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("recovers a lost-T2 captured payment storing each line's unit price before any discount", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const { deps, client } = integratedDeps(suite.db);
     const id = randomUUID();
     await withTransaction(suite.db, async (tx) => {
@@ -1865,11 +1865,11 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         cfg,
         id,
         [
-          { menuItemId: cafe.menuItemId, quantity: "1" },
-          { menuItemId: cafe.menuItemId, quantity: "2" },
+          { menuItemId: coffee.menuItemId, quantity: "1" },
+          { menuItemId: coffee.menuItemId, quantity: "2" },
         ],
         null,
-        { zoneId: cafe.zoneId },
+        { zoneId: coffee.zoneId },
       );
       await insertCapturedPayment(tx, {
         origin: cfg.origin,
@@ -1895,9 +1895,9 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("files a recovered capture under the device that took the card, not the one retrying", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const { deps } = integratedDeps(suite.db);
-    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
     const retrying = await deviceRequestCfg(suite.db, cfg);
     expect(retrying.origin.deviceId).not.toBe(cfg.origin.deviceId);
 
@@ -1910,9 +1910,9 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("recovers a lost capture on an open ticket_then_pay counter order: sends its dish once", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const { deps, client } = integratedDeps(suite.db);
-    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1923,10 +1923,10 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("recovers a lost capture whose product has since sold out: the card was charged, so it files", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const { deps } = integratedDeps(suite.db);
-    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
-    suite.db.run(sql`update products set available = 0 where id = ${cafe.id}`);
+    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
+    suite.db.run(sql`update products set available = 0 where id = ${coffee.id}`);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1935,26 +1935,26 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("refuses a fresh card payment before the reader is asked when a line never sent has sold out", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const { deps, client } = integratedDeps(suite.db);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
-    suite.db.run(sql`update products set available = 0 where id = ${cafe.id}`);
+    suite.db.run(sql`update products set available = 0 where id = ${coffee.id}`);
 
     await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
       code: "product.unavailable",
-      params: { productId: cafe.id },
+      params: { productId: coffee.id },
     });
     expect(client.lastCreateIntent).toBeUndefined();
     expect(await saleCount(id)).toBe(0);
   });
 
   it("recovers a lost-T2 capture on a PLACED order: files, records no handover, stays on the station queue", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const app = suite.db;
     // A placed ticket_then_pay order whose card collect captured but lost P3. With no outstanding
@@ -1962,8 +1962,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -2001,11 +2001,11 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("recovers with a reconstructed tip when the captured amount exceeds the locked total", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const { deps, client } = integratedDeps(app);
     // Locked total 1.50, captured 1.80 → the tip is reconstructed as 1.80 − 1.50 = 0.30.
-    const { id } = await seedLostCapture(cfg, cafe, "1", "1.80");
+    const { id } = await seedLostCapture(cfg, coffee, "1", "1.80");
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -2019,12 +2019,12 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("a captured amount BELOW the locked total is corruption: files nothing, leaves the payment for reconcile", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const { deps, client } = integratedDeps(app);
     // The charge cannot cover the locked total: there is no honest figure to file, so recovery
     // files NOTHING and throws, leaving the captured payment for reconciliation.
-    const { id } = await seedLostCapture(cfg, cafe, "1", "1.00");
+    const { id } = await seedLostCapture(cfg, coffee, "1", "1.00");
 
     await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
 
@@ -2037,12 +2037,12 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("two concurrent pays for one placed order: one is captured, the other is refused before asking its reader, and ONE sale is filed", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       label: "Mesa 7",
     });
     await placeOrder(
@@ -2080,10 +2080,10 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 
   it("two concurrent recoveries of one lost capture file ONE sale; the loser replays", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     // ONE lost capture, TWO retries: one recovers, and the other's transaction runs after that
     // commit, reads `settled`, and replays — no second filing, no second association.
-    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
 
     const { deps: depsA } = integratedDeps(suite.db);
     const { deps: depsB } = integratedDeps(suite.db);
@@ -2116,14 +2116,14 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
   /** Place an order and seed an unpaid invoice for the settlement tests. */
   async function placedIssuedBill(
     cfg: DeviceRequestConfig,
-    cafe: OfferedProduct,
+    coffee: OfferedProduct,
     quantity = "1",
   ): Promise<{ id: string; saleId: string }> {
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity }],
     });
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -2141,10 +2141,10 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
   }
 
   it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale), records no handover, stays on the station queue", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const app = suite.db;
-    const { id, saleId } = await placedIssuedBill(cfg, cafe);
+    const { id, saleId } = await placedIssuedBill(cfg, coffee);
     // The seeded invoice is outstanding; placement fired the order to the default station.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
@@ -2178,10 +2178,10 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
   });
 
   it("tips on: charges amountDue+tip, settles the invoice at the total, records the tip on the tender", async () => {
-    const { cfg: baseCfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg: baseCfg, coffee } = await modeVenue("ticket_then_pay");
     const cfg = { ...baseCfg, tipsEnabled: true };
     const app = suite.db;
-    const { id } = await placedIssuedBill(cfg, cafe);
+    const { id } = await placedIssuedBill(cfg, coffee);
     const { deps, client } = integratedDeps(app);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
@@ -2194,9 +2194,9 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
   });
 
   it("a decline leaves the invoice OUTSTANDING — nothing re-filed or voided; listOutstandingSales still lists it", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const app = suite.db;
-    const { id, saleId } = await placedIssuedBill(cfg, cafe);
+    const { id, saleId } = await placedIssuedBill(cfg, coffee);
 
     const client = new FakeStripe();
     client.declineNext();
@@ -2214,9 +2214,9 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
   });
 
   it("a second Pay that settles the invoice from the first card's charge before the first finalises makes finalizeSettle REPLAY via sale.already_settled", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const app = suite.db;
-    const { id } = await placedIssuedBill(cfg, cafe);
+    const { id } = await placedIssuedBill(cfg, coffee);
 
     // The second Pay settles the invoice from the first card's charge; the first's `settleSale`
     // then refuses with `sale.already_settled`, and it replays rather than settling twice.
@@ -2249,9 +2249,9 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
   });
 
   it("a settle whose payment cannot be associated rolls back — the invoice stays OUTSTANDING (P3 is atomic)", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const app = suite.db;
-    const { id, saleId } = await placedIssuedBill(cfg, cafe);
+    const { id, saleId } = await placedIssuedBill(cfg, coffee);
 
     // The provider reports `captured` but wrote no `payments` row, so the association throws
     // `payment.not_found`: it must be re-raised, and the settlement rolled back.
@@ -2276,10 +2276,10 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
 
   describe("a bill whose corrections leave nothing owed", () => {
     it("closes the bill without asking the reader, writing no tender and no payment", async () => {
-      const { cfg: baseCfg, cafe } = await modeVenue("ticket_then_pay");
+      const { cfg: baseCfg, coffee } = await modeVenue("ticket_then_pay");
       const cfg = { ...baseCfg, tipsEnabled: true };
       const station = await defaultStationId(cfg);
-      const { id, saleId } = await placedIssuedBill(cfg, cafe);
+      const { id, saleId } = await placedIssuedBill(cfg, coffee);
       await correctToZero(cfg, saleId);
       expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
       expect(await stationQueueOrderIds(station)).toEqual([id]);
@@ -2305,9 +2305,9 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     });
 
     it("refuses a malformed tip without asking the reader, and leaves the bill open", async () => {
-      const { cfg: baseCfg, cafe } = await modeVenue("ticket_then_pay");
+      const { cfg: baseCfg, coffee } = await modeVenue("ticket_then_pay");
       const cfg = { ...baseCfg, tipsEnabled: true };
-      const { id, saleId } = await placedIssuedBill(cfg, cafe);
+      const { id, saleId } = await placedIssuedBill(cfg, coffee);
       await correctToZero(cfg, saleId);
       const { deps, client } = integratedDeps(suite.db);
 
@@ -2324,8 +2324,8 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     });
 
     it("two pays at once close the bill once, and neither asks the reader", async () => {
-      const { cfg, cafe } = await modeVenue("ticket_then_pay");
-      const { id, saleId } = await placedIssuedBill(cfg, cafe);
+      const { cfg, coffee } = await modeVenue("ticket_then_pay");
+      const { id, saleId } = await placedIssuedBill(cfg, coffee);
       await correctToZero(cfg, saleId);
       const { deps: depsA, client: clientA } = integratedDeps(suite.db);
       const { deps: depsB, client: clientB } = integratedDeps(suite.db);
@@ -2356,8 +2356,8 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     });
 
     it("refuses a bill already below zero with the domain code, without asking the reader", async () => {
-      const { cfg, cafe } = await modeVenue("ticket_then_pay");
-      const { id, saleId } = await placedIssuedBill(cfg, cafe);
+      const { cfg, coffee } = await modeVenue("ticket_then_pay");
+      const { id, saleId } = await placedIssuedBill(cfg, coffee);
       // Written straight to `sales`: `recordCorrection` refuses a correction this large, but a
       // bill below zero must still be refused at collection. No fiscal record is written for it.
       await withTransaction(suite.db, async (tx) => {
@@ -2420,10 +2420,10 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     }
 
     it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row, records no handover, stays on the station queue", async () => {
-      const { cfg, cafe } = await modeVenue("ticket_then_pay");
+      const { cfg, coffee } = await modeVenue("ticket_then_pay");
       const station = await defaultStationId(cfg);
       const app = suite.db;
-      const { id } = await placedIssuedBill(cfg, cafe); // placing fires the ticket item to the station
+      const { id } = await placedIssuedBill(cfg, coffee); // placing fires the ticket item to the station
       const externalRef = await seedLostCaptureOnPlaced(cfg, id, "1.50"); // charged exactly the total
       expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
@@ -2450,9 +2450,9 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     });
 
     it("reconstructs a tip when the captured amount exceeds the amount due", async () => {
-      const { cfg, cafe } = await modeVenue("ticket_then_pay");
+      const { cfg, coffee } = await modeVenue("ticket_then_pay");
       const app = suite.db;
-      const { id } = await placedIssuedBill(cfg, cafe);
+      const { id } = await placedIssuedBill(cfg, coffee);
       await seedLostCaptureOnPlaced(cfg, id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
 
       const { deps, client } = integratedDeps(app);
@@ -2468,9 +2468,9 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     });
 
     it("a captured amount BELOW the amount due is corruption: settles nothing, leaves the payment for reconcile", async () => {
-      const { cfg, cafe } = await modeVenue("ticket_then_pay");
+      const { cfg, coffee } = await modeVenue("ticket_then_pay");
       const app = suite.db;
-      const { id, saleId } = await placedIssuedBill(cfg, cafe);
+      const { id, saleId } = await placedIssuedBill(cfg, coffee);
       await seedLostCaptureOnPlaced(cfg, id, "1.00"); // below the 1.50 amount due — cannot even cover it
 
       const { deps, client } = integratedDeps(app);
@@ -2485,8 +2485,8 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     });
 
     it("two concurrent recoveries settle the invoice ONCE; the loser replays", async () => {
-      const { cfg, cafe } = await modeVenue("ticket_then_pay");
-      const { id } = await placedIssuedBill(cfg, cafe);
+      const { cfg, coffee } = await modeVenue("ticket_then_pay");
+      const { id } = await placedIssuedBill(cfg, coffee);
       await seedLostCaptureOnPlaced(cfg, id, "1.50");
 
       // ONE lost capture, TWO retries: one settles, and the other's transaction runs after that
@@ -2545,10 +2545,10 @@ describe("an order being paid by card cannot be changed from another device (pla
   /** Two open tabs in a tables zone, each with one café line. */
   async function twoTabs() {
     const venue = await setupVenue();
-    const { cfg, cafe } = venue;
+    const { cfg, coffee } = venue;
     const { tabId, otherId, menuItemId } = await withTransaction(suite.db, async (tx) => {
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
-      const offer = offers.offerFor(cafe.id);
+      const offer = offers.offerFor(coffee.id);
       const tab = async (label: string) => {
         const table = await createTable(tx, cfg, { label, zoneId: offers.zoneId });
         const { tabId: id } = await openPartyTab(tx, cfg, { tableId: table.id });
@@ -3012,10 +3012,10 @@ describe("an order being paid by card cannot be changed from another device (pla
           tx,
           t.cfg,
           id,
-          [{ menuItemId: t.cafe.menuItemId, quantity: "1" }],
+          [{ menuItemId: t.coffee.menuItemId, quantity: "1" }],
           null,
           {
-            zoneId: t.cafe.zoneId,
+            zoneId: t.coffee.zoneId,
           },
         );
       }
@@ -3052,12 +3052,12 @@ describe("an order being paid by card cannot be changed from another device (pla
   });
 
   it("never writes the mark on a placed order it collects", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -3093,13 +3093,13 @@ describe("a party's bill request goes when a card or collect settles its last ow
    */
   async function partyAskingForBill(serviceMode: ServiceMode, owingSibling = false) {
     const venue = await setupVenue();
-    const { cfg, cafe } = venue;
+    const { cfg, coffee } = venue;
     const seated = await withTransaction(suite.db, async (tx) => {
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
       const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId: table.id });
       await addTabRound(tx, cfg, tabId, [
-        { menuItemId: offers.offerFor(cafe.id), quantity: owingSibling ? "2" : "1" },
+        { menuItemId: offers.offerFor(coffee.id), quantity: owingSibling ? "2" : "1" },
       ]);
       if (owingSibling) await splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
       if (serviceMode !== "table_tab") {
@@ -3336,9 +3336,9 @@ describe("a party's bill request goes when a card or collect settles its last ow
 
 describe("integrated answer receipt presentation", () => {
   it("includes current department fields on connected capture and refreshes them on replay", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const [{ department_id: departmentId }] = suite.db.all<{ department_id: string }>(
-      sql`select department_id from zone_service_policies where zone_id = ${cafe.zoneId}`,
+      sql`select department_id from zone_service_policies where zone_id = ${coffee.zoneId}`,
     );
     await suite.db
       .delete(departmentReceipts)
@@ -3352,8 +3352,8 @@ describe("integrated answer receipt presentation", () => {
     const provider = new SimulatorPaymentProvider(suite.db);
     const req = {
       id: randomUUID(),
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       simulationOutcome: "captured" as const,
     };
     const deps = { db: suite.db, backend, clock, provider };
@@ -3394,13 +3394,13 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
   ] as const)(
     "refreshes the saved department on %s without repeating payment or filing",
     async (_, issued, recovered) => {
-      const { cfg: original, cafe } = await setupVenue(issued ? "ticket_then_pay" : "prepay");
+      const { cfg: original, coffee } = await setupVenue(issued ? "ticket_then_pay" : "prepay");
       const cfg = { ...original, invoiceLocales: ["ca-ES", "es-ES"] };
       suite.db.run(
         sql`update locations set invoice_locales = '["ca-ES","es-ES"]' where id = ${cfg.locationId}`,
       );
       const [{ department_id: departmentId }] = suite.db.all<{ department_id: string }>(
-        sql`select department_id from zone_service_policies where zone_id = ${cafe.zoneId}`,
+        sql`select department_id from zone_service_policies where zone_id = ${coffee.zoneId}`,
       );
       const otherId = randomUUID();
       suite.db
@@ -3428,8 +3428,8 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
       if (issued) {
         await parkOrder({ db: suite.db }, cfg, {
           id,
-          zoneId: cafe.zoneId,
-          lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+          zoneId: coffee.zoneId,
+          lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         });
         await placeOrder(
           { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -3445,8 +3445,8 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         );
       } else if (recovered) {
         await withTransaction(suite.db, (tx) =>
-          createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {
-            zoneId: cafe.zoneId,
+          createOpenOrder(tx, cfg, id, [{ menuItemId: coffee.menuItemId, quantity: "1" }], null, {
+            zoneId: coffee.zoneId,
           }),
         );
       }
@@ -3467,8 +3467,8 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
       const { deps, client } = integratedDeps(suite.db);
       const req = {
         id,
-        zoneId: cafe.zoneId,
-        lines: issued || recovered ? [] : [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        zoneId: coffee.zoneId,
+        lines: issued || recovered ? [] : [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       };
       const first = await payWorkingOrderIntegrated(deps, cfg, req);
       expect(first.outcome).toBe("captured");
@@ -3493,7 +3493,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         jobs: suite.db.all(sql`select * from print_jobs order by id`),
       };
       suite.db.run(
-        sql`update zone_service_policies set department_id = ${otherId} where zone_id = ${cafe.zoneId}`,
+        sql`update zone_service_policies set department_id = ${otherId} where zone_id = ${coffee.zoneId}`,
       );
       suite.db.run(
         sql`update departments set trading_name = 'Changed brand' where id = ${departmentId}`,

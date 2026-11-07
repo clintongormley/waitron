@@ -138,10 +138,10 @@ async function setupVenue(): Promise<Seeded> {
     offers,
   } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "ES drinks" });
+    const drinks = await createCategory(tx, { name: "ES drinks" });
     const coffeeProduct = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "ES coffee",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -149,7 +149,7 @@ async function setupVenue(): Promise<Seeded> {
     });
     const waterProduct = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
@@ -175,7 +175,7 @@ async function setupVenue(): Promise<Seeded> {
       coffeeMenuItemId: coffeeMenuItem.id,
       waterMenuItemId: waterMenuItem.id,
       menuId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       tableId: table.id,
       offers,
     };

@@ -148,13 +148,13 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     const menu = await createCatalogue(tx, { name: `Issuance pass menu ${cfg.locationId}` });
     const category = (name: string, parentId?: string) =>
       createCategory(tx, { name, ...(parentId ? { parentId } : {}) });
-    const bebidas = await category("Bebidas");
-    const alcoholicas = await category("Bebidas alcohólicas", bebidas.id);
-    const cocteles = await category("Cócteles", alcoholicas.id);
-    const licores = await category("Licores", bebidas.id);
-    const cafes = await category("Cafés", bebidas.id);
-    const comida = await category("Comida");
-    const anadidos = await category("Añadidos");
+    const drinks = await category("Bebidas");
+    const alcoholicDrinks = await category("Bebidas alcohólicas", drinks.id);
+    const cocktails = await category("Cócteles", alcoholicDrinks.id);
+    const spirits = await category("Licores", drinks.id);
+    const coffees = await category("Cafés", drinks.id);
+    const food = await category("Comida");
+    const additions = await category("Añadidos");
     const product = (name: string, categoryId: string | null, unitPrice: string) =>
       createProduct(tx, {
         catalogueId: menu.id,
@@ -166,15 +166,15 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
         unitPrice,
         vatClass: "general",
       });
-    const negroni = await product("Negroni", cocteles.id, "9.00");
-    const cana = await product("Caña", alcoholicas.id, "2.50");
-    const cafe = await product("Café", cafes.id, "1.50");
-    const burger = await product("Hamburguesa", comida.id, "10.00");
-    const queso = await product("Queso", anadidos.id, "3.00");
-    const pan = await product("Pan", null, "1.00");
-    const [doble] = await setProductVariants(
+    const negroni = await product("Negroni", cocktails.id, "9.00");
+    const draftBeer = await product("Caña", alcoholicDrinks.id, "2.50");
+    const coffee = await product("Café", coffees.id, "1.50");
+    const burger = await product("Hamburguesa", food.id, "10.00");
+    const cheese = await product("Queso", additions.id, "3.00");
+    const bread = await product("Pan", null, "1.00");
+    const [doubleVariant] = await setProductVariants(
       tx,
-      cafe.id,
+      coffee.id,
       [
         {
           name: "Doble staff",
@@ -196,22 +196,22 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
         minPicks: 0,
         maxPicks: 2,
         active: true,
-        items: [{ productId: queso.id, maxQuantity: 1, preselected: false, price: "0.75" }],
+        items: [{ productId: cheese.id, maxQuantity: 1, preselected: false, price: "0.75" }],
       },
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
     await assignCatalogueToVenue(tx, menu.id);
     return {
-      categories: { bebidas, alcoholicas, cocteles, licores, cafes, comida, anadidos },
+      categories: { drinks, alcoholicDrinks, cocktails, spirits, coffees, food, additions },
       products: {
         negroni: negroni.id,
-        cana: cana.id,
-        cafe: cafe.id,
-        doble: doble!.id,
+        draftBeer: draftBeer.id,
+        coffee: coffee.id,
+        doubleVariant: doubleVariant!.id,
         burger: burger.id,
-        queso: queso.id,
-        pan: pan.id,
+        cheese: cheese.id,
+        bread: bread.id,
       },
       extrasListId: extras.id,
     };
@@ -229,13 +229,13 @@ const entry = (c: { id: string; name: string }): Entry => ({ id: c.id, name: c.n
 
 /** The chain Cócteles records before and after it moves from Bebidas alcohólicas to Licores. */
 const underAlcoholic = (v: Venue) =>
-  [v.categories.bebidas, v.categories.alcoholicas, v.categories.cocteles].map(entry);
+  [v.categories.drinks, v.categories.alcoholicDrinks, v.categories.cocktails].map(entry);
 const underSpirits = (v: Venue) =>
-  [v.categories.bebidas, v.categories.licores, v.categories.cocteles].map(entry);
+  [v.categories.drinks, v.categories.spirits, v.categories.cocktails].map(entry);
 
 async function moveCocktailsToSpirits(v: Venue): Promise<void> {
   await withTransaction(suite.db, (tx) =>
-    updateCategory(tx, v.categories.cocteles.id, { parentId: v.categories.licores.id }),
+    updateCategory(tx, v.categories.cocktails.id, { parentId: v.categories.spirits.id }),
   );
 }
 
@@ -379,8 +379,8 @@ describe("what a filed sale line records about its product", () => {
       zoneId: v.counter.zoneId,
       lines: [
         {
-          menuItemId: v.counter.offerFor(v.products.cafe),
-          variantId: v.products.doble,
+          menuItemId: v.counter.offerFor(v.products.coffee),
+          variantId: v.products.doubleVariant,
           quantity: "1",
         },
       ],
@@ -389,10 +389,10 @@ describe("what a filed sale line records about its product", () => {
 
     const [line] = await filedLines(id);
     expect(line).toMatchObject({
-      productId: v.products.doble,
-      parentProductId: v.products.cafe,
+      productId: v.products.doubleVariant,
+      parentProductId: v.products.coffee,
       lineGross: 220,
-      classification: { reporting: [v.categories.bebidas, v.categories.cafes].map(entry) },
+      classification: { reporting: [v.categories.drinks, v.categories.coffees].map(entry) },
     });
   });
 
@@ -407,7 +407,7 @@ describe("what a filed sale line records about its product", () => {
           menuItemId: v.counter.offerFor(v.products.burger),
           quantity: "1",
           extras: [
-            { listId: v.extrasListId, picks: [{ productId: v.products.queso, quantity: 1 }] },
+            { listId: v.extrasListId, picks: [{ productId: v.products.cheese, quantity: 1 }] },
           ],
         },
       ],
@@ -419,17 +419,17 @@ describe("what a filed sale line records about its product", () => {
       productId: v.products.burger,
       category: "Comida",
       menuId: v.counter.menuId,
-      classification: { reporting: [entry(v.categories.comida)] },
+      classification: { reporting: [entry(v.categories.food)] },
     });
     expect(extra).toMatchObject({
-      productId: v.products.queso,
+      productId: v.products.cheese,
       parentProductId: null,
       parentLineId: dish!.id,
       // The dish's, as before this change.
       category: "Comida",
       menuId: v.counter.menuId,
       lineGross: 75,
-      classification: { reporting: [entry(v.categories.anadidos)] },
+      classification: { reporting: [entry(v.categories.additions)] },
     });
   });
 
@@ -439,12 +439,12 @@ describe("what a filed sale line records about its product", () => {
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       zoneId: v.counter.zoneId,
-      lines: [{ menuItemId: v.counter.offerFor(v.products.pan), quantity: "1" }],
+      lines: [{ menuItemId: v.counter.offerFor(v.products.bread), quantity: "1" }],
       tender: { method: "cash", amount: "1.00" },
     });
 
     expect((await filedLines(id))[0]).toMatchObject({
-      productId: v.products.pan,
+      productId: v.products.bread,
       classification: { reporting: [] },
     });
   });
@@ -460,9 +460,9 @@ describe("what a filed sale line records about its product", () => {
     });
 
     await withTransaction(suite.db, (tx) =>
-      updateCategory(tx, v.categories.cocteles.id, {
+      updateCategory(tx, v.categories.cocktails.id, {
         name: "Mixed drinks",
-        parentId: v.categories.licores.id,
+        parentId: v.categories.spirits.id,
       }),
     );
 
@@ -530,13 +530,13 @@ describe("the snapshot is taken when the line is added, on every till filing pat
           menuItemId: v.counter.offerFor(v.products.burger),
           quantity: "1",
           extras: [
-            { listId: v.extrasListId, picks: [{ productId: v.products.queso, quantity: 1 }] },
+            { listId: v.extrasListId, picks: [{ productId: v.products.cheese, quantity: 1 }] },
           ],
         },
       ],
     });
     await withTransaction(suite.db, (tx) =>
-      updateCategory(tx, v.categories.anadidos.id, { parentId: v.categories.comida.id }),
+      updateCategory(tx, v.categories.additions.id, { parentId: v.categories.food.id }),
     );
 
     await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
@@ -546,8 +546,8 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     });
 
     expect(await reportingOf(id)).toEqual([
-      [entry(v.categories.comida)],
-      [entry(v.categories.anadidos)],
+      [entry(v.categories.food)],
+      [entry(v.categories.additions)],
     ]);
   });
 
@@ -767,10 +767,10 @@ describe("issuancePass", () => {
     const v = await setupVenue();
     const five = await basketOrder(v, [
       { productId: v.products.negroni },
-      { productId: v.products.cana },
-      { productId: v.products.cafe, variantId: v.products.doble },
+      { productId: v.products.draftBeer },
+      { productId: v.products.coffee, variantId: v.products.doubleVariant },
       { productId: v.products.negroni },
-      { productId: v.products.cana },
+      { productId: v.products.draftBeer },
     ]);
 
     await withTransaction(suite.db, async (tx) => {
@@ -784,7 +784,11 @@ describe("issuancePass", () => {
         [],
       );
       expect(new Set(issued.lines.map((l) => l.classification?.reporting.at(-1)?.id))).toEqual(
-        new Set([v.categories.cocteles.id, v.categories.alcoholicas.id, v.categories.cafes.id]),
+        new Set([
+          v.categories.cocktails.id,
+          v.categories.alcoholicDrinks.id,
+          v.categories.coffees.id,
+        ]),
       );
     });
   });
@@ -817,10 +821,10 @@ describe("issuancePass", () => {
     const forOne = await add([{ productId: v.products.negroni }]);
     const forFive = await add([
       { productId: v.products.negroni },
-      { productId: v.products.cana },
-      { productId: v.products.cafe, variantId: v.products.doble },
+      { productId: v.products.draftBeer },
+      { productId: v.products.coffee, variantId: v.products.doubleVariant },
       { productId: v.products.negroni },
-      { productId: v.products.cana },
+      { productId: v.products.draftBeer },
     ]);
 
     expect(forFive).toHaveLength(forOne.length);
@@ -832,7 +836,7 @@ describe("issuancePass", () => {
     const id = await basketOrder(v, [
       { productId: v.products.negroni },
       { productId: v.products.negroni },
-      { productId: v.products.pan },
+      { productId: v.products.bread },
     ]);
     await suite.db
       .update(workingOrderLines)
@@ -851,7 +855,7 @@ describe("issuancePass", () => {
     expect(issued.lines.map((l) => [l.productId, l.parentProductId, l.classification])).toEqual([
       [v.products.negroni, null, negroni],
       [null, null, negroni],
-      [v.products.pan, null, null],
+      [v.products.bread, null, null],
     ]);
   });
 

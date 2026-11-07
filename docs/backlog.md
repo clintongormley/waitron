@@ -2375,7 +2375,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   bill-editing, move-bill and other order suites;
   the till's moved-dish suite; accented bindings in the portion-selection, counter-portion-rows
   and till-ticket-view tests; shared helper consumers and file names.
-  Keep accented search fixtures unchanged.
+  Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
+  identity and served-at-huella fixtures. Keep accented search fixtures unchanged.
   Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
 

@@ -172,7 +172,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   zoneId: string;
   waterOfferId: string;
   waterProductId: string;
-  variantIds?: { double: string; fuera: string };
+  variantIds?: { double: string; unavailable: string };
   /** Every product offered at its own price in the counter zone, from a menu of the helper's own. */
   offers: ZoneOffers;
 }> {
@@ -212,11 +212,11 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: "Comida" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const food = await createCategory(tx, { name: "Comida" });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: comida.id,
+      categoryId: food.id,
       name: "Jamón cortado",
       pricingUnit: "weight",
       unitPrice: "24.90",
@@ -224,7 +224,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     });
     const water = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -241,7 +241,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       productId: water.id,
       grossPrice: "2.25",
     });
-    let variantIds: { double: string; fuera: string } | undefined;
+    let variantIds: { double: string; unavailable: string } | undefined;
     if (options.variants) {
       const variants = await setProductVariants(
         tx,
@@ -273,12 +273,12 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         { variantId: variants[0]!.id, price: "4.10" },
         { variantId: variants[1]!.id, price: "4.80" },
       ]);
-      variantIds = { double: variants[0]!.id, fuera: variants[1]!.id };
+      variantIds = { double: variants[0]!.id, unavailable: variants[1]!.id };
     }
     await offerMenuThroughZone(tx, cfg, zone.rows[0]!.id, cat.id, { makeDefault: true });
     await tx.execute(sql`
       insert into routing_cells (id, location_id, category_id, station_id)
-      values (${randomUUID()}, ${cfg.locationId}, ${bebidas.id},
+      values (${randomUUID()}, ${cfg.locationId}, ${drinks.id},
         (select id from kitchen_stations
          where location_id = ${cfg.locationId} and is_default))`);
     await publishWorkingMenu(tx, cat.id);
@@ -340,7 +340,7 @@ describe("recordTillSale", () => {
     await suite.db
       .update(products)
       .set({ available: false })
-      .where(eq(products.id, variantIds!.fuera));
+      .where(eq(products.id, variantIds!.unavailable));
     const deps = { db: suite.db, backend, clock };
     await expect(
       recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
@@ -352,7 +352,7 @@ describe("recordTillSale", () => {
     await expect(
       recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
         zoneId,
-        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
         tender: { method: "cash", amount: "4.80" },
       }),
     ).rejects.toMatchObject({ code: "product.variant_unavailable" });
@@ -420,7 +420,7 @@ describe("recordTillSale", () => {
       cfg,
       {
         zoneId,
-        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
         tender: { method: "cash", amount: "3.80" },
       },
     );
@@ -489,7 +489,7 @@ describe("recordTillSale", () => {
     await withTransaction(suite.db, async (tx) => {
       await setMenuVariants(tx, waterOfferId, [
         { variantId: variantIds!.double, price: "4.10" },
-        { variantId: variantIds!.fuera, price: "4.80" },
+        { variantId: variantIds!.unavailable, price: "4.80" },
       ]);
       await republishMenus(tx);
       await createOpenOrder(
@@ -498,7 +498,7 @@ describe("recordTillSale", () => {
         workingOrderId,
         [
           { menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" },
-          { menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" },
+          { menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" },
         ],
         null,
         { zoneId },
@@ -522,7 +522,7 @@ describe("recordTillSale", () => {
             available: true,
           },
           {
-            id: variantIds!.fuera,
+            id: variantIds!.unavailable,
             name: "Fuera nuevo",
             customerName: null,
             kitchenName: null,
@@ -535,7 +535,7 @@ describe("recordTillSale", () => {
       );
       await setMenuVariants(tx, waterOfferId, [
         { variantId: variantIds!.double, price: "31.00" },
-        { variantId: variantIds!.fuera, price: "41.00" },
+        { variantId: variantIds!.unavailable, price: "41.00" },
       ]);
     });
 
@@ -829,10 +829,10 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
+      const drinks = await createCategory(tx, { name: "Bebidas" });
       const product = await createProduct(tx, {
         catalogueId: cat.id,
-        categoryId: bebidas.id,
+        categoryId: drinks.id,
         name: "Bare staff name",
         customerName,
         pricingUnit: "each",
@@ -1014,26 +1014,26 @@ describe("ordering extras and options — parent + child lines", () => {
     offerFor: (productId: string) => string;
     burgerId: string;
     menuProductId: string;
-    jamonId: string;
+    hamId: string;
     comboId: string;
-    platoId: string;
+    platedDishId: string;
     baconId: string;
-    quesoId: string;
-    patatasId: string;
+    cheeseId: string;
+    potatoesId: string;
     /** "Extras": Bacon 0.50 at 10%, Queso 0.75 at 21%; at most three picks. */
     extrasListId: string;
     /** "Guarnición": at least two picks, at most three. */
-    guarnicionListId: string;
+    sideDishListId: string;
     /** "Tamaño": an active options list, so every Menú line must answer it. */
     sizeListId: string;
     /** "Grande" — an available label of "Tamaño", the one answer these tests send. */
-    sizeLabelGrandeId: string;
+    largeSizeLabelId: string;
     /** The venue's default content language, the key every frozen staff-name map is stored under. */
     defaultLanguage: string;
     /** "Salsa": active, with "Alioli" WITHDRAWN and one label still available. */
-    salsaListId: string;
+    sauceListId: string;
     /** "Alioli" — a label the list still carries and no longer offers. */
-    salsaLabelId: string;
+    sauceLabelId: string;
   }
 
   /**
@@ -1086,7 +1086,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const comida = await createCategory(tx, { name: "Comida" });
+      const food = await createCategory(tx, { name: "Comida" });
       const dish = (
         name: string,
         unitPrice: string,
@@ -1095,7 +1095,7 @@ describe("ordering extras and options — parent + child lines", () => {
       ) =>
         createProduct(tx, {
           catalogueId: cat.id,
-          categoryId: comida.id,
+          categoryId: food.id,
           name,
           pricingUnit,
           unitPrice,
@@ -1106,7 +1106,7 @@ describe("ordering extras and options — parent + child lines", () => {
       const extraProduct = (name: string, vatClass: "general" | "reduced") =>
         createProduct(tx, {
           catalogueId: cat.id,
-          categoryId: comida.id,
+          categoryId: food.id,
           name: `${name} staff`,
           customerName: { [defaultLanguage]: `${name} customer` },
           kitchenName: `${name} kitchen`,
@@ -1117,9 +1117,9 @@ describe("ordering extras and options — parent + child lines", () => {
 
       const burger = await dish("Hamburguesa", "9.00", "general");
       const menu = await dish("Menú", "12.00", "general");
-      const jamon = await dish("Jamón", "24.90", "reduced", "weight");
+      const ham = await dish("Jamón", "24.90", "reduced", "weight");
       const combo = await dish("Combo", "8.00", "general");
-      const plato = await dish("Plato", "10.00", "general");
+      const platedDish = await dish("Plato", "10.00", "general");
       const bacon = await extraProduct("Bacon", "reduced");
       if (storedEachExtra) {
         const [each] = await tx
@@ -1136,7 +1136,7 @@ describe("ordering extras and options — parent + child lines", () => {
           .returning({ id: units.id });
         await assignProductUnit(tx, bacon.id, each!.id);
       }
-      const queso = await extraProduct("Queso", "general");
+      const cheese = await extraProduct("Queso", "general");
       if (storedEachExtra) {
         const [millilitres] = await tx
           .insert(units)
@@ -1150,10 +1150,10 @@ describe("ordering extras and options — parent + child lines", () => {
             hardwareUnit: null,
           })
           .returning({ id: units.id });
-        await assignProductUnit(tx, queso.id, millilitres!.id);
+        await assignProductUnit(tx, cheese.id, millilitres!.id);
       }
-      const patatas = await extraProduct("Patatas", "general");
-      const ensalada = await extraProduct("Ensalada", "general");
+      const potatoes = await extraProduct("Patatas", "general");
+      const salad = await extraProduct("Ensalada", "general");
 
       const extrasList = await createExtraList(
         tx,
@@ -1167,7 +1167,7 @@ describe("ordering extras and options — parent + child lines", () => {
           items: [
             { productId: bacon.id, maxQuantity: 3, preselected: false, price: "0.50" },
             {
-              productId: queso.id,
+              productId: cheese.id,
               maxQuantity: 1,
               preselected: false,
               price: "0.75",
@@ -1177,7 +1177,7 @@ describe("ordering extras and options — parent + child lines", () => {
         },
         cfg.locale,
       );
-      const guarnicionList = await createExtraList(
+      const sideDishList = await createExtraList(
         tx,
         {
           name: "Guarnición",
@@ -1187,8 +1187,8 @@ describe("ordering extras and options — parent + child lines", () => {
           maxPicks: 3,
           active: true,
           items: [
-            { productId: patatas.id, maxQuantity: 1, preselected: false, price: "1.00" },
-            { productId: ensalada.id, maxQuantity: 1, preselected: false, price: "1.50" },
+            { productId: potatoes.id, maxQuantity: 1, preselected: false, price: "1.00" },
+            { productId: salad.id, maxQuantity: 1, preselected: false, price: "1.50" },
           ],
         },
         cfg.locale,
@@ -1216,7 +1216,7 @@ describe("ordering extras and options — parent + child lines", () => {
         cfg.locale,
       );
       // "Alioli" is WITHDRAWN while the list stays active — what a till with a stale menu can send.
-      const salsaList = await createOptionList(
+      const sauceList = await createOptionList(
         tx,
         {
           name: "Salsa",
@@ -1234,27 +1234,27 @@ describe("ordering extras and options — parent + child lines", () => {
 
       await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extrasList.id }]);
       await writeProductModifiers(tx, menu.id, [{ kind: "options", id: sizeList.id }]);
-      await writeProductModifiers(tx, jamon.id, [{ kind: "extras", id: extrasList.id }]);
-      await writeProductModifiers(tx, combo.id, [{ kind: "options", id: salsaList.id }]);
-      await writeProductModifiers(tx, plato.id, [{ kind: "extras", id: guarnicionList.id }]);
+      await writeProductModifiers(tx, ham.id, [{ kind: "extras", id: extrasList.id }]);
+      await writeProductModifiers(tx, combo.id, [{ kind: "options", id: sauceList.id }]);
+      await writeProductModifiers(tx, platedDish.id, [{ kind: "extras", id: sideDishList.id }]);
 
       await assignCatalogueToVenue(tx, cat.id);
       return {
         burgerId: burger.id,
         menuProductId: menu.id,
-        jamonId: jamon.id,
+        hamId: ham.id,
         comboId: combo.id,
-        platoId: plato.id,
+        platedDishId: platedDish.id,
         baconId: bacon.id,
-        quesoId: queso.id,
-        patatasId: patatas.id,
+        cheeseId: cheese.id,
+        potatoesId: potatoes.id,
         extrasListId: extrasList.id,
-        guarnicionListId: guarnicionList.id,
+        sideDishListId: sideDishList.id,
         sizeListId: sizeList.id,
-        sizeLabelGrandeId: sizeList.labels.find((label) => label.name === "Grande staff")!.id,
+        largeSizeLabelId: sizeList.labels.find((label) => label.name === "Grande staff")!.id,
         defaultLanguage,
-        salsaListId: salsaList.id,
-        salsaLabelId: salsaList.labels.find((label) => label.name === "Alioli")!.id,
+        sauceListId: sauceList.id,
+        sauceLabelId: sauceList.labels.find((label) => label.name === "Alioli")!.id,
       };
     });
     const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
@@ -1333,7 +1333,7 @@ describe("ordering extras and options — parent + child lines", () => {
           {
             menuItemId: v.offerFor(v.burgerId),
             quantity: "1",
-            extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
+            extras: extrasPick(v, [{ productId: v.cheeseId, quantity: 1 }]),
           },
         ],
         tender: { method: "cash", amount: "20.00" },
@@ -1371,7 +1371,7 @@ describe("ordering extras and options — parent + child lines", () => {
             quantity: "1",
             extras: extrasPick(v, [
               { productId: v.baconId, quantity: 1 },
-              { productId: v.quesoId, quantity: 1 },
+              { productId: v.cheeseId, quantity: 1 },
             ]),
           },
         ],
@@ -1415,7 +1415,7 @@ describe("ordering extras and options — parent + child lines", () => {
     });
 
     expect(wol).toHaveLength(3);
-    const [parent, childBacon, childQueso] = wol;
+    const [parent, childBacon, childCheese] = wol;
     expect(parent!.productId).toBe(v.burgerId);
     expect(parent!.parentLineId).toBeNull();
     expect(parent!.optionSnapshots).toEqual([]);
@@ -1424,9 +1424,9 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(childBacon!.parentLineId).toBe(parent!.id);
     expect(childBacon!.optionSnapshots).toEqual([]);
 
-    expect(childQueso!.productId).toBe(v.quesoId);
-    expect(childQueso!.parentLineId).toBe(parent!.id);
-    expect(childQueso!.optionSnapshots).toEqual([]);
+    expect(childCheese!.productId).toBe(v.cheeseId);
+    expect(childCheese!.parentLineId).toBe(parent!.id);
+    expect(childCheese!.optionSnapshots).toEqual([]);
 
     expect(sl).toHaveLength(3);
     expect(sl.filter((l) => l.parentLineId !== null)).toHaveLength(2);
@@ -1502,7 +1502,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
   /** The six frozen strings one answer to "Tamaño" carries, under the venue's default content
    *  language. Every name differs, so an assertion cannot pass while the wrong one was copied. */
-  const grandeSnapshot = (defaultLanguage: string) => ({
+  const largeSnapshot = (defaultLanguage: string) => ({
     listName: { [defaultLanguage]: "Tamaño staff" },
     listCustomerName: { [defaultLanguage]: "Tamaño customer" },
     listKitchenName: "Tamaño kitchen",
@@ -1671,7 +1671,7 @@ describe("ordering extras and options — parent + child lines", () => {
           {
             menuItemId: v.offerFor(v.menuProductId),
             quantity: "1",
-            options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
+            options: [{ listId: v.sizeListId, labelId: v.largeSizeLabelId }],
           },
         ],
         tender: { method: "cash", amount: "20.00" },
@@ -1682,9 +1682,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // A walk-up files from the price `createOpenOrder` returns, not the stored lock, so the answers
     // must ride on that price too.
     const filed = await filedLinesOf(workingOrderId);
-    expect(filed.map((line) => line.optionSnapshots)).toEqual([
-      [grandeSnapshot(v.defaultLanguage)],
-    ]);
+    expect(filed.map((line) => line.optionSnapshots)).toEqual([[largeSnapshot(v.defaultLanguage)]]);
   });
 
   it("a RETRIEVED order files the options answers its working-order line stored", async () => {
@@ -1700,7 +1698,7 @@ describe("ordering extras and options — parent + child lines", () => {
           {
             menuItemId: v.offerFor(v.menuProductId),
             quantity: "1",
-            options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
+            options: [{ listId: v.sizeListId, labelId: v.largeSizeLabelId }],
           },
         ],
         null,
@@ -1721,9 +1719,7 @@ describe("ordering extras and options — parent + child lines", () => {
     );
 
     const filed = await filedLinesOf(workingOrderId);
-    expect(filed.map((line) => line.optionSnapshots)).toEqual([
-      [grandeSnapshot(v.defaultLanguage)],
-    ]);
+    expect(filed.map((line) => line.optionSnapshots)).toEqual([[largeSnapshot(v.defaultLanguage)]]);
   });
 
   it("files an extras pick as a snapshot-only child line, with no catalogue key on the table", async () => {
@@ -1800,7 +1796,7 @@ describe("ordering extras and options — parent + child lines", () => {
             quantity: "1",
             extras: extrasPick(v, [
               { productId: v.baconId, quantity: 1 },
-              { productId: v.quesoId, quantity: 1 },
+              { productId: v.cheeseId, quantity: 1 },
             ]),
           },
         ],
@@ -1844,10 +1840,10 @@ describe("ordering extras and options — parent + child lines", () => {
         .orderBy(saleLines.lineNo);
     });
     expect(filed).toHaveLength(3);
-    const [filedParent, filedBacon, filedQueso] = filed;
+    const [filedParent, filedBacon, filedCheese] = filed;
     expect(filedParent!.parentLineId).toBeNull();
     expect(filedBacon!.parentLineId).toBe(filedParent!.id);
-    expect(filedQueso!.parentLineId).toBe(filedParent!.id);
+    expect(filedCheese!.parentLineId).toBe(filedParent!.id);
 
     // The ticket's `parentLineNo` carries the same link.
     expect(result.lines[0]!.parentLineNo).toBeNull();
@@ -1950,7 +1946,7 @@ describe("ordering extras and options — parent + child lines", () => {
             quantity: "1",
             extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
           },
-          { menuItemId: v.offerFor(v.jamonId), quantity: "0.1" },
+          { menuItemId: v.offerFor(v.hamId), quantity: "0.1" },
         ],
         null,
         { zoneId: v.zoneId },
@@ -1973,8 +1969,8 @@ describe("ordering extras and options — parent + child lines", () => {
           quantity: "1",
         },
         {
-          workingOrderLineId: lineOf(v.jamonId),
-          menuItemId: v.offerFor(v.jamonId),
+          workingOrderLineId: lineOf(v.hamId),
+          menuItemId: v.offerFor(v.hamId),
           quantity: "0.2",
         },
       ],
@@ -1984,7 +1980,7 @@ describe("ordering extras and options — parent + child lines", () => {
       .select({ productId: workingOrderLines.productId })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    expect(stored.map((line) => line.productId).sort()).toEqual([v.burgerId, v.jamonId].sort());
+    expect(stored.map((line) => line.productId).sort()).toEqual([v.burgerId, v.hamId].sort());
     // Hamburguesa 9.00 + 0.2 kg of Jamón at 24.90, and no Bacon.
     const result = await payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -2022,7 +2018,7 @@ describe("ordering extras and options — parent + child lines", () => {
           quantity: "1",
           extras: extrasPick(v, [
             { productId: v.baconId, quantity: 1 },
-            { productId: v.quesoId, quantity: 1 },
+            { productId: v.cheeseId, quantity: 1 },
           ]),
         },
       ]);
@@ -2121,7 +2117,7 @@ describe("ordering extras and options — parent + child lines", () => {
         {
           menuItemId: v.offerFor(v.burgerId),
           quantity: "1",
-          extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
+          extras: extrasPick(v, [{ productId: v.cheeseId, quantity: 1 }]),
         },
       ]);
       await tx
@@ -2156,14 +2152,14 @@ describe("ordering extras and options — parent + child lines", () => {
     });
     // Filed (sorted by line_no): dish#1, dish#2, queso — the compaction gives emitted lineNo 1,2,3.
     expect(filed).toHaveLength(3);
-    const [dish1, dish2, quesoChild] = filed;
+    const [dish1, dish2, cheeseChild] = filed;
     expect(dish1!.parentLineId).toBeNull();
     expect(dish2!.parentLineId).toBeNull();
     // The queso child points at DISH#2's filed id — never at itself, null, or dish#1.
-    expect(quesoChild!.parentLineId).toBe(dish2!.id);
-    expect(quesoChild!.parentLineId).not.toBe(quesoChild!.id);
-    expect(quesoChild!.parentLineId).not.toBeNull();
-    expect(quesoChild!.parentLineId).not.toBe(dish1!.id);
+    expect(cheeseChild!.parentLineId).toBe(dish2!.id);
+    expect(cheeseChild!.parentLineId).not.toBe(cheeseChild!.id);
+    expect(cheeseChild!.parentLineId).not.toBeNull();
+    expect(cheeseChild!.parentLineId).not.toBe(dish1!.id);
   });
 
   it("rejects unoffered answers, an unanswered options list, an over-cap pick and extras on a fractional product", async () => {
@@ -2224,7 +2220,7 @@ describe("ordering extras and options — parent + child lines", () => {
             quantity: "1",
             extras: extrasPick(v, [
               { productId: v.baconId, quantity: 3 },
-              { productId: v.quesoId, quantity: 1 },
+              { productId: v.cheeseId, quantity: 1 },
             ]),
           },
         ],
@@ -2242,7 +2238,7 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.zoneId,
         lines: [
           {
-            menuItemId: v.offerFor(v.jamonId),
+            menuItemId: v.offerFor(v.hamId),
             quantity: "0.250",
             extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
           },
@@ -2251,7 +2247,7 @@ describe("ordering extras and options — parent + child lines", () => {
       }),
     ).rejects.toMatchObject({
       code: "extras.unsupported_product",
-      params: { productId: v.jamonId, soldBy: "weight" },
+      params: { productId: v.hamId, soldBy: "weight" },
     });
 
     // (d) fewer picks than a list's floor (Guarnición demands two, one sent) → extras.limit_exceeded.
@@ -2260,10 +2256,10 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.zoneId,
         lines: [
           {
-            menuItemId: v.offerFor(v.platoId),
+            menuItemId: v.offerFor(v.platedDishId),
             quantity: "1",
             extras: [
-              { listId: v.guarnicionListId, picks: [{ productId: v.patatasId, quantity: 1 }] },
+              { listId: v.sideDishListId, picks: [{ productId: v.potatoesId, quantity: 1 }] },
             ],
           },
         ],
@@ -2271,7 +2267,7 @@ describe("ordering extras and options — parent + child lines", () => {
       }),
     ).rejects.toMatchObject({
       code: "extras.limit_exceeded",
-      params: { extraListId: v.guarnicionListId },
+      params: { extraListId: v.sideDishListId },
     });
   });
 
@@ -2304,7 +2300,7 @@ describe("ordering extras and options — parent + child lines", () => {
             {
               menuItemId: v.offerFor(v.burgerId),
               quantity,
-              extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
+              extras: extrasPick(v, [{ productId: v.cheeseId, quantity: 1 }]),
             },
           ],
           tender: { method: "cash", amount: "20.00" },
@@ -2320,7 +2316,7 @@ describe("ordering extras and options — parent + child lines", () => {
    * decimal places with no scale, a measure when `measure` is set. Answers the list's id. */
   const requireBread = (v: ModifierVenue, unitName: string, precision: number, measure = false) =>
     withTransaction(suite.db, async (tx) => {
-      const pan = await createExtraList(
+      const bread = await createExtraList(
         tx,
         {
           name: "Pan",
@@ -2329,13 +2325,13 @@ describe("ordering extras and options — parent + child lines", () => {
           minPicks: 1,
           maxPicks: 1,
           active: true,
-          items: [{ productId: v.patatasId, maxQuantity: 1, preselected: false, price: "1.00" }],
+          items: [{ productId: v.potatoesId, maxQuantity: 1, preselected: false, price: "1.00" }],
         },
         v.cfg.locale,
       );
       await writeProductModifiers(tx, v.burgerId, [
         { kind: "extras", id: v.extrasListId },
-        { kind: "extras", id: pan.id },
+        { kind: "extras", id: bread.id },
       ]);
       const unit = await createUnit(
         tx,
@@ -2351,7 +2347,7 @@ describe("ordering extras and options — parent + child lines", () => {
       );
       await assignProductUnit(tx, v.burgerId, unit.id);
       await republishMenus(tx);
-      return pan.id;
+      return bread.id;
     });
 
   /** A party tab on a fresh table holding one round of `line`. */
@@ -2374,7 +2370,7 @@ describe("ordering extras and options — parent + child lines", () => {
   // the dish unsellable.
   it("sells a dish in a unit with decimal places with no extras picks, whatever its extras lists require", async () => {
     const v = await setupModifierVenue();
-    const panId = await requireBread(v, "Jarra", 2);
+    const breadListId = await requireBread(v, "Jarra", 2);
     const deps = { db: suite.db, backend, clock };
     const tender = { method: "cash" as const, amount: "50.00" };
     const burger = v.offerFor(v.burgerId);
@@ -2439,7 +2435,7 @@ describe("ordering extras and options — parent + child lines", () => {
           {
             menuItemId: burger,
             quantity: "1",
-            extras: [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }],
+            extras: [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }],
           },
         ],
         tender,
@@ -2452,10 +2448,10 @@ describe("ordering extras and options — parent + child lines", () => {
 
   it("still refuses an empty answer to a required extras list on a dish in a counted unit", async () => {
     const v = await setupModifierVenue();
-    const panId = await requireBread(v, "Ración", 0);
+    const breadListId = await requireBread(v, "Ración", 0);
     const deps = { db: suite.db, backend, clock };
     const burger = v.offerFor(v.burgerId);
-    const refused = { code: "extras.limit_exceeded", params: { extraListId: panId } };
+    const refused = { code: "extras.limit_exceeded", params: { extraListId: breadListId } };
 
     await expect(
       recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
@@ -2468,7 +2464,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const tabId = await tabWith(v, {
       menuItemId: burger,
       quantity: "1",
-      extras: [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }],
+      extras: [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }],
     });
     await expect(
       withTransaction(suite.db, async (tx) =>
@@ -2479,11 +2475,11 @@ describe("ordering extras and options — parent + child lines", () => {
 
   it("sells a dish in a measure unit with no extras picks, whatever its extras lists require", async () => {
     const v = await setupModifierVenue();
-    const panId = await requireBread(v, "Mililitro", 0, true);
+    const breadListId = await requireBread(v, "Mililitro", 0, true);
     const deps = { db: suite.db, backend, clock };
     const burger = v.offerFor(v.burgerId);
     const tender = { method: "cash" as const, amount: "3000.00" };
-    const pan = [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }];
+    const bread = [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }];
     const refused = {
       code: "extras.unsupported_product",
       params: { productId: v.burgerId, soldBy: "measure" },
@@ -2519,7 +2515,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const tabId = await tabWith(v, { menuItemId: burger, quantity: "250" });
     await expect(
       withTransaction(suite.db, async (tx) =>
-        updateOrderLine(tx, v.cfg, tabId, 1, { extras: pan }, await revisionOf(tabId)),
+        updateOrderLine(tx, v.cfg, tabId, 1, { extras: bread }, await revisionOf(tabId)),
       ),
     ).rejects.toMatchObject(refused);
     await withTransaction(suite.db, async (tx) =>
@@ -2555,7 +2551,7 @@ describe("ordering extras and options — parent + child lines", () => {
     await expect(
       recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
-        lines: [{ menuItemId: burger, quantity: "250", extras: pan }],
+        lines: [{ menuItemId: burger, quantity: "250", extras: bread }],
         tender,
       }),
     ).rejects.toMatchObject(refused);
@@ -2564,7 +2560,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
   it("a ración still takes extras", async () => {
     const v = await setupModifierVenue();
-    const panId = await requireBread(v, "Ración", 0);
+    const breadListId = await requireBread(v, "Ración", 0);
     const deps = { db: suite.db, backend, clock };
 
     // 2 × 9.00 dish + 2 × 1.00 Pan.
@@ -2574,7 +2570,7 @@ describe("ordering extras and options — parent + child lines", () => {
         {
           menuItemId: v.offerFor(v.burgerId),
           quantity: "2",
-          extras: [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }],
+          extras: [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }],
         },
       ],
       tender: { method: "cash", amount: "50.00" },
@@ -2609,12 +2605,12 @@ describe("ordering extras and options — parent + child lines", () => {
     });
     // The control: the same list still sells the item that is both Active and Available.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.quesoId)),
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.cheeseId)),
     ).resolves.toBeDefined();
 
-    await suite.db.execute(sql`update products set active = 0 where id = ${v.quesoId}`);
+    await suite.db.execute(sql`update products set active = 0 where id = ${v.cheeseId}`);
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.quesoId)),
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.cheeseId)),
     ).rejects.toMatchObject({
       code: "extras.invalid",
       params: { field: "productId" },
@@ -2635,7 +2631,7 @@ describe("ordering extras and options — parent + child lines", () => {
       }),
     ).rejects.toMatchObject({
       code: "options.label_required",
-      params: { optionListId: v.salsaListId },
+      params: { optionListId: v.sauceListId },
     });
     await expect(
       recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
@@ -2644,14 +2640,14 @@ describe("ordering extras and options — parent + child lines", () => {
           {
             menuItemId: v.offerFor(v.comboId),
             quantity: "1",
-            options: [{ listId: v.salsaListId, labelId: v.salsaLabelId }],
+            options: [{ listId: v.sauceListId, labelId: v.sauceLabelId }],
           },
         ],
         tender: { method: "cash", amount: "10.00" },
       }),
     ).rejects.toMatchObject({
       code: "options.label_required",
-      params: { optionListId: v.salsaListId },
+      params: { optionListId: v.sauceListId },
     });
   });
 
@@ -2661,7 +2657,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const menuOffer = v.offerFor(v.menuProductId);
     const burgerOffer = v.offerFor(v.burgerId);
     const baconOffer = v.offerFor(v.baconId);
-    const options = [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }];
+    const options = [{ listId: v.sizeListId, labelId: v.largeSizeLabelId }];
     const extras = extrasPick(v, [{ productId: v.baconId, quantity: 1 }]);
     await withTransaction(suite.db, (tx) =>
       createOpenOrder(
@@ -2709,7 +2705,7 @@ describe("ordering extras and options — parent + child lines", () => {
         },
         { workingOrderLineId: lineOf(v.burgerId), menuItemId: burgerOffer, quantity: "1", extras },
         { workingOrderLineId: lineOf(v.baconId), menuItemId: baconOffer, quantity: "1" },
-        { menuItemId: v.offerFor(v.jamonId), quantity: "0.1" },
+        { menuItemId: v.offerFor(v.hamId), quantity: "0.1" },
       ],
     });
     const result = await payWorkingOrder(
@@ -2725,7 +2721,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // and the new 0.1 kg of Jamón at 24.90.
     expect(result.total).toBe("26.99");
     const filed = await filedLinesOf(id);
-    expect(filed[0]!.optionSnapshots).toEqual([grandeSnapshot(v.defaultLanguage)]);
+    expect(filed[0]!.optionSnapshots).toEqual([largeSnapshot(v.defaultLanguage)]);
   });
 
   it("charges an extra an edit adds to a held line at its published price", async () => {
@@ -2756,7 +2752,7 @@ describe("ordering extras and options — parent + child lines", () => {
           active: true,
           items: [
             { productId: v.baconId, maxQuantity: 3, preselected: false, price: "0.90" },
-            { productId: v.quesoId, maxQuantity: 1, preselected: false, price: "0.75" },
+            { productId: v.cheeseId, maxQuantity: 1, preselected: false, price: "0.75" },
           ],
         },
         v.cfg.locale,

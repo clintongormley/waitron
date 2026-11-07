@@ -83,9 +83,9 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
 interface SeededVenue {
   cfg: WithVenueRowId<DeviceRequestConfig>;
   /** 1.50 gross. */
-  cafe: AvailableProduct;
+  coffee: AvailableProduct;
   /** 2.00 gross, at café's VAT rate, so a two-line basket has one VAT group. */
-  agua: AvailableProduct;
+  water: AvailableProduct;
   counter: ZoneOffers;
   tables: ZoneOffers;
 }
@@ -126,10 +126,10 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue, venueId));
   const { available, counter, tables } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -137,7 +137,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
     });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
@@ -150,9 +150,9 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
       tables: await offerProducts(tx, cfg, { zone: "tables" }),
     };
   });
-  const cafe = available.find((p) => p.name === "Café")!;
-  const agua = available.find((p) => p.name === "Agua")!;
-  return { cfg, cafe, agua, counter, tables };
+  const coffee = available.find((p) => p.name === "Café")!;
+  const water = available.find((p) => p.name === "Agua")!;
+  return { cfg, coffee, water, counter, tables };
 }
 
 async function seedTable(
@@ -238,18 +238,20 @@ async function registroCount(workingOrderId: string): Promise<number> {
 
 describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
   it("openTab + addTabRound → payWorkingOrder settles it, files one sale + registro, table reads free", async () => {
-    const { cfg, cafe, agua, tables } = await setupVenue();
+    const { cfg, coffee, water, tables } = await setupVenue();
     const tableId = await seedTable(cfg, "Pay-1", suite.db, tables.zoneId);
     const deps = { db: suite.db, backend, clock };
 
     const { tabId } = await withTransaction(suite.db, async (tx) => {
       return openPartyTab(tx, cfg, {
         tableId,
-        lines: [{ menuItemId: tables.offerFor(cafe.id), quantity: "1" }],
+        lines: [{ menuItemId: tables.offerFor(coffee.id), quantity: "1" }],
       });
     });
     await withTransaction(suite.db, async (tx) => {
-      return addTabRound(tx, cfg, tabId, [{ menuItemId: tables.offerFor(agua.id), quantity: "1" }]);
+      return addTabRound(tx, cfg, tabId, [
+        { menuItemId: tables.offerFor(water.id), quantity: "1" },
+      ]);
     });
 
     // Paying by id files the stored lines; `lines` is ignored.
@@ -351,7 +353,7 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const depsA = { db: suite.db, backend, clock: clockFixed };
     const depsB = { db: suiteB.db, backend: backendB, clock: clockFixed };
 
-    const { cfg: cfgA, cafe: cafeA, counter: counterA } = await setupVenue();
+    const { cfg: cfgA, coffee: cafeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const walkUpId = randomUUID();
     await payWorkingOrder({ ...depsA, admission: testTradingAdmission() }, cfgA, {
@@ -361,7 +363,7 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
       tender: { method: "cash", amount: "5.00" },
     });
 
-    const { cfg: cfgB, cafe: cafeB, tables: tablesB } = await secondVenueSharingNif(nifA);
+    const { cfg: cfgB, coffee: cafeB, tables: tablesB } = await secondVenueSharingNif(nifA);
     const tableId = await seedTable(cfgB, "H2-tab", suiteB.db, tablesB.zoneId);
     const { tabId } = await withTransaction(suiteB.db, async (tx) => {
       return openPartyTab(tx, cfgB, {
@@ -404,7 +406,7 @@ async function deliveryTableOf(
 
 describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
   it("records delivery_table_id on the walk-up order and files one sale (it is NOT a tab)", async () => {
-    const { cfg, cafe, counter } = await setupVenue();
+    const { cfg, coffee, counter } = await setupVenue();
     const tableId = await seedTable(cfg, "Del-1");
     const deps = { db: suite.db, backend, clock };
 
@@ -412,7 +414,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     const res = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
       workingOrderId: id,
       zoneId: counter.zoneId,
-      lines: [{ menuItemId: counter.offerFor(cafe.id), quantity: "1" }],
+      lines: [{ menuItemId: counter.offerFor(coffee.id), quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
       deliveryTableId: tableId,
     });
@@ -427,7 +429,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
   });
 
   it("a deliveryTableId naming no table is refused table.not_found (a domain 4xx, not a raw 500)", async () => {
-    const { cfg, cafe, counter } = await setupVenue();
+    const { cfg, coffee, counter } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
     const orderId = randomUUID();
     const missingTableId = randomUUID();
@@ -437,7 +439,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
       recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
         workingOrderId: orderId,
         zoneId: counter.zoneId,
-        lines: [{ menuItemId: counter.offerFor(cafe.id), quantity: "1" }],
+        lines: [{ menuItemId: counter.offerFor(coffee.id), quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
         deliveryTableId: missingTableId,
       }),
@@ -458,7 +460,7 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
     const depsA = { db: suite.db, backend, clock: clockFixed };
     const depsB = { db: suiteB.db, backend: backendB, clock: clockFixed };
 
-    const { cfg: cfgA, cafe: cafeA, counter: counterA } = await setupVenue();
+    const { cfg: cfgA, coffee: cafeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const tableA = await seedTable(cfgA, "H2col-A");
     const deliveredId = randomUUID();
@@ -470,7 +472,7 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
       deliveryTableId: tableA,
     });
 
-    const { cfg: cfgB, cafe: cafeB, counter: counterB } = await secondVenueSharingNif(nifA);
+    const { cfg: cfgB, coffee: cafeB, counter: counterB } = await secondVenueSharingNif(nifA);
     const walkUpId = randomUUID();
     await recordTillSale({ ...depsB, admission: testTradingAdmission() }, cfgB, {
       workingOrderId: walkUpId,

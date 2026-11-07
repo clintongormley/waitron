@@ -2849,12 +2849,12 @@ describe("A803 split", () => {
       const { ana, m5, b2, b3 } = await threeBillsWithIdsAgainstNumbers("A803 Two sources");
       await order(v, b2, "Agua");
       await order(v, b3, "Caña");
-      const agua = await lineOn(b2, "Agua");
+      const water = await lineOn(b2, "Agua");
       const cana = await lineOn(b3, "Caña");
 
       const result = await splitSelected(ana.partyId, m5, {
         wholeBillIds: [],
-        loose: [loose(b3, cana.id), loose(b2, agua.id)],
+        loose: [loose(b3, cana.id), loose(b2, water.id)],
       });
 
       expect(result.billIds).toEqual([expect.any(String)]);
@@ -2919,11 +2919,11 @@ describe("A803 split", () => {
       it("its unpaid dishes can go loose, the payment staying", async () => {
         const { ana, m5, b1 } = await partPaid("A803 Part loose");
         const payments = await paymentsOf(v, b1);
-        const agua = await lineOn(b1, "Agua");
+        const water = await lineOn(b1, "Agua");
 
         const result = await splitSelected(ana.partyId, m5, {
           wholeBillIds: [],
-          loose: [loose(b1, agua.id)],
+          loose: [loose(b1, water.id)],
         });
 
         expect(await namesOn(result.billIds[0]!)).toEqual(["Agua"]);
@@ -3010,13 +3010,13 @@ describe("A803 split", () => {
         );
         expect(decimalToCents(await act((tx) => storedOrderTotal(tx, b2)))).toBe(5200);
         await cashContribution(v, b2, "40.00");
-        const agua = await lineOn(ana.tabId, "Agua");
+        const water = await lineOn(ana.tabId, "Agua");
         const steak = await lineOn(b2, "Steak");
 
         const error = await refusedWithNoRowChanged(() =>
           splitSelected(ana.partyId, m5, {
             wholeBillIds: [],
-            loose: [loose(b2, steak.id), loose(ana.tabId, agua.id)],
+            loose: [loose(b2, steak.id), loose(ana.tabId, water.id)],
           }),
         );
 
@@ -3221,10 +3221,10 @@ describe("A803 split", () => {
       it("on a loose source refuses order.payment_in_flight", async () => {
         const { ana, m5, b1 } = await tableFor("A803 Payment loose", "Burger", "Agua");
         pending(b1);
-        const agua = await lineOn(b1, "Agua");
+        const water = await lineOn(b1, "Agua");
 
         const error = await refusedWithNoRowChanged(() =>
-          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, agua.id)] }),
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, water.id)] }),
         );
 
         expect(error).toMatchObject({
@@ -3277,18 +3277,18 @@ describe("A803 split", () => {
       );
       const { guests } = await act((tx) => readPartyAllergy(tx, ana.partyId));
       const burger = await lineOn(b1, "Burger");
-      const agua = await lineOn(b1, "Agua");
+      const water = await lineOn(b1, "Agua");
       await act((tx) =>
         setAllergyLineTicks(tx, ana.partyId, [
           { guestId: guests[0]!.id, workingLineId: burger.id },
-          { guestId: guests[0]!.id, workingLineId: agua.id },
+          { guestId: guests[0]!.id, workingLineId: water.id },
         ]),
       );
 
       // A loose dish cannot fire on arrival; the whole bill's can, and it needs the allergy copy first.
       const result = await splitSelected(ana.partyId, m5, {
         wholeBillIds: [b2],
-        loose: [loose(b1, agua.id)],
+        loose: [loose(b1, water.id)],
       });
 
       const source = await act((tx) => readPartyAllergy(tx, ana.partyId));
@@ -3298,7 +3298,7 @@ describe("A803 split", () => {
       ]);
       expect(target.guests.map((guest) => guest.who)).toEqual(["Window seat"]);
       expect(target.ticks).toEqual([
-        { guestId: target.guests[0]!.id, draftLineId: null, workingLineId: agua.id },
+        { guestId: target.guests[0]!.id, draftLineId: null, workingLineId: water.id },
       ]);
     });
 
@@ -3320,12 +3320,12 @@ describe("A803 split", () => {
       it("one bill in two loose entries", async () => {
         const { ana, m5, b1 } = await tableFor("A803 Two entries", "Burger", "Agua");
         const burger = await lineOn(b1, "Burger");
-        const agua = await lineOn(b1, "Agua");
+        const water = await lineOn(b1, "Agua");
 
         const error = await refusedWithNoRowChanged(() =>
           splitSelected(ana.partyId, m5, {
             wholeBillIds: [],
-            loose: [loose(b1, burger.id), loose(b1, agua.id)],
+            loose: [loose(b1, burger.id), loose(b1, water.id)],
           }),
         );
 
