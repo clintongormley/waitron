@@ -3251,7 +3251,8 @@ dies leaves its file behind; the next holder overwrites it.
 **Every start takes the venue lock before it deletes backup staging; the holder file decides only
 when the lock cannot be taken.** Whatever the free space, a start through the box's entry point
 (`runEntry`, `apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this
-clean-up) deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
+clean-up, except that boot itself removes the restore working folders, `clearRestoreLeftovers` in
+`apps/server/src/boot.ts`) deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
 `lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it.
 The same section deletes every restore working folder (`restoreLeftovers`,
 `apps/server/src/restore-staging-dirs.ts`): `<state>/restore-staging/staged-recovery` whole, the
@@ -5152,7 +5153,7 @@ by `since` even when it missed the run that cleared it.
   deleted, and stays "the newest" in its folder until a later one exists, so the real latest backup
   can be deleted. A step the box made puts it last and stops it counting as the newest, but only
   while the hold lasts; a clock that runs ahead with no step the box made changes nothing.
-- On one box a restore no longer overlaps these deletions: the restore command takes the venue
+- On one box a restore cannot overlap these deletions: the restore command takes the venue
   folder before it reads an archive and holds it to its exit (`resolveRestoreTarget`,
   `apps/server/src/restore-command.ts`), so it is refused while the server runs and the server
   cannot start under it, and the start's own deletion (`deleteOldBackupsAtStart`) skips while the

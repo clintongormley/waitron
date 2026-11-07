@@ -174,7 +174,7 @@ with the same event and name. A refusal while resuming keeps them for another ch
 completed restore removes those files. A venue lock refusal before placement leaves a fresh
 request, rather than declaring it interrupted.
 
-If no local activation committed, the name stays burned. Prepare a new event against current
+If an interrupted restore's local activation never committed, the name stays burned. Prepare a new event against current
 outside history and submit a fresh restore request; do not delete the old incident to free it.
 A deliberate fresh request can restore the old backup again. It is different from retrying the
 interrupted request.

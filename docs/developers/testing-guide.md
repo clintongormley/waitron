@@ -3689,7 +3689,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
   `WAITRON_FULL_DISK_DIR_FROM_SPARE`, `WAITRON_FULL_DISK_DIR_BACKUP_ROOM`,
-  `WAITRON_FULL_DISK_DIR_HANDOVER` and `WAITRON_FULL_DISK_DIR_PLACEMENT` for the second to sixth files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
+  `WAITRON_FULL_DISK_DIR_HANDOVER`, `WAITRON_FULL_DISK_DIR_PLACEMENT` and
+  `WAITRON_FULL_DISK_DIR_RESTORE` for the second to seventh files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
   run them at once), otherwise skips locally and fails CI. Interrupted
   macOS images can remain attached; `pnpm reap` does not detach them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.

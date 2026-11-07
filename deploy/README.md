@@ -619,8 +619,10 @@ command against it treat that entrypoint differently:
   with no `trading.env`; a restore staged with a node recovery key for the next start is finished
   by that start. One that fails in between (while migrating the restored database, or in a module's
   restore step) keeps the restored database, with the box's old identity set aside as
-  `trading.env.replaced`; a command-line restore that failed while migrating finished when the
-  command was run again. Outside "as they were": a restore that is killed; a folder made to hold a
+  `trading.env.replaced`. A command-line restore that failed in a module's restore step finishes
+  when the same command is run again once the cause is gone; one that failed while migrating says
+  that running the same command again starts the restore over. A restore staged for the next start
+  is started over by that start. Outside "as they were": a restore that is killed; a folder made to hold a
   secret (such as `tls/`) on a box that had none; the backup room note, deleted before anything
   changes and written again by the next backup; Litestream's `.venue.db-litestream/` folder beside
   the old database, which is not put back if the move fails after removing it; a move that could
@@ -660,7 +662,10 @@ command against it treat that entrypoint differently:
   of the `state` volume or, inside its `restore-staging` folder, `archive-download-`,
   `archive-validate-` or `restore-admission-`, each followed by six random characters) and removes
   them when it ends. A run that is killed leaves them, holding a full copy of the venue's database
-  or the encrypted archive, and the next server start removes them. A `--from-archive` run that
+  or the encrypted archive, and the next server start removes them. Beside the secrets in the
+  state folder it can also leave `<name>.incoming`, `<name>.incoming.tmp` and
+  `<name>.restore-previous` files, which no start removes and a later restore replaces only for the
+  names its own backup carries; delete them once no restore is running. A `--from-archive` run that
   downloaded the archive but cannot remove its `archive-download-*` folder afterwards prints its
   result and then a line saying the next server start tries to remove it. Break-glass is the exception by design: it runs beside the server
   and takes no lock. Whatever holds the folder keeps a small file beside it,

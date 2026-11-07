@@ -513,6 +513,10 @@ called weaker than its name, the topic file lists what it does not see.
   Guard: `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never
   checks that a file takes the turn; the turn is in-process only. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
+- **A restore working folder is made only by a process that holds the venue folder from before it
+  makes it, under a name or prefix listed in `apps/server/src/restore-staging-dirs.ts`; `bootServer`
+  removes what that list names once it holds the venue folder.** Nothing guards it.
+  [Detail](docs/developers/conventions-data.md#one-process-per-venue-folder).
 - **An open `FileHandle` ends the process when it is collected, so one a route streams also closes
   on `c.req.raw.signal`'s abort: nothing reads or cancels the body of a connection already gone.**
   A test that reads only an `app.request()` status leaks the same way. Guard: "every file the copy
