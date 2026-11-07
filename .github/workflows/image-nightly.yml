@@ -16,7 +16,7 @@ on:
     - cron: "0 3 * * *" # nightly, 03:00 UTC — clear of stripe-sandbox (04:00) and mutation (05:00)
   workflow_dispatch:
 
-# The same guard mutation.yml and stripe-sandbox.yml set on this trigger shape: a manual dispatch
+# The same guard stripe-sandbox.yml sets on this trigger shape: a manual dispatch
 # overlapping the nightly (or another dispatch) supersedes the older run rather than booting a second
 # box beside it.
 concurrency:

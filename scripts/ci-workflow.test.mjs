@@ -29,7 +29,7 @@ import {
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
-// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one case
+// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except the cases
 // reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
 // two apt cases, a `--with-deps` case, the pnpm-setup, checkout and artifact-transfer cases reading every
 // .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
@@ -2703,6 +2703,173 @@ describe("the test shards", () => {
     expect(lines(section("mutation-handover"))).toContain(
       "- run: pnpm --filter @waitron/handover mutation",
     );
+  });
+
+  // A1428: a hand-started run can name the packages to mutate. Weaker than its name for the job
+  // graph: those assertions read mutation.yml as TEXT. The `pick` script itself is RUN.
+  describe("mutation.yml's package choice", () => {
+    const workflow = readFileSync(join(repoRoot, ".github/workflows/mutation.yml"), "utf8");
+    const section = (id) => {
+      const start = workflow.indexOf(`\n  ${id}:\n`);
+      expect(start, `no \`${id}\` job in mutation.yml`).toBeGreaterThan(-1);
+      const rest = workflow.slice(start + 1);
+      const end = rest.slice(1).search(/\n {2}\S/);
+      return end === -1 ? rest : rest.slice(0, end + 1);
+    };
+    const PACKAGES = {
+      "ui-core": "ui_core",
+      ui: "ui",
+      db: "db",
+      "node-db": "node_db",
+      handover: "handover",
+    };
+    const pickScript = () => {
+      const body = section("select").split("\n");
+      const at = body.findIndex((line) => line.trim() === "- id: pick");
+      expect(at, "no `pick` step in the select job").toBeGreaterThan(-1);
+      const run = body.findIndex((line, index) => index > at && line === "        run: |");
+      expect(run, "the `pick` step has no `run: |` block").toBeGreaterThan(-1);
+      const script = [];
+      for (const line of body.slice(run + 1)) {
+        if (line.trim() !== "" && !line.startsWith("          ")) break;
+        script.push(line.slice(10));
+      }
+      expect(script.join("").trim(), "the `pick` script is empty").not.toBe("");
+      return script.join("\n");
+    };
+    let scratch;
+    beforeAll(() => {
+      scratch = mkdtempSync(join(tmpdir(), "mutation-pick-"));
+    });
+    afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+    let runs = 0;
+    const pick = (requested) => {
+      const output = join(scratch, `output-${++runs}`);
+      writeFileSync(output, "");
+      const result = spawnSync("bash", ["-e", "-c", pickScript()], {
+        cwd: scratch,
+        encoding: "utf8",
+        timeout: 10_000,
+        env: { ...process.env, REQUESTED: requested, GITHUB_OUTPUT: output },
+      });
+      expect(result.error).toBeUndefined();
+      const written = readFileSync(output, "utf8").trim();
+      return {
+        status: result.status,
+        message: `${result.stdout}${result.stderr}`,
+        outputs: Object.fromEntries(
+          written === "" ? [] : written.split("\n").map((line) => line.split("=")),
+        ),
+      };
+    };
+    const only = (...names) =>
+      Object.fromEntries(
+        Object.entries(PACKAGES).map(([name, key]) => [key, String(names.includes(name))]),
+      );
+    const every = only(...Object.keys(PACKAGES));
+    const concurrency = () => {
+      const block = /^concurrency:\n((?: {2}.*\n)+)/m.exec(workflow)?.[0];
+      expect(block, "no top-level `concurrency:` block in mutation.yml").toBeDefined();
+      return block;
+    };
+
+    it.each([
+      ["", every],
+      ["   ", every],
+      [" \t\n", every],
+      ["ui", only("ui")],
+      ["ui-core", only("ui-core")],
+      ["db, node-db", only("db", "node-db")],
+      ["db node-db", only("db", "node-db")],
+      ["handover,ui", only("handover", "ui")],
+      ["ui,ui", only("ui")],
+    ])(
+      "given %j, selects exactly the packages named (all when none are)",
+      (requested, expected) => {
+        const result = pick(requested);
+        expect(result.status, result.message).toBe(0);
+        expect(result.outputs).toEqual(expected);
+      },
+    );
+
+    it.each(["bogus", "shared", "fiscal", "ui,bogus", "UI", "*", "ui-", "-core"])(
+      "refuses %j at once, naming the unknown word and the accepted names",
+      (requested) => {
+        const result = pick(requested);
+        expect(result.status).not.toBe(0);
+        const unknown = requested.split(",").find((word) => !(word in PACKAGES));
+        expect(result.message).toContain("::error::");
+        expect(result.message).toContain(`"${unknown}"`);
+        for (const name of Object.keys(PACKAGES)) expect(result.message).toContain(name);
+        expect(Object.values(result.outputs)).not.toContain("true");
+      },
+    );
+
+    it("takes the packages input on a hand-started run, read only through the step's env", () => {
+      const dispatch = workflow.slice(workflow.indexOf("\n  workflow_dispatch:") + 1);
+      expect(dispatch).toMatch(
+        /^ {2}workflow_dispatch:\n {4}inputs:\n {6}packages:\n(?: {8}.*\n)*? {8}type: string\n/,
+      );
+      expect(dispatch).toMatch(
+        /^ {2}workflow_dispatch:\n {4}inputs:\n {6}packages:\n(?: {8}.*\n)*? {8}default: ""\n/,
+      );
+      expect(dispatch).toMatch(
+        /^ {2}workflow_dispatch:\n {4}inputs:\n {6}packages:\n(?: {8}.*\n)*? {8}required: false\n/,
+      );
+      const select = section("select");
+      expect(select).toContain("timeout-minutes: 5");
+      expect(select).toContain("REQUESTED: ${{ inputs.packages }}");
+      expect(pickScript(), "the script interpolates the input itself").not.toContain("${{");
+      expect(workflow.replace(concurrency(), "").match(/inputs\.packages/g)).toHaveLength(1);
+      for (const key of Object.values(PACKAGES))
+        expect(select).toContain(`${key}: \${{ steps.pick.outputs.${key} }}`);
+    });
+
+    it("puts the packages text in the run's concurrency group, cancelling in progress", () => {
+      const block = concurrency();
+      expect(block).toContain(
+        "  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.packages }}\n",
+      );
+      expect(block).toContain("  cancel-in-progress: true\n");
+    });
+
+    it.each(Object.entries(PACKAGES))(
+      "runs %s's jobs only when the select job chose it",
+      (name, key) => {
+        const jobs = section(`mutation-${name}`)
+          .split("\n")
+          .map((line) => line.trimEnd());
+        expect(jobs).toContain("    needs: select");
+        expect(jobs).toContain(`    if: needs.select.outputs.${key} == 'true'`);
+        if (name === "node-db" || name === "handover") return;
+        const aggregate = section(`mutation-${name}-aggregate`)
+          .split("\n")
+          .map((line) => line.trimEnd());
+        expect(aggregate).toContain(`    needs: mutation-${name}`);
+        expect(aggregate).toContain(
+          `    if: always() && needs.mutation-${name}.result != 'skipped'`,
+        );
+      },
+    );
+
+    it("makes every job but select wait for it, directly or through its package's jobs", () => {
+      const jobs = workflow.slice(workflow.indexOf("\njobs:\n"));
+      const ids = [...jobs.matchAll(/^ {2}([a-z][a-z-]*):\n/gm)].map((match) => match[1]);
+      expect(ids.length, "no jobs read from mutation.yml").toBeGreaterThan(5);
+      expect(ids).toContain("select");
+      for (const id of ids.filter((id) => id !== "select")) {
+        const needs = /\n {4}needs: (\S+)\n/.exec(section(id))?.[1];
+        expect(needs, `${id} waits for nothing`).toBeDefined();
+        if (needs === "select") continue;
+        expect(ids, `${id} waits for an unknown job`).toContain(needs);
+        expect(section(needs), `${needs} does not wait for select`).toMatch(
+          /\n {4}needs: select\n/,
+        );
+        expect(section(id), `${id} runs when ${needs} was skipped`).toContain(
+          `\n    if: always() && needs.${needs}.result != 'skipped'\n`,
+        );
+      }
+    });
   });
 
   it("isolates Provisioning into six coverage shards and enforces the merged result", () => {

@@ -562,12 +562,12 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
 | `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, unless verified equal-tree PR CI is reused |
-| `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
-| `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
+| `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
+| `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
-| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
-| `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
-| `handover` | the unsharded `mutation-handover` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/handover mutation` fails below 90 too, because the bar is in its own config |
+| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
+| `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
+| `handover` | the unsharded `mutation-handover` job in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it; a LOCAL `pnpm --filter @waitron/handover mutation` fails below 90 too, because the bar is in its own config |
 
 Five hedges worth carrying. `packages/node-db`'s score is taken over the mutants its config's
 `ignoreStatic` keeps: a local `pnpm --filter @waitron/node-db exec stryker run --force` on
@@ -662,7 +662,8 @@ checks that it preserves the local mutation list and floor while disabling incre
 
 Nightly rather than Mondays only (owner, 2026-10-12). A run is a sharded matrix each for ui, db
 and ui-core, one aggregate job per matrix, and one unsharded job each for node-db and handover
-(`.github/workflows/mutation.yml`). The figures below were measured on 6–12 October, when a run was 43 jobs: ui's 30 shards, db's 10, ui-core as one job, and two aggregates. The account never ran more than 20 jobs at once from 6 to 12
+(`.github/workflows/mutation.yml`), after a short `select` job that decides which packages run (see
+rerunning by hand, below). The figures below were measured on 6–12 October, when a run was 43 jobs: ui's 30 shards, db's 10, ui-core as one job, and two aggregates. The account never ran more than 20 jobs at once from 6 to 12
 October except for one instant that read 21 (every job that held a runner, from
 `gh api 'repos/clintongormley/waitron/actions/runs?created=<day>&per_page=100' --paginate` and
 `gh api repos/clintongormley/waitron/actions/runs/<id>/jobs?per_page=100&filter=all --paginate`, a
@@ -677,6 +678,15 @@ the 05:00 UTC hour, the least of any hour, against 24.2% at 11:00 and 23.6% at 1
 started a median of 3 s after creation (90th percentile 77 s). 03:00 was about as quiet
 (2.5%) but holds image-nightly; stripe-sandbox runs at 04:00 and CodeQL at 01:37. The 2026-10-12
 scheduled run was created at 05:11.
+
+To rerun by hand, `gh workflow run mutation.yml --ref main` runs every package, as the nightly run
+does. Add `-f packages=db`, or `-f packages="ui,ui-core"`, to run only those (names are ui-core, ui,
+db, node-db and handover, separated by commas or spaces). A name it does not know fails the `select`
+job at once, and nothing else runs. The packages left out show as skipped: that run does not check
+their floors. A run started by hand cancels a mutation run already going on the same branch only
+when both were given the same `packages` text. Guard: the "mutation.yml's package choice" cases in `scripts/ci-workflow.test.mjs`,
+weaker than their name: they run the `select` step's script, but read the jobs' `needs`/`if` lines
+and the concurrency group as text.
 
 ### Reading `packages/db`'s score by hand
 
@@ -2320,6 +2330,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | image-smoke.yml    | smoke                             | 5.7 (run 37629651848)          | 15    |
 | licence.yml        | licence-integrity                 | 0.2                            | 5     |
 | licence.yml        | dco                               | 0.3                            | 5     |
+| mutation.yml       | select                            | not yet measured               | 5     |
 | mutation.yml       | mutation-ui-core (matrix shards)  | not yet measured in CI; 10.7 locally (shard 1; shards 2 and 3 not timed) | 25    |
 | mutation.yml       | mutation-ui-core-aggregate        | not yet measured               | 5     |
 | mutation.yml       | mutation-ui (matrix shards)       | 23.7 (run 38256003987, slowest of 30) | 50    |

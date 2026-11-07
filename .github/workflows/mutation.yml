@@ -6,7 +6,8 @@ name: Mutation testing
 # jobs do: it doesn't tell you "did I break something," it tells you "how good are my tests," which
 # is a slower-moving signal worth reviewing periodically rather than blocking merges on. Scheduled
 # nightly, plus on-demand via workflow_dispatch so it can be run against a specific branch (e.g. from
-# a PR) without waiting for the schedule.
+# a PR) without waiting for the schedule. A hand-started run mutates only the packages its `packages`
+# input names (`gh workflow run mutation.yml -f packages=db`); left empty, it mutates every one.
 #
 # packages/ui is SHARDED like packages/db, because one job stopped fitting. Job wall times from
 # `gh run view`: run 36380351019 (2026-09-28) 15m28s; run 37267389722 (2026-10-05) 90m11s; run
@@ -17,21 +18,69 @@ on:
   schedule:
     - cron: "0 5 * * *" # nightly, 05:00 UTC — why this hour: docs/developers/ci-and-gates.md, "Mutation testing runs nightly at 05:00 UTC"
   workflow_dispatch:
+    inputs:
+      packages:
+        description: "Packages to mutate, separated by commas or spaces, from ui-core, ui, db, node-db, handover. Empty = every package."
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.packages }}
   cancel-in-progress: true
 
 jobs:
+  # Turns the `packages` input into one true/false output per package. A package not chosen has its
+  # jobs SKIPPED, so its floor reads as not checked rather than passed. The schedule has no input, so
+  # it runs every package.
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ui_core: ${{ steps.pick.outputs.ui_core }}
+      ui: ${{ steps.pick.outputs.ui }}
+      db: ${{ steps.pick.outputs.db }}
+      node_db: ${{ steps.pick.outputs.node_db }}
+      handover: ${{ steps.pick.outputs.handover }}
+    steps:
+      - id: pick
+        name: Choose the packages to mutate
+        env:
+          REQUESTED: ${{ inputs.packages }}
+        run: |
+          set -euo pipefail
+          set -f
+          accepted="ui-core ui db node-db handover"
+          chosen=""
+          for word in $(printf '%s' "$REQUESTED" | tr ',' ' '); do
+            case " $accepted " in
+              *" $word "*) chosen="$chosen $word" ;;
+              *)
+                echo "::error::Unknown package \"$word\" in the packages input. Accepted names: ${accepted// /, }."
+                exit 1
+                ;;
+            esac
+          done
+          if [ -z "$chosen" ]; then chosen=" $accepted"; fi
+          for name in $accepted; do
+            case "$chosen " in
+              *" $name "*) value=true ;;
+              *) value=false ;;
+            esac
+            echo "$(printf '%s' "$name" | tr '-' '_')=$value" >> "$GITHUB_OUTPUT"
+          done
+
   # packages/ui-core, sharded and gated like packages/ui below: no thresholds.break in
   # packages/ui-core/stryker.config.json, one bar on the merged score in
   # `mutation-ui-core-aggregate`. One job took 6m44s on run 39373226000 (2026-10-20) for 612 mutants
   # at 4 test runners; the theme derivation under src/theme/ added about 1,180 more. Shard times
   # measured locally are in docs/developers/ci-and-gates.md, "Every job has a time limit".
   mutation-ui-core:
+    needs: select
+    if: needs.select.outputs.ui_core == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -140,7 +189,7 @@ jobs:
   # packages/ui-core's gate, for the reasons given on `mutation-db-aggregate` below.
   mutation-ui-core-aggregate:
     needs: mutation-ui-core
-    if: always()
+    if: always() && needs.mutation-ui-core.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -214,6 +263,8 @@ jobs:
   # tested), and one of wt-data-table.ts's four ranges took 28.7 minutes.
   # At 30 shards, run 38256003987: the slowest shard (wt-data-table.ts:1029-1285) took 23.7 minutes.
   mutation-ui:
+    needs: select
+    if: needs.select.outputs.ui == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -315,7 +366,7 @@ jobs:
   # packages/ui's gate, for the reasons given on `mutation-db-aggregate` below.
   mutation-ui-aggregate:
     needs: mutation-ui
-    if: always()
+    if: always() && needs.mutation-ui.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -418,6 +469,8 @@ jobs:
   # well-tested files passes while the package as a whole sits far below the bar. The package is
   # gated once, on the merged score, by the `mutation-db-aggregate` job below.
   mutation-db:
+    needs: select
+    if: needs.select.outputs.db == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -508,10 +561,11 @@ jobs:
   # this job adds the thirteen together and fails below 90, the score the owner set for every package
   # on 2026-09-19. It refuses to score at all when a shard's report is missing, because a shard
   # that crashed takes its own survivors with it and the remaining twelve read higher than the truth.
-  # `if: always()` so a red shard still gets its slice counted rather than skipping the gate.
+  # `if: always()` so a red shard still gets its slice counted rather than skipping the gate; it is
+  # skipped only when its shards were.
   mutation-db-aggregate:
     needs: mutation-db
-    if: always()
+    if: always() && needs.mutation-db.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -584,6 +638,8 @@ jobs:
   # packages/node-db is small enough to run unsharded, so its break: 90 lives in its own
   # stryker.config.json and this one job gates it.
   mutation-node-db:
+    needs: select
+    if: needs.select.outputs.node_db == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -654,6 +710,8 @@ jobs:
   # packages/handover is small enough to run unsharded, so its break: 90 lives in its own
   # stryker.config.json and this one job gates it.
   mutation-handover:
+    needs: select
+    if: needs.select.outputs.handover == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
