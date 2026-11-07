@@ -4,6 +4,18 @@ Before relying on email, send a test using your mail provider's settings. In the
 the test goes to your own account address. During setup, it goes to the administrator address
 you entered.
 
+## Set up a mail server {#set-up}
+
+In Prepare or Live, open **Settings → Email**. As an admin, choose **Set up mail server** or
+**Change mail server**, enter your provider's settings and send a test before saving. Enter fresh
+login details when changing an authenticated server; Waitron never shows the saved password.
+Managers can view the settings, but cannot save or remove them.
+
+Saving a mail server in Prepare sends invitations and password-reset links to real inboxes.
+Without one, Prepare keeps those messages in the box's test inbox. Only admins can open captured
+messages. Check the account delivery status on this page and the invoice status in **Mail server**:
+development boxes keep invoice email locally even when account email uses the saved server.
+
 ## Check the test result {#test-results}
 
 An accepted test means the mail server took the message. Check your inbox, including junk mail.
@@ -22,3 +34,13 @@ or another refusal, check the port and encryption, then retry.
 
 If setup asks you to test email, test again after changing the settings or administrator address.
 Continue becomes available after the server accepts a test of those settings for that address.
+
+## Remove a mail server {#remove}
+
+As an admin, choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
+Removing the server clears its saved login details too; enter them again if you set it up later.
+
+In Prepare, email goes back to the box's test inbox. In Live, account links and invoice email
+cannot be sent until you configure a server again; sales continue. On a development box, email
+goes back to its test inbox. If the settings fail to reload after removal, retry loading them;
+the removal has already succeeded.

@@ -4,9 +4,12 @@ import type { DashboardApi, EmailInbox } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { EmailScreen } from "./email-screen.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
 
 const LOCAL: EmailInbox = {
   mode: "local_capture",
@@ -40,7 +43,10 @@ function api(inbox: EmailInbox = LOCAL): DashboardApi {
 
 async function mount(inbox: EmailInbox = LOCAL) {
   const client = api(inbox);
-  const mounted = await mountWidget<EmailScreen>("dashboard-email-screen", { api: client });
+  const mounted = await mountWidget<EmailScreen>("dashboard-email-screen", {
+    api: client,
+    canReadCaptured: true,
+  });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await mounted.el.updateComplete;
   return { ...mounted, api: client };
@@ -50,6 +56,38 @@ const q = (el: EmailScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
 
 describe("email-screen", () => {
+  it("updates the visible heading when the screen language changes", async () => {
+    setLocale("en-GB");
+    const { el } = await mount({ mode: "smtp", count: 0, messages: [] });
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Email");
+    setLocale("es");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Correo"));
+  });
+  it("shows managers the delivery mode without captured headers, snippets, links or a misleading empty inbox", async () => {
+    const client = api();
+    const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", {
+      api: client,
+      canReadCaptured: false,
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=local-capture]")).not.toBeNull());
+    expect(q(el, ".message-list")).toBeNull();
+    expect(q(el, ".empty")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("Set up your account");
+    expect(el.shadowRoot!.textContent).not.toContain("Open the link");
+    expect(client.getTestEmail).not.toHaveBeenCalled();
+  });
+
+  it("ignores a captured-message click after the permission is removed", async () => {
+    const { el, api: client } = await mount();
+    await vi.waitFor(() => expect(q(el, "[data-test=message-mail-1]")).not.toBeNull());
+    const old = q(el, "[data-test=message-mail-1]")!;
+    el.canReadCaptured = false;
+    await el.updateComplete;
+    old.click();
+    await el.updateComplete;
+    expect(client.getTestEmail).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=message-body]")).toBeNull();
+  });
   it("opens the local test inbox and lists captured messages", async () => {
     const { el, api: client } = await mount();
 
@@ -86,7 +124,10 @@ describe("email-screen", () => {
   it("shows a localized alert when the inbox cannot be loaded", async () => {
     const client = api();
     client.getEmailInbox = vi.fn().mockRejectedValue({ code: "server.internal" });
-    const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", { api: client });
+    const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", {
+      api: client,
+      canReadCaptured: true,
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
 
@@ -98,7 +139,10 @@ describe("email-screen", () => {
 it("refreshes the inbox without a screen action", async () => {
   const liveData = new LiveData();
   const client = Object.assign(api(), { liveData });
-  const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", { api: client });
+  const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", {
+    api: client,
+    canReadCaptured: true,
+  });
   await vi.waitFor(() => expect(q(el, "[data-test=message-mail-1]")).not.toBeNull());
   vi.mocked(client.getEmailInbox).mockResolvedValue({ ...LOCAL, count: 0, messages: [] });
   liveData.invalidate([{ type: "email_inbox" }]);
@@ -123,7 +167,10 @@ describe("email-screen message and inbox edge cases", () => {
   }
 
   async function openFirst(client: DashboardApi) {
-    const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", { api: client });
+    const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", {
+      api: client,
+      canReadCaptured: true,
+    });
     await vi.waitFor(() => expect(q(el, "[data-test=message-mail-1]")).not.toBeNull());
     q(el, "[data-test=message-mail-1]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=message-body]")).not.toBeNull());
@@ -196,7 +243,10 @@ describe("email-screen message and inbox edge cases", () => {
         date: LOCAL.messages[0]!.createdAt,
         text: "Welcome",
       });
-    const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", { api: client });
+    const { el } = await mountWidget<EmailScreen>("dashboard-email-screen", {
+      api: client,
+      canReadCaptured: true,
+    });
     await vi.waitFor(() => expect(q(el, "[data-test=message-mail-1]")).not.toBeNull());
 
     q(el, "[data-test=message-mail-1]")!.click();

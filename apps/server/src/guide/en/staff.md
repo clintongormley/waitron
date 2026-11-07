@@ -18,6 +18,8 @@ email is set up; for when Waitron refuses it or it changes nothing, see
 [Common losses](data-protection.md#breach-losses). Disabling an account also deletes the person's
 PIN, password, passkeys, two-factor settings, recovery codes and Google link. Re-enabling it sends a new invitation. Managers do not see these actions.
 
+To configure delivery of these links, open [Email settings](email.md#set-up).
+
 If Waitron cannot verify your passkey, you can retry or choose **Use your password** to sign in.
 On the password screen, **I’ve forgotten my password** requests an email with a link to choose
 a new password. The acknowledgement is the same for every address; it does not confirm that an

@@ -35,21 +35,32 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
     "login",
     "saving",
     "read-failure",
+    "remove",
+    "remove-refused",
+    "prepare-blank",
+    "dev-stored",
   ] as const)(
     "renders accessible %s at phone and desktop widths in both languages",
     async (state) => {
       const view: EmailSettingsView =
         state === "unconfigured"
           ? { mode: "unconfigured", editable: true, settings: null }
-          : state === "captured"
-            ? { mode: "local_capture", editable: false, settings: null }
-            : { ...stored, editable: state !== "prepare" };
+          : state === "prepare-blank"
+            ? { mode: "local_capture", editable: true, settings: null }
+            : state === "captured"
+              ? { mode: "local_capture", editable: false, settings: null }
+              : {
+                  ...stored,
+                  mode: state === "dev-stored" ? "local_capture" : "smtp",
+                  editable: state !== "prepare",
+                };
       const api = {
         getEmailSettings:
           state === "read-failure"
             ? vi.fn().mockRejectedValue({ code: "connection.failed" })
             : vi.fn().mockResolvedValue(view),
         saveEmailSettings: vi.fn(() => new Promise<never>(() => {})),
+        removeEmailSettings: vi.fn().mockRejectedValue({ code: "connection.failed" }),
         testEmailSettings: vi.fn().mockResolvedValue(
           state === "accepted"
             ? { accepted: true }
@@ -70,7 +81,11 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
       } as unknown as DashboardApi;
       const { el, host } = await mountWidget<
         HTMLElementTagNameMap["dashboard-email-settings-panel"]
-      >("dashboard-email-settings-panel", { api }, theme);
+      >(
+        "dashboard-email-settings-panel",
+        { api, intent: state === "prepare-blank" ? "prepare" : "live" },
+        theme,
+      );
       await vi.waitFor(() =>
         expect(
           el.shadowRoot!.querySelector(
@@ -78,6 +93,17 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
           ),
         ).not.toBeNull(),
       );
+      if (state === "remove" || state === "remove-refused") {
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove]")!.click();
+        await el.updateComplete;
+        await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+        if (state === "remove-refused") {
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-confirm]")!.click();
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
+          );
+        }
+      }
       if (
         [
           "initial",

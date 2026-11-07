@@ -1919,8 +1919,8 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   boundary and a domain refusal, then test invalid values before they reach storage.
 
 - **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare still
-  refuses email in setup and in settings. Cut B adds actionable SMTP test results to both forms.
-  Left: Prepare settings, then the Prepare wizard and routing cut.
+  refuses email in setup. Settings now lets admins save and remove the relay, with manager reads
+  and actionable SMTP tests. Left: the Prepare wizard and routing cut, then invoice sender naming.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987

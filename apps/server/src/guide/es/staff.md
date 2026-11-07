@@ -20,6 +20,8 @@ borra su PIN, contraseña, llaves de acceso, verificación en dos pasos, código
 vínculo con Google. Al volver a habilitarla se envía una nueva
 invitación. Los gerentes no ven estas acciones.
 
+Para configurar el envío de estos enlaces, abre [Configuración del correo](email.md#set-up).
+
 Si Waitron no puede verificar tu passkey, puedes reintentarlo o elegir **Usar tu contraseña**
 para iniciar sesión. En la pantalla de contraseña, **¿Has olvidado tu contraseña?** solicita un
 correo con un enlace para elegir una nueva. La confirmación es la misma para todas las direcciones;

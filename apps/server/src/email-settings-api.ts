@@ -1,11 +1,17 @@
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
+import {
+  deleteCredential,
+  putCredential,
+  tryGetCredential,
+  type KeyRing,
+} from "@waitron/credentials";
 import { authorizeManager, persons, roleHasPermission, type Permission } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import { credentialField } from "./credentials.js";
 import type { Logger } from "./logger.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { OnboardingIntent } from "./trading-config.js";
@@ -42,30 +48,32 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       permission,
     });
   };
-  const editable =
-    deps.config.onboardingIntent !== "demo" && deps.config.onboardingIntent !== "prepare";
+  const editable = deps.config.onboardingIntent !== "demo";
   app.get("/management-api/email/settings", (c) =>
     run(c, log, async () => {
-      const actor = await withTransaction(deps.db, (tx) => authorize(tx, c));
+      const { actor, stored } = await withTransaction(deps.db, async (tx) => ({
+        actor: await authorize(tx, c),
+        stored: editable ? await tryGetCredential(tx, deps.ring, { purpose: "email.smtp" }) : null,
+      }));
       const canEdit = editable && roleHasPermission(actor.role, "person.admin");
       const delivery = await resolveInvoiceEmailDelivery(deps.db, deps.ring, deps.config);
-      if (delivery.mode !== "smtp")
+      if (stored === null)
         return c.json({ mode: delivery.mode, editable: canEdit, settings: null });
       let url: URL;
       try {
-        url = new URL(delivery.smtp.url);
+        url = new URL(credentialField(stored, "email.smtp", "url"));
         if (!["smtp:", "smtps:"].includes(url.protocol) || !url.hostname) throw new Error();
       } catch {
         throw new AppError("server.credential_unusable", { purpose: "email.smtp", field: "url" });
       }
       return c.json({
-        mode: "smtp",
+        mode: delivery.mode,
         editable: canEdit,
         settings: {
           server: url.hostname,
           port: Number(url.port || (url.protocol === "smtps:" ? 465 : 587)),
           encryption: url.protocol === "smtps:" ? "tls" : "starttls",
-          from: delivery.smtp.from,
+          from: credentialField(stored, "email.smtp", "from"),
           hasAuthentication: url.username !== "",
         },
       });

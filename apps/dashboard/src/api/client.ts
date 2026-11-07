@@ -668,13 +668,11 @@ export interface EmailSettingsDraft {
   from: string;
 }
 
-export type EmailSettingsView =
-  | {
-      mode: "smtp";
-      editable: boolean;
-      settings: Omit<EmailSettingsDraft, "user" | "password"> & { hasAuthentication: boolean };
-    }
-  | { mode: "local_capture" | "unconfigured"; editable: boolean; settings: null };
+export interface EmailSettingsView {
+  mode: "smtp" | "local_capture" | "unconfigured";
+  editable: boolean;
+  settings: (Omit<EmailSettingsDraft, "user" | "password"> & { hasAuthentication: boolean }) | null;
+}
 
 export const SMTP_TEST_CODES = [
   "email.test_host_not_found",
@@ -2731,6 +2729,10 @@ export class DashboardApi {
 
   saveEmailSettings(body: EmailSettingsDraft): Promise<{ saved: true }> {
     return this.#request("/management-api/email/settings", "PUT", body);
+  }
+
+  removeEmailSettings(): Promise<{ removed: true }> {
+    return this.#request("/management-api/email/settings", "DELETE");
   }
 
   testEmailSettings(body: EmailSettingsDraft): Promise<EmailSettingsTestResult> {

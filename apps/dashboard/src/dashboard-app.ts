@@ -298,6 +298,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "payments", labelKey: "nav.payments", requiresManager: true },
+      { screen: "email", labelKey: "nav.email", requiresManager: true },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "box-status", labelKey: "nav.box_status", requiresPermission: "system.manage" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
@@ -311,7 +312,6 @@ const NAV_GROUPS: NavGroup[] = [
 /** Core screens with no sidebar entry whose access rule #permittedScreen reads from here. */
 const UNLISTED_SCREENS: ScreenRule[] = [
   { screen: "my-schedule" },
-  { screen: "email", requiresManager: true },
   { screen: "demo-printer", requiresManager: true },
   { screen: "demo-reader", requiresManager: true },
   { screen: "floor-plan", requiresPermission: "venue.configure" },
@@ -2463,6 +2463,12 @@ export class DashboardApp extends LitElement {
       ];
     const shown = (items: NavItem[] = []): NavPage[] =>
       items
+        .filter(
+          (item) =>
+            item.screen !== "email" ||
+            this.onboardingIntent === "prepare" ||
+            this.onboardingIntent === "live",
+        )
         .filter((item) => this.#mayOpen(item))
         .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
     return NAV_GROUPS.map((group) => {
@@ -3000,6 +3006,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-email-screen
           .api=${this.api}
           .canManage=${this.#sessionPermissions.includes("system.manage")}
+          .canReadCaptured=${this.#sessionPermissions.includes("person.admin")}
+          .intent=${this.onboardingIntent}
         ></dashboard-email-screen>`;
       case "demo-printer":
         return html`<dashboard-demo-printer-screen

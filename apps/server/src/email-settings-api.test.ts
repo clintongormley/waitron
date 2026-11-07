@@ -107,6 +107,7 @@ function mount(
   intent: "demo" | "prepare" | "live" | undefined = "live",
   log: Logger = () => {},
   sendTest?: typeof sendSmtpTestMessage,
+  devMode = false,
 ) {
   const app = new Hono();
   mountEmailSettingsApi(
@@ -114,7 +115,7 @@ function mount(
     {
       db: suite.db,
       ring,
-      config: { onboardingIntent: intent, devMode: false },
+      config: { onboardingIntent: intent, devMode },
       ...(sendTest === undefined ? {} : { sendTest }),
     },
     log,
@@ -232,7 +233,7 @@ describe("SMTP settings", () => {
     expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
   });
-  it.each(["demo", "prepare"] as const)(
+  it.each(["demo"] as const)(
     "refuses a change in %s and leaves its configured credential intact",
     async (intent) => {
       const venue = await setupVenue();
@@ -254,28 +255,18 @@ describe("SMTP settings", () => {
         ),
       ).toEqual({ url: "smtps://old:old-secret@old.example.test:465", from: "old@example.test" });
       const read = await request(app, venue.admin);
-      expect(await read.json()).toEqual(
-        intent === "demo"
-          ? { mode: "local_capture", editable: false, settings: null }
-          : {
-              mode: "smtp",
-              editable: false,
-              settings: {
-                server: "old.example.test",
-                port: 465,
-                encryption: "tls",
-                from: "old@example.test",
-                hasAuthentication: true,
-              },
-            },
-      );
+      expect(await read.json()).toEqual({
+        mode: "local_capture",
+        editable: false,
+        settings: null,
+      });
     },
   );
   it("a preparing venue without credentials reports captured mail", async () => {
     const venue = await setupVenue();
     expect(await (await request(mount("prepare"), venue.admin)).json()).toEqual({
       mode: "local_capture",
-      editable: false,
+      editable: true,
       settings: null,
     });
   });
@@ -390,7 +381,7 @@ describe("SMTP settings test request", () => {
       },
     });
   });
-  it.each(["demo", "prepare"] as const)("refuses a proposed SMTP test in %s", async (intent) => {
+  it.each(["demo"] as const)("refuses a proposed SMTP test in %s", async (intent) => {
     const venue = await setupVenue();
     const response = await testRequest(mount(intent), venue.manager, settings);
     expect(response.status).toBe(409);
@@ -631,6 +622,99 @@ it("keeps SMTP settings read-only for a manager", async () => {
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ mode: "unconfigured", editable: false, settings: null });
 });
+
+it("lets a Prepare admin save, read and remove a sealed relay while managers only read and test their own proposal", async () => {
+  const venue = await setupVenue();
+  const rig = await smtpRig("accepted", true);
+  try {
+    const app = mount(
+      "prepare",
+      () => {},
+      (config, recipient) => sendSmtpTestMessage(config, recipient, { ca: smtpTestTls.caCertPem }),
+    );
+    expect((await request(app, venue.admin, settings)).status).toBe(200);
+    const before = await suite.db.select().from(tenantCredentials);
+    expect(JSON.stringify(before)).not.toContain("p@ss:word");
+    const redacted = {
+      server: "smtp.example.test",
+      port: 587,
+      encryption: "starttls",
+      from: "venue@example.test",
+      hasAuthentication: true,
+    };
+    expect(await (await request(app, venue.admin)).json()).toEqual({
+      mode: "smtp",
+      editable: true,
+      settings: redacted,
+    });
+    expect(await (await request(app, venue.manager)).json()).toEqual({
+      mode: "smtp",
+      editable: false,
+      settings: redacted,
+    });
+    const refused = await request(app, venue.manager, settings);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+    });
+    const tested = await app.request(path + "/test", {
+      method: "POST",
+      headers: { cookie: venue.manager, "content-type": "application/json" },
+      body: JSON.stringify({
+        server: "127.0.0.1",
+        port: Number(new URL(rig.config.url).port),
+        encryption: "tls",
+        from: "proposed@example.test",
+        recipient: "attacker@example.test",
+      }),
+    });
+    expect(tested.status).toBe(200);
+    expect(await tested.json()).toEqual({ accepted: true });
+    expect(rig.messages).toHaveLength(1);
+    expect(rig.messages[0]).toContain("To: manager@example.test");
+    expect(rig.messages[0]).not.toContain("attacker@example.test");
+    expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+    const removed = await app.request(path, { method: "DELETE", headers: { cookie: venue.admin } });
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ removed: true });
+    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    expect(await (await request(app, venue.admin)).json()).toEqual({
+      mode: "local_capture",
+      editable: true,
+      settings: null,
+    });
+  } finally {
+    await rig.close();
+  }
+});
+
+it.each(["prepare", "live"] as const)(
+  "shows stored settings separately from development capture in %s",
+  async (intent) => {
+    const venue = await setupVenue();
+    expect((await request(mount(), venue.admin, settings)).status).toBe(200);
+    const app = mount(intent, () => {}, undefined, true);
+    expect(await (await request(app, venue.admin)).json()).toEqual({
+      mode: "local_capture",
+      editable: true,
+      settings: {
+        server: "smtp.example.test",
+        port: 587,
+        encryption: "starttls",
+        from: "venue@example.test",
+        hasAuthentication: true,
+      },
+    });
+    const removed = await app.request(path, { method: "DELETE", headers: { cookie: venue.admin } });
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ removed: true });
+    expect(await (await request(app, venue.admin)).json()).toEqual({
+      mode: "local_capture",
+      editable: true,
+      settings: null,
+    });
+  },
+);
 
 describe("removing saved SMTP settings", () => {
   const remove = (app: Hono, cookie?: string) =>

@@ -1084,10 +1084,11 @@ export const en = {
   "demo_printer.empty": "Nothing has printed yet.",
   "demo_printer.drawer_opened": "The cash drawer opened.",
   "nav.payments": "Card payments",
-  "email.title": "Account email",
+  "nav.email": "Email",
+  "email.title": "Email",
   "email.local_capture":
     "Messages are captured on this box. No email is sent to the public internet.",
-  "email.smtp": "Messages are delivered through your configured SMTP gateway.",
+  "email.smtp": "Account email is sent to real inboxes through your configured mail server.",
   "email.unconfigured":
     "Email is not configured. Invitations and password-reset links cannot be delivered.",
   "email.empty": "No captured messages yet.",
@@ -1095,7 +1096,17 @@ export const en = {
   "email.from": "From",
   "email.to": "To",
   "email.open_link": "Open account link",
-  "email.settings.heading": "Invoice email",
+  "email.settings.heading": "Mail server",
+  "email.settings.guide": "Help with email settings",
+  "email.settings.remove_help": "What happens when you remove the mail server",
+  "email.settings.remove": "Remove mail server",
+  "email.settings.stop": "Stop",
+  "email.settings.prepare_save":
+    "Saving a mail server sends invitations and password-reset links to real inboxes.",
+  "email.settings.remove_capture":
+    "Remove the saved mail server? Email will be kept in this box's test inbox again. Stop keeps the server settings.",
+  "email.settings.remove_live":
+    "Remove the saved mail server? Account email cannot be sent and invoices cannot be emailed until you set up another server. Trading continues. Stop keeps the server settings.",
   "email.settings.change": "Change mail server",
   "email.settings.set_up": "Set up mail server",
   "email.settings.unavailable": "Invoices cannot be emailed until you set up a mail server.",
@@ -4884,10 +4895,11 @@ export const es: Record<StringKey, string> = {
   "demo_printer.empty": "Todavía no se ha impreso nada.",
   "demo_printer.drawer_opened": "Se abrió el cajón de efectivo.",
   "nav.payments": "Pagos con tarjeta",
-  "email.title": "Correo de cuentas",
+  "nav.email": "Correo",
+  "email.title": "Correo",
   "email.local_capture":
     "Los mensajes se guardan en este equipo. No se envía ningún correo a Internet.",
-  "email.smtp": "Los mensajes se envían mediante la pasarela SMTP configurada.",
+  "email.smtp": "El correo de cuentas llega a buzones reales mediante el servidor configurado.",
   "email.unconfigured":
     "El correo no está configurado. No se pueden enviar invitaciones ni enlaces para restablecer contraseñas.",
   "email.empty": "Aún no hay mensajes guardados.",
@@ -4895,7 +4907,17 @@ export const es: Record<StringKey, string> = {
   "email.from": "De",
   "email.to": "Para",
   "email.open_link": "Abrir enlace de cuenta",
-  "email.settings.heading": "Correo de facturas",
+  "email.settings.heading": "Servidor de correo",
+  "email.settings.guide": "Ayuda con la configuración del correo",
+  "email.settings.remove_help": "Qué ocurre al quitar el servidor de correo",
+  "email.settings.remove": "Quitar servidor de correo",
+  "email.settings.stop": "Parar",
+  "email.settings.prepare_save":
+    "Al guardar un servidor, las invitaciones y los enlaces para restablecer contraseñas llegan a buzones reales.",
+  "email.settings.remove_capture":
+    "¿Quitar el servidor guardado? El correo volverá a quedarse en el buzón de prueba de esta caja. Parar conserva la configuración.",
+  "email.settings.remove_live":
+    "¿Quitar el servidor guardado? No se enviarán correos de cuentas ni facturas hasta que configures otro servidor. Las ventas continúan. Parar conserva la configuración.",
   "email.settings.change": "Cambiar servidor de correo",
   "email.settings.set_up": "Configurar servidor de correo",
   "email.settings.unavailable":

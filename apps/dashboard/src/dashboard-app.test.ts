@@ -116,6 +116,42 @@ const meResponse = {
   modules: ["bookings"],
 };
 
+it.each(["prepare", "live", "demo", undefined] as const)(
+  "lists Email under Settings only for eligible roles in %s",
+  async (intent) => {
+    for (const role of ["admin", "manager", "supervisor", "staff"] as const) {
+      history.replaceState(null, "", "/manage/email");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            onboardingIntent: intent,
+            permissions:
+              role === "admin"
+                ? ["system.manage", "person.admin"]
+                : role === "manager"
+                  ? ["system.manage"]
+                  : [],
+          }),
+          getEmailInbox: vi.fn(() => new Promise(() => undefined)),
+          getEmailSettings: vi.fn(() => new Promise(() => undefined)),
+        }),
+      });
+      await flush(el);
+      const visible =
+        (intent === "prepare" || intent === "live") && (role === "admin" || role === "manager");
+      expect(navItem(el, "email") !== null).toBe(visible);
+      const screen = el.shadowRoot!.querySelector("dashboard-email-screen");
+      if (role === "admin" || role === "manager") {
+        expect(screen).not.toBeNull();
+        expect(screen!.canReadCaptured).toBe(role === "admin");
+      } else expect(screen).toBeNull();
+      cleanupWidgets();
+    }
+  },
+);
+
 /** Every read the shell and the screens it mounts make on connect resolves: a stray rejection is a
  * finding. */
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
@@ -2524,7 +2560,7 @@ describe("dashboard-app", () => {
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(navItem(el, "email"), "the banner's inbox link is the way to the inbox").toBeNull();
+    expect(navItem(el, "email"), "Prepare email settings are also in Settings").not.toBeNull();
     expect(navItem(el, "sections")).toBeNull();
     expect(navItem(el, "recipe")).toBeNull();
     expect(navItem(el, "location-menus")).toBeNull();
@@ -3778,7 +3814,7 @@ describe("dashboard-app", () => {
     ["admin", "dashboard-email-screen", "/manage/email"],
     ["supervisor", "dashboard-overview-screen", "/manage/overview"],
   ])(
-    "opens /manage/email, which has no sidebar entry, signed in as %s, only for a manager or an admin",
+    "opens /manage/email from Settings signed in as %s, only for a manager or an admin",
     async (role, tag, path) => {
       history.replaceState(null, "", "/manage/email");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -3789,7 +3825,7 @@ describe("dashboard-app", () => {
         }),
       });
       await flush(el);
-      expect(navItem(el, "email")).toBeNull();
+      expect(navItem(el, "email") !== null).toBe(role !== "supervisor");
       expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
       expect(location.pathname).toBe(path);
     },

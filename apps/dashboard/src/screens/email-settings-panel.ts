@@ -3,11 +3,14 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "../widgets/email-settings-form.js";
 import type { DashboardApi, EmailSettingsView } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { guideHref } from "../help-guide.js";
 
 @customElement("dashboard-email-settings-panel")
 export class EmailSettingsPanel extends LitElement {
@@ -35,13 +38,23 @@ export class EmailSettingsPanel extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  @property() intent?: "demo" | "prepare" | "live";
   @state() private view?: EmailSettingsView;
   @state() private readError?: string;
   @state() private editor?: { settings: EmailSettingsView["settings"] };
+  @state() private removeOpen = false;
+  @state() private removing = false;
+  @state() private actionError?: string;
+  @state() private modeKnown = true;
   #generation = 0;
+  #lifetime = 0;
+  #focusAfterRemove = false;
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -52,6 +65,11 @@ export class EmailSettingsPanel extends LitElement {
   }
   override disconnectedCallback(): void {
     ++this.#generation;
+    ++this.#lifetime;
+    this.removeOpen = false;
+    this.removing = false;
+    this.actionError = undefined;
+    this.#focusAfterRemove = false;
     super.disconnectedCallback();
   }
   override updated(changed: PropertyValues): void {
@@ -71,6 +89,7 @@ export class EmailSettingsPanel extends LitElement {
       const view = await (this.api.background ?? this.api).getEmailSettings();
       if (!this.isConnected || generation !== this.#generation) return;
       this.view = view;
+      this.modeKnown = true;
       this.readError = undefined;
     } catch (error) {
       if (this.isConnected && generation === this.#generation) this.readError = codeOf(error);
@@ -84,7 +103,46 @@ export class EmailSettingsPanel extends LitElement {
     )
       return;
     if (event.detail.close) this.editor = undefined;
+    this.api.liveData?.invalidate([{ type: "email_inbox" }]);
     void this.#load();
+  }
+  async #remove(): Promise<void> {
+    if (
+      !this.isConnected ||
+      !this.removeOpen ||
+      this.removing ||
+      !this.view?.editable ||
+      !this.view.settings
+    )
+      return;
+    const lifetime = this.#lifetime;
+    const current = () => this.isConnected && lifetime === this.#lifetime;
+    this.removing = true;
+    this.actionError = undefined;
+    try {
+      await this.api.removeEmailSettings();
+      if (!current()) return;
+      ++this.#generation;
+      this.view = { ...this.view!, settings: null };
+      this.modeKnown = false;
+      this.#focusAfterRemove = true;
+      this.removeOpen = false;
+      this.api.liveData?.invalidate([{ type: "email_inbox" }]);
+    } catch (error) {
+      if (current()) this.actionError = codeOf(error);
+    } finally {
+      if (current()) this.removing = false;
+    }
+  }
+  async #removedClosed(event: Event): Promise<void> {
+    event.stopPropagation();
+    this.removeOpen = false;
+    if (!this.isConnected || !this.#focusAfterRemove) return;
+    this.#focusAfterRemove = false;
+    const lifetime = this.#lifetime;
+    await this.updateComplete;
+    await this.#focusChange();
+    if (this.isConnected && lifetime === this.#lifetime) void this.#load();
   }
   override render(): TemplateResult {
     const view = this.view;
@@ -93,9 +151,14 @@ export class EmailSettingsPanel extends LitElement {
       ${
         view
           ? html`<div class="summary" data-test="summary">
-              <p>
-                ${t(view.mode === "smtp" ? "email.settings.gateway" : view.mode === "local_capture" ? "email.settings.captured" : "email.settings.unavailable")}
-              </p>
+              ${
+                this.modeKnown
+                  ? html`<p>
+                      ${t(view.mode === "smtp" ? "email.settings.gateway" : view.mode === "local_capture" ? "email.settings.captured" : "email.settings.unavailable")}
+                    </p>`
+                  : nothing
+              }
+              ${this.intent === "prepare" && !view.settings ? html`<p>${t("email.settings.prepare_save")}</p>` : nothing}
               ${
                 view.settings
                   ? html`<p>
@@ -135,16 +198,76 @@ export class EmailSettingsPanel extends LitElement {
             )
           : view?.editable
             ? html`<wt-button
-                data-test="change"
-                variant="secondary"
-                @click=${() => {
-                  if (this.isConnected && this.view?.editable)
-                    this.editor = { settings: this.view.settings };
-                }}
-                >${t(view.settings ? "email.settings.change" : "email.settings.set_up")}</wt-button
-              >`
+                  data-test="change"
+                  variant="secondary"
+                  @click=${() => {
+                    if (this.isConnected && this.view?.editable)
+                      this.editor = { settings: this.view.settings };
+                  }}
+                  >${t(view.settings ? "email.settings.change" : "email.settings.set_up")}</wt-button
+                >
+                ${
+                  view.settings
+                    ? html`<wt-button
+                        data-test="remove"
+                        variant="danger"
+                        .disabled=${this.removing}
+                        @click=${() => {
+                          if (
+                            this.isConnected &&
+                            this.view?.editable &&
+                            this.view.settings &&
+                            !this.editor &&
+                            !this.removing
+                          ) {
+                            this.actionError = undefined;
+                            this.removeOpen = true;
+                          }
+                        }}
+                        >${t("email.settings.remove")}</wt-button
+                      >`
+                    : nothing
+                }`
             : nothing
       }
+      <wt-dialog
+        data-test="remove-dialog"
+        .open=${this.removeOpen}
+        .dismissible=${!this.removing}
+        .heading=${t("email.settings.remove")}
+        @wt-close=${(event: Event) => void this.#removedClosed(event)}
+      >
+        <p>
+          ${t(
+            this.intent === "prepare" || this.view?.mode === "local_capture"
+              ? "email.settings.remove_capture"
+              : "email.settings.remove_live",
+          )}
+        </p>
+        <p><a href=${guideHref("email.remove")}>${t("email.settings.remove_help")}</a></p>
+        <wt-form-actions
+          slot="footer"
+          data-test="remove-actions"
+          .error=${this.actionError ? codeMessage(this.actionError) : ""}
+        >
+          <wt-button
+            data-test="remove-stop"
+            variant="secondary"
+            .disabled=${this.removing}
+            @click=${() => {
+              if (!this.removing) this.removeOpen = false;
+            }}
+            >${t("email.settings.stop")}</wt-button
+          >
+          <wt-button
+            data-test="remove-confirm"
+            variant="danger"
+            .disabled=${this.removing}
+            @click=${() => void this.#remove()}
+            >${t("email.settings.remove")}</wt-button
+          >
+        </wt-form-actions>
+      </wt-dialog>
     </section>`;
   }
 }

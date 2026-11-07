@@ -12,3 +12,10 @@ it("keeps the section", () => {
   expect(guideHref("products.selling-unit", "en-GB")).toBe("/help/en/products#selling-unit");
   expect(guideHref("products.variants", "en-GB")).toBe("/help/en/products#variants");
 });
+
+it("links mail settings and removal to both guide languages", () => {
+  expect(guideHref("email.set-up", "en-GB")).toBe("/help/en/email#set-up");
+  expect(guideHref("email.remove", "en-GB")).toBe("/help/en/email#remove");
+  expect(guideHref("email.set-up", "es")).toBe("/help/es/email#set-up");
+  expect(guideHref("email.remove", "es")).toBe("/help/es/email#remove");
+});

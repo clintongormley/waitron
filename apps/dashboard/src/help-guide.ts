@@ -1,6 +1,8 @@
 import { currentLocale } from "./i18n/t.js";
 
 export const GUIDE_LINKS = {
+  "email.set-up": { page: "email", section: "set-up" },
+  "email.remove": { page: "email", section: "remove" },
   "email.test-results": { page: "email", section: "test-results" },
   "venue.time-zone": { page: "time-zone", section: "confirm" },
   "products.selling-unit": { page: "products", section: "selling-unit" },
