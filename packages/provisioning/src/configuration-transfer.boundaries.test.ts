@@ -246,7 +246,6 @@ it.each([
 );
 
 it.each([
-  { change: { modules: { extra: 1 } }, field: "modules" },
   { change: { tables: { secret: [] } }, field: "tables" },
   { change: { tables: {} }, field: "table:zz_parents" },
   { change: { tables: { zz_parents: [null] } }, field: "table:zz_parents" },
@@ -263,25 +262,85 @@ it.each([
   ).toThrow(expect.objectContaining(invalid(field)));
 });
 
-it.each([{ "synthetic-transfer": 2 }, { "synthetic-transfer": 0 }])(
-  "refuses a module version that differs in either direction as another version: %j",
-  (exported) => {
-    const bundle = { ...configurationBundle(), modules: exported };
-    expect(() =>
-      validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
-        "synthetic-transfer": 1,
-      }),
-    ).toThrow(expect.objectContaining({ code: "setup.configuration_other_version", params: {} }));
+it.each([
+  { exported: 2, code: "setup.configuration_newer" },
+  { exported: 0, code: "setup.configuration_outdated" },
+])("refuses a module version $exported against this box's 1 as $code", ({ exported, code }) => {
+  const bundle = { ...configurationBundle(), modules: { "synthetic-transfer": exported } };
+  expect(() =>
+    validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
+      "synthetic-transfer": 1,
+    }),
+  ).toThrow(expect.objectContaining({ code, params: {} }));
+});
+
+it.each([
+  { order: "the older module first", names: ["synthetic-older", "synthetic-newer"] },
+  { order: "the newer module first", names: ["synthetic-newer", "synthetic-older"] },
+])("refuses an export with one module older and one newer as newer, with $order", ({ names }) => {
+  const modules = names.map((name) => ({ ...moduleWith([]), name }));
+  const bundle = {
+    ...configurationBundle(),
+    modules: { "synthetic-older": 0, "synthetic-newer": 2 },
+  };
+  expect(() =>
+    validateConfigurationBundle(bundle, modules, {
+      "synthetic-older": 1,
+      "synthetic-newer": 1,
+    }),
+  ).toThrow(expect.objectContaining({ code: "setup.configuration_newer", params: {} }));
+});
+
+it.each([
+  { order: "the unrecorded module first", names: ["synthetic-unrecorded", "synthetic-newer"] },
+  { order: "the newer module first", names: ["synthetic-newer", "synthetic-unrecorded"] },
+])(
+  "refuses a module this server has no recorded version for ahead of a newer one, with $order",
+  ({ names }) => {
+    const modules = names.map((name) => ({ ...moduleWith([]), name }));
+    const bundle = {
+      ...configurationBundle(),
+      modules: { "synthetic-unrecorded": 1, "synthetic-newer": 2 },
+    };
+    expect(() => validateConfigurationBundle(bundle, modules, { "synthetic-newer": 1 })).toThrow(
+      expect.objectContaining(invalid("module:synthetic-unrecorded")),
+    );
   },
 );
 
-it("refuses an export that lacks a module the box runs as a module mismatch, not an older export", () => {
+it("refuses an export that lacks a module the box runs as parts that differ", () => {
   const bundle = { ...configurationBundle(), modules: {} };
   expect(() =>
     validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
       "synthetic-transfer": 1,
     }),
-  ).toThrow(expect.objectContaining(invalid("module:synthetic-transfer")));
+  ).toThrow(
+    expect.objectContaining({
+      code: "setup.configuration_parts_differ",
+      params: { exportOnly: [], serverOnly: ["synthetic-transfer"] },
+    }),
+  );
+});
+
+it("names every part that differs, both ways and sorted, before comparing versions", () => {
+  const second = { ...moduleWith([]), name: "synthetic-second" };
+  const third = { ...moduleWith([]), name: "synthetic-alpha" };
+  const bundle = {
+    ...configurationBundle(),
+    modules: { "synthetic-transfer": 99, zeta: 1, beta: 1 },
+  };
+  expect(() =>
+    validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }]), second, third], {
+      "synthetic-transfer": 1,
+      "synthetic-second": 1,
+      "synthetic-alpha": 1,
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: "setup.configuration_parts_differ",
+      params: { exportOnly: ["beta", "zeta"], serverOnly: ["synthetic-alpha", "synthetic-second"] },
+    }),
+  );
 });
 
 it("validates a bundle without a module that has no set of its own, and refuses one naming it", () => {
@@ -298,7 +357,12 @@ it("validates a bundle without a module that has no set of its own, and refuses 
       modules,
       versions,
     ),
-  ).toThrow(expect.objectContaining(invalid("modules")));
+  ).toThrow(
+    expect.objectContaining({
+      code: "setup.configuration_parts_differ",
+      params: { exportOnly: ["synthetic-setless"], serverOnly: [] },
+    }),
+  );
 });
 
 it("checks an import's module version before replacing its existing rows", async () => {
@@ -312,7 +376,7 @@ it("checks an import's module version before replacing its existing rows", async
       importConfigurationTables(tx, bundle, [moduleWith([{ name: "zz_parents" }])], {
         "synthetic-transfer": 1,
       }),
-    ).rejects.toMatchObject({ code: "setup.configuration_other_version", params: {} });
+    ).rejects.toMatchObject({ code: "setup.configuration_newer", params: {} });
     expect((await tx.execute(sql`select id from zz_parents`)).rows).toEqual([{ id: "retained" }]);
   });
 });

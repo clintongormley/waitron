@@ -147,11 +147,7 @@ export const shellEn = {
   "shell.configuration.outdated":
     "This configuration export is from an older format. Export it again from a current box.",
   "shell.configuration.newer":
-    "This export was made by newer Waitron software than this box has. Update this box, then load the export again.",
-  "shell.configuration.other_version":
-    "This export was made by a different version of Waitron, so this box cannot load it. Install that version on this box and try again, or make a new export on a box running this box's version.",
-  "shell.configuration.incompatible_version":
-    "This export was made by a different version of Waitron, or on a box that runs different parts of Waitron, so this box cannot load it. If the box it came from runs a different version, make a new export on a box running this box's version and load that. Otherwise, choose Start empty and enter the configuration yourself.",
+    "This export comes from a newer version of Waitron. Update the software on this server then load the export again.",
   "shell.configuration.could_not_open":
     "The configuration export could not be opened. Check the file and passphrase.",
   "shell.configuration.category_name_taken":
@@ -323,11 +319,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.configuration.outdated":
     "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un equipo actualizado.",
   "shell.configuration.newer":
-    "Esta exportación la hizo una versión de Waitron más nueva que la de este equipo. Actualiza este equipo y vuelve a cargar la exportación.",
-  "shell.configuration.other_version":
-    "Esta exportación la hizo otra versión de Waitron, así que este equipo no puede cargarla. Instala esa versión en este equipo y vuelve a intentarlo, o haz una exportación nueva en un equipo con la versión de este.",
-  "shell.configuration.incompatible_version":
-    "Esta exportación la hizo otra versión de Waitron, o un equipo que usa otras partes de Waitron, así que este equipo no puede cargarla. Si el equipo de origen tiene otra versión, haz una exportación nueva en un equipo con la versión de este y carga esa. Si no, elige «Empezar desde cero» y configúralo tú.",
+    "Esta exportación viene de una versión más reciente de Waitron. Actualiza el software de este servidor y vuelve a cargar la exportación.",
   "shell.configuration.could_not_open":
     "No se ha podido abrir la exportación de configuración. Revisa el archivo y la contraseña de exportación.",
   "shell.configuration.category_name_taken":

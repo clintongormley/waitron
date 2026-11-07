@@ -631,7 +631,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Until then
   any installation may be reset at any time instead of carrying its data forward (owner,
   2026-10-03). This rule expires the day a real venue is live; add its replacement in the same
-  change.
+  change. Its replacement: from go-live, retiring a module also ships a way for an older export that
+  names it to load, by ignoring or converting its configuration, so an export always moves forwards
+  (owner, 2026-11-07).
 
 ---
 

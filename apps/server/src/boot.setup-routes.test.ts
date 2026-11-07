@@ -1597,14 +1597,19 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       { venue: { taxId: "60000011A" } },
     ],
     [
-      "refuses, as a module mismatch, the export of a box with bookings switched off",
+      "refuses the export of a box with bookings switched off as running different parts, naming bookings as this server's alone",
       () =>
         venueModuleConfig(
           parseModuleConfig({ modules: { bookings: false } }, ALL_MODULES),
           "ES-common",
         ),
       400,
-      { error: { code: "setup.request_invalid", params: { field: "module:bookings" } } },
+      {
+        error: {
+          code: "setup.configuration_parts_differ",
+          params: { exportOnly: [], serverOnly: ["bookings"] },
+        },
+      },
     ],
   ] as const)(
     "%s",

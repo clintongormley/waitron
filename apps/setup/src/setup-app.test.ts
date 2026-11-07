@@ -3200,42 +3200,41 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     expect(readDraft(el).configurationImport).toBeUndefined();
   });
 
+  const refusedWith = async (locale: string, refusal: { code: string; params: unknown }) => {
+    const el = await mountSetupApp(
+      stubApi({
+        stageConfiguration: vi.fn().mockRejectedValue({ ...refusal, status: 400 }),
+      }),
+    );
+    setLocale(locale);
+    configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+    await flush(el);
+    expect(readDraft(el).configurationImport).toBeUndefined();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
+    return bottomOf(await screenHost(el, "live-source"));
+  };
+
+  const PARTS_DIFFER_EN =
+    "This export comes from a newer version of Waitron. Update the software on this server then load the export again.";
+  const PARTS_DIFFER_ES =
+    "Esta exportación viene de una versión más reciente de Waitron. Actualiza el software de este servidor y vuelve a cargar la exportación.";
+
   it.each([
-    [
-      "en-GB",
-      "This export was made by a different version of Waitron, or on a box that runs different parts of Waitron, so this box cannot load it. If the box it came from runs a different version, make a new export on a box running this box's version and load that. Otherwise, choose Start empty and enter the configuration yourself.",
-    ],
-    [
-      "es-ES",
-      "Esta exportación la hizo otra versión de Waitron, o un equipo que usa otras partes de Waitron, así que este equipo no puede cargarla. Si el equipo de origen tiene otra versión, haz una exportación nueva en un equipo con la versión de este y carga esa. Si no, elige «Empezar desde cero» y configúralo tú.",
-    ],
+    ["en-GB", { exportOnly: ["fiscal-verifactu"], serverOnly: ["fiscal-none"] }, PARTS_DIFFER_EN],
+    ["es-ES", { exportOnly: ["fiscal-verifactu"], serverOnly: ["fiscal-none"] }, PARTS_DIFFER_ES],
+    ["en-GB", { exportOnly: ["bookings"], serverOnly: [] }, PARTS_DIFFER_EN],
+    ["en-GB", { exportOnly: [], serverOnly: ["fiscal-verifactu"] }, PARTS_DIFFER_EN],
+    ["en-GB", { exportOnly: ["fiscal-none"], serverOnly: ["fiscal-verifactu"] }, PARTS_DIFFER_EN],
+    ["en-GB", { exportOnly: "fiscal-verifactu" }, PARTS_DIFFER_EN],
+    ["en-GB", undefined, PARTS_DIFFER_EN],
+    ["es-ES", { exportOnly: ["payments"], serverOnly: ["bookings"] }, PARTS_DIFFER_ES],
   ] as const)(
-    "explains an export from another version or using different parts of Waitron (%s)",
-    async (locale, sentence) => {
+    "gives the newer-version sentence for any parts that differ, whatever the lists name (%s, %j)",
+    async (locale, params, sentence) => {
       try {
-        for (const field of ["module:core", "modules"]) {
-          const el = await mountSetupApp(
-            stubApi({
-              stageConfiguration: vi.fn().mockRejectedValue({
-                code: "setup.request_invalid",
-                params: { field },
-                status: 400,
-              }),
-            }),
-          );
-          setLocale(locale);
-          configurationRequest(
-            el,
-            new File(["encrypted"], "prepared.waitron-config"),
-            "passphrase",
-          );
-          await flush(el);
-          expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
-          expect(readDraft(el).configurationImport).toBeUndefined();
-          expect(
-            el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]"),
-          ).toBeNull();
-        }
+        expect(
+          await refusedWith(locale, { code: "setup.configuration_parts_differ", params }),
+        ).toBe(sentence);
       } finally {
         setLocale("en-GB");
       }
@@ -3245,42 +3244,11 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "This export was made by a different version of Waitron, so this box cannot load it. Install that version on this box and try again, or make a new export on a box running this box's version.",
+      "This export comes from a newer version of Waitron. Update the software on this server then load the export again.",
     ],
     [
       "es-ES",
-      "Esta exportación la hizo otra versión de Waitron, así que este equipo no puede cargarla. Instala esa versión en este equipo y vuelve a intentarlo, o haz una exportación nueva en un equipo con la versión de este.",
-    ],
-  ] as const)("explains an export from a different version (%s)", async (locale, sentence) => {
-    try {
-      const el = await mountSetupApp(
-        stubApi({
-          stageConfiguration: vi.fn().mockRejectedValue({
-            code: "setup.configuration_other_version",
-            params: {},
-            status: 400,
-          }),
-        }),
-      );
-      setLocale(locale);
-      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
-      await flush(el);
-      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
-      expect(readDraft(el).configurationImport).toBeUndefined();
-      expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
-    } finally {
-      setLocale("en-GB");
-    }
-  });
-
-  it.each([
-    [
-      "en-GB",
-      "This export was made by newer Waitron software than this box has. Update this box, then load the export again.",
-    ],
-    [
-      "es-ES",
-      "Esta exportación la hizo una versión de Waitron más nueva que la de este equipo. Actualiza este equipo y vuelve a cargar la exportación.",
+      "Esta exportación viene de una versión más reciente de Waitron. Actualiza el software de este servidor y vuelve a cargar la exportación.",
     ],
   ] as const)("explains an export from newer software (%s)", async (locale, sentence) => {
     try {
@@ -3334,6 +3302,8 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     ["setup.request_invalid", "artifact"],
     ["setup.request_invalid", "module:"],
+    ["setup.request_invalid", "module:core"],
+    ["setup.request_invalid", "modules"],
     ["setup.request_invalid", 12],
     ["setup.request_invalid", undefined],
     ["backup.artifact_invalid", "module:core"],

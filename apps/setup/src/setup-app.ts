@@ -464,15 +464,8 @@ const PRIVACY_CONTACT_MESSAGES: Record<string, { invalid: StringKey; tooLong: St
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
-  if (code === "setup.configuration_newer") return say("shell.configuration.newer");
-  if (code === "setup.configuration_other_version") return say("shell.configuration.other_version");
-  if (
-    code === "setup.request_invalid" &&
-    typeof params?.field === "string" &&
-    (params.field === "modules" ||
-      (params.field.startsWith("module:") && params.field.length > "module:".length))
-  ) {
-    return say("shell.configuration.incompatible_version");
+  if (code === "setup.configuration_newer" || code === "setup.configuration_parts_differ") {
+    return say("shell.configuration.newer");
   }
   if (code === "venue.detail_invalid" && typeof params?.field === "string") {
     const privacy = Object.hasOwn(PRIVACY_CONTACT_MESSAGES, params.field)

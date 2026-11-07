@@ -2445,10 +2445,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
   transaction while another is still running.
 
-- **`declarations` in `apps/server/src/configuration-transfer.ts` uses `module:<name>` when a local
-  module lacks its transfer declaration** — left open by A261-2e's review (#1277). Reachability with
-  the installed module list is unverified; distinguish that local build defect from an incompatible
-  artifact if it can reach setup.
+- **A module this server runs with no transfer declaration, or no recorded version, is refused as
+  `setup.request_invalid` field `module:<name>`** (`packages/provisioning/src/configuration-transfer.ts`),
+  which setup words, when the export is uploaded, as "The configuration export could not be opened.
+  Check the file and passphrase." That blames the file for a fault in this server's own build. An
+  export from a box running other modules now has its own code, `setup.configuration_parts_differ`
+  (A1384). Left open by A261-2e's review (#1277); whether a shipped build can reach it is unverified.
 
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off

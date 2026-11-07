@@ -505,7 +505,7 @@ new taxpayer has its own fiscal records, invoice numbering and certificate, so i
 on a fresh database. Its menus, layouts, staff and settings can come from the old venue:
 
 1. Install the same Waitron release on the new box as on the old one. The import refuses an export
-   whose modules are at different versions, and one that leaves out a module the new box runs.
+   whose modules are at different versions, and one whose list of modules differs from the new box's.
 2. After the old venue's last sale, open its dashboard, go to Backups, and use Configuration export.
    Note the passphrase.
 3. Leave the old box and its backups as they are, and do not reset it (see

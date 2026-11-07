@@ -180,6 +180,13 @@ direction answers `setup.configuration_other_version` («made by a different ver
 since a migration squash resets the counts; `setup.configuration_newer` is the format version's
 alone, and `incompatible_version`'s words now also name another version.
 
+2026-11-07, later (owner decision): `setup.configuration_other_version` is gone. A module version
+above this box's answers `setup.configuration_newer` and one below `setup.configuration_outdated`; an
+export whose list of parts differs answers `setup.configuration_parts_differ`, naming both lists, and
+`incompatible_version` is gone: setup shows the newer-version sentence for it too (owner, 16:41).
+The code's two lists are for the logs, and a mixed export with one part newer and another older
+answers `setup.configuration_newer` (PR #2527 thread).
+
 **Existing tests whose expected code flips** (a behaviour change; the PR names each):
 
 - `packages/provisioning/src/configuration-transfer.boundaries.test.ts:53` (`{ version: 11 }`):
@@ -385,6 +392,13 @@ with `shell.configuration.other_version` ("This export was made by a different v
 so this box cannot load it. …"), since a migration squash resets the counts;
 `shell.configuration.newer` answers the format version alone, and `incompatible_version`'s words now
 also name another version (the words are in `apps/setup/src/i18n/strings/shell.ts`).
+
+2026-11-07, later (owner decision): `setup.configuration_other_version` is gone. A module version
+above this box's answers `setup.configuration_newer` and one below `setup.configuration_outdated`; an
+export whose list of parts differs answers `setup.configuration_parts_differ`, naming both lists, and
+`incompatible_version` is gone: setup shows the newer-version sentence for it too (owner, 16:41).
+The code's two lists are for the logs, and a mixed export with one part newer and another older
+answers `setup.configuration_newer` (PR #2527 thread).
 
 ## File structure
 
@@ -614,7 +628,8 @@ tests `apps/server/src/first-setup-start-again.test.ts`,
   `shell.configuration.newer`; drop `params.field === "version"` there. Add the EN and ES strings
   and reword `shell.configuration.incompatible_version` (words table).
   _2026-11-07: superseded for module versions; both directions throw
-  `setup.configuration_other_version` (see the dated note under the Decision)._
+  `setup.configuration_other_version` (see the dated note under the Decision); later that day
+  the owner restored newer and outdated for module versions (the second dated note there)._
 - [ ] **Step 4:** the three commands green. Also run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-command-deployment`
   (the command line validates the same bundle, `first-setup-command-deployment.ts:97`) and
   `pnpm exec vitest run scripts/errors-reachable.test.ts`. Typecheck provisioning, server and setup;
