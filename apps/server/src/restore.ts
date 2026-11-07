@@ -17,7 +17,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, posix, sep } from "node:path";
 import { eq } from "drizzle-orm";
-import { AppError, isAppError, nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, hasCode, isAppError, nodeId as brandNodeId } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
@@ -78,6 +78,7 @@ import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
 import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { type StagedSecrets, stageSecrets } from "./restore-secrets.js";
 import "./errors.js";
 import { currentBackupVerificationTarget } from "./backup-verification-target.js";
 import {
@@ -383,9 +384,22 @@ async function validateEntryMetadata(
   return { manifest, dumpEntry, nodeDump: nodeEntry.bytes, secretEntries };
 }
 
+const nothingChanged = new WeakSet<object>();
+
+/** Whether {@link placeValidated} threw `error` after putting back everything it had changed,
+ * leaving the box's database, identity and secrets as they were (the backup room note aside). */
+export function placementLeftNothingChanged(error: unknown): boolean {
+  return typeof error === "object" && error !== null && nothingChanged.has(error);
+}
+
+function markNothingChanged(error: unknown): void {
+  if (typeof error === "object" && error !== null) nothingChanged.add(error);
+}
+
 /**
- * Once the old identity is set aside, a failure before the secrets write leaves no bootable
- * identity.
+ * The secrets are staged before anything is replaced, so a full disk is met while the box is as it
+ * was. The hooks' commit is the point of no return: after it a failure keeps the placed database
+ * and leaves the box's identity set aside, so a staged restore's resume can finish.
  */
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
@@ -402,46 +416,79 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     } finally {
       await existing.close();
     }
-  } else {
-    if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
-    await restoreDatabase({
-      databasePath: validated.databasePath,
-      // One source per restore: a restore that keeps the box's identity keeps its node.db too.
-      ...(deps.skipSecrets ? {} : { nodeDump: validated.nodeDump }),
-      venueDir: deps.venueDir,
-      stateDir: deps.stateDir,
-      log,
-    });
   }
-  // The gate admits an OLDER schema; a hook written against today's must not run against
-  // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
-  await (deps.migrate ?? applyMigrations)(
-    deps.venueDir,
-    migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
-  );
-  log("info", "restore.migrated", {});
-  if (deps.skipSecrets) {
-    log("info", "restore.identity.kept", {});
-    return;
+  let staged: StagedSecrets | undefined;
+  if (!deps.skipSecrets) {
+    try {
+      staged = await stageSecrets({
+        entries: validated.secretEntries,
+        stateDir: deps.stateDir,
+        log,
+      });
+    } catch (error) {
+      markNothingChanged(error);
+      throw error;
+    }
   }
-  const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
+  if (deps.resumeOperation === undefined) {
+    let identityMoved = false;
+    try {
+      if (!deps.skipSecrets) identityMoved = await setAsideExistingIdentity(deps.stateDir, log);
+      await restoreDatabase({
+        databasePath: validated.databasePath,
+        // One source per restore: a restore that keeps the box's identity keeps its node.db too.
+        ...(deps.skipSecrets ? {} : { nodeDump: validated.nodeDump }),
+        venueDir: deps.venueDir,
+        stateDir: deps.stateDir,
+        log,
+      });
+    } catch (error) {
+      await staged?.discard();
+      const identityBack = !identityMoved || (await putIdentityBack(deps.stateDir, log));
+      const databaseKept = !(
+        isAppError(error) &&
+        hasCode(error, "restore.placement_failed") &&
+        error.params.kept === "set_aside"
+      );
+      if (identityBack && databaseKept) markNothingChanged(error);
+      throw error;
+    }
+  }
   try {
-    const node = await resolveArtifactNode(opened.db, validated.secretEntries);
-    const name = await readRecoveryKeyName(opened.node, node.nodeId);
-    if (name !== null) log("info", "restore.recovery_key_selected", { name });
-    await runRestoreHooks({
-      db: opened.db,
-      nodeDb: opened.node,
-      modules: deps.modules,
-      node,
-      log,
-      withModuleOperations: deps.withModuleOperations,
-      resumeOperation: deps.resumeOperation,
-    });
-  } finally {
-    await opened.close();
+    // The gate admits an OLDER schema; a hook written against today's must not run against
+    // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
+    await (deps.migrate ?? applyMigrations)(
+      deps.venueDir,
+      migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
+    );
+    log("info", "restore.migrated", {});
+    if (staged === undefined) {
+      log("info", "restore.identity.kept", {});
+      return;
+    }
+    const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
+    try {
+      const node = await resolveArtifactNode(opened.db, validated.secretEntries);
+      const name = await readRecoveryKeyName(opened.node, node.nodeId);
+      if (name !== null) log("info", "restore.recovery_key_selected", { name });
+      await runRestoreHooks({
+        db: opened.db,
+        nodeDb: opened.node,
+        modules: deps.modules,
+        node,
+        log,
+        withModuleOperations: deps.withModuleOperations,
+        resumeOperation: deps.resumeOperation,
+      });
+    } finally {
+      await opened.close();
+    }
+  } catch (error) {
+    await staged?.discard();
+    throw error;
   }
-  await restoreSecrets({ entries: validated.secretEntries, stateDir: deps.stateDir, log });
+  await staged.publish();
+  await staged.finish();
 }
 
 /**
@@ -529,8 +576,9 @@ export async function lockRestoreTarget(directory: string): Promise<VenueLock> {
 }
 
 /**
- * Validate an encrypted backup and its identity completeness, then set aside any existing identity,
- * restore, migrate, run the module hooks in one transaction and write the artifact's secrets last.
+ * Validate an encrypted backup and its identity completeness, then stage the artifact's secrets,
+ * set aside any existing identity, place the database, migrate, run the module hooks in one
+ * transaction and publish the staged secrets.
  */
 export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   return restoreOwned(await validateArtifact(deps), deps);
@@ -821,19 +869,38 @@ export async function restoreSecrets(args: {
 }
 
 /**
- * Move a pre-existing identity aside before anything irreversible: `<stateDir>/trading.env` →
- * `trading.env.replaced` (boot reads only the former). With the artifact's identity written only
- * after the hook transaction commits, a successful set-aside leaves NO bootable identity until the
- * secrets write — neither the target's old one nor the artifact's. A missing file is the normal
- * fresh-box case.
+ * Move a pre-existing identity aside before the database is placed: `<stateDir>/trading.env` →
+ * `trading.env.replaced` (boot reads only the former), so no identity starts beside a restored
+ * database before the artifact's is published. True when it moved a file; a missing file is the
+ * normal fresh-box case.
  */
-export async function setAsideExistingIdentity(stateDir: string, log: Logger): Promise<void> {
+export async function setAsideExistingIdentity(stateDir: string, log: Logger): Promise<boolean> {
   const path = join(stateDir, TRADING_ENV_FILE);
   try {
     await rename(path, `${path}${REPLACED_SUFFIX}`);
     log("info", "restore.identity.set_aside", {});
+    return true;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    return false;
+  }
+}
+
+/** Undoes {@link setAsideExistingIdentity} when no `trading.env` has taken its place. False, logged,
+ * when it cannot. */
+export async function putIdentityBack(stateDir: string, log: Logger): Promise<boolean> {
+  const path = join(stateDir, TRADING_ENV_FILE);
+  if (lstatSync(path, { throwIfNoEntry: false }) !== undefined) {
+    log("error", "restore.identity.put_back_failed", { errno: "EEXIST" });
+    return false;
+  }
+  try {
+    await rename(`${path}${REPLACED_SUFFIX}`, path);
+    log("info", "restore.identity.put_back", {});
+    return true;
+  } catch (error) {
+    log("error", "restore.identity.put_back_failed", { errno: errnoOf(error) });
+    return false;
   }
 }
 

@@ -15,6 +15,7 @@ import { ALL_MODULES } from "./modules.js";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
   lockRestoreTarget,
+  placementLeftNothingChanged,
   restoreFromArtifactFile,
   validateArtifactFile,
   validateDatabaseEntries,
@@ -626,13 +627,15 @@ async function runHeld(
     }
     await run();
   } catch (error) {
-    // Refused admission never runs placement. A later failure can follow activation and must
-    // retain the checked-replay marker.
+    // Refused admission, and a placement that put back all it changed, leave nothing to resume. A
+    // later failure can follow activation and must retain the checked-replay marker.
     if (snapshot && error instanceof SnapshotPlacementRefused) {
       if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
     } else if (
       !resuming &&
-      (admissionRefused || (isAppError(error) && error.code === "provisioning.database_in_use"))
+      (admissionRefused ||
+        (markedStarted && placementLeftNothingChanged(error)) ||
+        (isAppError(error) && error.code === "provisioning.database_in_use"))
     ) {
       if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
     } else if (!resuming && !markedStarted) {

@@ -100,14 +100,11 @@ it.each([
   async (kind, fault) => {
     const f = await stage(kind);
     const failure = Object.assign(new Error("injected post-commit write failure"), { code: "EIO" });
-    const originalOpen = nativeFs.open;
-    vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
-      if (
-        String(args[0]) ===
-        join(f.stateDir, fault === "settings" ? "trading.env.tmp" : "credentials.key.tmp")
-      )
-        throw failure;
-      return originalOpen(...args);
+    const target = join(f.stateDir, fault === "settings" ? "trading.env" : "credentials.key");
+    const originalRename = nativeFs.rename;
+    vi.spyOn(nativeFs, "rename").mockImplementation(async (...args) => {
+      if (String(args[0]) === `${target}.incoming` && String(args[1]) === target) throw failure;
+      return originalRename(...args);
     });
     syncBuiltinESMExports();
     await expect(f.run()).rejects.toBe(failure);
@@ -332,10 +329,10 @@ import { runStagedRestore } from ${JSON.stringify(resolve("src/restore-request.t
 const [stateDir, venueDir, migrationsRoot, phase] = process.argv.slice(2);
 const wait = async () => { console.log("RECOVERY_CRASH_GATE"); await new Promise(() => { setInterval(() => {}, 1000); }); };
 if (phase === "staged" || phase === "hour-selected") await wait();
-const original = nativeFs.open;
-nativeFs.open = async (path, ...args) => {
-  if (phase === "before-publication" && String(path) === join(stateDir, "trading.env.tmp")) await wait();
-  return original(path, ...args);
+const original = nativeFs.rename;
+nativeFs.rename = async (from, to) => {
+  if (phase === "before-publication" && String(to) === join(stateDir, "trading.env")) await wait();
+  return original(from, to);
 };
 syncBuiltinESMExports();
 await runStagedRestore({ stateDir, venueDir, migrationsRoot, log: (_level, event, fields) => {

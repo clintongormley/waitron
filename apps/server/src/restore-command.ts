@@ -210,8 +210,8 @@ async function restoreArtifact(
 }
 
 /**
- * No "nothing changed": the last secrets write runs after the database is placed
- * (`placeValidated`, `restore.ts`).
+ * No "nothing changed": a disk that fills after the database is placed (the migration, the hooks)
+ * leaves the restored database in place (`placeValidated`, `restore.ts`).
  */
 const RESTORE_DISK_FULL =
   "restore failed: the disk filled during the restore; free some space and run it again";
