@@ -2597,3 +2597,36 @@ it("reads in Spanish: Pasos de servicio under Estados de la mesa", async () => {
   expect(section.contains(list)).toBe(true);
   expect(list.shadowRoot!.querySelector("h4")!.textContent!.trim()).toBe("Pasos de servicio");
 });
+
+it("an older venue copy arriving after a rename does not take the saved name back", async () => {
+  const original = structuredClone(model);
+  const { el, writes } = await mount(original);
+  await change(el, "name", "Restaurant revised");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await expect.poll(() => save(el).disabled).toBe(true);
+  const older = structuredClone(original);
+  older.departments[0]!.tradingName = "Other manager";
+  el.model = older;
+  await settled(el);
+  expect(field(el, "name").value).toBe("Restaurant revised");
+});
+
+it("an older venue copy arriving after a new step was saved cannot remove it from the next save", async () => {
+  const { el, writes } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  await addStep(el);
+  await editStep(el, 3, "Name", "Coffee");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await expect.poll(() => save(el).disabled).toBe(true);
+  el.model = laid();
+  await settled(el);
+  expect(stepNames(el)).toEqual(["Set up", "Take order", "Dessert?", "Coffee"]);
+  await addStep(el);
+  await editStep(el, 4, "Name", "Tea");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(sentSteps(writes[1]!.body)).toEqual([...SENT_STEPS, COFFEE, TEA]);
+});

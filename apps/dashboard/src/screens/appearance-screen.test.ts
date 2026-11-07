@@ -235,6 +235,33 @@ it.each(changes)(
   },
 );
 
+it("reads again after a theme save so a crossing read cannot hide another manager's newer theme", async () => {
+  let answerCrossing!: (response: Response) => void;
+  const latest: ThemeList = { themes: [BLUE, XMAS], inUse: BLUE.id };
+  const { api, fetchImpl } = stubApi([
+    json(listOf(GREEN)),
+    () =>
+      new Promise<Response>((resolve) => {
+        answerCrossing = resolve;
+      }),
+    json(latest),
+  ]);
+  const el = await mount(api);
+  api.liveData.invalidate([{ type: "custom_themes" }]);
+  await expect.poll(() => fetchImpl.mock.calls.length).toBe(2);
+  card(el)!.dispatchEvent(
+    new CustomEvent("themes-changed", {
+      detail: { kind: "saved", theme: BLUE },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await flush(el);
+  answerCrossing(new Response(JSON.stringify(latest), { status: 200 }));
+  await expect.poll(() => themesCard(el)?.list).toEqual(latest);
+  expect(card(el)!.list).toEqual(latest);
+});
+
 it("leaves the venue settings page's space between the Look card and the Themes card", async () => {
   const { api } = stubApi([json(listOf(GREEN))]);
   const el = await mount(api);
