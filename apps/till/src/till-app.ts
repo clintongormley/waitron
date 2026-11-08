@@ -1804,6 +1804,7 @@ function saleRefusalOf(
       | "sale.disk_full_manual_card"
       | "sale.charged_disk_full"
       | "sale.charged_clock_behind"
+      | "sale.charged_clock_unusable"
     >
   | { code: string; recoveryUrl?: string; manualCard?: true }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
@@ -1833,7 +1834,9 @@ function saleRefusalOf(
         ? "sale.charged_disk_full"
         : refusal.reason === "clock_behind_chain"
           ? "sale.charged_clock_behind"
-          : { code: "sale.charged_not_recorded" };
+          : refusal.reason === "clock_unusable"
+            ? "sale.charged_clock_unusable"
+            : { code: "sale.charged_not_recorded" };
     case "clock.unusable": {
       const reading = clockReadingOf(refusal);
       return reading === undefined ? { code: "clock.unusable" } : { clockUnusable: reading };

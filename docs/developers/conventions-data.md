@@ -2754,7 +2754,8 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   `bill-payments-api.ts`); every other caller, the dashboard's stuck-payment resolve route among
   them, still answers `storage.disk_full`. On those two routes the same 507 answers a card charged
   while the box's clock comes to read behind the latest fiscal record, with
-  `reason: "clock_behind_chain"` (`apps/server/src/clock-behind-stop.charged.test.ts`). The same answer covers a charge whose capture the
+  `reason: "clock_behind_chain"`, or `"clock_unusable"` when the clock reads before
+  28 October 2024 (`apps/server/src/clock-behind-stop.charged.test.ts`). The same answer covers a charge whose capture the
   provider could not save: SumUp's and Stripe's `collect` throw `ChargeNotSavedError`
   (`packages/payments/src/charge-not-saved.ts`) when the processor reported the card charged and
   that save failed for a full disk, and the two routes translate only that error
@@ -4127,8 +4128,11 @@ fiscal record and is stored as a payment, dated by the provider (`clock-behind-s
 as the stop begins on an already-invoiced order is recorded, dated by the provider" and "a card
 part payment charged as the stop begins is received, dated by the provider"). A card charged as the
 stop begins whose sale would file answers `507 sale.charged_not_recorded` with
-`reason: "clock_behind_chain"` on the till's two card routes, as
-[A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes) says.
+`reason: "clock_behind_chain"`, or `"clock_unusable"` when the clock moves before
+28 October 2024, on the till's two card routes. The two "clock becomes unusable"
+cases in `apps/server/src/clock-behind-stop.charged.test.ts` move the clock while
+the reader is held, then check one charge and one record after recovery. See
+[A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes).
 
 **Why the routes need their own check** (plan E10, measured 2026-10-22 with only the append's check
 in place, on `provisionBillVenue`'s venue and its `FakePaymentProvider`, every request on a clock a

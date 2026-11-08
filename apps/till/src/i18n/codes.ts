@@ -787,8 +787,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Cobrado con tarjeta, pero la venta no se ha registrado. No vuelvas a cobrar; avisa al encargado.",
   },
   "clock.unusable": {
-    en: "Sale not recorded: the server's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
-    es: "Venta no registrada: la hora del servidor es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    en: "Payment not recorded: the server's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
+    es: "Pago no registrado: la hora del servidor es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   },
   "clock.behind_chain": {
     en: "Can't be recorded: the server's clock reads earlier than its last sale. Tell a manager.",

@@ -10749,7 +10749,20 @@ describe("till-app", () => {
       },
     );
 
-    it("a card charged as the clock stop begins says not to charge again, and to press Pay once fixed", async () => {
+    it("a charged card stopped by an unusable clock says to recover without charging again", async () => {
+      const text = await payReader({
+        code: "sale.charged_not_recorded",
+        workingOrderId: "wo-1",
+        reason: "clock_unusable",
+        status: 507,
+      });
+      expect(text).toContain("Cobrado con tarjeta, pero el pago no se ha registrado:");
+      expect(text).toContain("hora del servidor es incorrecta");
+      expect(text).toContain("No vuelvas a cobrar");
+      expect(text).toContain("vuelve a intentar este pago");
+    });
+
+    it("a card charged as the clock stop begins says not to charge again, and to retry the payment once fixed", async () => {
       const text = await payReader({
         code: "sale.charged_not_recorded",
         workingOrderId: "wo-1",
@@ -12571,7 +12584,7 @@ describe("till-app", () => {
             { method: "cash", amount: "30.00" },
           ),
         ).toBe(
-          t("sale.clock_behind_chain")
+          t("collect.clock_behind_chain")
             .replace("{clockAt}", "14/03/2025\u00a009:12")
             .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
         );

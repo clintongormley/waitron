@@ -645,6 +645,17 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     },
   );
 
+  it.each(["clock_behind_chain", "clock_unusable"])(
+    "a charged presented card offers to retry the same payment for %s",
+    async (reason) => {
+      setLocale("en-GB");
+      const el = await mount({ refusal: { code: "sale.charged_not_recorded", reason } });
+      expect(actions(el).error).toContain("try this payment again");
+      expect(actions(el).error).toContain("without charging again");
+      expect(actions(el).error).not.toContain("press Pay");
+    },
+  );
+
   it("words a card charged as the clock stop begins in its own sentence", async () => {
     const el = await mount({
       refusal: { code: "sale.charged_not_recorded", reason: "clock_behind_chain" },

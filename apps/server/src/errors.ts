@@ -461,7 +461,7 @@ declare module "@waitron/shared" {
      */
     "sale.charged_not_recorded": {
       workingOrderId: string;
-      reason: "disk_full" | "clock_behind_chain" | "issuance_refused";
+      reason: "disk_full" | "clock_behind_chain" | "clock_unusable" | "issuance_refused";
       recoveryUrl?: string;
     };
     /**

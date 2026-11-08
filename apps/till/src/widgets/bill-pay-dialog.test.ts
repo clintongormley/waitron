@@ -567,6 +567,68 @@ describe("till-bill-pay-dialog: moving between steps", () => {
 });
 
 describe("till-bill-pay-dialog: refusals and answers", () => {
+  it("names the missing payment during a clock stop, without denying an issued invoice", async () => {
+    setLocale("en-GB");
+    const el = await mount({
+      refusal: {
+        code: "clock.behind_chain",
+        clockAt: "2025-03-14T08:12:00.000Z",
+        offsetMinutes: 60,
+        lastRecordAt: "2026-10-18T21:40:00.000Z",
+        lastRecordOffsetMinutes: 120,
+      },
+    });
+    expect(actions(el).error).toContain("Payment not recorded:");
+    expect(actions(el).error).toContain("14/03/2025\u00a009:12");
+    expect(actions(el).error).toContain("18/10/2026\u00a023:40");
+    expect(actions(el).error).not.toContain("Sale not recorded");
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "clock_behind_chain",
+      "Card charged, but the payment is not recorded:",
+      "Don't charge again",
+      "recorded automatically",
+      "press Pay",
+    ],
+    [
+      "en-GB",
+      "clock_unusable",
+      "Card charged, but the payment is not recorded:",
+      "Don't charge again",
+      "recorded automatically",
+      "press Pay",
+    ],
+    [
+      "es",
+      "clock_behind_chain",
+      "Cobrado con tarjeta, pero el pago no se ha registrado:",
+      "No vuelvas a cobrar",
+      "registra automáticamente",
+      "pulsa Cobrar",
+    ],
+    [
+      "es",
+      "clock_unusable",
+      "Cobrado con tarjeta, pero el pago no se ha registrado:",
+      "No vuelvas a cobrar",
+      "registra automáticamente",
+      "pulsa Cobrar",
+    ],
+  ] as const)(
+    "keeps a charged bill card on automatic recovery in %s for %s",
+    async (locale, reason, charged, noCharge, automatic, retry) => {
+      setLocale(locale);
+      const el = await mount({ refusal: { code: "sale.charged_not_recorded", reason } });
+      expect(actions(el).error).toContain(charged);
+      expect(actions(el).error).toContain(noCharge);
+      expect(actions(el).error).toContain(automatic);
+      expect(actions(el).error).not.toContain(retry);
+    },
+  );
+
   it("shows a refusal that names no field above the action, which stays enabled", async () => {
     const el = await mount({ refusal: { code: "bill.nothing_outstanding" } });
     expect(actions(el).error).toBe(codeMessage("bill.nothing_outstanding"));

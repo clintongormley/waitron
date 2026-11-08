@@ -822,8 +822,8 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
     ],
     [
       "clock.unusable",
-      "Venta no registrada: la hora del servidor es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
-      "Sale not recorded: the server's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
+      "Pago no registrado: la hora del servidor es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+      "Payment not recorded: the server's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
     ],
   ];
   for (const [code, spanish, english] of cases) {

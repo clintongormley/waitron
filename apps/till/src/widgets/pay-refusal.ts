@@ -50,7 +50,7 @@ function chargeableText(amount: string): string {
 }
 
 /** With `checkTime`, a clock stop's words point at the till's "Check the time". */
-export function refusalText(refusal: PayRefusal, checkTime = false): string {
+export function refusalText(refusal: PayRefusal, checkTime = false, billPayment = false): string {
   const recovery = recoveryRefusalText(refusal);
   if (recovery !== null) return recovery;
   if (refusal.text !== undefined) return refusal.text;
@@ -92,7 +92,9 @@ export function refusalText(refusal: PayRefusal, checkTime = false): string {
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "disk_full")
     return t("sale.charged_disk_full");
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "clock_behind_chain")
-    return t("sale.charged_clock_behind");
+    return t(billPayment ? "bill_pay.charged_clock_behind" : "sale.charged_clock_behind");
+  if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "clock_unusable")
+    return t(billPayment ? "bill_pay.charged_clock_unusable" : "sale.charged_clock_unusable");
   if (refusal.code === "device.forbidden_action" && refusal.action === "pay")
     return t("card_reader.not_set_up");
   if (refusal.code === "bill.tip_not_allowed" && refusal.chargeable !== undefined)

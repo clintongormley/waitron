@@ -103,7 +103,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
-- [A1387. Till sentences during the clock stop, with money in hand](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 - [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
 - [A1399. What happens when a bill payment is sent again under one id](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
@@ -1899,7 +1898,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   idle Solo does the same, the bell carries a standing `reader.offline` warning. For the owner to
   check against the reader. Left open by A798-B slice 10.
 
-- **A1387. Till sentences during the clock stop, with money in hand** (bundle of 4, 3 important, size S). [Detail](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
 
 - **Box status rows** (bundle of 4, 1 important, size S). [Detail](backlog/box.md#bundle-box-status-rows)
 

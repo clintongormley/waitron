@@ -398,3 +398,48 @@ it("a card part payment charged as the stop begins is received, dated by the pro
   expect(await statusOf(venue, billId)).toBe("open");
   expect(allRecords()).toBe(records);
 });
+
+it.each(["counter", "bill"] as const)(
+  "a %s card captured before the clock becomes unusable recovers once without another charge",
+  async (surface) => {
+    const now = nowMs();
+    const id = surface === "counter" ? randomUUID() : await tabWith(venue, "Paella");
+    const records = allRecords();
+    const before = collects();
+    const reader = movableClock(now + MINUTE);
+    const { answer, release } = await heldAtReader(() =>
+      surface === "counter"
+        ? cardSale(venue.appAt(reader.clock), id)
+        : payBill(venue.appAt(reader.clock), id, "35.00"),
+    );
+    reader.moveTo(Date.UTC(2001, 0, 1));
+    release();
+    const charged = await answer;
+    expect(charged.status).toBe(507);
+    expect(charged.json).toEqual({
+      code: "sale.charged_not_recorded",
+      params: { workingOrderId: id, reason: "clock_unusable" },
+    });
+    expect(capturedUnlinked(id)).toBe(1);
+    expect(registroCount(venue, id)).toBe(0);
+    expect(allRecords()).toBe(records);
+    if (surface === "counter") {
+      const paid = await payStored(venue.appAt(clockAt(now + 2 * MINUTE)), id);
+      expect(paid.status).toBe(200);
+      expect(paid.json.outcome).toBe("captured");
+    } else {
+      expect((await paymentRows(venue, id)).map((row) => row.state)).toEqual(["pending"]);
+      await settlePendingBillPayments({
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: clockAt(now + 2 * MINUTE),
+        cfg: venue.cfg,
+      });
+      expect((await paymentRows(venue, id)).map((row) => row.state)).toEqual(["received"]);
+    }
+    expect(registroCount(venue, id)).toBe(1);
+    expect(allRecords()).toBe(records + 1);
+    expect(collects()).toBe(before + 1);
+  },
+);

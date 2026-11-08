@@ -289,6 +289,23 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
     const { log, charged } = capturingLog();
     const params = { clockAt: "2001-01-01T00:00:00.000Z", offsetMinutes: 60 };
     vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(
+      new AppError("clock.set_refused", params),
+    );
+    const id = randomUUID();
+    const before = collects();
+
+    const answer = await walkUpPay(id, log);
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toEqual({ code: "clock.set_refused", params });
+    expect(collects()).toBe(before + 1);
+    expect(charged()).toEqual([]);
+  });
+
+  it("says the card was charged when the clock becomes unusable after capture", async () => {
+    const { log, charged } = capturingLog();
+    const params = { clockAt: "2001-01-01T00:00:00.000Z", offsetMinutes: 60 };
+    vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(
       new AppError("clock.unusable", params),
     );
     const id = randomUUID();
@@ -296,10 +313,16 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
 
     const answer = await walkUpPay(id, log);
 
-    expect(answer.status).toBe(409);
-    expect(answer.json).toEqual({ code: "clock.unusable", params });
+    expect(answer.status).toBe(507);
+    expect(answer.json).toEqual({
+      code: "sale.charged_not_recorded",
+      params: { workingOrderId: id, reason: "clock_unusable" },
+    });
     expect(collects()).toBe(before + 1);
-    expect(charged()).toEqual([]);
+    expect(charged()).toEqual([
+      { level: "error", event: "sale.charged_not_recorded", fields: { workingOrderId: id } },
+    ]);
+    expect(capturedUnlinked(id)).toBe(1);
   });
 });
 
