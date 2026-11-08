@@ -9101,7 +9101,7 @@ describe("till-app: Current orders", () => {
         readCurrentOrders: vi.fn().mockResolvedValue(current),
         splitHeldLineIntoUnits: split,
       });
-      emit(await openMesa(el), "split-group-line", { lineId: "line-1" });
+      emit(await openPartyTable(el), "split-group-line", { lineId: "line-1" });
       await flush(el);
       expect(split).toHaveBeenCalledOnce();
       return { el, refuse: () => refuse() };
