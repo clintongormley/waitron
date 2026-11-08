@@ -2183,19 +2183,6 @@ other full-disk words (`storage.disk_full` in `codes.ts`, the `sale.disk_full` g
 sentences that take a manager's PIN or choice on the spot; labels such as `approval.title_manager`;
 and the joining steps `device.join_name_hint` and `device.join_approval_guide`, which are no refusal.
 
-## Bundle A1392: Discard and Cancel fail on a table bill reached from the counter
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A922. Discard on a table's bill from Parked orders fails.** The till sends no bill editor's
-  expectation, and the server refuses a party bill's discard without one (400
-  `management.request_invalid`), leaving the bill open. Found while planning A582 slice 4; not fixed
-  there. [Detail](till.md#a922-discard-on-a-tables-bill-from-parked-orders-fails)
-- **A1199. On the counter, Cancel and Comp of one extra on a retrieved table bill are refused.**
-  The counter sends no bill editor's expectation and the server refuses `management.request_invalid`
-  on `expectedEdit`; staff see "Check the form and try again". Same cause as A922.
-  [Detail](till.md#a1199-on-the-counter-cancel-and-comp-of-one-extra-on-a-retrieved-table-bill-are-refused)
-
 ## Bundle: Printer identity at enrolment
 
 Printer identity is separate from the till route inventory.
@@ -4217,25 +4204,6 @@ English and Spanish): 8 px at 320 px with the long name.
 One answer: at phone width give the name two tap widths instead of three, which M2's numbers say
 gives back 44 px. That changes A738's look, so it waits for the owner.
 
-## A922. Discard on a table's bill from Parked orders fails
-
-Found while writing A582 slice 4's plan. Parked orders' Discard sends
-`abandonWorkingOrder(id, null)` (`apps/till/src/till-app.ts:7622`), and on a party (table) bill the
-server requires a bill editor's expectation (`requireOrderBillEditor`, `apps/server/src/bill-editing.ts:194`,
-which reads it with `parseBillEditExpected`, `:163`).
-
-Run while writing that plan (2026-10-20, on `be39179b0`, not re-run since): a throwaway server test
-provisioned a bill venue as `bill-editing.add-abandon.test.ts` does, opened a table's bill with
-`tabWith`, and sent the till's exact body, `DELETE /api/working-orders/<id>` with
-`{ "expectedEdit": null }`. It answered 400 `management.request_invalid` with
-`{ field: "expectedEdit" }`, and the bill stayed `open`. `bill-editing.add-abandon.test.ts`'s "requires an expectation on
-bodyless party requests" pins the bodyless form of the same refusal. Not run: the till end to end —
-whether the list shows a table's bill at all, and what the person sees when Discard fails.
-
-Out of A582's scope; the slice 4 plan's Parked orders help text (slice 4b) says nothing about a
-table's bill for this reason. Done when the till either sends the bill's expectation or does not
-offer Discard on a table's bill, with a test through the till.
-
 ## A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped row
 
 On a till row that groups identical portions, Comp and Void take a count and act on the last
@@ -4248,19 +4216,6 @@ line and firing members one by one would start a fire group and a ticket for eac
 build review left for the owner: accept, word the button differently on a grouped row, or let the
 route take a list. Slice 4a's picker (Move dishes…) takes a row's first portions and is for moves
 only; comp, void and Fire now are unchanged.
-
-## A1199. On the counter, Cancel and Comp of one extra on a retrieved table bill are refused
-
-Seen in A803 slice 1's LOOK (2026-10-29): Counter → Parked orders → Retrieve a table's bill →
-Cancel on one extra (or Comp at 50%) → Continue shows "Check the form and try again" with no field
-marked, and the server logs `management.request_invalid` with `field: "expectedEdit"`. The same
-happened on a bill slice 1 does not change (one unbound line of a counter order moved to a table).
-The till builds the request in `#adjustAsk` (`apps/till/src/till-app.ts`) with
-`expectedEdit: open.bill === undefined ? null : …`, and the counter opens no bill there. I believe
-it predates slice 1: `git blame` dates that line to c9ad7a634 (2026-10-19), an ancestor of the
-branch's base, and `main` at 1891ed658 has the same line; the branch changes no server
-`expectedEdit` check. Not run on `main`. A922 is the same refusal for Discard. Done when the
-counter sends the bill's expectation for a table's bill, with a test through the till.
 
 ## A1007. The till's adjustment window keeps a give-away and a line discount nothing opens
 
@@ -4364,7 +4319,7 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 
 **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-ticket/receipt grouping, has landed. What it leaves open is A1191–A1199, A1201, A1202, A1217 and the store limit under
+ticket/receipt grouping, has landed. What it leaves open is A1191–A1198, A1201, A1202, A1217 and the store limit under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Slice

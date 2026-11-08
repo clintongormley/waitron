@@ -257,6 +257,8 @@ arriba en la pantalla de la mesa, indica qué cuenta está en pantalla, como **C
 **Cuenta 2 · 3 cuentas · Clint · 54,00 €** cuando la mesa tiene tres. Aparece aunque la mesa tenga una sola
 cuenta, así que una segunda cuenta está siempre a un toque.
 
+En el mostrador, usa **Pedidos aparcados** para recuperar o descartar la cuenta de una mesa.
+
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
 el nombre de la cuenta, lo que queda por pagar o **Pagada ✓**, y una línea como **Ana tiene un
 pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Elige una
