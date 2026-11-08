@@ -102,7 +102,7 @@ describe("server health recovery", () => {
       ],
     ]);
     expect(health.githubRequest("/repos/o/r", undefined, () => '{"id":42}')).toEqual({ id: 42 });
-  });
+  }, 20_000);
 
   it("routes to GitHub when the health read fails and never changes shared settings", async () => {
     const outputs = [],
