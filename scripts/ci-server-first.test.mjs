@@ -98,14 +98,14 @@ describe("server-first workflow routing", () => {
     }
   });
   it("passes the routing decision into the reusable image workflow", () => {
-    const image = yaml.match(/^  image:\n([\s\S]*?)(?=^  [\w-]+:)/m)[1];
-    const input = image.match(/^      server_route: (.+)$/m)?.[1];
+    const image = yaml.match(/^ {2}image:\n([\s\S]*?)(?=^ {2}[\w-]+:)/m)[1];
+    const input = image.match(/^ {6}server_route: (.+)$/m)?.[1];
     expect(input).toBeDefined();
     for (const health of ["server", "hosted", ""]) expect(route(input, { health })).toBe(health);
   });
   it("keeps a timed-out route read from failing changes and defaults every job to hosted", () => {
-    const step = yaml.match(/      - id: server-route\n([\s\S]*?)(?=\n      - )/)[1];
-    expect(step).toMatch(/^        continue-on-error: true$/m);
+    const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}- )/)[1];
+    expect(step).toMatch(/^ {8}continue-on-error: true$/m);
     for (const job of jobs) expect(route(job.route, { health: "" }), job.id).toBe("ubuntu-latest");
   });
   it.each(["pull_request", "push", "schedule", "workflow_dispatch"])(
