@@ -715,24 +715,30 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       },
     );
 
-    it("clears a closed session's cookie, whoever it names", async () => {
-      const app = signOutApp();
-      const token = await openSession(suite.db);
-      await closeSession(suite.db, token);
+    it.each([
+      ["someone", () => abel.id],
+      ["nobody, by a word", () => "not-a-uuid"],
+    ])(
+      "leaves a closed session's cookie in place when the header names %s",
+      async (_what, named) => {
+        const app = signOutApp();
+        const token = await openSession(suite.db);
+        await closeSession(suite.db, token);
 
-      const del = await signOut(app, token, { named: abel.id });
+        const del = await signOut(app, token, { named: named() });
 
-      expect(del.status).toBe(200);
-      expect(await del.json()).toEqual({ ok: true });
-      expect(del.headers.get("set-cookie")).toMatch(/waitron_till_session=;/);
-    });
+        expect(del.status).toBe(200);
+        expect(await del.json()).toEqual({ ok: true });
+        expect(del.headers.get("set-cookie")).toBeNull();
+      },
+    );
 
     it("answers 200 with no session cookie, whoever it names", async () => {
       const del = await signOut(signOutApp(), null, { named: abel.id });
 
       expect(del.status).toBe(200);
       expect(await del.json()).toEqual({ ok: true });
-      expect(del.headers.get("set-cookie")).toMatch(/waitron_till_session=;/);
+      expect(del.headers.get("set-cookie")).toBeNull();
     });
 
     describe("a sign-out naming a person, with the next person's sign-in", () => {

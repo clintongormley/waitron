@@ -1508,23 +1508,22 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // A sign-out naming its session's person keeps the cookie: its answer can reach the browser
-  // after the next person's sign-in has replaced it.
+  // A sign-out naming anyone never clears the cookie: its answer can reach the browser after the
+  // next person's sign-in has replaced it.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
+      const namesSomeone = c.req.header(PERSON_HEADER) !== undefined;
       const token = readSessionToken(c);
       const holder =
         token !== null && isUuid(token) ? await openSessionPerson(deps.db, token) : null;
-      if (token === null || holder === null) {
-        clearSessionCookie(c);
-        return c.json({ ok: true });
+      if (token !== null && holder !== null) {
+        const refusal = personRefusal(c, holder);
+        if (refusal !== null) throw refusal;
+        await withTransaction(deps.db, async (tx) => {
+          await endSession(tx, token);
+        });
       }
-      const refusal = personRefusal(c, holder);
-      if (refusal !== null) throw refusal;
-      await withTransaction(deps.db, async (tx) => {
-        await endSession(tx, token);
-      });
-      if (c.req.header(PERSON_HEADER) === undefined) clearSessionCookie(c);
+      if (!namesSomeone) clearSessionCookie(c);
       return c.json({ ok: true });
     }),
   );
