@@ -585,47 +585,22 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
   });
 
   it.each([
-    [
-      "en-GB",
-      "clock_behind_chain",
-      "Card charged, but the payment is not recorded:",
-      "Don't charge again",
-      "recorded automatically",
-      "press Pay",
-    ],
-    [
-      "en-GB",
-      "clock_unusable",
-      "Card charged, but the payment is not recorded:",
-      "Don't charge again",
-      "recorded automatically",
-      "press Pay",
-    ],
-    [
-      "es",
-      "clock_behind_chain",
-      "Cobrado con tarjeta, pero el pago no se ha registrado:",
-      "No vuelvas a cobrar",
-      "registra automáticamente",
-      "pulsa Cobrar",
-    ],
-    [
-      "es",
-      "clock_unusable",
-      "Cobrado con tarjeta, pero el pago no se ha registrado:",
-      "No vuelvas a cobrar",
-      "registra automáticamente",
-      "pulsa Cobrar",
-    ],
+    ["en-GB", "clock_behind_chain", "bill_pay.charged_clock_behind"],
+    ["en-GB", "clock_unusable", "bill_pay.charged_clock_unusable"],
+    ["es", "clock_behind_chain", "bill_pay.charged_clock_behind"],
+    ["es", "clock_unusable", "bill_pay.charged_clock_unusable"],
   ] as const)(
     "keeps a charged bill card on automatic recovery in %s for %s",
-    async (locale, reason, charged, noCharge, automatic, retry) => {
+    async (locale, reason, key) => {
       setLocale(locale);
       const el = await mount({ refusal: { code: "sale.charged_not_recorded", reason } });
-      expect(actions(el).error).toContain(charged);
-      expect(actions(el).error).toContain(noCharge);
-      expect(actions(el).error).toContain(automatic);
-      expect(actions(el).error).not.toContain(retry);
+      expect(actions(el).error).toBe(t(key));
+      if (locale === "en-GB") {
+        expect(actions(el).error).toContain("Card charged, but the payment is not recorded:");
+        expect(actions(el).error).toContain("Don't charge again");
+        expect(actions(el).error).toContain("recorded automatically");
+        expect(actions(el).error).not.toContain("try this payment again");
+      }
     },
   );
 

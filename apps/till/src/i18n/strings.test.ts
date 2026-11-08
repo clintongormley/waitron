@@ -330,3 +330,30 @@ describe("the no-prep-station refusal that names its dishes", () => {
     ).toBe(message);
   });
 });
+
+describe("clock-stopped payment guidance", () => {
+  it.each([["sale.charged_clock_behind", "sale.charged_clock_unusable"]] as const)(
+    "keeps both whole-order clock reasons on the same retry path",
+    (behind, unusable) => {
+      for (const key of [behind, unusable]) {
+        expect(es[key]).toContain("Cobrado con tarjeta, pero el pago no se ha registrado:");
+        expect(es[key]).toContain("No vuelvas a cobrar");
+        expect(es[key]).toContain("vuelve a intentar este pago");
+        expect(es[key]).toContain("sin cobrar otra vez");
+      }
+    },
+  );
+  it.each(["bill_pay.charged_clock_behind", "bill_pay.charged_clock_unusable"] as const)(
+    "keeps %s on automatic recovery",
+    (key) => {
+      expect(es[key]).toContain("Cobrado con tarjeta, pero el pago no se ha registrado:");
+      expect(es[key]).toContain("No vuelvas a cobrar");
+      expect(es[key]).toContain("registra automáticamente");
+      expect(es[key]).not.toContain("vuelve a intentar");
+    },
+  );
+  it("names a refused collection without denying the recorded sale", () => {
+    expect(es["collect.clock_behind_chain"]).toContain("No se puede registrar:");
+    expect(es["collect.clock_behind_chain"]).not.toContain("Venta no registrada");
+  });
+});

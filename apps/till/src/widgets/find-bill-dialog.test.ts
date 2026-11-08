@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./find-bill-dialog.js";
 import type { TillFindBillDialog } from "./find-bill-dialog.js";
@@ -67,10 +67,14 @@ describe("Find a bill", () => {
       const message = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
         "wt-form-actions",
       )!.error;
-      expect(message).toContain(locale === "es" ? "No se puede registrar:" : "Can't be recorded:");
+      expect(message).toBe(
+        t("collect.clock_behind_chain")
+          .replace("{clockAt}", "14/03/2025\u00a009:12")
+          .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
+      );
       expect(message).toContain("14/03/2025\u00a009:12");
       expect(message).toContain("18/10/2026\u00a023:40");
-      expect(message).not.toContain(locale === "es" ? "Venta no registrada" : "Sale not recorded");
+      if (locale === "en-GB") expect(message).toContain("Can't be recorded:");
     },
   );
 

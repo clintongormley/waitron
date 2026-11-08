@@ -10756,10 +10756,7 @@ describe("till-app", () => {
         reason: "clock_unusable",
         status: 507,
       });
-      expect(text).toContain("Cobrado con tarjeta, pero el pago no se ha registrado:");
-      expect(text).toContain("hora del servidor es incorrecta");
-      expect(text).toContain("No vuelvas a cobrar");
-      expect(text).toContain("vuelve a intentar este pago");
+      expect(text).toContain(t("sale.charged_clock_unusable"));
     });
 
     it("a card charged as the clock stop begins says not to charge again, and to retry the payment once fixed", async () => {
