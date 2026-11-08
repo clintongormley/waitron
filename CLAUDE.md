@@ -917,7 +917,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   differing only in it must leave hashes identical.
 - **The producer's tax number does not change before A993 lands** (owner, 2026-11-06): a
   production start whose chain names another refuses `sif.producer_changed`, and the publish job
-  refuses a new one unless `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Guards:
+  refuses a new one unless `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Exception (owner,
+  2026-11-08): today's placeholder values may be replaced by the real ones once, before any
+  production start, with that variable set to the real number. Guards:
   `apps/server/src/boot.producer-change.test.ts` and the publish cases in
   `scripts/ci-workflow.test.mjs`, weaker than the rule: a stand-in `docker`, never a real publish.
   [Detail](docs/developers/ci-and-gates.md#the-publish-job-requires-guards-and-checks-the-producers-settings)
