@@ -72,7 +72,7 @@ useVenueDb({
             vatClass: "reduced",
           })
         ).id;
-      const croquette = await product("Croqueta", "3.33");
+      const croquette = await product("Croquette", "3.33");
       const burger = await product("Burger", "3.33");
       const cheese = await product("Cheese", "0.35");
       const toppings = (
@@ -290,20 +290,20 @@ describe("A1208 counter orders are written as portions", () => {
 
     const lines = linesOf(id);
     expect(lines.map(({ name, quantity, ordinal }) => [name, quantity, ordinal])).toEqual([
-      ["Croqueta", 1000, 1],
-      ["Croqueta", 1000, 1],
+      ["Croquette", 1000, 1],
+      ["Croquette", 1000, 1],
     ]);
     expect(lines[1]!.cohortId).not.toBe(lines[0]!.cohortId);
     expect(await filedRows(id)).toEqual([
       {
-        name: "Croqueta",
+        name: "Croquette",
         quantity: 1000,
         base: 303,
         vatRate: 1000,
         portions: [lines[0]!.portionId],
       },
       {
-        name: "Croqueta",
+        name: "Croquette",
         quantity: 1000,
         base: 303,
         vatRate: 1000,
@@ -329,7 +329,7 @@ describe("A1208 counter orders are written as portions", () => {
     ]);
     expect(await filedRows(id)).toEqual([
       {
-        name: "Croqueta",
+        name: "Croquette",
         quantity: 2000,
         base: 605,
         vatRate: 1000,
@@ -363,7 +363,7 @@ describe("A1208 counter orders are written as portions", () => {
 
     expect(await filedRows(id)).toEqual([
       {
-        name: "Croqueta",
+        name: "Croquette",
         quantity: 2000,
         base: 605,
         vatRate: 1000,
@@ -489,7 +489,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
     expect(saleOf(id)[0]!.total).toBe(299920);
   });
 
-  it("A1208 a parked order saved with 2,001 more croquetas stores each as its own portion", async () => {
+  it("A1208 a parked order saved with 2,001 more croquettes stores each as its own portion", async () => {
     const { id } = await park(croquettes("1"));
     const [croquette] = linesOf(id);
     const [revision, expectedEdit] = await inTx(venue, async (tx) => [
@@ -513,7 +513,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
     expect(lines.every((line) => line.portionId !== null && line.quantity === 1000)).toBe(true);
   });
 
-  it("A1208 a parked order of 17 croquetas each raised to 99 copies every sale context", async () => {
+  it("A1208 a parked order of 17 croquettes each raised to 99 copies every sale context", async () => {
     const { id } = await park(croquettes("17"));
     const stored = linesOf(id);
     const [revision, expectedEdit] = await inTx(venue, async (tx) => [
@@ -539,7 +539,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
     expect(contexts!.count).toBe(17 * 99);
   });
 
-  it("A1208 a parked order of 4,700 croquetas saved down to one records a cancellation for each other", async () => {
+  it("A1208 a parked order of 4,700 croquettes saved down to one records a cancellation for each other", async () => {
     const { id } = await park(linesOfAtMost99(4700, croquettes));
     const [kept, ...removed] = linesOf(id);
     const [revision, expectedEdit] = await inTx(venue, async (tx) => [

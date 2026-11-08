@@ -2381,11 +2381,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Tighten the checks the A974 review probed** (bundle of 4, size S). [Detail](backlog/architecture.md#bundle-tighten-the-checks-the-a974-review-probed)
 
 - **A976. Finish the server's English test-venue defaults.**
-  The party bill-action suite still uses Spanish dish samples. Receipt-print, working-order,
-  bill-move, arriving-dish, receipt-guest, till-API bill-move/split/groups/fiscal-sale, reprint, transfer,
-  portion-sale projection and order-portion counter/filing/adjustment suites still use Spanish
-  display samples; fiscal-sale and counter/adjustment order-portion test descriptions, other
-  bill-payment fixtures such as `bill-payments.test.ts`, helpers and screen expectations remain.
+  The party bill-action suite still uses Spanish dish samples. Bill-move, arriving-dish,
+  receipt-guest, till-API bill-move/groups/fiscal-sale and order-portion filing/adjustment suites
+  still use Spanish display samples; fiscal-sale and adjustment order-portion test descriptions,
+  other bill-payment fixtures such as `bill-payments.test.ts`, shared helpers and their
+  consumers' dish selectors and screen expectations remain.
   Triage made-here route and receipt-document fixture
   text there while preserving Spanish receipt output and locale checks. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).

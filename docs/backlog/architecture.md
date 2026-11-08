@@ -396,10 +396,9 @@ until A977).
   `till-table-order-screen.move-dishes.test.ts`.
   Remaining accented bindings include `portion-selection.test.ts`, `counter-portion-rows.test.ts`
   and `till-ticket-view.test.ts`.
-  Fixture strings remain separate from this naming work. The receipt-print and working-order
-  suites retain Spanish display samples under A976. The counter, filing and adjustment
-  order-portion suites retain Spanish dish samples under A976; counter and adjustment test
-  descriptions also stay with A976.
+  Fixture strings remain separate from this naming work. Shared helpers' Spanish dish samples
+  and their consumers stay with A976, as do the filing and adjustment order-portion samples
+  and adjustment test descriptions.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
   under A976.
   Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
@@ -412,8 +411,9 @@ until A977).
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
-  The transfer, portion-sale projection and counter, filing and adjustment order-portion suites
-  still have Spanish dish samples; the counter and adjustment suites have Spanish dish words in test descriptions.
+  The filing and adjustment order-portion suites still have Spanish dish samples; the adjustment
+  suite has Spanish dish words in test descriptions. Shared helpers' dish names and selectors
+  remain, including those read by the working-order, receipt-print and counter-portion suites.
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
@@ -781,8 +781,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   Private drink bindings remain in `sale-till-source.receipt.test.ts`,
   `issuance-pass.fiscal-identity.test.ts`, `list-unit-price.fiscal-identity.test.ts` and
   `served-at-huella.test.ts`; audit their fiscal fixture boundaries before renaming.
-  Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
-  display samples under A976.
+  Keep accented search fixtures unchanged. Shared helper display samples and their consumers
+  stay with A976.
   Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
@@ -847,15 +847,13 @@ product failures.
 - **A976. Finish the server's English test-venue defaults.** Spanish dish samples remain in
   `party-bill-actions.test.ts`. Spanish display samples remain in
   `bill-payments.test.ts`, `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
-  `receipt-guests.test.ts`, `receipt-print.test.ts`, `working-order.test.ts`, `till-api.reprint.test.ts`,
-  `order-portions.counter.test.ts`, `order-portions.filing.test.ts`,
-  `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts`,
-  `till-api.move-bill.test.ts`, `till-api.split-bill.test.ts`, `till-api.groups.test.ts`,
-  `till-api.fiscal-sale-paths.test.ts` and `portion-sale-projection.test.ts`; these belong to
+  `receipt-guests.test.ts`, `order-portions.filing.test.ts`, `order-portions.adjustments.test.ts`,
+  `till-api.move-bill.test.ts`, `till-api.groups.test.ts` and `till-api.fiscal-sale-paths.test.ts`;
+  shared helper samples and their consumers' dish selectors also remain. These belong to
   A976 rather than the private-name work in A974. The `made-here.routes.test.ts` venue
   samples and `receipt-document.test.ts` fixture descriptions and test titles also need
-  triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale descriptions and the counter
-  and adjustment order-portion descriptions also retain Spanish words. The fiscal-sale
+  triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale and
+  adjustment order-portion descriptions also retain Spanish words. The fiscal-sale
   suite’s string-selected SQL count alias stays with its fixture text. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route
   suites use English venue, operation and menu samples; their Spanish locale and starter-content

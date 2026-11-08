@@ -224,11 +224,11 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
       {
         country: "ES",
         taxId: nextTaxId(),
-        legalName: "Deli Recibos SL",
-        name: "Sala principal",
+        legalName: "Receipt Deli Ltd",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
+        operationDescription: "On-premises sale",
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -239,7 +239,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -254,11 +254,11 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const drinksCategory = await createCategory(tx, { name: "Bebidas" });
+    const drinksCategory = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinksCategory.id,
-      name: "Agua mineral",
+      name: "Mineral water",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -286,7 +286,7 @@ async function storeDepartmentReceipt(
   decoration: Record<string, unknown>,
   logoRasters: ReceiptLogoRasters | null = null,
 ) {
-  const receipt = { operationDescription: "Venta en establecimiento", ...decoration };
+  const receipt = { operationDescription: "On-premises sale", ...decoration };
   await suite.db
     .insert(departmentReceipts)
     .values({ departmentId, receipt, logoRasters })
@@ -310,9 +310,9 @@ async function makePrinter({
     const { id } = await createPrinter(
       tx,
       transport === "network_tcp"
-        ? { name: "Recibos", transport: "network_tcp", host: "192.0.2.1", hasCashDrawer }
+        ? { name: "Receipts", transport: "network_tcp", host: "192.0.2.1", hasCashDrawer }
         : {
-            name: "Recibos",
+            name: "Receipts",
             transport: "cloud_poll",
             pollId: `poll-${randomUUID()}`,
             hasCashDrawer,
@@ -716,7 +716,7 @@ it("a cash bill payment that pays the bill in full reads the device's printers o
   await configureReceipt(cfg, { mode: "auto", printerId });
   const tabId = await withTransaction(suite.db, async (tx) => {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const table = await createTable(tx, cfg, { label: "Mesa 4", zoneId: offers.zoneId });
+    const table = await createTable(tx, cfg, { label: "Table 4", zoneId: offers.zoneId });
     const { tabId } = await openPartyTab(tx, cfg, {
       tableId: table.id,
       lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
@@ -1144,7 +1144,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       decodeTicket(new Uint8Array(job.payload)).includes("VERI*FACTU"),
     )!;
     const payload = new Uint8Array(receipt.payload);
-    expect(decodeTicket(payload)).toContain("Deli Recibos SL");
+    expect(decodeTicket(payload)).toContain("Receipt Deli Ltd");
     expect(opensDrawer(payload)).toBe(false);
     const drawer = jobs.find((job) => job !== receipt)!;
     expect([...drawer.payload]).toEqual([...DRAWER_KICK]);
@@ -2153,7 +2153,7 @@ describe("the device's invoice printer", () => {
         .where(eq(devices.id, cfg.origin.deviceId));
     });
 
-    expect(await resolve(cfg.origin)).toEqual({ kind: "receipt", id: receipt, name: "Recibos" });
+    expect(await resolve(cfg.origin)).toEqual({ kind: "receipt", id: receipt, name: "Receipts" });
   });
 
   it("resolves none when the profile lists no invoice printer, or the origin is not a device", async () => {
@@ -2203,7 +2203,7 @@ describe("receipt issuer", () => {
     expect(original.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
     const issuerAt = (lines: string[]) =>
       lines.findIndex(
-        (line, at) => line === "Deli Recibos SL" && lines[at + 1]?.startsWith("NIF: "),
+        (line, at) => line === "Receipt Deli Ltd" && lines[at + 1]?.startsWith("NIF: "),
       );
     expect(issuerAt(original)).toBeGreaterThan(0);
     expect(original.indexOf("Deli Counter")).toBeLessThan(issuerAt(original));
@@ -2277,17 +2277,17 @@ describe("receipt issuer", () => {
 });
 
 describe("a party's receipt names the party and its tables (spec §8)", () => {
-  /** The receipt a party at Mesa 4 and 5 is printed when it pays, named `name` when one is given. */
+  /** The receipt a party at Table 4 and 5 is printed when it pays, named `name` when one is given. */
   async function receiptOfJoinedParty(name?: string): Promise<string> {
     const v = await setupPartyVenue(suite.db);
     const [{ departmentId }] = await suite.db
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurante" });
+    await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurant" });
     await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter() });
-    const table4Id = await v.table("Mesa 4");
-    const table5Id = await v.table("Mesa 5");
+    const table4Id = await v.table("Table 4");
+    const table5Id = await v.table("Table 5");
     const { partyId, tabId } = await seat(v, table4Id);
     await join(v, partyId, table5Id);
     if (name !== undefined) await nameParty(v, partyId, name);
@@ -2303,18 +2303,18 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
   }
 
   it("prints a named party's name and all its tables", async () => {
-    expect(await receiptOfJoinedParty("Ana")).toMatch(/^Ana · Mesa 4, 5 +Pedido \d+$/mu);
+    expect(await receiptOfJoinedParty("Ana")).toMatch(/^Ana · Table 4, 5 +Pedido \d+$/mu);
   });
 
   it("prints an unnamed party's tables alone", async () => {
     const receipt = await receiptOfJoinedParty();
-    expect(receipt).toMatch(/^Mesa 4, 5 +Pedido \d+$/mu);
-    expect(receipt).not.toContain("· Mesa 4, 5");
+    expect(receipt).toMatch(/^Table 4, 5 +Pedido \d+$/mu);
+    expect(receipt).not.toContain("· Table 4, 5");
   });
 
   it("names a party's bill by its own label once the party holds no table", async () => {
     const v = await setupPartyVenue(suite.db);
-    const table4Id = await v.table("Mesa 4");
+    const table4Id = await v.table("Table 4");
     const { partyId, tabId } = await seat(v, table4Id);
     await nameParty(v, partyId, "Ana");
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
@@ -2325,12 +2325,12 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
 
     const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, checkId));
 
-    expect(orderLabel).toBe("Mesa 4");
+    expect(orderLabel).toBe("Table 4");
   });
 
   it("still names a counter order's delivery table", async () => {
     const v = await setupPartyVenue(suite.db);
-    const terraceTableId = await v.table("Terraza 2");
+    const terraceTableId = await v.table("Terrace 2");
     const orderId = randomUUID();
     await inTx(v, (tx) =>
       createOpenOrder(tx, v.cfg, orderId, [], null, { deliveryTableId: terraceTableId }),
@@ -2338,7 +2338,7 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
 
     const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, orderId));
 
-    expect(orderLabel).toBe("Terraza 2");
+    expect(orderLabel).toBe("Terrace 2");
   });
 });
 
@@ -2350,9 +2350,9 @@ describe("a party's receipt prints its guests and the amount per person", () => 
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurante" });
+    await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurant" });
     await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter() });
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 12"), guests);
+    const { partyId, tabId } = await seat(v, await v.table("Table 12"), guests);
     await orderForParty(v, partyId, ["Burger"], tabId);
 
     await pay(v, tabId, "12.00");
@@ -2382,7 +2382,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
     const v = await setupPartyVenue(suite.db);
     const printerId = await makePrinter();
     await configureReceipt(v.cfg, { mode: "on_request", printerId });
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 13"), 4);
+    const { partyId, tabId } = await seat(v, await v.table("Table 13"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
     await pay(v, tabId, "12.00", stored);
     const deps = { db: v.db, backend: v.backend };
@@ -2527,13 +2527,13 @@ describe("a party's receipt prints its guests and the amount per person", () => 
 
   it("prints the guests chosen at payment, files the same as without them, and repeats them on a Reprint", async () => {
     const { v, pays } = await partiesPaying();
-    const chosen = await pays("Mesa 14", 5);
+    const chosen = await pays("Table 14", 5);
     const [original] = await chosen.receipts();
     expect(original).toContain("5 comensales · por persona");
     expect(original).toContain("2,40 €");
     expect(await chosen.guestCount()).toBe(4);
 
-    const plain = await pays("Mesa 15");
+    const plain = await pays("Table 15");
     expect(filedFacts(v, chosen.saleId)).toEqual(filedFacts(v, plain.saleId));
 
     await chosen.changeCountTo(6);
@@ -2545,8 +2545,8 @@ describe("a party's receipt prints its guests and the amount per person", () => 
 
   it("stores the party's count whether the field is sent as it was or not at all, and a later Reprint repeats it", async () => {
     const { pays } = await partiesPaying();
-    const asItWas = await pays("Mesa 16", 4);
-    const unsent = await pays("Mesa 17");
+    const asItWas = await pays("Table 16", 4);
+    const unsent = await pays("Table 17");
     expect(await asItWas.stored()).toEqual([{ guests: 4 }]);
     expect(await unsent.stored()).toEqual([{ guests: 4 }]);
 
@@ -2586,7 +2586,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
           },
         });
       const { logoRasters, ...decoration } = receipt;
-      const authored = { operationDescription: "Venta en establecimiento", ...decoration };
+      const authored = { operationDescription: "On-premises sale", ...decoration };
       const rows = await tx.select({ id: departments.id }).from(departments);
       for (const row of rows)
         await tx
@@ -2629,7 +2629,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
   /** The centred lines from the legal name to the rule that ends the block, trimmed. */
   function topBlock(payload: Uint8Array): string[] {
     const lines = printedLines(payload).map((line) => line.trim());
-    const name = lines.indexOf("Deli Recibos SL");
+    const name = lines.indexOf("Receipt Deli Ltd");
     expect(name).toBeGreaterThanOrEqual(0);
     return lines.slice(
       name,
@@ -2658,7 +2658,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(pictures(payload!).slice(1)).toEqual([[16, 2, LOGO_BITS]]);
     const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
     expect(topBlock(payload!)).toEqual([
-      "Deli Recibos SL",
+      "Receipt Deli Ltd",
       `NIF: ${taxId}`,
       "Calle Mayor 1",
       "28013 Madrid",
@@ -2759,7 +2759,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     await sellOne(cfg, each, zoneId);
     const [payload] = await receiptPayloads(cfg);
     const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
-    expect(topBlock(payload!)).toEqual(["Deli Recibos SL", `NIF: ${taxId}`]);
+    expect(topBlock(payload!)).toEqual(["Receipt Deli Ltd", `NIF: ${taxId}`]);
   });
 
   it.each([
@@ -2799,7 +2799,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(await fiscalRecordCount(cfg)).toBe(1);
     const [payload] = await receiptPayloads(cfg);
     const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
-    expect(topBlock(payload!)).toEqual(["Deli Recibos SL", `NIF: ${taxId}`]);
+    expect(topBlock(payload!)).toEqual(["Receipt Deli Ltd", `NIF: ${taxId}`]);
     // The footer prints after the tender line.
     const lines = printedLines(payload!).map((line) => line.trim());
     expect(lines.slice(lines.indexOf("Tarjeta") + 1).filter(Boolean)).toEqual([]);
@@ -2873,8 +2873,8 @@ describe("automatic F1 receipt delivery enrollment", () => {
         lines: [
           {
             lineNo: 1,
-            name: "Agua mineral",
-            descriptions: { "es-ES": "Agua mineral" },
+            name: "Mineral water",
+            descriptions: { "es-ES": "Mineral water" },
             quantity: "1",
             unitPrice: "1.50",
             vatRate: "21",
@@ -3576,7 +3576,7 @@ describe("department receipt presentation on thermal jobs", () => {
           .spyOn(VENUE_SERVICE, "readDepartmentReceipt")
           .mockImplementationOnce(async (tx, scope, id) => {
             const receipt = await read(tx, scope, id);
-            expect(receipt.operationDescription).toBe("Venta en establecimiento");
+            expect(receipt.operationDescription).toBe("On-premises sale");
             await tx.execute(
               sql`alter table department_receipts rename to test_hidden_department_receipts`,
             );
@@ -3947,7 +3947,7 @@ describe("the theme's logo on thermal receipts", () => {
       const [job] = await documents();
       expect(logos(job!.payload)).toEqual(paperWidth === "58mm" ? [[0xf0]] : []);
       const text = decodeTicket(job!.payload);
-      expect(text).toContain("Agua mineral");
+      expect(text).toContain("Mineral water");
       expect(text).toContain("TOTAL");
       expect(await fiscalRecordCount(cfg)).toBe(1);
     },
@@ -3989,7 +3989,7 @@ describe("the theme's logo on thermal receipts", () => {
 
   async function expectTextOnlyReprint(job: { payload: Uint8Array }, cfg: DeviceRequestConfig) {
     expect(logos(job.payload)).toEqual([]);
-    expect(decodeTicket(job.payload)).toContain("Agua mineral");
+    expect(decodeTicket(job.payload)).toContain("Mineral water");
     const lines = printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " "));
     expect(lines.find((line) => line.startsWith("TOTAL"))).toBe("TOTAL 1,50 €");
     expect(await fiscalRecordCount(cfg)).toBe(1);

@@ -140,7 +140,7 @@ interface SeededVenue {
   cfg: WithVenueRowId<DeviceRequestConfig>;
   /** The catalogue assigned to this venue's location — where the KDS routing tests add more products. */
   catalogueId: string;
-  /** The `each`-priced "Café" product (VAT general/21%, category "ES drinks"). */
+  /** The `each`-priced "Espresso" product (VAT general/21%, category "ES drinks"). */
   coffeeId: string;
   /** A second `each` product with NO category, so its priced line carries `category: null`. */
   waterId: string;
@@ -189,21 +189,21 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     },
   ]);
   await seedVenue(db, {
-    name: "Barra",
+    name: "Counter",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
+    operationDescription: "On-premises sale",
   });
   const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
 
   const { coffeeId, waterId, catalogueId, zoneId, coffeeOfferId, premiumCoffeeOfferId } =
     await withTransaction(db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Carta" });
+      const cat = await createCatalogue(tx, { name: "Menu" });
       const drinksCategory = await createCategory(tx, { name: "ES drinks" });
       const coffeeProduct = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: drinksCategory.id,
-        name: "Café",
+        name: "Espresso",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -213,13 +213,13 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       const waterProduct = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: null,
-        name: "Agua",
+        name: "Water",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
       });
       await assignCatalogueToVenue(tx, cat.id);
-      const premium = await createCatalogue(tx, { name: "Carta premium" });
+      const premium = await createCatalogue(tx, { name: "Premium menu" });
       const coffeeOffer = await addProductToMenu(tx, {
         menuId: cat.id,
         productId: coffeeProduct.id,
@@ -527,7 +527,7 @@ describe("a sold variant line carries its product and relative variant names", (
     const orderId = randomUUID();
     const { tabLines, stationItems, expoItems } = await withTransaction(db, async (tx) => {
       const { offerId, variantId, productId } = await seedVariantOffer(tx, catalogueId);
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       await insertRoute(tx, { zoneId, productId, stationId: kitchenStation.id });
       await createOpenOrder(
         tx,
@@ -741,7 +741,7 @@ describe("parkOrder", () => {
     expect(attribution.rows).toEqual([
       {
         menu_item_id: premiumCoffeeOfferId,
-        menu_name: "Carta premium",
+        menu_name: "Premium menu",
         department_name: "Restaurant",
       },
     ]);
@@ -839,7 +839,7 @@ describe("parkOrder", () => {
         productId: coffeeId,
         lineNo,
         quantity: 1000,
-        descriptions: { [LOCALE]: "Café" },
+        descriptions: { [LOCALE]: "Espresso" },
         unitPriceGross: 150,
         vatClass: "general",
         lineTotal: 150,
@@ -856,7 +856,7 @@ describe("parkOrder", () => {
     // (1500) from cents (150) and from a bare unit count (1 or 2).
     const { cfg, coffeeId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      // Café is priced `each` by default, and `assertQuantityPrecision` refuses a fractional
+      // Espresso is priced `each` by default, and `assertQuantityPrecision` refuses a fractional
       // quantity on it; the kg unit's precision of 3 is what admits 1.500.
       await catalogue.assignProductUnit(tx, coffeeId, kgUnitId);
     });
@@ -1007,7 +1007,7 @@ describe("parkOrder", () => {
     });
     expect(replay).toEqual({ id, orderNumber: 1 });
 
-    // The one surviving line is the ORIGINAL Café line — the re-park's Agua line was never inserted.
+    // The one surviving line is the ORIGINAL Espresso line — the re-park's Water line was never inserted.
     const woLines = await db
       .select()
       .from(workingOrderLines)
@@ -1359,7 +1359,6 @@ describe("listHeldOrders", () => {
     const { cfg, coffeeId, waterId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.update(products).set({ name: "Coffee" }).where(eq(products.id, coffeeId));
-      await tx.update(products).set({ name: "Water" }).where(eq(products.id, waterId));
     });
     const idA = randomUUID();
     const idB = randomUUID();
@@ -1371,7 +1370,7 @@ describe("listHeldOrders", () => {
       { productId: coffeeId, quantity: "1" },
       { productId: waterId, quantity: "3" },
     ];
-    await parkProducts(cfg, { id: idA, lines: linesA, label: "Mesa 4" });
+    await parkProducts(cfg, { id: idA, lines: linesA, label: "Table 4" });
     await parkProducts(cfg, { id: idB, lines: linesB });
 
     // The held `total` is the GROSS (VAT-inclusive) basket total the operator saw —
@@ -1402,7 +1401,7 @@ describe("listHeldOrders", () => {
         id: idA,
         items: [coffee, coffee],
         orderNumber: 1,
-        label: "Mesa 4",
+        label: "Table 4",
         counts: { ordered: 2, unsent: 2, held: 0, waiting: 0, ready: 0 },
         total: grossA,
         outstanding: grossA,
@@ -1710,7 +1709,7 @@ describe("getHeldOrder", () => {
 
     const revision = await revisionOf(id);
     await withTransaction(db, (tx) =>
-      updateOrderLine(tx, cfg, id, 1, { note: "Sin sal" }, revision),
+      updateOrderLine(tx, cfg, id, 1, { note: "No salt" }, revision),
     );
     const after = await db.execute<{
       quantity: number;
@@ -1808,7 +1807,7 @@ describe("getHeldOrder", () => {
   it("reconstructs a parked offer with its extras, customisation and locked display prices", async () => {
     const { cfg, zoneId, coffeeId, catalogueId, premiumCoffeeOfferId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
-      const attached = await addExtraList(tx, catalogueId, coffeeId, "Leche", {
+      const attached = await addExtraList(tx, catalogueId, coffeeId, "Milk", {
         price: "0.75",
         maxQuantity: 2,
         maxPicks: 2,
@@ -1826,7 +1825,7 @@ describe("getHeldOrder", () => {
           menuItemId: premiumCoffeeOfferId,
           quantity: "2",
           extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 2 }] }],
-          note: "Sin espuma",
+          note: "No foam",
         },
       ],
     });
@@ -1839,13 +1838,13 @@ describe("getHeldOrder", () => {
       menuItemId: premiumCoffeeOfferId,
       productId: coffeeId,
       quantity: "1.000",
-      note: "Sin espuma",
+      note: "No foam",
       extras: [
         {
           productId: extra.productId,
-          name: "Leche staff",
-          descriptions: { [LOCALE]: "Leche customer" },
-          kitchenName: "Leche kitchen",
+          name: "Milk staff",
+          descriptions: { [LOCALE]: "Milk customer" },
+          kitchenName: "Milk kitchen",
           price: "0.75",
           quantity: 2,
           listId: extra.listId,
@@ -1862,7 +1861,7 @@ describe("getHeldOrder", () => {
     // Give the product a customer name that DIFFERS from its staff name before parking, so the two
     // frozen halves below cannot be confused for one another.
     await db.execute(sql`
-      update products set customer_name = ${JSON.stringify({ [LOCALE]: "Café de la casa" })}
+      update products set customer_name = ${JSON.stringify({ [LOCALE]: "House espresso" })}
       where id = ${coffeeId}`);
     await withTransaction(db, republishMenus);
     await parkOrder({ db }, cfg, {
@@ -1872,8 +1871,8 @@ describe("getHeldOrder", () => {
     });
     await db.execute(sql`
       update products
-      set name = 'Renamed café',
-          customer_name = ${JSON.stringify({ [LOCALE]: "Renamed café de la casa" })},
+      set name = 'Renamed espresso',
+          customer_name = ${JSON.stringify({ [LOCALE]: "Renamed house espresso" })},
           pricing_unit = 'weight', vat_class = 'reduced',
           allergens = ${JSON.stringify({ milk: {} })}
       where id = ${coffeeId}`);
@@ -1902,9 +1901,9 @@ describe("getHeldOrder", () => {
           productId: coffeeId,
           menuItemId: premiumCoffeeOfferId,
           // Both frozen halves survive the rename, and they are distinct text.
-          name: "Café",
-          customerName: { [LOCALE]: "Café de la casa" },
-          // The café is priced by the each (no unit), so its snapshot resolves to the synthetic
+          name: "Espresso",
+          customerName: { [LOCALE]: "House espresso" },
+          // The espresso is priced by the each (no unit), so its snapshot resolves to the synthetic
           // Each unit — frozen at park time, unaffected by the live product's switch to weight above.
           unit: {
             id: EACH_UNIT.id,
@@ -1916,7 +1915,7 @@ describe("getHeldOrder", () => {
           vatClass: "general",
           category: "ES drinks",
           allergens: null,
-          catalogueName: "Carta premium",
+          catalogueName: "Premium menu",
         }),
       }),
     ]);
@@ -1955,7 +1954,7 @@ describe("getHeldOrder", () => {
     const id = randomUUID();
     await parkProducts(cfg, {
       id,
-      label: "Mesa 7",
+      label: "Table 7",
       lines: [
         { productId: coffeeId, quantity: "1" },
         { productId: waterId, quantity: "3" },
@@ -1978,7 +1977,7 @@ describe("getHeldOrder", () => {
       id,
       expectedEdit: null,
       orderNumber: 1,
-      label: "Mesa 7",
+      label: "Table 7",
       revision: 0,
       kitchenNote: { note: null, revision: 0, ownerRevision: 0, scope: { workingOrderId: id } },
       lines: [
@@ -2034,7 +2033,7 @@ describe("updateHeldOrder", () => {
   it("keeps extras rows and customisation on a quantity-only edit", async () => {
     const { cfg, zoneId, coffeeId, catalogueId, premiumCoffeeOfferId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
-      const attached = await addExtraList(tx, catalogueId, coffeeId, "Leche", {
+      const attached = await addExtraList(tx, catalogueId, coffeeId, "Milk", {
         price: "0.75",
         maxQuantity: 2,
         maxPicks: 2,
@@ -2053,7 +2052,7 @@ describe("updateHeldOrder", () => {
           menuItemId: premiumCoffeeOfferId,
           quantity: "1",
           extras: [{ listId: extra.listId, picks }],
-          note: "Sin espuma",
+          note: "No foam",
         },
       ],
     });
@@ -2079,7 +2078,7 @@ describe("updateHeldOrder", () => {
           menuItemId: premiumCoffeeOfferId,
           quantity: "3",
           extras: [{ listId: extra.listId, picks }],
-          note: "Sin espuma",
+          note: "No foam",
         },
       ],
     });
@@ -2151,7 +2150,7 @@ describe("updateHeldOrder", () => {
     const venue = await setupVenue();
     const { cfg, zoneId, coffeeId, catalogueId, premiumCoffeeOfferId } = venue;
     const extra = await withTransaction(db, async (tx) => {
-      const attached = await addExtraList(tx, catalogueId, coffeeId, "Leche", {
+      const attached = await addExtraList(tx, catalogueId, coffeeId, "Milk", {
         price: "0.75",
         maxQuantity: 2,
         maxPicks: 2,
@@ -2284,14 +2283,14 @@ describe("updateHeldOrder", () => {
         tx,
         {
           name: "Cooking list staff",
-          customerName: { [CONTENT_LANGUAGE]: "Cooking cliente", ca: "CA cooking client" },
+          customerName: { [CONTENT_LANGUAGE]: "Cooking customer", ca: "CA cooking client" },
           kitchenName: "Cooking list kitchen",
           defaultLabelId: null,
           active: true,
           labels: [
             {
               name: "Rare staff",
-              customerName: { [CONTENT_LANGUAGE]: "Rare hecho cliente", ca: "CA rare fet client" },
+              customerName: { [CONTENT_LANGUAGE]: "Rare customer", ca: "CA rare fet client" },
               kitchenName: "Rare kitchen",
               available: true,
             },
@@ -2324,10 +2323,10 @@ describe("updateHeldOrder", () => {
     expect(before[0]!.optionSnapshots).toEqual([
       {
         listName: { [CONTENT_LANGUAGE]: "Cooking list staff" },
-        listCustomerName: { [CONTENT_LANGUAGE]: "Cooking cliente" },
+        listCustomerName: { [CONTENT_LANGUAGE]: "Cooking customer" },
         listKitchenName: "Cooking list kitchen",
         labelName: { [CONTENT_LANGUAGE]: "Rare staff" },
-        labelCustomerName: { [CONTENT_LANGUAGE]: "Rare hecho cliente" },
+        labelCustomerName: { [CONTENT_LANGUAGE]: "Rare customer" },
         labelKitchenName: "Rare kitchen",
       },
     ]);
@@ -2364,7 +2363,7 @@ describe("updateHeldOrder", () => {
           tx,
           {
             name: "Cooking list staff",
-            customerName: { [CONTENT_LANGUAGE]: "Cooking cliente", ca: "CA cooking client" },
+            customerName: { [CONTENT_LANGUAGE]: "Cooking customer", ca: "CA cooking client" },
             kitchenName: "Cooking list kitchen",
             defaultLabelId: null,
             active: true,
@@ -2372,7 +2371,7 @@ describe("updateHeldOrder", () => {
               {
                 name: "Rare staff",
                 customerName: {
-                  [CONTENT_LANGUAGE]: "Rare hecho cliente",
+                  [CONTENT_LANGUAGE]: "Rare customer",
                   ca: "CA rare fet client",
                 },
                 kitchenName: "Rare kitchen",
@@ -2416,10 +2415,10 @@ describe("updateHeldOrder", () => {
       expect(before[0]!.optionSnapshots).toEqual([
         {
           listName: { [CONTENT_LANGUAGE]: "Cooking list staff" },
-          listCustomerName: { [CONTENT_LANGUAGE]: "Cooking cliente" },
+          listCustomerName: { [CONTENT_LANGUAGE]: "Cooking customer" },
           listKitchenName: "Cooking list kitchen",
           labelName: { [CONTENT_LANGUAGE]: "Rare staff" },
-          labelCustomerName: { [CONTENT_LANGUAGE]: "Rare hecho cliente" },
+          labelCustomerName: { [CONTENT_LANGUAGE]: "Rare customer" },
           labelKitchenName: "Rare kitchen",
         },
       ]);
@@ -2757,7 +2756,7 @@ describe("updateHeldOrder", () => {
     await parkProducts(cfg, {
       id,
       lines: [{ productId: coffeeId, quantity: "2" }],
-      label: "Mesa 4",
+      label: "Table 4",
     });
     const [beforeSummary] = await listHeldOrders({ db });
 
@@ -2768,14 +2767,14 @@ describe("updateHeldOrder", () => {
       { productId: waterId, quantity: "1" },
       { productId: coffeeId, quantity: "1" },
     ];
-    await updateProducts(cfg, id, { lines: newLines, label: "Mesa 7" });
+    await updateProducts(cfg, id, { lines: newLines, label: "Table 7" });
 
     // order_number / node_id / origin are untouched; only the label changed and the
     // status stays open (the update ran over the enforce_transition trigger, not around it).
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(wo).toMatchObject({
       status: "open",
-      label: "Mesa 7",
+      label: "Table 7",
       orderNumber: 1,
       nodeId: cfg.nodeId,
       source: "device",
@@ -2784,7 +2783,7 @@ describe("updateHeldOrder", () => {
       settledAt: null,
     });
 
-    // The two old café lines are gone; the two new lines carry the new products, numbered after them.
+    // The two old espresso lines are gone; the two new lines carry the new products, numbered after them.
     const lines = await db
       .select()
       .from(workingOrderLines)
@@ -2814,11 +2813,11 @@ describe("updateHeldOrder", () => {
     await parkProducts(cfg, {
       id,
       lines: [{ productId: coffeeId, quantity: "1" }],
-      label: "Mesa 4",
+      label: "Table 4",
     });
 
     // No label on the update: a label is part of the order's state, so omitting it clears the
-    // parked "Mesa 4" rather than leaving it in place.
+    // parked "Table 4" rather than leaving it in place.
     await updateProducts(cfg, id, { lines: [{ productId: waterId, quantity: "1" }] });
 
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
@@ -2831,7 +2830,7 @@ describe("updateHeldOrder", () => {
     await parkProducts(cfg, {
       id,
       lines: [{ productId: coffeeId, quantity: "2" }],
-      label: "Mesa 4",
+      label: "Table 4",
     });
     const before = await readOrder(id);
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
@@ -2855,7 +2854,7 @@ describe("updateHeldOrder", () => {
     });
 
     // Both refusals happen before any line is deleted, so the parked order still holds its two
-    // original café lines unchanged.
+    // original espresso lines unchanged.
     const after = await readOrder(id);
     expect(after.lineTotals).toEqual(before.lineTotals);
     const lines = await db
@@ -2918,7 +2917,7 @@ describe("updateHeldOrder", () => {
     await expect(
       updateProducts(cfg, id, {
         revision: copy.revision,
-        label: "Mesa 9",
+        label: "Table 9",
         lines: [{ workingOrderLineId: line, productId: coffeeId, quantity: "2", note: "second" }],
       }),
     ).rejects.toMatchObject({
@@ -3369,7 +3368,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     const id = randomUUID();
     await parkProducts(cfg, {
       id,
-      lines: [{ productId: coffeeId, quantity: "1", options: [answer], note: "sin sal" }],
+      lines: [{ productId: coffeeId, quantity: "1", options: [answer], note: "No salt" }],
     });
     const held = await getHeldOrder({ db }, id);
 
@@ -3579,9 +3578,9 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("routes a product cell before its category cell and the default and snapshots the station at fire time", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
-      const barStation = await createStation(tx, { name: "Barra" });
-      const drinks = await createCategory(tx, { name: "Copas" });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
+      const barStation = await createStation(tx, { name: "Counter" });
+      const drinks = await createCategory(tx, { name: "Glasses" });
       await routeCategoryTo(tx, drinks.id, barStation.id);
       const beerProduct = await makeProduct(tx, catalogueId, { categoryId: drinks.id });
       const coffeeProduct = await makeProduct(tx, catalogueId, {
@@ -3643,17 +3642,17 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     // the value; this pins that it stays FROZEN against a later edit — the immutability half.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const p = await makeProduct(tx, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [
-        { productId: p, quantity: "1", note: "sin cebolla" },
+        { productId: p, quantity: "1", note: "No onion" },
       ]);
 
       const [before] = await tx
         .select({ note: ticketItems.note })
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, orderId));
-      expect(before).toEqual({ note: "sin cebolla" });
+      expect(before).toEqual({ note: "No onion" });
 
       await tx
         .update(workingOrderLines)
@@ -3673,7 +3672,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         .select({ note: ticketItems.note })
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, orderId));
-      expect(after).toEqual({ note: "sin cebolla" });
+      expect(after).toEqual({ note: "No onion" });
     });
   });
 
@@ -3690,7 +3689,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("refuses to fire when the only default station is inactive in stored data (station.no_default)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       await tx
         .update(kitchenStations)
         .set({ active: false })
@@ -3705,7 +3704,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("a re-fire of an already-fired line is refused ticket.already_fired", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const orderId = await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const p = await makeProduct(tx, catalogueId, {});
       const { id } = await placeOrderWith(tx, cfg, [line(p)]);
       return id;
@@ -3735,7 +3734,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("addTabRound fires the appended round's lines to the resolved station (the tab round-send)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
@@ -3975,7 +3974,7 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin hielo" }, revision!);
+        await updateOrderLine(tx, cfg, tabId, 1, { note: "No ice" }, revision!);
         const [item] = await ticketItemsFor(tx, tabId);
         expect(item!.stationId).toBe(upstairs.id);
         expect(
@@ -3985,7 +3984,7 @@ describe("opening hours", () => {
               .from(ticketItems)
               .where(eq(ticketItems.workingOrderId, tabId))
           )[0]!.note,
-        ).toBe("Sin hielo");
+        ).toBe("No ice");
         const [parent] = await tx
           .select({ id: workingOrderLines.id })
           .from(workingOrderLines)
@@ -4016,15 +4015,15 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin limón" }, lastRevision!);
+        await updateOrderLine(tx, cfg, tabId, 1, { note: "No lemon" }, lastRevision!);
         expect(
           await tx
             .select({ stationId: ticketItems.stationId, note: ticketItems.note })
             .from(ticketItems)
             .where(eq(ticketItems.workingOrderId, tabId)),
         ).toEqual([
-          { stationId: upstairs.id, note: "Sin hielo" },
-          { stationId: kitchen.id, note: "Sin limón" },
+          { stationId: upstairs.id, note: "No ice" },
+          { stationId: kitchen.id, note: "No lemon" },
         ]);
       } finally {
         vi.useRealTimers();
@@ -4325,7 +4324,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
   async function payingHeldOrder(orderFlow?: OrderFlow) {
     const venue = await setupVenue(orderFlow);
     // Placing fires the line, which needs a station to reach.
-    await withTransaction(db, (tx) => createStation(tx, { name: "Cocina", isDefault: true }));
+    await withTransaction(db, (tx) => createStation(tx, { name: "Kitchen", isDefault: true }));
     const id = randomUUID();
     await parkProducts(venue.cfg, { id, lines: [{ productId: venue.coffeeId, quantity: "1" }] });
     await db
@@ -4387,7 +4386,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
   it("placeOrder fires one ticket item per line to the resolved station (Mode T)", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { kitchenStationId, coffeeProduct } = await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const p = await makeProduct(tx, catalogueId, {});
       return { kitchenStationId: kitchenStation.id, coffeeProduct: p };
     });
@@ -4412,9 +4411,9 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
   it("parking stamps no line sent; placing sends every counter course", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { coffeeProduct, dessertProduct } = await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starters = await createCourse(tx, { name: "Entrantes", displayOrder: 1 });
-      const desserts = await createCourse(tx, { name: "Postres", displayOrder: 3 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 1 });
+      const desserts = await createCourse(tx, { name: "Desserts", displayOrder: 3 });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const dessertProduct = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, coffeeProduct, starters.id);
@@ -4454,9 +4453,9 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
   it("places and fires every counter course, putting no line in a group", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { coffeeProduct, dessertProduct } = await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starters = await createCourse(tx, { name: "Entrantes", displayOrder: 1 });
-      const desserts = await createCourse(tx, { name: "Postres", displayOrder: 3 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 1 });
+      const desserts = await createCourse(tx, { name: "Desserts", displayOrder: 3 });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const dessertProduct = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, coffeeProduct, starters.id);
@@ -4504,9 +4503,9 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
   it("keeps a placed counter's released dishes after a sold-out change and repeated line release", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { coffeeProduct, dessertProduct } = await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starters = await createCourse(tx, { name: "Entrantes", displayOrder: 1 });
-      const desserts = await createCourse(tx, { name: "Postres", displayOrder: 3 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 1 });
+      const desserts = await createCourse(tx, { name: "Desserts", displayOrder: 3 });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const dessertProduct = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, coffeeProduct, starters.id);
@@ -4553,7 +4552,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
   it("placeOrder refuses a line whose product sold out after it was parked, placing nothing", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const coffeeProduct = await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       return makeProduct(tx, catalogueId, {});
     });
     const id = randomUUID();
@@ -4613,13 +4612,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("bumps a line queued→preparing→ready, refuses illegal moves, and whole-ticket bumps together", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const waterProduct = await makeProduct(tx, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         line(coffeeProduct),
         line(waterProduct),
-      ]); // both → Cocina, queued
+      ]); // both → Kitchen, queued
 
       const items = await ticketItemRows(tx, orderId);
       expect(items.map((i) => i.state)).toEqual(["queued", "queued"]);
@@ -4658,7 +4657,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("advanceTicketItem refuses a skip (queued→ready), to='queued', and a nonexistent item", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(coffeeProduct)]);
       const [item] = await ticketItemRows(tx, orderId);
@@ -4688,7 +4687,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("advanceTicketItem refuses a garbage or missing `to` with the same code, not a raw TypeError", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(coffeeProduct)]);
       const [item] = await ticketItemRows(tx, orderId);
@@ -4718,12 +4717,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("listStationQueue groups a station's items by order oldest-first, dropping collected and abandoned orders", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
-      const barStation = await createStation(tx, { name: "Barra" });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
+      const barStation = await createStation(tx, { name: "Counter" });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const glassProduct = await makeProduct(tx, catalogueId, { stationId: barStation.id });
 
-      // Order 1 → Cocina (two lines), then order 2 → Cocina (one line) + one line to Barra.
+      // Order 1 → Kitchen (two lines), then order 2 → Kitchen (one line) + one line to Counter.
       const { id: order1 } = await placeOrderWith(tx, cfg, [
         line(coffeeProduct),
         line(coffeeProduct),
@@ -4757,7 +4756,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         order2,
       ]);
 
-      // Abandoning order 2 drops it too — the queue is empty at Cocina.
+      // Abandoning order 2 drops it too — the queue is empty at Kitchen.
       await tx
         .update(workingOrders)
         .set({ status: "abandoned" })
@@ -4769,8 +4768,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("carries each line's snapshotted kitchen name + quantity, items ordered by line_no", async () => {
     const { cfg, coffeeId, waterId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
-      // Line 1 → 2× Café, line 2 → 3× Agua, both routed to the default station. Grouped, as a
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
+      // Line 1 → 2× Espresso, line 2 → 3× Water, both routed to the default station. Grouped, as a
       // counter order written before portions, so each item carries a quantity other than one.
       const { id: orderId } = await placeOrderWith(
         tx,
@@ -4786,10 +4785,10 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(2);
       // Items in line_no order, each carrying the line's snapshotted kitchen name + quantity (the
-      // stored count read back as "2.000"/"3.000") — what the kitchen display turns into "2× Café".
+      // stored count read back as "2.000"/"3.000") — what the kitchen display turns into "2× Espresso".
       // Neither product carries a kitchen name of its own, so each falls back to its staff name.
       expect(group!.items[0]).toMatchObject({
-        name: "Café",
+        name: "Espresso",
         unitPrecision: 0,
         quantity: "2.000",
       });
@@ -4797,7 +4796,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es,
       });
       expect(group!.items[1]).toMatchObject({
-        name: "Agua",
+        name: "Water",
         unitPrecision: 0,
         quantity: "3.000",
       });
@@ -4810,9 +4809,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("attaches extras no cell decides as sub-items on listStationQueue and the pass board", async () => {
     const { cfg, coffeeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const largeExtra = await addExtra(tx, catalogueId, coffeeId, "ES large");
-      const oatMilkExtra = await addExtra(tx, catalogueId, coffeeId, "Leche avena");
+      const oatMilkExtra = await addExtra(tx, catalogueId, coffeeId, "Oat milk");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         {
           productId: coffeeId,
@@ -4840,7 +4839,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(group!.items[0]!.modifiers).toEqual([
         { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
         {
-          descriptions: { [LOCALE]: "Leche avena" },
+          descriptions: { [LOCALE]: "Oat milk" },
           perDish: 1,
           addAllergens: null,
           suitableFor: [],
@@ -4851,7 +4850,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(expoItem.modifiers).toEqual([
         { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
         {
-          descriptions: { [LOCALE]: "Leche avena" },
+          descriptions: { [LOCALE]: "Oat milk" },
           perDish: 1,
           addAllergens: null,
           suitableFor: [],
@@ -4866,18 +4865,18 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("surfaces a fired line's snapshotted note on listStationQueue and the pass board", async () => {
     const { cfg, coffeeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
-        { productId: coffeeId, quantity: "1", note: "sin cebolla" },
+        { productId: coffeeId, quantity: "1", note: "No onion" },
       ]);
 
       const [group] = await listStationQueue(tx, kitchenStation.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(1);
-      expect(group!.items[0]!.note).toBe("sin cebolla");
+      expect(group!.items[0]!.note).toBe("No onion");
 
       const expoItem = (await passItems(tx))[0]!;
-      expect(expoItem.note).toBe("sin cebolla");
+      expect(expoItem.note).toBe("No onion");
 
       // A later DRAFT edit of the parent line does NOT move the fired snapshot the kitchen reads.
       const [parent] = await tx
@@ -4894,7 +4893,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         .set({ note: "con cebolla" })
         .where(eq(workingOrderLines.id, parent!.id));
       const [afterEdit] = await listStationQueue(tx, kitchenStation.id);
-      expect(afterEdit!.items[0]!.note).toBe("sin cebolla");
+      expect(afterEdit!.items[0]!.note).toBe("No onion");
     });
   });
 
@@ -4903,7 +4902,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("surfaces a null note for a plain fired line", async () => {
     const { cfg, coffeeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       await placeOrderWith(tx, cfg, [{ productId: coffeeId, quantity: "1" }]);
 
       const [group] = await listStationQueue(tx, kitchenStation.id);
@@ -4918,7 +4917,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("attaches the dish's own allergens, ignoring a gluten-removing option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       // A gluten burger with a "gluten-free bun" option: base `{gluten: contains}`. The option states no
       // allergens of its own; the dish shows its OWN gluten (options are never folded into the dish).
       const burger = await createProduct(tx, {
@@ -4930,7 +4929,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { kinds: ["wheat" as const] } },
       });
-      const gfBun = await addExtra(tx, catalogueId, burger.id, "Bread sin gluten");
+      const gfBun = await addExtra(tx, catalogueId, burger.id, "Gluten-free bread");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         {
           productId: burger.id,
@@ -4968,7 +4967,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("marks the as-served profile pending when the dish's base allergens are unreviewed", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await makeProduct(tx, catalogueId, {}); // no allergens → published NULL
       const opt = await addExtra(tx, catalogueId, dish, "Extra");
       await placeOrderWith(tx, cfg, [
@@ -4991,7 +4990,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("attaches a pending profile to a plain, modifier-less unreviewed dish (KDS errs safe)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await makeProduct(tx, catalogueId, {}); // no allergens → published NULL
       await placeOrderWith(tx, cfg, [line(dish)]); // no options at all
       const item = (await listStationQueue(tx, kitchenStation.id))[0]!.items[0]!;
@@ -5010,7 +5009,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("attaches the dish's own allergens, ignoring an added allergen from an option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -5039,7 +5038,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("shows the dish's own vegan declaration when an option is selected", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -5049,7 +5048,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         dietaryDeclarations: ["vegan"],
       });
-      const dairyFree = await addExtra(tx, catalogueId, dish.id, "Sin lácteos", {
+      const dairyFree = await addExtra(tx, catalogueId, dish.id, "Dairy-free", {
         suitableFor: [],
       });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
@@ -5089,7 +5088,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("keeps the dish's own vegan/vegetarian claims regardless of a selected invalidating option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -5139,7 +5138,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("reads unknown suitability when a product has no direct declarations", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await makeProduct(tx, catalogueId, {});
       await placeOrderWith(tx, cfg, [line(dish)]);
 
@@ -5160,7 +5159,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("bands each item by the station's thresholds and carries them on the group", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true }); // 5/10/15 defaults
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const waterProduct = await makeProduct(tx, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [
@@ -5229,9 +5228,9 @@ describe("waiter line release / hold-and-fire", () => {
   it("auto-fires the earliest course, holds later ones, and waiter line release keeps its same-course sibling held", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const soup = await makeProduct(tx, catalogueId, {});
       const steak = await makeProduct(tx, catalogueId, {});
       const sibling = await makeProduct(tx, catalogueId, {});
@@ -5266,12 +5265,12 @@ describe("waiter line release / hold-and-fire", () => {
 
   it("a null-course line fires immediately (treated as earliest) even while a real later course is held", async () => {
     // §2b: a null course_id has no display_order and fires immediately. Proven alongside a genuine
-    // coursed hold: the loose (courseless) line fires at once while the later Principales line waits.
+    // coursed hold: the loose (courseless) line fires at once while the later Mains line waits.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const loose = await makeProduct(tx, catalogueId, {}); // no course → null
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
@@ -5293,9 +5292,9 @@ describe("waiter line release / hold-and-fire", () => {
   it("line release is idempotent — re-firing an already-fired dish leaves its timestamps untouched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
@@ -5303,7 +5302,7 @@ describe("waiter line release / hold-and-fire", () => {
 
       const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
 
-      // The earliest course (Entrantes) auto-fired; re-firing it must NOT restamp — its WHERE
+      // The earliest course (Starters) auto-fired; re-firing it must NOT restamp — its WHERE
       // (`fired_at IS NULL`) matches nothing already-fired.
       const beforeEnt = byLine(await courseItemsFor(tx, orderId), starter).firedAt;
       await fireProductLine(tx, cfg, orderId, starter);
@@ -5326,10 +5325,10 @@ describe("waiter line release / hold-and-fire", () => {
     // immediately, even when that course is NOT the earliest.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
-      const post = await createCourse(tx, { name: "Postres", displayOrder: 2 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const post = await createCourse(tx, { name: "Desserts", displayOrder: 2 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       const dessert = await makeProduct(tx, catalogueId, {});
@@ -5339,26 +5338,26 @@ describe("waiter line release / hold-and-fire", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
-      // Round 1: starter (Entrantes, earliest) auto-fires; main (Principales) is held.
+      // Round 1: starter (Starters, earliest) auto-fires; main (Mains) is held.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       let items = await courseItemsFor(tx, tabId);
       expect(byLine(items, starter).firedAt).not.toBeNull();
       expect(byLine(items, main).firedAt).toBeNull();
 
-      // Round 2: dessert (Postres) ALONE. It is NOT the order's earliest (Entrantes from round 1 is), so
+      // Round 2: dessert (Desserts) ALONE. It is NOT the order's earliest (Starters from round 1 is), so
       // it stays held — decisive proof the earliest is taken over prior rounds, not this batch (a
-      // batch-only min would make Postres its own earliest and fire it).
+      // batch-only min would make Desserts its own earliest and fire it).
       await addRound(tx, cfg, tabId, [line(dessert)]);
       items = await courseItemsFor(tx, tabId);
       expect(byLine(items, dessert).firedAt).toBeNull();
 
-      // Release Principales explicitly — now fired for the order though it is not the earliest course.
+      // Release Mains explicitly — now fired for the order though it is not the earliest course.
       await fireProductLine(tx, cfg, tabId, main);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).not.toBeNull();
 
-      // Round 3: another main. Principales is already fired for this order, so this new item joins the
-      // fired course and fires at once — the `firedCourseIds` branch, isolated (Principales is not the
-      // earliest). Dessert (Postres, still unfired) remains held.
+      // Round 3: another main. Mains is already fired for this order, so this new item joins the
+      // fired course and fires at once — the `firedCourseIds` branch, isolated (Mains is not the
+      // earliest). Dessert (Desserts, still unfired) remains held.
       await addRound(tx, cfg, tabId, [line(main)]);
       items = await courseItemsFor(tx, tabId);
       const mains = items.filter((i) => i.productId === main);
@@ -5374,9 +5373,9 @@ describe("waiter line release / hold-and-fire", () => {
     // so the whole-ticket sweep addresses both; only the fired one is in the match.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
@@ -5384,8 +5383,8 @@ describe("waiter line release / hold-and-fire", () => {
 
       const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
       const before = await courseItemsFor(tx, orderId);
-      expect(byLine(before, starter).firedAt).not.toBeNull(); // Entrantes auto-fired
-      expect(byLine(before, main).firedAt).toBeNull(); // Principales held
+      expect(byLine(before, starter).firedAt).not.toBeNull(); // Starters auto-fired
+      expect(byLine(before, main).firedAt).toBeNull(); // Mains held
 
       // Whole-ticket bump to preparing: the fired starter advances; the held main is skipped.
       await advanceTicket(tx, cfg, orderId, kitchenStation.id, "preparing");
@@ -5400,16 +5399,16 @@ describe("waiter line release / hold-and-fire", () => {
   it("releases a HELD course's items after deletion while its historical course row exists", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
 
       const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
-      expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Principales held
+      expect(byLine(await courseItemsFor(tx, orderId), main).firedAt).toBeNull(); // Mains held
 
       await deleteCourse(tx, mainCourse.id);
       await fireProductLine(tx, cfg, orderId, main);
@@ -5453,10 +5452,10 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("moves a HELD line to another course, updating both course_id snapshots", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
-      const post = await createCourse(tx, { name: "Postres", displayOrder: 2 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const post = await createCourse(tx, { name: "Desserts", displayOrder: 2 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
@@ -5464,15 +5463,15 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
-      // Ring both: starter (Entrantes, earliest) auto-fires; main (Principales) is HELD — it is line 2.
+      // Ring both: starter (Starters, earliest) auto-fires; main (Mains) is HELD — it is line 2.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       const before = await courseItemsFor(tx, tabId);
       expect(byLine(before, main).firedAt).toBeNull(); // held — a later course
-      expect(byLine(before, main).courseId).toBe(mainCourse.id); // its snapshot sits on Principales
+      expect(byLine(before, main).courseId).toBe(mainCourse.id); // its snapshot sits on Mains
 
       await setLineCourse(tx, cfg, tabId, 2, post.id);
 
-      // The open-tab line AND its held ticket item snapshot both moved to Postres…
+      // The open-tab line AND its held ticket item snapshot both moved to Desserts…
       const [lineRow] = await tx
         .select({ courseId: workingOrderLines.courseId })
         .from(workingOrderLines)
@@ -5487,9 +5486,9 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("clears a held line's course to null (fire-earliest), updating both snapshots", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
@@ -5513,18 +5512,18 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("refuses to re-course a FIRED line (ticket.already_fired)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      // A lone Entrantes line is the order's earliest (only) course, so it auto-fires at round-send.
+      // A lone Starters line is the order's earliest (only) course, so it auto-fires at round-send.
       await addRound(tx, cfg, tabId, [line(starter)]);
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
 
-      // Principales is a valid LIVE course, so requireLiveCourse passes — the FIRED guard is what refuses.
+      // Mains is a valid LIVE course, so requireLiveCourse passes — the FIRED guard is what refuses.
       await expect(setLineCourse(tx, cfg, tabId, 1, mainCourse.id)).rejects.toMatchObject({
         code: "ticket.already_fired",
         params: { workingOrderId: tabId },
@@ -5535,9 +5534,9 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("refuses an unknown OR retired target course (course.not_found)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const retired = await createCourse(tx, { name: "Postres", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const retired = await createCourse(tx, { name: "Desserts", displayOrder: 1 });
       await tx
         .update(kitchenCourses)
         .set({ active: false })
@@ -5565,8 +5564,8 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("throws tab.line_not_found for a line_no not on the tab", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const starter = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
       const tableId = await makeTable(tx, cfg);
@@ -5610,9 +5609,9 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   it("fires a SUBSET of held lines (refreshing queued_at) and leaves the rest held", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main1 = await makeProduct(tx, catalogueId, {});
       const main2 = await makeProduct(tx, catalogueId, {});
@@ -5622,7 +5621,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
-      // Ring three: starter (Entrantes, earliest) auto-fires as line 1; both Principales mains are HELD
+      // Ring three: starter (Starters, earliest) auto-fires as line 1; both Mains mains are HELD
       // — main1 is line 2, main2 is line 3.
       await addRound(tx, cfg, tabId, [line(starter), line(main1), line(main2)]);
       // Age the held lines' queued_at so the send's refresh is distinguishable from the ring stamp.
@@ -5655,10 +5654,10 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   it("an empty line list releases EVERY held line (send-all together)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
-      const post = await createCourse(tx, { name: "Postres", displayOrder: 2 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const post = await createCourse(tx, { name: "Desserts", displayOrder: 2 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       const dessert = await makeProduct(tx, catalogueId, {});
@@ -5668,7 +5667,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
-      // starter (line 1) auto-fires; main (line 2, Principales) and dessert (line 3, Postres) are held.
+      // starter (line 1) auto-fires; main (line 2, Mains) and dessert (line 3, Desserts) are held.
       await addRound(tx, cfg, tabId, [line(starter), line(main), line(dessert)]);
       const before = await itemsByLineNo(tx, tabId);
       expect(before.get(2)!.firedAt).toBeNull();
@@ -5687,9 +5686,9 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   it("is idempotent — an already-fired line in the set is left untouched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
@@ -5736,24 +5735,24 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       // A printer per station, so the HELD line's print can be counted in isolation from the auto-fired
-      // starter's (which prints at Cocina the moment it is rung).
-      await attachedPrinter(tx, { name: "Cocina", isDefault: true }, "P-Cocina");
+      // starter's (which prints at Kitchen the moment it is rung).
+      await attachedPrinter(tx, { name: "Kitchen", isDefault: true }, "P-Kitchen");
       const { station: barStation, printerId: barPrinterId } = await attachedPrinter(
         tx,
-        { name: "Barra" },
-        "P-Barra",
+        { name: "Counter" },
+        "P-Counter",
       );
 
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
-      const starter = await makeProduct(tx, catalogueId, {}); // → Cocina (default)
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const starter = await makeProduct(tx, catalogueId, {}); // → Kitchen (default)
       const main = await makeProduct(tx, catalogueId, { stationId: barStation.id });
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
-      // Ring both: starter auto-fires (prints at Cocina); main (Principales, Barra) is HELD — no Barra
+      // Ring both: starter auto-fires (prints at Kitchen); main (Mains, Counter) is HELD — no Counter
       // print yet, because a held line prints only when it is sent.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       const allJobsBefore = await tx.select({ id: printJobs.id }).from(printJobs);
@@ -5761,8 +5760,8 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
         .select({ id: printJobs.id })
         .from(printJobs)
         .where(eq(printJobs.printerId, barPrinterId));
-      expect(barJobsBefore).toHaveLength(0); // the HELD Barra line has NOT printed
-      // (Cocina already has the auto-fired starter's ticket, so the outbox is not simply empty.)
+      expect(barJobsBefore).toHaveLength(0); // the HELD Counter line has NOT printed
+      // (Kitchen already has the auto-fired starter's ticket, so the outbox is not simply empty.)
       expect(allJobsBefore.length).toBeGreaterThan(0);
 
       // Send the held line — its kitchen print is enqueued now.
@@ -5782,8 +5781,8 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("un-fires a fired-not-started line back to held (fired_at → null, state stays queued)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const starter = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
       const tableId = await makeTable(tx, cfg);
@@ -5806,8 +5805,8 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("refuses a STARTED (preparing/ready) line with ticket.already_started, naming its item id", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const starter = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
       const tableId = await makeTable(tx, cfg);
@@ -5833,8 +5832,8 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("refuses a ready line with ticket.already_started, naming its item id", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const starter = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
       const tableId = await makeTable(tx, cfg);
@@ -5857,9 +5856,9 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("is a no-op on an already-HELD line (its fired_at stays null)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
@@ -5867,7 +5866,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
-      // starter (line 1) auto-fires; main (line 2, Principales) is HELD — fired_at already null.
+      // starter (line 1) auto-fires; main (line 2, Mains) is HELD — fired_at already null.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
 
@@ -5882,8 +5881,8 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("throws tab.line_not_found for a line_no not on the tab", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const starter = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
       const tableId = await makeTable(tx, cfg);
@@ -5943,15 +5942,15 @@ describe("correction slips on recall & void (A6)", () => {
     await withTransaction(db, async (tx) => {
       const { printerId: kitchenPrinterId } = await attachedPrinter(
         tx,
-        { name: "Cocina", isDefault: true },
-        "P-Cocina",
+        { name: "Kitchen", isDefault: true },
+        "P-Kitchen",
       );
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const starter = await namedProduct(tx, catalogueId, "Croquetas", starterCourse.id);
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const starter = await namedProduct(tx, catalogueId, "Croquettes", starterCourse.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
-      // A lone earliest-course line auto-fires at round-send — it prints (fire ticket) at Cocina.
+      // A lone earliest-course line auto-fires at round-send — it prints (fire ticket) at Kitchen.
       await addRound(tx, cfg, tabId, [line(starter)]);
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
       const before = await jobRows(tx);
@@ -5964,22 +5963,22 @@ describe("correction slips on recall & void (A6)", () => {
       expect(fresh[0]!.printerId).toBe(kitchenPrinterId);
       const text = decodeTicket(fresh[0]!.payload);
       expect(text).toContain("RECALLED");
-      expect(text).toContain("Croquetas");
+      expect(text).toContain("Croquettes");
     });
   });
 
   it("(b) recalling a HELD line no HOLD ticket carries enqueues NO slip", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await attachedPrinter(tx, { name: "Cocina", isDefault: true }, "P-Cocina");
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
-      const starter = await namedProduct(tx, catalogueId, "Croquetas", starterCourse.id);
+      await attachedPrinter(tx, { name: "Kitchen", isDefault: true }, "P-Kitchen");
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const starter = await namedProduct(tx, catalogueId, "Croquettes", starterCourse.id);
       const main = await namedProduct(tx, catalogueId, "Chuleton", mainCourse.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
-      // starter (line 1) auto-fires; main (line 2, Principales) is HELD — never printed.
+      // starter (line 1) auto-fires; main (line 2, Mains) is HELD — never printed.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
       const before = await jobRows(tx);
@@ -5997,11 +5996,11 @@ describe("correction slips on recall & void (A6)", () => {
     await withTransaction(db, async (tx) => {
       const { printerId: kitchenPrinterId } = await attachedPrinter(
         tx,
-        { name: "Cocina", isDefault: true },
-        "P-Cocina",
+        { name: "Kitchen", isDefault: true },
+        "P-Kitchen",
       );
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const starter = await namedProduct(tx, catalogueId, "Croquetas", starterCourse.id);
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const starter = await namedProduct(tx, catalogueId, "Croquettes", starterCourse.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
@@ -6017,7 +6016,7 @@ describe("correction slips on recall & void (A6)", () => {
       expect(fresh[0]!.printerId).toBe(kitchenPrinterId);
       const text = decodeTicket(fresh[0]!.payload);
       expect(text).toContain("VOID");
-      expect(text).toContain("Croquetas");
+      expect(text).toContain("Croquettes");
     });
   });
 
@@ -6026,10 +6025,10 @@ describe("correction slips on recall & void (A6)", () => {
     await withTransaction(db, async (tx) => {
       const { printerId } = await attachedPrinter(
         tx,
-        { name: "Cocina", isDefault: true },
-        "P-Cocina",
+        { name: "Kitchen", isDefault: true },
+        "P-Kitchen",
       );
-      const starter = await namedProduct(tx, catalogueId, "Croquetas");
+      const starter = await namedProduct(tx, catalogueId, "Croquettes");
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
@@ -6039,26 +6038,26 @@ describe("correction slips on recall & void (A6)", () => {
         .where(eq(workingOrders.id, tabId));
       const before = await jobRows(tx);
 
-      await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin cebolla" }, revision!);
+      await updateOrderLine(tx, cfg, tabId, 1, { note: "No onion" }, revision!);
 
       const fresh = (await jobRows(tx)).filter((j) => !before.some((b) => b.id === j.id));
       expect(fresh.map((job) => job.printerId)).toEqual([printerId, printerId]);
       const [slip, ticket] = fresh.map((job) => decodeTicket(job.payload));
       expect(slip).toContain("RECALLED");
-      expect(slip).toContain("Croquetas");
+      expect(slip).toContain("Croquettes");
       expect(ticket).not.toContain("RECALLED");
-      expect(ticket).toContain("Croquetas");
-      expect(ticket).toContain("Sin cebolla");
+      expect(ticket).toContain("Croquettes");
+      expect(ticket).toContain("No onion");
     });
   });
 
   it("(d) voiding a HELD line no HOLD ticket carries enqueues NO slip", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await attachedPrinter(tx, { name: "Cocina", isDefault: true }, "P-Cocina");
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
-      const starter = await namedProduct(tx, catalogueId, "Croquetas", starterCourse.id);
+      await attachedPrinter(tx, { name: "Kitchen", isDefault: true }, "P-Kitchen");
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const starter = await namedProduct(tx, catalogueId, "Croquettes", starterCourse.id);
       const main = await namedProduct(tx, catalogueId, "Chuleton", mainCourse.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
@@ -6090,10 +6089,10 @@ describe("addTabRound hold-on-send (A3)", () => {
     await withTransaction(db, async (tx) => {
       const { printerId: kitchenPrinterId } = await attachedPrinter(
         tx,
-        { name: "Cocina", isDefault: true },
-        "P-Cocina",
+        { name: "Kitchen", isDefault: true },
+        "P-Kitchen",
       );
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const olives = await makeProduct(tx, catalogueId, {});
       const bread = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, olives, starterCourse.id);
@@ -6132,8 +6131,8 @@ describe("addTabRound hold-on-send (A3)", () => {
     await withTransaction(db, async (tx) => {
       const { printerId: kitchenPrinterId } = await attachedPrinter(
         tx,
-        { name: "Cocina", isDefault: true },
-        "P-Cocina",
+        { name: "Kitchen", isDefault: true },
+        "P-Kitchen",
       );
       const modified = await makeProduct(tx, catalogueId, {});
       const plain = await makeProduct(tx, catalogueId, {});
@@ -6170,11 +6169,11 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
   it("shows one order's two-station single-course dishes with their station names and course, excluding collected/abandoned orders", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const barStation = await createStation(tx, { name: "Barra" });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const barStation = await createStation(tx, { name: "Counter" });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       // Two products in the SAME course, routed to DIFFERENT stations — the cross-station shape.
-      const soup = await makeProduct(tx, catalogueId, {}); // → Cocina (default)
+      const soup = await makeProduct(tx, catalogueId, {}); // → Kitchen (default)
       const olives = await makeProduct(tx, catalogueId, { stationId: barStation.id });
       await setProductCourse(tx, soup, starterCourse.id);
       await setProductCourse(tx, olives, starterCourse.id);
@@ -6187,15 +6186,15 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       const items = boardItems(board);
       // Both dishes in the one course, each labelled with its OWN station — the join listStationQueue omits.
       expect(items).toHaveLength(2);
-      const starterCourseSnapshot = { id: starterCourse.id, name: "Entrantes", displayOrder: 0 };
+      const starterCourseSnapshot = { id: starterCourse.id, name: "Starters", displayOrder: 0 };
       expect(items.map((i) => i.course)).toEqual([starterCourseSnapshot, starterCourseSnapshot]);
-      expect(items.map((i) => i.stationName).sort()).toEqual(["Barra", "Cocina"]);
+      expect(items.map((i) => i.stationName).sort()).toEqual(["Counter", "Kitchen"]);
       expect(items.every((i) => i.state === "queued")).toBe(true);
       expect(items.every((i) => i.firedAt !== null)).toBe(true);
       expect(items.every((i) => !("awayAt" in i))).toBe(true);
       // The display snapshot rides through: `name` is the resolved kitchen label, `qty` the
       // quantity as a three-place decimal string.
-      const soupItem = items.find((i) => i.stationName === "Cocina")!;
+      const soupItem = items.find((i) => i.stationName === "Kitchen")!;
       // The fixture seeds no kitchen name, so the label is the product's staff name (`P-<uuid>`),
       // a plain string rather than a locale map.
       expect(soupItem.name).toMatch(/^P-/);
@@ -6220,9 +6219,9 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
   it("keeps counter course labels in display order and releases every course", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
@@ -6232,7 +6231,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
 
       const board = await readScopedPassBoard(tx, EVERY);
       const [d0, d1] = boardItems(board);
-      expect([d0!.course?.name, d1!.course?.name]).toEqual(["Entrantes", "Principales"]);
+      expect([d0!.course?.name, d1!.course?.name]).toEqual(["Starters", "Mains"]);
       expect(d0!.firedAt).not.toBeNull(); // earliest course auto-fired
       expect(boardCards(board).some((card) => "away" in card)).toBe(false);
       expect(d1!.firedAt).not.toBeNull(); // Counter Send releases every course.
@@ -6253,8 +6252,8 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
   it("keeps every unserved item on the pass board", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const a = await makeProduct(tx, catalogueId, {});
       const b = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, a, starterCourse.id);
@@ -6278,14 +6277,14 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
   it("surfaces the dining-table label for a tab and omits it for a walk-up, and ages the tab's card from its first sent dish", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {}); // null course → fires immediately
 
       // A party's tab at a known-labelled table.
       const { zoneId } = await tableOffers(tx, cfg);
       const { rows } = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Mesa 5', ${zoneId}, ${nowIso()})
+        values (${randomUUID()}, ${cfg.locationId}, 'Table 5', ${zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
       const tableId = rows[0]!.id;
@@ -6298,7 +6297,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       const board = await readScopedPassBoard(tx, EVERY);
       const orders = boardCards(board).flatMap((c) => c.orders);
       const tab = orders.find((o) => o.orderId === tabId)!;
-      expect(tab.tableLabel).toBe("Mesa 5");
+      expect(tab.tableLabel).toBe("Table 5");
       const walk = orders.find((o) => o.orderId === walkup)!;
       expect(walk.tableLabel).toBeUndefined();
       const tabCard = cardOf(board, (c) => c.orders.some((o) => o.orderId === tabId));
@@ -6310,11 +6309,11 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
   it("names a counter order after the table it is delivered to, not its own label", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const { rows } = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Terraza 8', ${(await offerProducts(tx, cfg)).zoneId}, ${nowIso()})
+        values (${randomUUID()}, ${cfg.locationId}, 'Terrace 8', ${(await offerProducts(tx, cfg)).zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
       const { id } = await placeOrderWith(tx, cfg, [line(coffeeProduct)]);
@@ -6326,14 +6325,14 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       const order = boardCards(await readScopedPassBoard(tx, EVERY))
         .flatMap((c) => c.orders)
         .find((o) => o.orderId === id)!;
-      expect(order.tableLabel).toBe("Terraza 8");
+      expect(order.tableLabel).toBe("Terrace 8");
     });
   });
 
   it("names a joined party's tables together on every bill of the party (spec decision 9)", async () => {
     const v = await setupPartyVenue(db);
-    const table4Id = await v.table("Mesa 4");
-    const table5Id = await v.table("Mesa 5");
+    const table4Id = await v.table("Table 4");
+    const table5Id = await v.table("Table 5");
     const { partyId, tabId } = await seat(v, table4Id);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
@@ -6343,8 +6342,8 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
     const orders = boardCards(board).flatMap((card) => card.orders);
 
     expect(Object.fromEntries(orders.map((order) => [order.orderId, order.tableLabel]))).toEqual({
-      [tabId]: "Mesa 4, 5",
-      [checkId]: "Mesa 4, 5",
+      [tabId]: "Table 4, 5",
+      [checkId]: "Table 4, 5",
     });
   });
 
@@ -6354,15 +6353,15 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
   it("carries each item's own station thresholds and band", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
-      const barStation = await createStation(tx, { name: "Barra" });
-      // Distinct thresholds so a per-item mix-up (Barra's item reading Cocina's thresholds, or vice
+      await createStation(tx, { name: "Kitchen", isDefault: true }); // 5/10/15 defaults
+      const barStation = await createStation(tx, { name: "Counter" });
+      // Distinct thresholds so a per-item mix-up (Counter's item reading Kitchen's thresholds, or vice
       // versa) would fail this test rather than passing by coincidence on identical defaults.
       await tx
         .update(kitchenStations)
         .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 })
         .where(eq(kitchenStations.id, barStation.id));
-      const soup = await makeProduct(tx, catalogueId, {}); // → Cocina (default)
+      const soup = await makeProduct(tx, catalogueId, {}); // → Kitchen (default)
       const olives = await makeProduct(tx, catalogueId, { stationId: barStation.id });
 
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(olives)]);
@@ -6370,7 +6369,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       const soupItem = items.find((i) => i.productId === soup)!;
       const oliveItem = items.find((i) => i.productId === olives)!;
 
-      // Backdate the Barra item past ITS OWN overdue threshold (4) but nowhere near Cocina's (10).
+      // Backdate the Counter item past ITS OWN overdue threshold (4) but nowhere near Kitchen's (10).
       await tx.execute(
         sql`update ticket_items set queued_at = ${minutesAgo(5)} where id = ${oliveItem.id}`,
       );
@@ -6404,7 +6403,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
   it("drops a served line, and its band, off the pass board (design §3 — ages until it reaches the guest)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
+      await createStation(tx, { name: "Kitchen", isDefault: true }); // 5/10/15 defaults
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const waterProduct = await makeProduct(tx, catalogueId, {});
       const tableId = await makeTable(tx, cfg);
@@ -6438,10 +6437,10 @@ async function firedCourseAcrossTwoStations(
   cfg: WithVenueRowId<DeviceRequestConfig>,
   catalogueId: string,
 ): Promise<{ orderId: string; courseId: string }> {
-  await createStation(tx, { name: "Cocina", isDefault: true });
-  const barStation = await createStation(tx, { name: "Barra" });
-  const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-  const soup = await makeProduct(tx, catalogueId, {}); // → Cocina (default)
+  await createStation(tx, { name: "Kitchen", isDefault: true });
+  const barStation = await createStation(tx, { name: "Counter" });
+  const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+  const soup = await makeProduct(tx, catalogueId, {}); // → Kitchen (default)
   const olives = await makeProduct(tx, catalogueId, { stationId: barStation.id });
   await setProductCourse(tx, soup, starterCourse.id);
   await setProductCourse(tx, olives, starterCourse.id);
@@ -6471,23 +6470,23 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
   it("skips held items and leaves ready and newly fired items undispatched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, catalogueId, {});
       const main = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
       const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
 
-      // Principales is HELD (later course, fired_at null). bumpCourseReady on it advances NOTHING — the
+      // Mains is HELD (later course, fired_at null). bumpCourseReady on it advances NOTHING — the
       // `fired_at IS NOT NULL` predicate skips held items.
       await bumpCourseReady(tx, cfg, orderId, mainCourse.id);
       let items = await courseItemsFor(tx, orderId);
       expect(byLine(items, main).state).toBe("queued"); // held → skipped
       expect(byLine(items, main).firedAt).toBeNull(); // and still held
 
-      // Entrantes IS fired, so bumping it plates its item straight to `ready` (queued → ready in one step)
+      // Starters IS fired, so bumping it plates its item straight to `ready` (queued → ready in one step)
       // — the OTHER answer, so the held-skip above is a real measurement, not "nothing ever advances".
       await bumpCourseReady(tx, cfg, orderId, starterCourse.id);
       items = await courseItemsFor(tx, orderId);
@@ -6535,7 +6534,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
   it("rescales a held kitchen ticket by the extra's frozen 50 g portion", async () => {
     const { cfg, coffeeId, catalogueId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await attachedPrinter(tx, { name: "Cocina", isDefault: true }, "P-Cocina");
+      await attachedPrinter(tx, { name: "Kitchen", isDefault: true }, "P-Kitchen");
       const { station: extrasStation } = await attachedPrinter(
         tx,
         { name: "Emplatado" },
@@ -6626,7 +6625,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, tabId));
       const beforeNoteJobs = await tx.select({ id: printJobs.id }).from(printJobs);
-      await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin sal" }, nextRevision!);
+      await updateOrderLine(tx, cfg, tabId, 1, { note: "No salt" }, nextRevision!);
       const noteJobs = (
         await tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs)
       )
@@ -6639,7 +6638,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
   it("voids the physical 50 g child amount when a fired dish is cancelled or reduced", async () => {
     const { cfg, coffeeId, catalogueId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const extrasStation = await createStation(tx, { name: "Emplatado" });
       const extrasCategory = await createCategory(tx, { name: "Extras" });
       await routeCategory(tx, extrasCategory.id, {
@@ -6952,7 +6951,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     await withTransaction(db, async (tx) => {
       const bacon = await addExtra(tx, catalogueId, coffeeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
-      // line 1 = café (parent), line 2 = bacon (child).
+      // line 1 = espresso (parent), line 2 = bacon (child).
       const tabId = await openExtrasTab(tx, cfg, tableId, [
         {
           productId: coffeeId,
@@ -7388,7 +7387,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("rejects a malformed (non-uuid) course override with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
       await expect(
@@ -7402,7 +7401,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("rejects an unknown (well-formed but absent) course override with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
       const missing = randomUUID();
@@ -7415,10 +7414,10 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("rejects a DEACTIVATED course override with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
-      const dead = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      const dead = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, dead.id));
       await expect(
         addRound(tx, cfg, tabId, [{ productId: coffeeProduct, quantity: "1", courseId: dead.id }]),
@@ -7429,11 +7428,11 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("accepts a valid active course override and resolves it (the override wins over the product default)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       // The product DEFAULT differs from the override — proving the override WINS and is snapshotted,
       // and that a legitimate active override is not rejected by the screen.
-      const def = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
-      const override = await createCourse(tx, { name: "Principales", displayOrder: 1 });
+      const def = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const override = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       await setProductCourse(tx, coffeeProduct, def.id);
       const tabId = await openEmptyTab(tx, cfg);
@@ -7800,9 +7799,9 @@ describe("order path — extras and options", () => {
       const wine = await createProduct(tx, {
         catalogueId,
         categoryId: null,
-        name: "Vino staff",
-        customerName: { [defaultLanguage]: "Vino customer" },
-        kitchenName: "Vino kitchen",
+        name: "Wine staff",
+        customerName: { [defaultLanguage]: "Wine customer" },
+        kitchenName: "Wine kitchen",
         pricingUnit: "each",
         // The list item's own price outranks this, so a child priced at 3.00 would mean the offer
         // was never read.
@@ -7812,9 +7811,9 @@ describe("order path — extras and options", () => {
       const extraList = await catalogue.createExtraList(
         tx,
         {
-          name: "Vinos staff",
-          customerName: { [defaultLanguage]: "Vinos customer" },
-          kitchenName: "Vinos kitchen",
+          name: "Wines staff",
+          customerName: { [defaultLanguage]: "Wines customer" },
+          kitchenName: "Wines kitchen",
           minPicks: 0,
           maxPicks,
           active: true,
@@ -7942,9 +7941,9 @@ describe("order path — extras and options", () => {
       expect(child.productId).toBe(seeded.wineId);
       // The wine's three names, frozen: staff on `name`, customer re-keyed onto the venue's
       // invoice locale, kitchen on `kitchen_name`.
-      expect(child.name).toBe("Vino staff");
-      expect(child.descriptions).toEqual({ [LOCALE]: "Vino customer" });
-      expect(child.kitchenName).toBe("Vino kitchen");
+      expect(child.name).toBe("Wine staff");
+      expect(child.descriptions).toEqual({ [LOCALE]: "Wine customer" });
+      expect(child.kitchenName).toBe("Wine kitchen");
       // The extra PRODUCT's own VAT, never the 10% dish's.
       expect(child.vatClass).toBe("general");
       // The list ITEM's price, not the wine's own 3.00; dish ×1 × pick ×1 = 1. All three columns
@@ -8030,22 +8029,22 @@ describe("order path — extras and options", () => {
       const list = await catalogue.createOptionList(
         tx,
         {
-          name: "Leche list staff",
-          customerName: { [CONTENT_LANGUAGE]: "Leche cliente", ca: "Llet client" },
-          kitchenName: "Leche list kitchen",
+          name: "Milk list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Milk customer", ca: "Llet client" },
+          kitchenName: "Milk list kitchen",
           defaultLabelId: null,
           active: true,
           labels: [
             {
-              name: "Entera staff",
-              customerName: { [CONTENT_LANGUAGE]: "Entera cliente", ca: "Sencera client" },
-              kitchenName: "Entera kitchen",
+              name: "Whole staff",
+              customerName: { [CONTENT_LANGUAGE]: "Whole customer", ca: "Sencera client" },
+              kitchenName: "Whole kitchen",
               available: true,
             },
             {
-              name: "Avena staff",
-              customerName: { [CONTENT_LANGUAGE]: "Avena cliente", ca: "Civada client" },
-              kitchenName: "Avena kitchen",
+              name: "Oat staff",
+              customerName: { [CONTENT_LANGUAGE]: "Oat customer", ca: "Civada client" },
+              kitchenName: "Oat kitchen",
               available: true,
             },
           ],
@@ -8082,12 +8081,12 @@ describe("order path — extras and options", () => {
       expect(lines.map((line) => line.optionSnapshots)).toEqual([
         [
           {
-            listName: { [CONTENT_LANGUAGE]: "Leche list staff" },
-            listCustomerName: { [CONTENT_LANGUAGE]: "Leche cliente" },
-            listKitchenName: "Leche list kitchen",
-            labelName: { [CONTENT_LANGUAGE]: "Avena staff" },
-            labelCustomerName: { [CONTENT_LANGUAGE]: "Avena cliente" },
-            labelKitchenName: "Avena kitchen",
+            listName: { [CONTENT_LANGUAGE]: "Milk list staff" },
+            listCustomerName: { [CONTENT_LANGUAGE]: "Milk customer" },
+            listKitchenName: "Milk list kitchen",
+            labelName: { [CONTENT_LANGUAGE]: "Oat staff" },
+            labelCustomerName: { [CONTENT_LANGUAGE]: "Oat customer" },
+            labelKitchenName: "Oat kitchen",
           },
         ],
       ]);
@@ -8213,7 +8212,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     const { cfg, coffeeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       const bacon = await addExtraList(tx, catalogueId, coffeeId, "Bacon", { price: "1.00" });
-      const milkExtra = await addExtraList(tx, catalogueId, coffeeId, "Leche", {
+      const milkExtra = await addExtraList(tx, catalogueId, coffeeId, "Milk", {
         price: "0.30",
         maxQuantity: 3,
       });
@@ -8299,16 +8298,16 @@ describe("what a held-order edit preserves and what it replaces", () => {
     const { cfg, coffeeId, catalogueId } = await setupVenue();
     // One wine, offered by two of the dish's lists at two prices.
     const seeded = await withTransaction(db, async (tx) => {
-      const cheap = await addExtraList(tx, catalogueId, coffeeId, "Vino", {
+      const cheap = await addExtraList(tx, catalogueId, coffeeId, "Wine", {
         price: "1.00",
         maxQuantity: 3,
       });
       const dear = await catalogue.createExtraList(
         tx,
         {
-          name: "Vino premium list staff",
-          customerName: { [CONTENT_LANGUAGE]: "Vino premium list customer" },
-          kitchenName: "Vino premium list kitchen",
+          name: "Premium wine list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Premium wine list customer" },
+          kitchenName: "Premium wine list kitchen",
           minPicks: 0,
           maxPicks: null,
           active: true,
@@ -8368,13 +8367,13 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("prices a pick now when it moves to another list offering the same product: it is a new pick", async () => {
     const { cfg, coffeeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      const cheap = await addExtraList(tx, catalogueId, coffeeId, "Vino", { price: "1.00" });
+      const cheap = await addExtraList(tx, catalogueId, coffeeId, "Wine", { price: "1.00" });
       const dear = await catalogue.createExtraList(
         tx,
         {
-          name: "Vino premium list staff",
-          customerName: { [CONTENT_LANGUAGE]: "Vino premium list customer" },
-          kitchenName: "Vino premium list kitchen",
+          name: "Premium wine list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Premium wine list customer" },
+          kitchenName: "Premium wine list kitchen",
           minPicks: 0,
           maxPicks: null,
           active: true,
@@ -9073,24 +9072,24 @@ describe("editing a saved order prices only what the edit adds", () => {
 // ---------------------------------------------------------------------------------------------------
 
 /**
- * "Wine by the glass" (reduced, category "Vinos", course Primero, sulphites, vegan) on the venue's
+ * "Wine by the glass" (reduced, category "Wines", course First, sulphites, vegan) on the venue's
  * zone menu, with two variants: "125 ml" sets nothing but its staff name and price, so every other
  * field reads its parent's; "175 ml" sets its own customer and kitchen names, VAT, course,
  * allergens and dietary declarations, so a reader of the parent's value gets it wrong. 175 ml also
- * still stores a category of its own ("Copas"), which a variant never reads: its category is
+ * still stores a category of its own ("Glasses"), which a variant never reads: its category is
  * always its parent's.
  */
 async function seedWine(tx: Transaction, catalogueId: string) {
-  const wineCategory = await createCategory(tx, { name: "Vinos" });
-  const glassesCategory = await createCategory(tx, { name: "Copas" });
-  const firstCourse = await createCourse(tx, { name: "Primero", displayOrder: 1 });
-  const secondCourse = await createCourse(tx, { name: "Segundo", displayOrder: 2 });
+  const wineCategory = await createCategory(tx, { name: "Wines" });
+  const glassesCategory = await createCategory(tx, { name: "Glasses" });
+  const firstCourse = await createCourse(tx, { name: "First", displayOrder: 1 });
+  const secondCourse = await createCourse(tx, { name: "Second", displayOrder: 2 });
   const parent = await createProduct(tx, {
     catalogueId,
     categoryId: wineCategory.id,
     name: "Wine by the glass",
-    customerName: { [LOCALE]: "Vino de la casa" },
-    kitchenName: "VINO",
+    customerName: { [LOCALE]: "House wine" },
+    kitchenName: "WINE",
     pricingUnit: "each",
     unitPrice: "4.00",
     vatClass: "reduced",
@@ -9117,7 +9116,7 @@ async function seedWine(tx: Transaction, catalogueId: string) {
       },
       {
         name: "175 ml",
-        customerName: { [CONTENT_LANGUAGE]: "Copa grande" },
+        customerName: { [CONTENT_LANGUAGE]: "Large glass" },
         kitchenName: "V175",
         image: null,
         unitPrice: "5.50",
@@ -9239,8 +9238,8 @@ describe("a variant is sold as the product it is", () => {
       .orderBy(workingOrderLines.lineNo);
     const parentNames = {
       name: "Wine by the glass",
-      descriptions: { [LOCALE]: "Vino de la casa" },
-      kitchenName: "VINO",
+      descriptions: { [LOCALE]: "House wine" },
+      kitchenName: "WINE",
     };
     expect(rows).toEqual([
       {
@@ -9254,18 +9253,18 @@ describe("a variant is sold as the product it is", () => {
         unitPriceGross: 450,
         vatClass: "reduced",
         courseId: wine.firstCourseId,
-        category: "Vinos",
+        category: "Wines",
       },
       {
         productId: wine.wine175,
         ...parentNames,
         variantName: "175 ml",
-        variantDescriptions: { [LOCALE]: "Copa grande" },
+        variantDescriptions: { [LOCALE]: "Large glass" },
         variantKitchenName: "V175",
         unitPriceGross: 550,
         vatClass: "general",
         courseId: wine.secondCourseId,
-        category: "Vinos",
+        category: "Wines",
       },
     ]);
   });
@@ -9417,12 +9416,12 @@ describe("a variant is sold as the product it is", () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, catalogueId);
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const barStation = await createStation(tx, { name: "Barra" });
-      const glassStation = await createStation(tx, { name: "Copas" });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const barStation = await createStation(tx, { name: "Counter" });
+      const glassStation = await createStation(tx, { name: "Glasses" });
       await routeCategoryTo(tx, wine.wineCategoryId, barStation.id);
       await routeCategoryTo(tx, wine.glassesCategoryId, glassStation.id);
-      // Both lines name variants; each takes its product's category cell, so Copas's cell takes neither.
+      // Both lines name variants; each takes its product's category cell, so Glasses's cell takes neither.
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
@@ -9445,9 +9444,9 @@ describe("a variant is sold as the product it is", () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, catalogueId);
-      await createStation(tx, { name: "Cocina", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const cellarStation = await createStation(tx, { name: "Bodega" });
-      const terraceStation = await createStation(tx, { name: "Terraza" });
+      const terraceStation = await createStation(tx, { name: "Terrace" });
       await routeCategoryTo(tx, wine.wineCategoryId, cellarStation.id);
       await routeCategoryTo(tx, wine.glassesCategoryId, terraceStation.id);
       const orderId = randomUUID();
@@ -9473,9 +9472,9 @@ describe("a variant is sold as the product it is", () => {
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, catalogueId);
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const barStation = await createStation(tx, { name: "Barra" });
-      const terraceStation = await createStation(tx, { name: "Terraza" });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const barStation = await createStation(tx, { name: "Counter" });
+      const terraceStation = await createStation(tx, { name: "Terrace" });
       await insertRoute(tx, {
         zoneId,
         categoryId: wine.glassesCategoryId,
@@ -9506,7 +9505,7 @@ describe("a variant is sold as the product it is", () => {
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, catalogueId);
       const cellarStation = await createStation(tx, { name: "Bodega", isDefault: true });
-      const terraceStation = await createStation(tx, { name: "Terraza" });
+      const terraceStation = await createStation(tx, { name: "Terrace" });
       await insertRoute(tx, {
         zoneId,
         categoryId: wine.wineCategoryId,
@@ -9540,7 +9539,7 @@ describe("a variant is sold as the product it is", () => {
     const orderId = randomUUID();
     const { items, wine } = await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, catalogueId);
-      const barStation = await createStation(tx, { name: "Barra", isDefault: true });
+      const barStation = await createStation(tx, { name: "Counter", isDefault: true });
       await insertRoute(tx, { zoneId, productId: wine.parentId, stationId: barStation.id });
       await createOpenOrder(
         tx,
@@ -9587,7 +9586,7 @@ describe("a variant is sold as the product it is", () => {
       const list = await catalogue.createExtraList(
         tx,
         {
-          name: "Copa",
+          name: "Glass",
           customerName: null,
           kitchenName: null,
           minPicks: 0,
@@ -9603,7 +9602,7 @@ describe("a variant is sold as the product it is", () => {
       await attachModifierList(tx, coffeeId, { kind: "extras", id: list.id });
 
       await republishMenus(tx);
-      const barStation = await createStation(tx, { name: "Barra", isDefault: true });
+      const barStation = await createStation(tx, { name: "Counter", isDefault: true });
       await insertRoute(tx, { zoneId, productId: coffeeId, stationId: barStation.id });
       await createOpenOrder(
         tx,
@@ -9655,7 +9654,7 @@ describe("a variant is sold as the product it is", () => {
     const orderId = randomUUID();
     const seen = await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, catalogueId);
-      const barStation = await createStation(tx, { name: "Barra", isDefault: true });
+      const barStation = await createStation(tx, { name: "Counter", isDefault: true });
       await insertRoute(tx, { zoneId, productId: wine.parentId, stationId: barStation.id });
       await createOpenOrder(
         tx,
@@ -9687,9 +9686,9 @@ describe("a variant is sold as the product it is", () => {
       // The line's own frozen precision: the till splits by it, since a variant is never one of the
       // till's products (it lists the offers' parents).
       tabUnitPrecision: [0],
-      station: ["VINO (125 ml)"],
-      expo: ["VINO (125 ml)"],
-      receipt: [{ [LOCALE]: "Vino de la casa (125 ml)", "en-GB": "Vino de la casa (125 ml)" }],
+      station: ["WINE (125 ml)"],
+      expo: ["WINE (125 ml)"],
+      receipt: [{ [LOCALE]: "House wine (125 ml)", "en-GB": "House wine (125 ml)" }],
     });
   });
 
@@ -9741,7 +9740,7 @@ describe("a variant is sold as the product it is", () => {
         );
         await tx
           .update(products)
-          .set({ name: "Renamed", customerName: { [LOCALE]: "New nombre" } })
+          .set({ name: "Renamed", customerName: { [LOCALE]: "New customer name" } })
           .where(eq(products.id, wine.wine125));
         const [stored] = await tx
           .select({ variantDescriptions: workingOrderLines.variantDescriptions })
@@ -9757,8 +9756,8 @@ describe("a variant is sold as the product it is", () => {
         stored: { [LOCALE]: frozen, "en-GB": frozen },
         receipt: [
           {
-            [LOCALE]: `Vino de la casa (${printed})`,
-            "en-GB": `Vino de la casa (${printed})`,
+            [LOCALE]: `House wine (${printed})`,
+            "en-GB": `House wine (${printed})`,
           },
         ],
       });
@@ -9846,7 +9845,7 @@ describe("a variant is sold as the product it is", () => {
     const { wine, options } = await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, catalogueId);
       // The list is attached to the PARENT: a variant offers its parent's lists.
-      const options = await addOptionList(tx, wine.parentId, "Temperatura", ["Fría", "Natural"]);
+      const options = await addOptionList(tx, wine.parentId, "Temperature", ["Chilled", "Ambient"]);
       await republishMenus(tx);
       return { wine, options };
     });
@@ -9923,7 +9922,7 @@ describe("a variant is sold as the product it is", () => {
 describe("a parent with Active variants is never sold as itself, as an extra or on a raise", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  /** An extras list on Café, published on its offer, offering the wine parent and one of its
+  /** An extras list on Espresso, published on its offer, offering the wine parent and one of its
    * variants. */
   async function wineExtras(
     tx: Transaction,
@@ -9935,7 +9934,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     const list = await catalogue.createExtraList(
       tx,
       {
-        name: "Vino list staff",
+        name: "Wine list staff",
         customerName: null,
         kitchenName: null,
         minPicks: 0,
@@ -10059,7 +10058,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         product.id,
         [
           {
-            name: "Doble",
+            name: "Double",
             customerName: null,
             kitchenName: null,
             image: null,
@@ -10161,7 +10160,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         coffeeId,
         [
           {
-            name: "Doble",
+            name: "Double",
             customerName: null,
             kitchenName: null,
             image: null,
@@ -10258,9 +10257,9 @@ describe("line release on an order with no service context", () => {
   it("releases the held course and stamps its line sent", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { id } = await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Cocina", isDefault: true });
-      const starters = await createCourse(tx, { name: "Entrantes", displayOrder: 1 });
-      const desserts = await createCourse(tx, { name: "Postres", displayOrder: 3 });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 1 });
+      const desserts = await createCourse(tx, { name: "Desserts", displayOrder: 3 });
       const soup = await makeProduct(tx, catalogueId, {});
       const custardProduct = await makeProduct(tx, catalogueId, {});
       const id = randomUUID();

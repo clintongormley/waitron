@@ -92,12 +92,12 @@ const suite = useVenueDb({
     staffMember = { id: person!.id };
     cfg = makeCfg(await venueLocationId(db), nodeId);
     const product = await withTransaction(db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Carta" });
-      const drinksCategory = await createCategory(tx, { name: "Bebidas" });
+      const cat = await createCatalogue(tx, { name: "Menu" });
+      const drinksCategory = await createCategory(tx, { name: "Drinks" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: drinksCategory.id,
-        name: "Café",
+        name: "Espresso",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -184,7 +184,7 @@ async function partyRevisionOf(db: Database, billId: string): Promise<number> {
   return row!.revision;
 }
 
-/** Seeds one open tab on table A carrying `aQty` café lines (line_no 1), plus a mounted app and a
+/** Seeds one open tab on table A carrying `aQty` espresso lines (line_no 1), plus a mounted app and a
  * logged-in cookie. */
 async function setupTabApp(
   aQty = "2",
@@ -352,7 +352,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
 
 /** The same merge on a seated party's tab, whose split-off check belongs to the party too. */
 describe("POST /api/bills/:id/merge of a seated party's check back into its tab", () => {
-  /** A party seated through the till's seat route, a round of three cafés, and one of them split off
+  /** A party seated through the till's seat route, a round of three coffees, and one of them split off
    * onto a check; the revision is the party's as the floor reads it after the split. */
   async function seatedSplit(): Promise<{
     post: (path: string, body: unknown) => Promise<Response>;
@@ -482,7 +482,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
     const { cfg: venueCfg, cafeId: provisionedCoffeeId } = await setupVenue(db);
     const { tabId, personId, profileId } = await withTransaction(db, async (tx) => {
       const offers = await offerProducts(tx, venueCfg, { zone: "tables" });
-      const table = await createTable(tx, venueCfg, { label: "Mesa 5", zoneId: offers.zoneId });
+      const table = await createTable(tx, venueCfg, { label: "Table 5", zoneId: offers.zoneId });
       const tab = await openPartyTab(tx, venueCfg, {
         tableId: table.id,
         lines: offers.toOfferLines([{ productId: provisionedCoffeeId, quantity: "2" }]),
@@ -502,7 +502,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
       return { tabId: tab.tabId, personId: person!.id, profileId: profile!.id };
     });
     // The sale route takes its till from the device that sends it.
-    const device = await enrolDeviceForTest(db, venueCfg, { name: "Barra", profileId });
+    const device = await enrolDeviceForTest(db, venueCfg, { name: "Counter", profileId });
     const session = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId: device.deviceId, personId, pin: "5555" }),
     );
@@ -553,7 +553,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
     const { billId: checkId } = (await split.json()) as { billId: string };
 
     expect((await heldOrders(app, cookie)).find((order) => order.id === checkId)).toMatchObject({
-      label: "Mesa 5",
+      label: "Table 5",
     });
 
     const pay = await app.request("/api/sales", {
@@ -568,7 +568,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
       ),
     });
     expect(pay.status).toBe(200);
-    expect(await pay.json()).toMatchObject({ total: "1.50", orderLabel: "Mesa 5" });
+    expect(await pay.json()).toMatchObject({ total: "1.50", orderLabel: "Table 5" });
     expect((await heldOrders(app, cookie)).map((order) => order.id)).not.toContain(checkId);
   });
 });
