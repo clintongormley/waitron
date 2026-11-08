@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import indexHtml from "../index.html?raw";
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { ProvisionBody, SetupApi, SetupStatus } from "./api/client.js";
@@ -3059,16 +3060,18 @@ describe("page shell", () => {
     const el = await mountSetupApp();
     goto(el, screen);
     await el.updateComplete;
-    const logo = wizard(el).querySelector<HTMLElement>("[data-test=setup-logo]")!;
+    const logo = wizard(el).querySelector<WtWaitronLockup>("[data-test=setup-logo]")!;
     const shown = wizard(el).querySelector(`[data-test=screen-${screen}]`)!;
-    expect(logo.getAttribute("role")).toBe("img");
-    expect(logo.getAttribute("aria-label")).toBe("Waitron");
-    expect(logo.querySelector("svg")).not.toBeNull();
+    expect(logo.localName).toBe("wt-waitron-lockup");
+    await logo.updateComplete;
+    const drawing = logo.shadowRoot!.querySelector("svg")!;
+    expect(drawing.getAttribute("role")).toBe("img");
+    expect(drawing.getAttribute("aria-label")).toBe("Waitron");
     expect(logo.compareDocumentPosition(shown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it.each(["light", "dark"] as const)(
-    "paints the logo's word in the text colour and its waiter in the primary colour (%s theme)",
+    "paints the logo's word in the text colour and its cloche in the primary colour (%s theme)",
     async (theme) => {
       const el = await mountSetupApp();
       const host = el.parentElement!;
@@ -3079,12 +3082,15 @@ describe("page shell", () => {
         probe.style.color = `var(${token})`;
         return getComputedStyle(probe).color;
       };
-      const svg = wizard(el).querySelector("[data-test=setup-logo] svg")!;
+      const logo = wizard(el).querySelector<WtWaitronLockup>("[data-test=setup-logo]")!;
+      expect(logo.localName).toBe("wt-waitron-lockup");
+      await logo.updateComplete;
+      const svg = logo.shadowRoot!.querySelector("svg")!;
       // Found by the brand file's own ink, not by position, so a reordered file fails here.
-      const waiter = svg.querySelector(':scope > g[fill="#1f6feb"]');
+      const cloche = svg.querySelector(':scope > g[fill="#1f6feb"]');
       const word = svg.querySelector(':scope > g[fill="#16181d"]');
       expect(getComputedStyle(word!).fill).toBe(colourOf("--wt-color-text"));
-      expect(getComputedStyle(waiter!).fill).toBe(colourOf("--wt-color-primary"));
+      expect(getComputedStyle(cloche!).fill).toBe(colourOf("--wt-color-primary"));
     },
   );
 });
