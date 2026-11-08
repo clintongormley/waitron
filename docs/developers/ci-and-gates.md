@@ -19,8 +19,8 @@ imported lockup, and till's powered-by image check; the three app builds also co
 The reader list is explicit: a new consumer needs that list updated. The selection tests exercise
 the classifier, real workflow gate shell and hook; they do not discover new asset consumers.
 
-The full CI run starts nightly at 02:00 UTC, on manual dispatch and on `v*` releases. It tests all
-packages, collects coverage and requires the existing merged `98/98/98/95` thresholds. Scoped
+The full CI run starts nightly at 02:00 UTC, on manual dispatch other than a `server_probe` one, and on `v*` releases. It tests all
+packages, runs ESLint and Prettier with no saved results, collects coverage and requires the existing merged `98/98/98/95` thresholds. Scoped
 runs skip coverage transfers and merge jobs. Shards retain their existing allocation and check
 that their test script exists before running, including when result uploads are skipped.
 
@@ -684,8 +684,7 @@ Each CI shard writes one JSON report and has no separate score floor. The five-m
 `mutation-shared-aggregate` job requires four report directories and enforces 90% on their combined
 score. Both jobs report to `ci`; the aggregate uses the same shared-package conditions
 as the shards, and still runs after a failed shard to refuse incomplete reports. The final `ci`
-verdict refuses a skipped mutation aggregate when shared was selected, except when verified reuse
-supplies the earlier result. Its executable jq cases cover that refusal and the unselected,
+verdict refuses a skipped mutation aggregate when shared was selected. Its executable jq cases cover that refusal and the unselected,
 documentation paths. The workflow guard also requires the aggregate's condition
 to be `always() && ` followed by the shards' condition. Downloads and
 uploads use the existing bounded two-attempt patterns. The download action keeps each artifact
@@ -1518,15 +1517,12 @@ not count, and a step an `if:` switches off does; a reporter counts only in a `-
 on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's own config; and only
 root `scripts/` is scanned.
 
-`lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) run unless
-main reuses verified equal-tree PR CI. A regression in a skipped path is caught there only as
-far as the root suites exercise it.
+`lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) run on every
+CI run except a `server_probe` dispatch, so a regression in a path the gated test jobs skip is caught there only as far as the root
+suites exercise it. On a pull request or ordinary `main` push, `lint` restores results an earlier
+`main` run kept for the same inputs, if there are any (see "The lint job reuses earlier results
+except on a full run").
 
-A merge to `main` without verified reuse runs the unfiltered suite whenever its `code` output is true. The range starts
-at the nearest ancestor with its own queued, running or successful main CI run. Earlier code
-stays with that run, so a docs push does not repeat its package suites while it waits.
-A range containing only inert paths, documentation or machinery neither
-`ROOT_SCOPE_CONSUMERS` nor `GLOBAL_ROOT_FILES` lists can skip it. That run verifies the narrowing.
 Read the `changes` job's `code`, `scope` and `packages` outputs
 before treating a green PR as evidence about the workspace. Designed and built in #27.
 
@@ -3317,6 +3313,35 @@ WHICH entries a new export competes with, list them with sizes and last-access t
 (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and name
 them before adding the export.
 
+### The lint job reuses earlier results except on a full run
+
+On a pull request or an ordinary push to `main`, the `lint` job restores the results an earlier
+`main` run kept, if there are any for the same inputs, and ESLint and Prettier then re-check only
+files whose content changed. A nightly, release or manual run (`full` is `true`), other than a `server_probe` dispatch, which skips `lint`, restores nothing and checks every file.
+
+The results are kept once a day for each combination of `eslint.config.js`, `pnpm-lock.yaml` and
+every `package.json`, and only by a push to `main`; a pull request reads them and saves nothing. A
+run restores before `pnpm install`, because afterwards `**/package.json` would also match the files
+under `node_modules`. A failed restore or save does not fail the job. Both tools' result files hold
+absolute paths, so a run whose checkout folder differs from the saving run's re-checks every file
+(measured 2026-11-08 by running a warmed cache over a small fixture from a second folder, not on a
+hosted runner).
+
+**What this can miss.** `import-x/no-restricted-paths` reads files other than the one it is
+checking, and neither tool's cache watches those. A cached "passed" for an unchanged file can
+therefore hide a restricted import that a change to another file caused. The next full run checks
+everything; one is scheduled nightly at 02:00 UTC. A change to the three inputs above starts
+a new set of results.
+
+**What it costs the shared cache.** On 2026-11-08 its entries competed with the `node-cache-*`
+entries (about 167 MB each) and `playwright-*` (about 279 MB). A whole-repository run on one Mac that
+day left 5.7 MB of result files, 0.74 MB after `zstd -3`, so a day adds a few MB at most for each set
+of inputs. That run and a second with nothing changed measured the benefit on the same Mac: ESLint
+2 s against 60 s and Prettier 4 s against 85 s.
+
+Guard: the "reuse lint results only on runs that are not full" case in
+`scripts/ci-workflow.test.mjs`, weaker than its name: it reads the workflow as text.
+
 ### CodeQL scans `main` nightly, and nothing waits for it
 
 `.github/workflows/codeql.yml` runs at 01:37 UTC on the default branch and on request (`gh workflow
@@ -3658,7 +3683,7 @@ package-wide coverage. Run additional consumer tests locally when useful for inv
 ### Adding a workspace package breaks the root guards until it is wired in
 
 Three guards in the root Vitest project read workspace members BY NAME. The `root-guards` job
-runs that project. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
+runs that project on every CI run except a `server_probe` dispatch. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are
@@ -4799,6 +4824,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   package, not what the package's Vitest config includes.
 
 ### Root entry: CI does not run every check on every push
+
+2026-11-08: pull-request results are no longer reused (#2557); see [scoped tests and full verification](#scoped-tests-and-full-verification).
 
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace. A main push

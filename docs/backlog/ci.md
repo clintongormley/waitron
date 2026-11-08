@@ -951,7 +951,7 @@ not captured. It was not reproduced. **Next action:** reproduce it under load an
 [two bounded attempts](../developers/ci-and-gates.md#every-artifact-upload-is-bounded).
 2026-10-31 (A1254): Node setup now has
 [two bounded attempts](../developers/ci-and-gates.md#every-node-setup-is-bounded).
-The remaining cache, Docker and CodeQL steps still wait on their job limits.
+The remaining cache, Docker and CodeQL steps still wait on their job limits, except the `lint` job's two cache steps, which have one-minute limits and may fail without failing the job (A1447).
 
 List them with
 
