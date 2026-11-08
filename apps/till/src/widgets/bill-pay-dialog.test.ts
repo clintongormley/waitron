@@ -78,7 +78,7 @@ it.each(["en", "es"] as const)("temporary balance explanation in %s", async (loc
     await el.updateComplete;
     const message = () => text(root(el).querySelector("[data-pay-refunded]"));
     expect(message()).toBe(
-      `${t("bill_refund.failed").replace("{amount}", money("5.00"))} ${locale === "en" ? "The card provider cannot refund this yet. You can start a new refund later." : "El proveedor de pagos aún no puede hacer esta devolución. Puedes iniciar una nueva devolución más tarde."}`.replace(
+      `${t("bill_refund.failed").replace("{amount}", money("5.00"))} ${t("refund.provider_balance_unavailable")}`.replace(
         /\s+/g,
         " ",
       ),

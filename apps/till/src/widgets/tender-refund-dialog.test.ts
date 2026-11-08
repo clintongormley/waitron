@@ -72,7 +72,7 @@ it.each(["en", "es"] as const)("temporary balance explanation in %s", async (loc
   const message = () =>
     root(el).querySelector("[data-outcome]")!.textContent!.replace(/\s+/g, " ").trim();
   expect(message()).toBe(
-    `${t("tender_refund.failed")} ${locale === "en" ? "The card provider cannot refund this yet. You can start a new refund later." : "El proveedor de pagos aún no puede hacer esta devolución. Puedes iniciar una nueva devolución más tarde."}`,
+    `${t("tender_refund.failed")} ${t("refund.provider_balance_unavailable")}`,
   );
   el.result = { ...el.result!, refusalReason: undefined };
   await el.updateComplete;
