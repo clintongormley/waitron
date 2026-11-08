@@ -92,9 +92,13 @@ describe("brand generation reads the dark theme at run time", () => {
       (dir) => {
         const path = join(dir, "waitron-wordmark.svg");
         const source = readFileSync(path, "utf8");
-        const taller = source.replace(/viewBox="0 0 ([\d.]+) [\d.]+"/, 'viewBox="0 0 $1 90"');
-        expect(taller).not.toBe(source);
-        writeFileSync(path, taller);
+        // A new ink too, so a light lockup written anyway would differ from the committed one.
+        const altered = source
+          .replace(/viewBox="0 0 ([\d.]+) [\d.]+"/, 'viewBox="0 0 $1 90"')
+          .replace(/(<svg[^>]*fill=")[^"]+"/, '$1#fedcba"');
+        expect(altered).toMatch(/viewBox="0 0 [\d.]+ 90"/);
+        expect(altered).toContain('fill="#fedcba"');
+        writeFileSync(path, altered);
       },
     );
     expect(result.status).toBe(1);
