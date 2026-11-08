@@ -4,7 +4,7 @@ import type { StoredLines } from "../widgets/basket.js";
 import { foldRetrievedPortions, portionWireLines } from "./counter-portion-rows.js";
 import type { OrderLine } from "./working-order.js";
 
-const caña: TillProduct = {
+const beer: TillProduct = {
   id: "cana",
   name: "Caña",
   menuItemId: "offer-cana",
@@ -53,7 +53,7 @@ function stored(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLin
 }
 
 const basketLine = (id: string, over: Partial<OrderLine> = {}): OrderLine => ({
-  product: caña,
+  product: beer,
   quantity: "1",
   workingOrderLineId: id,
   ...over,
@@ -126,7 +126,7 @@ describe("A1208 counter rows: folding a retrieved order's portions", () => {
 
   it("keeps a line with no stored id apart from the row its neighbours fold into", () => {
     const listed = listing([stored("c1", 1), stored("c2", 2)]);
-    const unsaved: OrderLine = { product: caña, quantity: "1" };
+    const unsaved: OrderLine = { product: beer, quantity: "1" };
     expect(
       foldRetrievedPortions([basketLine("c1"), unsaved, basketLine("c2")], listed, false),
     ).toEqual([basketLine("c1", { quantity: "2", portionLineIds: ["c1", "c2"] }), unsaved]);
