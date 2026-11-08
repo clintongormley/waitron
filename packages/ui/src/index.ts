@@ -204,6 +204,7 @@ export {
   type WtVenueLogoSize,
 } from "./components/wt-venue-logo.js";
 export { WtPoweredBy } from "./components/wt-powered-by.js";
+export { WtWaitronLockup } from "./components/wt-waitron-lockup.js";
 
 export { ReorderController, type ReorderModel } from "./reorder-table.js";
 export { reorder } from "./reorder.js";

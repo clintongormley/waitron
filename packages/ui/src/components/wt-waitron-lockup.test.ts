@@ -4,6 +4,7 @@ import { cleanup, host, lockupWordBaseline, mount, textBaseline } from "../test-
 import type { WtWaitronLockup } from "./wt-waitron-lockup.js";
 import "./wt-waitron-lockup.js";
 import lockupSource from "../../brand/waitron-lockup.svg?raw";
+import * as ui from "../index.js";
 
 afterEach(cleanup);
 
@@ -30,6 +31,11 @@ async function lockup(markup = "<wt-waitron-lockup></wt-waitron-lockup>") {
 }
 
 describe("wt-waitron-lockup", () => {
+  it("is exported and registered", () => {
+    expect(customElements.get("wt-waitron-lockup")).toBeTypeOf("function");
+    expect(ui.WtWaitronLockup).toBe(customElements.get("wt-waitron-lockup"));
+  });
+
   it("draws the brand lockup's own drawing", async () => {
     const el = await lockup();
     const source = new DOMParser().parseFromString(lockupSource, "image/svg+xml").documentElement;
