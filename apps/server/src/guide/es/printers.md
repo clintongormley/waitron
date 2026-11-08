@@ -39,6 +39,6 @@ Abre **Cola de impresión** para ver por qué espera un trabajo. Si ningún agen
 USB o Bluetooth, comprueba la conexión de la impresora y su agente de impresión. El mensaje de
 conexión puede aparecer junto al último error de impresión comunicado.
 
-Las órdenes del cajón no se pueden reenviar. Si una orden caducó antes de enviarse, el TPV muestra
-**El cajón no se abrió**. Usa su botón **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
+Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no se abrió**, comprueba
+la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
 el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.

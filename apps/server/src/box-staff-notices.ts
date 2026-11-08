@@ -1,4 +1,4 @@
-import { printJobs, type Transaction } from "@waitron/db";
+import { printers, printJobs, type Transaction } from "@waitron/db";
 import { and, eq, sql } from "drizzle-orm";
 import { readPrinterRoles } from "@waitron/layouts";
 import type {
@@ -163,8 +163,16 @@ export function devicePrinterNoticeSources(deps: {
           const [latest] = await tx
             .select({ id: printJobs.id, status: printJobs.status, error: printJobs.lastError })
             .from(printJobs)
-            .where(and(eq(printJobs.printerId, printerId), eq(printJobs.kind, "drawer")))
-            // Insertion order still identifies the new request after a clock step or equal stamps.
+            .innerJoin(printers, eq(printers.id, printJobs.printerId))
+            .where(
+              and(
+                eq(printJobs.printerId, printerId),
+                eq(printJobs.kind, "drawer"),
+                eq(printers.active, true),
+                eq(printers.hasCashDrawer, true),
+              ),
+            )
+            // Ordering without clock time lets a new request clear the notice after a clock step.
             .orderBy(sql`${printJobs}.rowid desc`)
             .limit(1);
           return latest?.status === "failed" && latest.error === "print_job.drawer_expired"

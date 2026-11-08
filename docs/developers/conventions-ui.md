@@ -1779,6 +1779,15 @@ drawer report retains its actual failed-attempt count. If another opening is nee
 through the normal permission and audit path. The claim must commit before transport; `runAgentOnce`'s caller-owned transaction
 cannot provide that guarantee and has no production caller (the separate backlog item remains).
 
+D1's 2026-11-08 notice uses the latest drawer job for the device's assigned drawer, through the
+equipment read. It hides while the printer is inactive or no longer has a drawer. Its manual-open
+button uses the existing permission and supervisor path, refreshes after success and refuses a
+second in-flight request. The notice waits for an agent's next claim pass to settle an aged job;
+the read does not settle it. `device-equipment-api.test.ts` runs real expiry and audit paths and
+the unavailable/usable transitions. Its query-plan case checks a fixed SQL shape, not the source
+query: `(printer_id, kind)` avoids sorting printer history. The supplemental review measured the
+old read at 127.59 ms over 200,000 synthetic jobs; dropping the new index fails the plan case.
+
 A517's real-store cases in `packages/printing/src/runtime.aged-batch.test.ts` reproduced duplicate
 unsent document and drawer tails after aging the tail's claim, and duplicate drawer pulses after
 a lost report or uncertain send. The remote-agent cases in `apps/server/src/print-api.test.ts`

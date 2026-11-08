@@ -32,6 +32,19 @@ const BEHIND: StaffNotice = { ...DISK, key: "behind", code: "clock.behind_chain"
 const EXPIRED: StaffNotice = { ...SPACE, key: "drawer", code: "print_job.drawer_expired" };
 
 describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (theme) => {
+  it("has no violations while the drawer opening is in flight", async () => {
+    const { host } = await mountWidget<TillNoticeStrip>(
+      "till-notice-strip",
+      {
+        notices: [EXPIRED],
+        canOpenDrawer: true,
+        drawerBusy: true,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it.each([
     ["drawer without permission", [EXPIRED], false],
     ["drawer alone", [EXPIRED], true],

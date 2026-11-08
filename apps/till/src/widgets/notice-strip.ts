@@ -41,6 +41,7 @@ function words(notice: StaffNotice, checkTime: boolean, host: TillNoticeStrip): 
               ? html` <wt-button
                   data-open-drawer
                   variant="secondary"
+                  .disabled=${host.drawerBusy}
                   @click=${() => host.dispatchEvent(new CustomEvent("till-open-drawer", { bubbles: true, composed: true }))}
                   >${t("action.open_drawer")}</wt-button
                 >`
@@ -166,6 +167,7 @@ export class TillNoticeStrip extends LitElement {
   /** The box offers this till "Check the time". */
   @property({ attribute: false }) checkTimeOffered = false;
   @property({ attribute: false }) canOpenDrawer = false;
+  @property({ attribute: false }) drawerBusy = false;
 
   @state() private open = false;
 

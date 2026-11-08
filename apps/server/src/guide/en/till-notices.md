@@ -13,19 +13,17 @@ The line shows the most serious notice first, in its main words and then its hin
 For example, **Nothing can be saved: the server is out of space · Tell a manager**. A red line means
 something cannot be saved, an amber line means something needs attention but work is still saved, and a blue line is for information.
 
-When more than one notice is showing, the line ends with a count such as **+1**. Tap the line to
+When more than one notice is showing, the line ends with a count such as **+1**. Tap that count to
 open the list of every notice, most serious first. The list sits under the line and pushes the
-screen down, so it never covers the order. Tap the line again to close it.
+screen down, so it never covers the order. Tap the count again to close it.
 
-There is no close button. A notice goes by itself once the server no longer has the problem. A kitchen
-display shows no notice line.
+There is no close button for a notice. A kitchen display shows no notice line.
 
 ## What each notice means {#notices}
 
 **Drawer didn’t open** means the request expired before it could be sent. Check the printer’s
 power and connection, then use **Open drawer** if you still need it open. If asked, choose someone
-who can authorise opening it and enter their PIN. The notice is shared by tills using that drawer
-and goes when a new drawer request is made. The button is offered on devices allowed to open it.
+who can authorise opening it and enter their PIN.
 
 **Nothing can be saved: the server is out of space · Tell a manager** is red. The server has no disk
 space left, so orders, payments and other changes cannot be saved. A manager needs to free space
