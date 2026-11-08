@@ -143,6 +143,10 @@ export const HOLDER_STALLED = "provisioning.database_holder_stalled";
 /** Typed so a misspelled code below fails the typecheck rather than rendering the generic line. */
 type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
 
+const MALFORMED_PRODUCER_EN =
+  "This copy of Waitron was built with its producer's details incomplete or in the wrong form, so it cannot be used.";
+const MALFORMED_PRODUCER_ES =
+  "Esta copia de Waitron se creó con los datos de quien la produce incompletos o mal escritos, así que no puede usarse.";
 const PRODUCER_ACTION_EN =
   "Install an official Waitron update on this box. If you build Waitron yourself, build it with your own producer's details.";
 const PRODUCER_ACTION_ES =
@@ -258,28 +262,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     },
   },
   "software_producer.invalid": {
-    "en-GB": {
-      title:
-        "This copy of Waitron was built with its producer's details incomplete or in the wrong form, so it cannot be used.",
-      action: PRODUCER_ACTION_EN,
-    },
-    "es-ES": {
-      title:
-        "Esta copia de Waitron se creó con los datos de quien la produce incompletos o mal escritos, así que no puede usarse.",
-      action: PRODUCER_ACTION_ES,
-    },
+    "en-GB": { title: MALFORMED_PRODUCER_EN, action: PRODUCER_ACTION_EN },
+    "es-ES": { title: MALFORMED_PRODUCER_ES, action: PRODUCER_ACTION_ES },
   },
   "sif.producer_invalid": {
-    "en-GB": {
-      title:
-        "This copy of Waitron was built with its producer's details incomplete or in the wrong form, so it cannot be used.",
-      action: PRODUCER_ACTION_EN,
-    },
-    "es-ES": {
-      title:
-        "Esta copia de Waitron se creó con los datos de quien la produce incompletos o mal escritos, así que no puede usarse.",
-      action: PRODUCER_ACTION_ES,
-    },
+    "en-GB": { title: MALFORMED_PRODUCER_EN, action: PRODUCER_ACTION_EN },
+    "es-ES": { title: MALFORMED_PRODUCER_ES, action: PRODUCER_ACTION_ES },
   },
   "server.config_missing": {
     "en-GB": {

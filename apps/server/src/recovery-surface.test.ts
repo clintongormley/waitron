@@ -453,8 +453,9 @@ describe("curated operator text", () => {
   // worst (CLAUDE.md §5); `restore.membership_invalid` because the page's Retry reads the same copy
   // again, which the generic line does not say; `append_only.triggers_changed` because a box that
   // stopped itself reaches the page at once, and the generic line says only that Waitron could not
-  // start; `sif.producer_unset` because a retry of the same version and settings refuses again,
-  // and the generic line does not say what to change.
+  // start; `sif.producer_unset`, `software_producer.invalid` and `sif.producer_invalid` because a
+  // retry of the same version and settings refuses again, and the generic line does not say what
+  // to change.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -477,6 +478,8 @@ describe("curated operator text", () => {
       "restore.membership_invalid",
       "append_only.triggers_changed",
       "sif.producer_unset",
+      "software_producer.invalid",
+      "sif.producer_invalid",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
