@@ -257,6 +257,7 @@ describe("the floor's attention signals", () => {
   it("counts a held zero-precision measure as one without changing the reminder", async () => {
     const v = await setupPartyVenue(suite.db);
     await inTx(v, async (tx) => {
+      await setReleaseReminderInEveryDepartment(tx, 10);
       const [measure] = await tx
         .insert(units)
         .values({
@@ -273,7 +274,7 @@ describe("the floor's attention signals", () => {
     });
     const table = await v.table("Mesa 2");
     const seated = await seat(v, table);
-    await inTx(v, (tx) =>
+    const placed = await inTx(v, (tx) =>
       placeGroupedRound(
         tx,
         v.cfg,
@@ -285,11 +286,13 @@ describe("the floor's attention signals", () => {
         OPERATOR,
       ),
     );
-    const before = (await floorRow(v, table)).party!.reminder;
     expect(await inTx(v, (tx) => readHeldCounts(tx, [seated.partyId]))).toEqual(
       new Map([[seated.partyId, 1]]),
     );
-    expect((await floorRow(v, table)).party!.reminder).toEqual(before);
+    expect((await floorRow(v, table)).party!.reminder).toEqual({
+      groupId: placed.groups[0]!.id,
+      dueAt: null,
+    });
   });
 
   it("A725 ready signals sort opposite dish insertion order by station name", async () => {

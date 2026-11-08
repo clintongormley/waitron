@@ -64,6 +64,60 @@ const slices = (rows: ReturnType<typeof sentPanel>["served"]) =>
   rows.map(({ row, kind, quantity, amount }) => ({ id: row.lineId, kind, quantity, amount }));
 
 describe("Sent panel (A773)", () => {
+  it.each([
+    { quantity: "3", unitPrecision: 0, firing: "3" },
+    { quantity: "3", unitPrecision: 3, firing: "1" },
+  ])(
+    "uses precision when classification is absent ($unitPrecision)",
+    ({ quantity, unitPrecision, firing }) => {
+      const panel = sentPanel(
+        current([], [row("missing-flag", { quantity, unitPrecision })]),
+        "bill-1",
+        now,
+      );
+      expect(panel.counts.firing).toBe(firing);
+    },
+  );
+
+  it("counts a fully cancelled fractional dish once from its original quantity", () => {
+    const panel = sentPanel(
+      current(
+        [],
+        [
+          row("fraction", {
+            quantity: "2.5",
+            cancelledQuantity: "2.5",
+            countsWholePortions: true,
+          }),
+        ],
+      ),
+      "bill-1",
+      now,
+    );
+    expect(panel.counts).toEqual({ ready: "0", firing: "0", held: "0", served: "1" });
+    expect(panel.served[0]!.quantity).toBe("2.5");
+  });
+
+  it("uses the served stamp when counting the remaining portions of a cancelled dish", () => {
+    const panel = sentPanel(
+      current(
+        [],
+        [
+          row("stamped", {
+            quantity: "3",
+            cancelledQuantity: "2",
+            servedQuantity: "0",
+            servedAt: at(1),
+          }),
+        ],
+      ),
+      "bill-1",
+      now,
+    );
+    expect(panel.counts.served).toBe("3");
+    expect(panel.served[0]!.kind).toBe("cancelled_charged");
+  });
+
   it("separates actual serving, charged cancellation and active food without losing a rounding cent", () => {
     const dish = row("dish", {
       quantity: "3.000",

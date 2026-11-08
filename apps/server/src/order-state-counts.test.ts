@@ -52,6 +52,7 @@ import type { BillVenue } from "./testing/bill-venue.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { dishCounts, readOrderStateCounts } from "./order-state-counts.js";
 import { readBillSignals } from "./table-signals.js";
+import { serviceCancellationFamilies, writeServiceCancellations } from "./line-service-cancel.js";
 import type { CountedLine } from "./order-state-counts.js";
 import "./errors.js";
 
@@ -422,6 +423,72 @@ describe("dishCounts", () => {
 });
 
 describe("readOrderStateCounts", () => {
+  it.each([
+    ["remaining whole portions", "Tarta", 3000, 0, 1500, 0, 2],
+    ["real cancellation", "Tarta", 3000, 0, 0, 1000, 2],
+    ["parent's hardware unit", "Paella", 150000, 0, 0, 0, 1],
+    ["parent's frozen precision", "Tarta", 3000, 3, 0, 0, 1],
+    ["fractional active dish", "Tarta", 2500, 0, 0, 0, 1],
+  ] as const)(
+    "floor counts %s on both parent and extra stations",
+    async (_name, product, quantity, precision, served, cancel, want) => {
+      const { billId } = await seatParty();
+      await sendRound(billId, [withSauce("Tarta", "3")]);
+      const { dish, extra } = await kitchenItems(billId);
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(workingOrderLines)
+          .set({
+            productId: await productOf(tx, product),
+            quantity,
+            unitPrecision: precision,
+            servedQuantity: served,
+          })
+          .where(eq(workingOrderLines.id, dish.lineId));
+        await tx.update(ticketItems).set({ quantity }).where(eq(ticketItems.id, dish.id));
+        if (cancel > 0) {
+          const rows = await tx
+            .select()
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, billId));
+          await writeServiceCancellations(
+            tx,
+            serviceCancellationFamilies(
+              rows,
+              [{ dish: rows.find((r) => r.id === dish.lineId)!, off: cancel }],
+              [],
+            ),
+            venue.operatorId,
+            false,
+          );
+        }
+      });
+      await advance(dish.id, "preparing", "ready");
+      await advance(extra!.id, "preparing", "ready");
+      const ready = (await inTx(venue, (tx) => readBillSignals(tx, [billId])))
+        .get(billId)!
+        .find((s) => s.kind === "ready");
+      expect(ready?.kind === "ready" ? ready.byStation.map((s) => s.count) : null).toEqual([
+        want,
+        want,
+      ]);
+    },
+  );
+
+  it("counts a fractional held whole-portion dish once", async () => {
+    const { partyId } = await seatParty();
+    const groupId = await holdGroup(partyId, [plain("Tarta")]);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ quantity: 2500, unitPrecision: 0 })
+        .where(eq(workingOrderLines.groupId, groupId)),
+    );
+    expect(await inTx(venue, (tx) => readHeldCounts(tx, [partyId]))).toEqual(
+      new Map([[partyId, 1]]),
+    );
+  });
+
   it("counts a parked order's dishes by quantity, all unsent", async () => {
     const id = await parked([
       ["Tarta", "2"],

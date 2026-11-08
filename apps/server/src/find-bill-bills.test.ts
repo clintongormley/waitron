@@ -109,47 +109,67 @@ describe("Find Bills SQL paging", () => {
     expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: 0 });
   });
 
-  it("counts a zero-precision weighed dish once using its current inherited unit", async () => {
-    const id = await named("Weighed dish", "Caña");
-    await inTx(venue, async (tx) => {
-      const [line] = await tx
-        .select()
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, id));
-      const [gram] = await tx
-        .insert(units)
-        .values({
-          staffName: "Gram",
-          staffAbbreviation: "g",
-          name: { en: "Gram" },
-          abbreviation: { en: "g" },
-          precision: 0,
-          hardwareUnit: "g",
-        })
-        .returning({ id: units.id });
-      await assignProductUnit(tx, line!.productId!, gram!.id);
-      const [variant] = await setProductVariants(
-        tx,
-        line!.productId!,
-        [
-          {
-            name: "Large",
-            customerName: null,
-            kitchenName: null,
-            image: null,
-            unitPrice: "3.00",
-            available: true,
-          },
-        ],
-        "en",
-      );
-      await tx
-        .update(workingOrderLines)
-        .set({ productId: variant!.id, quantity: 150000, unitPrecision: 0 })
-        .where(eq(workingOrderLines.id, line!.id));
-    });
-    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: 1 });
-  });
+  it.each([
+    ["g", false, 0, 0, 150000, 0, 1],
+    [null, true, 0, 0, 330000, 0, 1],
+    [null, false, 3, 0, 3000, 0, 3],
+    [null, false, 0, 3, 3000, 0, 1],
+    [null, false, 3, null, 3000, 0, 1],
+    [null, false, 0, null, 2500, 0, 1],
+    ["g", false, 0, 0, 150000, 150000, 0],
+  ] as const)(
+    "counts inherited %s/measure %s, current %s/frozen %s, quantity %s/cancelled %s as %s",
+    async (hardwareUnit, measure, precision, frozen, quantity, cancelled, want) => {
+      const id = await named("Weighed dish", "Caña");
+      await inTx(venue, async (tx) => {
+        const [line] = await tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id));
+        const [gram] = await tx
+          .insert(units)
+          .values({
+            staffName: "Gram",
+            staffAbbreviation: "g",
+            name: { en: "Gram" },
+            abbreviation: { en: "g" },
+            precision,
+            hardwareUnit,
+            measure,
+          })
+          .returning({ id: units.id });
+        await assignProductUnit(tx, line!.productId!, gram!.id);
+        const [variant] = await setProductVariants(
+          tx,
+          line!.productId!,
+          [
+            {
+              name: "Large",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: "3.00",
+              available: true,
+            },
+          ],
+          "en",
+        );
+        await tx
+          .update(workingOrderLines)
+          .set({ productId: variant!.id, quantity, unitPrecision: frozen })
+          .where(eq(workingOrderLines.id, line!.id));
+        if (cancelled > 0)
+          await tx.insert(lineServiceCancellations).values({
+            lineId: line!.id,
+            quantity: cancelled,
+            cancelledAt: new Date().toISOString(),
+            wasStarted: false,
+            actorId: venue.operatorId,
+          });
+      });
+      expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: want });
+    },
+  );
 
   it("sorts by item count before paging in both directions across fifty rows", async () => {
     const ids: string[] = [];

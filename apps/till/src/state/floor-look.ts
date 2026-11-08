@@ -108,7 +108,7 @@ export function readyCount(table: TableState): number {
     : signal.byStation.reduce((sum, { count }) => sum + count, 0);
 }
 
-// Joined tables carry the same party's ready quantity; adding their counts would repeat its dishes.
+// Joined tables carry the same party's ready count; adding their counts would repeat its dishes.
 const largestReady = (members: readonly TableState[]): number =>
   Math.max(0, ...members.map(readyCount));
 

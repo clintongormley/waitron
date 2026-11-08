@@ -595,7 +595,7 @@ describe("mapLook", () => {
 });
 
 describe("mapLook's description", () => {
-  it("uses station-ready dish counts instead of a legacy quantity count", () => {
+  it("uses station-ready dish counts instead of the fallback line count", () => {
     const ready = {
       kind: "ready" as const,
       byStation: [
