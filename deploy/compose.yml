@@ -82,7 +82,7 @@ services:
   # this inbox when no SMTP credential exists. Keep both ports on the box loopback:
   # browsers read captured messages through Waitron's authenticated management API.
   mailpit:
-    image: axllent/mailpit:v1.32.0
+    image: axllent/mailpit:v1.33.0
     restart: unless-stopped
     networks:
       - internal
