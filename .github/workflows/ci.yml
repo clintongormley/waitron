@@ -1178,14 +1178,6 @@ jobs:
             echo "save=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Save experimental server module cache
-        if: steps.a1446-size.outputs.save == 'true' && steps.a1446-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        timeout-minutes: 1
-        with:
-          path: node_modules/.experimental-vitest-cache
-          key: exp-a1446-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.workspace }}-${{ matrix.shard }}-${{ hashFiles('pnpm-lock.yaml', '.nvmrc', 'apps/server/vitest.config.ts', '**/tsconfig*.json') }}
-
       # `if-no-files-found: error` guards a shard that silently ran nothing: no blob → the upload fails
       # the shard, rather than a green that tested nothing (see test-heavy's upload step).
       - id: upload_blob

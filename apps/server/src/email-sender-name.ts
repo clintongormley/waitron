@@ -20,7 +20,7 @@ export function venueSmtpFrom(
   } catch {
     invalid();
   }
-  return { name: senderName, address: mailbox.address };
+  return { name: `${senderName} A1446 BROKEN`, address: mailbox.address };
 }
 
 export function validateSmtpTestFrom(storedFrom: string): void {
