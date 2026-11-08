@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 const yaml = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const jobs = [...yaml.matchAll(/^ {2}([\w-]+):\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm)]
   .map(([, id, body]) => ({ id, body, route: body.match(/^ {4}runs-on: (.+)$/m)?.[1] }))
-  .filter((job) => job.route);
+  .filter((job) => job.route && job.id !== "server-probe");
 jobs.push({
   id: "image-smoke",
   route: readFileSync(
@@ -16,9 +16,18 @@ jobs.push({
 });
 function route(
   expression,
-  { event = "push", attempt = 1, mode = "server", hosted = "{}", fork = false } = {},
+  {
+    event = "push",
+    attempt = 1,
+    mode = "server",
+    hosted = "{}",
+    fork = false,
+    health = "server",
+    probe = false,
+  } = {},
 ) {
   const context = {
+    inputs: { server_probe: probe },
     vars: new Proxy(
       {
         DISPOSABLE_TESTS_MODE: mode,
@@ -46,6 +55,7 @@ function route(
       },
     },
     matrix: { shard: 1 },
+    needs: { changes: { outputs: { server_route: health } } },
     fromJSON: JSON.parse,
     toJSON: JSON.stringify,
     format: (template, ...values) =>
@@ -56,6 +66,38 @@ function route(
     : expression;
 }
 describe("server-first workflow routing", () => {
+  it("runs only an explicitly dispatched probe and gives its retry a hosted route", () => {
+    const body = yaml.match(/^ {2}server-probe:\n([\s\S]*?)(?=^ {2}[\w-]+:)/m)[1];
+    const condition = body.match(/^ {4}if: (.+)$/m)[1];
+    const selected = body.match(/^ {4}runs-on: (.+)$/m)[1];
+    expect(route(condition, { event: "workflow_dispatch", probe: true })).toBe(true);
+    expect(route(condition, { event: "pull_request", probe: true })).toBe(false);
+    expect(route(condition, { event: "workflow_dispatch", probe: false })).toBe(false);
+    expect(route(selected, { attempt: 1 })).toEqual(["self-hosted", "dt-42-1234-1-server-probe-1"]);
+    expect(route(selected, { attempt: 2 })).toBe("ubuntu-latest");
+  });
+  it("runs the recovery workflow only from trusted main", () => {
+    const workflow = readFileSync(
+      new URL("../.github/workflows/server-health.yml", import.meta.url),
+      "utf8",
+    );
+    const expression = workflow.match(/^ {4}if: \$\{\{ (.+) \}\}$/m)[1];
+    for (const event_name of ["schedule", "workflow_dispatch", "pull_request"]) {
+      for (const ref of ["refs/heads/main", "refs/heads/feature"]) {
+        expect(runInNewContext(expression, { github: { event_name, ref } })).toBe(
+          ref === "refs/heads/main" && event_name !== "pull_request",
+        );
+      }
+    }
+  });
+  it("keeps new work on GitHub while the routing job observes a stalled server", () => {
+    for (const job of jobs.filter(
+      (job) =>
+        !["changes", "server-queue-watchdog", "ci", "publish", "image-smoke"].includes(job.id),
+    )) {
+      expect(route(job.route, { health: "hosted" }), job.id).toBe("ubuntu-latest");
+    }
+  });
   it.each(["pull_request", "push", "schedule", "workflow_dispatch"])(
     "sends every direct %s job to a server on first and later attempts",
     (event) => {

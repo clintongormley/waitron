@@ -141,7 +141,7 @@ for ordinary traffic. The watchdog uses the same selection. The selection reads 
 head for a pull request and `github.sha` for the other events.
 
 `DISPOSABLE_TESTS_HOSTED_ATTEMPTS` is a JSON object mapping run IDs to the exact next
-attempt selected for hosted fallback. An unmarked user rerun remains server-first. The
+attempt selected for hosted fallback. An unmarked user rerun remains eligible for the server, subject to the health check below. The
 controller writes and reads back a marker before cancelling its owned attempt; a later
 attempt does not inherit an earlier attempt's marker. Verify this on an actual rerun:
 local expression checks do not establish when GitHub reads a changed repository variable.
@@ -152,33 +152,45 @@ single job. The reusable image job uses logical key `image-smoke-1`; GitHub repo
 job name as `image / smoke`. Existing check names, test commands, coverage merges,
 setup retries and execution limits remain unchanged.
 
-The hosted watchdog checks actual job assignments for its configured families. It reads
-30 records per page, allowing ten seconds for each complete paginated read. It waits up
-to five minutes, with at most ten polls and 200 API calls including cancellation. Each
-family follows its job's scope, without a type cap. Lint and root guards remain watched
-when classification fails. Reads require the complete expected family membership,
-unique job IDs, consistent totals and matching run, attempt, head and labels. A routed
-job is assigned when it is running with a positive runner ID; completion also ends its
-queue wait. The aggregate checks the job's result separately.
+The routing job checks this repository's queued and running workflows with its own
+read-only Actions token. If a server job has waited five minutes and no server job is
+assigned or running, this run uses GitHub and records the reason in its summary. An
+unverifiable inventory also chooses GitHub. This does not change the human routing switch.
+A retry reads the previous attempt: an unassigned server job cancelled after that wait
+keeps the retry hosted even after the old queue has disappeared.
 
-If jobs remain unassigned, the watchdog rechecks this run's identity and requests normal
-cancellation, with one retry. Its message names the waiting families. Acceptance of that
-request still fails the watchdog. HTTP 409 passes only after completion of the same
-attempt is read back. The shell retains its 1,260-second outer deadline inside a
-22-minute job; the shorter polling limit also bounds a frozen clock. Empty or incomplete
-inventories and refused cancellation end red. The watchdog itself needs a GitHub runner,
-so this does not bound elapsed time during a GitHub outage. Timeout selection prefers
+The hosted queue watchdog reads its configured families in pages of 30, allowing ten
+seconds for each complete read. It waits up to five minutes, with at most ten polls and
+200 API calls including the recovery dispatch. Reads require complete family membership,
+unique job IDs and matching run, attempt, head and labels. After the wait it dispatches
+`server-health.yml` on `main`. A valid waiting inventory and accepted dispatch pass this
+watchdog; incomplete inventories and refused dispatches fail it. The shell retains its
+1,260-second outer deadline inside a 22-minute job. Timeout selection prefers
 `gnutimeout`, then `gtimeout`, then `timeout`.
 
-The watchdog starts for every admitted event and attempt that is not cancelled, using
-the same admission expression in `SHOULD_WATCH`. With no enabled family it exits without
-an API call. A specifically marked hosted fallback skips it.
+The independent Server health workflow runs on GitHub every five minutes, or by manual
+dispatch, on trusted `main` only. With its own Actions write token it rechecks that no
+server work is assigned or running, force-cancels a stuck run, waits for that cancellation
+to complete, then reruns the whole workflow so routing runs again. It reports the affected
+run IDs in its summary. A changed run identity or an incomplete inventory refuses recovery.
+It does not restart ordinary failed runs. If the recovery job stops after cancellation
+but before rerun, you must rerun that cancelled run yourself. GitHub scheduling and hosted
+runner availability can delay both watchdogs; five minutes is the observed queue threshold,
+not a wall-clock recovery guarantee.
 
-This first A1440 slice retains whole-run fallback: cancellation also stops running
-siblings, and a job can still wait while the server pool is full. Per-job capacity routing
-belongs to the next slice. Qualify a manual branch run, actual server assignments and the
-exact merge's main run before reporting activation; retain their run, attempt, source,
-runner IDs and results. Local checks do not establish a queue-time or speed improvement.
+Every fifteen minutes, Server health also checks for idle server capacity when the human
+switch is `server`. It suppresses its probe while server work is queued or assigned, or
+when current active runs or the latest 100 completed runs contain server work completed
+within fifteen minutes. Otherwise it dispatches CI with `server_probe=true`: only a tiny
+Node job and the final aggregate run. Its first attempt requests a server; later attempts
+use GitHub, allowing the independent recovery workflow to finish a failed pickup drill.
+You can dispatch this explicit probe while the human switch is hosted. The controller
+must recognise `server-probe-1` before the first attempt can be picked up.
+
+The controller's separate full-pool overflow waits about a minute and preserves runs
+that already have server work. Job-by-job capacity routing remains open. Retain actual
+run, attempt, source, runner IDs and results when qualifying activation; local tests do
+not establish GitHub scheduling, a queue-time improvement or workflow-token permission.
 
 The watch-list evaluator withholds the four job-status functions from step environment
 expressions. Its “evaluates watch-list environment expressions without job-status functions”
@@ -193,11 +205,10 @@ libraries; all browser families need full Chromium and its system libraries. Ven
 also uses `TMPDIR=/dev/shm` and `sudo dmesg`. Qualify an actual till browser-family job,
 including its existing deadline, before enabling that family. Read back
 `all_external_contributors`. Qualify an actual server-scoped PR on the rented runner,
-retaining its runner ID/name/labels, source head and coverage/aggregate results. Then take
-the label away and stop the server for the requested fallback drills. Read the visible
+retaining its runner ID/name/labels, source head and coverage/aggregate results. Use a controlled unavailable-label drill without stopping other lanes' server work. Read the visible
 first-attempt failure or cancellation and an unchanged-head second attempt finishing on
-GitHub. Lane I owns automatic retry of attempts it admitted; an unowned label requires an
-explicit rerun. These live qualifications remain open; local shell tests do not establish
+GitHub. The independent watchdog recovers matching queued labels even before the controller has
+admitted them. These live qualifications remain open; local shell tests do not establish
 GitHub scheduling, VM isolation or a speed improvement.
 
 The public repository still exposes the runner VM, host and reachable network to code that

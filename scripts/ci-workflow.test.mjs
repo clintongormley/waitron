@@ -78,6 +78,7 @@ const ADDITIONAL_ROUTES = [
 const familyCap = (family) => `DISPOSABLE_TESTS_${family.replaceAll("-", "_").toUpperCase()}_JOBS`;
 function routingContext(family = "server") {
   return {
+    inputs: { server_probe: false },
     github: {
       run_attempt: 1,
       sha: "a".repeat(40),
@@ -101,6 +102,7 @@ function routingContext(family = "server") {
       changes: {
         outputs: {
           code: "true",
+          server_route: "server",
           ...Object.fromEntries(
             DISPOSABLE_FAMILIES.map((name) => [
               name.replaceAll("-", "_"),
@@ -198,6 +200,7 @@ describe("disposable family routing", () => {
         context.needs.changes.outputs[key] = "true";
       for (const match of body.join("\n").matchAll(/needs\.changes\.outputs\.(\w+)/g))
         context.needs.changes.outputs[match[1]] = "true";
+      context.needs.changes.outputs.server_route = "server";
       const routing = body.find((line) => /^ {4}runs-on:/.test(line));
       expect(row.count).toBe(matrixShards(body)?.length ?? 1);
       expect(row.matrix).toBe(matrixShards(body) !== undefined);
@@ -210,7 +213,7 @@ describe("disposable family routing", () => {
       context.needs.changes.result = "failure";
       context.needs.changes.outputs = {};
       if (jobCondition(body, context))
-        expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(true);
+        expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
     }
   });
 
@@ -300,7 +303,10 @@ describe("disposable server routing", () => {
     expect(job("changes").body).toContain("    runs-on: ubuntu-latest");
     for (const entry of jobs) {
       const routing = entry.body.find((line) => /^ {4}runs-on:/.test(line));
-      if (!routing || ["changes", "server-queue-watchdog", "publish", "ci"].includes(entry.id))
+      if (
+        !routing ||
+        ["changes", "server-queue-watchdog", "publish", "ci", "server-probe"].includes(entry.id)
+      )
         continue;
       for (const event of ["pull_request", "push", "workflow_dispatch", "schedule"]) {
         const context = routingContext();
@@ -376,7 +382,7 @@ case "$endpoint" in
     response="$STUB_DIR/jobs.$selected.$page"
     if [ -f "$STUB_DIR/jobs-error.status" ]; then response="$STUB_DIR/jobs-error"; fi
     ;;
-  repos/o/r/actions/runs/1234/cancel)
+  repos/o/r/actions/runs/1234/cancel|repos/o/r/actions/workflows/server-health.yml/dispatches)
     case " $* " in *' POST '*) ;; *) echo 'Expected POST' >&2; exit 1 ;; esac
     advance cancel; response="$STUB_DIR/cancel.$selected" ;;
   repos/o/r/actions/runs/1234)
@@ -501,7 +507,22 @@ exit "$status"
       elapsed,
     };
   }
-  const cancellations = (result) => result.calls.filter((args) => args.includes("POST"));
+  const recoveryDispatches = (result) => result.calls.filter((args) => args.includes("POST"));
+
+  it("delegates recovery to trusted main without cancelling its own workflow", () => {
+    const result = runWatch({}, { SLEEP_OVERRUN: "0" });
+    expect(result.status, result.output).toBe(0);
+    expect(recoveryDispatches(result)).toEqual([
+      [
+        "api",
+        "--method",
+        "POST",
+        "repos/o/r/actions/workflows/server-health.yml/dispatches",
+        "-f",
+        "ref=main",
+      ],
+    ]);
+  });
 
   const familyRows = (id, count, matrix, firstId) =>
     Array.from({ length: count }, (_, at) => ({
@@ -530,8 +551,8 @@ exit "$status"
           { id: "test-server", count: 24, matrix: true, enabled: false },
         ),
       );
-      expect(result.status === 0, result.output).toBe(both);
-      expect(cancellations(result)).toHaveLength(both ? 0 : 1);
+      expect(result.status, result.output).toBe(0);
+      expect(recoveryDispatches(result)).toHaveLength(both ? 0 : 1);
       if (!both) expect(result.output).toContain("test-ui");
     },
   );
@@ -550,7 +571,7 @@ exit "$status"
     );
     expect(result.status, result.output).not.toBe(0);
     expect(result.calls).toHaveLength(1);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it("matches an unsharded API name exactly while excluding its merge job", () => {
     const ui = familyRows("test-ui", 1, false, 100);
@@ -560,7 +581,7 @@ exit "$status"
       familyEnvironment({ id: "test-ui", count: 1, matrix: false, enabled: true }),
     );
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it("names the waiting browser family when both cancellation requests fail", () => {
     const ui = familyRows("test-ui", 1, false, 100);
@@ -575,8 +596,10 @@ exit "$status"
       familyEnvironment({ id: "test-ui", count: 1, matrix: false, enabled: true }),
     );
     expect(result.status, result.output).not.toBe(0);
-    expect(cancellations(result)).toHaveLength(2);
-    expect(result.output).toContain("Could not request cancellation of the queued test-ui jobs");
+    expect(recoveryDispatches(result)).toHaveLength(2);
+    expect(result.output).toContain(
+      "Could not request independent recovery of the queued test-ui jobs",
+    );
   });
   it.each(["name", "head", "attempt", "label", "missing"])(
     "does not hide a browser %s fault behind assigned server jobs",
@@ -599,7 +622,7 @@ exit "$status"
         ),
       );
       expect(result.status, result.output).not.toBe(0);
-      expect(cancellations(result)).toHaveLength(1);
+      expect(recoveryDispatches(result)).toHaveLength(1);
     },
   );
 
@@ -647,7 +670,7 @@ exit "$status"
       { CHECK_STDIN: "true" },
     );
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it.each(["assigned", "completed"])(
     "accepts a complete inventory with the routed job %s",
@@ -660,7 +683,7 @@ exit "$status"
       });
       const result = runWatch({ polls: [pages(entries)] });
       expect(result.status, result.output).toBe(0);
-      expect(cancellations(result)).toEqual([]);
+      expect(recoveryDispatches(result)).toEqual([]);
     },
   );
   it.each([true, false])(
@@ -672,8 +695,8 @@ exit "$status"
         if (both) Object.assign(entries[1], { status: "in_progress", runner_id: 10 });
       });
       const result = runWatch({ polls: [pages(rows)] });
-      expect(result.status === 0, result.output).toBe(both);
-      expect(cancellations(result)).toHaveLength(both ? 0 : 1);
+      expect(result.status, result.output).toBe(0);
+      expect(recoveryDispatches(result)).toHaveLength(both ? 0 : 1);
     },
   );
   it("does not call an in-progress shard assigned without a positive runner ID", () => {
@@ -686,8 +709,8 @@ exit "$status"
         ),
       ],
     });
-    expect(result.status, result.output).not.toBe(0);
-    expect(cancellations(result)).toHaveLength(1);
+    expect(result.status, result.output).toBe(0);
+    expect(recoveryDispatches(result)).toHaveLength(1);
   });
   it("allows an initial empty listing and legitimate inventory growth between paginated polls", () => {
     const ready = inventory((rows) => {
@@ -702,7 +725,7 @@ exit "$status"
     );
     expect(result.status, result.output).toBe(0);
     expect(result.calls.some((args) => args.some((arg) => arg.endsWith("&page=2")))).toBe(true);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it("compares the configured label prefix as data", () => {
     const result = runWatch(
@@ -719,7 +742,7 @@ exit "$status"
       { LABEL_PREFIX: 'dt"quoted' },
     );
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it.each([
     "missing",
@@ -755,7 +778,7 @@ exit "$status"
       if (fault === "changing total") listing[1].total_count++;
       const result = runWatch({ polls: [listing] });
       expect(result.status, result.output).not.toBe(0);
-      expect(cancellations(result)).toHaveLength(1);
+      expect(recoveryDispatches(result)).toHaveLength(1);
     },
   );
   it("refuses more than thirty records in one API page", () => {
@@ -765,7 +788,7 @@ exit "$status"
     });
     const result = runWatch({ polls: [[{ total_count: entries.length, jobs: entries }]] });
     expect(result.status, result.output).not.toBe(0);
-    expect(cancellations(result)).toHaveLength(1);
+    expect(recoveryDispatches(result)).toHaveLength(1);
   });
   it("uses the remainder of one ten-second budget for subsequent pages", () => {
     const entries = inventory((rows) => {
@@ -794,48 +817,48 @@ exit "$status"
     });
     expect(result.status, result.output).not.toBe(0);
     expect(result.calls).toHaveLength(1);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
-  it("cannot turn API failures or a still-unassigned job into success", () => {
+  it("fails unreadable inventory but delegates a valid waiting queue", () => {
     for (const jobsError of [false, true]) {
       const result = runWatch({ jobsError });
-      expect(result.status, result.output).not.toBe(0);
-      expect(cancellations(result)).toHaveLength(1);
+      expect(result.status, result.output).toBe(jobsError ? 1 : 0);
+      expect(recoveryDispatches(result)).toHaveLength(1);
     }
   });
   it("makes no more than ten inventory polls even when the clock does not advance", () => {
     const result = runWatch({}, { FREEZE_CLOCK: "true" });
-    expect(result.status, result.output).not.toBe(0);
+    expect(result.status, result.output).toBe(0);
     expect(result.calls.filter((args) => args.some((arg) => arg.includes("/jobs?")))).toHaveLength(
       10,
     );
-    expect(cancellations(result)).toHaveLength(1);
+    expect(recoveryDispatches(result)).toHaveLength(1);
     expect(result.sleeps).toEqual(Array(10).fill("30"));
   });
-  it("waits five minutes before requesting cancellation of a queued run", () => {
+  it("waits five minutes before requesting independent recovery of a queued run", () => {
     const result = runWatch({}, { SLEEP_OVERRUN: "0" });
-    expect(result.status, result.output).not.toBe(0);
+    expect(result.status, result.output).toBe(0);
     expect(result.elapsed).toBe(300);
     expect(result.sleeps).toEqual(Array(10).fill("30"));
-    expect(cancellations(result)).toHaveLength(1);
+    expect(recoveryDispatches(result)).toHaveLength(1);
   });
   it("does not cancel a matching attempt that has already completed", () => {
     const result = runWatch({ runs: [{ out: { ...identity, status: "completed" } }] });
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it.each([{ id: 999 }, { run_attempt: 2 }, { head_sha: "b".repeat(40) }])(
     "refuses cancellation after an identity change %j",
     (change) => {
       const result = runWatch({ runs: [{ out: { ...identity, ...change } }] });
       expect(result.status, result.output).not.toBe(0);
-      expect(cancellations(result)).toEqual([]);
+      expect(recoveryDispatches(result)).toEqual([]);
     },
   );
-  it("retries a failed cancellation once, and an accepted request still cannot pass", () => {
+  it("retries a failed recovery dispatch once and passes only after it is accepted", () => {
     const result = runWatch({ cancel: [{ status: 1, error: "HTTP 503" }, {}] });
-    expect(result.status, result.output).not.toBe(0);
-    expect(cancellations(result)).toHaveLength(2);
+    expect(result.status, result.output).toBe(0);
+    expect(recoveryDispatches(result)).toHaveLength(2);
   });
   it("accepts a 409 only when the same run attempt is read back completed", () => {
     const result = runWatch({
@@ -843,10 +866,10 @@ exit "$status"
       runs: [{ out: identity }, { out: { ...identity, status: "completed" } }],
     });
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toHaveLength(1);
+    expect(recoveryDispatches(result)).toHaveLength(1);
     const rejected = runWatch({ cancel: [{ status: 1, error: "HTTP 409" }] });
     expect(rejected.status, rejected.output).not.toBe(0);
-    expect(cancellations(rejected)).toHaveLength(2);
+    expect(recoveryDispatches(rejected)).toHaveLength(2);
   });
   it("caps the complete watchdog at 200 HTTP requests, including pagination", () => {
     const entries = inventory((rows) => {
@@ -3718,7 +3741,7 @@ describe("the lint and root-guards jobs", () => {
       expect(
         job(id).body.filter((line) => /^ {4}(if|needs):/.test(line)),
         id,
-      ).toEqual(["    needs: changes", "    if: always()"]);
+      ).toEqual(["    needs: changes", "    if: ${{ always() && !inputs.server_probe }}"]);
     }
   });
 
@@ -5796,6 +5819,7 @@ describe("scoped tests and nightly full verification", () => {
         outputs: {
           full,
           code: "true",
+          server_route: "server",
           ...Object.fromEntries(SCOPE_GATES.map(({ output }) => [output, "true"])),
         },
       },

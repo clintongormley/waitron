@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
 async function inventory(request, path, key) {
   const entries = [];
   let total;
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; ; page++) {
     const answer = await request(
       `${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`,
     );
@@ -25,7 +28,6 @@ async function inventory(request, path, key) {
     if (entries.length === total) return entries;
     assert.equal(answer[key].length, 100, "Incomplete server inventory page");
   }
-  throw new Error("Server inventory page limit exceeded");
 }
 
 function owned(run, repositoryId) {
@@ -84,7 +86,10 @@ export async function serverHealth(options) {
   for (const run of runs.values()) {
     const jobs = await serverJobs(options, run);
     running += jobs.filter(assigned).length;
-    recent ||= jobs.some((job) => assigned(job) || now - Date.parse(job.completed_at) < 900_000);
+    recent ||= jobs.some(
+      (job) =>
+        job.status === "queued" || assigned(job) || now - Date.parse(job.completed_at) < 900_000,
+    );
     if (jobs.some((job) => job.status === "queued" && !job.runner_id && old(job, run, now)))
       stuck.push(run);
   }
@@ -155,9 +160,96 @@ export async function recoverServer(options) {
     }
     assert.equal(current.status, "completed", "Stuck run cancellation did not finish");
     if (current.conclusion === "cancelled") {
-      await request(path + "/rerun-failed-jobs", { method: "POST" });
+      await request(path + "/rerun", { method: "POST" });
       retried.push(run.id);
     }
   }
   return { retried };
 }
+
+export async function needsServerProbe(options) {
+  const { request, repository, repositoryId, now = Date.now() } = options;
+  if ((await serverHealth(options)).recent) return false;
+  const recent = await request(
+    `/repos/${repository}/actions/runs?status=completed&per_page=100&page=1`,
+  );
+  assert.ok(
+    Array.isArray(recent.workflow_runs) &&
+      recent.workflow_runs.length === Math.min(recent.total_count, 100),
+    "Incomplete recent run inventory",
+  );
+  const runs = recent.workflow_runs;
+  for (const run of runs) {
+    if (!owned(run, repositoryId)) continue;
+    if (
+      (await serverJobs(options, run)).some((job) => now - Date.parse(job.completed_at) < 900_000)
+    )
+      return false;
+  }
+  return true;
+}
+
+export async function healthCommand(command, options, { report, output }) {
+  if (command === "route") {
+    let answer;
+    try {
+      answer = await serverRoute(options);
+    } catch (error) {
+      answer = { route: "hosted", reason: `Server queue could not be verified: ${error.message}` };
+    }
+    output(`server_route=${answer.route}`);
+    report(answer.reason);
+  } else if (command === "recover") {
+    const { retried } = await recoverServer(options);
+    report(
+      retried.length
+        ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned server work.`
+        : "No stalled server run needed recovery.",
+    );
+  } else {
+    assert.equal(command, "probe", "Unknown server health command");
+    if (await needsServerProbe(options)) {
+      await options.request(`/repos/${options.repository}/actions/workflows/ci.yml/dispatches`, {
+        method: "POST",
+        body: { ref: options.ref, inputs: { server_probe: true } },
+      });
+      report("Dispatched one server pickup probe after no recent server traffic was observed.");
+    } else report("Server traffic was observed; no idle probe is needed.");
+  }
+}
+
+export function githubRequest(path, { method = "GET", body } = {}, execute = execFileSync) {
+  const args = ["api", path, "--method", method];
+  if (body !== undefined) args.push("--input", "-");
+  const result = execute("gh", args, {
+    encoding: "utf8",
+    timeout: 15000,
+    maxBuffer: 2 * 1024 * 1024,
+    input: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return result.trim() ? JSON.parse(result) : null;
+}
+
+export async function main(command, env = process.env, request = githubRequest) {
+  await healthCommand(
+    command,
+    {
+      request,
+      repository: env.GITHUB_REPOSITORY,
+      repositoryId: Number(env.GITHUB_REPOSITORY_ID),
+      runId: Number(env.GITHUB_RUN_ID),
+      attempt: Number(env.GITHUB_RUN_ATTEMPT),
+      prefix: env.LABEL_PREFIX || "dt",
+      ref: "main",
+    },
+    {
+      output: (line) => appendFileSync(env.GITHUB_OUTPUT, line + "\n"),
+      report: (line) => {
+        console.log(line);
+        appendFileSync(env.GITHUB_STEP_SUMMARY, line + "\n");
+      },
+    },
+  );
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  await main(process.argv[2]);
