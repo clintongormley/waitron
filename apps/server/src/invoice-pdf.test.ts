@@ -881,3 +881,48 @@ it.each([
   expect(pages[0]!.text).toContain(`${label}: Ab-09/xy`);
   expect(pages[0]!.text).not.toContain("NIF: Ab-09/xy");
 });
+
+describe("A4 remembered text widths", () => {
+  /** A module copy whose remembered widths no earlier case has filled. */
+  const freshModules = async () => {
+    vi.resetModules();
+    const { invoiceFont: font } = await import("./invoice-font.js");
+    const page = await import("./invoice-page.js");
+    return { font, page };
+  };
+
+  it("lays out the same invoice a second time without measuring any text again", async () => {
+    const { font, page } = await freshModules();
+    const layout = vi.spyOn(font, "layout");
+    try {
+      const first = page.layoutInvoicePages(fixture);
+      expect(layout.mock.calls.length).toBeGreaterThan(0);
+      layout.mockClear();
+      const second = page.layoutInvoicePages(fixture);
+      expect(layout).not.toHaveBeenCalled();
+      expect(second).toEqual(first);
+    } finally {
+      layout.mockRestore();
+      vi.resetModules();
+    }
+  });
+
+  it("forgets every remembered width once the limit is reached", async () => {
+    const { font, page } = await freshModules();
+    const probe = "Width bound probe text";
+    const layout = vi.spyOn(font, "layout");
+    try {
+      const measured = page.invoiceTextWidth(probe, 10);
+      page.invoiceTextWidth(probe, 10);
+      expect(layout.mock.calls.filter(([text]) => text === probe)).toHaveLength(1);
+      for (let index = 0; index < page.INVOICE_TEXT_WIDTH_MEMO_LIMIT; index++) {
+        page.invoiceTextWidth(`bound filler ${index}`, 10);
+      }
+      expect(page.invoiceTextWidth(probe, 20)).toBeCloseTo(measured * 2);
+      expect(layout.mock.calls.filter(([text]) => text === probe)).toHaveLength(2);
+    } finally {
+      layout.mockRestore();
+      vi.resetModules();
+    }
+  });
+});

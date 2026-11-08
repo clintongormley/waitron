@@ -2081,6 +2081,9 @@ below. Twenty-four since A1297.)
 What this does not fix: `src/invoice-pdf.test.ts` took 162 s on run 39068745456, a floor under
 whichever shard holds it. Local wall times were no guide here: the same old code took 138.7 s and
 197.2 s on consecutive runs beside other sessions' tests.
+(2026-11-08, A1451: `width()` in `apps/server/src/invoice-page.ts` now remembers each text's
+measured width. Locally, without coverage, the file's tests took 27.6-28.8 s before and 13.3-14.3 s
+after, with two cases added; its CI time after the change was not measured here.)
 
 ### The till's shards: seven, because the work outgrew two
 
@@ -2257,7 +2260,8 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
   from the test helper and from the product's preview, validate and restore steps each decrypting
   the same archive; `src/first-setup-unused-pdf.test.ts` 151 s, one 84 s test building three
   fixtures; `src/invoice-pdf.test.ts` 119 s, its slowest test's time, without coverage, 95% under `width()`
-  (`apps/server/src/invoice-page.ts:47`), about 4.5 times slower under coverage.
+  (`apps/server/src/invoice-page.ts:47`), about 4.5 times slower under coverage. (2026-11-08, A1451:
+  `width()` now remembers each text's measured width; see "What this does not fix" above.)
 - **The split put heavy files together.** Vitest 4.1.11 sorts the files by the sha1 of each path and
   cuts the list into equal counts (`BaseSequencer.shard`), so which files share a shard depends only
   on their names. `python3 -I replay2.py files.txt` in the model folder replays that split

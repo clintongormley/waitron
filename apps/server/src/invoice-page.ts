@@ -44,9 +44,20 @@ export interface InvoicePage {
   elements: InvoicePageElement[];
 }
 
+export const INVOICE_TEXT_WIDTH_MEMO_LIMIT = 5000;
+// Bounded because the server runs for months and every invoice brings new names.
+const advanceWidths = new Map<string, number>();
+
 function width(text: string, size: number): number {
-  return (invoiceFont.layout(text).advanceWidth * size) / invoiceFont.unitsPerEm;
+  let advance = advanceWidths.get(text);
+  if (advance === undefined) {
+    if (advanceWidths.size >= INVOICE_TEXT_WIDTH_MEMO_LIMIT) advanceWidths.clear();
+    advance = invoiceFont.layout(text).advanceWidth;
+    advanceWidths.set(text, advance);
+  }
+  return (advance * size) / invoiceFont.unitsPerEm;
 }
+export { width as invoiceTextWidth };
 
 function wrap(text: string, available: number, size: number): string[] {
   const lines: string[] = [];

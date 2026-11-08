@@ -2203,9 +2203,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A late move or second finger can overtake the gesture hold timer.**
   [Detail](backlog/ci.md#a-late-move-or-second-finger-can-overtake-the-gesture-hold-timer).
 
-- **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
-  [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
-
 - **A1398. Pack the other packages' test shards by measured time** (bundle of 3, 1 important, size M). [Detail](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 
 - **Tests copy the dashboard shell's link handler instead of calling it.**
