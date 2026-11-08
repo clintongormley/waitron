@@ -15,6 +15,7 @@ import {
   expectRestartExit,
   ready,
 } from "../test/first-fiscal-hour-entry.js";
+import { useBuiltServer } from "./testing/built-server.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -34,6 +35,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 
 const fixture = entryWorkspaces();
+const built = useBuiltServer(["src/bin.ts", "src/node-entry.ts"]);
 
 it.each(["src/bin.ts", "src/node-entry.ts"])(
   "%s refuses Start again while a restore or reset request waits, then deletes the attempt in place and starts fresh in the same folders",
@@ -64,7 +66,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       agentClosed = true;
       await agent.close();
     };
-    let child = await childProcess(script, f.env);
+    let child = await childProcess(built(script), f.env);
     let origin = `https://127.0.0.1:${child.port}`;
     try {
       expect(await ready(child, origin, agent)).toEqual({ claimed: true, resolution: true });
@@ -134,14 +136,14 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       expect(await selected.json()).toEqual({ restarting: true });
       await closeAgent();
       await expectRestartExit(child);
-      child = await childProcess(script, f.env);
+      child = await childProcess(built(script), f.env);
       origin = `https://127.0.0.1:${child.port}`;
       agent = new Agent({ connect: { ca } });
       agentClosed = false;
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect((await stat(join(f.venueDir, "venue.db"))).size).toBeGreaterThan(0);
       await child.stop();
-      child = await childProcess(script, f.env);
+      child = await childProcess(built(script), f.env);
       origin = `https://127.0.0.1:${child.port}`;
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);

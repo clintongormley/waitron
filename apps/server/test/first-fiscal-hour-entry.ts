@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect } from "vitest";
 import type { Agent } from "undici";
@@ -68,18 +68,14 @@ export async function childProcess(
     await held.close();
     throw error;
   }
-  const child = spawn(
-    process.execPath,
-    ["--import", retainedHttpPreload, "--import", "tsx", resolve(script), ...args],
-    {
-      env: {
-        ...env,
-        WAITRON_HTTP_PORT: String(held.port),
-        WAITRON_HTTP_LANDING_PORT: String(landing?.port ?? 0),
-      },
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
+  const child = spawn(process.execPath, ["--import", retainedHttpPreload, script, ...args], {
+    env: {
+      ...env,
+      WAITRON_HTTP_PORT: String(held.port),
+      WAITRON_HTTP_LANDING_PORT: String(landing?.port ?? 0),
     },
-  );
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
+  });
   let output = "";
   child.stdout!.on("data", (bytes: Buffer) => {
     output += bytes.toString();

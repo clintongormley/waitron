@@ -9,8 +9,16 @@ import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { FRESH, writeRecoveryState } from "./recovery-state.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { childProcess, entryWorkspaces, ready } from "../test/first-fiscal-hour-entry.js";
+import { useBuiltServer } from "./testing/built-server.js";
 
 const fixture = entryWorkspaces();
+const provisioningBin = "../../packages/provisioning/src/bin.ts";
+const built = useBuiltServer([
+  "src/bin.ts",
+  "src/node-entry.ts",
+  "src/bin-restore.ts",
+  provisioningBin,
+]);
 
 it.each([
   { kind: "restore", intent: false, code: "setup.attempt_conflict" },
@@ -81,7 +89,7 @@ it.each([
             "--yes",
           ];
     const child = await childProcess(
-      kind === "restore" ? "src/bin-restore.ts" : "../../packages/provisioning/src/bin.ts",
+      built(kind === "restore" ? "src/bin-restore.ts" : provisioningBin),
       {
         ...f.env,
         WAITRON_ADMIN_PASSWORD: PASSWORD,
@@ -147,7 +155,7 @@ it.each([
     const agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
     const fetch: typeof globalThis.fetch = (url, init) =>
       globalThis.fetch(url, { ...init, dispatcher: agent } as RequestInit);
-    const child = await childProcess(script, f.env, [], { landing: true });
+    const child = await childProcess(built(script), f.env, [], { landing: true });
     try {
       const base = `https://127.0.0.1:${child.port}`;
       expect(await ready(child, base, agent)).toEqual({ claimed: true, resolution: true });

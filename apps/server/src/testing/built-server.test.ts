@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +53,26 @@ describe("useBuiltServer", () => {
 
   it("leaves apps/server/dist unwritten", () => {
     expect(distState()).toEqual(distBefore);
+  });
+});
+
+describe("useBuiltServer with named entries", () => {
+  const provisioning = "../../packages/provisioning/src/bin.ts";
+  const built = useBuiltServer(["src/bin.ts", provisioning]);
+
+  it("bundles each named entry in the one directory, under its own file name", () => {
+    expect(dirname(built("src/bin.ts"))).toBe(dirname(built(provisioning)));
+    expect(built("src/bin.ts")).not.toBe(built(provisioning));
+    const server = readFileSync(built("src/bin.ts"), "utf8");
+    const command = readFileSync(built(provisioning), "utf8");
+    expect(server).toContain('nameVenueHolder("server"');
+    expect(server).not.toContain("writeModuleConfigTo(");
+    expect(command).toContain("writeModuleConfigTo(");
+    expect(command).not.toContain('nameVenueHolder("server"');
+  });
+
+  it("refuses an entry it was not asked to bundle", () => {
+    expect(() => built("src/node-entry.ts")).toThrow("src/node-entry.ts");
   });
 });
 
