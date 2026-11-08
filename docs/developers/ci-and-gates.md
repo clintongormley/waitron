@@ -181,12 +181,21 @@ The independent Server health workflow runs on GitHub every five minutes, or by 
 dispatch, on trusted `main` only. With its own Actions write token it rechecks that no
 server work is assigned or running, and no assigned job in active CI runs started or
 finished within five minutes. It also checks the latest 100 completed CI runs for server
-work finished within five minutes. It selects only the oldest stuck run, repeats the global
+work finished within five minutes, skipping job reads for runs whose `updated_at` is over
+five minutes old; missing or invalid update times still get job reads. It selects only the
+oldest stuck run, repeats the global
 active-work check, force-cancels that run, waits for cancellation to complete, then reruns
 the whole workflow so routing runs again. Other candidates wait for the next invocation.
-It reports the affected run ID in its summary. A changed run identity or an incomplete
+It reports the affected run ID in its summary. A refused force-cancel names that run for
+intervention; until it is resolved, younger candidates wait. A changed run identity or an incomplete
 inventory refuses recovery. Short non-final pages continue until the advertised count; an
-early empty page, duplicate ID or changed count still refuses the read.
+early empty page, duplicate ID or changed count stops the read. Recovery and probing report
+that the inventory is unavailable and make no change; the command passes so an uncertain
+read does not itself become a stuck-server alarm. Routing chooses GitHub on an uncertain read.
+The completed-history filter assumes GitHub updates a completed run no earlier than its
+last job finishes. A 2026-11-08 read of 15 completed CI runs and all 855 of their jobs found
+no job completion later than its run's `updated_at`. This observation is not an API
+guarantee; the owner accepted that limit to avoid up to 100 old job-inventory reads per pass.
 It does not restart ordinary failed runs. If the recovery job stops after cancellation
 but before rerun, you must rerun that cancelled run yourself. GitHub scheduling and hosted
 runner availability can delay both watchdogs; five minutes is the observed queue threshold,

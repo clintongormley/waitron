@@ -628,4 +628,180 @@ describe("server health recovery", () => {
     await expect(health.recoverServer(f.options)).rejects.toThrow(/inventory/);
     expect(f.calls.filter(([, options]) => options.method === "POST")).toEqual([]);
   });
+  it.each(["recover", "probe"])(
+    "reports an incomplete inventory without writes or a failed %s command",
+    async (command) => {
+      const f = fixture(),
+        request = f.request,
+        reports = [];
+      f.options.request = async (path, options) =>
+        path.includes("/jobs?")
+          ? { total_count: 2, jobs: path.endsWith("&page=1") ? [f.job] : [] }
+          : request(path, options);
+      await health.healthCommand(command, f.options, {
+        report: (line) => reports.push(line),
+        output: () => {},
+      });
+      expect(reports.join("\n")).toMatch(/inventory.*unavailable/i);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+    },
+  );
+
+  it("keeps an API permission refusal visible during recovery", async () => {
+    const f = fixture();
+    f.options.request = async () => {
+      throw new Error("HTTP 403 forbidden");
+    };
+    await expect(
+      health.healthCommand("recover", f.options, { report: () => {}, output: () => {} }),
+    ).rejects.toThrow("HTTP 403");
+  });
+
+  it("does not count a recently cancelled unassigned job as server progress", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) =>
+      path.includes("/jobs?")
+        ? {
+            total_count: 2,
+            jobs: [
+              f.job,
+              {
+                ...f.job,
+                id: 124,
+                status: "completed",
+                runner_id: 0,
+                conclusion: "cancelled",
+                started_at: date(0.5),
+                completed_at: date(0.5),
+              },
+            ],
+          }
+        : request(path, options);
+    expect((await health.recoverServer(f.options)).retried).toEqual([12]);
+  });
+
+  it("stops completed CI history at 100 even when more than 1000 runs exist", async () => {
+    const f = fixture(),
+      reads = [];
+    f.options.request = async (path) => {
+      reads.push(path);
+      if (path.includes("status=completed")) {
+        expect(path).toContain("/actions/workflows/ci.yml/runs?");
+        expect(path).toContain("page=1");
+        return {
+          total_count: 1500,
+          workflow_runs: Array.from({ length: 100 }, (_, i) => ({
+            ...f.run,
+            id: i + 100,
+            head_repository: { id: 99 },
+          })),
+        };
+      }
+      expect(path).toContain("/runs?");
+      return { total_count: 0, workflow_runs: [] };
+    };
+    expect(await health.needsServerProbe(f.options)).toBe(true);
+    expect(reads.filter((path) => path.includes("status=completed"))).toHaveLength(1);
+  });
+  it("does not read completed history when the active queue needs no recovery", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.job.runner_id = 7;
+    f.options.request = async (path, options) => {
+      if (path.includes("status=completed")) throw new Error("Unnecessary history request");
+      return request(path, options);
+    };
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+  });
+
+  it.each(["duplicate", "changed-count"])(
+    "reports a moving completed history as unavailable: %s",
+    async (change) => {
+      const f = fixture(),
+        request = f.request,
+        reports = [];
+      f.options.request = async (path, options) => {
+        if (path.includes("status=completed"))
+          return {
+            total_count: change === "changed-count" && path.endsWith("&page=2") ? 3 : 2,
+            workflow_runs: [
+              {
+                ...f.run,
+                id: change === "duplicate" || path.endsWith("&page=1") ? 98 : 99,
+                head_repository: { id: 99 },
+              },
+            ],
+          };
+        return request(path, options);
+      };
+      await health.healthCommand("recover", f.options, {
+        report: (line) => reports.push(line),
+        output: () => {},
+      });
+      expect(reports.join("\n")).toMatch(/inventory.*unavailable/i);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+    },
+  );
+  it.each(["old", "boundary", "recent", "missing", "invalid"])(
+    "bounds completed-history job reads for an %s update",
+    async (state) => {
+      const f = fixture(),
+        request = f.request,
+        reads = [];
+      f.options.request = async (path, options) => {
+        if (path.includes("status=completed"))
+          return {
+            total_count: 1,
+            workflow_runs: [
+              {
+                ...f.run,
+                id: 13,
+                status: "completed",
+                updated_at: {
+                  old: date(5.001),
+                  boundary: date(5),
+                  recent: date(1),
+                  missing: undefined,
+                  invalid: "invalid",
+                }[state],
+              },
+            ],
+          };
+        if (path.includes("/runs/13/attempts/")) {
+          reads.push(path);
+          return {
+            total_count: 1,
+            jobs: [
+              {
+                ...f.job,
+                id: 124,
+                run_id: 13,
+                labels: ["self-hosted", "dt-42-13-1-lint-1"],
+                status: "completed",
+                runner_id: 7,
+                completed_at: state === "old" ? date(6) : date(1),
+              },
+            ],
+          };
+        }
+        return request(path, options);
+      };
+      expect((await health.recoverServer(f.options)).retried).toEqual(state === "old" ? [12] : []);
+      expect(reads).toHaveLength(state === "old" ? 0 : 1);
+    },
+  );
+
+  it("names the stuck run when force-cancel needs intervention", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) => {
+      if (path.endsWith("/force-cancel")) throw new Error("HTTP 403 forbidden");
+      return request(path, options);
+    };
+    await expect(health.recoverServer(f.options)).rejects.toThrow(
+      /Stuck run 12.*force-cancel.*HTTP 403/,
+    );
+    expect(f.calls.some(([path]) => path.endsWith("/rerun"))).toBe(false);
+  });
 });

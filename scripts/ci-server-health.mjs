@@ -4,6 +4,8 @@ import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
+class InventoryUnavailable extends Error {}
+
 async function inventory(request, path, key, limit) {
   const entries = [];
   let total;
@@ -18,18 +20,20 @@ async function inventory(request, path, key, limit) {
         (limit !== undefined || total <= 1000) &&
         answer.total_count === total &&
         Array.isArray(answer[key]),
-      "Incomplete server inventory",
+      new InventoryUnavailable("Incomplete server inventory"),
     );
     entries.push(...answer[key]);
     assert.ok(
       entries.length <= total && new Set(entries.map((entry) => entry.id)).size === entries.length,
-      "Duplicate server inventory",
+      new InventoryUnavailable("Duplicate server inventory"),
     );
     if (entries.length >= Math.min(total, limit ?? total))
       return entries.slice(0, limit ?? entries.length);
     assert.ok(
       answer[key].length > 0,
-      `Incomplete server inventory: empty page after ${entries.length} of ${total} entries`,
+      new InventoryUnavailable(
+        `Incomplete server inventory: empty page after ${entries.length} of ${total} entries`,
+      ),
     );
   }
 }
@@ -163,7 +167,14 @@ export async function recoverServer(options) {
       current.status === "completed"
     )
       continue;
-    await request(path + "/force-cancel", { method: "POST" });
+    try {
+      await request(path + "/force-cancel", { method: "POST" });
+    } catch (error) {
+      throw new Error(
+        `Stuck run ${run.id} force-cancel refused; intervention needed: ${error.message}`,
+        { cause: error },
+      );
+    }
     for (let poll = 0; poll < 24; poll++) {
       current = await request(path);
       assert.ok(
@@ -193,7 +204,7 @@ async function completedServerTraffic(options) {
     100,
   );
   for (const run of runs) {
-    if (!owned(run, repositoryId)) continue;
+    if (!owned(run, repositoryId) || now - Date.parse(run.updated_at) > 300_000) continue;
     if (
       (await serverJobs(options, run)).some(
         (job) => job.runner_id > 0 && now - Date.parse(job.completed_at) < 300_000,
@@ -209,31 +220,39 @@ export async function needsServerProbe(options) {
 }
 
 export async function healthCommand(command, options, { report, output }) {
-  if (command === "route") {
-    let answer;
-    try {
-      answer = await serverRoute(options);
-    } catch (error) {
-      answer = { route: "hosted", reason: `Server queue could not be verified: ${error.message}` };
+  try {
+    if (command === "route") {
+      let answer;
+      try {
+        answer = await serverRoute(options);
+      } catch (error) {
+        answer = {
+          route: "hosted",
+          reason: `Server queue could not be verified: ${error.message}`,
+        };
+      }
+      output(`server_route=${answer.route}`);
+      report(answer.reason);
+    } else if (command === "recover") {
+      const { retried } = await recoverServer(options);
+      report(
+        retried.length
+          ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned or recently progressing server work.`
+          : "No stalled server run needed recovery.",
+      );
+    } else {
+      assert.equal(command, "probe", "Unknown server health command");
+      if (await needsServerProbe(options)) {
+        await options.request(`/repos/${options.repository}/actions/workflows/ci.yml/dispatches`, {
+          method: "POST",
+          body: { ref: options.ref, inputs: { server_probe: true } },
+        });
+        report("Dispatched one server pickup probe after no recent server traffic was observed.");
+      } else report("Server traffic was observed; no idle probe is needed.");
     }
-    output(`server_route=${answer.route}`);
-    report(answer.reason);
-  } else if (command === "recover") {
-    const { retried } = await recoverServer(options);
-    report(
-      retried.length
-        ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned or recently progressing server work.`
-        : "No stalled server run needed recovery.",
-    );
-  } else {
-    assert.equal(command, "probe", "Unknown server health command");
-    if (await needsServerProbe(options)) {
-      await options.request(`/repos/${options.repository}/actions/workflows/ci.yml/dispatches`, {
-        method: "POST",
-        body: { ref: options.ref, inputs: { server_probe: true } },
-      });
-      report("Dispatched one server pickup probe after no recent server traffic was observed.");
-    } else report("Server traffic was observed; no idle probe is needed.");
+  } catch (error) {
+    if (!(error instanceof InventoryUnavailable)) throw error;
+    report(`Server inventory unavailable; ${command} made no change: ${error.message}`);
   }
 }
 
