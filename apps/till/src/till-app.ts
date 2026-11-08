@@ -3367,6 +3367,8 @@ export class TillApp extends LitElement {
   @state() private billNameRefusal: { billId: string; name: string; message: string } | null = null;
   @state() private revealOtherDrafts = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
+  /** A Change dish the kitchen refused as started, which the table screen shows in its window. */
+  @state() private changeRefusal: { lineNo: number; message: string } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
   @state() private splitRowsUnread: SplitRefusal | null = null;
   /** The panel's rows and the revision a press sends with them: one answer, written in one place,
@@ -11519,6 +11521,7 @@ export class TillApp extends LitElement {
       this.nameRefusal = null;
       this.billNameRefusal = null;
       this.guestsRefusal = null;
+      this.changeRefusal = null;
       this.splitRefusal = null;
       this.billGone = null;
       this.reprintSent = [];
@@ -15285,8 +15288,11 @@ export class TillApp extends LitElement {
     const visit = this.#orderVisit;
     const left = () => this.#hasLeftOrder(orderId, visit);
     const tableId = this.activeTableId;
+    // The screen that sent the change, which alone can reopen its window.
+    const sender = event.target as Element | null;
     this.errorKey = undefined;
     this.cancelOffer = null;
+    this.changeRefusal = null;
     let outcome: { saved: { revision: number; party: BillParty } } | { error: unknown };
     try {
       outcome = {
@@ -15356,23 +15362,28 @@ export class TillApp extends LitElement {
       }
     }
     if (!identity()) return;
-    this.errorKey =
-      code !== undefined && DRAFT_REFUSALS.has(code)
-        ? draftRefusalError({
-            refused: code,
-            ownerName: (outcome.error as { ownerName?: string }).ownerName,
-          })
-        : code === "working_order.out_of_date"
-          ? "held.changed_elsewhere"
-          : code === "bill.received_exceeds_total"
-            ? billWriteError(outcome.error, true)
-            : lineWriteError(outcome.error);
+    if (code === "ticket.already_started" && sender?.isConnected === true)
+      this.changeRefusal = {
+        lineNo,
+        message: fill(t("table.change_dish_started"), { dish: lineName }),
+      };
+    else
+      this.errorKey =
+        code !== undefined && DRAFT_REFUSALS.has(code)
+          ? draftRefusalError({
+              refused: code,
+              ownerName: (outcome.error as { ownerName?: string }).ownerName,
+            })
+          : code === "working_order.out_of_date"
+            ? "held.changed_elsewhere"
+            : code === "bill.received_exceeds_total"
+              ? billWriteError(outcome.error, true)
+              : lineWriteError(outcome.error);
     if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
     else if (isBillMoneyRefusal(outcome.error)) await this.#loadLinesAndBills();
     else await this.#loadTabLines();
     if (!identity()) return;
     if (code !== undefined && DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
-    if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }
 
   #releaseEditDeadEnds(): void {
@@ -20235,6 +20246,7 @@ export class TillApp extends LitElement {
     if (!this.#inShell()) return;
     this.#orderVisit++;
     this.cancelOffer = null;
+    this.changeRefusal = null;
     const session = this.#operatorSession;
     const flushed = this.#flushDraft(true);
     this.#clearErrorKeepingLateChange();
@@ -20556,6 +20568,7 @@ export class TillApp extends LitElement {
       .billNameRefusal=${this.billNameRefusal}
       .revealOtherDrafts=${this.revealOtherDrafts}
       .guestsRefusal=${this.guestsRefusal}
+      .changeRefusal=${this.changeRefusal}
       .splitRefusal=${this.splitRefusal}
       .splitRowsUnread=${this.splitRowsUnread}
       .splitRead=${this.splitRead}
@@ -20733,6 +20746,7 @@ export class TillApp extends LitElement {
           .billNameRefusal=${this.billNameRefusal}
           .revealOtherDrafts=${this.revealOtherDrafts}
           .guestsRefusal=${this.guestsRefusal}
+          .changeRefusal=${this.changeRefusal}
           .splitRefusal=${this.splitRefusal}
           .splitRowsUnread=${this.splitRowsUnread}
           .splitRead=${this.splitRead}

@@ -788,3 +788,104 @@ it("sends a dish's extras when they change, and its whole set with any other cha
   await pressChange(noteOnly);
   expect(sent[0]!.patch).toEqual({ note: "warm, no salt", portionLineNos: [], extras: [] });
 });
+
+const startedFlan = "The kitchen has already started Flan, so it can't be changed.";
+
+/** The note box's text inside the open window's fields. */
+async function noteShown(el: TillTableOrderScreen): Promise<string> {
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  await picker.updateComplete;
+  const field = picker.shadowRoot!.querySelector<WtTextarea>('[data-test="line-note"]')!;
+  await field.updateComplete;
+  return field.shadowRoot!.querySelector("textarea")!.value;
+}
+
+/** Changes the Flan's note and count, presses Change dish, and hands the screen the refusal. */
+async function refuseChange(el: TillTableOrderScreen, lineNo = 1) {
+  const seen = changes(el);
+  await editNote(el, "warm, no cream");
+  await setQuantity(el, "3");
+  await pressChange(el);
+  expect(seen).toHaveLength(1);
+  await expect.poll(() => q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(false);
+  el.changeRefusal = { lineNo, message: startedFlan };
+  await el.updateComplete;
+  return seen;
+}
+
+it("reopens the window as it was left when the kitchen had started the dish, the refusal above the buttons", async () => {
+  const el = await openRow({ lines: [line()], revision: 9, billEdit });
+  const seen = await refuseChange(el);
+  const dialog = q<WtDialog>(el, "[data-sent-line-dialog]")!;
+  await expect.poll(() => dialog.open).toBe(true);
+  expect(await noteShown(el)).toBe("warm, no cream");
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  expect(
+    picker.shadowRoot!.querySelector<HTMLElement & { value: string }>('[name="quantity"]')!.value,
+  ).toBe("3");
+  await expect.poll(() => footerSentence(el)?.textContent?.trim()).toBe(startedFlan);
+  const change = q(el, "[data-sent-change]")!;
+  await expect.poll(() => change.hasAttribute("disabled")).toBe(false);
+  const voidButton = q(el, "[data-sent-change-refused-void]")!;
+  const compButton = q(el, "[data-sent-change-refused-comp]")!;
+  expect(voidButton.textContent!.trim()).toBe(t("table.void_line"));
+  expect(compButton.textContent!.trim()).toBe(t("comp.title"));
+  const sentence = footerSentence(el)!.getBoundingClientRect();
+  for (const action of [change, voidButton, compButton])
+    expect(sentence.bottom).toBeLessThanOrEqual(action.getBoundingClientRect().top);
+  await pressChange(el);
+  expect(seen).toHaveLength(2);
+  expect(seen[1]!.patch).toEqual(seen[0]!.patch);
+});
+
+it("ignores a refusal no Change dish asked for, and a refusal for another dish", async () => {
+  const el = await openRow({ lines: [line()] });
+  el.changeRefusal = { lineNo: 1, message: startedFlan };
+  await el.updateComplete;
+  expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
+  expect(q(el, "[data-sent-change-refused-void]")).toBeNull();
+  el.changeRefusal = null;
+  await el.updateComplete;
+  await refuseChange(el, 2);
+  expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(false);
+});
+
+it("drops the refusal and the attempted change once the reopened window closes", async () => {
+  const { el, answer, dialog } = await openInApp();
+  await refuseChange(el);
+  await expect.poll(() => dialog.open).toBe(true);
+  q(el, "[data-sent-line-close]")!.click();
+  await answer("discard");
+  await expect.poll(() => dialog.open).toBe(false);
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!);
+  await el.updateComplete;
+  await expect.poll(() => dialog.open).toBe(true);
+  expect(await noteShown(el)).toBe("warm");
+  expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
+  expect(q(el, "[data-sent-change-refused-void]")).toBeNull();
+  expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
+});
+
+it.each([
+  ["void", "cancel-item"],
+  ["comp", "adjust"],
+] as const)(
+  "asks before the refused window's %s throws the change away, and acts only on Discard",
+  async (action, type) => {
+    const { el, answer, dialog } = await openInApp();
+    const events: unknown[] = [];
+    el.addEventListener(type, (event) => events.push((event as CustomEvent).detail));
+    await refuseChange(el);
+    await expect.poll(() => dialog.open).toBe(true);
+    q(el, `[data-sent-change-refused-${action}]`)!.click();
+    await answer("keep");
+    expect(events).toEqual([]);
+    expect(dialog.open).toBe(true);
+    expect(await noteShown(el)).toBe("warm, no cream");
+    q(el, `[data-sent-change-refused-${action}]`)!.click();
+    await answer("discard");
+    await expect.poll(() => events).toHaveLength(1);
+    await expect.poll(() => dialog.open).toBe(false);
+  },
+);

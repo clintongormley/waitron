@@ -523,7 +523,7 @@ export interface BillPayDetail {
 export interface ChangeLineDetail {
   expectedEdit: BillEditExpected | null;
   lineNo: number;
-  /** The line's staff name, for a message about the change shown once another order is open. */
+  /** The line's staff name, for a message about the change. */
   lineName: string;
   patch: OrderLinePatch;
   revision: number;
@@ -1349,6 +1349,20 @@ export class TillTableOrderScreen extends LitElement {
     pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
     detail: ModifierChangeDetail;
   } | null = null;
+  /** The app's answer to a Change dish the kitchen refused as started: the dish's line, and why. */
+  @property({ attribute: false }) changeRefusal: { lineNo: number; message: string } | null = null;
+  /** The last Change dish sent, kept so a refusal of it can reopen its window as it was left. */
+  #sentChangeAttempt?: {
+    pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
+    lineNo: number;
+    selection: ModifierConfirmDetail;
+  };
+  /** The refusal the reopened Sent window shows, and the change it puts back in the fields. */
+  @state() private sentChangeRefused: {
+    pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
+    message: string;
+    selection: ModifierConfirmDetail;
+  } | null = null;
   /** The product and selection the open Sent window's fields started from. */
   #sentChangeSeed?: {
     pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
@@ -2157,8 +2171,11 @@ export class TillTableOrderScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
+    if (changed.has("changeRefusal")) this.#reopenRefusedChange();
     if (this.sentLinePending !== null && this.#sentLine() === undefined)
       this.sentLinePending = null;
+    if (this.sentChangeRefused !== null && this.sentChangeRefused.pending !== this.sentLinePending)
+      this.sentChangeRefused = null;
     this.#watchDraft();
     this.#refreshKept();
     if (this.#draftPress !== undefined && !this.#draftPressCurrent()) this.#endDraftDrag();
@@ -3182,10 +3199,23 @@ export class TillTableOrderScreen extends LitElement {
         ...(detail.note ? { note: detail.note } : {}),
       },
     };
+    this.#sentChangeAttempt = { pending, lineNo: line.lineNo, selection: detail };
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
     this.#dispatch("change-line", change);
     return true;
+  }
+
+  /** Reopens the window of the Change dish the app says was refused, while no other is open. */
+  #reopenRefusedChange(): void {
+    const refusal = this.changeRefusal;
+    const attempt = this.#sentChangeAttempt;
+    if (refusal === null || attempt === undefined || attempt.lineNo !== refusal.lineNo) return;
+    this.#sentChangeAttempt = undefined;
+    if (this.sentLinePending !== null) return;
+    const pending = { ...attempt.pending };
+    this.sentLinePending = pending;
+    this.sentChangeRefused = { pending, message: refusal.message, selection: attempt.selection };
   }
 
   /** The open window's fields hold a change that another of its actions would throw away. */
@@ -3350,7 +3380,11 @@ export class TillTableOrderScreen extends LitElement {
       });
   }
 
-  #sentLineMore(members: readonly SentSlice[] | undefined): TemplateResult | typeof nothing {
+  /** `refused`: the footer already offers Void… and Comp… beside the refusal. */
+  #sentLineMore(
+    members: readonly SentSlice[] | undefined,
+    refused = false,
+  ): TemplateResult | typeof nothing {
     const slice = members?.[0];
     if (members === undefined || slice === undefined) return nothing;
     const fire = this.#canFireSent(slice);
@@ -3358,8 +3392,8 @@ export class TillTableOrderScreen extends LitElement {
     const station = members.every((member) => this.#canMoveSent(member));
     const unserve =
       slice.kind === "served" && members.every((member) => this.#sentBillOpen(member.row));
-    const comp = this.#sentOrderLine(slice) !== undefined;
-    const canVoid = this.#canVoidSent(slice);
+    const comp = !refused && this.#sentOrderLine(slice) !== undefined;
+    const canVoid = !refused && this.#canVoidSent(slice);
     if (!fire && !recall && !station && !unserve && !canVoid && !comp) return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
@@ -3448,6 +3482,11 @@ export class TillTableOrderScreen extends LitElement {
       changeLines === undefined ? undefined : this.#sentChangeSeedFor(pending!, changeLines[0]!);
     const change = this.sentChange?.pending === pending ? this.sentChange.detail : undefined;
     const changeReady = change?.changed === true && change.savable && !disabled;
+    const refused =
+      this.sentChangeRefused?.pending === pending ? this.sentChangeRefused : undefined;
+    const refusedVoid = refused !== undefined && slice !== undefined && this.#canVoidSent(slice);
+    const refusedComp =
+      refused !== undefined && slice !== undefined && this.#sentOrderLine(slice) !== undefined;
     // More of a weighed dish is weighed on its own, so it goes in the New order.
     const weighed = changeLines !== undefined && (changeLines[0]!.unitPrecision ?? 0) > 0;
     const status =
@@ -3498,6 +3537,7 @@ export class TillTableOrderScreen extends LitElement {
                         .product=${seed.product}
                         .quantity=${this.#displayQty(shownQuantity)}
                         .initialSelections=${seed.selection}
+                        .restoredSelection=${refused?.selection}
                         .disabled=${disabled}
                         @wt-modifier-change=${(event: CustomEvent<ModifierChangeDetail>) => {
                           event.stopPropagation();
@@ -3539,7 +3579,10 @@ export class TillTableOrderScreen extends LitElement {
               </div>
             `
       }
-      <wt-form-actions slot="footer" .error=${change?.fixFields ? t("form.fix_fields") : ""}>
+      <wt-form-actions
+        slot="footer"
+        .error=${change?.fixFields ? t("form.fix_fields") : (refused?.message ?? "")}
+      >
         <wt-button
           slot="cancel"
           variant="secondary"
@@ -3555,7 +3598,9 @@ export class TillTableOrderScreen extends LitElement {
         >
         ${seed === undefined ? nothing : html`<wt-button data-sent-change variant=${changeReady ? "primary" : "secondary"} ?disabled=${!changeReady} @click=${() => this.renderRoot.querySelector<TillModifierPicker>("[data-sent-change-fields]")?.confirm()}>${t("table.change_dish")}</wt-button>`}
         ${slice?.kind === "fired" && slice.row.released ? html`<wt-button data-sent-line-serve aria-label=${`${t("table.serve")} · ${slice.row.name}`} variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
-        ${this.#sentLineMore(members)}
+        ${refusedVoid ? html`<wt-button variant="secondary" data-sent-change-refused-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
+        ${refusedComp ? html`<wt-button variant="secondary" data-sent-change-refused-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
+        ${this.#sentLineMore(members, refused !== undefined)}
       </wt-form-actions>
     </wt-dialog>`;
   }

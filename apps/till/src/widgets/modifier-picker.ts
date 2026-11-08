@@ -244,6 +244,9 @@ export class TillModifierPicker extends LitElement {
   @property({ attribute: false }) nutrition: LineNutrition | null = null;
   @property({ attribute: false }) stagedRemoval?: StagedRemoval;
   #removalStaged = false;
+  /** What the fields show once open, in place of {@link initialSelections}, which stays what a
+   * change is measured from: a change the server refused, put back as it was left. */
+  @property({ attribute: false }) restoredSelection?: ModifierConfirmDetail;
   @property({ attribute: false }) draftParent?: object;
   /** Draws only the fields, for a host window to hold: no window, actions, variants, course or
    * total. The host saves through {@link confirm}, guards leaving through {@link requestLeave} and
@@ -334,6 +337,27 @@ export class TillModifierPicker extends LitElement {
       else this.#setCount(this.stagedRemoval.listId, this.stagedRemoval.productId, 0);
       scope.changed();
     }
+    if (this.restoredSelection !== undefined && !this.readOnly) {
+      this.#restore(this.restoredSelection);
+      scope.changed();
+    }
+  }
+
+  #restore(selection: ModifierConfirmDetail): void {
+    if (selection.quantity !== undefined) this.editedQuantity = selection.quantity;
+    if (this.withNote) {
+      this.note = selection.note ?? "";
+      this.noteExpanded = this.note !== "";
+    }
+    this.picks = Object.fromEntries(
+      (selection.extras ?? []).map((extra) => [
+        pickKey(extra.listId, extra.productId),
+        extra.quantity,
+      ]),
+    );
+    this.answers = Object.fromEntries(
+      (selection.options ?? []).map((answer) => [answer.listId, answer.labelId]),
+    );
   }
 
   override disconnectedCallback(): void {

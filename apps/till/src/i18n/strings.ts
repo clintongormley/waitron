@@ -1186,6 +1186,7 @@ export const en = {
   // Per-line kitchen actions
   "table.change_dish": "Change dish",
   "table.change_dish_lower": "To take one off, use Void…",
+  "table.change_dish_started": "The kitchen has already started {dish}, so it can't be changed.",
   "table.recall_line": "Recall",
   "table.void_line": "Void…",
   "table.cancel_line": "Cancel",
@@ -3115,6 +3116,8 @@ export const es: Record<StringKey, string> = {
   "table.split_group_line": "Separar cantidad",
   "table.change_dish": "Cambiar plato",
   "table.change_dish_lower": "Para quitar uno, usa Cancelar…",
+  "table.change_dish_started":
+    "La cocina ya ha empezado a preparar {dish}, así que no se puede cambiar.",
   "table.recall_line": "Retirar",
   "table.void_line": "Cancelar…",
   "table.cancel_line": "Cancelar",
