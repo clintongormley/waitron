@@ -2606,7 +2606,7 @@ export class TillApi {
    */
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
     this.#baseUrl = baseUrl;
-    this.#fetchImpl = (input, init) => this.#fetchNamingPerson(fetchImpl, input, init);
+    this.#fetchImpl = fetchImpl;
   }
 
   #personSource?: () => SessionPerson | null;
@@ -2622,34 +2622,13 @@ export class TillApi {
     this.#personRefused = onRefused;
   }
 
-  /** Not `async`: a request naming nobody returns the held fetch's own promise, adding no step. */
-  #fetchNamingPerson(
-    fetchImpl: FetchLike,
-    input: Parameters<FetchLike>[0],
-    init?: RequestInit,
-  ): Promise<Response> {
-    const signIn = String(input).endsWith("/api/session") && init?.method === "POST";
-    const person = signIn ? null : (this.#personSource?.() ?? null);
-    if (person === null) return fetchImpl(input, init);
-    const headers = new Headers(init?.headers);
-    headers.set(PERSON_HEADER, person.personId);
-    return fetchImpl(input, { ...init, headers }).then((res) =>
-      res.ok ? res : this.#noticePersonRefusal(res, person),
-    );
-  }
-
-  async #noticePersonRefusal(res: Response, person: SessionPerson): Promise<Response> {
-    const parsed: unknown = await res
-      .clone()
-      .json()
-      .catch(() => undefined);
-    if (isRecord(parsed) && isRecord(parsed.error) && parsed.error.code === SESSION_PERSON_REFUSAL)
-      try {
-        this.#personRefused?.(person);
-      } catch {
-        // The caller still sees the server's refusal, not the listener's failure.
-      }
-    return res;
+  #noticeRefusal(code: string, person: SessionPerson | null): void {
+    if (person === null || code !== SESSION_PERSON_REFUSAL) return;
+    try {
+      this.#personRefused?.(person);
+    } catch {
+      // The caller still sees the server's refusal, not the listener's failure.
+    }
   }
 
   listDepartmentTransferDestinations(options: ReadOptions = {}): Promise<{
@@ -2744,11 +2723,14 @@ export class TillApi {
     reload: (event: "ready" | "change") => void,
     options: ReadOptions = {},
   ): Promise<void> {
+    const person = this.#personSource?.() ?? null;
     return readTransferEvents(
       this.#baseUrl + "/api/department-transfers/events",
       this.#fetchImpl,
       reload,
       options.signal,
+      person === null ? {} : { [PERSON_HEADER]: person.personId },
+      (code) => this.#noticeRefusal(code, person),
     );
   }
 
@@ -4927,6 +4909,9 @@ export class TillApi {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           };
+    const signIn = path === "/api/session" && method === "POST";
+    const person = signIn ? null : (this.#personSource?.() ?? null);
+    if (person !== null) headers = { ...headers, [PERSON_HEADER]: person.personId };
     if (headers !== undefined)
       init.headers = { ...(init.headers as Record<string, string> | undefined), ...headers };
     if (signal !== undefined) init.signal = signal;
@@ -4940,6 +4925,7 @@ export class TillApi {
       const code = typeof rawCode === "string" ? rawCode : "server.internal";
       const rawParams = envelope?.params;
       const params = isRecord(rawParams) ? rawParams : undefined;
+      this.#noticeRefusal(code, person);
       // `params` first, so a `code` or `status` key inside it cannot overwrite the validated ones.
       throw { ...params, code, status: res.status };
     }

@@ -6109,6 +6109,32 @@ describe("TillApi: the tab's person on every request", () => {
     expect(onRefused.mock.calls[0]![0]).toBe(sent);
   });
 
+  it.each([
+    ["a request", (api: TillApi) => api.getTill()],
+    ["the transfer stream", (api: TillApi) => api.readDepartmentTransferEvents(() => {})],
+  ])("reads a refused answer's body once while someone is named (%s)", async (_, send) => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: SESSION_PERSON_REFUSAL, params: { personId: "p1" } } }, 409),
+      );
+    const api = new TillApi("", fetchStub);
+    const onRefused = vi.fn();
+    api.namePersonFrom(() => ({ personId: "p1" }), onRefused);
+    const reads = vi.spyOn(Response.prototype, "json");
+    const clones = vi.spyOn(Response.prototype, "clone");
+
+    try {
+      await expect(send(api)).rejects.toMatchObject({ code: SESSION_PERSON_REFUSAL, status: 409 });
+      expect(onRefused).toHaveBeenCalledOnce();
+      expect(reads).toHaveBeenCalledOnce();
+      expect(clones).not.toHaveBeenCalled();
+    } finally {
+      reads.mockRestore();
+      clones.mockRestore();
+    }
+  });
+
   it("does not call the listener for another refusal", async () => {
     const fetchStub = vi
       .fn<typeof fetch>()
