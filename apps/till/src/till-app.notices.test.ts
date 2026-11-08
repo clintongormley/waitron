@@ -267,19 +267,17 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
         getTill: vi
           .fn()
           .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "open-cash-drawer"] }),
-        getDeviceEquipment: vi
-          .fn()
-          .mockResolvedValue(
-            withNotices([
-              {
-                owner: "drawers",
-                key: "one",
-                code: "print_job.drawer_expired",
-                severity: "warning",
-                params: {},
-              },
-            ]),
-          ),
+        getDeviceEquipment: vi.fn().mockResolvedValue(
+          withNotices([
+            {
+              owner: "drawers",
+              key: "one",
+              code: "print_job.drawer_expired",
+              severity: "warning",
+              params: {},
+            },
+          ]),
+        ),
         openDrawer,
       });
       await signIn(el);
@@ -303,19 +301,17 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
       getTill: vi
         .fn()
         .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "open-cash-drawer"] }),
-      getDeviceEquipment: vi
-        .fn()
-        .mockResolvedValue(
-          withNotices([
-            {
-              owner: "drawers",
-              key: "one",
-              code: "print_job.drawer_expired",
-              severity: "warning",
-              params: {},
-            },
-          ]),
-        ),
+      getDeviceEquipment: vi.fn().mockResolvedValue(
+        withNotices([
+          {
+            owner: "drawers",
+            key: "one",
+            code: "print_job.drawer_expired",
+            severity: "warning",
+            params: {},
+          },
+        ]),
+      ),
       openDrawer,
     });
     await signIn(el);
