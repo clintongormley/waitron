@@ -1294,13 +1294,13 @@ describe("cross-till end-to-end", () => {
 
 describe("an order another box opened", () => {
   it("an open order stamped with another box is paid and changed here", async () => {
-    const { cfg: here, cafe, zoneId } = await setupVenue();
+    const { cfg: here, coffee, zoneId } = await setupVenue();
     const otherBox = await addNode(here);
     const orderId = randomUUID();
     await parkOrder({ db: suite.db }, otherBox, {
       id: orderId,
       zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     const stored = async () =>
       (

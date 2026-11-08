@@ -860,15 +860,15 @@ describe("a box the held chart does not name primary takes no new money", () => 
   }
 
   it("refuses a cash sale before any money or record", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     await chartNamingAnotherBoxPrimary(cfg);
     const id = randomUUID();
 
     await expect(
       payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
         id,
-        zoneId: cafe.zoneId,
-        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        zoneId: coffee.zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       }),
     ).rejects.toMatchObject({ code: "fiscal.chain_handed_over", params: { nodeId: cfg.nodeId } });
@@ -877,7 +877,7 @@ describe("a box the held chart does not name primary takes no new money", () => 
   });
 
   it("refuses a connected-card sale before the reader is asked to charge", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     await chartNamingAnotherBoxPrimary(cfg);
     const provider = new FakePaymentProvider(suite.db);
     const id = randomUUID();
@@ -893,7 +893,7 @@ describe("a box the held chart does not name primary takes no new money", () => 
           sayCardChargedNotRecorded: true,
         },
         cfg,
-        { id, zoneId: cafe.zoneId, lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }] },
+        { id, zoneId: coffee.zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
       ),
     ).rejects.toMatchObject({ code: "fiscal.chain_handed_over", params: { nodeId: cfg.nodeId } });
     expect(provider.collectCalls).toEqual([]);
@@ -902,7 +902,7 @@ describe("a box the held chart does not name primary takes no new money", () => 
   });
 
   it("answers a card charged before the chart moved as charged and not recorded", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const provider = new FakePaymentProvider(suite.db);
     const collect = provider.collect.bind(provider);
     provider.collect = async (params) => {
@@ -923,7 +923,7 @@ describe("a box the held chart does not name primary takes no new money", () => 
           sayCardChargedNotRecorded: true,
         },
         cfg,
-        { id, zoneId: cafe.zoneId, lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }] },
+        { id, zoneId: coffee.zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
       ),
     ).rejects.toMatchObject({
       code: "sale.charged_not_recorded",
