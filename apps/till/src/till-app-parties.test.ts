@@ -10608,6 +10608,25 @@ describe("till-app: recording an unpaid departure", () => {
     },
   );
 
+  it("says a bill still holds money, not that it cannot be merged, when refused bill.payments_received", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi.fn().mockRejectedValue({
+        code: "bill.payments_received",
+        status: 409,
+        workingOrderId: "wo-check",
+      }),
+    });
+    await typeReason(el, "Ran off");
+    await confirmDeparture(el);
+
+    const bottom = dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "wt-form-actions",
+    )!;
+    expect(bottom.error).toBe(t("table.finish_bill_holds_money"));
+    expect(bottom.error).not.toContain("merged");
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
   it("keeps the dialog open saying a card payment is in progress when refused order.payment_in_flight", async () => {
     const { el } = await openDeparture({
       recordUnpaidDeparture: vi.fn().mockRejectedValue({
@@ -10627,7 +10646,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(tableOrder(el)).not.toBeNull();
   });
 
-  it("keeps the dialog open saying the box is out of disk space when refused storage.disk_full", async () => {
+  it("keeps the dialog open saying the server is out of disk space when refused storage.disk_full", async () => {
     const { el } = await openDeparture({
       recordUnpaidDeparture: vi.fn().mockRejectedValue({
         code: "storage.disk_full",

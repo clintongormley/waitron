@@ -289,6 +289,35 @@ describe("till-basket: a stored counter order", () => {
     );
   });
 
+  it("keeps + on a dish the kitchen has and has not started, which has no −", async () => {
+    const lines = listed.map((row) =>
+      row.id === "l-1" ? { ...row, state: "queued" as const } : row,
+    );
+    const el = await mount(storedOrder(), { ...stored, lines });
+
+    expect(within(el, 0, "data-cancel-line")).not.toBeNull();
+    expect(rows(el)[0]!.querySelector(".step-dec")).toBeNull();
+    expect(rows(el)[0]!.querySelector(".step-inc")).not.toBeNull();
+  });
+
+  it("keeps + on a dish whose extra the kitchen has started", async () => {
+    const sentAt = "2026-09-30T09:00:00.000Z";
+    const sent = { sentAt, firedAt: sentAt };
+    const lines = listed.map((row) =>
+      row.id === "l-3"
+        ? { ...row, ...sent }
+        : row.id === "l-4"
+          ? { ...row, ...sent, state: "preparing" as const }
+          : row,
+    );
+    const el = await mount(storedOrder(), { ...stored, lines });
+
+    expect(rows(el)[2]!.querySelector(".step-inc")).not.toBeNull();
+    expect(rows(el)[2]!.querySelectorAll(".step-gap")).toHaveLength(1);
+    expect(within(el, 2, "data-cancel-line")).not.toBeNull();
+    expect(rows(el)[1]!.querySelector(".step-inc")).not.toBeNull();
+  });
+
   it("keeps the dish the kitchen has lined up with the others, stacked or not", async () => {
     const el = await mount(storedOrder());
     el.parentElement!.style.width = "600px";
@@ -669,6 +698,21 @@ describe("A1208 a retrieved row of identical portions", () => {
   }
   const cheeseOfBurger = () =>
     t("table.extra_of").replace("{extra}", "Cheese").replace("{dish}", "Hamburguesa");
+
+  it("keeps + on a row when the kitchen has started the extra of a dish other than its first", async () => {
+    const el = await mount(rowOfThree(), portions);
+    expect(rows(el)[0]!.querySelector(".step-inc")).not.toBeNull();
+
+    el.storedLines = {
+      ...portions,
+      lines: portions.lines.map((row) =>
+        row.id === "c-2" ? { ...row, state: "preparing" as const } : row,
+      ),
+    };
+    await el.updateComplete;
+
+    expect(rows(el)[0]!.querySelector(".step-inc")).not.toBeNull();
+  });
 
   it("comps the row as every dish in it, counted in dishes", async () => {
     const el = await mount(rowOfThree(), portions);

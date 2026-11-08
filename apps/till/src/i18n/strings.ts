@@ -4,13 +4,13 @@
 export const en = {
   "recovery.open": "Open recovery",
   "recovery.issuance_stopped":
-    "New invoices are stopped. Open recovery with this box's current recovery key.",
+    "New invoices are stopped. Open recovery with this server's current recovery key.",
   "recovery.charged": "Card charged. Do not charge again.",
   "recovery.manual_card":
     "If you already charged a card on a separate terminal, refund it there before trying this sale again.",
   "trust.title": "This device hasn't trusted the till yet",
   "trust.explanation":
-    "The till is served over HTTPS with the venue box's own certificate, which this device does not recognise yet. Install the box's certificate, then reopen the till.",
+    "The till is served over HTTPS with the venue server's own certificate, which this device does not recognise yet. Install the server's certificate, then reopen the till.",
   "trust.open_setup": "Open the setup page for instructions",
 
   "venue.time_zone_wait": "Trading is starting. Wait and try again.",
@@ -794,6 +794,8 @@ export const en = {
   "expo.reprint": "Reprint",
   "expo.item_forgotten": "Forgotten",
   "expo.undo": "Undo",
+  "expo.zone_not_allowed":
+    "This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
   "expo.watcher_empty": "Nothing waiting here",
   "cancel.reason_prompt": "Reason for cancelling",
   // Integrated card terminal
@@ -1329,6 +1331,8 @@ export const en = {
   "line.quantity_invalid": "Enter a positive quantity that fits this dish’s unit.",
   "table.split_quantity_whole_error": "Choose a whole quantity from 1 up to the amount ordered",
   "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
+  "table.move_dish_gone": "A dish you picked is no longer on this bill, so nothing moved.",
+  "table.move_bill_gone": "That bill is no longer open, so nothing moved.",
   "table.round_sending": "Sending the order…",
   "table.draft_actions": "Send the order",
   "table.draft_joins_group": "Joins Group {n}",
@@ -1449,25 +1453,25 @@ export const en = {
   // A PERMANENT refusal, unlike `sale.error`: retrying cannot work. It must never say nothing was
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
-    "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
+    "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this server up. If you already charged a card on the terminal, refund it there.",
   // Their "tell a manager" is the owner's stated exception to never sending the person elsewhere: a
   // waiter at a stopped till has no step of their own (2026-11-06, A1384).
   "sale.disk_full":
-    "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager.",
+    "Sale not recorded: the server is out of disk space. Don't take payment until it is fixed; tell a manager.",
   "sale.disk_full_manual_card":
-    "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager. If you already charged a card on the terminal, refund it there.",
+    "Sale not recorded: the server is out of disk space. Don't take payment until it is fixed; tell a manager. If you already charged a card on the terminal, refund it there.",
   "sale.charged_disk_full":
-    "Card charged, but the sale is not recorded: the box is out of space. Do not charge again; tell a manager.",
+    "Card charged, but the sale is not recorded: the server is out of space. Do not charge again; tell a manager.",
   "sale.clock_unusable":
-    "Sale not recorded: the box's clock is wrong (it reads {date}). Tell a manager. If you already charged a card on the terminal, refund it there.",
+    "Sale not recorded: the server's clock is wrong (it reads {date}). Tell a manager. If you already charged a card on the terminal, refund it there.",
   "sale.clock_unusable_check":
-    "Sale not recorded: the box's clock is wrong (it reads {date}). Use “Check the time” at the top of the screen. If you already charged a card on the terminal, refund it there.",
+    "Sale not recorded: the server's clock is wrong (it reads {date}). Use “Check the time” at the top of the screen. If you already charged a card on the terminal, refund it there.",
   "sale.clock_behind_chain":
-    "Sale not recorded: the box's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open; tell a manager. If you already charged on another card machine, don't charge again: record it once this is fixed.",
+    "Sale not recorded: the server's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open; tell a manager. If you already charged on another card machine, don't charge again: record it once this is fixed.",
   "sale.clock_behind_chain_check":
-    "Sale not recorded: the box's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open. Use “Check the time” at the top of the screen. If you already charged on another card machine, don't charge again: record it once this is fixed.",
+    "Sale not recorded: the server's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open. Use “Check the time” at the top of the screen. If you already charged on another card machine, don't charge again: record it once this is fixed.",
   "sale.charged_clock_behind":
-    "Card charged, but the sale is not recorded: the box's clock reads earlier than its last sale. Don't charge again. Once it is fixed, press Pay: it is recorded without charging again.",
+    "Card charged, but the sale is not recorded: the server's clock reads earlier than its last sale. Don't charge again. Once it is fixed, press Pay: it is recorded without charging again.",
   "take_payment.not_permitted": "You do not have permission to take payments",
   "reprint.error": "Could not reprint the receipt, try again",
   "reprint_language.title": "Reprint receipt",
@@ -1495,10 +1499,14 @@ export const en = {
     "The order could not be read again. Park it, then retrieve it, to check it.",
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
+  "station.no_default_named":
+    "No prep station can make {dishes}. Fix this in the dashboard, on the Prep stations page.",
   "place.error": "Could not send the order, try again",
+  "place.unconfirmed":
+    "The server did not answer. Send again: the kitchen will not get the order twice.",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
-    "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
+    "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this server up.",
   "station.advance_error": "Could not update the ticket, try again",
   // Shown when a list's refresh failed: the plain key when no write came before it, an `_after_*`
   // key after a write that SUCCEEDED, when only the list refresh behind it failed.
@@ -1849,68 +1857,68 @@ export const en = {
   "update.reload": "Reload",
   "sale.unconfirmed":
     "The server did not answer. Check whether the sale went through before trying again.",
-  "staff_notice.storage.disk_full": "Nothing can be saved: the box is out of space",
-  "staff_notice.clock.unusable": "Sales can't be recorded: the box's clock is wrong",
-  "staff_notice.storage.space_low": "The box is nearly out of space",
-  "staff_notice.clock.check_time": "The box's time needs checking",
+  "staff_notice.storage.disk_full": "Nothing can be saved: the server is out of space",
+  "staff_notice.clock.unusable": "Sales can't be recorded: the server's clock is wrong",
+  "staff_notice.storage.space_low": "The server is nearly out of space",
+  "staff_notice.clock.check_time": "The server's time needs checking",
   "staff_notice.clock.behind_chain":
-    "Payments stopped: the box's clock reads earlier than its last sale",
+    "Payments stopped: the server's clock reads earlier than its last sale",
   "staff_notice.fiscal.records_unsent": "{n} sales not yet sent to the tax agency",
   "staff_notice.fiscal.records_unsent_one": "1 sale not yet sent to the tax agency",
   "staff_notice.printer.jobs_waiting": "Printer “{printer}” not printing",
   "staff_notice.since": "since {time}",
-  "staff_notice.unknown": "The box needs attention",
+  "staff_notice.unknown": "The server needs attention",
   "staff_notice.tell_manager": "Tell a manager",
   "staff_notice.check_time": "Check the time",
   "box_time.title": "Check the time",
-  "box_time.loading": "Reading the box's time…",
-  "box_time.differs": "The box's clock says {box}. This device says {till}.",
+  "box_time.loading": "Reading the server's time…",
+  "box_time.differs": "The server's clock says {box}. This device says {till}.",
   "box_time.differs_ask":
-    "Use this device's time? The box's clock is set to it and payments start again. Every manager is told it was you, from this device.",
+    "Use this device's time? The server's clock is set to it and payments start again. Every manager is told it was you, from this device.",
   "box_time.differs_wrong_till":
     "If this device's time is wrong too, correct it in the device's own settings first.",
   "box_time.agrees":
-    "The box's clock says {box}, and this device agrees. If that is the right time, confirm it: payments start again. Every manager is told it was you.",
+    "The server's clock says {box}, and this device agrees. If that is the right time, confirm it: payments start again. Every manager is told it was you.",
   "box_time.not_now": "Not now",
   "box_time.use_till": "Use this time",
   "box_time.time_right": "The time is right",
-  "box_time.set_to": "The box's clock is set to {after}.",
-  "box_time.confirmed": "The box's time is confirmed.",
+  "box_time.set_to": "The server's clock is set to {after}.",
+  "box_time.confirmed": "The server's time is confirmed.",
   "box_time.close": "Close",
   "box_time.check_again": "Check again",
   "box_time.admin": "Administrator sign-in",
   "box_time.admin_refused.pin_invalid": "Wrong PIN. Sign in again to try once more.",
   "box_time.admin_refused.pin_throttled": "Too many wrong PINs. Wait a moment, then sign in again.",
   "box_time.admin_refused.not_permitted":
-    "The person who signed in is no longer an administrator, so they cannot set the box's clock. Another administrator can sign in.",
-  "box_time.refused.not_stopped": "The box's clock no longer needs checking.",
+    "The person who signed in is no longer an administrator, so they cannot set the server's clock. Another administrator can sign in.",
+  "box_time.refused.not_stopped": "The server's clock no longer needs checking.",
   "box_time.refused.not_start_up":
-    "The box has been running since its clock was last right, so a staff member can no longer set it from a device. An administrator can, here.",
+    "The server has been running since its clock was last right, so a staff member can no longer set it from a device. An administrator can, here.",
   "box_time.refused.authority_pending":
-    "The box is still trying the tax agency's time over the internet. Check again in a minute.",
+    "The server is still trying the tax agency's time over the internet. Check again in a minute.",
   "box_time.refused.witnessed":
-    "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from this device's. If a try fails, it tries again later.",
+    "The server has the tax agency's time, so it confirms or sets its clock from that time itself, not from this device's. If a try fails, it tries again later.",
   "box_time.refused.target_invalid":
     "This device's clock reads {till}, which cannot be right. Correct this device's date and time in its settings, then check again.",
   "box_time.refused.synchronised":
-    "The box keeps its clock in time over the internet, so it does not take a time from a device. Check this device's own clock.",
+    "The server keeps its clock in time over the internet, so it does not take a time from a device. Check this device's own clock.",
   "box_time.refused.host_unavailable":
-    "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself.",
-  "box_time.refused.stale": "The box's clock changed while this was being checked.",
+    "This server cannot read or set its own clock: the part of the server that does that is not answering. If the server can reach the internet, its own time service may still put the clock right by itself.",
+  "box_time.refused.stale": "The server's clock changed while this was being checked.",
   "box_time.refused.check_expired": "This took too long.",
   "box_time.refused.same_machine":
-    "This screen is the box itself, so its clock is the box's own. Check from a till or handheld instead.",
+    "This screen is the server itself, so its clock is the server's own. Check from a till or handheld instead.",
   "box_time.refused.contrary_proof":
-    "The tax agency's time or two other devices disagree with the box's clock, so this device cannot confirm it. If one of those devices shows the right time, check the time from that device.",
+    "The tax agency's time or two other devices disagree with the server's clock, so this device cannot confirm it. If one of those devices shows the right time, check the time from that device.",
   "box_time.refused.not_admitted":
     "This device's profile no longer lets you work on it, so it cannot check the time for you. Sign in on a device whose profile admits you.",
-  "box_time.refused.set_failed_refused": "The box could not set its clock. Nothing was changed.",
+  "box_time.refused.set_failed_refused": "The server could not set its clock. Nothing was changed.",
   "box_time.refused.set_failed_unverified":
-    "The box asked for its clock to be set but could not confirm it took.",
+    "The server asked for its clock to be set but could not confirm it took.",
   "box_time.refused.pending_disproofs":
-    "The box has not finished recording what it found about its clock. Check again in a minute.",
+    "The server has not finished recording what it found about its clock. Check again in a minute.",
   "box_time.refused.other":
-    "The box's time could not be checked. Check again to see where it stands.",
+    "The server's time could not be checked. Check again to see where it stands.",
   "staff_notice.retried": "Retried automatically",
   "staff_notice.more": "+{n}",
   "staff_notice.more_label": "{n} more notices",
@@ -1924,7 +1932,7 @@ export type StringKey = keyof typeof en;
 export const es: Record<StringKey, string> = {
   "recovery.open": "Abrir recuperación",
   "recovery.issuance_stopped":
-    "La emisión de facturas está detenida. Abre la recuperación con la clave de recuperación actual de este equipo.",
+    "La emisión de facturas está detenida. Abre la recuperación con la clave de recuperación actual de este servidor.",
   "recovery.charged": "La tarjeta ya se ha cobrado. No vuelvas a cobrar.",
   "recovery.manual_card":
     "Si ya has cobrado con tarjeta en un datáfono independiente, devuelve el importe allí antes de intentar registrar esta venta otra vez.",
@@ -2697,6 +2705,8 @@ export const es: Record<StringKey, string> = {
   "expo.reprint": "Reimprimir",
   "expo.item_forgotten": "Olvidado",
   "expo.undo": "Deshacer",
+  "expo.zone_not_allowed":
+    "El perfil de este dispositivo no trabaja en esa zona. Se puede cambiar en el panel, en Perfiles de dispositivo.",
   "expo.watcher_empty": "Nada pendiente aquí",
   "cancel.reason_prompt": "Motivo de la cancelación",
   "card.collecting": "Acerca o inserta la tarjeta…",
@@ -3221,6 +3231,9 @@ export const es: Record<StringKey, string> = {
   "table.split_quantity_whole_error": "Elige una cantidad entera entre 1 y la cantidad pedida",
   "table.split_held_error":
     "Envía los artículos en espera a cocina antes de pasarlos a otra cuenta",
+  "table.move_dish_gone":
+    "Un plato que has elegido ya no está en esta cuenta, así que no se ha movido nada.",
+  "table.move_bill_gone": "Esa cuenta ya no está abierta, así que no se ha movido nada.",
   "table.round_sending": "Enviando el pedido…",
   "table.draft_actions": "Enviar el pedido",
   "table.draft_joins_group": "Al grupo {n}",
@@ -3336,23 +3349,23 @@ export const es: Record<StringKey, string> = {
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
   "sale.payment_in_flight": "Se está cobrando este pedido con tarjeta. Espera a que termine.",
   "sale.refused":
-    "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró este servidor. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.disk_full":
-    "Venta no registrada: el equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado.",
+    "Venta no registrada: el servidor no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado.",
   "sale.disk_full_manual_card":
-    "Venta no registrada: el equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    "Venta no registrada: el servidor no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.charged_disk_full":
-    "Cobrado con tarjeta, pero la venta no se ha registrado: el equipo no tiene espacio. No vuelvas a cobrar; avisa al encargado.",
+    "Cobrado con tarjeta, pero la venta no se ha registrado: el servidor no tiene espacio. No vuelvas a cobrar; avisa al encargado.",
   "sale.clock_unusable":
-    "Venta no registrada: la hora del equipo es incorrecta (marca {date}). Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    "Venta no registrada: la hora del servidor es incorrecta (marca {date}). Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.clock_unusable_check":
-    "Venta no registrada: la hora del equipo es incorrecta (marca {date}). Usa «Comprobar la hora» arriba. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    "Venta no registrada: la hora del servidor es incorrecta (marca {date}). Usa «Comprobar la hora» arriba. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.clock_behind_chain":
-    "Venta no registrada: la hora del equipo ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto; avisa al encargado. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
+    "Venta no registrada: la hora del servidor ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto; avisa al encargado. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
   "sale.clock_behind_chain_check":
-    "Venta no registrada: la hora del equipo ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto. Usa «Comprobar la hora» arriba. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
+    "Venta no registrada: la hora del servidor ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto. Usa «Comprobar la hora» arriba. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
   "sale.charged_clock_behind":
-    "Cobrado con tarjeta, pero la venta no se ha registrado: la hora del equipo es anterior a la última venta. No vuelvas a cobrar. Cuando se arregle, pulsa Cobrar: se registra sin cobrar otra vez.",
+    "Cobrado con tarjeta, pero la venta no se ha registrado: la hora del servidor es anterior a la última venta. No vuelvas a cobrar. Cuando se arregle, pulsa Cobrar: se registra sin cobrar otra vez.",
   "take_payment.not_permitted": "No tienes permiso para cobrar",
   "reprint.error": "No se pudo reimprimir el recibo, inténtalo de nuevo",
   "reprint_language.title": "Reimprimir recibo",
@@ -3380,9 +3393,13 @@ export const es: Record<StringKey, string> = {
     "No se pudo volver a leer el pedido. Apárcalo y recupéralo para comprobarlo.",
   "held.changed_elsewhere":
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
+  "station.no_default_named":
+    "Ninguna estación de preparación puede preparar {dishes}. Corrígelo en el panel, en la página Estaciones de preparación.",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
+  "place.unconfirmed":
+    "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",
   "place.refused":
-    "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja.",
+    "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró este servidor.",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
   "refresh.held": "La lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_park":
@@ -3728,33 +3745,34 @@ export const es: Record<StringKey, string> = {
   "update.reload": "Recargar",
   "sale.unconfirmed":
     "El servidor no respondió. Comprueba si la venta se registró antes de reintentar.",
-  "staff_notice.storage.disk_full": "No se puede guardar nada: el equipo no tiene espacio",
-  "staff_notice.clock.unusable": "No se pueden registrar ventas: la hora del equipo es incorrecta",
-  "staff_notice.storage.space_low": "Queda poco espacio en el equipo",
-  "staff_notice.clock.check_time": "Hay que comprobar la hora del equipo",
+  "staff_notice.storage.disk_full": "No se puede guardar nada: el servidor no tiene espacio",
+  "staff_notice.clock.unusable":
+    "No se pueden registrar ventas: la hora del servidor es incorrecta",
+  "staff_notice.storage.space_low": "Queda poco espacio en el servidor",
+  "staff_notice.clock.check_time": "Hay que comprobar la hora del servidor",
   "staff_notice.clock.behind_chain":
-    "No se puede cobrar: la hora del equipo es anterior a la última venta",
+    "No se puede cobrar: la hora del servidor es anterior a la última venta",
   "staff_notice.fiscal.records_unsent": "{n} ventas sin enviar a Hacienda",
   "staff_notice.fiscal.records_unsent_one": "1 venta sin enviar a Hacienda",
   "staff_notice.printer.jobs_waiting": "Impresora «{printer}» no imprime",
   "staff_notice.since": "desde {time}",
-  "staff_notice.unknown": "El equipo necesita atención",
+  "staff_notice.unknown": "El servidor necesita atención",
   "staff_notice.tell_manager": "Avisa al encargado",
   "staff_notice.check_time": "Comprobar la hora",
   "box_time.title": "Comprobar la hora",
-  "box_time.loading": "Leyendo la hora del equipo…",
-  "box_time.differs": "El reloj del equipo marca {box}. Este dispositivo marca {till}.",
+  "box_time.loading": "Leyendo la hora del servidor…",
+  "box_time.differs": "El reloj del servidor marca {box}. Este dispositivo marca {till}.",
   "box_time.differs_ask":
-    "¿Usar la hora de este dispositivo? El reloj del equipo se pone a esa hora y se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú, desde este dispositivo.",
+    "¿Usar la hora de este dispositivo? El reloj del servidor se pone a esa hora y se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú, desde este dispositivo.",
   "box_time.differs_wrong_till":
     "Si la hora de este dispositivo también está mal, corrígela primero en los ajustes del propio dispositivo.",
   "box_time.agrees":
-    "El reloj del equipo marca {box} y este dispositivo coincide. Si es la hora correcta, confírmala: se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú.",
+    "El reloj del servidor marca {box} y este dispositivo coincide. Si es la hora correcta, confírmala: se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú.",
   "box_time.not_now": "Ahora no",
   "box_time.use_till": "Usar esta hora",
   "box_time.time_right": "La hora es correcta",
-  "box_time.set_to": "El reloj del equipo marca ahora {after}.",
-  "box_time.confirmed": "La hora del equipo está confirmada.",
+  "box_time.set_to": "El reloj del servidor marca ahora {after}.",
+  "box_time.confirmed": "La hora del servidor está confirmada.",
   "box_time.close": "Cerrar",
   "box_time.check_again": "Comprobar otra vez",
   "box_time.admin": "Acceso de administrador",
@@ -3763,36 +3781,36 @@ export const es: Record<StringKey, string> = {
   "box_time.admin_refused.pin_throttled":
     "Demasiados PIN incorrectos. Espera un momento y vuelve a iniciar sesión.",
   "box_time.admin_refused.not_permitted":
-    "La persona que ha iniciado sesión ya no tiene permisos de administrador, así que no puede poner en hora el reloj del equipo. Puede iniciar sesión otro administrador.",
-  "box_time.refused.not_stopped": "Ya no hace falta comprobar el reloj del equipo.",
+    "La persona que ha iniciado sesión ya no tiene permisos de administrador, así que no puede poner en hora el reloj del servidor. Puede iniciar sesión otro administrador.",
+  "box_time.refused.not_stopped": "Ya no hace falta comprobar el reloj del servidor.",
   "box_time.refused.not_start_up":
-    "El equipo lleva en marcha desde la última vez que su reloj estaba bien, así que un empleado ya no puede ponerlo en hora desde un dispositivo. Un administrador sí puede, aquí.",
+    "El servidor lleva en marcha desde la última vez que su reloj estaba bien, así que un empleado ya no puede ponerlo en hora desde un dispositivo. Un administrador sí puede, aquí.",
   "box_time.refused.authority_pending":
-    "El equipo aún está intentando obtener la hora de Hacienda por internet. Vuelve a comprobarlo dentro de un minuto.",
+    "El servidor aún está intentando obtener la hora de Hacienda por internet. Vuelve a comprobarlo dentro de un minuto.",
   "box_time.refused.witnessed":
-    "El equipo tiene la hora de Hacienda, así que confirma o pone su reloj en hora con esa hora él solo, no con la de este dispositivo. Si un intento falla, lo vuelve a intentar más tarde.",
+    "El servidor tiene la hora de Hacienda, así que confirma o pone su reloj en hora con esa hora él solo, no con la de este dispositivo. Si un intento falla, lo vuelve a intentar más tarde.",
   "box_time.refused.target_invalid":
     "El reloj de este dispositivo marca {till}, y eso no puede ser correcto. Corrige la fecha y la hora de este dispositivo en sus ajustes y vuelve a comprobarlo.",
   "box_time.refused.synchronised":
-    "El equipo mantiene su reloj en hora por internet, así que no toma la hora de un dispositivo. Comprueba el reloj de este dispositivo.",
+    "El servidor mantiene su reloj en hora por internet, así que no toma la hora de un dispositivo. Comprueba el reloj de este dispositivo.",
   "box_time.refused.host_unavailable":
-    "Este equipo no puede leer ni poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo.",
-  "box_time.refused.stale": "El reloj del equipo ha cambiado mientras se comprobaba.",
+    "Este servidor no puede leer ni poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo.",
+  "box_time.refused.stale": "El reloj del servidor ha cambiado mientras se comprobaba.",
   "box_time.refused.check_expired": "Ha tardado demasiado.",
   "box_time.refused.same_machine":
-    "Esta pantalla es el propio equipo, así que su reloj es el del equipo. Compruébalo desde una caja o un terminal de mano.",
+    "Esta pantalla es el propio servidor, así que su reloj es el del servidor. Compruébalo desde una caja o un terminal de mano.",
   "box_time.refused.contrary_proof":
-    "La hora de Hacienda u otros dos dispositivos no coinciden con el reloj del equipo, así que este dispositivo no puede confirmarlo. Si uno de esos dispositivos muestra la hora correcta, comprueba la hora desde ese dispositivo.",
+    "La hora de Hacienda u otros dos dispositivos no coinciden con el reloj del servidor, así que este dispositivo no puede confirmarlo. Si uno de esos dispositivos muestra la hora correcta, comprueba la hora desde ese dispositivo.",
   "box_time.refused.not_admitted":
     "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede comprobar la hora por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
   "box_time.refused.set_failed_refused":
-    "El equipo no ha podido poner su reloj en hora. No se ha cambiado nada.",
+    "El servidor no ha podido poner su reloj en hora. No se ha cambiado nada.",
   "box_time.refused.set_failed_unverified":
-    "El equipo pidió poner su reloj en hora, pero no ha podido confirmar que se hiciera.",
+    "El servidor pidió poner su reloj en hora, pero no ha podido confirmar que se hiciera.",
   "box_time.refused.pending_disproofs":
-    "El equipo aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a comprobarlo dentro de un minuto.",
+    "El servidor aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a comprobarlo dentro de un minuto.",
   "box_time.refused.other":
-    "No se ha podido comprobar la hora del equipo. Vuelve a comprobarlo para ver cómo está.",
+    "No se ha podido comprobar la hora del servidor. Vuelve a comprobarlo para ver cómo está.",
   "staff_notice.retried": "Se reintenta solo",
   "staff_notice.more": "+{n}",
   "staff_notice.more_label": "{n} avisos más",

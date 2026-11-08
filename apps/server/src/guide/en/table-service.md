@@ -47,11 +47,11 @@ export carries payment policy, not card readers or this setting.
 
 When Waitron prints a card slip for a sale, its words, date and amounts follow that sale’s saved receipt language. Changing your screen language or the venue’s current receipt language keeps the earlier sale’s slip in its original language.
 
-## Trust the box before opening the till {#certificate-trust}
+## Trust the server before opening the till {#certificate-trust}
 
 The till's **This device hasn't trusted the till yet** page follows your browser's preferred
 supported language, with English as the fallback. Choose **Open the setup page for instructions**
-to install the box's certificate on this device, then reopen the till.
+to install the server's certificate on this device, then reopen the till.
 
 ## Refund all or part of a payment {#refund-payment}
 

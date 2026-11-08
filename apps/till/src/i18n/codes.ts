@@ -364,8 +364,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido sin enviar ya no está en esta mesa. Vuelve a cargar la mesa e inténtalo de nuevo",
   },
   "bill.payments_received": {
-    en: "A bill that has taken payments cannot be merged, and items cannot be transferred between it and another bill. Take the rest from the bill's payments",
-    es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra, ni se pueden transferir artículos entre ella y otra cuenta. Cobra el resto desde los pagos de la cuenta",
+    en: "A bill that has taken payments cannot be merged with another.",
+    es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra.",
   },
   "working_order.not_placed": {
     en: "This bill is no longer waiting for payment",
@@ -571,6 +571,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
   },
+  "station.no_default": {
+    en: "No prep station can make one of these dishes. Fix this in the dashboard, on the Prep stations page.",
+    es: "Ninguna estación de preparación puede preparar uno de estos platos. Corrígelo en el panel, en la página Estaciones de preparación.",
+  },
   "ticket.already_started": {
     en: "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
     es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
@@ -685,8 +689,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo no puede usar esa estación. Pide a un responsable que revise sus ajustes.",
   },
   "device.forbidden_action": {
-    en: "This device's profile doesn't allow that. Ask a manager to change it.",
-    es: "El perfil de este dispositivo no lo permite. Pide a un responsable que lo modifique.",
+    en: "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",
+    es: "El perfil de este dispositivo no lo permite. Se puede cambiar en el panel, en Perfiles de dispositivo.",
   },
   "kitchen_screen.zone_not_allowed": {
     en: "This order is in a zone this pass screen doesn't show.",
@@ -775,36 +779,36 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // Its "Tell a manager" is the owner's stated exception to never sending the person elsewhere: a
   // waiter at a stopped till has no step of their own (2026-11-06, A1384).
   "storage.disk_full": {
-    en: "Not saved: the box is out of disk space. Tell a manager.",
-    es: "No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.",
+    en: "Not saved: the server is out of disk space. Tell a manager.",
+    es: "No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.",
   },
   "sale.charged_not_recorded": {
     en: "Card charged, but the sale is not recorded. Do not charge again; tell a manager.",
     es: "Cobrado con tarjeta, pero la venta no se ha registrado. No vuelvas a cobrar; avisa al encargado.",
   },
   "clock.unusable": {
-    en: "Sale not recorded: the box's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
-    es: "Venta no registrada: la hora del equipo es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    en: "Sale not recorded: the server's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
+    es: "Venta no registrada: la hora del servidor es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   },
   "clock.behind_chain": {
-    en: "Can't be recorded: the box's clock reads earlier than its last sale. Tell a manager.",
-    es: "No se puede registrar: la hora del equipo es anterior a la última venta. Avisa al encargado.",
+    en: "Can't be recorded: the server's clock reads earlier than its last sale. Tell a manager.",
+    es: "No se puede registrar: la hora del servidor es anterior a la última venta. Avisa al encargado.",
   },
   "clock.set_refused": {
-    en: "The box's clock was not set. Use “Check the time” to see why.",
-    es: "No se ha puesto en hora el reloj del equipo. Usa «Comprobar la hora» para ver por qué.",
+    en: "The server's clock was not set. Use “Check the time” to see why.",
+    es: "No se ha puesto en hora el reloj del servidor. Usa «Comprobar la hora» para ver por qué.",
   },
   "clock.set_failed": {
-    en: "The box could not set its clock. Nothing was changed.",
-    es: "El equipo no ha podido poner su reloj en hora. No se ha cambiado nada.",
+    en: "The server could not set its clock. Nothing was changed.",
+    es: "El servidor no ha podido poner su reloj en hora. No se ha cambiado nada.",
   },
   "clock.check_expired": {
     en: "The time check took too long. Check again.",
     es: "La comprobación de la hora ha tardado demasiado. Vuelve a comprobarla.",
   },
   "clock.confirm_refused": {
-    en: "The box's time was not confirmed. Use “Check the time” to see why.",
-    es: "No se ha confirmado la hora del equipo. Usa «Comprobar la hora» para ver por qué.",
+    en: "The server's time was not confirmed. Use “Check the time” to see why.",
+    es: "No se ha confirmado la hora del servidor. Usa «Comprobar la hora» para ver por qué.",
   },
   "handover.stepping_down": {
     en: "This server no longer runs the venue, so it is not taking requests now. Nothing was changed.",

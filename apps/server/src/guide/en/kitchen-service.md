@@ -8,7 +8,7 @@ Record the guest and assign their dishes through the table's
 
 If the till cannot confirm a counter send, retry with the basket unchanged. When the first send
 already reached the server, the retry returns its original result and moves the till on as placed.
-It adds no second kitchen ticket or collection-number slip. While the box is out of disk space,
+It adds no second kitchen ticket or collection-number slip. While the server is out of disk space,
 the retry is refused and the till says the order was not saved, even if the first send already
 reached the server.
 
@@ -309,7 +309,7 @@ On the till, an unsent dish whose period ended earlier the same business day sho
 and **Lunch ended**. When you send it from a table, or pay for, send or park the order at the
 counter, the till first lists such dishes and asks you to check with the kitchen.
 **Kitchen agreed — send** sends them, and **Remove them** takes them off the order. On a park the
-button reads **Kitchen agreed — save**. The same window opens when the box finds such a dish before
+button reads **Kitchen agreed — save**. The same window opens when the server finds such a dish before
 the till has marked it.
 
 A dish that the period now running also sells is not marked and is sent as usual. A dish left from
@@ -338,8 +338,8 @@ Once released, a dish can move through preparation to Ready at its station. A di
 waits for the pass](kitchen-service.md#station-waits) goes to the pass's **To fire** column
 instead: see
 [Work the pass](kitchen-service.md#pass-screen).
-While the box is out of disk space, moving a dish on is refused. The station says
-**Not saved: the box is out of disk space. Tell a manager.** and the dish stays where it was.
+While the server is out of disk space, moving a dish on is refused. The station says
+**Not saved: the server is out of disk space. Tell a manager.** and the dish stays where it was.
 
 Confirm allergy instructions in the table's allergy window before requesting cooking. At a
 station or the pass, read the copy already attached to each dish. The kitchen screens do not open

@@ -510,6 +510,11 @@ export class TillPassScreen extends LitElement {
     if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
   }
 
+  /** The pass offers no other area to choose, so this refusal skips the code's general sentence. */
+  #refusalSentence(code: string): string {
+    return code === "service_zone.not_allowed" ? t("expo.zone_not_allowed") : codeMessage(code);
+  }
+
   #leverRefused(card: PassCard | undefined, error: unknown): void {
     this.leverError = {
       code: (error as { code?: string } | null)?.code ?? "server.internal",
@@ -691,14 +696,14 @@ export class TillPassScreen extends LitElement {
       ${
         this.reprintErrorCode
           ? html`<p class="error" role="alert" slot="status" data-reprint-error>
-              ${codeMessage(this.reprintErrorCode)}
+              ${this.#refusalSentence(this.reprintErrorCode)}
             </p>`
           : nothing
       }
       ${
         this.leverError
           ? html`<p class="error" role="alert" slot="status" data-lever-error>
-              ${this.leverError.card}: ${codeMessage(this.leverError.code)}
+              ${this.leverError.card}: ${this.#refusalSentence(this.leverError.code)}
             </p>`
           : nothing
       }

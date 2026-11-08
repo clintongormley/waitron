@@ -1997,7 +1997,7 @@ staff notices an open till keeps", and `apps/till/src/state/staff-notices.test.t
 **A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,
 `apps/till/src/i18n/staff-notices.ts`) from `staff_notice.<code>` in
 `apps/till/src/i18n/strings.ts`, in English and Spanish. It words only the codes it names, so a
-code it does not name is drawn as "The box needs attention · Tell a manager", in its own tone,
+code it does not name is drawn as "The server needs attention · Tell a manager", in its own tone,
 whatever the strings file holds. `scripts/staff-notice-codes.test.ts` requires, for every code a
 source sends, words in both languages in the strings file and a wording from `staffNoticeText` in
 both languages other than that one. It is weaker than its name:
@@ -2297,7 +2297,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 - **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**
   (`apps/till/src/i18n/staff-notices.ts`, from `staff_notice.<code>` in English and Spanish); a
-  code it does not name is drawn as "The box needs attention". Guard:
+  code it does not name is drawn as "The server needs attention". Guard:
   `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
   text, in source files it lists by hand. See [conventions-ui.md](conventions-ui.md).
 

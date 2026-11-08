@@ -38,7 +38,7 @@ import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 import { nextFloorMoment } from "./state/floor-today.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -6530,6 +6530,42 @@ describe("till-app", () => {
     });
   });
 
+  it("place-order refused station.no_default says no station can make the dish", async () => {
+    const { el } = await mountApp({
+      placeOrder: vi.fn().mockRejectedValue({ code: "station.no_default", status: 409 }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "place-order", {});
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      codeMessage("station.no_default"),
+    );
+  });
+
+  it("place-order refused station.no_default naming its dishes says which dishes no station can make", async () => {
+    const { el } = await mountApp({
+      placeOrder: vi.fn().mockRejectedValue({
+        code: "station.no_default",
+        status: 409,
+        dishes: "Navajas, Almejas",
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "place-order", {});
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      fill(t("station.no_default_named"), { dishes: "Navajas, Almejas" }),
+    );
+  });
+
   it("a held order parked from this till is saved from revision 0", async () => {
     const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const placeOrder = vi
@@ -7514,6 +7550,7 @@ describe("till-app", () => {
 
   it.each([
     [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+    [{ code: "station.no_default", status: 409 }, () => codeMessage("station.no_default")],
     [{ code: "server.internal", status: 500 }, () => t("held.park_error")],
   ])("park-order refused %o shows that refusal's sentence", async (refused, shown) => {
     const { el } = await mountApp({ parkOrder: vi.fn().mockRejectedValue(refused) });
@@ -12108,10 +12145,9 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1); // basket intact
     });
 
-    it("place: a fresh-basket park network failure shows place.error, not sale.unconfirmed", async () => {
+    it("place: a fresh-basket park network failure shows place.error, not place.unconfirmed", async () => {
       // `parkOrder` is the preliminary save on a fresh basket; a network failure of it means the
-      // `placeOrder` fiscal request was never made, so this is the free-to-retry `place.error`, not the
-      // "did it file?" `sale.unconfirmed`. `placeOrder` is never reached.
+      // `placeOrder` request was never made. `placeOrder` is never reached.
       const parkOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -12130,12 +12166,11 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1); // basket kept
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("place.error"));
-      expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+      expect(banner.textContent).not.toContain(t("place.unconfirmed"));
     });
 
-    it("place: the placeOrder fiscal request network-failing shows sale.unconfirmed (the request was reached)", async () => {
-      // The other side: park succeeded and `placeOrder` IS called, so a network failure of THAT
-      // request is `sale.unconfirmed` — the placement / deferred invoice may have filed.
+    it("place: the placeOrder request network-failing shows place.unconfirmed (the request was reached)", async () => {
+      // The other side: park succeeded and `placeOrder` IS called, so the reply to THAT request was lost.
       const placeOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -12153,7 +12188,7 @@ describe("till-app", () => {
       expect(placeOrder).toHaveBeenCalled();
       expect(tenderPay(el).stage).toBe("order"); // never advanced — the place failed
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
-      expect(banner.textContent).toContain(t("sale.unconfirmed"));
+      expect(banner.textContent).toContain(t("place.unconfirmed"));
     });
 
     it("place single-flight: a second place-order while the first is pending places EXACTLY ONCE", async () => {
@@ -16850,7 +16885,7 @@ describe("a failed list refresh after a successful write", () => {
     expect(message(el, "held")).toBe(t("refresh.held_after_sale"));
   });
 
-  it("place: the collect stage stands and the queue refresh failure never shows sale.unconfirmed", async () => {
+  it("place: the collect stage stands and the queue refresh failure never shows place.unconfirmed", async () => {
     const getStationQueue = failingAfterLogin<StationQueue>({
       items: [],
       notices: [],
@@ -16870,7 +16905,7 @@ describe("a failed list refresh after a successful write", () => {
 
     expect(currentApi.placeOrder).toHaveBeenCalledOnce();
     expect(tenderPay(el).stage).toBe("collect");
-    expect(alertText(el)).not.toContain(t("sale.unconfirmed"));
+    expect(alertText(el)).not.toContain(t("place.unconfirmed"));
     expect(alertText(el)).not.toContain(t("place.error"));
     expect(message(el, "station")).toBe(t("refresh.station_after_place"));
 

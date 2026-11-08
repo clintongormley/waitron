@@ -298,7 +298,7 @@ called weaker than its name, the topic file lists what it does not see.
   as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
   Nothing guards it.
 - **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**; a code it
-  does not name is drawn as "The box needs attention". Guard:
+  does not name is drawn as "The server needs attention". Guard:
   `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
   text, in source files it lists by hand. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;

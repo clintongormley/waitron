@@ -209,10 +209,10 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     expect(codeMessage(code, "en")).not.toContain(code);
   }
   expect(codeMessage("bill.payments_received", "en")).toBe(
-    "A bill that has taken payments cannot be merged, and items cannot be transferred between it and another bill. Take the rest from the bill's payments",
+    "A bill that has taken payments cannot be merged with another.",
   );
   expect(codeMessage("bill.payments_received", "es")).toBe(
-    "Una cuenta que ya ha recibido pagos no se puede juntar con otra, ni se pueden transferir artículos entre ella y otra cuenta. Cobra el resto desde los pagos de la cuenta",
+    "Una cuenta que ya ha recibido pagos no se puede juntar con otra.",
   );
 });
 
@@ -505,6 +505,24 @@ it("explains that unsupported published menus require a venue reset in both lang
   );
 });
 
+it("says no prep station can make one of the dishes and where to fix it, in both locales", () => {
+  expect(codeMessage("station.no_default", "en")).toBe(
+    "No prep station can make one of these dishes. Fix this in the dashboard, on the Prep stations page.",
+  );
+  expect(codeMessage("station.no_default", "es")).toBe(
+    "Ninguna estación de preparación puede preparar uno de estos platos. Corrígelo en el panel, en la página Estaciones de preparación.",
+  );
+});
+
+it("says where a device's profile can be changed when it refuses an action, in both locales", () => {
+  expect(codeMessage("device.forbidden_action", "en")).toBe(
+    "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",
+  );
+  expect(codeMessage("device.forbidden_action", "es")).toBe(
+    "El perfil de este dispositivo no lo permite. Se puede cambiar en el panel, en Perfiles de dispositivo.",
+  );
+});
+
 it("says a zone the device's profile does not work in, and a profile left with no zone, in both locales", () => {
   expect(codeMessage("service_zone.not_allowed", "en")).toBe(
     "This device's profile does not work in that area. Choose one of its own areas",
@@ -785,8 +803,8 @@ it("says a clock behind the last sale means nothing can be recorded, in both lan
     codeMessage("clock.behind_chain", "en-GB"),
     codeMessage("clock.behind_chain", "es-ES"),
   ]).toEqual([
-    "Can't be recorded: the box's clock reads earlier than its last sale. Tell a manager.",
-    "No se puede registrar: la hora del equipo es anterior a la última venta. Avisa al encargado.",
+    "Can't be recorded: the server's clock reads earlier than its last sale. Tell a manager.",
+    "No se puede registrar: la hora del servidor es anterior a la última venta. Avisa al encargado.",
   ]);
 });
 
@@ -794,8 +812,8 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
   const cases: [string, string, string][] = [
     [
       "storage.disk_full",
-      "No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.",
-      "Not saved: the box is out of disk space. Tell a manager.",
+      "No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.",
+      "Not saved: the server is out of disk space. Tell a manager.",
     ],
     [
       "sale.charged_not_recorded",
@@ -804,8 +822,8 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
     ],
     [
       "clock.unusable",
-      "Venta no registrada: la hora del equipo es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
-      "Sale not recorded: the box's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
+      "Venta no registrada: la hora del servidor es incorrecta. Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+      "Sale not recorded: the server's clock is wrong. Tell a manager. If you already charged a card on the terminal, refund it there.",
     ],
   ];
   for (const [code, spanish, english] of cases) {

@@ -5285,7 +5285,7 @@ describe("source-backed draft foundations", () => {
     let calls = 0;
     const probe = vi.spyOn(orderWrites, "fireLines").mockImplementation(async (...args) => {
       const result = await fire(...args);
-      if (++calls === 2) throw new AppError("station.no_default", {});
+      if (++calls === 2) throw new AppError("station.no_default", { dishes: "X" });
       return result;
     });
     try {
@@ -5295,7 +5295,7 @@ describe("source-backed draft foundations", () => {
             { lineIds: [id], release: "hold" },
             { lineIds: lineIds(draft), release: "fire" },
           ]),
-        { code: "station.no_default", params: {} },
+        { code: "station.no_default", params: { dishes: "X" } },
       );
       expect(calls).toBe(2);
     } finally {

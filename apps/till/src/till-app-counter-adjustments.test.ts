@@ -1003,6 +1003,27 @@ describe("till-app: comping a stored counter order", () => {
     expect(offered(el)).toBe(0);
   });
 
+  it.each([
+    ["en", "The server did not answer. Send again: the kitchen will not get the order twice."],
+    [
+      "es",
+      "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",
+    ],
+  ] as const)("a lost Send reply says to send again, in %s", async (language, sentence) => {
+    const el = await placeCounter({
+      placeOrder: vi.fn().mockRejectedValue(new TypeError("Network reply lost")),
+    });
+    const previous = currentLocale();
+    setLocale(language);
+    try {
+      emit(counter(el), "place-order");
+      await flush(el);
+      expect(banner(el)!.textContent!.trim()).toBe(sentence);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("moves on as placed when an unchanged retry answers the original placement", async () => {
     const placeOrder = vi
       .fn()
@@ -1012,7 +1033,7 @@ describe("till-app: comping a stored counter order", () => {
     emit(counter(el), "place-order");
     await flush(el);
     expect(counter(el).stage).toBe("order");
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
 
     emit(counter(el), "place-order");
     await flush(el);
@@ -1081,7 +1102,7 @@ describe("till-app: comping a stored counter order", () => {
     await flush(el);
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
 
     emit(counter(el), "place-order");
@@ -1105,7 +1126,7 @@ describe("till-app: comping a stored counter order", () => {
     const el = await placeCounter({ placeOrder, updateWorkingOrder });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     const store = counter(el).store;
     store.addProduct(store.lines[1]!.product, "1");
 
@@ -1164,7 +1185,7 @@ describe("till-app: comping a stored counter order", () => {
       await confirm();
       emit(counter(el), "place-order");
       await flush(el);
-      expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+      expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
       await confirm(true);
 
       emit(counter(el), "place-order");
@@ -1200,7 +1221,7 @@ describe("till-app: comping a stored counter order", () => {
     store.addProduct(store.lines[1]!.product, "1");
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
     emit(counter(el), "place-order");
     await flush(el);
@@ -1235,7 +1256,7 @@ describe("till-app: comping a stored counter order", () => {
     });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     emit(counter(el), "choose-receipt-language");
     await flush(el);
     emit(
@@ -1265,7 +1286,7 @@ describe("till-app: comping a stored counter order", () => {
     const el = await placeCounter({ placeOrder });
     emit(counter(el), "place-order");
     await flush(el);
-    expect(banner(el)?.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     const replacement = {
       ...api,
       updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 5 }),
@@ -1331,10 +1352,10 @@ describe("till-app: comping a stored counter order", () => {
             expect(send().disabled).toBe(false);
             await userEvent.click(send());
             await vi.waitFor(() =>
-              expect(banner(el)?.textContent).toContain(t("sale.unconfirmed")),
+              expect(banner(el)?.textContent).toContain(t("place.unconfirmed")),
             );
             await flush(el);
-            expect(el.shadowRoot!.textContent).toContain(t("sale.unconfirmed", language));
+            expect(el.shadowRoot!.textContent).toContain(t("place.unconfirmed", language));
             await page.screenshot({
               path: `__screenshots__/a983-place-replay/lost-${language}-${theme}-${width}.png`,
             });
@@ -1380,6 +1401,351 @@ describe("till-app: comping a stored counter order", () => {
       ...ask,
       expectedRevision: 5,
       expectedEdit: null,
+    });
+  });
+
+  it("still offers Cancel on a dish the kitchen has started", async () => {
+    const lines = listing(4);
+    lines.lines[0] = { ...lines.lines[0]!, state: "preparing" };
+    const el = await retrieved({ getTabLines: vi.fn().mockResolvedValue(lines) });
+
+    expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
+  });
+
+  describe("a dish the kitchen has started since the till read it", () => {
+    const startedListing = (revision = 5) => {
+      const lines = listing(revision);
+      lines.lines[0] = { ...lines.lines[0]!, state: "preparing" };
+      return lines;
+    };
+    const startsMeanwhile = () => ({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockResolvedValue(heldOrder(5)),
+      getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(startedListing()),
+    });
+    const raise = (el: TillApp) => press(el, inBasket(el, ".line .step-inc")!);
+
+    it("keeps the basket and says the park failed, reading nothing again, when a save is refused for a dish the kitchen has started", async () => {
+      const updateWorkingOrder = vi
+        .fn()
+        .mockRejectedValue({ code: "ticket.already_started", status: 409 });
+      const el = await retrieved({ ...startsMeanwhile(), updateWorkingOrder });
+      const reads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+      await raise(el);
+      counter(el).store.addProduct(product("bravas", "Bravas", "5.00"), "1");
+
+      emit(counter(el), "park-order", {});
+      await flush(el);
+
+      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(reads);
+      expect(banner(el)!.textContent!.trim()).toBe(t("held.park_error"));
+      const store = counter(el).store;
+      expect(store.dirty).toBe(true);
+      expect(store.revision).toBe(4);
+      expect(
+        store.lines.map((line) => [line.workingOrderLineId, line.product.id, line.quantity]),
+      ).toEqual([
+        ["l-1", "croquetas", "2"],
+        ["l-2", "cana", "1"],
+        [undefined, "bravas", "1"],
+      ]);
+    });
+
+    const extraStarted = (lines: TabLines): TabLines => {
+      const dish = { ...lines.lines[0]!, sentAt: null, firedAt: null, state: null };
+      const extra = tabLine({
+        id: "l-1x",
+        lineNo: 9,
+        parentLineNo: 1,
+        name: "Alioli",
+        productId: "alioli",
+        unitPriceGross: "0.00",
+        sentAt: "2026-09-30T09:00:00.000Z",
+        firedAt: "2026-09-30T09:00:00.000Z",
+        state: "preparing",
+      });
+      return { ...lines, lines: [dish, ...lines.lines.slice(1), extra] };
+    };
+    it.each([
+      ["a started dish", (lines: TabLines) => lines],
+      ["a dish whose extra is started", extraStarted],
+    ])(
+      "reads %s back after a raise as the two lines the server keeps, so a later save does not raise it again",
+      async (_, shape) => {
+        const raisedOrder = (): HeldOrder => {
+          const order = heldOrder(5);
+          return {
+            ...order,
+            lines: [
+              ...order.lines,
+              { ...order.lines[0]!, workingOrderLineId: "l-3", quantity: "1.000" },
+            ],
+          } as HeldOrder;
+        };
+        const raisedListing = (): TabLines => {
+          const lines = startedListing(5);
+          lines.lines.push({ ...lines.lines[0]!, id: "l-3", lineNo: 3, state: "queued" });
+          return lines;
+        };
+        const updateWorkingOrder = vi
+          .fn()
+          .mockResolvedValueOnce({ revision: 5 })
+          .mockResolvedValue({ revision: 6 });
+        const el = await retrieved({
+          listWorkingOrders: vi.fn().mockResolvedValue([
+            {
+              items: [],
+              id: "wo-9",
+              orderNumber: 12,
+              label: "Mesa 4",
+              counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
+              total: "8.50",
+              outstanding: "4.50",
+              hasPayments: true,
+              partyId: null,
+              billNumber: null,
+              billName: null,
+              openedAt: "2026-09-30T09:00:00.000Z",
+              signals: [],
+            },
+          ]),
+          getBillBalance: vi.fn().mockResolvedValue({
+            workingOrderId: "wo-9",
+            status: "open",
+            total: "8.50",
+            received: "4.00",
+            reserved: "0.00",
+            outstanding: "4.50",
+            tips: "0.00",
+            payments: [],
+            paidLines: [],
+          }),
+          retrieveWorkingOrder: vi
+            .fn()
+            .mockResolvedValueOnce(heldOrder(4))
+            .mockResolvedValue(raisedOrder()),
+          getTabLines: vi
+            .fn()
+            .mockResolvedValueOnce(shape(startedListing(4)))
+            .mockResolvedValue(raisedListing()),
+          updateWorkingOrder,
+        });
+        await raise(el);
+        emit(counter(el), "counter-bill-pay", { amount: "4.50" });
+        await flush(el);
+
+        const first = vi.mocked(updateWorkingOrder).mock.calls[0]![1] as {
+          lines: { workingOrderLineId?: string; quantity: string }[];
+        };
+        expect(first.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+          ["l-1", "2"],
+          ["l-2", "1"],
+        ]);
+        expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+        expect(api.getTabLines).toHaveBeenCalledTimes(2);
+        const store = counter(el).store;
+        expect(store.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+          ["l-1", "1"],
+          ["l-2", "1"],
+          ["l-3", "1"],
+        ]);
+        expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
+        expect(inBasket(el, '[data-cancel-line="2"]')).not.toBeNull();
+
+        emit(el.shadowRoot!.querySelector("till-bill-pay-dialog")!, "bill-pay-close");
+        await flush(el);
+        store.addProduct(store.lines[1]!.product, "1");
+        emit(counter(el), "park-order", {});
+        await flush(el);
+
+        expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+        const later = vi.mocked(updateWorkingOrder).mock.calls[1]![1] as {
+          lines: { workingOrderLineId?: string; quantity: string }[];
+          revision: number;
+        };
+        expect(later.revision).toBe(5);
+        expect(later.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+          ["l-1", "1"],
+          ["l-2", "1"],
+          ["l-3", "1"],
+          [undefined, "1"],
+        ]);
+      },
+    );
+
+    it("reads nothing back when a started dish of two is saved as it was beside an unsent dish raised in place", async () => {
+      const ofTwo = (order: HeldOrder): HeldOrder =>
+        ({
+          ...order,
+          lines: [{ ...order.lines[0]!, quantity: "2.000" }, order.lines[1]!],
+        }) as HeldOrder;
+      const listedOfTwo = (lines: TabLines): TabLines => ({
+        ...lines,
+        lines: [{ ...lines.lines[0]!, quantity: "2.000" }, lines.lines[1]!],
+      });
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 5 });
+      const el = await retrieved({
+        retrieveWorkingOrder: vi
+          .fn()
+          .mockResolvedValueOnce(ofTwo(heldOrder(4)))
+          .mockResolvedValue(ofTwo(heldOrder(5))),
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce(listedOfTwo(startedListing(4)))
+          .mockResolvedValue(listedOfTwo(startedListing(5))),
+        updateWorkingOrder,
+      });
+      const reads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+      counter(el).store.setLineQuantity(1, "2");
+
+      emit(counter(el), "park-order", {});
+      await flush(el);
+
+      const saved = vi.mocked(updateWorkingOrder).mock.calls[0]![1] as {
+        lines: { workingOrderLineId?: string; quantity: string }[];
+      };
+      expect(saved.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+        ["l-1", "2"],
+        ["l-2", "2"],
+      ]);
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(reads);
+    });
+
+    it("reads a started weighed dish back after a raise to exactly one, as the two lines the server keeps", async () => {
+      const jamon: TillProduct = { ...product("jamon", "Jamón", "10.00"), pricingUnit: "weight" };
+      const weighed = (revision: number, extra: HeldOrder["lines"] = []): HeldOrder => {
+        const order = heldOrder(revision);
+        const dish = { ...order.lines[0]!, productId: "jamon", quantity: "0.500", product: jamon };
+        return { ...order, lines: [dish, order.lines[1]!, ...extra] } as HeldOrder;
+      };
+      const weighedListing = (revision: number): TabLines => {
+        const lines = startedListing(revision);
+        lines.lines[0] = {
+          ...lines.lines[0]!,
+          name: "Jamón",
+          productId: "jamon",
+          quantity: "0.500",
+          unitPrecision: 3,
+          unitPriceGross: "10.00",
+        };
+        return lines;
+      };
+      const raisedListing = (): TabLines => {
+        const lines = weighedListing(5);
+        lines.lines.push({ ...lines.lines[0]!, id: "l-3", lineNo: 3, state: "queued" });
+        return lines;
+      };
+      const raisedOrder = weighed(5, [
+        { ...weighed(5).lines[0]!, workingOrderLineId: "l-3", quantity: "0.500" },
+      ]);
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 5 });
+      const el = await retrieved({
+        listWorkingOrders: vi.fn().mockResolvedValue([
+          {
+            items: [],
+            id: "wo-9",
+            orderNumber: 12,
+            label: "Mesa 4",
+            counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
+            total: "7.50",
+            outstanding: "3.50",
+            hasPayments: true,
+            partyId: null,
+            billNumber: null,
+            billName: null,
+            openedAt: "2026-09-30T09:00:00.000Z",
+            signals: [],
+          },
+        ]),
+        getBillBalance: vi.fn().mockResolvedValue({
+          workingOrderId: "wo-9",
+          status: "open",
+          total: "7.50",
+          received: "4.00",
+          reserved: "0.00",
+          outstanding: "3.50",
+          tips: "0.00",
+          payments: [],
+          paidLines: [],
+        }),
+        retrieveWorkingOrder: vi
+          .fn()
+          .mockResolvedValueOnce(weighed(4))
+          .mockResolvedValue(raisedOrder),
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce(weighedListing(4))
+          .mockResolvedValue(raisedListing()),
+        updateWorkingOrder,
+      });
+      const store = counter(el).store;
+      expect(store.lines[0]!.quantity).toBe("0.500");
+      store.setLineQuantity(0, "1.000");
+      emit(counter(el), "counter-bill-pay", { amount: "3.50" });
+      await flush(el);
+
+      const saved = vi.mocked(updateWorkingOrder).mock.calls[0]![1] as {
+        lines: { workingOrderLineId?: string; quantity: string }[];
+      };
+      expect(saved.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+        ["l-1", "1.000"],
+        ["l-2", "1"],
+      ]);
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+      expect(api.getTabLines).toHaveBeenCalledTimes(2);
+      expect(store.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+        ["l-1", "0.500"],
+        ["l-2", "1"],
+        ["l-3", "0.500"],
+      ]);
+    });
+
+    it.each([["working_order.out_of_date", "held.changed_elsewhere"]] as const)(
+      "keeps the sentence for %s when the held list cannot be read after the reload",
+      async (code, key) => {
+        const el = await retrieved({
+          ...startsMeanwhile(),
+          updateWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
+        });
+        await raise(el);
+        const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+        vi.mocked(api.listWorkingOrders).mockRejectedValue(new TypeError("Failed to fetch"));
+
+        emit(counter(el), "park-order", {});
+        await flush(el);
+
+        expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+        expect(counter(el).store.revision).toBe(5);
+        expect(banner(el)!.textContent!.trim()).toBe(t(key));
+      },
+    );
+
+    describe.each(["working_order.out_of_date"])("when the reload after %s fails", (code) => {
+      it.each([
+        ["a network error", new TypeError("Failed to fetch"), "held.reread_failed"],
+        ["a server fault", { code: "server.internal", status: 500 }, "held.reread_failed"],
+        ["the order gone", { code: "working_order.not_found", status: 404 }, "held.stale"],
+      ] as const)("%s keeps the basket and shows its own sentence", async (_, failure, key) => {
+        const el = await retrieved({
+          retrieveWorkingOrder: vi
+            .fn()
+            .mockResolvedValueOnce(heldOrder(4))
+            .mockRejectedValue(failure),
+          updateWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
+        });
+        await raise(el);
+
+        emit(counter(el), "park-order", {});
+        await flush(el);
+
+        expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+        expect(counter(el).store.revision).toBe(4);
+        expect(counter(el).store.dirty).toBe(true);
+        expect(banner(el)!.textContent!.trim()).toBe(t(key));
+      });
     });
   });
 

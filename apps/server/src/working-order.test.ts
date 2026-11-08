@@ -3524,10 +3524,10 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         .set({ active: false })
         .where(eq(kitchenStations.id, kitchen.id));
       await expect(fireLines(tx, cfg, id, [line!])).rejects.toEqual(
-        expect.objectContaining({ code: "station.no_default", params: {} }),
+        expect.objectContaining({ code: "station.no_default", params: { dishes: "Handwritten" } }),
       );
       await expect(fireLines(tx, cfg, id, [line!], { unroutable: "skip" })).rejects.toEqual(
-        expect.objectContaining({ code: "station.no_default", params: {} }),
+        expect.objectContaining({ code: "station.no_default", params: { dishes: "Handwritten" } }),
       );
     });
   });
@@ -3683,7 +3683,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const uncategorised = await makeProduct(tx, catalogueId, {}); // no product/category route
       const refusal = await fireContextless(tx, cfg, [uncategorised]).catch((e: unknown) => e);
       expect(refusal).toMatchObject({ code: "station.no_default" });
-      expect((refusal as { params: unknown }).params).toEqual({});
+      expect((refusal as { params: unknown }).params).toEqual({ dishes: "Line" });
     });
   });
 
@@ -3697,7 +3697,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         .where(eq(kitchenStations.id, kitchenStation.id));
       const uncategorised = await makeProduct(tx, catalogueId, {}); // no product/category route
       await expect(fireContextless(tx, cfg, [uncategorised])).rejects.toEqual(
-        expect.objectContaining({ code: "station.no_default", params: {} }),
+        expect.objectContaining({ code: "station.no_default", params: { dishes: "Line" } }),
       );
     });
   });

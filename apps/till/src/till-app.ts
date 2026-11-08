@@ -688,7 +688,6 @@ const TABLE_REFUSALS = new Set([
   "bill.presented",
   "bill.paid",
   "bill.other_party",
-  "bill.payments_received",
   "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
@@ -696,6 +695,9 @@ const TABLE_REFUSALS = new Set([
   "storage.disk_full",
   "clock.behind_chain",
   "menu_period.ended",
+  "station.no_default",
+  "department.operation_description_required",
+  "sale.department_missing",
 ]);
 
 /** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
@@ -762,17 +764,7 @@ function isPaymentsReceived(error: unknown): boolean {
 function wholeTabErrorOf(error: unknown, tender: { manualCard: boolean }): CounterError {
   const saleRefusal = saleRefusalOf(error, tender);
   if (saleRefusal !== undefined) return saleRefusal;
-  return isPaymentsReceived(error)
-    ? "bill.pay_with_bill_payments"
-    : isPermanentSaleRefusal(error)
-      ? "sale.refused"
-      : isNetworkFailure(error)
-        ? "sale.unconfirmed"
-        : isTakePaymentRefusal(error)
-          ? "take_payment.not_permitted"
-          : isPaymentInFlight(error)
-            ? "sale.payment_in_flight"
-            : (settleRefusalOf(error) ?? "sale.error");
+  return isPaymentsReceived(error) ? "bill.pay_with_bill_payments" : settlingErrorOf(error);
 }
 
 /** The sheet's words for a card the reader did not charge. */
@@ -822,6 +814,14 @@ function tableWriteError(error: unknown): CounterError {
   if (code === undefined || !TABLE_REFUSALS.has(code)) return "table.error";
   return code === "table.needs_moving" && typeof refused!.tableId === "string"
     ? { code, tableId: refused!.tableId }
+    : withDishes(code, error);
+}
+
+/** A `station.no_default` refusal keeps the dishes it names, for the sentence that names them. */
+function withDishes(code: string, error: unknown): { code: string; dishes?: string } {
+  const dishes = (error as { dishes?: unknown } | undefined)?.dishes;
+  return code === "station.no_default" && typeof dishes === "string" && dishes !== ""
+    ? { code, dishes }
     : { code };
 }
 
@@ -1005,6 +1005,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "storage.disk_full",
   "clock.behind_chain",
   "menu_period.ended",
+  "station.no_default",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -1071,7 +1072,7 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
   const code = (error as { code?: string } | undefined)?.code;
-  return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
+  return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? withDishes(code, error) : fallback;
 }
 
 function discardError(error: unknown): CounterError {
@@ -1489,6 +1490,7 @@ type CounterError =
       bill?: string;
       recoveryUrl?: string;
       manualCard?: true;
+      dishes?: string;
     }
   | { billPayments: string }
   | { replacedGroups: string }
@@ -1587,10 +1589,13 @@ function errorText(
       if (table !== undefined)
         return tableSentence(table, "floor.needs_moving_first", "floor.needs_moving_first_named");
     }
+    const message =
+      error.dishes === undefined
+        ? codeMessage(error.code)
+        : fill(t("station.no_default_named"), { dishes: error.dishes });
     const bill = error.bill;
-    if (bill !== undefined)
-      return fill(t("table.refused_on_bill"), { bill, message: codeMessage(error.code) });
-    return codeMessage(error.code);
+    if (bill !== undefined) return fill(t("table.refused_on_bill"), { bill, message });
+    return message;
   }
   if ("billNameTakenOver" in error)
     return named(
@@ -1852,6 +1857,30 @@ function profileRefusalOf(
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
+}
+
+/** What a refused payment says once `saleRefusalOf` and any check of the site's own have passed it by. */
+function settlingErrorOf(
+  error: unknown,
+):
+  | Extract<
+      StringKey,
+      | "sale.refused"
+      | "sale.unconfirmed"
+      | "take_payment.not_permitted"
+      | "sale.payment_in_flight"
+      | "sale.error"
+    >
+  | NonNullable<ReturnType<typeof settleRefusalOf>> {
+  return isPermanentSaleRefusal(error)
+    ? "sale.refused"
+    : isNetworkFailure(error)
+      ? "sale.unconfirmed"
+      : isTakePaymentRefusal(error)
+        ? "take_payment.not_permitted"
+        : isPaymentInFlight(error)
+          ? "sale.payment_in_flight"
+          : (settleRefusalOf(error) ?? "sale.error");
 }
 
 /** `POST /api/pay` names its reader refusal `pay`; a profile that takes no orders is `take-orders`. */
@@ -7635,18 +7664,30 @@ export class TillApp extends LitElement {
     // go on a line of their own) or a row of portions can leave stored dishes the basket's rows do
     // not name (plan D12).
     const listed = this.counterLines?.orderId === id ? this.counterLines.lines : [];
+    // The server adds a raise of a dish the kitchen has, or of one with an extra it has, as a new
+    // line.
     const risesInPlace = (lineId: string) =>
       listed.some(
         (line) =>
-          line.id === lineId && line.portion !== true && line.listUnitPriceGross === undefined,
+          line.id === lineId &&
+          line.portion !== true &&
+          line.listUnitPriceGross === undefined &&
+          line.firedAt === null &&
+          !listed.some((extra) => extra.parentLineNo === line.lineNo && extra.firedAt !== null),
       );
     const movesIds =
       rows.some((row) => row.portionLineIds !== undefined) ||
-      sent.some(
-        (wire) =>
-          wire.workingOrderLineId === undefined ||
-          (Number(wire.quantity) !== 1 && !risesInPlace(wire.workingOrderLineId)),
-      );
+      sent.some((wire) => {
+        const lineId = wire.workingOrderLineId;
+        if (lineId === undefined) return true;
+        const stored = listed.find((line) => line.id === lineId);
+        // A line the till has not read is taken as unchanged when saved at one.
+        if (stored === undefined) return Number(wire.quantity) !== 1;
+        return (
+          compareDecimal(decimal(wire.quantity), decimal(stored.quantity)) > 0 &&
+          !risesInPlace(lineId)
+        );
+      });
     return !movesIds || (await this.#readBackSaved(id, session, visit));
   }
 
@@ -7823,7 +7864,7 @@ export class TillApp extends LitElement {
         this.errorKey = isPermanentSaleRefusal(error)
           ? "place.refused"
           : reachedPlace && isNetworkFailure(error)
-            ? "sale.unconfirmed"
+            ? "place.unconfirmed"
             : counterError(error, "place.error");
     } finally {
       this.placing = false;
@@ -7870,16 +7911,7 @@ export class TillApp extends LitElement {
       // permanent refusal takes `sale.refused`.
       if (session !== this.#operatorSession) return;
       this.errorKey =
-        saleRefusalOf(error, { manualCard: tender.method === "card" }) ??
-        (isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : isPaymentInFlight(error)
-                ? "sale.payment_in_flight"
-                : (settleRefusalOf(error) ?? "sale.error"));
+        saleRefusalOf(error, { manualCard: tender.method === "card" }) ?? settlingErrorOf(error);
     } finally {
       this.submitting = false;
     }
@@ -8670,15 +8702,7 @@ export class TillApp extends LitElement {
       this.findBillError =
         saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
         profileRefusalOf(error) ??
-        (isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : isPaymentInFlight(error)
-                ? "sale.payment_in_flight"
-                : (settleRefusalOf(error) ?? "sale.error"));
+        settlingErrorOf(error);
     } finally {
       this.submitting = false;
       if (current()) this.findBillBusy = false;
@@ -9016,22 +9040,20 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders();
   }
 
-  /**
-   * A save refused `working_order.out_of_date` was made from a copy another till has since
-   * changed: the order is loaded again as it now stands, and staff are told, so they make their
-   * change again on it. An order closed meanwhile reads as a stale retrieve.
-   */
+  /** Loads the order again after a save was refused for an out-of-date copy. A failed read of the
+   * held list keeps the sentence. */
   async #reloadChangedOrder(id: string): Promise<void> {
     const session = this.#operatorSession;
     try {
       await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
       if (session !== this.#operatorSession) return;
       this.errorKey = "held.changed_elsewhere";
-    } catch {
+    } catch (error) {
       if (session !== this.#operatorSession) return;
-      this.errorKey = "held.stale";
+      const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
+      this.errorKey = gone ? "held.stale" : "held.reread_failed";
     }
-    await this.#refreshHeldOrders();
+    await this.#refreshHeldOrders().catch(() => undefined);
   }
 
   /** Replaces the basket with the open order `id` as stored, with its lines as the server lists
@@ -12297,8 +12319,11 @@ export class TillApp extends LitElement {
     this.activeTabId = next;
     this.#billAfterSplit = undefined;
     if (gone !== undefined) {
-      const was = [...bills, ...before].find((bill) => bill.workingOrderId === gone);
-      const numbered = was !== undefined && was.billNumber !== null;
+      // A bill merged away is still listed, without its number; the earlier read holds the number.
+      const was = [...bills, ...before].find(
+        (bill) => bill.workingOrderId === gone && bill.billNumber !== null,
+      );
+      const numbered = was !== undefined;
       const shown = bills.find((bill) => bill.workingOrderId === next);
       const key =
         shown === undefined
@@ -16811,7 +16836,10 @@ export class TillApp extends LitElement {
       });
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
-      await this.#onBillPairRefusal(error);
+      if (isPaymentsReceived(error)) {
+        this.errorKey = { code: "bill.payments_received" };
+        await this.#loadPartyBills();
+      } else await this.#onBillPairRefusal(error);
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
@@ -16911,7 +16939,18 @@ export class TillApp extends LitElement {
       if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string } | undefined)?.code;
       if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
-      else {
+      else if (code === "tab.line_not_found" || code === "tab.not_open") {
+        await this.#loadLinesAndBills();
+        // The read may have moved the screen off a bill that has gone; a bill the waiter chose
+        // meanwhile clears what the screen said.
+        if (
+          this.api === asked.api &&
+          !this.#hasLeftParty(asked.partyId, asked.sent) &&
+          (this.activeTabId === asked.billId || this.billGone !== null)
+        )
+          this.errorKey =
+            code === "tab.line_not_found" ? "table.move_dish_gone" : "table.move_bill_gone";
+      } else {
         const destination = this.#refusedBill(
           error,
           toBillId === null ? [] : [toBillId],

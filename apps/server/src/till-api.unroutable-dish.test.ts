@@ -856,7 +856,104 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       );
 
     await expect(round(stranded)).rejects.toMatchObject({ code: "station.no_replacement" });
-    await expect(round(missing)).rejects.toMatchObject({ code: "station.no_default" });
+    await expect(round(missing)).rejects.toMatchObject({
+      code: "station.no_default",
+      params: { dishes: missing.name },
+    });
+  });
+
+  it("names every dish in a round that no station can take, once each, in line order", async () => {
+    const navajas = await dish("Navajas");
+    const { dish: routed } = await routedDish("Pulpo");
+    const almejas = await dish("Almejas");
+    const { partyId } = await seat(v, await v.table(`T-${randomUUID().slice(0, 8)}`));
+
+    await expect(
+      inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, partyId, {
+          groups: [
+            {
+              lines: [navajas, routed, almejas, navajas].map((d) => ({
+                menuItemId: d.tablesOffer,
+                quantity: "1",
+              })),
+              release: "fire",
+            },
+          ],
+          operatorId: OPERATOR,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "station.no_default",
+      params: { dishes: `${navajas.name}, ${almejas.name}` },
+    });
+  });
+
+  it("names a catalogue dish no station can take beside a dish with no product, in line order", async () => {
+    const coffee = await dish("Coffee");
+    const { dish: routed } = await routedDish("Pulpo");
+    const stranded = await strandedDish("Navajas");
+    const chosen = await dish("Almejas");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      zoneId: v.counter.zoneId,
+      lines: [
+        { menuItemId: coffee.counterOffer, quantity: "1" },
+        { menuItemId: routed.counterOffer, quantity: "1" },
+        { menuItemId: stranded.counterOffer, quantity: "1" },
+        { menuItemId: chosen.counterOffer, quantity: "1", makeAt: await station("Bar") },
+      ],
+    });
+    await inTx(v, (tx) =>
+      tx.insert(workingOrderLines).values({
+        workingOrderId: id,
+        lineNo: 5,
+        productId: null,
+        name: "Soup",
+        descriptions: { [v.cfg.locale]: "Soup" },
+        quantity: 1000,
+        unitPriceGross: 150,
+        vatClass: "general",
+        lineTotal: 150,
+      }),
+    );
+    const refusal = { code: "station.no_default", params: { dishes: `${coffee.name}, Soup` } };
+
+    await expect(
+      inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id))),
+    ).rejects.toMatchObject(refusal);
+    await expect(
+      inTx(v, async (tx) =>
+        fireLines(tx, v.cfg, id, await unsentDishLines(tx, id), { unroutable: "skip" }),
+      ),
+    ).rejects.toMatchObject(refusal);
+  });
+
+  it("with an active default station, a table round sends a dish with no route and one whose route's station is off", async () => {
+    const stranded = await strandedDish("Pulpo");
+    const missing = await dish("Navajas");
+    const { partyId } = await seat(v, await v.table(`T-${randomUUID().slice(0, 8)}`));
+    const round = (d: Dish) =>
+      inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, partyId, {
+          groups: [{ lines: [{ menuItemId: d.tablesOffer, quantity: "1" }], release: "fire" }],
+          operatorId: OPERATOR,
+        }),
+      );
+    await expect(round(missing)).rejects.toMatchObject({
+      code: "station.no_default",
+      params: { dishes: missing.name },
+    });
+
+    await inTx(v, async (tx) =>
+      tx.run(
+        sql`update kitchen_stations set active = 1 where location_id = ${v.cfg.locationId} and is_default`,
+      ),
+    );
+
+    for (const sent of [await round(missing), await round(stranded)])
+      expect(sent.groups[0]!.lineIds).toHaveLength(1);
   });
 
   it("stores a chosen station on a parked dish and refuses a switched-off station", async () => {

@@ -414,12 +414,15 @@ describe("the spare fetches the old box's final copy", () => {
     });
     await r.start({ compare, download });
     await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    await vi.waitFor(
+      async () => expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
+      { timeout: 10_000 },
+    );
     await settle();
     // M1 no longer answers, so no later attempt's own clean-up is what removed it.
     expect(download).toHaveBeenCalledTimes(1);
     expect(existsSync(r.received())).toBe(false);
     expect(compare).not.toHaveBeenCalled();
-    expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable");
   });
 
   it("after such a throw the next attempt fetches the file again", async () => {

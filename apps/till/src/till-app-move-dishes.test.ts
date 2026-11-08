@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
-import type { BillBalance, PartyBill, TabLine } from "./api/client.js";
+import type { BillBalance, PartyBill, TabLine, TabLines } from "./api/client.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, differentPeopleText, setLocale, t } from "./i18n/t.js";
 import { cleanupWidgets, partyBillOf } from "./widgets/test-helpers.js";
@@ -117,6 +117,18 @@ function heldMove() {
     settle: (value: { billId: string }) => settle(value),
     refuse: (error: unknown) => refuse(error),
   };
+}
+
+/** A read whose answer waits until the test answers it. */
+function heldRead<T>() {
+  let settle!: (value: T) => void;
+  const call = vi.fn(
+    () =>
+      new Promise<T>((resolve) => {
+        settle = resolve;
+      }),
+  );
+  return { call, settle: (value: T) => settle(value) };
 }
 
 describe("A803 move dishes app:", () => {
@@ -406,6 +418,22 @@ describe("A803 move dishes app:", () => {
     expect(bannerText(el)).toContain(t("table.bills_served_differently"));
   });
 
+  it.each(["department.operation_description_required", "sale.department_missing"])(
+    "%s, from issuing the part-paid bill, shows that code's own sentence",
+    async (code) => {
+      const { el, order } = await open({
+        getPartyBills: vi.fn().mockResolvedValue(partPaid()),
+        moveDishes: vi.fn().mockRejectedValue({ code, status: 400 }),
+      });
+
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+      await flush(el, 6);
+
+      expect(bannerText(el)).toContain(codeMessage(code));
+      expect(bannerText(el)).not.toContain(t("table.error"));
+    },
+  );
+
   it("a refusal leaves the source bill on screen with the panel closed, and opening Move dishes… again starts with nothing picked over the re-read balance", async () => {
     const getBillBalance = vi
       .fn()
@@ -503,12 +531,204 @@ describe("A803 move dishes app:", () => {
 
     emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
     await flush(el, 6);
-    expect(bannerText(el)).toContain(t("table.error"));
+    expect(bannerText(el)).toContain(t("table.move_bill_gone"));
     emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
     await flush(el, 6);
 
     expect(moveDishes).toHaveBeenCalledTimes(2);
     expect(bannerText(el)).toBe("");
+  });
+
+  describe("a refusal meaning the screen is out of date", () => {
+    const OTHER_DISH: TabLine = { ...DISH, id: "line-2", lineNo: 2, name: "Flan" };
+    const gone = (el: TillApp) =>
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bill-gone]");
+
+    it.each([
+      ["en", "A dish you picked is no longer on this bill, so nothing moved."],
+      ["es", "Un plato que has elegido ya no está en esta cuenta, así que no se ha movido nada."],
+    ] as const)(
+      "tab.line_not_found says the dish has left, in %s, and shows the bill's current dishes",
+      async (language, sentence) => {
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
+        const { el, order } = await open({
+          getTabLines,
+          moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 404 }),
+        });
+        setLocale(language);
+        getTabLines.mockResolvedValue({ lines: [OTHER_DISH], revision: 1 });
+        const lineReads = getTabLines.mock.calls.length;
+        const drafts = api.listDrafts.mock.calls.length;
+
+        emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+        await flush(el, 8);
+
+        expect(bannerText(el)).toBe(sentence);
+        expect(getTabLines.mock.calls.length).toBe(lineReads + 1);
+        expect(tableOrder(el)!.lines.map((line) => line.id)).toEqual(["line-2"]);
+        expect(api.listDrafts.mock.calls.length).toBeGreaterThan(drafts);
+      },
+    );
+
+    it.each([
+      ["en", "That bill is no longer open, so nothing moved."],
+      ["es", "Esa cuenta ya no está abierta, así que no se ha movido nada."],
+    ] as const)(
+      "tab.not_open for the destination says so, in %s, and reads the bills and dishes again",
+      async (language, sentence) => {
+        const getPartyBills = vi.fn().mockResolvedValue(twoBills());
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
+        const { el, order } = await open({
+          getPartyBills,
+          getTabLines,
+          moveDishes: vi.fn().mockRejectedValue({ code: "tab.not_open", status: 409 }),
+        });
+        setLocale(language);
+        getPartyBills.mockResolvedValue([bill("wo-4", 1)]);
+        const lineReads = getTabLines.mock.calls.length;
+
+        emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+        await flush(el, 8);
+
+        expect(bannerText(el)).toBe(sentence);
+        expect(getTabLines.mock.calls.length).toBe(lineReads + 1);
+        expect(tableOrder(el)!.bills.map((each) => each.workingOrderId)).toEqual(["wo-4"]);
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        expect(gone(el)).toBeNull();
+      },
+    );
+
+    it.each([
+      ["tab.line_not_found", "table.move_dish_gone"],
+      ["tab.not_open", "table.move_bill_gone"],
+    ] as const)(
+      "%s shows its sentence only once the bill on screen has been read again",
+      async (code, key) => {
+        const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
+        const { el, order } = await open({
+          getTabLines,
+          moveDishes: vi.fn().mockRejectedValue({ code, status: 409 }),
+        });
+        const read = heldRead<TabLines>();
+        getTabLines.mockImplementationOnce(read.call);
+
+        emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+        await vi.waitFor(() => expect(read.call).toHaveBeenCalled());
+        await flush(el, 8);
+
+        expect(bannerText(el)).toBe("");
+        expect(tableOrder(el)!.lines.map((line) => line.id)).toEqual(["line-1"]);
+
+        read.settle({ lines: [OTHER_DISH], revision: 1 });
+        await flush(el, 8);
+
+        expect(bannerText(el)).toBe(t(key));
+        expect(tableOrder(el)!.lines.map((line) => line.id)).toEqual(["line-2"]);
+      },
+    );
+
+    it("a refusal whose dishes cannot be read again still says what happened", async () => {
+      const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
+      const { el, order } = await open({
+        getTabLines,
+        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 404 }),
+      });
+      getTabLines.mockRejectedValue(new TypeError("Failed to fetch"));
+
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+      await flush(el, 8);
+
+      expect(bannerText(el)).toBe(t("table.move_dish_gone"));
+    });
+
+    it("a refusal says nothing on a bill the waiter chose while the bill was read again", async () => {
+      const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
+      const { el, order } = await open({
+        getTabLines,
+        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 404 }),
+      });
+      const read = heldRead<TabLines>();
+      getTabLines.mockImplementationOnce(read.call);
+
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+      await vi.waitFor(() => expect(read.call).toHaveBeenCalled());
+      emit(tableOrder(el)!, "switch-bill", { workingOrderId: "bill-1" });
+      await flush(el, 8);
+      read.settle({ lines: [OTHER_DISH], revision: 1 });
+      await flush(el, 8);
+
+      expect(tableOrder(el)!.orderId).toBe("bill-1");
+      expect(bannerText(el)).toBe("");
+    });
+
+    it("a refusal read again after Ana signed out and Sam signed in shows Sam nothing", async () => {
+      const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
+      const { el, order } = await open({
+        getTabLines,
+        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 404 }),
+      });
+      const read = heldRead<TabLines>();
+      getTabLines.mockImplementationOnce(read.call);
+
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+      await vi.waitFor(() => expect(read.call).toHaveBeenCalled());
+      emit(tableOrder(el)!, "logout");
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+      await flush(el, 6);
+      read.settle({ lines: [OTHER_DISH], revision: 1 });
+      await flush(el, 8);
+
+      expect(bannerText(el)).toBe("");
+    });
+
+    it("the bill on screen merged away moves the screen to the bill left, whose buttons still work", async () => {
+      const getPartyBills = vi.fn().mockResolvedValue(twoBills());
+      const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
+      const moveDishes = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "tab.not_open", status: 409 })
+        .mockResolvedValue({ billId: "wo-new" });
+      const { el, order } = await open({ getPartyBills, getTabLines, moveDishes });
+      getPartyBills.mockResolvedValue([
+        { ...bill("wo-4", 1), billNumber: null, status: "abandoned" },
+        bill("bill-1", 2),
+      ]);
+      getTabLines.mockResolvedValue({
+        lines: [{ ...OTHER_DISH, id: "line-3" }],
+        revision: 1,
+      });
+
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+      await flush(el, 8);
+
+      expect(bannerText(el)).toBe("That bill is no longer open, so nothing moved.");
+      expect(gone(el)!.textContent!.trim()).toBe(
+        "Bill 1 is no longer at this table. Now showing Bill 2.",
+      );
+      const shown = tableOrder(el)!;
+      expect(shown.orderId).toBe("bill-1");
+      expect(shown.lines.map((line) => line.id)).toEqual(["line-3"]);
+
+      const menu = () => shown.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+      const picker = () =>
+        shown.shadowRoot!.querySelector<TillPortionPicker>("till-portion-picker");
+      await userEvent.click(menu());
+      await userEvent.click(menu().querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+      await shown.updateComplete;
+      await picker()!.updateComplete;
+      picker()!.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-3"]')!.click();
+      await shown.updateComplete;
+      shown.shadowRoot!.querySelector<HTMLElement>('[data-move-dishes-to="new"]')!.click();
+      await shown.updateComplete;
+      shown
+        .shadowRoot!.querySelector("[data-move-dishes-confirm]")!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+      await flush(el, 8);
+
+      expect(moveDishes).toHaveBeenCalledTimes(2);
+      expect(moveDishes.mock.calls[1]!.slice(0, 3)).toEqual(["bill-1", ["line-3"], null]);
+    });
   });
 
   it("a successful move to Bill 2 reads the bill's drafts once more", async () => {

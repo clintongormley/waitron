@@ -207,7 +207,7 @@ it.each(["identifierType", "identifierCountryCode", "unchanged"])(
     await flush(el);
     expect(placeOrder).toHaveBeenCalledTimes(1);
     expect(setOrderInvoiceChoice).toHaveBeenCalledTimes(1);
-    expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("sale.unconfirmed"));
+    expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("place.unconfirmed"));
     const next =
       field === "unchanged"
         ? recipient

@@ -152,7 +152,7 @@ database, recovery keys and saved backups.
 ## When the box is out of space {#out-of-space}
 
 When the disk is full, nothing can be saved: tills cannot save orders, payments or other changes,
-and they show **Nothing can be saved: the box is out of space**. On this page, **Sales** and
+and they show **Nothing can be saved: the server is out of space**. On this page, **Sales** and
 **Disk space** turn red.
 
 While the disk is full, a red bar at the top of every dashboard page starts **Disk full: the tills
@@ -181,9 +181,9 @@ orders, the kitchen and clocking in carry on, though a change or a kitchen send 
 paying a part-paid bill, and cancelling an order that already has an invoice, are refused. The [till
 notices guide](till-notices.md#notices) lists what staff can and cannot do meanwhile.
 
-The tills show **Payments stopped: the box's clock reads earlier than its last sale**. The alerts
+The tills show **Payments stopped: the server's clock reads earlier than its last sale**. The alerts
 bell says so too, with both times in it: the time on the box's clock and the time of the latest
-sale. On this page, **Sales** and **Clock** turn red with the tills' words, and the **Clock** row
+sale. On this page, **Sales** and **Clock** turn red, and the **Clock** row
 adds what to do: **With the internet the box corrects its clock by itself; otherwise an
 administrator can use “Check with this device's time”.** Where the box can tell, the row also says
 whether it is **Kept in time over the internet** or **Not kept in time over the internet**, as
@@ -363,7 +363,7 @@ payment that Waitron could not record. The box records that payment by itself on
 back, but the alert stays in the bell until a manager presses **Mark handled** on it.
 
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
-box's clock is wrong** instead, and the bell says so too, with the date the box's clock reads.
+server's clock is wrong** instead, and the bell says so too, with the date the box's clock reads.
 Nothing can confirm the clock then, and the box cannot ask the tax agency for its time, because
 with a date that early it cannot check the tax agency's certificate. The way out is to set the
 clock right: on a box kept in time over the internet, by connecting it to the internet; otherwise

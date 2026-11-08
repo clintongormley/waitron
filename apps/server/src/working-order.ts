@@ -1881,6 +1881,28 @@ export async function assertPartyBillOpen(
   return order.revision;
 }
 
+async function noDefaultStation(
+  tx: Transaction,
+  lines: readonly FireableLine[],
+): Promise<AppError<"station.no_default">> {
+  const rows = await tx
+    .select({
+      id: workingOrderLines.id,
+      name: workingOrderLines.name,
+      variantName: workingOrderLines.variantName,
+    })
+    .from(workingOrderLines)
+    .where(
+      inArray(
+        workingOrderLines.id,
+        lines.map((line) => line.id),
+      ),
+    );
+  const nameOf = new Map(rows.map((row) => [row.id, staffPresentationName(row)]));
+  const dishes = [...new Set(lines.map((line) => nameOf.get(line.id)!))].join(", ");
+  return new AppError("station.no_default", { dishes });
+}
+
 /** The columns of a stored line {@link fireLines} reads. */
 export const fireableLineColumns = {
   id: workingOrderLines.id,
@@ -2192,9 +2214,18 @@ export async function fireLines(
       .from(kitchenStations)
       .where(and(eq(kitchenStations.isDefault, true), eq(kitchenStations.active, true)));
     fallbackStationId = fallback?.id ?? null;
-    if (fallbackStationId === null) throw new AppError("station.no_default", {});
+    if (fallbackStationId === null)
+      throw await noDefaultStation(
+        tx,
+        lines.filter((line) => {
+          if (line.productId === null) return !chosenStations.has(line.id);
+          const kind = makers.get(line.productId)?.kind;
+          return stationFor(line) === null && kind !== "made" && kind !== "no_replacement";
+        }),
+      );
   }
   const unrouted: FireableLine[] = [];
+  const nowhere: FireableLine[] = [];
   const noReplacement: { stationId: string; productId: string }[] = [];
   lines = lines.filter((line) => {
     const outcome = line.productId === null ? undefined : makers.get(line.productId);
@@ -2204,11 +2235,14 @@ export async function fireLines(
     if (hasMaker) return true;
     if (outcome?.kind === "no_replacement")
       noReplacement.push({ stationId: outcome.stationId, productId: line.productId! });
-    if (options.unroutable !== "skip" && outcome?.kind !== "no_replacement")
-      throw new AppError("station.no_default", {});
+    if (options.unroutable !== "skip" && outcome?.kind !== "no_replacement") {
+      nowhere.push(line);
+      return false;
+    }
     unrouted.push(line);
     return false;
   });
+  if (nowhere.length > 0) throw await noDefaultStation(tx, nowhere);
   if (noReplacement.length > 0 && options.unroutable !== "skip")
     throw new AppError("station.no_replacement", {
       stationId: noReplacement[0]!.stationId,
@@ -5926,9 +5960,10 @@ async function assertProductsSellable(
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
  *   a new line; a drop voids the difference, with a notice and slip. Removing it voids it the same
  *   way.
- * - A started line is refused `ticket.already_started`; then a changed or raised line whose records'
- *   stations do not allow changes after sending is refused `ticket.already_fired`. A removal or a
- *   drop is a void, which the stations' choice does not gate.
+ * - A started line's quantity rise is taken as a not-started one's is; its change, drop or removal
+ *   is refused `ticket.already_started`. Then a changed or raised line whose records' stations do
+ *   not allow changes after sending is refused `ticket.already_fired`. A removal or a drop is a
+ *   void, which the stations' choice does not gate.
  *
  * New lines are numbered after the order's highest line number, and reach the kitchen as
  * {@link EditableOrder.newWork} says: where work was sent, as a round's line would, a course the
@@ -5967,14 +6002,15 @@ async function applyLineEdits(
   );
   /**
    * Refuses what the kitchen state forbids, the stations' choice only for a change; answers
-   * whether the kitchen holds fired work.
+   * whether the kitchen holds fired work. A bare raise leaves the started work alone, so it is not
+   * refused as started.
    */
-  const kitchenHas = (line: EditableParent, change: boolean): boolean => {
+  const kitchenHas = (line: EditableParent, change: boolean, bareRaise = false): boolean => {
     const records = [line, ...line.children].flatMap((part) =>
       part.ticket === null ? [] : [part.ticket],
     );
     const started = records.find((record) => isStarted(record.state));
-    if (started !== undefined) {
+    if (started !== undefined && !bareRaise) {
       throw new AppError("ticket.already_started", { ticketItemId: started.id });
     }
     if (change) refuseChangesAfterSending(orderId, records, stationChanges);
@@ -6140,7 +6176,7 @@ async function applyLineEdits(
     if (!changed && rise === 0) continue;
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
-    const fired = kitchenHas(parent, changed || rise > 0);
+    const fired = kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
     // Widening an adjusted line would sell the added units at its adjusted price (ruling R12).
     const addedApart = action === "free" && rise > 0 && parent.adjusted;
