@@ -110,6 +110,7 @@ describe("the user guides", () => {
       "add-printer",
       "calibrate",
       "printer-details",
+      "print-queue",
     ]);
   });
 
