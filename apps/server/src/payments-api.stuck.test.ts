@@ -877,37 +877,6 @@ async function resolutionsFor(paymentId: string) {
 // --- the list -------------------------------------------------------------------------------
 
 describe("GET /management-api/payments/stuck", () => {
-  it("keeps a known amount mismatch visible and locked when a manager checks it again", async () => {
-    const v = await setup();
-    const id = await openOrder(v);
-    const { paymentId, piId } = await strandPayment(v, id, {
-      status: "succeeded",
-      amountReceived: 140,
-    });
-    const first = await send(v, "POST", resolvePath(paymentId), v.managerCookie);
-    expect(first.status).toBe(409);
-    expect(await errorOf(first)).toMatchObject({ code: "payment.capture_mismatch_unresolved" });
-    v.client.setIntent(piId, { status: "succeeded", amount: 150, amountReceived: 150 });
-    const read = vi.spyOn(v.client, "retrievePaymentIntent");
-    const second = await send(v, "POST", resolvePath(paymentId), v.managerCookie);
-    expect(second.status).toBe(409);
-    expect(await errorOf(second)).toMatchObject({ code: "payment.capture_mismatch_unresolved" });
-    const list = await send(v, "GET", "/management-api/payments/stuck");
-    expect(((await list.json()) as { paymentId: string }[]).map((row) => row.paymentId)).toEqual([
-      paymentId,
-    ]);
-    expect(read).not.toHaveBeenCalled();
-    const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
-    expect(order!.paymentAttemptAt).not.toBeNull();
-    const [payment] = await suite.db.select().from(payments).where(eq(payments.id, paymentId));
-    expect(payment).toMatchObject({
-      state: "attempting",
-      saleId: null,
-      settledAt: null,
-      amount: 150,
-    });
-  });
-
   it("lists a stranded payment, and omits one on an order that carries no mark", async () => {
     const v = await setup();
     const stuckOrder = await openOrder(v);

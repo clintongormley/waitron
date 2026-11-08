@@ -584,6 +584,4 @@ su correo: con una fecha tan temprana no puede comprobar el certificado del serv
 
 Si no coincide un importe de tarjeta, lee las dos cifras de la alerta antes de volver a cobrar:
 lo que solicitó Waitron y lo que indicó el proveedor de pagos. Comprueba el cobro en el panel del
-proveedor. El pedido sigue sin pagar y bloqueado, y su lector sigue ocupado. Waitron ha dejado
-de comprobar ese pago automáticamente. **Marcar como resuelto** solo mueve la alerta a la lista
-de resueltos; no libera el pedido ni el lector.
+proveedor.

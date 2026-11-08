@@ -30,7 +30,6 @@ declare module "@waitron/shared" {
         orderNumber?: number;
       }[];
     };
-    "payment.capture_mismatch_unresolved": { workingOrderId: string; recoveryUrl: string };
     "payment.not_found": { provider: string; paymentRef: string };
     "payment.refund_exceeds_capture": {
       paymentRef: string;

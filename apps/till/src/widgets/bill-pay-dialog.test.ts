@@ -3174,14 +3174,3 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
     await expectInView(el, "[data-pay-scan-back]", false);
   });
 });
-
-it("a reopened bill with a known mismatch offers charge inspection and no further payment", async () => {
-  const el = await mount({
-    balance: balanceOf({ captureMismatch: true, reserved: "10.00", outstanding: "110.00" }),
-  });
-  expect(text(root(el))).toContain("different amount");
-  expect(text(root(el).querySelector("[data-pay-reserved]"))).toContain("Unresolved card payment");
-  expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
-  expect(root(el).querySelector("[data-pay-confirm]")).toBeNull();
-  expect(root(el).querySelector("a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
-});

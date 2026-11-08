@@ -94,7 +94,6 @@ export interface PaymentResult {
   provider: string;
   paymentRef: string;
   state: PaymentResultState;
-  captureMismatch?: true;
   /** The captured total on a successful `collect`, the requested total while pending or failed,
    * the captured total for `void`/`refund`, or the amount refunded for `partialRefund`. */
   amount: Decimal;

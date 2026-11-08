@@ -22,7 +22,6 @@ import type {
 } from "@waitron/payments";
 import {
   captureAttempting,
-  hasCaptureMismatch,
   recordCaptureMismatch,
   payments,
   countProviderCancelledResolutions,
@@ -195,9 +194,6 @@ export class StripeTerminalProvider implements PaymentProvider {
         provider: PROVIDER,
         paymentRef,
         state: row.state,
-        ...((await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
-          ? { captureMismatch: true as const }
-          : {}),
         amount: decimal(row.amount),
         settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       };
@@ -258,9 +254,6 @@ export class StripeTerminalProvider implements PaymentProvider {
       provider: PROVIDER,
       paymentRef,
       state: row.state,
-      ...((await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
-        ? { captureMismatch: true as const }
-        : {}),
       amount: decimal(row.amount),
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       ...(outcome.kind === "failed" &&

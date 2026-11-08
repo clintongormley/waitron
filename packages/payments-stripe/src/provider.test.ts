@@ -100,33 +100,6 @@ async function capturedPayment(externalRef: string): Promise<{ paymentRef: strin
 }
 
 describe("StripeTerminalProvider.collect", () => {
-  it.each([
-    [0, "failed", "12.10"],
-    [1200, "captured", "12.00"],
-    [1300, "captured", "13.00"],
-  ] as const)(
-    "records the actual amount or a zero failure when Stripe received %s cents",
-    async (amountReceived, state, amount) => {
-      const fake = new FakeStripe();
-      const process = fake.processPaymentIntent.bind(fake);
-      vi.spyOn(fake, "processPaymentIntent").mockImplementation(
-        async (readerId, paymentIntentId) => {
-          await process(readerId, paymentIntentId);
-          fake.setIntent(paymentIntentId, { status: "succeeded", amount: 1210, amountReceived });
-        },
-      );
-      const params = await collectParams();
-
-      const result = await providerFor(fake).collect(params);
-
-      expect.soft(result).toMatchObject({ state, amount });
-      expect(await rowFor(result.paymentRef)).toMatchObject({
-        state,
-        amount,
-      });
-    },
-  );
-
   it("captures: attempting -> captured, settledAt set, external_ref = the PI id", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();

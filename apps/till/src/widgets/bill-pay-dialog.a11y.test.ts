@@ -1270,35 +1270,3 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     }
   });
 });
-
-for (const locale of ["en-GB", "es-ES"])
-  for (const theme of ["light", "dark"] as const)
-    it.each([390, 1280])(
-      `known mismatch remains readable in ${locale} ${theme} at %i`,
-      async (width) => {
-        const before = { locale: currentLocale(), width: innerWidth, height: innerHeight };
-        setLocale(locale);
-        await page.viewport(width, 900);
-        try {
-          const { el, host } = await mountWidget<TillBillPayDialog>(
-            "till-bill-pay-dialog",
-            { balance: { ...balance, captureMismatch: true }, lines, way: "items" },
-            theme,
-          );
-          await el.updateComplete;
-          const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-recovery]")!;
-          expect(link.getAttribute("href")).toBe("/manage/payments");
-          expect(el.shadowRoot!.querySelector("[data-pay-confirm]")).toBeNull();
-          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
-          expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-          await expectNoA11yViolations(host);
-          if (import.meta.env.VITE_A1389_CAPTURE === "1")
-            await page.screenshot({
-              path: `__screenshots__/a1389/bill-${locale}-${theme}-${width}.png`,
-            });
-        } finally {
-          setLocale(before.locale);
-          await page.viewport(before.width, before.height);
-        }
-      },
-    );

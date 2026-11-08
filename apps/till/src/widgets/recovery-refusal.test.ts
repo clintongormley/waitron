@@ -197,28 +197,3 @@ it.each([
 ])("ignores a malformed recovery refusal: %j", (value) => {
   expect(recoveryRefusalOf(value)).toBeUndefined();
 });
-
-for (const locale of ["en", "es"] as const) {
-  it.each(["card_mismatch", "payment.capture_mismatch_unresolved", "reader.payment_in_progress"])(
-    `offers Card payments instead of fiscal recovery for %s in ${locale}`,
-    async (code) => {
-      setLocale(locale);
-      const { el } = await mountWidget<TillPresentedPayDialog>("till-presented-pay-dialog", {
-        open: true,
-        amount: "35.00",
-        takesCash: true,
-        refusal: refusalOf({ code, recoveryUrl: "/manage/payments" }),
-      });
-      const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-recovery]");
-      expect(link?.getAttribute("href")).toBe("/manage/payments");
-      expect(link?.textContent).toBe(
-        locale === "en" ? "Card payments / sign in" : "Pagos con tarjeta / acceder",
-      );
-      const actions = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-        "wt-form-actions",
-      )!;
-      expect(actions.error).toContain(locale === "en" ? "different amount" : "importe distinto");
-      expect(actions.error).not.toContain(t("recovery.issuance_stopped"));
-    },
-  );
-}

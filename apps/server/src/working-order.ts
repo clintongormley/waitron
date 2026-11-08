@@ -1,4 +1,3 @@
-import { findActiveCaptureMismatch } from "@waitron/payments";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
@@ -5774,18 +5773,11 @@ export async function refusePaymentInFlight(
   }
 }
 
-/** Ordinary partial card attempts permit another contribution; a known amount mismatch stops all
- * further money on its order. The whole-order mark also covers providers without attempt rows. */
+/** The whole-order mark also covers providers without attempt rows. */
 export async function refuseOrderPaymentMarked(
   tx: Transaction,
   orderIds: readonly string[],
 ): Promise<void> {
-  const mismatch = await findActiveCaptureMismatch(tx, { orderIds });
-  if (mismatch !== undefined)
-    throw new AppError("payment.capture_mismatch_unresolved", {
-      workingOrderId: mismatch.workingOrderId,
-      recoveryUrl: "/manage/payments",
-    });
   const [paying] = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)

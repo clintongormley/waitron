@@ -85,30 +85,6 @@ const suite = useVenueDb({
 });
 
 describe("SumUpCloudProvider.collect", () => {
-  it.each([
-    ["0.00", "failed", "12.50"],
-    ["12.00", "captured", "12.00"],
-    ["13.00", "captured", "13.00"],
-  ] as const)(
-    "records the actual amount or a zero failure when SumUp reports %s",
-    async (reported, state, amount) => {
-      const { fake, provider, params, row } = await setup(suite);
-      const findTransaction = fake.findTransaction.bind(fake);
-      vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => {
-        const transaction = await findTransaction(query);
-        return transaction === null ? null : { ...transaction, amount: decimal(reported) };
-      });
-
-      const result = await provider.collect(params);
-
-      expect.soft(result).toMatchObject({ state, amount });
-      expect(await row(result.paymentRef)).toMatchObject({
-        state,
-        amount,
-      });
-    },
-  );
-
   it("captures: T1 attempting → checkout keyed by our payment_ref → poll → T2 captured with SumUp's transaction id", async () => {
     const { fake, provider, params, row } = await setup(suite);
     const result = await provider.collect(params);

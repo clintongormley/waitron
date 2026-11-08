@@ -54,7 +54,7 @@ async function setup() {
   return { client, make, params, row, attempt };
 }
 
-it.each(["collect", "sweep"])("records actual Stripe amounts through %s", async (path) => {
+it("records actual Stripe amounts", async () => {
   for (const [received, tipAmount, state, amount, alertCount] of [
     [1210, undefined, "captured", "12.10", 0],
     [1200, undefined, "captured", "12.00", 1],
@@ -63,7 +63,7 @@ it.each(["collect", "sweep"])("records actual Stripe amounts through %s", async 
     [1300, 89, "captured", "13.00", 1],
     [0, undefined, "failed", "12.10", 1],
   ] as const) {
-    const { client, make, params, row, attempt } = await setup();
+    const { client, make, params, row } = await setup();
     vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (id) => ({
       id,
       status: "succeeded",
@@ -71,19 +71,9 @@ it.each(["collect", "sweep"])("records actual Stripe amounts through %s", async 
       amountReceived: received,
       tipAmount,
     }));
-    let paymentRef: string;
-    if (path === "collect") {
-      const result = await make().collect(params);
-      expect(result).toMatchObject({ state, amount });
-      paymentRef = result.paymentRef;
-    } else {
-      paymentRef = (await attempt("succeeded", received)).paymentRef;
-      expect(await make().resolvePending(now, await ownsEveryPayment(suite.db))).toMatchObject({
-        forwarded: state === "captured" ? 1 : 0,
-        declined: state === "failed" ? 1 : 0,
-        incidentsRaised: alertCount,
-      });
-    }
+    const result = await make().collect(params);
+    expect(result).toMatchObject({ state, amount });
+    const paymentRef = result.paymentRef;
     expect(await row(paymentRef)).toMatchObject({ state, amount });
     const stored = await suite.db.select().from(payments);
     expect(stored.find((p) => p.paymentRef === paymentRef)?.requestedAmount).toBe(1210);

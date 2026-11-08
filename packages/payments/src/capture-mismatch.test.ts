@@ -4,22 +4,12 @@ import { CORE_MIGRATIONS, incidents, workingOrders, withTransaction } from "@wai
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { decimal } from "@waitron/shared";
-import {
-  assertReaderStartable,
-  captureAttempting,
-  failAttempting,
-  getPaymentByRef,
-  insertAttempting,
-} from "./store.js";
+import { captureAttempting, failAttempting, getPaymentByRef, insertAttempting } from "./store.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { payments } from "./schema/payments.js";
-import { seedWorkingOrder, seedHeldReader, seedBillPayment } from "../test/seed.js";
+import { seedWorkingOrder } from "../test/seed.js";
 import { deviceOrigin } from "@waitron/shared";
-import {
-  findActiveCaptureMismatch,
-  hasCaptureMismatch,
-  recordCaptureMismatch,
-} from "./capture-mismatch.js";
+import { hasCaptureMismatch, recordCaptureMismatch } from "./capture-mismatch.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const sink = { raise: recordIncidentOnce, handle: markIncidentHandled };
@@ -185,67 +175,5 @@ it("records the existing order number alongside the processor reference", async 
   );
   expect((await alerts())[0]?.params).toMatchObject({
     payments: [{ orderNumber: 27, externalRef: "external-order-number" }],
-  });
-});
-
-it("holds only the recorded active payment's order, bill contribution and reader", async () => {
-  const held = await seedWorkingOrder(suite.db);
-  const ordinary = await seedWorkingOrder(suite.db);
-  const readerId = await seedHeldReader(suite.db, held.deviceId);
-  const otherReader = await seedHeldReader(suite.db, held.deviceId);
-  const billPaymentId = await seedBillPayment(suite.db, held);
-  const otherBill = await seedBillPayment(suite.db, ordinary);
-  const key = { provider: "sumup", paymentRef: "held-ref" };
-  await withTransaction(suite.db, async (tx) => {
-    await insertAttempting(tx, {
-      ...key,
-      origin: deviceOrigin(held.deviceId),
-      workingOrderId: held.workingOrderId,
-      nodeId: held.nodeId,
-      amount: decimal("12.10"),
-      readerId,
-      billPaymentId,
-    });
-    await insertAttempting(tx, {
-      provider: "sumup",
-      paymentRef: "ordinary-ref",
-      origin: deviceOrigin(held.deviceId),
-      workingOrderId: ordinary.workingOrderId,
-      nodeId: ordinary.nodeId,
-      amount: decimal("12.10"),
-      readerId: otherReader,
-      billPaymentId: otherBill,
-    });
-    await recordCaptureMismatch(tx, sink, mismatch("unrelated"), now);
-    await recordCaptureMismatch(
-      tx,
-      sink,
-      { ...mismatch(key.paymentRef, key.provider), workingOrderId: held.workingOrderId },
-      now,
-    );
-    for (const filter of [
-      { orderIds: [held.workingOrderId] },
-      { readerId },
-      { billPaymentId },
-      { payment: key },
-    ])
-      expect(await findActiveCaptureMismatch(tx, filter)).toMatchObject(key);
-    for (const filter of [
-      { orderIds: [] },
-      { orderIds: [ordinary.workingOrderId] },
-      { readerId: otherReader },
-      { billPaymentId: otherBill },
-      { payment: { provider: "sumup", paymentRef: "ordinary-ref" } },
-    ])
-      expect(await findActiveCaptureMismatch(tx, filter)).toBeUndefined();
-    await assertReaderStartable(tx, deviceOrigin(held.deviceId), otherReader);
-  });
-  await expect(
-    withTransaction(suite.db, (tx) =>
-      assertReaderStartable(tx, deviceOrigin(held.deviceId), readerId),
-    ),
-  ).rejects.toMatchObject({
-    code: "reader.payment_in_progress",
-    params: { readerId, recoveryUrl: "/manage/payments" },
   });
 });

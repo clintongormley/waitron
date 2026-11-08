@@ -335,8 +335,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Un pago con tarjeta de {amount:money} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
   },
   "payment.capture_mismatch": {
-    en: "The card amount differs. The order stays unpaid and locked. Automatic checks have stopped. Check the charge in the card provider's dashboard.",
-    es: "El importe de la tarjeta no coincide. El pedido sigue sin pagar y bloqueado. Las comprobaciones automáticas se han detenido. Comprueba el cobro en el panel del proveedor de pagos.",
+    en: "The card amount differs. Check the charge in the card provider's dashboard.",
+    es: "El importe de la tarjeta no coincide. Comprueba el cobro en el panel del proveedor de pagos.",
     items: {
       param: "payments",
       en: "Order {orderNumber}, {provider:card_provider} {externalRef} (Waitron {paymentRef}): Waitron requested {requestedAmount:money}; the card provider reported {reportedAmount:money}.",

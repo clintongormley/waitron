@@ -3,8 +3,6 @@
 // fails typecheck.
 export const en = {
   "recovery.open": "Open recovery",
-  "card.mismatch":
-    "The card provider reported a different amount. Waitron has stopped asking it about this payment. Check the charge in Card payments before taking more money on this order or reader.",
   "recovery.issuance_stopped":
     "New invoices are stopped. Open recovery with this server's current recovery key.",
   "recovery.charged": "Card charged. Do not charge again.",
@@ -1605,7 +1603,6 @@ export const en = {
   "bill_pay.total": "Total",
   "bill_pay.received": "Paid so far",
   "bill_pay.reserved": "Card payment in progress",
-  "bill_pay.mismatch_reserved": "Unresolved card payment",
   "bill_pay.outstanding": "Still to pay",
   "bill_pay.way": "How is this paid?",
   "bill_pay.way_whole": "Whole bill",
@@ -1956,8 +1953,6 @@ export type StringKey = keyof typeof en;
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
   "recovery.open": "Abrir recuperación",
-  "card.mismatch":
-    "El proveedor de pagos indicó un importe distinto. Waitron ha dejado de consultar este pago. Comprueba el cobro en Pagos con tarjeta antes de cobrar más en este pedido o con este lector.",
   "recovery.issuance_stopped":
     "La emisión de facturas está detenida. Abre la recuperación con la clave de recuperación actual de este servidor.",
   "recovery.charged": "La tarjeta ya se ha cobrado. No vuelvas a cobrar.",
@@ -3522,7 +3517,6 @@ export const es: Record<StringKey, string> = {
   "bill_pay.total": "Total",
   "bill_pay.received": "Pagado hasta ahora",
   "bill_pay.reserved": "Pago con tarjeta en curso",
-  "bill_pay.mismatch_reserved": "Pago con tarjeta sin resolver",
   "bill_pay.outstanding": "Queda por pagar",
   "bill_pay.way": "¿Cómo se paga?",
   "bill_pay.way_whole": "Toda la cuenta",

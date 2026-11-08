@@ -18,36 +18,22 @@ import { SumUpCloudProvider } from "./provider.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const now = new Date("2026-11-07T03:00:00.000Z");
 
-it.each(["collect", "sweep"])("records actual SumUp amounts through %s", async (path) => {
+it("records actual SumUp amounts", async () => {
   for (const [actual, state, amount, alertCount] of [
     ["12.50", "captured", "12.50", 0],
     ["12.00", "captured", "12.00", 1],
     ["13.00", "captured", "13.00", 1],
     ["0.00", "failed", "12.50", 1],
   ] as const) {
-    const { provider, fake, params, row, makeProvider } = await setup(suite, (fake) => {
-      if (path === "sweep") fake.stallNext();
-    });
-    let paymentRef: string;
-    if (path === "sweep") paymentRef = (await provider.collect(params)).paymentRef;
+    const { provider, fake, params, row } = await setup(suite);
     vi.spyOn(fake, "findTransaction").mockResolvedValue({
       id: `txn_${actual}`,
       status: "SUCCESSFUL",
       amount: decimal(actual),
     });
-    if (path === "collect") {
-      const result = await provider.collect(params);
-      expect(result).toMatchObject({ state, amount });
-      paymentRef = result.paymentRef;
-    } else {
-      expect(
-        await makeProvider().resolvePending(now, await ownsEveryPayment(suite.db)),
-      ).toMatchObject({
-        forwarded: state === "captured" ? 1 : 0,
-        declined: state === "failed" ? 1 : 0,
-        incidentsRaised: alertCount,
-      });
-    }
+    const result = await provider.collect(params);
+    expect(result).toMatchObject({ state, amount });
+    const paymentRef = result.paymentRef;
     expect(await row(paymentRef!)).toMatchObject({ state, amount });
     const alerts = await suite.db.select().from(incidents);
     const evidence = alerts

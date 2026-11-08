@@ -23,7 +23,6 @@ import type {
 import {
   captureAttempting,
   getPaymentByRef,
-  hasCaptureMismatch,
   recordCaptureMismatch,
   failAttempting,
   insertAttempting,
@@ -199,10 +198,6 @@ export class SumUpCloudProvider implements PaymentProvider {
         provider: SUMUP_PROVIDER,
         paymentRef,
         state: row.state,
-        ...(row.state === "attempting" &&
-        (await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
-          ? { captureMismatch: true as const }
-          : {}),
         amount: decimal(row.amount),
         settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       };
@@ -256,9 +251,6 @@ export class SumUpCloudProvider implements PaymentProvider {
       provider: SUMUP_PROVIDER,
       paymentRef,
       state: row.state,
-      ...((await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
-        ? { captureMismatch: true as const }
-        : {}),
       amount: decimal(row.amount),
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       card,
@@ -266,9 +258,6 @@ export class SumUpCloudProvider implements PaymentProvider {
   }
 
   private async pendingResult(paymentRef: string): Promise<PaymentResult> {
-    const captureMismatch = await this.inTransaction((tx) =>
-      hasCaptureMismatch(tx, { provider: SUMUP_PROVIDER, paymentRef }),
-    );
     const row = (await this.inTransaction((tx) =>
       getPaymentByRef(tx, { provider: SUMUP_PROVIDER, paymentRef }),
     ))!;
@@ -278,7 +267,6 @@ export class SumUpCloudProvider implements PaymentProvider {
       state: row.state,
       amount: decimal(row.amount),
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
-      ...(captureMismatch ? { captureMismatch: true as const } : {}),
     };
   }
 

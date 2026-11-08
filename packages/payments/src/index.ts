@@ -164,6 +164,6 @@ export { reversePayment } from "./reverse.js";
 export {
   hasCaptureMismatch,
   recordCaptureMismatch,
-  findActiveCaptureMismatch,
+  findCaptureWarning,
 } from "./capture-mismatch.js";
 export type { CaptureMismatch, CaptureMismatchSink } from "./capture-mismatch.js";

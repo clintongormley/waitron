@@ -2579,29 +2579,3 @@ describe("A803 table pay", () => {
     },
   );
 });
-
-it.each(["en", "es"])(
-  "a mismatched card amount offers inspection with no retry or checking promise in %s",
-  async (locale) => {
-    const previous = currentLocale();
-    onTestFinished(() => setLocale(previous));
-    setLocale(locale);
-    const store = new WorkingOrderStore();
-    store.addProduct(coffee, "1");
-    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-      store,
-      cardProvider: "stripe_terminal",
-    });
-    click(el, ".pay-card");
-    await el.updateComplete;
-    el.cardOutcome = { outcome: "capture_mismatch" };
-    el.cardAttemptsOver = 1;
-    await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(
-      locale === "en" ? "different amount" : "importe distinto",
-    );
-    expect(query(el, ".retry")).toBeNull();
-    expect(query(el, ".pending-check")).toBeNull();
-    expect(query(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
-  },
-);

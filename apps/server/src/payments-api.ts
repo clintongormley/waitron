@@ -22,7 +22,6 @@ import {
   tenderRefunds,
   sales,
   invoiceSeries,
-  withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -35,7 +34,6 @@ import {
   deviceCardReaders,
   deviceProfileCardReaders,
   findPaymentByBillPayment,
-  findActiveCaptureMismatch,
   IN_PROGRESS_PAYMENT_STATES,
   paymentHoldOutcome,
   paymentHoldOutcomes,
@@ -173,7 +171,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.hold_already_recorded": 409,
   "payment.resolve_unsupported": 422,
   "payment.outcome_unknown": 409,
-  "payment.capture_mismatch_unresolved": 409,
   "bill.payment_not_found": 404,
   "tender.refund_not_found": 404,
   "tender.refund_not_stuck": 409,
@@ -443,17 +440,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     personId: string,
     notStuck: () => AppError,
   ): Promise<{ provider: PaymentProvider; resolved: AbandonedAttemptOutcome; now: Date }> => {
-    const refuseMismatch = async () => {
-      const mismatch = await withTransaction(deps.db, (tx) =>
-        findActiveCaptureMismatch(tx, { payment: attempt }),
-      );
-      if (mismatch !== undefined)
-        throw new AppError("payment.capture_mismatch_unresolved", {
-          workingOrderId: mismatch.workingOrderId,
-          recoveryUrl: "/manage/payments",
-        });
-    };
-    await refuseMismatch();
     const provider = await deps.pool.get(attempt.provider);
     if (provider.resolveAbandonedAttempt === undefined) {
       throw new AppError("payment.resolve_unsupported", { providerId: attempt.provider });
@@ -463,7 +449,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const resolved = await provider.resolveAbandonedAttempt(attempt.paymentRef, now, {
         personId,
       });
-      await refuseMismatch();
       return { provider, resolved, now };
     } catch (error) {
       if (isAppError(error) && error.code === "payment.not_found") throw notStuck();

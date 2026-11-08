@@ -1,7 +1,6 @@
 import { incidents, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, eq, inArray } from "drizzle-orm";
-import { payments } from "./schema/payments.js";
+import { eq } from "drizzle-orm";
 import { AppError, jobOrigin } from "@waitron/shared";
 import "./errors.js";
 import type { HeldAlertSink } from "./held-alert.js";
@@ -54,45 +53,20 @@ function entries(params: Record<string, unknown>): CaptureMismatch[] {
   return params.payments as CaptureMismatch[];
 }
 
-export async function findActiveCaptureMismatch(
+export async function findCaptureWarning(
   tx: Transaction,
-  filter:
-    | { orderIds: readonly string[] }
-    | { readerId: string }
-    | { billPaymentId: string }
-    | { payment: { provider: string; paymentRef: string } },
+  filter: { orderIds: readonly string[] } | { payment: { provider: string; paymentRef: string } },
 ): Promise<CaptureMismatch | undefined> {
-  if ("orderIds" in filter && filter.orderIds.length === 0) return undefined;
-  const active = await tx
-    .select({ provider: payments.provider, paymentRef: payments.paymentRef })
-    .from(payments)
-    .where(
-      and(
-        eq(payments.state, "attempting"),
-        "orderIds" in filter
-          ? inArray(payments.workingOrderId, [...filter.orderIds])
-          : "readerId" in filter
-            ? eq(payments.readerId, filter.readerId)
-            : "billPaymentId" in filter
-              ? eq(payments.billPaymentId, filter.billPaymentId)
-              : and(
-                  eq(payments.provider, filter.payment.provider),
-                  eq(payments.paymentRef, filter.payment.paymentRef),
-                ),
-      ),
-    );
-  if (active.length === 0) return undefined;
   const rows = await tx
     .select({ params: incidents.params })
     .from(incidents)
     .where(eq(incidents.code, CODE));
-  for (const row of rows) {
-    const mismatch = entries(row.params).find((entry) =>
-      active.some(
-        (payment) => payment.provider === entry.provider && payment.paymentRef === entry.paymentRef,
-      ),
+  return rows
+    .flatMap((row) => entries(row.params))
+    .find((entry) =>
+      "orderIds" in filter
+        ? filter.orderIds.includes(entry.workingOrderId)
+        : entry.provider === filter.payment.provider &&
+          entry.paymentRef === filter.payment.paymentRef,
     );
-    if (mismatch !== undefined) return mismatch;
-  }
-  return undefined;
 }

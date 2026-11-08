@@ -47,7 +47,6 @@ export carries payment policy, not card readers or this setting.
 
 When Waitron prints a card slip for a sale, its words, date and amounts follow that sale’s saved receipt language. Changing your screen language or the venue’s current receipt language keeps the earlier sale’s slip in its original language.
 
-If the payment screen says the card provider reported a different amount, open **Card payments / sign in**. Compare the alert's requested and reported amounts with the charge in the provider's dashboard. Do not take more money on that order or reuse that reader while it is held. Automatic checks have stopped; acknowledging the alert does not release the payment.
 
 ## Trust the server before opening the till {#certificate-trust}
 

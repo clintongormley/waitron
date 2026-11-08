@@ -20,7 +20,6 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
-import { recoveryLink } from "./recovery-refusal.js";
 import { typedAmount } from "../state/bill-payment.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -1190,13 +1189,11 @@ export class TillTenderPay extends LitElement {
     const orderId = this.store.id;
     const reason =
       this.cardOutcome?.outcome === "declined" ? this.cardOutcome.failureReason : undefined;
-    const mismatch = this.cardOutcome?.outcome === "capture_mismatch";
     const keepCard = KEEP_CARD_REASONS.has(reason ?? "");
-    const message = mismatch
-      ? t("card.mismatch")
-      : this.cardOutcome?.outcome === "timeout" ||
-          this.cardOutcome?.outcome === "network_unavailable" ||
-          reason === "reader_unavailable"
+    const message =
+      this.cardOutcome?.outcome === "timeout" ||
+      this.cardOutcome?.outcome === "network_unavailable" ||
+      reason === "reader_unavailable"
         ? t("card.no_answer")
         : keepCard
           ? t("card.keep_card")
@@ -1212,7 +1209,7 @@ export class TillTenderPay extends LitElement {
       </div>
       <div class="actions">
         ${
-          keepCard || mismatch
+          keepCard
             ? nothing
             : html`<wt-button
                 class="retry"
@@ -1223,9 +1220,8 @@ export class TillTenderPay extends LitElement {
                 ${t("card.retry")}
               </wt-button>`
         }
-        ${mismatch ? recoveryLink({ code: "card_mismatch" }) : nothing}
         <wt-button class="switch-tender" variant="secondary" @click=${() => this.#requestCancel()}>
-          ${t(mismatch ? "action.back" : "card.cancel")}
+          ${t("card.cancel")}
         </wt-button>
       </div>
     `;

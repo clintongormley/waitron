@@ -25,6 +25,7 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
+  decimalToCents,
   saleId as brandSaleId,
   subtractDecimal,
   workingOrderId as brandWorkingOrderId,
@@ -47,9 +48,15 @@ import {
   payments,
   associatePaymentWithSale,
   findCapturedPaymentForWorkingOrder,
+  findCaptureWarning,
   recordManualCardPayment,
 } from "@waitron/payments";
-import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
+import type {
+  CaptureMismatch,
+  CapturedPaymentForOrder,
+  PaymentProvider,
+  PaymentResult,
+} from "@waitron/payments";
 import {
   formatInvoiceNumber,
   recordSale,
@@ -100,6 +107,7 @@ import {
   afterCardCharged,
   collectFailure,
   holdsPayment,
+  readBillBalance,
   refuseBillWithPayments,
 } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
@@ -617,10 +625,14 @@ export interface IntegratedPayRequest {
  * exception (CLAUDE.md §5). Only `captured` carries a ticket.
  */
 export type IntegratedPayOutcome =
-  | { outcome: "captured"; ticket: TillSaleResult }
+  | { outcome: "captured"; ticket: TillSaleResult; captureWarning?: CaptureMismatch }
+  | {
+      outcome: "partial";
+      balance: import("./bill-payments.js").BillBalance;
+      captureWarning?: CaptureMismatch;
+    }
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
-  | { outcome: "capture_mismatch" }
   | { outcome: "network_unavailable" };
 
 /** {@link payWorkingOrderIntegrated}'s deps: the fiscal {@link TillSaleDeps} plus the card `provider`. */
@@ -1086,7 +1098,7 @@ async function fileImmediateSale(
   return ticket;
 }
 
-async function readOutstandingSaleForOrder(
+export async function readOutstandingSaleForOrder(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<{ saleId: SaleId; amountDue: Decimal } | undefined> {
@@ -1395,7 +1407,7 @@ async function payIntegrated(
   if (prepared.kind === "recover-settle") {
     const { captured, outstanding, attendanceKey } = prepared;
     return afterCardCharged(deps, req.id, () =>
-      finalizeSettleRecovery(deps, cfg, req, captured, outstanding, attendanceKey),
+      finalizeSettleRecovery(deps, cfg, req, captured, outstanding, attendanceKey, operatorId),
     );
   }
 
@@ -1436,22 +1448,40 @@ async function payIntegrated(
         finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
       );
     }
-    // An unresolved attempt keeps the mark, including a mismatch that no later sweep may resolve.
     await releasePaymentAttempt(deps, req.id, attemptAt);
     return toPayOutcome(result, null);
   }
 
   // ---- P3 (tx B) ----
+  const short = await withTransaction(deps.db, async (tx) => {
+    const captured = await findCapturedPaymentForWorkingOrder(tx, {
+      provider: result.provider,
+      workingOrderId: req.id,
+    });
+    return captured !== undefined && compareDecimal(decimal(captured.amount), baseAmount) < 0
+      ? retainShortCapture(tx, deps, cfg, req.id, captured, operatorId, prepared.attendanceKey)
+      : null;
+  });
+  if (short !== null) return short;
   if (prepared.kind === "settle") {
     const { outstanding, attendanceKey } = prepared;
     return {
       outcome: "captured",
       ticket: await afterCardCharged(deps, req.id, () =>
-        finalizeSettle(deps, cfg, req, outstanding, tip, result, attendanceKey),
+        finalizeSettle(
+          deps,
+          cfg,
+          req,
+          outstanding,
+          subtractDecimal(result.amount, baseAmount),
+          result,
+          attendanceKey,
+        ),
       ),
     };
   }
   const { gross, identities, wasPlaced, attendanceKey } = prepared;
+  const actualTip = subtractDecimal(result.amount, baseAmount);
   const ticket = await afterCardCharged(deps, req.id, () =>
     finalizeCapture(
       deps,
@@ -1459,14 +1489,69 @@ async function payIntegrated(
       req,
       gross,
       identities,
-      tip,
+      actualTip,
       result,
       operatorId,
       wasPlaced,
       attendanceKey,
     ),
   );
-  return { outcome: "captured", ticket };
+  return {
+    outcome: "captured",
+    ticket,
+    captureWarning: await withTransaction(deps.db, (tx) =>
+      findCaptureWarning(tx, { payment: result }),
+    ),
+  };
+}
+
+async function retainShortCapture(
+  tx: Transaction,
+  deps: IntegratedPayDeps,
+  cfg: TradingContext,
+  orderId: string,
+  captured: CapturedPaymentForOrder,
+  operatorId: string | undefined,
+  attendanceKey?: string,
+): Promise<IntegratedPayOutcome> {
+  await requireEconomicWrite(tx, cfg, deps.admission);
+  const [payment] = await tx.select().from(payments).where(eq(payments.id, captured.id));
+  // Background recovery has no operator to attribute a contribution to. The provider row already
+  // retains the money; the next operator's Pay attaches it without charging again.
+  if (operatorId !== undefined && payment!.billPaymentId === null) {
+    const [part] = await tx
+      .insert(billPayments)
+      .values({
+        workingOrderId: orderId,
+        submissionId: `capture:${captured.id}`,
+        fingerprint: captured.id,
+        kind: "contribution",
+        method: "card",
+        applied: decimalToCents(decimal(captured.amount)),
+        tip: 0,
+        state: "received",
+        requestedBy: operatorId,
+        ...storedDeviceOrigin(payment!),
+        receivedAt: captured.settledAt!,
+      })
+      .returning({ id: billPayments.id });
+    await tx.update(payments).set({ billPaymentId: part!.id }).where(eq(payments.id, captured.id));
+    const [order] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, orderId));
+    if (order!.status === "open")
+      await tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: null })
+        .where(eq(workingOrders.id, orderId));
+    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
+  }
+  return {
+    outcome: "partial",
+    balance: await readBillBalance(tx, orderId),
+    captureWarning: await findCaptureWarning(tx, { payment: captured }),
+  };
 }
 
 function tipOf(cfg: TradingContext, req: IntegratedPayRequest): Decimal {
@@ -1783,9 +1868,7 @@ async function finalizeRecovery(
       const capturedAmount = decimal(captured.amount);
 
       if (compareDecimal(capturedAmount, priced.total) < 0) {
-        throw new Error(
-          `finalizeRecovery: captured ${captured.amount} is below the locked total ${priced.total} for working order ${req.id}`,
-        );
+        return retainShortCapture(tx, deps, cfg, req.id, captured, operatorId, attendanceKey);
       }
 
       const tip = subtractDecimal(capturedAmount, priced.total);
@@ -2034,6 +2117,7 @@ async function finalizeSettleRecovery(
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
   attendanceKey?: string,
+  operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -2054,9 +2138,7 @@ async function finalizeSettleRecovery(
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, outstanding.amountDue) < 0) {
-      throw new Error(
-        `finalizeSettleRecovery: captured ${captured.amount} is below the amount due ${outstanding.amountDue} for working order ${req.id}`,
-      );
+      return retainShortCapture(tx, deps, cfg, req.id, captured, operatorId, attendanceKey);
     }
 
     const tip = subtractDecimal(capturedAmount, outstanding.amountDue);
@@ -2114,7 +2196,7 @@ export function toPayOutcome(
     return { outcome: "network_unavailable" };
   }
   if (result.state === "attempting") {
-    return { outcome: result.captureMismatch === true ? "capture_mismatch" : "timeout" };
+    return { outcome: "timeout" };
   }
   return {
     outcome: "declined",

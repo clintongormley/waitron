@@ -542,6 +542,3 @@ early it cannot check the mail server's certificate.
 
 If a card amount differs, read the alert's two figures before taking any more money: what Waitron
 requested and what the card provider reported. Check the charge in the provider's dashboard.
-The order stays unpaid and locked, and its reader stays occupied. Waitron has stopped checking
-that payment automatically. **Mark handled** only moves the alert to the handled list; it does
-not free the order or the reader.
