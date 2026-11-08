@@ -390,7 +390,9 @@ tags skip it: they name no range. That run is the one that sees a direct push to
 writes when a pull request merges, which no hook ever sees: `6797bc03a` reached `main` unsigned
 that way. A push that creates `main` (its previous tip is all zeros), and one whose previous tip
 the checkout does not have, name no range the job can list, and each fails rather than passing
-unchecked; `scripts/check-signoff.test.mjs` runs the step against both.
+unchecked; `scripts/check-signoff.test.mjs` runs the step against both. The LICENSE step's hash
+and both steps' place after `gates` are held by “the licence and sign-off checks” in
+`scripts/ci-workflow.test.mjs`, weaker than its name: it reads text and runs neither step.
 
 ### Built applications in `bundle-smoke`
 
@@ -2956,8 +2958,8 @@ git alone, in `ubuntu:24.04` (git 2.43.0, libcurl 8.5.0 OpenSSL), each under `ti
 
 Margin for a full-history fetch: `git fetch` of all of `clintongormley/waitron` (292 MB `.git`)
 from this Mac took 14 s with limit 1000/20, and 15 s and 13 s with the window cut to 2 s — the
-2-second window never fired. (Since A1316, 3 November 2026, the full-history checkouts are
-blobless: see [the section on them](#the-two-full-history-checkouts-skip-old-file-contents-a1316).)
+2-second window never fired. (Since A1316, 3 November 2026, the full-history checkout is
+blobless: see [the section on it](#the-full-history-checkout-skips-old-file-contents-a1316).)
 
 #### Why the stop step's pattern is not `pgrep -x git`
 
@@ -3173,12 +3175,12 @@ in main run `40750935978`, till shard 3 (`123038600113`).
 
 The “uses full history, without old file contents, only for change classification and
 sign-off” case in `scripts/ci-workflow.test.mjs` checks each literal checkout step in the workflow files.
-Since A1316 it also checks that both attempts in each full-history job set
+Since A1316 it also checks that both attempts in the full-history job set
 `filter: blob:none` and that no other checkout sets a `filter` (see
-[the next section](#the-two-full-history-checkouts-skip-old-file-contents-a1316)). It is
+[the next section](#the-full-history-checkout-skips-old-file-contents-a1316)). It is
 weaker than its name: it reads text, assumes omitted depth means one, and does not inspect
 external reusable workflows, composite actions or dynamically selected actions. It names the
-full-history jobs (since A1455 only `ci.yml`'s `changes`) and checks both attempts. A1316's local
+one full-history job, `ci.yml`'s `changes`, and checks both attempts. A1316's local
 controls, when there were two such jobs, reverted each of the 22 changed
 suite checkout inputs independently and deleted each of the four required full-history inputs;
 all 26 changes failed this guard, and the restored candidate passed. Existing behavioral
@@ -3208,7 +3210,7 @@ attempt, so this conversion reduces requested history without eliminating checko
 | --- | --- | --- |
 | [Git Trace2 API](https://git-scm.com/docs/api-trace2#_enabling_a_target), checked 28 October 2026 | “`1` or `true` - Writes to `STDERR`.” | Send the event target to the existing step log without a separate artifact upload. |
 
-#### The two full-history checkouts skip old file contents (A1316)
+#### The full-history checkout skips old file contents (A1316)
 
 Both attempts of the `changes` job's checkout in `ci.yml` set `filter: blob:none` beside
 `fetch-depth: 0`. That makes it a blobless partial clone: git downloads every commit and tree,
@@ -3286,8 +3288,8 @@ requests that step already made a network call, `git fetch --no-tags origin "$BA
 | [git partial clone design](https://git-scm.com/docs/partial-clone), checked 3 November 2026 | “Missing objects can later be "demand fetched" if/when needed.” | The checkout and rename detection fetch the files they need. |
 
 The guard is the “uses full history, without old file contents, only for change classification
-and sign-off” case, with the limits stated in the section above. Deleting the filter from each
-of the four steps in turn, and adding it to the `lint` job's two checkout attempts, each failed
+and sign-off” case, with the limits stated in the section above. In A1316's controls (3 November
+2026, when four steps carried the filter), deleting the filter from each of the four steps in turn, and adding it to the `lint` job's two checkout attempts, each failed
 it: `pnpm exec vitest run scripts/ci-workflow.test.mjs -t "full history"` exited 1 for each of
 the six edits and passed on the unedited file (2 passed, 411 skipped; the other case that name
 filter matches, “reads a full history on the first attempt only”, reads a made-up snippet).

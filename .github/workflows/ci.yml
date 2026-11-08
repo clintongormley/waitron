@@ -1,13 +1,12 @@
 name: CI
 
-# `ci` is the only job in this file, and the only context, that branch protection (ruleset 19899160)
-# requires. Read the list back with:
+# `ci` is the only job in this file that branch protection (ruleset 19899160) requires. Read the
+# list back with:
 #
 #   gh api repos/:owner/:repo/rulesets/19899160 \
 #     --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
 #
 # The licence and sign-off checks are steps of the `changes` job, so they fail `ci` through it.
-# The watcher removes the old licence workflow's two contexts from the ruleset when this lands.
 #
 # The job ids below are therefore NOT a stable public interface, and removing that property is the
 # whole point of the `ci` job. Until the ruleset was changed, five ids here were required by name:

@@ -24,8 +24,8 @@ import {
 
 // Two properties of .github/workflows/ci.yml that nothing else can check:
 //
-//   * every job reports to `ci`. `ci` is the ONLY context branch protection requires, so a job
-//     missing from its `needs` can fail while the pull request stays green.
+//   * every job reports to `ci`. `ci` is the only job in ci.yml that branch protection requires,
+//     so a job missing from its `needs` can fail while the pull request stays green.
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
@@ -3574,7 +3574,9 @@ describe("the image smoke's scoping", () => {
 
 describe("main push package gates", () => {
   const changes = job("changes").body;
-  const step = changes.slice(changes.indexOf("      - id: gates"));
+  const fromGates = changes.slice(changes.indexOf("      - id: gates"));
+  const nextStep = fromGates.findIndex((line, index) => index > 0 && line.startsWith("      - "));
+  const step = nextStep === -1 ? fromGates : fromGates.slice(0, nextStep);
   const scriptAt = step.indexOf("        run: |");
   const script = step
     .slice(scriptAt + 1)
@@ -5425,13 +5427,9 @@ describe("the workflows' checkouts", () => {
   });
 });
 
-// Read as TEXT: GitHub's evaluation of the steps' conditions is not run here.
+// Read as TEXT; neither step is run here (check-signoff.test.mjs runs the sign-off step).
 describe("the licence and sign-off checks", () => {
-  const changesSteps = (() => {
-    const block = jobBlocks(lines.join("\n")).find(({ id }) => id === "changes");
-    expect(block).toBeDefined();
-    return workflowSteps(block.lines.join("\n"));
-  })();
+  const changesSteps = workflowSteps(job("changes").body.join("\n"));
   const indexOf = (predicate) => changesSteps.findIndex(predicate);
 
   it("verifies LICENSE byte-for-byte in the changes job", () => {

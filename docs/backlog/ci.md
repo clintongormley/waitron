@@ -1175,8 +1175,8 @@ In full comparison run `40765243305`, both a full-history and a shallow first at
 does not distinguish waiting for incoming data from local indexing. Capture more evidence at
 that boundary before attributing the wait to GitHub, the network or local indexing.
 Suite jobs use depth one, with full history retained for change classification and sign-off.
-Since A1316 the full-history checkouts skip old file contents
-([why, and what was measured](../developers/ci-and-gates.md#the-two-full-history-checkouts-skip-old-file-contents-a1316)).
+Since A1316 the full-history checkout skips old file contents
+([why, and what was measured](../developers/ci-and-gates.md#the-full-history-checkout-skips-old-file-contents-a1316)).
 Full baseline `40757792434` and shallow comparison `40765243305` each passed 76 jobs, with
 one skipped publish. Package test counts matched; the root gained the new history guard.
 Across the 35 converted suite instances, median stored pack bytes fell from 408,161,710 to
