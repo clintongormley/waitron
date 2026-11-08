@@ -135,7 +135,7 @@ hook, or how tests are scheduled:
   full scheduled/manual main verification or a fully checked release tag, never an ordinary main
   push. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
 - **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server reads
-  intercepted**; PRs whose scope is `documentation` or `root` skip it, as do runs reusing verified CI.
+  intercepted**; PRs whose scope is `documentation` or `root` skip it.
   A blank dashboard or till still passes, and setup's server routes are not tested. Guard:
   `scripts/bundle-smoke.test.mjs`, weaker than its name: reads workflow steps and real build-script
   declarations, not the builds or browser check. [Detail](docs/developers/ci-and-gates.md#built-applications-in-bundle-smoke).

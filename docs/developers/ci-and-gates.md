@@ -351,7 +351,7 @@ A source test cannot catch a shipped bundle that builds but fails when opened.
 The code-gated `bundle-smoke` job builds credentials, server, print-agent and
 provisioning with their existing Node build scripts, plus dashboard, setup and
 till with their Vite build scripts. This includes code pull requests that change
-no image input. Verified equal-tree PR CI can still supply the main push's result.
+no image input.
 
 The job opens the built setup page in headless Chromium and presses Continue to
 setup. It expects the setup choices to appear and refuses browser exceptions or
