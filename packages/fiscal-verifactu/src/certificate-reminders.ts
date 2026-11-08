@@ -62,7 +62,7 @@ export async function claimReminder(
   recipients: readonly Recipient[],
   now: Date,
 ): Promise<Reminder | null> {
-  const history = [...(await readHistoryNodes(tx, deps.nodeId as NodeId))];
+  const history = await readHistoryNodes(tx, deps.nodeId as NodeId);
   const install = await latestInstallAmong(tx, history);
   if (install === null) return null;
   const timeZone = await venueTimeZone(tx);
@@ -144,7 +144,7 @@ export async function reportReminder(
   outcome: "sent" | "rejected" | "unknown",
   now: Date,
 ): Promise<void> {
-  const history = [...(await readHistoryNodes(tx, deps.nodeId as NodeId))];
+  const history = await readHistoryNodes(tx, deps.nodeId as NodeId);
   await tx
     .update(fiscalCertificateReminders)
     .set({ status: STATUS[outcome], reportedAt: now })

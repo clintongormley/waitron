@@ -52,7 +52,7 @@ export function createReconciliationSweep(
         .innerJoin(envios, eq(envios.registroId, registrosFacturacion.id))
         .where(
           and(
-            inArray(registrosFacturacion.nodeId, [...deps.scope.historyNodeIds]),
+            inArray(registrosFacturacion.nodeId, deps.scope.historyNodeIds),
             eq(registrosFacturacion.idEmisorFactura, deps.scope.taxpayerId),
             eq(registrosFacturacion.entorno, deps.scope.environment),
           ),

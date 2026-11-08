@@ -22,7 +22,7 @@ export async function latestInstallAmong(
   const [row] = await tx
     .select()
     .from(fiscalCertificateInstalls)
-    .where(inArray(fiscalCertificateInstalls.nodeId, [...history]))
+    .where(inArray(fiscalCertificateInstalls.nodeId, history))
     .orderBy(desc(fiscalCertificateInstalls.installedAt))
     .limit(1);
   return row ?? null;

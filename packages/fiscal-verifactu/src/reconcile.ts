@@ -284,7 +284,7 @@ async function rowsForPeriod(
     scope === undefined
       ? sql``
       : sql`
-    and ${inArray(sql`r.node_id`, [...scope.historyNodeIds])}
+    and ${inArray(sql`r.node_id`, scope.historyNodeIds)}
     and r.id_emisor_factura = ${scope.taxpayerId}
     and r.entorno = ${scope.environment}
   `;
@@ -293,7 +293,7 @@ async function rowsForPeriod(
   const knownNode =
     scope === undefined
       ? sql`known.node_id = r.node_id`
-      : inArray(sql`known.node_id`, [...scope.historyNodeIds]);
+      : inArray(sql`known.node_id`, scope.historyNodeIds);
   const sameInvoice = sql`
         known.sale_id = r.sale_id and ${knownNode}
           and known.id_emisor_factura = r.id_emisor_factura

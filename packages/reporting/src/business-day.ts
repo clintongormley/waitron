@@ -250,5 +250,5 @@ export function reversedSalesClause(window: WindowClause): SQL {
 export function nodeScopeClause(nodeIds?: readonly NodeId[], column: SQL = sql`s.node_id`): SQL {
   if (nodeIds === undefined) return sql``;
   if (nodeIds.length === 0) throw new Error("reporting: empty box list");
-  return sql`and ${inArray(column, [...nodeIds])}`;
+  return sql`and ${inArray(column, nodeIds)}`;
 }
