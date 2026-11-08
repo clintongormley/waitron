@@ -60,7 +60,7 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
+import { PERSON_HEADER, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type {
   AttendanceCommand,
   AttendanceCommandResult,
@@ -99,6 +99,13 @@ export type {
 
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
+
+export const SESSION_PERSON_REFUSAL = "session.person_not_signed_in";
+
+/** One sign-in's person. A refusal hands back the very object its request named. */
+export interface SessionPerson {
+  personId: string;
+}
 
 /** A plain (non-array, non-null) object — the only parsed body shape an error envelope can be read from. */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -803,9 +810,6 @@ export interface DraftSave {
   revision: number;
   expectedEdit: BillEditExpected;
   lines: DraftLineInput[];
-  /** The person whose order this is; the server refuses the save unless it is the person signed
-   * in on this device. */
-  personId: string;
 }
 
 export interface BillEditState {
@@ -834,7 +838,6 @@ export interface PartyDraftSnapshot {
 
 export interface DraftTakeover {
   revision: number;
-  personId: string;
   expectedEdit: BillEditExpected;
   submissionId: string;
 }
@@ -2603,7 +2606,46 @@ export class TillApi {
    */
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
     this.#baseUrl = baseUrl;
-    this.#fetchImpl = fetchImpl;
+    this.#fetchImpl = (input, init) => this.#fetchNamingPerson(fetchImpl, input, init);
+  }
+
+  #personSource?: () => SessionPerson | null;
+  #personRefused?: (person: SessionPerson) => void;
+
+  /** Every request but the sign-in names `source()`'s person; a request the server refuses for
+   * naming someone not signed in calls `onRefused` with the person it named, whatever the status. */
+  namePersonFrom(
+    source: () => SessionPerson | null,
+    onRefused: (person: SessionPerson) => void,
+  ): void {
+    this.#personSource = source;
+    this.#personRefused = onRefused;
+  }
+
+  async #fetchNamingPerson(
+    fetchImpl: FetchLike,
+    input: Parameters<FetchLike>[0],
+    init?: RequestInit,
+  ): Promise<Response> {
+    const signIn = String(input).endsWith("/api/session") && init?.method === "POST";
+    const person = signIn ? null : (this.#personSource?.() ?? null);
+    if (person === null) return fetchImpl(input, init);
+    const headers = new Headers(init?.headers);
+    headers.set(PERSON_HEADER, person.personId);
+    const res = await fetchImpl(input, { ...init, headers });
+    if (!res.ok) {
+      const parsed: unknown = await res
+        .clone()
+        .json()
+        .catch(() => undefined);
+      if (
+        isRecord(parsed) &&
+        isRecord(parsed.error) &&
+        parsed.error.code === SESSION_PERSON_REFUSAL
+      )
+        this.#personRefused?.(person);
+    }
+    return res;
   }
 
   listDepartmentTransferDestinations(options: ReadOptions = {}): Promise<{
@@ -2744,10 +2786,8 @@ export class TillApi {
     return this.#request<SessionResult>("/api/session", "POST", { personId, pin });
   }
 
-  /** `personId` is the person this tab believes is signed in. The server ends nothing when the
-   * session behind the device's cookie is someone else's. */
-  async logout(personId: string): Promise<void> {
-    await this.#request<{ ok: boolean }>("/api/session", "DELETE", { personId });
+  async logout(): Promise<void> {
+    await this.#request<{ ok: boolean }>("/api/session", "DELETE");
   }
 
   getClockState(options: ReadOptions = {}): Promise<TillClockState> {
@@ -4246,7 +4286,7 @@ export class TillApi {
   splitHeldLineIntoUnits(
     partyId: string,
     lineId: string,
-    command: GroupCommand & { personId: string; expectedEdit: BillEditExpected },
+    command: GroupCommand & { expectedEdit: BillEditExpected },
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4369,7 +4409,7 @@ export class TillApi {
   recallToDraft(
     partyId: string,
     lineId: string,
-    command: GroupCommand & { personId: string; expectedEdit: BillEditExpected },
+    command: GroupCommand & { expectedEdit: BillEditExpected },
     options: ReadOptions = {},
   ): Promise<{ revision: number; draft: Draft; edit: BillEditState }> {
     return this.#request(

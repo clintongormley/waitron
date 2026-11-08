@@ -286,7 +286,6 @@ describe("bill-scoped saved work and retained local candidates", () => {
       "draft-1",
       {
         revision: 4,
-        personId: "ana",
         submissionId: expect.any(String),
         expectedEdit: { billId: "bill-1", editorVersion: 3, draftId: "draft-1", draftRevision: 4 },
       },
@@ -370,7 +369,6 @@ describe("bill-scoped saved work and retained local candidates", () => {
             expect.objectContaining({ menuItemId: "offer-steak", quantity: "1" }),
             expect.objectContaining({ menuItemId: "offer-salad", quantity: "3" }),
           ],
-          personId: "ana",
         },
         { signal: expect.any(AbortSignal) },
       );
@@ -413,7 +411,6 @@ describe("bill-scoped saved work and retained local candidates", () => {
         revision: 0,
         expectedEdit: { billId: "bill-1", editorVersion: 0, draftId: null, draftRevision: null },
         lines: [expect.objectContaining({ menuItemId: "offer-salad", quantity: "1" })],
-        personId: "ana",
       },
       { signal: expect.any(AbortSignal) },
     );

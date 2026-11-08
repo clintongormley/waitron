@@ -4871,7 +4871,6 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         "draft-b2",
         {
           revision: 1,
-          personId: "p1",
           expectedEdit: {
             billId: "b2",
             editorVersion: 1,
@@ -5524,7 +5523,6 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           "draft-b2",
           {
             revision: 0,
-            personId: "p1",
             expectedEdit: { billId: "b2", editorVersion: 1, draftId: "draft-b2", draftRevision: 0 },
             submissionId: expect.any(String),
           },

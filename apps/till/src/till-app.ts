@@ -13284,7 +13284,6 @@ export class TillApp extends LitElement {
       try {
         return await composition.api.splitHeldLineIntoUnits(party.id, lineId, {
           ...command,
-          personId: composition.sync!.personId,
           expectedEdit,
         });
       } catch (error) {
@@ -13334,7 +13333,6 @@ export class TillApp extends LitElement {
           {
             submissionId: crypto.randomUUID(),
             expectedPartyRevision: party.revision,
-            personId: state.personId,
             expectedEdit: state.expectedEdit,
           },
           options,
@@ -13680,7 +13678,6 @@ export class TillApp extends LitElement {
             {
               submissionId: crypto.randomUUID(),
               expectedPartyRevision: party.revision,
-              personId: state.personId,
               expectedEdit: state.expectedEdit,
             },
             options,
@@ -20075,7 +20072,6 @@ export class TillApp extends LitElement {
 
   /** Keeps the basket: it belongs to the till. */
   async #onLogout(endServerSession = true): Promise<void> {
-    const personId = this.#sessionPersonId;
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
@@ -20132,7 +20128,7 @@ export class TillApp extends LitElement {
     if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
     if (endServerSession)
       try {
-        await api.logout(personId);
+        await api.logout();
       } catch {
         // The device is already locked locally.
       }

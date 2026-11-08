@@ -7585,7 +7585,6 @@ describe("till-app: the order's groups", () => {
             "line-steak",
             {
               ...command(3),
-              personId: "p1",
               expectedEdit: {
                 billId: "wo-4",
                 editorVersion: 0,
@@ -7635,7 +7634,6 @@ describe("till-app: the order's groups", () => {
           "line-steak",
           {
             ...command(3),
-            personId: "p1",
             expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
           },
         ],
@@ -7723,7 +7721,6 @@ describe("till-app: the order's groups", () => {
           "line-steak",
           {
             ...command(3),
-            personId: "p1",
             expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
           },
         ],
@@ -7765,7 +7762,6 @@ describe("till-app: the order's groups", () => {
           "line-steak",
           {
             ...command(3),
-            personId: "p1",
             expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
           },
         ],
@@ -7811,7 +7807,6 @@ describe("till-app: the order's groups", () => {
           "line-steak",
           {
             ...command(3),
-            personId: "p1",
             expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
           },
         ],
@@ -7934,7 +7929,6 @@ describe("till-app: the order's groups", () => {
           type === "split-group-line"
             ? {
                 ...command(3),
-                personId: "p1",
                 expectedEdit: {
                   billId: "wo-4",
                   editorVersion: 0,
@@ -9100,7 +9094,6 @@ describe("till-app: Current orders", () => {
       expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
-        personId: "p1",
         expectedEdit: { billId, editorVersion, draftId: null, draftRevision: null },
       });
       expect(order.orderId).toBe("wo-4");
@@ -9339,7 +9332,6 @@ describe("till-app: Current orders", () => {
     expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
       submissionId: expect.any(String),
       expectedPartyRevision: 4,
-      personId: "p1",
       expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     });
     expect(order.groupCommandBusy).toBe(false);
@@ -9372,7 +9364,6 @@ describe("till-app: Current orders", () => {
     expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
       submissionId: expect.any(String),
       expectedPartyRevision: 3,
-      personId: "p1",
       expectedEdit: { billId: "wo-check", editorVersion: 8, draftId: null, draftRevision: null },
     });
   });

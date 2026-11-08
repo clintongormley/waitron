@@ -357,7 +357,6 @@ describe("DraftSync: saving", () => {
         revision: 0,
         expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         lines: [expect.objectContaining({ menuItemId: "offer-beer", quantity: "3" })],
-        personId: "p1",
       },
       { signal: expect.any(AbortSignal) },
     );
@@ -386,25 +385,10 @@ describe("DraftSync: saving", () => {
           draftRevision: 1,
         },
         lines: [expect.anything(), expect.anything()],
-        personId: "p1",
       },
       { signal: expect.any(AbortSignal) },
     );
     expect(draft.revision).toBe(2);
-  });
-
-  it("names the sync's person in every save", async () => {
-    server.personId = "p7";
-    const draft = sync("p7");
-    await draft.load();
-    draft.store.addProduct(beer, "1");
-    await settle();
-    expect(server.saveDraft.mock.calls[0]![1].personId).toBe("p7");
-
-    draft.store.addProduct(steak, "1");
-    await settle();
-
-    expect(server.saveDraft.mock.calls[1]![1].personId).toBe("p7");
   });
 
   it("never has two saves out: edits made while one is out go in one save after it answers", async () => {
@@ -441,7 +425,6 @@ describe("DraftSync: saving", () => {
         expect.objectContaining({ menuItemId: "offer-beer", quantity: "1" }),
         expect.objectContaining({ menuItemId: "offer-steak", quantity: "2" }),
       ],
-      personId: "p1",
     });
   });
 
@@ -1760,7 +1743,6 @@ describe("DraftSync: taking over another person's draft", () => {
       theirs.id,
       {
         revision: theirs.revision,
-        personId: "p1",
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -2122,7 +2104,6 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
       elsewhere.id,
       {
         revision,
-        personId: "p1",
         expectedEdit: {
           billId: "wo-check",
           editorVersion: 1,

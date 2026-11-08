@@ -3,6 +3,7 @@ import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.
 import { productUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import {
+  SESSION_PERSON_REFUSAL,
   isNetworkFailure,
   type Draft,
   type DraftLine,
@@ -29,7 +30,7 @@ export const DRAFT_REFUSALS: ReadonlySet<string> = new Set([
   "draft.already_submitted",
 ]);
 
-export const SESSION_PERSON_REFUSAL = "session.person_not_signed_in";
+export { SESSION_PERSON_REFUSAL };
 
 /** A table draft: a tap adds into a line that orders the same thing, as the server's save does. */
 export class DraftStore extends WorkingOrderStore {
@@ -703,7 +704,6 @@ export class DraftSync {
         draftId,
         {
           revision,
-          personId: this.personId,
           expectedEdit: this.expectedEdit!,
           submissionId: crypto.randomUUID(),
         },
@@ -749,7 +749,7 @@ export class DraftSync {
       taken = await this.#options.api.takeOverDraft(
         this.partyId,
         draftId,
-        { revision, personId: this.personId, expectedEdit, submissionId: crypto.randomUUID() },
+        { revision, expectedEdit, submissionId: crypto.randomUUID() },
         { signal: limit.signal },
       );
     } catch (error) {
@@ -969,7 +969,6 @@ export class DraftSync {
           revision: this.#revision,
           expectedEdit,
           lines,
-          personId: this.personId,
         },
         { signal: limit.signal },
       );

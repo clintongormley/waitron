@@ -706,7 +706,7 @@ describe("W69 unassigned table draft", () => {
     oldDiscard.click();
     await flush(el);
     expect(api.logout).toHaveBeenCalledTimes(1);
-    expect(api.logout).toHaveBeenCalledWith("p1");
+    expect(api.logout).toHaveBeenCalledWith();
     expect(server.saveDraft).not.toHaveBeenCalled();
     expect(server.submitDraft).not.toHaveBeenCalled();
   });
@@ -4994,7 +4994,6 @@ describe("till-app: other people's drafts and taking one over", () => {
       alexs.id,
       {
         revision: alexs.revision,
-        personId: SAM,
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -5054,7 +5053,6 @@ describe("till-app: other people's drafts and taking one over", () => {
       alexs.id,
       {
         revision: alexs.revision,
-        personId: SAM,
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -8433,7 +8431,6 @@ describe("recalled draft source splitting", () => {
       {
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
-        personId: "p1",
         expectedEdit: {
           billId: "wo-4",
           editorVersion: 1,
@@ -8958,7 +8955,6 @@ describe("recalled draft source splitting", () => {
         "source-7",
         {
           expectedPartyRevision: 3,
-          personId: "p1",
           submissionId: expect.any(String),
           expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         },
@@ -9022,7 +9018,6 @@ describe("recalled draft source splitting", () => {
               afterGroupId: null,
             },
           ],
-          personId: "p1",
         },
         { signal: expect.any(AbortSignal) },
       );
@@ -9457,7 +9452,6 @@ describe("recalled draft source splitting", () => {
             "source-7",
             {
               expectedPartyRevision: 4,
-              personId: "p1",
               submissionId: expect.any(String),
               expectedEdit: {
                 billId: "wo-4",

@@ -51,7 +51,6 @@ describe("bill editing over the till client", () => {
   it("sends the shown bill observation and command identity in a takeover", async () => {
     const ask = {
       revision: 3,
-      personId: "person-1",
       expectedEdit: { billId: "bill-2", editorVersion: 7, draftId: "draft-2", draftRevision: 3 },
       submissionId: "takeover-1",
     };
@@ -95,7 +94,6 @@ describe("bill editing over the till client", () => {
         revision: 3,
         lines: [],
         expectedEdit: { billId: "bill-2", editorVersion: 6, draftId: "draft-2", draftRevision: 3 },
-        personId: "p1",
       }),
     ).rejects.toEqual({ ...params, code: "draft.taken_over", status: 409 });
   });
