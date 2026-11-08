@@ -1910,8 +1910,9 @@ to the app build only. In order, the publish job:
    on `main`, or a `v*` tag; on `main` the read happens inside `main-tag-guard.sh`, which also
    decides `move` or `hold`, and on a tag the tags step calls the read directly, with no decision.
    A read error or timeout fails the job;
-3. fails when that environment's `WAITRON_PRODUCER_TAX_ID` differs from the secret, unless the
-   repository variable `WAITRON_PRODUCER_CHANGE_ALLOWED` holds the new tax number itself. A `:main`
+3. fails when that environment's `WAITRON_PRODUCER_TAX_ID` differs from the secret, both trimmed as
+   a box trims them, unless the repository variable `WAITRON_PRODUCER_CHANGE_ALLOWED`, trimmed the
+   same way and not blank, holds the new tax number itself. A `:main`
    carrying no tax number, or no `:main` at all, is no difference. A variable left set lets through
    only a change to that same number, later ones included;
 4. builds the app image with `load: true` (one platform; a second needs this rechecked);
@@ -1920,15 +1921,16 @@ to the app build only. In order, the publish job:
 6. runs `node /app/server.js check-producer` in that image, under `timeout 120` and with no network: each
    fiscal module's `refuseSettings` seat checks the image's own environment as a production start
    does (for Veri\*Factu, the shared `software_producer.invalid` checks and its own
-   `sif.producer_invalid` ones), and a refusal prints its code, setting and reason, never a value;
+   `sif.producer_invalid` ones), and a refusal prints its code, setting and reason, never a value; a fiscal module with no such seat is skipped, and with none at all the step logs that and passes;
 7. builds again with `push: true` from the builder's cache, with the tags step's tags, then pushes
    the print-agent image, which takes none of the three.
 
 The pushed image is rebuilt from cache rather than `docker push`ed from the loaded one, so it is
 built from the same arguments but is not byte-for-byte the compared image. Guards:
 `scripts/ci-workflow.test.mjs` (runs the four producer step scripts, and the tags step on a
-release tag, against fixtures and a stand-in `docker`; for step 6 the stand-in runs that command
-from source under `tsx`, not the bundle in an image; it reads the rest as text),
+release tag, against fixtures and a stand-in `docker`; for step 6 the stand-in only answers a
+status and runs nothing; it reads the rest as text), `apps/server/src/bin.commands.test.ts` (runs
+that command in the built program on the test runner, not in an image),
 `scripts/deploy-image-env.test.ts` (reads the Dockerfile and `compose.yml` as text) and
 `scripts/main-tag-guard.test.mjs` (the hand-back and `published-image-env.sh`, against a stubbed
 `docker`). None runs the job.

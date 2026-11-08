@@ -273,7 +273,7 @@ export { CALENDAR_COLOURS, type CalendarColour } from "./calendar-colours.js";
 export { classifyTimeZone, classifySavedTimeZone, timeZoneOffsetMinutes } from "./time-zone.js";
 export type { SavedTimeZone } from "./time-zone.js";
 export { isUnset } from "./env-value.js";
-export { readSoftwareProducer, type SoftwareProducer } from "./software-producer.js";
+export { readSoftwareProducer } from "./software-producer.js";
 export type { PricingUnit } from "./menu-document/pricing-unit.js";
 export {
   allergenKinds,

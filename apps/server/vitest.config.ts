@@ -44,7 +44,6 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // `src/bin.ts` is the process entry point, exercised only by a manual end-to-end boot.
       // `src/boot.ts` is deliberately NOT here: an unreachable branch carries its own `v8 ignore`
       // in place, never a file-level exclusion.
       exclude: [...coverageConfigDefaults.exclude, "scripts/**", "src/testing/**", "src/bin.ts"],

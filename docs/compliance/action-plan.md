@@ -213,8 +213,10 @@ We offered reciprocity in the message. Send it.
 > **2026-11-08:** Task 8 is built and parked for the owner. Once it lands, the records name the
 > producer from the image's three settings, and a production start with none of them refuses
 > whether or not the build is published, replacing the 2026-10-23 note's "a published production
-> build will not trade". Before it lands the three repository secrets must be set, and the tax
-> number must not change until A993 lands.
+> build will not trade". The three repository secrets hold placeholder values for now (owner,
+> 2026-11-08), so records from an official image name that placeholder until the real values
+> replace it, which is safe only while no box has started in production. Apart from that
+> replacement, the tax number must not change until A993 lands.
 
 Needed before anyone else uses the software; already overdue in principle, since the producer
 deadline passed on 29 July 2025.

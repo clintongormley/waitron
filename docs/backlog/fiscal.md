@@ -1322,13 +1322,13 @@ open the new installation, so a change of producer is blocked in production unti
 The three secrets hold placeholder values for now (owner, 2026-11-08; `gh secret list` showed all three set that day); replacing them, with
 `gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`,
 is safe only while no box has started in production, because a production chain refuses a different producer tax number until A993 lands.
-Every full run's publish job fails while any is missing. The tax number must not change until A993 lands: the publish job runs on every full run (the nightly, a
+Every full run's publish job fails while any is missing. Once an image carrying a placeholder is published, replacing its tax number also needs `WAITRON_PRODUCER_CHANGE_ALLOWED` set to the new number. Apart from replacing the placeholder, the tax number must not change until A993 lands: the publish job runs on every full run (the nightly, a
 manual run on `main`, a `v*` tag), so a changed name or address reaches boxes as they update, but a
 changed tax number fails the publish unless the repository variable
 `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Watch the first nightly or manual publish:
 the job builds with `load: true`, checks the three values inside the image and runs the server's
 own producer check there, then pushes from the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
-plan's 8g Step 5) waits for the secrets.
+plan's 8g Step 5) is still to do.
 Then slices 1b to 6, and A993's plan. Still needed from outside: the asesor's answer to Q53. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 

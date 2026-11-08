@@ -588,6 +588,9 @@ taxpayer.
 >   address reaches boxes as they update, and only a changed tax number is held, by 8g's guard.
 >   Each is corrected in place.
 > - The owner answered the A993 question on 2026-11-06; "What A993 inherits" now records it.
+> - 2026-11-08, later: the owner had the three secrets set to placeholder values, so the fork test
+>   no longer waits (it is still not run), and "Setting the secrets" and 8h's "must be set before
+>   it lands" no longer apply. The separate checker became `node /app/server.js check-producer`.
 
 > **This replaces every earlier Task 8.** The original (fill two constants), the 2026-11-03 amendment
 > (a box's private `.env` and `--producer-file`) and the 2026-11-04 proposal (a venue-database row,
