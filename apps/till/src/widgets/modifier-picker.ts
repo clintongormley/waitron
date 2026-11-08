@@ -54,6 +54,18 @@ export interface ModifierConfirmDetail extends LineSelection {
   courseId?: string;
 }
 
+/** What an inline picker tells its host after any update that moves one of these. */
+export interface ModifierChangeDetail {
+  /** The draft differs from what it opened with, or from what it last confirmed. */
+  changed: boolean;
+  /** The windowed Save would be enabled now. */
+  savable: boolean;
+  /** The windowed footer would show `form.fix_fields` now. */
+  fixFields: boolean;
+  /** What a confirm would send now. */
+  selection: ModifierConfirmDetail;
+}
+
 /**
  * One pick's identity while the dialog is open. A product can be offered by two of a dish's lists at
  * two prices, so the list has to be part of the key: counting by product alone would make one
@@ -224,6 +236,11 @@ export class TillModifierPicker extends LitElement {
   @property({ attribute: false }) stagedRemoval?: StagedRemoval;
   #removalStaged = false;
   @property({ attribute: false }) draftParent?: object;
+  /** Draws only the fields, for a host window to hold: no window, actions, variants, course or
+   * total. The host saves through {@link confirm}, guards leaving through {@link requestLeave} and
+   * follows `wt-modifier-change`. */
+  @property({ type: Boolean }) inline = false;
+  #reported?: { key: string; product: TillProduct };
   @state() private courseId = "";
   @state() private editedQuantity = "1";
   @state() private attempted = false;
@@ -256,8 +273,12 @@ export class TillModifierPicker extends LitElement {
       picks: { ...this.picks },
       answers: { ...this.answers },
       note: this.note.trim(),
-      courseId: this.initialCourse === undefined ? null : this.courseId,
+      courseId: this.#hasCourse ? this.courseId : null,
     };
+  }
+
+  get #hasCourse(): boolean {
+    return this.initialCourse !== undefined && !this.inline;
   }
 
   override connectedCallback(): void {
@@ -347,7 +368,7 @@ export class TillModifierPicker extends LitElement {
   /** Every variant the offer lists, in variant order; an unavailable one is drawn disabled. The
    * parent itself is never offered: a product with variants is sold as one of them. */
   get #variants() {
-    return this.product.variants ?? [];
+    return this.inline ? [] : (this.product.variants ?? []);
   }
 
   get #chosenVariant() {
@@ -517,21 +538,7 @@ export class TillModifierPicker extends LitElement {
     if (this.lineDetails && this.#quantityInvalid()) return;
     if (!this.#satisfied(this.#stalePicks(), this.#listTotals())) return;
     const submitted = this.#draft();
-    const extras = this.#selectedExtras();
-    const options = this.#selectedOptions();
-    const detail: ModifierConfirmDetail = {
-      product: this.#selectedProduct,
-      ...(this.lineDetails && this.initialSelections !== undefined
-        ? { quantity: this.editedQuantity }
-        : {}),
-      ...(this.initialCourse === undefined ? {} : { courseId: this.courseId }),
-      ...(extras.length === 0 ? {} : { extras }),
-      ...(options.length === 0 ? {} : { options, optionSnapshots: this.#selectedSnapshots() }),
-    };
-    const note = this.note.trim();
-    if (note !== "") {
-      detail.note = note;
-    }
+    const detail = this.#detail();
     // Consumers can leave during the event; a refused apply must restore this draft's baseline.
     const baseline = this.#baseline;
     this.#baseline = submitted;
@@ -548,6 +555,62 @@ export class TillModifierPicker extends LitElement {
       this.#baseline = baseline;
       if (baseline !== undefined) this.#scope?.commit(baseline);
     }
+  }
+
+  #detail(): ModifierConfirmDetail {
+    const extras = this.#selectedExtras();
+    const options = this.#selectedOptions();
+    const detail: ModifierConfirmDetail = {
+      product: this.#selectedProduct,
+      ...(this.lineDetails && this.initialSelections !== undefined
+        ? { quantity: this.editedQuantity }
+        : {}),
+      ...(this.#hasCourse ? { courseId: this.courseId } : {}),
+      ...(extras.length === 0 ? {} : { extras }),
+      ...(options.length === 0 ? {} : { options, optionSnapshots: this.#selectedSnapshots() }),
+    };
+    const note = this.note.trim();
+    if (note !== "") {
+      detail.note = note;
+    }
+    return detail;
+  }
+
+  /** Saves as the windowed Save does: the same checks, the same cancelable `wt-modifier-confirm`. */
+  confirm(): void {
+    this.#confirm();
+  }
+
+  /** Asks the leave question when the draft changed; true when the host may close. */
+  async requestLeave(reason: LeaveReason): Promise<boolean> {
+    return this.#leave ? this.#beforeClose(reason) : true;
+  }
+
+  override updated(): void {
+    if (!this.inline || !this.product || !this.#scope) return;
+    const saveAction = this.#saveAction();
+    const quantityRefused = this.attempted && this.lineDetails && this.#quantityInvalid();
+    const report: ModifierChangeDetail = {
+      changed: !saveAction.unchanged,
+      savable:
+        !this.disabled &&
+        !this.readOnly &&
+        !saveAction.unchanged &&
+        !quantityRefused &&
+        this.#satisfied(this.#stalePicks(), this.#listTotals()),
+      fixFields: !this.readOnly && quantityRefused,
+      selection: this.#detail(),
+    };
+    const key = JSON.stringify({ ...report, selection: { ...report.selection, product: null } });
+    if (this.#reported?.key === key && this.#reported.product === report.selection.product) return;
+    this.#reported = { key, product: report.selection.product };
+    this.dispatchEvent(
+      new CustomEvent<ModifierChangeDetail>("wt-modifier-change", {
+        detail: report,
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   #cancel(event: Event): void {
@@ -585,6 +648,168 @@ export class TillModifierPicker extends LitElement {
     const totals = this.#listTotals();
     const saveAction = this.#saveAction();
     const satisfied = this.#satisfied(stale, totals);
+    const fields = html`<div ?inert=${this.disabled}>
+      ${this.inline ? nothing : html`<slot name="line-details"></slot>${lineNutrition(this.nutrition)}`}
+      ${
+        this.readOnly
+          ? html`
+              <p>${this.quantity}</p>
+              ${(this.initialSelections?.extras ?? []).map((extra) => html`<p>${extra.name} ×${extra.quantity}</p>`)}
+              ${
+                this.initialSelections?.optionSnapshots !== undefined
+                  ? optionAnswers(this.initialSelections.optionSnapshots, {
+                      reads: "staff",
+                    }).map((answer) => html`<p>${answer}</p>`)
+                  : (this.initialSelections?.options ?? []).map(
+                      (answer) =>
+                        html`<p>
+                          ${this.product.offeredModifiers?.flatMap((list) => (list.kind === "options" && list.id === answer.listId ? list.labels.filter((label) => label.id === answer.labelId).map((label) => label.name) : []))}
+                        </p>`,
+                    )
+              }
+              ${this.initialSelections?.note ? html`<p>${t("line.note.label")}: ${this.initialSelections.note}</p>` : nothing}
+            `
+          : html`
+              ${
+                this.lineDetails && this.initialSelections !== undefined
+                  ? html`<wt-input
+                      name="quantity"
+                      label=${t("table.split_quantity")}
+                      required
+                      decimal-locale=${currentLocale()}
+                      .value=${this.editedQuantity}
+                      .error=${this.attempted && this.#quantityInvalid() ? t("line.quantity_invalid") : ""}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        event.stopPropagation();
+                        if (!this.isConnected || !this.active || this.disabled || this.readOnly)
+                          return;
+                        this.editedQuantity = event.detail.value;
+                        this.#scope?.changed();
+                      }}
+                    ></wt-input>`
+                  : nothing
+              }
+              ${
+                !this.#hasCourse
+                  ? nothing
+                  : html`<wt-combobox
+                      name="course"
+                      label=${`${t("table.course_label")} · ${productName(this.product)}`}
+                      placeholder=${this.coursePlaceholder || this.courseChoices.find((choice) => choice.value === "")?.label || ""}
+                      search="auto"
+                      searchPlaceholder=${t("form.combobox_search")}
+                      noResultsLabel=${t("form.combobox_no_results")}
+                      .options=${this.courseChoices}
+                      .value=${this.courseId}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        event.stopPropagation();
+                        if (
+                          !this.isConnected ||
+                          !this.active ||
+                          this.disabled ||
+                          !this.courseChoices.some((choice) => choice.value === event.detail.value)
+                        )
+                          return;
+                        this.courseId = event.detail.value;
+                        this.#scope?.changed();
+                      }}
+                    ></wt-combobox>`
+              }
+              ${
+                this.#variants.length === 0
+                  ? nothing
+                  : html`<fieldset class="group">
+                      <legend class="group-name">${t("modifier.variant")} *</legend>
+                      ${this.#variants.map(
+                        (variant) =>
+                          html`<label class="option">
+                            <input
+                              type="radio"
+                              name="product-variant"
+                              value=${variant.id}
+                              .checked=${this.variantId === variant.id}
+                              ?disabled=${!variant.available}
+                              @change=${(event: Event) => {
+                                event.stopPropagation();
+                                if (!this.isConnected || !this.active) return;
+                                this.variantId = variant.id;
+                                this.#scope?.changed();
+                              }}
+                            />
+                            <span class="option-name">${variant.name}</span>
+                            ${
+                              variant.unitPriceDifference === null
+                                ? nothing
+                                : html`<span class="price-difference"
+                                    >${priceDifference(variant.unitPriceDifference)}</span
+                                  >`
+                            }
+                            <span class="option-delta"
+                              >${formatMoney(variant.unitPrice, currentLocale())}</span
+                            >
+                          </label>`,
+                      )}
+                    </fieldset>`
+              }
+              ${this.#offered.map((entry) =>
+                entry.kind === "extras"
+                  ? this.#renderExtras(entry, totals.get(entry.id) ?? 0)
+                  : this.#renderOptions(entry),
+              )}
+              ${stale.map(
+                (extra) =>
+                  html`<p class="refusal" role="alert">
+                    ${extra.name}: ${t("modifier.selection_changed")}
+                  </p>`,
+              )}
+              ${
+                this.initialSelections !== undefined && !this.withNote
+                  ? nothing
+                  : this.lineDetails && this.note === "" && !this.noteExpanded
+                    ? html`<wt-button
+                        class="add-note"
+                        variant="secondary"
+                        @click=${async (event: Event) => {
+                          event.stopPropagation();
+                          if (!this.isConnected || !this.active || this.disabled || this.readOnly)
+                            return;
+                          const connection = this.#connection;
+                          this.noteExpanded = true;
+                          await this.updateComplete;
+                          const field = this.shadowRoot!.querySelector("wt-textarea");
+                          await field?.updateComplete;
+                          if (
+                            connection === this.#connection &&
+                            this.isConnected &&
+                            this.active &&
+                            !this.disabled &&
+                            !this.readOnly
+                          )
+                            field?.focus();
+                        }}
+                        >${t("line.note.add")}</wt-button
+                      >`
+                    : renderLineExtrasEditor({
+                        note: this.note,
+                        onNoteChange: (note) => {
+                          if (!this.isConnected || !this.active) return;
+                          this.note = note;
+                          this.#scope?.changed();
+                        },
+                      })
+              }
+              ${
+                this.showTotal && !this.inline
+                  ? html`<div class="running">
+                      <span class="running-label">${t("label.total")}</span>
+                      <span class="running-amount">${this.#runningPrice}</span>
+                    </div>`
+                  : nothing
+              }
+            `
+      }
+    </div>`;
+    if (this.inline) return fields;
     const modal = html`<wt-modal
       ${trackDialog()}
       size="standard"
@@ -593,170 +818,7 @@ export class TillModifierPicker extends LitElement {
       .heading=${productName(this.product)}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
-      <div ?inert=${this.disabled}>
-        <slot name="line-details"></slot>
-        ${lineNutrition(this.nutrition)}
-        ${
-          this.readOnly
-            ? html`
-                <p>${this.quantity}</p>
-                ${(this.initialSelections?.extras ?? []).map((extra) => html`<p>${extra.name} ×${extra.quantity}</p>`)}
-                ${
-                  this.initialSelections?.optionSnapshots !== undefined
-                    ? optionAnswers(this.initialSelections.optionSnapshots, {
-                        reads: "staff",
-                      }).map((answer) => html`<p>${answer}</p>`)
-                    : (this.initialSelections?.options ?? []).map(
-                        (answer) =>
-                          html`<p>
-                            ${this.product.offeredModifiers?.flatMap((list) => (list.kind === "options" && list.id === answer.listId ? list.labels.filter((label) => label.id === answer.labelId).map((label) => label.name) : []))}
-                          </p>`,
-                      )
-                }
-                ${this.initialSelections?.note ? html`<p>${t("line.note.label")}: ${this.initialSelections.note}</p>` : nothing}
-              `
-            : html`
-                ${
-                  this.lineDetails && this.initialSelections !== undefined
-                    ? html`<wt-input
-                        name="quantity"
-                        label=${t("table.split_quantity")}
-                        required
-                        decimal-locale=${currentLocale()}
-                        .value=${this.editedQuantity}
-                        .error=${this.attempted && this.#quantityInvalid() ? t("line.quantity_invalid") : ""}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                          event.stopPropagation();
-                          if (!this.isConnected || !this.active || this.disabled || this.readOnly)
-                            return;
-                          this.editedQuantity = event.detail.value;
-                          this.#scope?.changed();
-                        }}
-                      ></wt-input>`
-                    : nothing
-                }
-                ${
-                  this.initialCourse === undefined
-                    ? nothing
-                    : html`<wt-combobox
-                        name="course"
-                        label=${`${t("table.course_label")} · ${productName(this.product)}`}
-                        placeholder=${this.coursePlaceholder || this.courseChoices.find((choice) => choice.value === "")?.label || ""}
-                        search="auto"
-                        searchPlaceholder=${t("form.combobox_search")}
-                        noResultsLabel=${t("form.combobox_no_results")}
-                        .options=${this.courseChoices}
-                        .value=${this.courseId}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                          event.stopPropagation();
-                          if (
-                            !this.isConnected ||
-                            !this.active ||
-                            this.disabled ||
-                            !this.courseChoices.some(
-                              (choice) => choice.value === event.detail.value,
-                            )
-                          )
-                            return;
-                          this.courseId = event.detail.value;
-                          this.#scope?.changed();
-                        }}
-                      ></wt-combobox>`
-                }
-                ${
-                  this.#variants.length === 0
-                    ? nothing
-                    : html`<fieldset class="group">
-                        <legend class="group-name">${t("modifier.variant")} *</legend>
-                        ${this.#variants.map(
-                          (variant) =>
-                            html`<label class="option">
-                              <input
-                                type="radio"
-                                name="product-variant"
-                                value=${variant.id}
-                                .checked=${this.variantId === variant.id}
-                                ?disabled=${!variant.available}
-                                @change=${(event: Event) => {
-                                  event.stopPropagation();
-                                  if (!this.isConnected || !this.active) return;
-                                  this.variantId = variant.id;
-                                  this.#scope?.changed();
-                                }}
-                              />
-                              <span class="option-name">${variant.name}</span>
-                              ${
-                                variant.unitPriceDifference === null
-                                  ? nothing
-                                  : html`<span class="price-difference"
-                                      >${priceDifference(variant.unitPriceDifference)}</span
-                                    >`
-                              }
-                              <span class="option-delta"
-                                >${formatMoney(variant.unitPrice, currentLocale())}</span
-                              >
-                            </label>`,
-                        )}
-                      </fieldset>`
-                }
-                ${this.#offered.map((entry) =>
-                  entry.kind === "extras"
-                    ? this.#renderExtras(entry, totals.get(entry.id) ?? 0)
-                    : this.#renderOptions(entry),
-                )}
-                ${stale.map(
-                  (extra) =>
-                    html`<p class="refusal" role="alert">
-                      ${extra.name}: ${t("modifier.selection_changed")}
-                    </p>`,
-                )}
-                ${
-                  this.initialSelections !== undefined && !this.withNote
-                    ? nothing
-                    : this.lineDetails && this.note === "" && !this.noteExpanded
-                      ? html`<wt-button
-                          class="add-note"
-                          variant="secondary"
-                          @click=${async (event: Event) => {
-                            event.stopPropagation();
-                            if (!this.isConnected || !this.active || this.disabled || this.readOnly)
-                              return;
-                            const connection = this.#connection;
-                            this.noteExpanded = true;
-                            await this.updateComplete;
-                            const field = this.shadowRoot!.querySelector("wt-textarea");
-                            await field?.updateComplete;
-                            if (
-                              connection === this.#connection &&
-                              this.isConnected &&
-                              this.active &&
-                              !this.disabled &&
-                              !this.readOnly
-                            )
-                              field?.focus();
-                          }}
-                          >${t("line.note.add")}</wt-button
-                        >`
-                      : renderLineExtrasEditor({
-                          note: this.note,
-                          onNoteChange: (note) => {
-                            if (!this.isConnected || !this.active) return;
-                            this.note = note;
-                            this.#scope?.changed();
-                          },
-                        })
-                }
-                ${
-                  this.showTotal
-                    ? html`<div class="running">
-                        <span class="running-label">${t("label.total")}</span>
-                        <span class="running-amount">${this.#runningPrice}</span>
-                      </div>`
-                    : nothing
-                }
-              `
-        }
-      </div>
+      ${fields}
       ${!this.readOnly && this.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p slot="footer" role="alert">${t("form.fix_fields")}</p>` : nothing}
       <wt-button
         slot="footer"

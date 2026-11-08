@@ -2343,6 +2343,9 @@ export interface OrderLinePatch {
   options?: OptionSelection[];
   extras?: ExtraSelection[];
   makeAt?: string | null;
+  /** The other line numbers of the same Sent row, changed in the same save. With it, `quantity` is
+   * the row's total, a whole number no lower than it is now; a weighed dish leaves `quantity` out. */
+  portionLineNos?: number[];
 }
 
 /** `GET /api/working-orders/:id/lines` — an open tab's lines and the revision they were read at. */
@@ -3321,9 +3324,11 @@ export class TillApi {
 
   /**
    * Edit ONE dish line of an open order → `PUT /api/working-orders/:orderId/lines/:lineNo`, from the
-   * copy read at `revision`. An absent field keeps the line's own. Rejects `working_order.out_of_date`,
-   * `order.payment_in_flight`, `ticket.already_started`, `ticket.already_fired` or
-   * `tab.line_not_found`. Resolves the revision the order is at after the edit, and its party's.
+   * copy read at `revision`. An absent field keeps the line's own; with `portionLineNos` the change
+   * goes to every dish of the line's Sent row. Rejects `working_order.out_of_date`,
+   * `draft.taken_over`, `draft.out_of_date`, `order.payment_in_flight`, `bill.line_paid`,
+   * `ticket.already_started`, `ticket.already_fired` or `tab.line_not_found`. Resolves the revision
+   * the order is at after the edit, and its party's.
    */
   updateOrderLine(
     orderId: string,

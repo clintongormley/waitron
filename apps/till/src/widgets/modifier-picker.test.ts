@@ -1082,6 +1082,181 @@ describe("till-modifier-picker", () => {
     });
   });
 
+  describe("inline mode", () => {
+    type ChangeDetail = {
+      changed: boolean;
+      savable: boolean;
+      fixFields: boolean;
+      selection: ModifierConfirmDetail;
+    };
+    /** A line of two Burgers, cooked medium, cheese once and a note: what a Sent row's window edits. */
+    const edited = {
+      product: burger,
+      quantity: "2",
+      lineDetails: true,
+      withNote: true,
+      initialSelections: {
+        extras: [
+          {
+            listId: "list-extras",
+            productId: "p-cheese",
+            name: "Queso",
+            price: "1.00",
+            quantity: 1,
+          },
+        ],
+        options: [{ listId: "list-cooked", labelId: "label-medium" }],
+        note: "sin sal",
+      },
+    };
+    function reports(picker: TillModifierPicker): ChangeDetail[] {
+      const seen: ChangeDetail[] = [];
+      picker.addEventListener("wt-modifier-change", (event) =>
+        seen.push((event as CustomEvent<ChangeDetail>).detail),
+      );
+      return seen;
+    }
+    async function makeEdits(picker: TillModifierPicker) {
+      picker
+        .shadowRoot!.querySelector('[name="quantity"]')!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "3" } }));
+      incButton(picker, "list-extras", "p-cheese")!.click();
+      labelRadio(picker, "list-cooked", "label-rare").click();
+      const field = picker.shadowRoot!.querySelector<WtTextarea>('[data-test="line-note"]')!;
+      await field.updateComplete;
+      const box = field.shadowRoot!.querySelector("textarea")!;
+      box.value = "sin sal, bien hecha";
+      box.dispatchEvent(new Event("input"));
+      await picker.updateComplete;
+    }
+
+    it("draws only its fields: no window, no actions, no variants, course or total", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        ...edited,
+        product: {
+          ...burger,
+          variants: [
+            {
+              ...sellingValuesOf(burger),
+              id: "big",
+              name: "Big",
+              unitPrice: "9.00",
+              unitPriceDifference: "1.00",
+              available: true,
+            },
+          ],
+        },
+        initialCourse: "",
+        courseChoices: [{ value: "", label: "Mains" }],
+        inline: true,
+      });
+      const root = el.shadowRoot!;
+      expect(root.querySelector("wt-modal")).toBeNull();
+      expect(root.querySelector(".confirm")).toBeNull();
+      expect(root.querySelector(".cancel")).toBeNull();
+      expect(root.querySelector('[name="product-variant"]')).toBeNull();
+      expect(root.querySelector('wt-combobox[name="course"]')).toBeNull();
+      expect(root.querySelector(".running")).toBeNull();
+      expect(root.querySelector('wt-input[name="quantity"]')).not.toBeNull();
+      expect(labelRadio(el, "list-cooked", "label-rare")).not.toBeNull();
+      expect(stepCount(el, "list-extras", "p-cheese")).toBe("1");
+      expect(root.querySelector('[data-test="line-note"]')).not.toBeNull();
+    });
+
+    it("tells its host when the draft changes, and when it is back where it opened", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        ...edited,
+        inline: true,
+      });
+      const seen = reports(el);
+      labelRadio(el, "list-cooked", "label-rare").click();
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: true, fixFields: false });
+      expect(seen.at(-1)!.selection.options).toEqual([
+        { listId: "list-cooked", labelId: "label-rare" },
+      ]);
+      labelRadio(el, "list-cooked", "label-medium").click();
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ changed: false, savable: false });
+      const count = seen.length;
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(seen, "an update that changes nothing reports nothing").toHaveLength(count);
+    });
+
+    it("confirms with the detail the windowed Save gives for the same edits", async () => {
+      const windowed = (
+        await mountWidget<TillModifierPicker>("till-modifier-picker", { ...edited })
+      ).el;
+      await makeEdits(windowed);
+      let fromWindow: ModifierConfirmDetail | undefined;
+      windowed.addEventListener(
+        "wt-modifier-confirm",
+        (e) => (fromWindow = (e as CustomEvent<ModifierConfirmDetail>).detail),
+      );
+      addButton(windowed).click();
+      cleanupWidgets();
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        ...edited,
+        inline: true,
+      });
+      const seen = reports(el);
+      await makeEdits(el);
+      let fromInline: ModifierConfirmDetail | undefined;
+      el.addEventListener(
+        "wt-modifier-confirm",
+        (e) => (fromInline = (e as CustomEvent<ModifierConfirmDetail>).detail),
+      );
+      el.confirm();
+      await el.updateComplete;
+      expect(fromWindow).toMatchObject({ quantity: "3", note: "sin sal, bien hecha" });
+      expect(fromInline).toEqual(fromWindow);
+      expect(seen.at(-2)!.selection).toEqual(fromWindow);
+      expect(seen.at(-1), "a saved draft is the new baseline").toMatchObject({
+        changed: false,
+        savable: false,
+      });
+    });
+
+    it("keeps the draft changed when its host refuses the confirm", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        ...edited,
+        inline: true,
+      });
+      const seen = reports(el);
+      labelRadio(el, "list-cooked", "label-rare").click();
+      await el.updateComplete;
+      el.addEventListener("wt-modifier-confirm", (event) => event.preventDefault());
+      el.confirm();
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: true });
+    });
+
+    it("shows a bad quantity only once confirmed, then says it blocks the save", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        ...edited,
+        inline: true,
+      });
+      const seen = reports(el);
+      const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        'wt-input[name="quantity"]',
+      )!;
+      field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0" } }));
+      await el.updateComplete;
+      expect(field.error).toBe("");
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: true, fixFields: false });
+      const sent: ModifierConfirmDetail[] = [];
+      el.addEventListener("wt-modifier-confirm", (e) =>
+        sent.push((e as CustomEvent<ModifierConfirmDetail>).detail),
+      );
+      el.confirm();
+      await el.updateComplete;
+      expect(sent).toEqual([]);
+      expect(field.error).toBe(t("line.quantity_invalid"));
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: false, fixFields: true });
+    });
+  });
+
   it("offers no extras list on a dish weighed on a scale or sold in a unit with decimals", async () => {
     // The server refuses extras on such a dish (`extras.unsupported_product`); its options list stays.
     const litre: TillProduct = {
