@@ -64,36 +64,10 @@ change what deleting a person does.
 
 ## Roles the admin can edit (A7)
 
-**A1002 design OWNER APPROVED, 2026-11-07 22:51; activity/email addition at 22:53.
-Corrected 2026-11-08.** The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
-records the exact authority in §11. No further design approval is needed; the required Claude read
-still precedes plan/build. Neither starts in this documentation firing.
-
-Several roles combine their privileges; any held role can match a policy list, independently of
-the action privilege. Empty device/reason/bill-limit lists mean nobody. Deletion removes the role
-from people and every live list with one impact confirmation, without replacements. Sole-role
-holders keep identity/status/credentials with no role and eligible own-person self-service only;
-pending/suspended status stays. Roles used by shifts retire so those shifts retain their names.
-
-Staff, Supervisor, Manager and Admin keep fixed translated names and cannot be deleted. Ordinary
-built-in privileges are editable; protected Admin has every declared privilege through code alone
-and a usable active human anchor. Manager holds the single `person.admin` by default; assignment
-and sign-in changes require the actor to hold the target's whole resulting union. Cloud's single
-account owner (D608) is separate from Admin. `node.promote` merges into `node.manage`, Admin-only
-by default and assignable; recovery and other promotion conditions stay.
-
-Only `roles` (permission IDs as JSON) and `person_roles` store role authority. No counters or
-seed bookkeeping; field/set comparisons protect stale edits. Outstanding links read current
-authority when used and are not cancelled on role changes. Approval records keep identities,
-without new role snapshots. Transfer carries definitions, memberships and JSON references through
-normal mapping; imported people stay suspended, with normal later reactivation checks.
-
-§7 specifies activity entries for membership/permission changes and role lifecycle actions, plus
-one EN/ES membership-change email template for the subject person with an address. It records the
-missing shared activity/queued-mail seams at the current source pin; reuse A1308's shared paths,
-without new infrastructure. Audits remain pinned and SOURCE READ ONLY. The dated permission
-discussion below stays historical; A1113 owns mirror dashboard/viewer retirement. The three sale
-privileges stay separate and fiscal behavior stays unchanged. Plan, build and qualification remain.
+**A1002 design approved 2026-11-07 22:51, with the 22:53 activity/email addition; corrected
+2026-11-08.** The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
+holds the accepted rules, recorded authority, shared activity/mail dependencies and review
+corrections. Plan and build remain open.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -324,19 +298,9 @@ After A760, decide whether to remove the redundant column and read the provider 
 
 ## Review every permission: fewer, coarser, and consistently named
 
-**A1002 correction, 2026-11-08:** the
-[approved inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
-keeps the accepted non-fiscal merges and ordinary defaults. `sale.void`, `sale.refund` and
-`sale.rectify` stay separate. `workforce.self_approve` is Admin by default and also requires
-`workforce.correct`; `personal_data.export` remains the one privacy-export entry.
-`node.promote` merges into `node.manage`, Admin-only by default and assignable, with all other
-promotion conditions unchanged. Admin authority is the code's every-declared-permission rule,
-with no stored grants or permission-catalog table. The full approval at 2026-11-07 22:51 and
-22:53 activity/email addition are quoted in §11; no design approval remains outstanding.
-Implementation precedes enabling editable roles, after the required Claude read.
-
-The dated discussion below is historical; this correction supersedes its pending-approval wording
-and points to the accepted target without changing those original receipts.
+**2026-11-08:** A1002's [approved inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
+is the target. Implementation remains open. The dated discussion below is historical;
+its pending-approval wording is superseded by the 2026-11-07 full approval recorded in design §11.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
   A494 (2026-10-11), `catalogue.manage` (manager and above, the roles that hold `person.manage`)
@@ -379,21 +343,9 @@ and Manager retain editable privileges. Admin retains every current/future grant
 usable active human anchor. The 2026-10-22 ~12:05 protection answer originally allowed Admin rename;
 the new names answer supersedes that allowance only.
 
-**Correction 2026-11-08:** the [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
-is OWNER APPROVED at 2026-11-07 22:51 with the simplifications, plus the 22:53 activity/email
-addition; exact provenance is in §11. The earlier 7 November separate-promotion interpretation is
-superseded: the target is merged `node.manage`, Admin-only by default and assignable.
-
-A person's roles combine privileges and match context lists independently. Copying a built-in
-creates an ordinary custom with today's permissions, without future authority or list membership.
-Deletion leaves a sole-role person with no role and preserves pending/suspended status; used-shift
-roles retire. One role list serves access and rota. §3–§7 specify two role tables, permission JSON,
-Admin authority in code, field/set stale-edit checks, links retained through role changes,
-identity-only approval records and ordinary transfer mapping with imported people suspended.
-Membership/permission/lifecycle changes enter the shared activity log; membership changes email
-the subject if they have an address, in their language. The current source gap for shared activity/
-queued mail is explicit in §7. See [A7](#roles-the-admin-can-edit-a7). Plan/build remain later work,
-with the required Claude read first; this revision starts neither.
+**2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
+records the 2026-11-07 22:51 simplifications and 22:53 activity/email addition. See
+[A7](#roles-the-admin-can-edit-a7) for current status. Plan/build remain open.
 
 ## Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order says so
 

@@ -15,8 +15,9 @@ The historical source audit stays pinned to `2e63a28a87f3f43e2f665f6fb8649fe2766
 Those references are reading-only receipts, not runtime verification. Bounded additional readings
 at `e0f3e261c3811333d91db376fcab900eab216151` and `e0da0ad18a` remain labelled in §7.
 The 2026-11-08 **SOURCE READ ONLY** additions use
-`e0e4f5b8fda194814a6280340f1b93bb7569307a`. All target behavior describes the approved design,
-not a claim that it is built. No executable schema or implementation plan is supplied.
+`e0e4f5b8fda194814a6280340f1b93bb7569307a`. Target behavior follows the approved policy;
+§7 labels integration defaults awaiting watcher confirmation. None of this claims working
+implementation. No executable schema or implementation plan is supplied.
 
 ## 1. The problem, through one shift
 
@@ -94,8 +95,10 @@ it. Her previous refunds keep their recorded authorizer.
 - **Names stay Staff, Supervisor, Manager, Admin.** Cloud's single account owner (D608) is separate
   from the venue's Admin role; neither confers the other's authority.
 
-§11 records the answer sources and exact full approval. The union and any-held-role matching,
-previously driver interpretations, are now settled by that approval.
+§11 quotes the 7 November full approval and addition, including union and any-held-role matching.
+Earlier decision receipts remain in this document's pre-correction version at
+`e0e4f5b8fda194814a6280340f1b93bb7569307a`; the historical code audit remains pinned separately
+to `2e63a28a87f3f43e2f665f6fb8649fe2766aee84`.
 
 ## 2. One permission review, before role storage
 
@@ -213,8 +216,8 @@ or context-list entries. Initial setup creates the built-ins; later starts prese
 permissions and custom roles. There is no seed-completion record or start-up grant-filling pass.
 
 Replace `ModulePermission.grantedFrom` (historical `packages/module/src/module.ts:110`) with a
-declaration plus explicit default preset keys. Workforce correction names Supervisor, Manager and
-Admin individually. The contract owns that finite key vocabulary; runtime `RoleId` is a distinct
+declaration plus explicit ordinary default preset keys. Workforce correction names Supervisor and
+Manager; Admin receives every declaration through code. The contract owns that finite key vocabulary; runtime `RoleId` is a distinct
 type. Replace `packages/composition/src/role-parity.ts:5` with two-way type assertions for the seed
 and declaration contracts identity accepts. Keep existing dependency direction. Reject duplicate
 ownership, unknown default keys and undeclared grants. No `indexOf` or implied ordering remains.
@@ -240,7 +243,10 @@ permissions are a short JSON list on its row, under the owner's 4 November rule.
 memberships are unique on person ID and role ID. Replace the single `persons.role` enum with these
 memberships; a person can hold several roles or none (§6). Keep one identity, status and
 authentication record per person. No permission-catalog, grants, authority-counter or seed table.
-No tenant column. A1308's `tables-people.md` draws the shared access/rota role fields.
+No tenant column. A1308's `tables-people.md` draws the shared access/rota role fields, but its
+`roles` drawing's `revision` column and catalogue/grants/seed-completion placeholders are superseded by this
+approval: remove them and add the role's `permissions` JSON column. Its claim that storage is
+still open is superseded too. Update that drawing when the role schema is planned.
 
 Policy references are role IDs in JSON on their owning row: device admission, a reason's
 `apply_roles` and `approver_roles`, and `billApproverRoles`. No foreign key sees those IDs, so
@@ -279,6 +285,7 @@ before commit. Queries run in turn. The write turn uses `withTransaction`/`withW
 | --- | --- |
 | Create/copy role | Actor holds `person.admin` and every selected/copied privilege. No preset metadata, people or context memberships copied. |
 | Edit role grants | Actor holds each added privilege. Removals may narrow grants the actor lacks. Recompute each holder's union; preserve built-in keys/names and Admin's code rule. |
+| Rename a custom role | Require `person.admin`; retain unique folded names and fixed built-in names. Renaming changes no authority. |
 | Assign/edit membership, invite or reactivate | Require `person.admin`. The WHOLE resulting person's union, including retained memberships, must be within the actor's current whole-person union. Check context gains separately even when unions are equal. No self-promotion or representative-role comparison. |
 | Change another person's sign-in/status | Require `person.admin` and dominance over the target's whole current union, preventing takeover through another role. Covers email, PIN/password reset, invitation, suspension/reactivation and MFA/passkey/Google removal. |
 | Delete or retire custom role | Require `person.admin` and domain configuration authority for referenced policies. Remove references under §6; no reassignment. Pure removal does not require holding grants being removed. A sole-role holder is left with no role; multi-role holders retain their other roles. |
@@ -321,7 +328,9 @@ Role or permission changes do not cancel outstanding invitations, password-reset
 links. At redemption, read current target memberships, status and authority; an old link never
 restores a removed role. For administrator-issued actions, check the issuer's current active status,
 `person.admin`, the target's whole current union within the issuer's and the last usable Admin
-invariant. Use issuer identity, not a copy of their roles. Normal expiry, single use and
+invariant. Record `issued_by` on the existing account-action row: the issuer's person ID for
+administrator-issued links, null for self-service. Store identity only, not their roles.
+Normal expiry, single use and
 credential/proof checks remain. A link may be refused by current authority without being cancelled
 because a role changed. Reissuing keeps the existing same-purpose replacement behavior.
 
@@ -458,12 +467,12 @@ There is no primary/first/senior role or Staff default; `roleIds: []` has no ope
 
 ### Activity and role-change email, owner addition 2026-11-07 22:53
 
-Record each actual membership/permission change and role creation, rename, retirement or deletion
-in the venue's activity log: actor identity, subject person/role, change and time. Include bulk
-removals and cleared permissions on deletion/retirement; no-op saves add nothing. Keep old/new names
-for renames and the permission ID for permission changes, never the actor's role set. History is
-not authority. The proposed codes below use A1308's domain/action convention; placeholders display
-names and translated privilege labels, while recorded subjects remain IDs.
+Record each membership/permission edit and role lifecycle action in the venue activity log:
+actor identity, subject, change and time. Bulk membership removals each get an entry; no-op saves
+get none. Create/copy/retire/delete has one lifecycle entry carrying its initial/removed permission
+list, without separate permission entries. Store the role label at the time, including on deletion;
+keep old/new labels for rename. These are target facts, never the approver's role set. The two
+membership codes below replace A1308's proposed `person.roles_changed`, not add a second event.
 
 | Proposed code | English activity text | Spanish activity text |
 | --- | --- | --- |
@@ -491,9 +500,20 @@ Format `{when}` in the recipient's language and venue time zone. Use the shared 
 policy; SMTP never holds the role-change transaction. No new log, queue, notification service,
 transactional-delivery guarantee or retry scheme.
 
+**Proposed integration defaults, for watcher confirmation:** write the activity entry and queue
+row in the role-change transaction. Queue kind/template `role_membership_changed` uses
+`dedupe_key = role-membership:<activity-entry-id>`, `subject_id` for that entry, `person_id` for
+the recipient and `requested_by` for the actor. Keep role label, actor display name and change time
+in `params` so deletion cannot erase the wording; use `editorName` for the actor's name, already a
+personal-data key. Take the recipient address at claim as the queue requires. Inherit `box_alert`'s
+24-hour `not_after` policy. Log setup/import baseline memberships, but email only subsequent role
+changes, including deletion/retirement removals, to avoid emailing an imported staff list.
+
 **Unbuilt dependency:** no shared activity writer or general queued-mail API was located at the
-source pin below. A1308's `activity_log`/`outgoing_mail` must supply those seams before this addition
-is built. Reuse them; do not adapt the domain-specific attendance/invoice queues or add infrastructure.
+source pin below. A1308's people design also records no person-change audit today; its shared log
+and history display remain dependencies. Direct SMTP exists today; waiting for `outgoing_mail`
+follows A1308's approved U4 one-queue decision. Reuse those paths when built, without adapting
+domain-specific queues or adding infrastructure.
 
 ### Current-source receipts for this correction, 2026-11-08
 
@@ -645,12 +665,9 @@ Future acceptance, not results of this documentation revision. The later plan ho
 
 ## 11. Approval provenance and the required Claude read
 
-Earlier receipts remain in this document at historical commit `e0e4f5b8fda194814a6280340f1b93bb7569307a`.
-The dated full approval below supersedes earlier contrary interpretations.
-
 **Location:** `/Users/clintongormley/waitron-campaign-k/questions.md`,
 **WATCHER2026-11-07 22:51**, OWNER APPROVED the full design with changes ('y').
-Exact authority supplied by the parent for restricted-seat verification:
+Recorded authority:
 
 > 1. No change counters ('revisions') on persons, roles or lists, and no cancelling of outstanding invitation/reset/email-change links when roles change: a link already re-checks the person's current roles when used. Keep ordinary 'this changed while you were editing' protection.
 > 2. Admin can do everything is a rule in the code, not stored permission rows filled in at start-up; no seed-completion record.
@@ -668,7 +685,3 @@ Exact authority supplied by the parent for restricted-seat verification:
 > 1. Activity log: every role given to or taken from a person, every permission added to or removed from a role, and creating, renaming, retiring or deleting a role is one entry in the venue's existing activity log: who did it, to whom or to which role, what changed, when. Use the existing activity log, no new log.
 > 2. Email: when a person is given or loses a role, email that person (in their language) saying which role, who changed it and when. Only people with an email address on file; someone without one gets no message and the log entry still stands. Permission changes to a role do not email everyone who holds it. Use the existing email path.
 > Name the log entry codes and the email template in the design; English and Spanish wording.
-
-Design is OWNER APPROVED with these corrections and addition; no settled choice needs reapproval.
-This firing creates no plan/build. The parent obtains the fresh Claude read before either starts;
-every later plan also needs Claude's read before build, and one longer than a page goes to the owner.

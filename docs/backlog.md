@@ -1524,11 +1524,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
 - **A1002: several roles per person, fixed built-in names and editable ordinary grants.** Design
-  OWNER APPROVED 2026-11-07 22:51 with simplifications; activity/email addition at 22:53, incorporated
-  2026-11-08. Two role tables, Admin authority in code, retained links and ordinary transfer mapping;
-  `node.promote` merges into assignable, Admin-default `node.manage`. Plan/build remain, after the
-  required Claude read; this documentation firing starts neither. Exact authority and the shared
-  activity/queued-mail source gap are in design §11 and §7.
+  approved 2026-11-07 22:51, with the 22:53 activity/email addition; corrected 2026-11-08.
+  [Design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md). Plan/build remain open;
+  shared activity/mail dependencies and review corrections are recorded there.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
