@@ -20,7 +20,7 @@ on:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.workflow == 'CI' && vars.DISPOSABLE_TESTS_MODE == 'server' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == (github.event.pull_request.head.sha || github.sha)) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-image-smoke-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, 1)))) || 'ubuntu-latest' }}
     timeout-minutes: 15
     # Naming any permission drops every default, so `contents: read` is restated. This job pushes
     # nothing to a registry — the GHCR publish is ci.yml's `publish` job, which holds `packages: write`.
