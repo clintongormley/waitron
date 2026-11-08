@@ -1,4 +1,9 @@
-import { chooseTheme, leaveCoordinatorFor, navigationGuardFor } from "@waitron/ui";
+import {
+  chooseTheme,
+  leaveCoordinatorFor,
+  navigationGuardFor,
+  startThemeChoice,
+} from "@waitron/ui";
 import { commands, page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
@@ -14,6 +19,7 @@ import { diag } from "./diagnostics.js";
 import indexHtml from "../index.html?raw";
 import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
 import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -801,7 +807,9 @@ describe("dashboard-app", () => {
     await flush(el);
 
     expect(brandBanner(el)).toBeTruthy();
-    expect(brandBanner(el)!.querySelector<HTMLImageElement>('img[alt="Waitron"]')).toBeTruthy();
+    const lockup = brandBanner(el)!.querySelector<WtWaitronLockup>("wt-waitron-lockup")!;
+    await lockup.updateComplete;
+    expect(lockup.shadowRoot!.querySelector("svg")!.getAttribute("aria-label")).toBe("Waitron");
     expect(venueName(el)!.textContent?.trim()).toBe("Deli Test SL");
     expect(
       el.shadowRoot!.querySelector("wt-demo-bar")?.shadowRoot!.querySelector("strong")?.textContent,
@@ -809,23 +817,32 @@ describe("dashboard-app", () => {
     expect(logoutBtn(el)).toBeNull();
   });
 
-  it("shows the dark-theme lockup in the banner while the computer is in dark mode, and the light one otherwise", async () => {
+  it("paints the banner's lockup in the dark theme's inks while the computer is in dark mode, and the light theme's otherwise", async () => {
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
     });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    startThemeChoice(host);
     await flush(el);
 
-    // Vite may inline a small SVG as a data URL, rewriting its quotes and spacing on the way, so
-    // the served drawing is compared with the file's once both are parsed.
+    /** A lockup file's two inks, cloche then word, as computed styles spell them. */
     const drawing = (svg: string) =>
-      new XMLSerializer()
-        .serializeToString(new DOMParser().parseFromString(svg, "image/svg+xml").documentElement)
-        .replace(/\s+/g, " ");
-    const served = async (url: string) => drawing(await (await fetch(url)).text());
+      [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)]
+        .map(
+          (m) =>
+            `rgb(${m
+              .slice(1, 4)
+              .map((hex) => parseInt(hex, 16))
+              .join(", ")})`,
+        )
+        .join(" ");
     expect(drawing(darkLockup)).not.toBe(drawing(lightLockup));
-    const img = brandBanner(el)!.querySelector<HTMLImageElement>('img[alt="Waitron"]')!;
-    const shown = async () => (img.currentSrc ? served(img.currentSrc) : "");
+    const lockup = brandBanner(el)!.querySelector<WtWaitronLockup>("wt-waitron-lockup")!;
+    await lockup.updateComplete;
+    const shown = async () =>
+      [...lockup.shadowRoot!.querySelectorAll("svg > g")]
+        .map((g) => getComputedStyle(g).fill)
+        .join(" ");
     try {
       await commands.emulateColorScheme("dark");
       await expect.poll(shown).toBe(drawing(darkLockup));
@@ -841,14 +858,13 @@ describe("dashboard-app", () => {
     await flush(el);
 
     const identity = brandBanner(el)!.querySelector<HTMLElement>(".brand-identity")!;
-    const logo = identity.querySelector<HTMLImageElement>(".brand-logo")!;
+    const logo = identity.querySelector<HTMLElement>(".brand-logo")!;
     const toggle = identity.querySelector<HTMLElement>("[data-test=nav-toggle]")!;
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
       await page.viewport(1280, 800);
       expect(window.innerWidth).toBe(1280);
-      expect(identity.querySelector("source")!.getClientRects()).toHaveLength(0);
       expect(toggle.getBoundingClientRect().left).toBeCloseTo(
         identity.getBoundingClientRect().left,
         0,

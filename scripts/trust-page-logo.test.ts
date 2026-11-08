@@ -122,7 +122,7 @@ describe("the certificate page's logo still draws the brand lockup", () => {
 
   it("finds geometry to compare at all", () => {
     // Without this, an extractor that matched nothing would compare two empty lists and pass.
-    expect(geometry(brand.drawing).length).toBeGreaterThan(20);
+    expect(geometry(brand.drawing).length).toBeGreaterThan(10);
   });
 
   it("shares the lockup's viewBox", () => {

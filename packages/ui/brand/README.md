@@ -1,8 +1,8 @@
 # Brand assets
 
-The mark is a running waiter carrying a covered tray. The wordmark is WAiTRON, upright, whose only
-three diagonals are the W's second and fourth arms and the A's left arm, with the T's bar running the
-full width of the word above the other letters. The lockup is the two together.
+The mark is a cloche: a serving dome with a knob and a highlight cut out of it, on a plate. The
+wordmark is "waitron" in lower case, set in Outfit Medium (SIL Open Font License) at -0.03em and
+drawn as outlines, so nothing loads a font. The lockup is the two together, side by side.
 
 ## Sources and derived files
 
@@ -11,15 +11,15 @@ drawings and the dark colour tokens, so the geometry exists in exactly one place
 redrawing the mark is one edit plus one command. The derived files are committed, so run the command
 whenever you change a source drawing or a dark token.
 
-| File                          | Kind    | Read by                                                                                                                                                                                    |
-| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `waitron-mark.svg`            | source  | The waiter alone, fixed blue, transparent, tight viewBox. Use for anything that is not a favicon.                                                                                          |
-| `waitron-wordmark.svg`        | source  | The word alone, ink.                                                                                                                                                                       |
-| `waitron-lockup.svg`          | derived | Mark at the word's cap height, then the word. The logo.                                                                                                                                    |
-| `waitron-lockup-dark.svg`     | derived | The lockup in the dark theme's colours, for an `<img>` on a dark ground (the dashboard's banner and the Look card preview's dark panel; addresses in `packages/ui/src/waitron-lockup.ts`). |
-| `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. Carries a `prefers-color-scheme` rule; the rasters below cannot.                                                                                        |
-| `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs.                                                                                          |
-| `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                                                                                                             |
+| File                          | Kind    | Read by                                                                                                                                                               |
+| ----------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `waitron-mark.svg`            | source  | The cloche alone, fixed blue, transparent, tight viewBox. Use for anything that is not a favicon.                                                                     |
+| `waitron-wordmark.svg`        | source  | The word alone, ink, cut to the mark's height: its viewBox is `0 0 <width> <the mark's height>`, and the generator refuses any other.                                 |
+| `waitron-lockup.svg`          | derived | The mark, a gap, then the word, both unscaled. The logo. `wt-waitron-lockup` draws it inline.                                                                         |
+| `waitron-lockup-dark.svg`     | derived | The lockup in the dark theme's colours, for an `<img>` on a dark ground (addresses in `packages/ui/src/waitron-lockup.ts`; outside tests, only the UI demo reads it). |
+| `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. Carries a `prefers-color-scheme` rule; the rasters below cannot.                                                                   |
+| `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs.                                                                     |
+| `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                                                                                        |
 
 `public/` is what the apps serve: `apps/{till,dashboard,setup}/vite.config.ts` each point `publicDir`
 at it, so there is one copy rather than three. Vite prefixes the URLs with each app's `base` at build
@@ -28,7 +28,11 @@ time — verified by building all three: the dashboard emits `/manage/favicon.ic
 if an app links to a file this directory does not hold, or points its `publicDir` somewhere else.
 
 Standalone SVGs carry literal colours because an `<img>` cannot read the page's CSS custom
-properties. When you change a dark token in `packages/ui-core/src/tokens/colors.css`, re-run the
+properties. The screens do not use them as images: `wt-waitron-lockup`
+(`packages/ui/src/components/wt-waitron-lockup.ts`) imports `waitron-lockup.svg` through a `?raw`
+import and repaints its first top-level group with `--wt-color-primary` and its last with
+`--wt-color-text`, so the dashboard's banner, `wt-powered-by` and the Look card preview follow light,
+dark and a venue's own colours. When you change a dark token in `packages/ui-core/src/tokens/colors.css`, re-run the
 generator: it reads `--wt-color-primary` and `--wt-color-text` from that file's
 `@media (prefers-color-scheme: dark)` block for the dark lockup and the favicon's dark rule.
 It expects six-digit hex values and an unindented closing brace for that block; a missing block or
@@ -46,7 +50,7 @@ and each dark value from the `@media (prefers-color-scheme: dark)` block, so a `
 that disagrees with either is not seen, and it checks neither the favicon nor the certificate page's
 copy.
 
-The setup wizard (`apps/setup/src/setup-app.ts`) also draws the lockup inline, but copies nothing:
+The setup wizard (`apps/setup/src/setup-app.ts`) also draws the lockup inline, in the same way, but copies nothing:
 it imports `waitron-lockup.svg` as-is through a `?raw` import and repaints its two top-level groups
 by position — the first `<g>` (the waiter) with `--wt-color-primary`, the last (the word) with
 `--wt-color-text`. That is the order `build-icons.mjs` writes them in, so the wizard depends on it

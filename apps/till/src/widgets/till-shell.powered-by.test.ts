@@ -9,7 +9,9 @@ import {
   type WtPoweredBy,
   type WtVenueLogo,
 } from "@waitron/ui";
-import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
+import darkLockup from "../../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
+import lightLockup from "../../../../packages/ui/brand/waitron-lockup.svg?raw";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -87,12 +89,37 @@ async function atViewport(width: number, height: number, run: () => Promise<void
   }
 }
 
-async function lockupLoaded(line: WtPoweredBy): Promise<HTMLImageElement> {
+async function lockupLoaded(line: WtPoweredBy): Promise<WtWaitronLockup> {
   await line.updateComplete;
-  const lockup = line.shadowRoot!.querySelector<HTMLImageElement>('[part="lockup"]')!;
-  await expect.poll(() => lockup.complete && lockup.naturalWidth > 0).toBe(true);
+  const lockup = line.shadowRoot!.querySelector<WtWaitronLockup>('[part="lockup"]')!;
+  await lockup.updateComplete;
   return lockup;
 }
+
+/** The lockup's cloche and word inks, and the two tokens they should be painted from. */
+function inks(lockup: WtWaitronLockup): { drawn: string[]; tokens: string[] } {
+  const drawn = [...lockup.shadowRoot!.querySelectorAll("svg > g")].map(
+    (g) => getComputedStyle(g).fill,
+  );
+  const tokens = ["--wt-color-primary", "--wt-color-text"].map((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = getComputedStyle(lockup).getPropertyValue(name);
+    document.body.append(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  });
+  return { drawn, tokens };
+}
+
+/** A lockup file's word ink, as computed styles spell it. */
+const wordInk = (svg: string) => {
+  const m = [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)][1]!;
+  return `rgb(${m
+    .slice(1, 4)
+    .map((hex) => parseInt(hex, 16))
+    .join(", ")})`;
+};
 
 /** Mounts a handheld, or the shell `props` describe, with the stored logo, and lets it settle. */
 async function mountWithLogo(theme?: "light" | "dark", props: Partial<TillShell> = {}) {
@@ -125,8 +152,9 @@ describe("Powered by Waitron at the foot of a handheld's More", () => {
       expect(rule.previousElementSibling!.matches("wt-button.logout")).toBe(true);
       expect(line.getAttribute("label")).toBe(t("login.powered_by"));
       expect(line.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Powered by");
-      const lockup = await lockupLoaded(line);
-      expect(lockup.getAttribute("src")).toBe(WAITRON_LOCKUP_URL);
+      const { drawn, tokens } = inks(await lockupLoaded(line));
+      expect(drawn).toEqual(tokens);
+      expect(drawn[1]).toBe(wordInk(lightLockup));
       const logout = moreMenu(el).querySelector(".logout")!.getBoundingClientRect();
       expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(logout.bottom);
     });
@@ -239,12 +267,13 @@ describe("Powered by Waitron at the foot of a handheld's More", () => {
     },
   );
 
-  it("under Dark the lockup is the dark drawing", async () => {
+  it("under Dark the lockup takes the dark theme's inks", async () => {
     await atViewport(390, 844, async () => {
       const el = await mountWithLogo("dark");
       await openMenu(el);
-      const lockup = await lockupLoaded(lineOf(el)!);
-      expect(lockup.getAttribute("src")).toBe(WAITRON_LOCKUP_DARK_URL);
+      const { drawn, tokens } = inks(await lockupLoaded(lineOf(el)!));
+      expect(drawn).toEqual(tokens);
+      expect(drawn[1]).toBe(wordInk(darkLockup));
     });
   });
 });
@@ -265,8 +294,9 @@ describe("Powered by Waitron at the foot of a cash register's More", () => {
       expect(rule.previousElementSibling!.matches(".logout")).toBe(true);
       expect(line.getAttribute("label")).toBe(t("login.powered_by"));
       expect(line.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Powered by");
-      const lockup = await lockupLoaded(line);
-      expect(lockup.getAttribute("src")).toBe(WAITRON_LOCKUP_URL);
+      const { drawn, tokens } = inks(await lockupLoaded(line));
+      expect(drawn).toEqual(tokens);
+      expect(drawn[1]).toBe(wordInk(lightLockup));
       const logout = moreMenu(el).querySelector(".logout")!.getBoundingClientRect();
       expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(logout.bottom);
     });
@@ -414,12 +444,13 @@ describe("Powered by Waitron at the foot of a cash register's More", () => {
     },
   );
 
-  it("under Dark the lockup is the dark drawing", async () => {
+  it("under Dark the lockup takes the dark theme's inks", async () => {
     await atViewport(1280, 800, async () => {
       const el = await mountWithLogo("dark", counter);
       await openMenu(el);
-      const lockup = await lockupLoaded(lineOf(el)!);
-      expect(lockup.getAttribute("src")).toBe(WAITRON_LOCKUP_DARK_URL);
+      const { drawn, tokens } = inks(await lockupLoaded(lineOf(el)!));
+      expect(drawn).toEqual(tokens);
+      expect(drawn[1]).toBe(wordInk(darkLockup));
     });
   });
 });

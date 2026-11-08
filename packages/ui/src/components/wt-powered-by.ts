@@ -1,10 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
-import { ColorSchemeController } from "../color-scheme.js";
-import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "../waitron-lockup.js";
+import "./wt-waitron-lockup.js";
 
-/** The words in `label`, then Waitron's lockup in the drawing for the host's colour scheme. */
+/** The words in `label`, then Waitron's lockup in the colours of the theme it sits in. */
 @customElement("wt-powered-by")
 export class WtPoweredBy extends LitElement {
   static override styles = [
@@ -19,24 +18,19 @@ export class WtPoweredBy extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      img {
-        display: block;
+      wt-waitron-lockup {
+        flex: none;
         inline-size: calc(var(--wt-space-6) * 2);
-        block-size: auto;
       }
     `,
   ];
 
   @property() label = "";
 
-  readonly #scheme = new ColorSchemeController(this);
-
   override render() {
-    return html`${this.label ? html`<span part="label">${this.label}</span>` : nothing}<img
+    return html`${this.label ? html`<span part="label">${this.label}</span>` : nothing}<wt-waitron-lockup
         part="lockup"
-        src=${this.#scheme.dark ? WAITRON_LOCKUP_DARK_URL : WAITRON_LOCKUP_URL}
-        alt="Waitron"
-      />`;
+      ></wt-waitron-lockup>`;
   }
 }
 

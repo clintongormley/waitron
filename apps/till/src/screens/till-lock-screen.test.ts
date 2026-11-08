@@ -1,3 +1,4 @@
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
@@ -724,8 +725,8 @@ describe("the venue logo and Powered by on the sign-in", () => {
   /** The box around what the line draws: its words and Waitron's lockup, not its full-width host. */
   async function lineBox(line: WtPoweredBy): Promise<DOMRect> {
     await line.updateComplete;
-    const lockup = line.shadowRoot!.querySelector<HTMLImageElement>('[part="lockup"]')!;
-    await expect.poll(() => lockup.complete && lockup.naturalWidth > 0).toBe(true);
+    const lockup = line.shadowRoot!.querySelector<WtWaitronLockup>('[part="lockup"]')!;
+    await lockup.updateComplete;
     await frame();
     const a = line.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
     const b = lockup.getBoundingClientRect();

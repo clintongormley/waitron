@@ -20,7 +20,6 @@ import {
   reportVenueLogoFailure,
   reportVenueLogoLoaded,
   setHelpMode,
-  type ThemeChoice,
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
@@ -43,7 +42,7 @@ import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
 import { applyVenueTheme, readVenueTheme, setContentLanguages } from "@waitron/ui";
-import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
+import "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { DashboardQueries } from "./api/query-controller.js";
 import { createSessionEpoch, type SessionEpoch } from "./session-signals.js";
 import { consumePermissionReturn, PermissionContinuation } from "./permission-continuation.js";
@@ -198,12 +197,6 @@ function storeFold(folded: boolean): void {
   } catch {
     // Remembering the choice is a convenience; the sidebar works without it.
   }
-}
-
-function darkLogoMedia(choice: ThemeChoice): string {
-  if (choice === "dark") return "all";
-  if (choice === "light") return "not all";
-  return "(prefers-color-scheme: dark)";
 }
 
 type AccessRule = {
@@ -656,21 +649,10 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .brand-logo-picture {
-        display: contents;
-      }
-
-      /* Hidden because under display: contents it becomes an item of the identity row and adds a
-         gap before the logo. */
-      .brand-logo-picture > source {
-        display: none;
-      }
-
       .brand-logo {
         display: block;
         flex: 0 0 auto;
         width: calc(var(--wt-space-6) * 4);
-        height: auto;
       }
 
       .venue-logo {
@@ -2113,10 +2095,7 @@ export class DashboardApp extends LitElement {
   }
 
   #lockup(slot?: string): TemplateResult {
-    return html`<picture class="brand-logo-picture" slot=${slot ?? nothing}>
-      <source media=${darkLogoMedia(this.#theme.choice)} srcset=${WAITRON_LOCKUP_DARK_URL} />
-      <img class="brand-logo" src=${WAITRON_LOCKUP_URL} alt="Waitron" />
-    </picture>`;
+    return html`<wt-waitron-lockup class="brand-logo" slot=${slot ?? nothing}></wt-waitron-lockup>`;
   }
 
   #banner(authenticated: boolean, hasNav: boolean): TemplateResult {

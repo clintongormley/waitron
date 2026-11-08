@@ -10,7 +10,9 @@ import {
 } from "@waitron/ui";
 import { WAITRON_CHOICES, themeSheet, type TextScale } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
+import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
+import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { DashboardApp } from "./dashboard-app.js";
@@ -73,15 +75,24 @@ const lines = (el: DashboardApp) => el.shadowRoot!.querySelectorAll<WtPoweredBy>
 const inBanner = (el: DashboardApp) => banner(el).querySelectorAll<WtPoweredBy>("wt-powered-by");
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-async function loadedLockup(line: WtPoweredBy): Promise<HTMLImageElement> {
+async function loadedLockup(line: WtPoweredBy): Promise<WtWaitronLockup> {
   await line.updateComplete;
-  const img = line.shadowRoot!.querySelector<HTMLImageElement>("[part=lockup]")!;
-  if (!(img.complete && img.naturalWidth > 0)) {
-    await new Promise((resolve) => img.addEventListener("load", resolve, { once: true }));
-  }
-  expect(img.naturalWidth).toBeGreaterThan(0);
-  return img;
+  const lockup = line.shadowRoot!.querySelector<WtWaitronLockup>("[part=lockup]")!;
+  await lockup.updateComplete;
+  return lockup;
 }
+
+/** A lockup file's two inks, cloche then word, as computed styles spell them. */
+const fileInks = (svg: string) =>
+  [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)]
+    .map(
+      (m) =>
+        `rgb(${m
+          .slice(1, 4)
+          .map((hex) => parseInt(hex, 16))
+          .join(", ")})`,
+    )
+    .join(" ");
 
 /** The single banner line, with its lockup loaded and the frame laid out. */
 async function theLine(el: DashboardApp): Promise<WtPoweredBy> {
@@ -202,14 +213,28 @@ describe("Powered by in the signed-in banner", () => {
     else expect(label).not.toBe("Powered by");
   });
 
-  it("draws Waitron's dark lockup in the dark theme", async () => {
+  it("paints Waitron's lockup in the venue theme's dark colours, not the stock ones", async () => {
     store(withLogo);
     startVenueTheme(document.documentElement, { fetchImpl: never });
     const el = await signedIn({ theme: "dark" });
     const line = await theLine(el);
-    const img = line.shadowRoot!.querySelector<HTMLImageElement>("[part=lockup]")!;
-    expect(img.getAttribute("src")).toBe(WAITRON_LOCKUP_DARK_URL);
-    expect(img.getAttribute("src")).not.toBe(WAITRON_LOCKUP_URL);
+    const lockup = await loadedLockup(line);
+    const inks = [...lockup.shadowRoot!.querySelectorAll("svg > g")]
+      .map((g) => getComputedStyle(g).fill)
+      .join(" ");
+    const resolved = ["--wt-color-primary", "--wt-color-text"].map((name) => {
+      const probe = document.createElement("span");
+      probe.style.color = getComputedStyle(line).getPropertyValue(name);
+      document.body.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    });
+    expect(inks).toBe(resolved.join(" "));
+    // The word takes the dark theme's ink; the cloche, the venue's own colour.
+    expect(inks.split(") ")[1]).toBe(fileInks(darkLockup).split(") ")[1]);
+    expect(inks).not.toBe(fileInks(darkLockup));
+    expect(inks).not.toBe(fileInks(lightLockup));
   });
 
   describe.each(["en-GB", "es-ES"] as const)("at desktop width (%s)", (locale) => {

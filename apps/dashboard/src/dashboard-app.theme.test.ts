@@ -11,6 +11,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/t
 import { setLocale } from "./i18n/t.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { DashboardApi } from "./api/client.js";
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
 import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 
@@ -56,29 +57,41 @@ function stubApi(locale: Locale = "es-ES", onboardingIntent = "prepare"): Dashbo
   } as unknown as DashboardApi;
 }
 
-// Vite may inline a small SVG as a data URL, rewriting its quotes and spacing on the way, so the
-// served drawing is compared with the file's once both are parsed.
+/** A lockup file's two inks, cloche then word, as computed styles spell them. */
 const drawing = (svg: string) =>
-  new XMLSerializer()
-    .serializeToString(new DOMParser().parseFromString(svg, "image/svg+xml").documentElement)
-    .replace(/\s+/g, " ");
-const served = async (url: string) => drawing(await (await fetch(url)).text());
+  [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)]
+    .map(
+      (m) =>
+        `rgb(${m
+          .slice(1, 4)
+          .map((hex) => parseInt(hex, 16))
+          .join(", ")})`,
+    )
+    .join(" ");
 
 async function mountShell(): Promise<{ host: HTMLElement; shown: () => Promise<string> }> {
   const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+  // As main.ts does for the page: the theme choice paints the tokens the lockup reads.
+  startThemeChoice(host);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  const img = el.shadowRoot!.querySelector<HTMLImageElement>(
-    '[data-test=brand-banner] img[alt="Waitron"]',
+  const lockup = el.shadowRoot!.querySelector<WtWaitronLockup>(
+    "[data-test=brand-banner] wt-waitron-lockup",
   )!;
-  return { host, shown: async () => (img.currentSrc ? served(img.currentSrc) : "") };
+  await lockup.updateComplete;
+  const shown = async () =>
+    [...lockup.shadowRoot!.querySelectorAll("svg > g")]
+      .map((g) => getComputedStyle(g).fill)
+      .join(" ");
+  return { host, shown };
 }
 
 it("tells the two lockups apart", () => {
   expect(drawing(darkLockup)).not.toBe(drawing(lightLockup));
+  expect(drawing(lightLockup)).toMatch(/^rgb\(.*\) rgb\(.*\)$/);
 });
 
-it("with Dark chosen the banner shows the dark lockup, whatever the computer is set to", async () => {
+it("with Dark chosen the banner paints the lockup in the dark theme's inks, whatever the computer is set to", async () => {
   await commands.emulateColorScheme("light");
   const { shown } = await mountShell();
   chooseTheme("dark");
@@ -87,7 +100,7 @@ it("with Dark chosen the banner shows the dark lockup, whatever the computer is 
   await expect.poll(shown).toBe(drawing(darkLockup));
 });
 
-it("with Light chosen it shows the light lockup, whatever the computer is set to", async () => {
+it("with Light chosen it paints the light theme's inks, whatever the computer is set to", async () => {
   // The computer is dark before the shell draws, so a stale light drawing cannot pass the first poll.
   await commands.emulateColorScheme("dark");
   const { shown } = await mountShell();

@@ -24,7 +24,7 @@ const darkToken = (name) => {
 };
 const MARK_BLUE_DARK = darkToken("primary");
 const WORD_INK_DARK = darkToken("text");
-const ICON_CANVAS = 136; // mark is 124.64 x 117.09, so this leaves an even margin on the long axis
+const ICON_CANVAS = 136; // mark is 124 x 84.91, so this leaves an even margin on the long axis
 
 /**
  * The body must carry no fill of its own: a `fill` attribute on an inner element beats an inherited
@@ -120,14 +120,19 @@ write(
     `<g class="m" transform="${pad(mark.w, mark.h)}">${mark.body}</g></svg>\n`,
 );
 
-// Mark at the wordmark's cap height, feet on its baseline, then the word.
-const scale = 100 / mark.h;
-const gap = 30;
-const wordX = mark.w * scale + gap;
+// The two drawings are cut to one shared height, so they sit side by side unscaled.
+if (word.x !== 0 || word.y !== 0 || word.h !== mark.h) {
+  throw new Error(
+    `waitron-wordmark.svg: viewBox must be 0 0 <width> ${mark.h}, the mark's height, got ` +
+      `${word.x} ${word.y} ${word.w} ${word.h}`,
+  );
+}
+const gap = 14.44;
+const wordX = mark.w + gap;
 const lockup = (markFill, wordFill) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${word.x} ${word.y} ${wordX + word.w} ${word.h}">` +
-  `<g fill="${markFill}" transform="scale(${scale.toFixed(4)})">${mark.body}</g>` +
-  `<g fill="${wordFill}" transform="translate(${wordX.toFixed(1)},0)">${word.body}</g></svg>\n`;
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${+(wordX + word.w).toFixed(2)} ${mark.h}">` +
+  `<g fill="${markFill}">${mark.body}</g>` +
+  `<g fill="${wordFill}" transform="translate(${wordX.toFixed(2)},0)">${word.body}</g></svg>\n`;
 write(join(here, "waitron-lockup.svg"), lockup(mark.fill, word.fill));
 // For an `<img>` on a dark ground, which cannot read the theme's tokens.
 write(join(here, "waitron-lockup-dark.svg"), lockup(MARK_BLUE_DARK, WORD_INK_DARK));

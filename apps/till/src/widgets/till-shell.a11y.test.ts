@@ -1,3 +1,4 @@
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -332,8 +333,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
         await vi.waitFor(() =>
           expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
         );
-        const lockup = line.shadowRoot!.querySelector<HTMLImageElement>('[part="lockup"]')!;
-        await vi.waitFor(() => expect(lockup.complete && lockup.naturalWidth > 0).toBe(true));
+        await line.shadowRoot!.querySelector<WtWaitronLockup>('[part="lockup"]')!.updateComplete;
         await expectNoA11yViolations(host);
       });
     } finally {
@@ -390,8 +390,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
         await vi.waitFor(() =>
           expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
         );
-        const lockup = line.shadowRoot!.querySelector<HTMLImageElement>('[part="lockup"]')!;
-        await vi.waitFor(() => expect(lockup.complete && lockup.naturalWidth > 0).toBe(true));
+        await line.shadowRoot!.querySelector<WtWaitronLockup>('[part="lockup"]')!.updateComplete;
         await expectNoA11yViolations(host);
       });
     } finally {

@@ -4,7 +4,7 @@ import { formatMoney } from "@waitron/shared";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { THEME_STORAGE_KEY, chooseTheme } from "@waitron/ui/src/theme-choice.js";
-import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import {
   WAITRON_CHOICES,
   themeSheet,
@@ -264,18 +264,25 @@ it.each(SWEEPS)(
       setLocale(locale);
       const { el, host } = await mountWithLogo(logo, legalName);
       if (logo !== null) await Promise.all([loaded(el, "light"), loaded(el, "dark")]);
-      const lockups = [...el.shadowRoot!.querySelectorAll<HTMLImageElement>("img.lockup")];
+      const lockups = [
+        ...el.shadowRoot!.querySelectorAll<WtWaitronLockup>("wt-waitron-lockup.lockup"),
+      ];
       expect(lockups).toHaveLength(logo === null ? 2 : 0);
-      await Promise.all(lockups.map((image) => image.decode()));
+      await Promise.all(lockups.map((lockup) => lockup.updateComplete));
       const found: string[] = [];
       for (let previewWidth = 220; previewWidth <= 900; previewWidth += 8) {
         host.style.width = `${previewWidth}px`;
         await new Promise((resolve) => requestAnimationFrame(resolve));
         found.push(...overflowing(el).map((line) => `${previewWidth}px ${line}`));
-        for (const image of lockups) {
-          const box = image.getBoundingClientRect();
+        for (const lockup of lockups) {
+          const box = lockup.getBoundingClientRect();
           const drawn = box.width / box.height;
-          const natural = image.naturalWidth / image.naturalHeight;
+          const [, , w, h] = lockup
+            .shadowRoot!.querySelector("svg")!
+            .getAttribute("viewBox")!
+            .split(/\s+/)
+            .map(Number);
+          const natural = w! / h!;
           if (Math.abs(drawn - natural) > 0.05)
             found.push(
               `${previewWidth}px lockup drawn ${drawn.toFixed(2)}:1, not ${natural.toFixed(2)}:1`,
@@ -345,18 +352,35 @@ it("with a dark image the dark panel draws it, unplated", async () => {
   expect(boxOf(dark).hasAttribute("data-plate")).toBe(false);
 });
 
-it("with no logo, Waitron's lockup in each panel's drawing", async () => {
+it("with no logo, Waitron's lockup in each panel's colours", async () => {
   const { el } = await mountWithLogo(null);
   expect(strip(el, "light").querySelector("wt-venue-logo")).toBeNull();
   const lockup = (mode: "light" | "dark") =>
-    strip(el, mode).querySelector<HTMLImageElement>("img.lockup")!;
-  expect(lockup("light").src).toBe(WAITRON_LOCKUP_URL);
-  expect(lockup("dark").src).toBe(WAITRON_LOCKUP_DARK_URL);
+    strip(el, mode).querySelector<WtWaitronLockup>("wt-waitron-lockup.lockup")!;
+  const inks = async (mode: "light" | "dark") => {
+    await lockup(mode).updateComplete;
+    return [...lockup(mode).shadowRoot!.querySelectorAll("svg > g")].map(
+      (g) => getComputedStyle(g).fill,
+    );
+  };
+  const tokens = (mode: "light" | "dark") => {
+    const style = getComputedStyle(lockup(mode));
+    return ["--wt-color-primary", "--wt-color-text"].map((name) => {
+      const probe = document.createElement("span");
+      probe.style.color = style.getPropertyValue(name);
+      strip(el, mode).append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    });
+  };
+  expect(await inks("light")).toEqual(tokens("light"));
+  expect(await inks("dark")).toEqual(tokens("dark"));
+  expect(await inks("dark")).not.toEqual(await inks("light"));
+  expect(lockup("light").getAttribute("label")).toBe("");
   expect(strip(el, "dark").querySelector(".legal-name")!.textContent).toBe("BAR LUCÍA S.L.");
-  const bar = getComputedStyle(lockup("light")).height;
-  el.logo = { light: L };
-  await el.updateComplete;
-  expect(getComputedStyle(boxOf(logoOf(el, "light"))).height).toBe(bar);
+  strip(el, "light").style.setProperty("--wt-space-5", "21px");
+  expect(lockup("light").getBoundingClientRect().height).toBe(21);
 });
 
 it("the page's own setting does not move a panel's version", async () => {
