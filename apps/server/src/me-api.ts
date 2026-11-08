@@ -37,7 +37,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
 import "./errors.js";
-import { codeOf, createErrorBoundary } from "@waitron/server-kit";
+import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import {
@@ -51,7 +51,7 @@ import {
 import type { Logger } from "./logger.js";
 import type { TradingAdmissionView } from "./trading-admission.js";
 import type { OnboardingIntent } from "./trading-config.js";
-import { AccountEmailFailure, type AccountEmailSender } from "./account-email.js";
+import { accountEmailFailure, type AccountEmailSender } from "./account-email.js";
 import { modulesNamed } from "./modules.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
@@ -170,23 +170,29 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         saveOwnProfile,
         (person) => normalizeAndValidateEmail(input.email) !== person.email,
       );
-      let emailVerificationSent = false;
-      if (issued !== null && deps.sendAccountEmail !== undefined) {
-        try {
-          await deps.sendAccountEmail({
-            ...issued,
-            actionUrl: deps.accountActionBaseUrl ?? "/",
-            locale: issued.locale ?? deps.venueLocale,
-          });
-          emailVerificationSent = true;
-        } catch (error) {
-          log("error", "account_email.send_failed", {
-            purpose: issued.purpose,
-            errorCode: error instanceof AccountEmailFailure ? error.problem : codeOf(error),
-          });
-        }
+      if (issued === null) return c.json({ emailVerificationSent: false });
+      if (deps.sendAccountEmail === undefined)
+        return c.json({
+          emailVerificationSent: false,
+          problem: "email.unconfigured",
+          uncertain: false,
+        });
+      try {
+        const delivery = await deps.sendAccountEmail({
+          ...issued,
+          actionUrl: deps.accountActionBaseUrl ?? "/",
+          locale: issued.locale ?? deps.venueLocale,
+        });
+        return c.json({ emailVerificationSent: true, delivery });
+      } catch (error) {
+        const { problem, uncertain, reason } = accountEmailFailure(error);
+        log("error", "account_email.send_failed", {
+          purpose: issued.purpose,
+          errorCode: problem,
+          ...(reason === undefined ? {} : { reason }),
+        });
+        return c.json({ emailVerificationSent: false, problem, uncertain });
       }
-      return c.json({ emailVerificationSent });
     }),
   );
   app.post("/management-api/session/me/profile/email/confirm", (c) =>

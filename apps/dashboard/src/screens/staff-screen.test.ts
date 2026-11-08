@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
@@ -511,7 +511,12 @@ describe("staff-screen", () => {
 
   it("reports when the person was created but email delivery was unavailable", async () => {
     const api = stubApi({
-      createPerson: vi.fn().mockResolvedValue({ id: "p3", invitationSent: false }),
+      createPerson: vi.fn().mockResolvedValue({
+        id: "p3",
+        invitationSent: false,
+        problem: "email.send_refused",
+        uncertain: false,
+      }),
     });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
       canAdminister: true,
@@ -1232,7 +1237,11 @@ describe("staff-screen — row actions, filters and edit races", () => {
 
   it("confirms enabling, then reports that the invitation email could not be sent", async () => {
     const api = stubApi({
-      reactivatePerson: vi.fn().mockResolvedValue({ invitationSent: false }),
+      reactivatePerson: vi.fn().mockResolvedValue({
+        invitationSent: false,
+        problem: "email.send_refused",
+        uncertain: false,
+      }),
     });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
       canAdminister: true,
@@ -1315,7 +1324,11 @@ describe("staff-screen — row actions, filters and edit races", () => {
   });
 
   it("drops a resend-invitation from a closed edit dialog and a second one while the first runs", async () => {
-    let finish!: (value: { invitationSent: boolean }) => void;
+    let finish!: (value: {
+      invitationSent: boolean;
+      problem?: "email.send_refused";
+      uncertain?: boolean;
+    }) => void;
     const api = stubApi({
       resendInvitation: vi.fn().mockReturnValue(
         new Promise((resolve) => {
@@ -1338,7 +1351,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
     await openEdit(el, "p1");
     resend();
     resend();
-    finish({ invitationSent: false });
+    finish({ invitationSent: false, problem: "email.send_refused", uncertain: false });
     await flush(el);
     expect(api.resendInvitation).toHaveBeenCalledExactlyOnceWith("p1");
     expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")!.textContent!.trim()).toBe(
@@ -1631,5 +1644,89 @@ describe("staff-screen filter fields", () => {
     await chooseOption(status, "suspended");
     await flush(el);
     expect(shown(el)).toEqual(["p2"]);
+  });
+});
+
+describe("account email outcome messages", () => {
+  for (const locale of ["en-GB", "es-ES"]) {
+    it.each([
+      { result: { invitationSent: true, delivery: "sent" }, key: "staff.invitation_sent" },
+      { result: { invitationSent: true, delivery: "captured" }, key: "staff.invitation_captured" },
+      {
+        result: { invitationSent: false, problem: "email.unconfigured", uncertain: false },
+        key: "staff.invitation_unconfigured",
+      },
+      {
+        result: { invitationSent: false, problem: "email.send_refused", uncertain: false },
+        key: "staff.invitation_not_sent",
+      },
+      {
+        result: { invitationSent: false, problem: "email.send_refused", uncertain: true },
+        key: "staff.invitation_uncertain",
+      },
+      {
+        result: { invitationSent: false, problem: "email.send_timeout", uncertain: true },
+        key: "staff.invitation_uncertain",
+      },
+    ] as const)(
+      `shows the actual account email outcome in ${locale}: $key`,
+      async ({ result, key }) => {
+        const previous = currentLocale();
+        setLocale(locale);
+        try {
+          const api = stubApi({ createPerson: vi.fn().mockResolvedValue({ id: "p3", ...result }) });
+          const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+            api,
+            canAdminister: true,
+          });
+          await flush(el);
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+          await flush(el);
+          await createThroughForm(el);
+          await vi.waitFor(() =>
+            expect(
+              el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent?.trim(),
+            ).toBe(t(key)),
+          );
+          expect(form(el).open).toBe(false);
+        } finally {
+          setLocale(previous);
+        }
+      },
+    );
+  }
+
+  it("distinguishes an immediate invitation retry from a mail failure", async () => {
+    const api = stubApi({
+      resendInvitation: vi
+        .fn()
+        .mockResolvedValueOnce({
+          invitationSent: false,
+          problem: "email.send_refused",
+          uncertain: false,
+        })
+        .mockResolvedValueOnce({ invitationSent: false }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api,
+      canAdminister: true,
+    });
+    await flush(el);
+    for (const key of ["staff.invitation_not_sent", "staff.invitation_throttled"] as const) {
+      list(el).dispatchEvent(
+        new CustomEvent("person-action", {
+          detail: { personId: "p1", action: "resend-invitation" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-row-action]")!.click();
+      await vi.waitFor(() =>
+        expect(
+          el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent?.trim(),
+        ).toBe(t(key)),
+      );
+    }
   });
 });

@@ -372,6 +372,15 @@ export type {
 
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 
+export interface AccountEmailDeliveryDetails {
+  delivery?: "sent" | "captured";
+  problem?: "email.unconfigured" | "email.send_refused" | "email.send_timeout";
+  uncertain?: boolean;
+}
+
+export type InvitationResult = { invitationSent: boolean } & AccountEmailDeliveryDetails;
+export type ProfileSaveResult = { emailVerificationSent: boolean } & AccountEmailDeliveryDetails;
+
 export interface OwnProfile {
   displayName: string;
   firstNames: string | null;
@@ -2658,7 +2667,7 @@ export class DashboardApi {
       input,
     );
   }
-  saveProfile(input: ProfileDetails): Promise<{ emailVerificationSent: boolean }> {
+  saveProfile(input: ProfileDetails): Promise<ProfileSaveResult> {
     return this.#request("/management-api/session/me/profile", "PUT", input);
   }
   confirmProfileEmail(code: string): Promise<{ email: string }> {
@@ -2761,19 +2770,12 @@ export class DashboardApi {
     telephone: string | null;
     role: PersonRole;
     email: string;
-  }): Promise<{ id: string; invitationSent: boolean }> {
-    return this.#request<{ id: string; invitationSent: boolean }>(
-      "/management-api/staff",
-      "POST",
-      input,
-    );
+  }): Promise<{ id: string } & InvitationResult> {
+    return this.#request<{ id: string } & InvitationResult>("/management-api/staff", "POST", input);
   }
 
-  resendInvitation(id: string): Promise<{ invitationSent: boolean }> {
-    return this.#request<{ invitationSent: boolean }>(
-      `/management-api/staff/${id}/invitation`,
-      "POST",
-    );
+  resendInvitation(id: string): Promise<InvitationResult> {
+    return this.#request<InvitationResult>(`/management-api/staff/${id}/invitation`, "POST");
   }
 
   savePerson(id: string, details: PersonEditDetails): Promise<void> {
@@ -2788,18 +2790,12 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/staff/${id}/deactivate`, "POST");
   }
 
-  resetLogin(id: string): Promise<{ invitationSent: boolean }> {
-    return this.#request<{ invitationSent: boolean }>(
-      `/management-api/staff/${id}/reset-login`,
-      "POST",
-    );
+  resetLogin(id: string): Promise<InvitationResult> {
+    return this.#request<InvitationResult>(`/management-api/staff/${id}/reset-login`, "POST");
   }
 
-  reactivatePerson(id: string): Promise<{ invitationSent: boolean }> {
-    return this.#request<{ invitationSent: boolean }>(
-      `/management-api/staff/${id}/reactivate`,
-      "POST",
-    );
+  reactivatePerson(id: string): Promise<InvitationResult> {
+    return this.#request<InvitationResult>(`/management-api/staff/${id}/reactivate`, "POST");
   }
 
   passkeyRegisterOptions(input: ProfileCredentials): Promise<PasskeyChallenge> {

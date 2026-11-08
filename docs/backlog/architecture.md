@@ -135,8 +135,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   reader before deciding"; there are no row locks, the enable waits behind the unpair's write
   transaction. `apps/server/README.md` sends readers to "the `drain.complete` log line, the
   `incidents` table" for rejected fiscal records, a path only someone with a terminal can take.
-  Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`; `me-api.ts`'s profile
-  save logs `account_email.send_failed` with the caught error's message. The lock-ordering and
+  Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`. The lock-ordering and
   deadlock cases for transfers, merges and split bills went with PostgreSQL and nothing replaced
   them (one write transaction per venue file is what serialises those writers now). Test titles
   #622 could not touch: "regardless of database date display settings" in `print-api.test.ts`,

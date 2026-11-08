@@ -223,12 +223,9 @@ by the answers):
     rule (`merchants[].name`, `apps/server/src/log-personal-data.ts`) and the guard's array check
     that goes with it. Touches `packages/payments-sumup` and the dashboard's connect form, which
     S10 kept out of scope.
-  - **`account_email.send_failed` has two shapes.** The profile route logs
-    `{ purpose, errorCode }`; the invitation route (`deliverAccountAction`,
-    `apps/server/src/management-api.ts`) logs `{ purpose, personId }` and no error code, so a
-    refused invitation does not say why. Next action: log the code there too.
-  - **The profile route's `errorCode` holds values no registry declares** (`email.send_refused`,
-    `email.unconfigured`, from `AccountEmailFailure`). Register them or rename the field.
+  - **Account-mail routes log unregistered values in `errorCode`** (`email.send_refused`,
+    `email.unconfigured` and `email.send_timeout`, from `AccountEmailFailure`). Register them or
+    rename the field in both the profile and invitation routes.
   - **Smaller tidy-ups:** read registries with TypeScript's parser instead of text in
     `scripts/personal-log-params.test.ts` (its header lists what text reading misses); merge its
     three similar allow-list checks; reuse the existing fake mail server in

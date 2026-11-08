@@ -258,10 +258,13 @@ describe("the running server's managers' email check", () => {
         };
         expect(holder.managementSend).toBeTypeOf("function");
         expect(holder.profileSend).toBeTypeOf("function");
-        await expect(holder.managementSend!(message)).rejects.toThrow("configured");
+        await expect(holder.managementSend!(message)).rejects.toMatchObject({
+          problem: "email.unconfigured",
+          uncertain: false,
+        });
         await expect(
           holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
-        ).rejects.toThrow("configured");
+        ).rejects.toMatchObject({ problem: "email.unconfigured", uncertain: false });
         if (!repair) {
           const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
             headers: { cookie: venue.managerCookie },
@@ -276,6 +279,31 @@ describe("the running server's managers' email check", () => {
       }
     },
   );
+  it.each([false, true])(
+    "reports capture at both account boundaries in Demo (development %s)",
+    async (development) => {
+      const venue = await setupVenue(suite.db);
+      const booted: Booted = {};
+      try {
+        await bootServer(booted, venue, { intent: "demo", development });
+        const message = {
+          purpose: "invitation" as const,
+          email: "invitee@example.test",
+          displayName: "Invitee",
+          actionUrl: "https://dashboard.example.test/manage/account",
+          expiresAt: "2026-11-08T12:00:00Z",
+          locale: "en-GB",
+        };
+        await expect(holder.managementSend!(message)).resolves.toBe("captured");
+        await expect(
+          holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
+        ).resolves.toBe("captured");
+      } finally {
+        await shutDown(booted);
+      }
+    },
+  );
+
   it("Prepare sends through the saved relay at both account boundaries", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, (tx) =>
@@ -302,10 +330,10 @@ describe("the running server's managers' email check", () => {
         expiresAt: "2026-11-08T12:00:00Z",
         locale: "en-GB",
       };
-      await expect(holder.managementSend!(message)).resolves.toBeUndefined();
+      await expect(holder.managementSend!(message)).resolves.toBe("sent");
       await expect(
         holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe("sent");
       expect((await holder.attendance!.resolveDelivery()).mode).toBe("smtp");
     } finally {
       await shutDown(booted);

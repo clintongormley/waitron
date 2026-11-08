@@ -441,7 +441,10 @@ describe("mountMeApi — profile credentials", () => {
     const app = mountApp({
       accountActionCodeKey: codeKey,
       accountActionBaseUrl: "https://waitron.example/",
-      sendAccountEmail: async (message) => void sent.push(message),
+      sendAccountEmail: async (message) => {
+        sent.push(message);
+        return "sent";
+      },
     });
     const cookie = await cookieFor(me);
     const saved = await send(app, "PUT", "/management-api/session/me/profile", {
@@ -456,7 +459,7 @@ describe("mountMeApi — profile credentials", () => {
         currentPassword: "current password",
       },
     });
-    expect(await saved.json()).toEqual({ emailVerificationSent: true });
+    expect(await saved.json()).toEqual({ emailVerificationSent: true, delivery: "sent" });
     expect(sent).toHaveLength(1);
     const pending = await send(app, "GET", "/management-api/session/me/profile", { cookie });
     expect(await pending.json()).toMatchObject({
@@ -1082,6 +1085,97 @@ describe("mountMeApi — own credentials and second factor", () => {
     return { app, lines };
   }
 
+  it.each([
+    { label: "accepted", route: "sent", want: { emailVerificationSent: true, delivery: "sent" } },
+    {
+      label: "captured",
+      route: "captured",
+      want: { emailVerificationSent: true, delivery: "captured" },
+    },
+    {
+      label: "unconfigured",
+      want: { emailVerificationSent: false, problem: "email.unconfigured", uncertain: false },
+    },
+    {
+      label: "refused",
+      error: new AccountEmailFailure("email.send_refused", "email.test_login_refused", false),
+      want: { emailVerificationSent: false, problem: "email.send_refused", uncertain: false },
+    },
+    {
+      label: "deadline",
+      error: new AccountEmailFailure("email.send_timeout", "email.test_timeout", true),
+      want: { emailVerificationSent: false, problem: "email.send_timeout", uncertain: true },
+    },
+    {
+      label: "lost acknowledgement",
+      error: new AccountEmailFailure("email.send_refused", "email.test_refused", true),
+      want: { emailVerificationSent: false, problem: "email.send_refused", uncertain: true },
+    },
+    {
+      label: "unexpected",
+      error: Object.assign(new Error("PASSWORD-SENTINEL https://action.invalid/SECRET"), {
+        code: "PROVIDER-CODE-SENTINEL",
+      }),
+      want: { emailVerificationSent: false, problem: "email.send_refused", uncertain: true },
+    },
+  ] as const)(
+    "reports profile email $label without undoing the saved pending address",
+    async (sample) => {
+      const personId = await personWithPassword({
+        email: `before-${personCount + 1}@example.test`,
+      });
+      const email = `after-${personCount}@example.test`;
+      const { app, lines } = capturingApp({
+        sendAccountEmail:
+          sample.label === "unconfigured"
+            ? undefined
+            : async () => {
+                if ("error" in sample) throw sample.error;
+                return "route" in sample ? sample.route : "sent";
+              },
+      });
+      const response = await send(app, "PUT", "/management-api/session/me/profile", {
+        cookie: await cookieFor(personId),
+        body: {
+          displayName: `Credential User ${personCount}`,
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email,
+          locale: "en-GB",
+          currentPassword: PASSWORD,
+        },
+      });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toEqual(sample.want);
+      expect((await personRow(personId)).pendingEmail).toBe(email);
+      expect(lines.filter((line) => line[1] === "account_email.send_failed")).toEqual(
+        "error" in sample
+          ? [
+              [
+                "error",
+                "account_email.send_failed",
+                {
+                  purpose: "email_change",
+                  errorCode: sample.want.problem,
+                  ...(sample.error instanceof AccountEmailFailure
+                    ? { reason: sample.error.reason }
+                    : {}),
+                },
+              ],
+            ]
+          : [],
+      );
+      for (const secret of [
+        "PASSWORD-SENTINEL",
+        "https://action.invalid/SECRET",
+        "PROVIDER-CODE-SENTINEL",
+      ])
+        expect(JSON.stringify([body, lines])).not.toContain(secret);
+    },
+  );
+
   it("changes the person's own PIN once the current password is confirmed", async () => {
     const personId = await personWithPassword();
     const res = await send(mountApp(), "PUT", "/management-api/session/me/pin", {
@@ -1244,17 +1338,18 @@ describe("mountMeApi — own credentials and second factor", () => {
   });
 
   it.each([
-    ["an Error", new Error("mail relay down"), "unknown"],
-    ["a bare string", "mail relay refused", "unknown"],
+    ["an Error", new Error("mail relay down"), true, undefined],
+    ["a bare string", "mail relay refused", true, undefined],
     [
       "an AccountEmailFailure",
       new AccountEmailFailure("email.send_refused", "email.test_refused", false),
-      "email.send_refused",
+      false,
+      "email.test_refused",
     ],
-    ["an AppError", new AppError("account_action.invalid", {}), "account_action.invalid"],
+    ["an AppError", new AppError("account_action.invalid", {}), true, undefined],
   ])(
     "saves the profile but reports no verification email sent when sending throws %s",
-    async (_label, thrown, logged) => {
+    async (_label, thrown, uncertain, reason) => {
       personCount += 1;
       const personId = await personWithPassword({ email: `before-${personCount}@example.com` });
       const sent: AccountEmail[] = [];
@@ -1277,14 +1372,22 @@ describe("mountMeApi — own credentials and second factor", () => {
         },
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ emailVerificationSent: false });
+      expect(await res.json()).toEqual({
+        emailVerificationSent: false,
+        problem: "email.send_refused",
+        uncertain,
+      });
       expect(sent).toHaveLength(1);
       expect(sent[0]!.actionUrl).toBe("/");
       expect((await personRow(personId)).pendingEmail).toBe(`after-${personCount}@example.com`);
       expect(lines).toContainEqual([
         "error",
         "account_email.send_failed",
-        { purpose: "email_change", errorCode: logged },
+        {
+          purpose: "email_change",
+          errorCode: "email.send_refused",
+          ...(reason === undefined ? {} : { reason }),
+        },
       ]);
     },
   );

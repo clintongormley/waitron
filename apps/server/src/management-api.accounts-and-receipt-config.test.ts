@@ -40,7 +40,7 @@ import { WorkforceBackend } from "@waitron/workforce";
 import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
-import type { AccountEmailSender } from "./account-email.js";
+import { AccountEmailFailure, type AccountEmailSender } from "./account-email.js";
 import type { exchangeGoogleCode } from "./google-oidc.js";
 import {
   mountManagementApi,
@@ -567,6 +567,7 @@ describe("Management API staff + session routes", () => {
     await setupTenant();
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const res = await app.request("/management-api/staff", {
@@ -595,6 +596,7 @@ describe("Management API staff + session routes", () => {
     const { staffId } = await setupTenant();
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const unknown = await app.request("/management-api/password-reset", {
       method: "POST",
@@ -646,6 +648,7 @@ describe("Management API staff + session routes", () => {
     );
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const request = (email: string) =>
       app.request("/management-api/password-reset", {
@@ -675,6 +678,7 @@ describe("Management API staff + session routes", () => {
     await setupTenant();
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const lock = await holdWriteLock();
     try {
@@ -693,7 +697,7 @@ describe("Management API staff + session routes", () => {
 
   it("settles an answered reset only once its token is written", async () => {
     const { staffId } = await setupTenant();
-    const app = mountApp(async () => {});
+    const app = mountApp(async () => "sent");
     const lock = await holdWriteLock();
     let settled = false;
     let settling: Promise<void> | undefined;
@@ -721,6 +725,7 @@ describe("Management API staff + session routes", () => {
     const app = mountApp(async () => {
       sending();
       await delivered;
+      return "sent";
     });
     try {
       expect((await requestReset(app, STAFF_EMAIL)).status).toBe(202);
@@ -747,6 +752,7 @@ describe("Management API staff + session routes", () => {
       const app = mountApp(
         async (message) => {
           sent.push(message);
+          return "sent";
         },
         undefined,
         undefined,
@@ -779,7 +785,7 @@ describe("Management API staff + session routes", () => {
       begin select raise(abort, 'refused for the test'); end
     `);
     try {
-      const app = mountApp(async () => {}, undefined, undefined, log);
+      const app = mountApp(async () => "sent", undefined, undefined, log);
       expect((await requestReset(app, STAFF_EMAIL)).status).toBe(202);
       await expect(app.settle()).resolves.toBeUndefined();
       expect(log).toHaveBeenCalledWith("error", "account_action.request_failed", {
@@ -817,6 +823,7 @@ describe("Management API staff + session routes", () => {
     await setupTenant();
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const created = await app.request("/management-api/staff", {
@@ -856,6 +863,7 @@ describe("Management API staff + session routes", () => {
     await setupTenant();
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const created = await app.request("/management-api/staff", {
@@ -906,7 +914,7 @@ describe("Management API staff + session routes", () => {
       headers: { cookie },
     });
     expect(resent.status).toBe(200);
-    expect(await resent.json()).toEqual({ invitationSent: true });
+    expect(await resent.json()).toEqual({ invitationSent: true, delivery: "sent" });
     expect(sent).toHaveLength(3);
     expect(sent[2]!.email).toBe("pending-resend@x.com");
     expect(sent[2]!.code).toBeUndefined();
@@ -1031,6 +1039,7 @@ describe("Management API staff + session routes", () => {
     const { staffId } = await setupTenant();
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const reset = await app.request(`/management-api/staff/${staffId}/reset-login`, {
@@ -1038,7 +1047,7 @@ describe("Management API staff + session routes", () => {
       headers: { cookie },
     });
     expect(reset.status).toBe(200);
-    expect(await reset.json()).toEqual({ invitationSent: true });
+    expect(await reset.json()).toEqual({ invitationSent: true, delivery: "sent" });
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ purpose: "invitation", email: STAFF_EMAIL });
     const row = await suite.db.execute<{
@@ -1863,6 +1872,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     for (const body of [{}, { email: 42 }]) {
       const res = await app.request("/management-api/password-reset", {
@@ -1880,6 +1890,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     await app.request("/management-api/password-reset", {
       method: "POST",
@@ -1945,6 +1956,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     expect(log).toHaveBeenCalledWith("error", "account_email.send_failed", {
       purpose: "invitation",
       personId: created.id,
+      errorCode: "email.send_refused",
     });
     expect(JSON.stringify(log.mock.calls)).not.toContain("secret");
   });
@@ -1954,6 +1966,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const created = await app.request("/management-api/staff", {
@@ -1967,7 +1980,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
         method: "POST",
         headers: { cookie },
       });
-    expect(await (await resend()).json()).toEqual({ invitationSent: true });
+    expect(await (await resend()).json()).toEqual({ invitationSent: true, delivery: "sent" });
     expect(await (await resend()).json()).toEqual({ invitationSent: false });
     expect(sent).toHaveLength(2);
   });
@@ -2009,6 +2022,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const status = async () =>
@@ -2032,7 +2046,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       });
     const first = await reactivate();
     expect(first.status).toBe(200);
-    expect(await first.json()).toEqual({ invitationSent: true });
+    expect(await first.json()).toEqual({ invitationSent: true, delivery: "sent" });
     expect(await status()).toBe("pending");
     expect(sent.map((m) => [m.purpose, m.email])).toEqual([["invitation", STAFF_EMAIL]]);
 
@@ -2746,6 +2760,7 @@ describe("A998 admin account authority", () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const managerCookie = await login(app, MANAGER_EMAIL);
     const changed = await app.request(`/management-api/staff/${admin!.id}`, {
@@ -2830,6 +2845,7 @@ describe("A998 staff route authority", () => {
       const sent: Parameters<AccountEmailSender>[0][] = [];
       const app = mountApp(async (message) => {
         sent.push(message);
+        return "sent";
       });
       const cookie = await login(app, MANAGER_EMAIL);
       const response = await app.request(`/management-api/staff/${staffId}/${action}`, {
@@ -2849,6 +2865,7 @@ describe("A998 staff route authority", () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const cookie = await login(app, MANAGER_EMAIL);
     const response = await app.request("/management-api/staff", {
@@ -2873,6 +2890,7 @@ it("rechecks admin authority lost after the invitation preflight", async () => {
   const sent: Parameters<AccountEmailSender>[0][] = [];
   const app = mountApp(async (message) => {
     sent.push(message);
+    return "sent";
   });
   const cookie = await login(app, "owner@example.test", "dashPass123");
   const original = suite.db.withWriteLock.bind(suite.db);
@@ -2938,6 +2956,7 @@ it("retires a pre-promotion invitation and lets an admin issue its replacement",
   const sent: Parameters<AccountEmailSender>[0][] = [];
   const app = mountApp(async (message) => {
     sent.push(message);
+    return "sent";
   });
   const managerCookie = await login(app, "owner@example.test", "dashPass123");
   const adminCookie = await login(app, "owner@example.test", "dashPass123");
@@ -2977,7 +2996,7 @@ it("retires a pre-promotion invitation and lets an admin issue its replacement",
     headers: { cookie: adminCookie },
   });
   expect(resent.status).toBe(200);
-  expect(await resent.json()).toEqual({ invitationSent: true });
+  expect(await resent.json()).toEqual({ invitationSent: true, delivery: "sent" });
   expect(sent).toHaveLength(2);
   const freshToken = new URL(sent[1]!.actionUrl).searchParams.get("token")!;
   expect(freshToken).not.toBe(oldToken);
@@ -2996,6 +3015,7 @@ describe("A1000 non-admin account authority", () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
+      return "sent";
     });
     const managerCookie = await login(app, MANAGER_EMAIL);
     const changed = await app.request(`/management-api/staff/${admin!.id}`, {
@@ -3065,6 +3085,7 @@ it("preserves a manager changing their own email through staff details", async (
   const sent: Parameters<AccountEmailSender>[0][] = [];
   const app = mountApp(async (message) => {
     sent.push(message);
+    return "sent";
   });
   const cookie = await login(app, MANAGER_EMAIL);
   const saved = await app.request(`/management-api/staff/${managerId.toUpperCase()}`, {
@@ -3175,6 +3196,7 @@ it("sends password-reset links back to the requesting staff origin", async () =>
   const sent: Parameters<AccountEmailSender>[0][] = [];
   const local = mountApp(async (message) => {
     sent.push(message);
+    return "sent";
   });
   const staff = createStaffApp(local, "https://staff.example.test");
   expect(
@@ -3189,4 +3211,216 @@ it("sends password-reset links back to the requesting staff origin", async () =>
   await local.settle();
   expect(sent).toHaveLength(1);
   expect(new URL(sent[0]!.actionUrl).origin).toBe("https://staff.example.test");
+});
+
+describe("account email delivery details", () => {
+  const cases = [
+    { label: "accepted", route: "sent", want: { invitationSent: true, delivery: "sent" } },
+    { label: "captured", route: "captured", want: { invitationSent: true, delivery: "captured" } },
+    {
+      label: "unconfigured",
+      want: { invitationSent: false, problem: "email.unconfigured", uncertain: false },
+    },
+    {
+      label: "refused",
+      error: new AccountEmailFailure("email.send_refused", "email.test_login_refused", false),
+      want: { invitationSent: false, problem: "email.send_refused", uncertain: false },
+    },
+    {
+      label: "deadline",
+      error: new AccountEmailFailure("email.send_timeout", "email.test_timeout", true),
+      want: { invitationSent: false, problem: "email.send_timeout", uncertain: true },
+    },
+    {
+      label: "lost acknowledgement",
+      error: new AccountEmailFailure("email.send_refused", "email.test_refused", true),
+      want: { invitationSent: false, problem: "email.send_refused", uncertain: true },
+    },
+    {
+      label: "unexpected provider error",
+      error: Object.assign(new Error("PASSWORD-SENTINEL https://action.invalid/SECRET"), {
+        code: "PROVIDER-CODE-SENTINEL",
+      }),
+      want: { invitationSent: false, problem: "email.send_refused", uncertain: true },
+    },
+  ] as const;
+  for (const action of ["create", "invitation", "reset-login", "reactivate"] as const) {
+    it.each(cases)(
+      `${action} reports $label while retaining the issued account action`,
+      async (sample) => {
+        const { staffId } = await setupTenant();
+        if (action === "invitation" || action === "reactivate") {
+          await suite.db
+            .update(persons)
+            .set({ status: action === "invitation" ? "pending" : "suspended" })
+            .where(eq(persons.id, staffId));
+        }
+        const log = vi.fn<Logger>();
+        const send: AccountEmailSender | undefined =
+          sample.label === "unconfigured"
+            ? undefined
+            : async () => {
+                if ("error" in sample) throw sample.error;
+                return "route" in sample ? sample.route : "sent";
+              };
+        const app = mountApp(send, undefined, undefined, log);
+        const cookie = await login(app, "owner@example.test", "dashPass123");
+        const res = await app.request(
+          action === "create"
+            ? "/management-api/staff"
+            : `/management-api/staff/${staffId}/${action}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", cookie },
+            ...(action === "create"
+              ? {
+                  body: JSON.stringify(
+                    invitationBody("Delivery Recipient", "delivery@example.test"),
+                  ),
+                }
+              : {}),
+          },
+        );
+        expect(res.status).toBe(action === "create" ? 201 : 200);
+        const body = (await res.json()) as { id?: string };
+        expect(body).toEqual({
+          ...(action === "create" ? { id: expect.any(String) } : {}),
+          ...sample.want,
+        });
+        const id = body.id ?? staffId;
+        const [person] = await suite.db
+          .select({ status: persons.status })
+          .from(persons)
+          .where(eq(persons.id, id));
+        expect(person?.status).toBe("pending");
+        const links = await suite.db.execute<{ n: string }>(
+          sql`select cast(count(*) as text) as n from management_account_actions where person_id=${id}`,
+        );
+        expect(links.rows).toEqual([{ n: "1" }]);
+        const failures = log.mock.calls.filter((call) => call[1] === "account_email.send_failed");
+        expect(failures).toEqual(
+          "error" in sample
+            ? [
+                [
+                  "error",
+                  "account_email.send_failed",
+                  {
+                    purpose: "invitation",
+                    personId: id,
+                    errorCode: sample.want.problem,
+                    ...(sample.error instanceof AccountEmailFailure
+                      ? { reason: sample.error.reason }
+                      : {}),
+                  },
+                ],
+              ]
+            : [],
+        );
+        const serialized = JSON.stringify([body, log.mock.calls]);
+        for (const secret of [
+          "PASSWORD-SENTINEL",
+          "https://action.invalid/SECRET",
+          "PROVIDER-CODE-SENTINEL",
+        ])
+          expect(serialized).not.toContain(secret);
+      },
+    );
+  }
+
+  it("keeps public reset empty and immediate while sanitising the eventual delivery failure", async () => {
+    const { staffId } = await setupTenant();
+    const log = vi.fn<Logger>();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const sending = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let sends = 0;
+    const app = mountApp(
+      async () => {
+        sends += 1;
+        started();
+        await gate;
+        throw Object.assign(new Error("PASSWORD-SENTINEL https://action.invalid/SECRET"), {
+          code: "PROVIDER-CODE-SENTINEL",
+        });
+      },
+      undefined,
+      undefined,
+      log,
+    );
+    try {
+      const response = await requestReset(app, STAFF_EMAIL);
+      expect([response.status, await response.text()]).toEqual([202, ""]);
+      await sending;
+      expect(log.mock.calls.filter((call) => call[1] === "account_email.send_failed")).toEqual([]);
+    } finally {
+      release();
+    }
+    await vi.waitFor(() =>
+      expect(log.mock.calls.filter((call) => call[1] === "account_email.send_failed")).toEqual([
+        [
+          "error",
+          "account_email.send_failed",
+          { purpose: "password_reset", personId: staffId, errorCode: "email.send_refused" },
+        ],
+      ]),
+    );
+    expect(sends).toBe(1);
+    for (const secret of [
+      "PASSWORD-SENTINEL",
+      "https://action.invalid/SECRET",
+      "PROVIDER-CODE-SENTINEL",
+    ])
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+  });
+
+  it("reports the immediate retry as unchanged and preserves a throttled reset's credentials", async () => {
+    const { staffId } = await setupTenant();
+    let actionUrl = "";
+    const app = mountApp(async (message) => {
+      actionUrl = message.actionUrl;
+      throw new AccountEmailFailure("email.send_refused", "email.test_login_refused", false);
+    });
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    const request = (action: string) =>
+      app.request(`/management-api/staff/${staffId}/${action}`, {
+        method: "POST",
+        headers: { cookie },
+      });
+    const failed = await request("reset-login");
+    expect(await failed.json()).toEqual({
+      invitationSent: false,
+      problem: "email.send_refused",
+      uncertain: false,
+    });
+    const link = new URL(actionUrl);
+    const completed = await app.request("/management-api/account-actions/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token: link.searchParams.get("token"),
+        purpose: "invitation",
+        password: PASSWORD,
+        pin: "2468",
+      }),
+    });
+    expect(completed.status).toBe(200);
+    const before = await suite.db
+      .select({ password: persons.passwordHash, pin: persons.pinHash, status: persons.status })
+      .from(persons)
+      .where(eq(persons.id, staffId));
+    expect(before[0]?.password).not.toBeNull();
+    const retry = await request("reset-login");
+    expect(await retry.json()).toEqual({ invitationSent: false });
+    expect(
+      await suite.db
+        .select({ password: persons.passwordHash, pin: persons.pinHash, status: persons.status })
+        .from(persons)
+        .where(eq(persons.id, staffId)),
+    ).toEqual(before);
+  });
 });

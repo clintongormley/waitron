@@ -764,7 +764,12 @@ describe("the recovery page, the log file and stdout carry no person's details",
 
         expect(answer).toEqual({
           status: 201,
-          body: { id: expect.any(String), invitationSent: false },
+          body: {
+            id: expect.any(String),
+            invitationSent: false,
+            problem: "email.send_refused",
+            uncertain: false,
+          },
         });
         const personId = (answer.body as { id: string }).id;
         expect(relay.recipients).toEqual([JORDI_EMAIL]);
@@ -772,7 +777,12 @@ describe("the recovery page, the log file and stdout carry no person's details",
         await expectLogged(
           r,
           "account_email.send_failed",
-          { purpose: "invitation", personId },
+          {
+            purpose: "invitation",
+            personId,
+            errorCode: "email.send_refused",
+            reason: "email.test_refused",
+          },
           [JORDI_EMAIL, JORDI_NAME],
           "error",
         );
@@ -809,13 +819,16 @@ describe("the recovery page, the log file and stdout carry no person's details",
         },
       );
 
-      expect(answer).toEqual({ status: 200, body: { emailVerificationSent: false } });
+      expect(answer).toEqual({
+        status: 200,
+        body: { emailVerificationSent: false, problem: "email.send_refused", uncertain: false },
+      });
       expect(relay.recipients).toEqual([JORDI_EMAIL]);
       expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
       await expectLogged(
         r,
         "account_email.send_failed",
-        { purpose: "email_change", errorCode: "email.send_refused" },
+        { purpose: "email_change", errorCode: "email.send_refused", reason: "email.test_refused" },
         [JORDI_EMAIL],
         "error",
       );

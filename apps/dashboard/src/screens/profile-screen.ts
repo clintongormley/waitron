@@ -24,7 +24,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import type { DashboardApi, OwnProfile } from "../api/client.js";
+import type { DashboardApi, OwnProfile, ProfileSaveResult } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -175,6 +175,9 @@ export class ProfileScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         overflow-wrap: anywhere;
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
       .field-meta {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-normal);
@@ -238,6 +241,9 @@ export class ProfileScreen extends LitElement {
   /** Whether `error` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
   #fieldErrors: Partial<Record<Field, string>> = {};
+  @property({ type: Boolean }) canAdminister = false;
+  @state() private emailStatus:
+    "sent" | "captured" | "unconfigured" | "not_sent" | "uncertain" | null = null;
   @state() private saved = false;
   @state() private busy = false;
   @state() private visible = new Set<Field>();
@@ -296,6 +302,7 @@ export class ProfileScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#operation++;
+    this.emailStatus = null;
     this.#download++;
     this.downloading = false;
     this.busy = false;
@@ -380,6 +387,7 @@ export class ProfileScreen extends LitElement {
   #edit(mode: Mode, id = ""): void {
     if (this.busy) return;
     this.mode = mode;
+    if (mode === "details") this.emailStatus = null;
     this.removingId = id;
     this.attempted = false;
     this.refused = {};
@@ -611,8 +619,9 @@ export class ProfileScreen extends LitElement {
       ? { currentPassword: f.currentPassword, ...(this.profile!.hasTotp ? { totp: f.totp } : {}) }
       : {};
     try {
+      let emailResult: ProfileSaveResult | undefined;
       if (this.mode === "details")
-        await this.api.saveProfile({
+        emailResult = await this.api.saveProfile({
           displayName: f.displayName.trim(),
           firstNames: f.firstNames.trim(),
           lastNames: f.lastNames.trim(),
@@ -678,6 +687,21 @@ export class ProfileScreen extends LitElement {
         await this.api.confirmProfileEmail(f.setupCode);
       }
       if (!active()) return;
+      if (this.mode === "email") this.emailStatus = null;
+      if (emailResult !== undefined) {
+        this.emailStatus =
+          emailResult.uncertain === true
+            ? "uncertain"
+            : emailResult.problem === "email.unconfigured"
+              ? "unconfigured"
+              : emailResult.problem !== undefined
+                ? "not_sent"
+                : emailResult.delivery === "captured"
+                  ? "captured"
+                  : emailResult.emailVerificationSent
+                    ? "sent"
+                    : null;
+      }
       if (this.mode === "passkey" || this.mode === "remove") void signalAcceptedPasskeys(this.api);
       scope?.commit(submitted);
       if (!scope?.isDirty()) this.#closeSaved();
@@ -1182,10 +1206,32 @@ export class ProfileScreen extends LitElement {
       </wt-modal>
     `;
   }
+  #renderEmailStatus() {
+    const status = this.emailStatus;
+    if (status === null) return nothing;
+    return html`<div role="status" data-test="email-status">
+      <p data-test="email-status-text">${t(`profile.email_${status}`)}</p>
+      ${
+        status === "sent"
+          ? nothing
+          : this.canAdminister
+            ? html`<a data-test="email-settings-link" href="/manage/email"
+                >${t(status === "captured" ? "nav.email_inbox" : "nav.email")}</a
+              >`
+            : html`<p>${t("profile.email_admin_help")}</p>
+                <wt-button
+                  data-test="email-admin-sign-in"
+                  @click=${() => this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}
+                  >${t("staff.sign_in_as_admin")}</wt-button
+                >`
+      }
+    </div>`;
+  }
   override render() {
     const p = this.profile;
     return html`<div class="profile">
       ${this.saved ? html`<p role="status">${t("profile.saved")}</p>` : nothing}
+      ${this.#renderEmailStatus()}
       ${
         p === null
           ? html`

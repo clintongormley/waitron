@@ -357,6 +357,8 @@ qualify power loss during placement; A1415's process-kill tests establish restar
 The [dated design amendment](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md)
 and [implementation plan](../superpowers/plans/2026-10-22-a987-prepare-venue-email.md) govern the
 build; the original design's unanswered questions and earlier permission descriptions are historical.
+The [account-delivery amendment](../superpowers/plans/2026-11-08-a987-account-delivery-details.md)
+covers the account result messages and recovery actions.
 
 Prepare requires a usable route before setup completes outside development. Live asks again;
 configuration export carries no mail settings or secrets. Settings → Email serves Prepare and
@@ -369,8 +371,11 @@ the relevant field or at the bottom of both SMTP forms, with the matching Englis
 guide. Cut C opens Prepare settings, adds admin removal and Settings navigation, and shows stored
 settings separately from invoice capture on development boxes. The Prepare wizard now collects and
 tests SMTP outside development; ordinary Prepare uses the relay or reports unavailable mail. Demo's
-inbox link is offered publicly and to signed-in admins. Left: account delivery details and sender
-naming for account, setup and invoice envelopes.
+inbox link is offered publicly and to signed-in admins. Users and Account settings show actual
+account-mail results, including uncertain sends; throttled invitation actions say nothing changed.
+Left: sender naming for account, setup and invoice envelopes, and making non-development Demo
+capture account mail even when a stored relay exists (the current resolver still
+prefers that relay; `apps/server/src/email-delivery.ts` and its stored-relay tests).
 Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
 joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
 The setup-test network-target issue below remains separate open work.

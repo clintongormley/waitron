@@ -20,7 +20,7 @@ borra su PIN, contraseña, llaves de acceso, verificación en dos pasos, código
 vínculo con Google. Al volver a habilitarla se envía una nueva
 invitación. Los gerentes no ven estas acciones.
 
-Para configurar el envío de estos enlaces, abre [Configuración del correo](email.md#set-up).
+Para configurar el envío de estos enlaces, abre [Configuración del correo](email.md#set-up). Si puede que una invitación no se haya enviado, revisa la bandeja del destinatario antes de reenviarla: solo funciona el enlace más reciente. Si un reintento indica que no ha cambiado nada, espera un minuto.
 
 Si Waitron no puede verificar tu passkey, puedes reintentarlo o elegir **Usar tu contraseña**
 para iniciar sesión. En la pantalla de contraseña, **¿Has olvidado tu contraseña?** solicita un
@@ -33,6 +33,8 @@ cuenta deshabilitada.
 Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus propios datos de
 acceso. Puedes seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en
 dos pasos.
+
+Para confirmar una nueva dirección, introduce el código que llegue a ella. Si no se puede enviar la confirmación, usa el enlace a Correo o **Iniciar sesión como administrador** que ofrece el resultado; después vuelve a tu cuenta, introduce de nuevo la dirección en **Tus datos** y guarda.
 
 En **Seguridad**, elige **Añadir passkey** junto a **Passkeys**.
 Sigue las instrucciones de tu gestor de contraseñas para añadirla.

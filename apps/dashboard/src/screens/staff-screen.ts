@@ -99,7 +99,8 @@ export class StaffScreen extends LitElement {
   @state() private errorField: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
-  @state() private invitationStatus: "sent" | "not_sent" | null = null;
+  @state() private invitationStatus:
+    "sent" | "captured" | "not_sent" | "unconfigured" | "uncertain" | "throttled" | null = null;
   @state() private search = "";
   @state() private roleFilter: PersonRole | "all" = "all";
   @state() private statusFilter: "current" | "pending" | "active" | "suspended" | "all" = "current";
@@ -180,6 +181,21 @@ export class StaffScreen extends LitElement {
     </div>`;
   }
 
+  #showInvitation(result: Awaited<ReturnType<DashboardApi["resendInvitation"]>>): void {
+    this.invitationStatus =
+      result.uncertain === true
+        ? "uncertain"
+        : result.problem === "email.unconfigured"
+          ? "unconfigured"
+          : result.problem !== undefined
+            ? "not_sent"
+            : result.delivery === "captured"
+              ? "captured"
+              : result.invitationSent
+                ? "sent"
+                : "throttled";
+  }
+
   #onRowAction(event: CustomEvent<{ personId: string; action: string }>): void {
     event.stopPropagation();
     if (this.rowBusy || !this.canAdminister) return;
@@ -214,7 +230,7 @@ export class StaffScreen extends LitElement {
             : action === "reactivate"
               ? this.api.reactivatePerson(person.personId)
               : this.api.resendInvitation(person.personId));
-      if (result) this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+      if (result) this.#showInvitation(result);
       this.rowAction = null;
       await this.#load();
     } catch (error) {
@@ -224,8 +240,7 @@ export class StaffScreen extends LitElement {
     }
   }
 
-  // Not @state, since nothing renders off it. Set synchronously on entry, so a double-clicked Crear
-  // files at most one person.
+  // Set before awaiting so two clicks cannot create two people.
   #creating = false;
 
   #editing = false;
@@ -374,7 +389,7 @@ export class StaffScreen extends LitElement {
     try {
       const result = await this.api.resendInvitation(personId);
       if (this.editingPerson?.personId !== personId) return;
-      this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+      this.#showInvitation(result);
       this.shadowRoot!.querySelector("dashboard-person-edit")!.closeIfUnchanged();
     } catch (error) {
       if (this.editingPerson?.personId === personId) this.#fail(error);
@@ -407,7 +422,7 @@ export class StaffScreen extends LitElement {
     this.#showError(null);
     try {
       const result = await this.api.createPerson(event.detail);
-      this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+      this.#showInvitation(result);
       const closed = this.shadowRoot!.querySelector("dashboard-person-form")!.closeSaved(
         event.detail,
       );

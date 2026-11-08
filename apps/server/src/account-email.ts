@@ -14,7 +14,7 @@ export interface AccountEmail {
   locale: string;
 }
 
-export type AccountEmailSender = (message: AccountEmail) => Promise<void>;
+export type AccountEmailSender = (message: AccountEmail) => Promise<"sent" | "captured">;
 
 export class AccountEmailFailure extends Error {
   constructor(
@@ -24,6 +24,21 @@ export class AccountEmailFailure extends Error {
   ) {
     super(problem);
   }
+}
+
+// Provider error text can contain credentials in connection addresses; log only these codes.
+export function accountEmailFailure(error: unknown): {
+  problem: AccountEmailFailure["problem"];
+  uncertain: boolean;
+  reason?: SmtpTestCode;
+} {
+  return error instanceof AccountEmailFailure
+    ? {
+        problem: error.problem,
+        uncertain: error.uncertain,
+        ...(error.reason === undefined ? {} : { reason: error.reason }),
+      }
+    : { problem: "email.send_refused", uncertain: true };
 }
 
 function escapeHtml(value: string): string {
@@ -125,5 +140,6 @@ ${
         outcome.status === "unknown",
       );
     }
+    return "sent";
   };
 }
