@@ -134,9 +134,9 @@ interface Venue {
 let venue: Venue;
 
 const MENU: { name: string; customer: string; kitchen: string; price: string }[] = [
-  { name: "Chuletón", customer: "Chuletón a la brasa", kitchen: "CHULETA", price: "25.00" },
-  { name: "Tarta", customer: "Tarta de queso", kitchen: "TARTA", price: "18.00" },
-  { name: "Caña", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
+  { name: "Steak", customer: "Chuletón a la brasa", kitchen: "CHULETA", price: "25.00" },
+  { name: "Cake", customer: "Tarta de queso", kitchen: "TARTA", price: "18.00" },
+  { name: "Beer", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
 ];
 
 async function provision(db: typeof suite.db): Promise<Venue> {
@@ -452,7 +452,7 @@ describe("invoice selection before reserving new bill money", () => {
   it.each(["cash", "manual", "reader"] as const)(
     "refuses a %s reservation when this node does not own the saved invoice choice",
     async (method) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       const before = await snapshot(billId);
       const error = await captureError(() =>
         pay(billId, { ...venue.cfg, nodeId: brandNodeId(randomUUID()) }, method),
@@ -468,7 +468,7 @@ describe("invoice selection before reserving new bill money", () => {
   it.each(["cash", "manual", "reader"] as const)(
     "accepts a %s reservation for this node's F2 bill at the ceiling",
     async (method) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       const result = await pay(
         billId,
         { ...venue.cfg, simplifiedInvoiceLimit: decimal("3.00") },
@@ -487,7 +487,7 @@ describe("invoice selection before reserving new bill money", () => {
   it.each(["cash", "manual", "reader"] as const)(
     "retains the F2 ceiling before a %s reservation",
     async (method) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       const before = await snapshot(billId);
       const error = await captureError(() =>
         pay(billId, { ...venue.cfg, simplifiedInvoiceLimit: decimal("2.00") }, method),
@@ -500,7 +500,7 @@ describe("invoice selection before reserving new bill money", () => {
   it.each(["cash", "manual", "reader"] as const)(
     "accepts a saved F1 before a %s reservation above the F2 ceiling",
     async (method) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
         revision: 0,
         invoiceType: "F1",
@@ -533,9 +533,9 @@ describe("invoice selection before reserving new bill money", () => {
 
 describe("the writers with no route of their own", () => {
   it("refuses moving a paid line between bills", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     await take(billId, cash("25.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1 }] }));
-    const other = await tabWith("Caña");
+    const other = await tabWith("Beer");
 
     const code = await codeOf(inTx((tx) => moveOrderLines(tx, venue.cfg, billId, other, [1])));
 
@@ -543,7 +543,7 @@ describe("the writers with no route of their own", () => {
   });
 
   it("refuses a split of unpaid lines that would leave the bill owing less than it received", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     await take(billId, cash("30.00"));
 
     const error = await captureError(() =>
@@ -557,7 +557,7 @@ describe("the writers with no route of their own", () => {
   });
 
   it("counts a pending card's reservation against the bill's total", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     await insertPayment(billId, { applied: 5000 });
 
     const error = await captureError(() => inTx((tx) => assertBillInvariant(tx, [billId])));
@@ -569,7 +569,7 @@ describe("the writers with no route of their own", () => {
   });
 
   it("refuses a void while a card payment of part of the bill is pending, before the invariant", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     await insertPayment(billId, { applied: 2000 });
 
     const error = await captureError(() => inTx((tx) => cancelLine(tx, venue.cfg, billId, 1)));
@@ -578,7 +578,7 @@ describe("the writers with no route of their own", () => {
   });
 
   it("refuses removing a paid line by saving the order without it, and lets an unpaid one go", async () => {
-    const billId = await tabWith("Chuletón", "Tarta", "Caña");
+    const billId = await tabWith("Steak", "Cake", "Beer");
     await take(billId, cash("25.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1 }] }));
     const lines = await inTx((tx) =>
       tx
@@ -601,7 +601,7 @@ describe("the writers with no route of their own", () => {
 
     const refused = await codeOf(
       updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, venue.cfg, billId, {
-        lines: [keep(2, "Tarta"), keep(3, "Caña")],
+        lines: [keep(2, "Cake"), keep(3, "Beer")],
         revision: order!.revision,
       }),
     );
@@ -610,7 +610,7 @@ describe("the writers with no route of their own", () => {
       venue.cfg,
       billId,
       {
-        lines: [keep(1, "Chuletón"), keep(2, "Tarta")],
+        lines: [keep(1, "Steak"), keep(2, "Cake")],
         revision: order!.revision,
       },
     );
@@ -623,7 +623,7 @@ describe("the writers with no route of their own", () => {
     const billId = await inTx(async (tx) => {
       const { tabId } = await openPartyTab(tx, venue.cfg, {
         tableId: await freshTableIn(tx),
-        lines: [{ menuItemId: offer("Caña"), quantity: "3" }],
+        lines: [{ menuItemId: offer("Beer"), quantity: "3" }],
       });
       return tabId;
     });
@@ -653,7 +653,7 @@ describe("the writers with no route of their own", () => {
     const billId = await inTx(async (tx) => {
       const { tabId } = await openPartyTab(tx, venue.cfg, {
         tableId: await freshTableIn(tx),
-        lines: [{ menuItemId: offer("Caña"), quantity: "2" }],
+        lines: [{ menuItemId: offer("Beer"), quantity: "2" }],
       });
       return tabId;
     });
@@ -680,7 +680,7 @@ describe("the writers with no route of their own", () => {
   it("on a bill written before portions, refuses splitting off more of a line than is unpaid", async () => {
     const billId = await inTx(async (tx) => {
       const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: await freshTableIn(tx) });
-      await writeGroupedLines(tx, venue.cfg, tabId, [{ menuItemId: offer("Caña"), quantity: "3" }]);
+      await writeGroupedLines(tx, venue.cfg, tabId, [{ menuItemId: offer("Beer"), quantity: "3" }]);
       return tabId;
     });
     await take(
@@ -704,7 +704,7 @@ describe("the writers with no route of their own", () => {
 
 describe("a bill holding money", () => {
   it("is refused by the cash sale before the in-flight check, naming the money", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     await take(billId, cash("10.00"));
     await inTx((tx) =>
       tx
@@ -725,7 +725,7 @@ describe("a bill holding money", () => {
   });
 
   it("is refused by the collect of a placed order", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     await take(billId, cash("10.00"));
     await inTx((tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, billId)),
@@ -743,7 +743,7 @@ describe("a bill holding money", () => {
   });
 
   it("can be abandoned once every payment on it is refunded in full, tip included", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const paid = await take(billId, cash("10.00"));
     await inTx((tx) =>
       tx.insert(billPaymentRefunds).values({
@@ -770,7 +770,7 @@ describe("a bill holding money", () => {
   });
 
   it("answers working_order.not_open, not its money, when discarding a bill already closed", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     await take(billId, cash("10.00"));
     await inTx((tx) =>
       tx
@@ -788,7 +788,7 @@ describe("a bill holding money", () => {
 
 describe("settling a card payment of part of the bill", () => {
   it("refuses completing a payment that is no longer pending, and failing one received", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     const failed = await insertPayment(billId, {
       state: "failed",
       failedAt: "2026-09-27T10:00:00Z",
@@ -820,7 +820,7 @@ describe("settling a card payment of part of the bill", () => {
 
 describe("the guests a manager's confirmation stores", () => {
   it("stores the party's count read when the manager confirms the card, as payments-api's attest does", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     suite.db.run(
       sql`update parties set guest_count = 4
           where id = (select party_id from working_orders where id = ${billId})`,
@@ -856,8 +856,8 @@ describe("the guests a manager's confirmation stores", () => {
 
 describe("the money a bill has received", () => {
   it("counts only received payments, net of their refunds", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
-    const other = await tabWith("Caña");
+    const billId = await tabWith("Steak", "Cake");
+    const other = await tabWith("Beer");
     const received = await take(billId, cash("5.00"));
     await inTx((tx) =>
       tx.insert(billPaymentRefunds).values({
@@ -887,10 +887,10 @@ describe("the money a bill has received", () => {
   });
 
   it("holds a bill with a received or a pending payment, and not one whose only payment failed", async () => {
-    const received = await tabWith("Chuletón");
-    const pending = await tabWith("Tarta");
-    const failed = await tabWith("Caña");
-    const none = await tabWith("Caña");
+    const received = await tabWith("Steak");
+    const pending = await tabWith("Cake");
+    const failed = await tabWith("Beer");
+    const none = await tabWith("Beer");
     await take(received, cash("5.00"));
     await insertPayment(pending, { applied: 100 });
     await insertPayment(failed, {
@@ -927,7 +927,7 @@ async function insertReceiptAttempt(tx: Transaction, sourceId: string): Promise<
 
 describe("the invoice at full payment", () => {
   it("refuses a filed F1 whole credit without changing its sale, settlement or series", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -1012,7 +1012,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("finds a settled F1 by its invoice number or saved customer name without changing sale or print rows", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -1034,7 +1034,7 @@ describe("the invoice at full payment", () => {
       ),
     );
     expect(completed.invoice).toMatchObject({ invoiceType: "F1", total: "3.00" });
-    const wildcardBill = await tabWith("Caña");
+    const wildcardBill = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, wildcardBill, {
       revision: 0,
       invoiceType: "F1",
@@ -1127,7 +1127,7 @@ describe("the invoice at full payment", () => {
   it("limits invoice lookup to twenty newest filed F1 bills before returning rows", async () => {
     const expected: { workingOrderId: string; invoiceNumber: string }[] = [];
     for (let index = 0; index < 21; index++) {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
         revision: 0,
         invoiceType: "F1",
@@ -1150,7 +1150,7 @@ describe("the invoice at full payment", () => {
       );
       expected.unshift({ workingOrderId: billId, invoiceNumber: completed.invoice!.invoiceNumber });
     }
-    const unissued = await tabWith("Caña");
+    const unissued = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, unissued, {
       revision: 0,
       invoiceType: "F1",
@@ -1161,7 +1161,7 @@ describe("the invoice at full payment", () => {
         countryCode: "ES",
       },
     });
-    const f2Id = await tabWith("Caña");
+    const f2Id = await tabWith("Beer");
     const f2Payment = await insertPayment(f2Id, { applied: 300 });
     const f2 = await inTx((tx) =>
       completeBillPayment(
@@ -1226,7 +1226,7 @@ describe("the invoice at full payment", () => {
 
   it("finds an invoice by every word of the customer's name, closest first, keeping a trailing space", async () => {
     const issueTo = async (legalName: string) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
         revision: 0,
         invoiceType: "F1",
@@ -1342,7 +1342,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("reads a captured-card F1 over HTTP after changing live invoice identity without taking or refiling payment", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -1433,7 +1433,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("files the saved full invoice when a captured card completes the bill", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -1523,7 +1523,7 @@ describe("the invoice at full payment", () => {
               set: { receiptPrintMode: mode },
             }),
         );
-        const billId = await tabWith("Caña");
+        const billId = await tabWith("Beer");
         if (invoiceType === "F1") {
           await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
             revision: 0,
@@ -1604,7 +1604,7 @@ describe("the invoice at full payment", () => {
   );
 
   it("tracks the captured-card F1 original separately from its manual copy", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -1668,7 +1668,7 @@ describe("the invoice at full payment", () => {
           await inTx((tx) =>
             tx.update(devices).set({ receiptPrinterId: null }).where(eq(devices.id, device!.id)),
           );
-        const billId = await tabWith("Caña");
+        const billId = await tabWith("Beer");
         await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
           revision: 0,
           invoiceType: "F1",
@@ -1741,7 +1741,7 @@ describe("the invoice at full payment", () => {
   it.each(["queued", "printing", "done", "failed"] as const)(
     "retains the complete F1 original job when the issuance hook repeats after %s",
     async (status) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
         revision: 0,
         invoiceType: "F1",
@@ -1786,7 +1786,7 @@ describe("the invoice at full payment", () => {
   );
 
   it("keeps an F1 handover confirmation after a later original resend completes", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -1838,7 +1838,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("reads an F1 original's print attempts without treating its duplicate as the original", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -1927,7 +1927,7 @@ describe("the invoice at full payment", () => {
       await inTx((tx) =>
         tx.update(devices).set({ receiptPrinterId: null }).where(eq(devices.id, device!.id)),
       );
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
         revision: 0,
         invoiceType: "F1",
@@ -1987,7 +1987,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("returns the saved issue offset on an F2 original and replay", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const paymentId = await insertPayment(billId, { applied: 300 });
     const completed = await inTx((tx) =>
       completeBillPayment(
@@ -2007,7 +2007,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("returns saved line VAT on an original F1 and its settled replay", async () => {
-    const billId = await tabWith("Caña", "Chuletón");
+    const billId = await tabWith("Beer", "Steak");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -2039,7 +2039,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("returns filed net line figures on the original F1 and a settled replay", async () => {
-    const billId = await tabWith("Caña", "Chuletón");
+    const billId = await tabWith("Beer", "Steak");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -2079,7 +2079,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("replays a settled F1 with the filed recipient and taxpayer domicile after setup changes", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -2147,7 +2147,7 @@ describe("the invoice at full payment", () => {
     { cap: null, legalName: "Á".repeat(121) },
     { cap: 3, legalName: "𐐀𐐀𐐀" },
   ])("saves a name allowed by the backend's name limit ($cap)", async ({ cap, legalName }) => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     expect(
       await setOrderInvoiceChoice(suite.db, { recipientNameMaxLength: cap }, venue.cfg, billId, {
         revision: 0,
@@ -2167,7 +2167,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("uses the backend's smaller name limit when saving a recipient", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const [before] = await inTx((tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
     );
@@ -2196,7 +2196,7 @@ describe("the invoice at full payment", () => {
   ])(
     "revalidates the saved F1 $field before filing received bill money",
     async ({ field, change }) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
         revision: 0,
         invoiceType: "F1",
@@ -2252,7 +2252,7 @@ describe("the invoice at full payment", () => {
   );
 
   it("stages an email choice for the authenticated staff member under the bill revision", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await withDepartmentContact({ email: "dining@example.test" }, async () => {
       const request = {
         revision: 0,
@@ -2307,7 +2307,7 @@ describe("the invoice at full payment", () => {
   it.each([null, {}, { accepted: false }, { accepted: true, statementVersion: "old" }])(
     "ignores a consent key %j the request still sends",
     async (consent) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await withDepartmentContact({ email: "dining@example.test" }, async () => {
         await setOrderInvoiceChoice(
           suite.db,
@@ -2348,7 +2348,7 @@ describe("the invoice at full payment", () => {
     [{ medium: "a4", pagePrinterId: null }, "delivery.pagePrinterId"],
     [{ medium: "email", recipient: "bad" }, "delivery.recipient"],
   ])("refuses malformed staged delivery %j without advancing the bill", async (delivery, field) => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const request = {
       revision: 0,
       invoiceType: "F1" as const,
@@ -2373,7 +2373,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("refuses staged email when no mail transport is available", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await withDepartmentContact({ email: "dining@example.test", phone: "910000000" }, async () => {
       const request = {
         revision: 0,
@@ -2436,7 +2436,7 @@ describe("the invoice at full payment", () => {
 
     it("stages an email choice that names a recipient", async () => {
       await withDepartmentContact({ email: "dining@example.test" }, async () => {
-        const billId = await tabWith("Caña");
+        const billId = await tabWith("Beer");
         expect(await stageEmail(billId)).toBe(1);
         const [saved] = await inTx((tx) =>
           tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
@@ -2452,7 +2452,7 @@ describe("the invoice at full payment", () => {
     it("refuses with only a venue-wide contact and stages with a department contact", async () => {
       await withVenueContact({ email: "venue@example.test" }, async () => {
         await withDepartmentContact({}, async () => {
-          const billId = await tabWith("Caña");
+          const billId = await tabWith("Beer");
           await expect(stageEmail(billId)).rejects.toMatchObject({
             code: "invoice_delivery.email_unavailable",
             params: {},
@@ -2465,7 +2465,7 @@ describe("the invoice at full payment", () => {
       });
       await withVenueContact({}, async () => {
         await withDepartmentContact({ email: "dining@example.test" }, async () => {
-          const billId = await tabWith("Caña");
+          const billId = await tabWith("Beer");
           expect(await stageEmail(billId)).toBe(1);
         });
       });
@@ -2478,7 +2478,7 @@ describe("the invoice at full payment", () => {
     ] as const)(
       "reads the contact of a non-default order department: %s has one",
       async (_label, contacts, stages) => {
-        const billId = await tabWith("Caña");
+        const billId = await tabWith("Beer");
         const [context] = await inTx((tx) =>
           tx
             .select()
@@ -2570,7 +2570,7 @@ describe("the invoice at full payment", () => {
       async (_label, change, code) => {
         const contact = "contact" in change ? change.contact : { email: "dining@example.test" };
         await withDepartmentContact(contact, async () => {
-          const billId = await tabWith("Caña");
+          const billId = await tabWith("Beer");
           await expect(
             setOrderInvoiceChoice(
               suite.db,
@@ -2602,7 +2602,7 @@ describe("the invoice at full payment", () => {
 
     it("reserves a staged email original at paid-bill issuance and keeps it when contacts change", async () => {
       await withDepartmentContact({ email: "dining@example.test" }, async () => {
-        const billId = await tabWith("Caña");
+        const billId = await tabWith("Beer");
         await stageEmail(billId);
         const paymentId = await insertPayment(billId, { applied: 300 });
         const result = await inTx((tx) =>
@@ -2643,7 +2643,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("stages a receipt choice explicitly", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const request = {
       revision: 0,
       invoiceType: "F1" as const,
@@ -2665,7 +2665,7 @@ describe("the invoice at full payment", () => {
   it.each(["active", "disabled", "missing"] as const)(
     "stages only an active A4 destination: %s",
     async (kind) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       const pagePrinterId = randomUUID();
       if (kind !== "missing")
         await inTx(async (tx) => {
@@ -2721,7 +2721,7 @@ describe("the invoice at full payment", () => {
   );
 
   it("refuses an A4 choice that comes with no signed-in staff member", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const pagePrinterId = randomUUID();
     await inTx(async (tx) => {
       await tx.insert(pagePrinters).values({
@@ -2758,7 +2758,7 @@ describe("the invoice at full payment", () => {
   });
 
   it.each(["email", "a4"])("refuses %s delivery for a simplified bill", async (medium) => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await expect(
       setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
         revision: 0,
@@ -2780,7 +2780,7 @@ describe("the invoice at full payment", () => {
     "associates the staged %s original with paid-bill issuance and rolls it back with the sale",
     async (kind) => {
       const medium = kind === "email" ? "email" : "a4";
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       const pagePrinterId = randomUUID();
       await withDepartmentContact({ email: "dining@example.test" }, async () => {
         await inTx(async (tx) => {
@@ -2926,7 +2926,7 @@ describe("the invoice at full payment", () => {
   );
 
   it("files a saved full-invoice choice through the full series when its bill is paid", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
       revision: 0,
       invoiceType: "F1",
@@ -2976,7 +2976,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("files nothing more for a bill already settled", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const paid = await take(billId, cash("3.00"));
     expect(paid.invoice).toBeDefined();
     expect(paid.invoice!.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
@@ -2998,7 +2998,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("files no invoice for a bill whose lines and money are both gone", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const paid = await take(billId, cash("1.00"));
     await inTx((tx) =>
       tx.insert(billPaymentRefunds).values({
@@ -3035,7 +3035,7 @@ describe("the invoice at full payment", () => {
   });
 
   it("files a card payment no provider row stands behind as a card tender, linking nothing", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const paymentId = await insertPayment(billId, {
       applied: 300,
       state: "received",
@@ -3067,7 +3067,7 @@ describe("the invoice at full payment", () => {
   it.each(["es-ES", "en-GB"])(
     "prints a slip for each card payment, each paired with its own tender (config %s)",
     async (locale) => {
-      const billId = await tabWith("Chuletón", "Tarta");
+      const billId = await tabWith("Steak", "Cake");
       const early = new Date(Date.now() - 60_000).toISOString();
       const late = new Date().toISOString();
       const first = await insertPayment(billId, {
@@ -3173,7 +3173,7 @@ describe("the invoice at full payment", () => {
   );
 
   it("records the lines an item payment covers with what they cost when paid", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
 
     const paid = await take(
       billId,
@@ -3201,7 +3201,7 @@ describe("the receipt's payments, taken within one millisecond", () => {
   }
 
   it("lists the payments in the order they were taken", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     const start = Date.now();
     const receivedAt = new Date(start + AMOUNTS.length).toISOString();
     const paymentId = descendingIds();
@@ -3251,7 +3251,7 @@ describe("the receipt's payments, taken within one millisecond", () => {
   });
 
   it("lists a payment's refunds in the order they were asked for", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     const refunded = AMOUNTS.reduce((sum, cents) => sum + cents, 0);
     const paymentId = await insertPayment(billId, {
       applied: 4300 + refunded,
@@ -3301,7 +3301,7 @@ describe("the bill's payments, taken within one millisecond", () => {
   const decimals = AMOUNTS.map((cents) => (cents / 100).toFixed(2));
 
   it("shows the bill's payments in the order they were taken", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     const at = new Date().toISOString();
     const paymentId = descendingIds();
     for (const applied of AMOUNTS) {
@@ -3320,7 +3320,7 @@ describe("the bill's payments, taken within one millisecond", () => {
   });
 
   it("shows a payment's refunds in the order they were asked for", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     const at = new Date().toISOString();
     await insertPayment(billId, {
       applied: 4300 + AMOUNTS.reduce((sum, cents) => sum + cents, 0),
@@ -3355,7 +3355,7 @@ describe("the bill's payments, taken within one millisecond", () => {
   });
 
   it("prints the card slips in the order the cards were taken", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     const at = new Date().toISOString();
     const untipped = await insertPayment(billId, {
       applied: 2000,
@@ -3431,7 +3431,7 @@ describe("the bill's payments, taken within one millisecond", () => {
 
 describe("bill answer receipt presentation", () => {
   it("resolves live department settings on direct bill issuance and resultOf replay", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     const departmentId = await invoiceContactDepartment();
     const [original] = await inTx((tx) =>
       tx.select().from(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId)),

@@ -851,7 +851,7 @@ product failures.
 
 - **A976. Finish the server's English test-venue defaults.** Spanish dish samples remain in
   `party-bill-actions.test.ts`. Spanish display samples remain in
-  `bill-payments.test.ts`, `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
+  `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
   `receipt-guests.test.ts`, `order-portions.filing.test.ts`, `order-portions.adjustments.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.groups.test.ts` and `till-api.fiscal-sale-paths.test.ts`;
   shared helper samples and their consumers' dish selectors also remain. These belong to
