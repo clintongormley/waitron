@@ -645,6 +645,25 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     },
   );
 
+  it.each([
+    ["en-GB", "clock_behind_chain", "sale.charged_clock_behind"],
+    ["en-GB", "clock_unusable", "sale.charged_clock_unusable"],
+    ["es", "clock_behind_chain", "sale.charged_clock_behind"],
+    ["es", "clock_unusable", "sale.charged_clock_unusable"],
+  ] as const)(
+    "a charged presented card offers to retry the same payment in %s for %s",
+    async (locale, reason, key) => {
+      setLocale(locale);
+      const el = await mount({ refusal: { code: "sale.charged_not_recorded", reason } });
+      expect(actions(el).error).toBe(t(key));
+      if (locale === "en-GB") {
+        expect(actions(el).error).toContain("try this payment again");
+        expect(actions(el).error).toContain("without charging again");
+        expect(actions(el).error).not.toContain("press Pay");
+      }
+    },
+  );
+
   it("words a card charged as the clock stop begins in its own sentence", async () => {
     const el = await mount({
       refusal: { code: "sale.charged_not_recorded", reason: "clock_behind_chain" },

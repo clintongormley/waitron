@@ -1320,21 +1320,6 @@ once released. Belongs with A1016.
   bar beside the bell's toast; and reading the queue's "no button" as the dropped Box status button.
   The seven questions are in #2223's description. Left open by A1127 slice 3 (#2223).
 
-## Bundle A1387: Till sentences during the clock stop, with money in hand
-
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A Pay of an order whose invoice was already filed says 'Sale not recorded' during the clock
-  stop**, where the payment is what is not recorded. Left open by A798-B slice 8 (#2012).
-- **The till's card-charged sentence for the clock says "press Pay", which does not fit a bill's
-  card.**
-  [Detail](box.md#the-tills-card-charged-sentence-for-the-clock-says-press-pay-which-does-not-fit-a-bills-card)
-- **A collect refused with both times shows the payment sentence** ("Sale not recorded…",
-  `clockBehindText` in `apps/till/src/widgets/find-bill-dialog.ts`), not the "Can't be recorded"
-  sentence the plan's decision 20 lists for a collect. Left open by A798-B slice 8 (#2012).
-- **A clock that jumps before 28-10-2024 while a card is charged answers `clock.unusable`, and the
-  till never says the card was charged.** Left open by A798-B slice 8 (#2012).
-
 ## Bundle: Finish the clock work: a check at every start and every change
 
 3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -2321,13 +2306,6 @@ With a date that
   so the email waits until the clock is fixed, when there is nothing left to say. A plain relay or
   the practice box's local capture does receive it. For the owner to know. Left open by A798-B
   slice 10.
-
-## The till's card-charged sentence for the clock says "press Pay", which does not fit a bill's card.
-
-For a card taken from a bill's payment options (Whole bill, Pay items, Contribute, Split
-  equally), Pay answers `order.payment_in_flight` until the box records the pending payment itself
-  (probed during the build: a second card contribution on the charged bill was refused 409 and
-  charged nothing). A bill variant of the sentence is open. Left open by A798-B slice 8 (#2012).
 
 ## The Clock row says 'connect the box to the internet' where that may not help.
 

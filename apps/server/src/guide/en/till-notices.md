@@ -49,8 +49,8 @@ When a payment is refused, the till shows the server's time and the time of the 
 already charged the customer on another card machine, do not charge again: record the payment once
 payments are back.
 
-If the till says a card was charged but the sale is not recorded, do not charge again. This can
-happen when a card reader charges a card just as payments stop. What to do next depends on how the
+If the till says a card was charged but the payment is not recorded, do not charge again. This can
+happen when the clock changes while the reader is charging the card. What to do next depends on how the
 card was taken:
 
 - **At the counter, or a table's bill paid in one go from the presented bill:** once payments are

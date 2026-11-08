@@ -318,7 +318,8 @@ export class TillPresentedPayDialog extends LitElement {
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
     const errors = new Map(own);
     const field = this.#refusalField();
-    if (field !== null) errors.set(field, refusalText(this.shownRefusal!, this.checkTimeOffered));
+    if (field !== null)
+      errors.set(field, refusalText(this.shownRefusal!, { checkTime: this.checkTimeOffered }));
     return errors;
   }
 
@@ -326,7 +327,7 @@ export class TillPresentedPayDialog extends LitElement {
     const parts: string[] = [];
     if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
     if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(refusalText(this.shownRefusal, this.checkTimeOffered));
+      parts.push(refusalText(this.shownRefusal, { checkTime: this.checkTimeOffered }));
     return parts.join(" ");
   }
 
@@ -500,7 +501,7 @@ export class TillPresentedPayDialog extends LitElement {
       ${payNotice(this.notice)}`;
     const actions = html`<wt-form-actions
       slot="footer"
-      .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal, this.checkTimeOffered)}
+      .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal, { checkTime: this.checkTimeOffered })}
       >${recoveryLink(this.shownRefusal)}
       <wt-button
         slot="cancel"

@@ -56,8 +56,8 @@ Cuando se rechaza un cobro, el terminal muestra la hora del servidor y la de la 
 has cobrado al cliente en otro datáfono, no vuelvas a cobrar: registra el pago cuando se pueda
 volver a cobrar.
 
-Si el terminal dice que se ha cobrado con tarjeta pero la venta no se ha registrado, no vuelvas a
-cobrar. Puede pasar cuando un lector de tarjetas cobra una tarjeta justo cuando se paran los cobros.
+Si el terminal dice que se ha cobrado con tarjeta pero el pago no se ha registrado, no vuelvas a
+cobrar. Puede pasar si la hora cambia mientras el lector está cobrando la tarjeta.
 Lo que hay que hacer después depende de cómo se cobró la tarjeta:
 
 - **En el mostrador, o la cuenta de una mesa cobrada de una vez desde la cuenta presentada:** cuando se

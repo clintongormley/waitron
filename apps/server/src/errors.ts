@@ -455,13 +455,9 @@ declare module "@waitron/shared" {
     "reader.offline": { reader: string };
     /** The till was asked to ring a sale with no lines; refused before any catalogue read or fiscal write. */
     "sale.empty_basket": Record<string, never>;
-    /**
-     * A card was charged on a connected reader and its sale could not be recorded; `reason` says
-     * why.
-     */
     "sale.charged_not_recorded": {
       workingOrderId: string;
-      reason: "disk_full" | "clock_behind_chain" | "issuance_refused";
+      reason: "disk_full" | "clock_behind_chain" | "clock_unusable" | "issuance_refused";
       recoveryUrl?: string;
     };
     /**

@@ -197,7 +197,7 @@ it.each([
     expect(unusable).toContain(check);
     expect(unusable).not.toContain(tell);
     expect(clockUnusableText("2001-01-01T10:00:00.000Z", 60)).not.toContain(check);
-    const behind = clockBehindText(BEHIND, true);
+    const behind = clockBehindText(BEHIND, { checkTime: true });
     expect(behind).toContain(check);
     expect(behind).toContain("(14/03/2025\u00a009:12)");
     expect(clockBehindText(BEHIND)).not.toContain(check);
@@ -206,11 +206,15 @@ it.each([
 
 it("words a clock.behind_chain payment refusal with Check the time only while it is offered", () => {
   const refusal = { code: "clock.behind_chain", ...BEHIND };
-  expect(refusalText(refusal, true)).toBe(clockBehindText(BEHIND, true));
+  expect(refusalText(refusal, { checkTime: true })).toBe(
+    clockBehindText(BEHIND, { checkTime: true }),
+  );
   expect(refusalText(refusal)).toBe(clockBehindText(BEHIND));
   expect(refusalText(refusal)).toContain("tell a manager");
   const unusable = { code: "clock.unusable", clockAt: BEHIND.clockAt, offsetMinutes: 60 };
-  expect(refusalText(unusable, true)).toBe(clockUnusableText(BEHIND.clockAt, 60, true));
+  expect(refusalText(unusable, { checkTime: true })).toBe(
+    clockUnusableText(BEHIND.clockAt, 60, true),
+  );
   expect(refusalText(unusable)).toBe(clockUnusableText(BEHIND.clockAt, 60));
 });
 

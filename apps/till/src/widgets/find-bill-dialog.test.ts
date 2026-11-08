@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./find-bill-dialog.js";
 import type { TillFindBillDialog } from "./find-bill-dialog.js";
@@ -50,6 +50,34 @@ afterEach(() => {
 });
 
 describe("Find a bill", () => {
+  it.each(["en-GB", "es"])(
+    "says a collection cannot be recorded and keeps both clock readings in %s",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount();
+      el.error = {
+        clockBehind: {
+          clockAt: "2025-03-14T08:12:00.000Z",
+          offsetMinutes: 60,
+          lastRecordAt: "2026-10-18T21:40:00.000Z",
+          lastRecordOffsetMinutes: 120,
+        },
+      };
+      await el.updateComplete;
+      const message = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-form-actions",
+      )!.error;
+      expect(message).toBe(
+        t("collect.clock_behind_chain")
+          .replace("{clockAt}", "14/03/2025\u00a009:12")
+          .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
+      );
+      expect(message).toContain("14/03/2025\u00a009:12");
+      expect(message).toContain("18/10/2026\u00a023:40");
+      if (locale === "en-GB") expect(message).toContain("Can't be recorded:");
+    },
+  );
+
   it("shows the selected debt with its invoice, table, name and amount", async () => {
     const el = await mount();
     expect(el.shadowRoot!.textContent).toContain("Familia Ruiz");

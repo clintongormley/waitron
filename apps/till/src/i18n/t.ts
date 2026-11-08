@@ -130,12 +130,24 @@ function readingText(at: string, offsetMinutes: number): string {
   return `${date}\u00a0${time}`;
 }
 
+type ClockBehindOptions =
+  { collection?: false; checkTime?: boolean } | { collection: true; checkTime?: false };
+
 /** Each reading in its own offset, the one its record carries or would carry; with `checkTime`,
  * pointing at the till's "Check the time". */
-export function clockBehindText(behind: ClockBehind, checkTime = false): string {
+export function clockBehindText(
+  behind: ClockBehind,
+  { checkTime = false, collection = false }: ClockBehindOptions = {},
+): string {
   const clockAt = readingText(behind.clockAt, behind.offsetMinutes);
   const lastRecordAt = readingText(behind.lastRecordAt, behind.lastRecordOffsetMinutes);
-  return t(checkTime ? "sale.clock_behind_chain_check" : "sale.clock_behind_chain")
+  return t(
+    collection
+      ? "collect.clock_behind_chain"
+      : checkTime
+        ? "sale.clock_behind_chain_check"
+        : "sale.clock_behind_chain",
+  )
     .replace("{clockAt}", () => clockAt)
     .replace("{lastRecordAt}", () => lastRecordAt);
 }
