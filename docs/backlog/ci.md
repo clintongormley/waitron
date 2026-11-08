@@ -730,6 +730,8 @@ A1424's live qualification was added on 7 November 2026.
 
 ## Decisions and deliberate limits
 
+- **An older PR head may lack a newer workflow's browser smoke script (watcher, 2026-11-08 04:18, A1402).** Keep checking out the PR head. When `apps/setup/test/bundle-smoke.mjs` is absent, skip only that browser check with a notice; builds and other smoke checks stay required. An existing script's failure still fails the job. [Mechanism and test](../developers/ci-and-gates.md#built-applications-in-bundle-smoke).
+
 - **A1427 — keep package scoping; stop related-file selection (2026-11-07).** The corrected 40-PR replay narrowed five server runs to 1,135 of 1,273 files, retained 26 full runs and skipped nine. Its duration-table estimate was about 241 test-job seconds saved at four workers, against 698 local selection seconds plus 24 installs at 5.2 seconds each. These are estimates and local timings, not observed hosted savings. The watcher stopped PR2 at 22:49; keep the prototype and receipts unpublished and add no further selection machinery. Keep PR2557's package-scoped tests and nightly/manual full coverage.
 
 - **Investigate CI failures before retrying (owner, 2026-10-31, A1243).** Follow the

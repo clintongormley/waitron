@@ -2132,6 +2132,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+See [CI decisions](backlog/ci.md#decisions-and-deliberate-limits) for workflow limits, including browser smoke checks on older PR heads.
+
 - **Add a control to each check that cannot fail** (bundle of 4, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
 
 - **The logo retry checks' deadline and counting** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-the-logo-retry-checks-deadline-and-counting)

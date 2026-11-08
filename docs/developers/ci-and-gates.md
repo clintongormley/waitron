@@ -360,6 +360,13 @@ this checks the built page and its event handlers, not the server's setup routes
 Dashboard and till are built but are not opened by this check. The existing
 credentials refusal and server-start smoke checks remain separate.
 
+PR jobs check out the PR head, which can predate a workflow change on main. If
+that head has no `apps/setup/test/bundle-smoke.mjs`, the browser step prints a
+notice and skips that check; the application builds and other smoke checks
+still run. When the script exists, its failure fails the job. The root guard
+executes the workflow's shell against absent, passing and failing scripts using
+real pnpm and Node in a temporary workspace.
+
 You can run the page check after building setup:
 
 ```bash

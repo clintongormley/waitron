@@ -551,7 +551,12 @@ jobs:
 
       - name: Open the built setup page
         timeout-minutes: 2
-        run: timeout 90 pnpm --filter @waitron/setup exec node test/bundle-smoke.mjs
+        run: |
+          if [ -f apps/setup/test/bundle-smoke.mjs ]; then
+            timeout 90 pnpm --filter @waitron/setup exec node test/bundle-smoke.mjs
+          else
+            echo "::notice::Skipping built setup browser check: apps/setup/test/bundle-smoke.mjs is absent from the checked-out head."
+          fi
 
       # sharp's native addon cannot be bundled and esbuild does not refuse to try: without
       # `--external:sharp` the build passes and the bundle is a syntax error (bundled sharp declares
