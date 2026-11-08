@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { currentSif } from "./registro-sif.js";
-import { SOFTWARE_IDENTITY } from "./software-identity.js";
+import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -246,6 +246,7 @@ describe("the software block", () => {
         ...SOFTWARE_IDENTITY,
         multipleTaxpayersPossible: "S",
         multipleTaxpayersNow: "S",
+        producer: PRODUCER_PENDING,
       },
     });
     const { saleId } = await sell();

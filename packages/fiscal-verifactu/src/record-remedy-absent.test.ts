@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { sales, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -26,6 +26,10 @@ import { registrosFacturacion } from "./schema/registros.js";
 import { filingCaseEvents, type FilingCaseCause } from "./schema/filing-cases.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-07-20T17:20:35Z");
@@ -618,4 +622,23 @@ it("a record of an unrelated box is still refused", async () => {
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
   expect(await snapshot()).toEqual(before);
+});
+
+it("names the producer from the settings in the cancellation's software block, keeping the taxpayer as issuer", async () => {
+  vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
+  const before = await snapshot();
+  const response = await send();
+  expect(response.status).toBe(200);
+  const after = await snapshot();
+  const cancellation = after.records.at(-1)!;
+  expect(cancellation.tipoRegistro).toBe("anulacion");
+  expect(cancellation.sistemaInformatico).toMatchObject({
+    NombreRazon: "PRODUCER PERSON",
+    NIF: "00000000T",
+  });
+  expect(cancellation.nombreRazonEmisor).toBe(before.records[0]!.nombreRazonEmisor);
+  expect(cancellation.nombreRazonEmisor).not.toBe("PRODUCER PERSON");
+  expect(cancellation.idEmisorFactura).toBe(before.records[0]!.idEmisorFactura);
 });

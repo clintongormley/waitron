@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { recordSale } from "@waitron/core";
 import {
   invoiceSeries,
@@ -33,6 +33,10 @@ import { filingCaseEvents } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedNode, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-03-01T12:07:00Z");
@@ -523,6 +527,9 @@ it.each(["seriesId", "operationDescription"])("requires a nonblank correction %s
   await refuses({ ...body, correction: { ...correction, [key]: " " } });
 });
 it("binds a production-host synthetic correction to production records", async () => {
+  vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
   const backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
@@ -584,4 +591,20 @@ it("binds a production-host synthetic correction to production records", async (
     total: -605,
     correctsSaleId: after.records[1]!.saleId,
   });
+});
+
+it("names the producer from the settings in the corrective invoice's software block, keeping the taxpayer as issuer", async () => {
+  vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
+  const before = await snapshot();
+  const res = await send();
+  expect(res.status).toBe(200);
+  const after = await snapshot();
+  expect(after.records[1]!.sistemaInformatico).toMatchObject({
+    NombreRazon: "PRODUCER PERSON",
+    NIF: "00000000T",
+  });
+  expect(after.records[1]!.nombreRazonEmisor).toBe(before.records[0]!.nombreRazonEmisor);
+  expect(after.records[1]!.idEmisorFactura).toBe(before.records[0]!.idEmisorFactura);
 });

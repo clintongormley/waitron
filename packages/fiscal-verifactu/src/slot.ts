@@ -5,7 +5,12 @@ import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import type { FiscalBackendDeps, FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
-import { BUILD_COMMIT, refuseUnsetProducer } from "./software-identity.js";
+import {
+  SOFTWARE_IDENTITY,
+  refuseProducerSettings,
+  runningProducer,
+  type SoftwareIdentity,
+} from "./software-identity.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { certificateAlerts } from "./certificate-alerts.js";
 import { claimReminder, reportReminder } from "./certificate-reminders.js";
@@ -33,12 +38,15 @@ export function rejectResolveClient(): Promise<never> {
   return Promise.reject(new Error("fiscal slot: resolveClient must never be called by recordSale"));
 }
 
-export function makeVerifactuBackend(
-  { db, clock, environment }: FiscalBackendDeps,
-  published: boolean,
-): VerifactuBackend {
-  refuseUnsetProducer(environment, published);
+export function makeVerifactuBackend({
+  db,
+  clock,
+  environment,
+}: FiscalBackendDeps): VerifactuBackend {
+  const identity: SoftwareIdentity = { ...SOFTWARE_IDENTITY, producer: runningProducer() };
+  refuseProducerSettings(environment, identity);
   return new VerifactuBackend({
+    identity,
     clock,
     db,
     environment,
@@ -72,7 +80,7 @@ export const FISCAL_SLOT: FiscalContribution = {
       .from(envios)
       .where(eq(envios.estado, "rechazado"))
       .orderBy(envios.registroId),
-  makeBackend: (deps) => makeVerifactuBackend(deps, BUILD_COMMIT !== null),
+  makeBackend: (deps) => makeVerifactuBackend(deps),
   // The runtime submission pass. The regime OWNS its transport: it builds a per-pass mTLS resolver
   // (one TLS pool per pass with due work, released in `finally`) and hands `runDrain` only the
   // vault-scoped `resolveClient`. `environment` doubles as `runDrain`'s `Entorno` guard and

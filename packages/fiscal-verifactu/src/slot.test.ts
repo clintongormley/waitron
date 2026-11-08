@@ -58,56 +58,47 @@ describe("FISCAL_SLOT", () => {
   });
 });
 
-describe("refuses a published production build while the producer is pending", () => {
-  it("refuses production on a published build", () => {
+describe("the producer settings at backend construction", () => {
+  const PRODUCER = {
+    WAITRON_PRODUCER_NAME: "PRODUCER PERSON",
+    WAITRON_PRODUCER_TAX_ID: "00000000T",
+    WAITRON_PRODUCER_ADDRESS: "1 Example Street, 00000 Nowhere (Province), Spain",
+  };
+
+  function setProducer(values: Partial<typeof PRODUCER>): void {
+    for (const name of Object.keys(PRODUCER) as (keyof typeof PRODUCER)[])
+      vi.stubEnv(name, values[name] ?? "");
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("refuses production with none set, on a build with no stamp", () => {
+    setProducer({});
+    expect(() => makeVerifactuBackend({ db: STUB_DB, clock, environment: "production" })).toThrow(
+      expect.objectContaining({ code: "sif.producer_unset" }),
+    );
     expect(() =>
-      makeVerifactuBackend({ db: STUB_DB, clock, environment: "production" }, true),
+      FISCAL_SLOT.makeBackend({ db: STUB_DB, clock, environment: "production" }),
     ).toThrow(expect.objectContaining({ code: "sif.producer_unset" }));
   });
 
-  it("serves preproduction on a published build", () => {
-    const backend = makeVerifactuBackend(
-      { db: STUB_DB, clock, environment: "preproduction" },
-      true,
+  it("serves production with the settings set", () => {
+    setProducer(PRODUCER);
+    const backend = makeVerifactuBackend({ db: STUB_DB, clock, environment: "production" });
+    expect(backend).toBeInstanceOf(VerifactuBackend);
+    expect(FISCAL_SLOT.makeBackend({ db: STUB_DB, clock, environment: "production" }).id).toBe(
+      "verifactu",
     );
-    expect(backend.id).toBe("verifactu");
   });
 
-  it("serves production on an unpublished build", () => {
-    const backend = makeVerifactuBackend({ db: STUB_DB, clock, environment: "production" }, false);
+  it("serves preproduction with none set", () => {
+    setProducer({});
+    const backend = makeVerifactuBackend({ db: STUB_DB, clock, environment: "preproduction" });
     expect(backend.id).toBe("verifactu");
-  });
-
-  it("serves production through the slot when the run carries no build stamp", () => {
-    const backend = FISCAL_SLOT.makeBackend({ db: STUB_DB, clock, environment: "production" });
-    expect(backend.id).toBe("verifactu");
-  });
-
-  describe("on a build whose bundle carries a stamp", () => {
-    afterEach(() => {
-      vi.unstubAllGlobals();
-      vi.resetModules();
-    });
-
-    async function stampedSlot() {
-      vi.stubGlobal("__WAITRON_HOUR_RELEASE__", { sourceCommit: "a".repeat(40) });
-      vi.resetModules();
-      return (await import("./slot.js")).FISCAL_SLOT;
-    }
-
-    it("refuses production through the slot", async () => {
-      const slot = await stampedSlot();
-      expect(() => slot.makeBackend({ db: STUB_DB, clock, environment: "production" })).toThrow(
-        expect.objectContaining({ code: "sif.producer_unset" }),
-      );
-    });
-
-    it("serves preproduction through the slot", async () => {
-      const slot = await stampedSlot();
-      expect(slot.makeBackend({ db: STUB_DB, clock, environment: "preproduction" }).id).toBe(
-        "verifactu",
-      );
-    });
   });
 });
 

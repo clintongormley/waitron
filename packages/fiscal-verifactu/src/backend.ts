@@ -68,7 +68,12 @@ import { confirmClockStep, latestClockStep } from "./clock-step.js";
 import { misdatedDetail, misdatedRecords } from "./clock-misdated.js";
 import { readAuthorityTime } from "./authority-time.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
-import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
+import {
+  PRODUCER_PENDING,
+  SOFTWARE_IDENTITY,
+  producerFields,
+  softwareVersion,
+} from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
 
 /** `FiscalRecordRef.backend`/`NodeRegistration.backend` — the regime-neutral interface's own
@@ -103,7 +108,7 @@ export interface VerifactuBackendOptions {
    * mis-stamp every registro from a host that forgot to set it.
    */
   deploymentEnvironment: Entorno;
-  /** Tests only; production passes none (./slot.ts). */
+  /** ./slot.ts passes the producer read from the settings; with none given, the taxpayer is named. */
   identity?: SoftwareIdentity;
   /** Accepted but NOT consumed by this class: the skip-retry cadence belongs to the standalone
    * `drain` (`DrainDeps.skipRetryMs`). */
@@ -173,7 +178,7 @@ export class VerifactuBackend implements FiscalBackend {
     this.clock = options.clock;
     this.environment = options.environment ?? "production";
     this.deploymentEnvironment = options.deploymentEnvironment;
-    this.identity = options.identity ?? SOFTWARE_IDENTITY;
+    this.identity = options.identity ?? { ...SOFTWARE_IDENTITY, producer: PRODUCER_PENDING };
   }
 
   assertRecordableAt(reading: { instant: Date; offsetMinutes: number }): void {

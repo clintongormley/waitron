@@ -9,7 +9,12 @@ import { applyRecordCorrection, type RemedyKind } from "./record-remedy.js";
 import { readCorrectedRecordFacts } from "./record-remedy-facts.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
-import { producerFields, SOFTWARE_IDENTITY, softwareVersion } from "./software-identity.js";
+import {
+  producerFields,
+  runningProducer,
+  SOFTWARE_IDENTITY,
+  softwareVersion,
+} from "./software-identity.js";
 
 function invalid(): never {
   throw new AppError("fiscal.remedy_request_invalid", {});
@@ -127,7 +132,10 @@ export async function applyCorrectedRecordFacts(
     Subsanacion: "S",
     RechazoPrevio: priorOutcome === "rejected" ? "X" : "N",
     SistemaInformatico: {
-      ...producerFields(SOFTWARE_IDENTITY, { legalName: tenant.legalName, nif: sif.nif }),
+      ...producerFields(
+        { ...SOFTWARE_IDENTITY, producer: runningProducer() },
+        { legalName: tenant.legalName, nif: sif.nif },
+      ),
       NombreSistemaInformatico: SOFTWARE_IDENTITY.name,
       IdSistemaInformatico: sif.idSistemaInformatico,
       Version: softwareVersion(),
