@@ -21462,6 +21462,8 @@ export class TillApp extends LitElement {
                                     slot="notices"
                                     .notices=${this.staffNotices}
                                     .checkTimeOffered=${this.checkTimeOffered}
+                                    .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+                                    @till-open-drawer=${() => void this.#onOpenDrawer()}
                                     @till-check-time=${() => (this.boxTimeOpen = true)}
                                   ></till-notice-strip
                                   >${

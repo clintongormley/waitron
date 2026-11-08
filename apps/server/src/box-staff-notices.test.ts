@@ -232,7 +232,12 @@ describe("printer notices", () => {
     });
     const one = sources("d1");
     const two = sources("d2");
-    expect([...one, ...two].map((s) => s.owner)).toEqual(["printers", "printers"]);
+    expect([...one, ...two].map((s) => s.owner)).toEqual([
+      "printers",
+      "drawers",
+      "printers",
+      "drawers",
+    ]);
     await one[0]!.source.read(CTX);
     await two[0]!.source.read(CTX);
     expect(trouble).toHaveBeenCalledTimes(1);

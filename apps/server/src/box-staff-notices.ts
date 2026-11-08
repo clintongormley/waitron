@@ -1,4 +1,5 @@
-import type { Transaction } from "@waitron/db";
+import { printJobs, type Transaction } from "@waitron/db";
+import { and, eq, sql } from "drizzle-orm";
 import { readPrinterRoles } from "@waitron/layouts";
 import type {
   StaffNotice,
@@ -131,7 +132,6 @@ export function printerStaffNoticeSource(deps: {
   };
 }
 
-/** One source per device, all reading the box's printers in trouble through one cache. */
 export function devicePrinterNoticeSources(deps: {
   now: () => Date;
   cacheMs?: number;
@@ -151,6 +151,34 @@ export function devicePrinterNoticeSources(deps: {
         trouble: (tx, at) => cache.get("all", () => trouble(tx, at)),
         documentPrinters: deps.documentPrinters,
       }),
+    },
+    {
+      owner: "drawers",
+      source: {
+        async read({ tx }) {
+          const printerId = (await readPrinterRoles(tx, deviceId)).find(
+            (role) => role.role === "cash_drawer",
+          )?.resolvedId;
+          if (printerId == null) return [];
+          const [latest] = await tx
+            .select({ id: printJobs.id, status: printJobs.status, error: printJobs.lastError })
+            .from(printJobs)
+            .where(and(eq(printJobs.printerId, printerId), eq(printJobs.kind, "drawer")))
+            // Insertion order still identifies the new request after a clock step or equal stamps.
+            .orderBy(sql`${printJobs}.rowid desc`)
+            .limit(1);
+          return latest?.status === "failed" && latest.error === "print_job.drawer_expired"
+            ? [
+                {
+                  key: `print_job.drawer_expired:${latest.id}`,
+                  code: "print_job.drawer_expired",
+                  severity: "warning" as const,
+                  params: {},
+                },
+              ]
+            : [];
+        },
+      },
     },
   ];
 }

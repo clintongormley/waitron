@@ -36,6 +36,9 @@ export function staffNoticeText(
   main: string;
   hint: string;
 } {
+  if (notice.code === "print_job.drawer_expired") {
+    return { main: t("staff_notice.print_job.drawer_expired"), hint: "" };
+  }
   if (Object.hasOwn(FIXED, notice.code)) {
     return {
       main: t(FIXED[notice.code as keyof typeof FIXED]),

@@ -25,6 +25,12 @@ problema. Una pantalla de cocina no muestra la línea de avisos.
 
 ## Qué significa cada aviso {#notices}
 
+**El cajón no se abrió** significa que la solicitud caducó antes de poder enviarse. Comprueba la
+alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si
+se te pide, elige a alguien que pueda autorizar la apertura e introduce su PIN. El aviso aparece
+en los TPV que usan ese cajón y desaparece con una nueva solicitud. El botón se ofrece en los
+dispositivos que tienen permiso para abrirlo.
+
 **No se puede guardar nada: el servidor no tiene espacio · Avisa al encargado** es rojo. El servidor
 no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. El
 encargado tiene que liberar espacio en el servidor, en la

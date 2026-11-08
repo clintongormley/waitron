@@ -48,6 +48,41 @@ function tokenColour(host: HTMLElement, token: string): string {
 }
 
 describe("till-notice-strip", () => {
+  it.each([
+    ["en", "Drawer didn’t open", "Open drawer"],
+    ["es", "El cajón no se abrió", "Abrir cajón"],
+  ])(
+    "offers a new drawer opening from its expiry notice in %s",
+    async (locale, message, action) => {
+      setLocale(locale);
+      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [notice("print_job.drawer_expired", "warning"), DISK],
+        canOpenDrawer: true,
+      });
+      expect(flat(strip(el))).toContain(message);
+      const open = root(el).querySelector<HTMLElement>("[data-open-drawer]")!;
+      expect(flat(open)).toBe(action);
+      expect(open.closest("button")).toBeNull();
+      let requests = 0;
+      el.addEventListener("till-open-drawer", () => requests++);
+      await userEvent.click(open);
+      expect(requests).toBe(1);
+      expect(list(el)).toBeNull();
+      await userEvent.click(button(el)!);
+      expect(root(el).querySelectorAll("[data-open-drawer]")).toHaveLength(2);
+    },
+  );
+
+  it("shows the drawer expiry without an action when the profile cannot open it", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+      notices: [notice("print_job.drawer_expired", "warning")],
+      canOpenDrawer: false,
+    });
+    expect(flat(strip(el))).toBe("Drawer didn’t open");
+    expect(root(el).querySelector("[data-open-drawer]")).toBeNull();
+  });
+
   it("draws nothing with no notices, and leaves the status region empty", async () => {
     const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", { notices: [] });
     expect(strip(el)).toBeNull();

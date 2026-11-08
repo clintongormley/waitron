@@ -38,5 +38,6 @@ Open **Print Queue** to see why a job is waiting. If no print agent sees a USB o
 printer, check the printer connection and its print agent. A connection message can appear
 alongside the last reported printing error.
 
-Drawer commands cannot be resent. If a command expired before it was sent, open the drawer
-again if needed. If no result was reported, check whether the drawer opened before opening it again.
+Drawer commands cannot be resent. If a command expired before it was sent, the till shows
+**Drawer didn’t open**. Use its **Open drawer** button if you still need it open. If no result was
+reported, check whether the drawer opened before opening it again.

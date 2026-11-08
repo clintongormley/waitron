@@ -22,6 +22,11 @@ display shows no notice line.
 
 ## What each notice means {#notices}
 
+**Drawer didn’t open** means the request expired before it could be sent. Check the printer’s
+power and connection, then use **Open drawer** if you still need it open. If asked, choose someone
+who can authorise opening it and enter their PIN. The notice is shared by tills using that drawer
+and goes when a new drawer request is made. The button is offered on devices allowed to open it.
+
 **Nothing can be saved: the server is out of space · Tell a manager** is red. The server has no disk
 space left, so orders, payments and other changes cannot be saved. A manager needs to free space
 on the server, on the [Box status page](box-status.md#free-space). If the server had to use its spare
