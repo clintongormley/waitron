@@ -2094,16 +2094,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **One signed request helper; strict reply readers** (bundle of 2, size M). [Detail](backlog/replication-cloud.md#bundle-one-signed-request-helper-strict-reply-readers)
 
-- **A951-S. Reach the box's dashboard through Cloud.** The test-box trials support trusted
-  public dashboard sign-in, automatic tunnel and certificate setup, Settings on/off, and app
-  and peer recovery. The combined build remains a draft: installation and physical reboot
-  await the owner's shared quiet window. Trial details and limits stay in
-  [PR #2543](https://github.com/clintongormley/waitron/pull/2543).
-  Translate all returned one editable menu suggestion; address completion still needs its trial.
+- **A951-S provider trials.** Translate all returned one editable menu suggestion on the test box;
+  address completion still needs its trial. Keep the approved consent and request limits.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
-- **Waitron retains:** publication of box-side networking; first-contact trust
-  bootstrap; and the cloud-standby end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
+- **Waitron retains:** first-contact trust bootstrap; and the cloud-standby end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
   [Detail](backlog/replication-cloud.md#waitron-retains)
 
 - **Loose ends left by the SQLite failover-loop prototype gate.** Provider qualification,

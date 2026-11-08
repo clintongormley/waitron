@@ -287,8 +287,7 @@ record the stop somewhere that survives the repair.
 
 ## Waitron retains
 
-The implemented Cloud connection screen and manager adapter; publication of box-side networking;
-first-contact trust bootstrap; and the cloud-standby end-to-end
+The implemented Cloud connection screen and manager adapter; first-contact trust bootstrap; and the cloud-standby end-to-end
 proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
 settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute
 to the promoted cloud → the venue sells and files. Local maintenance requirements remain in
@@ -1021,14 +1020,9 @@ stays parked. Use the existing Cloud gateway and one outbound WireGuard containe
 password sign-in on the box; staff-host passkeys enrol separately. Venue devices keep using
 `.local`, and local sales never depend on Cloud or the internet. Customer pages stay later.
 
-The test-box trials support trusted public dashboard sign-in, automatic tunnel and certificate
-setup, Settings on/off, and recovery after app and peer restarts. The combined build remains a
-draft and removes the old TCP relay; it does not enable standby adoption. Trial details, source
-revisions and limits stay in [PR #2543](https://github.com/clintongormley/waitron/pull/2543).
-
-Left: publish and install the combined build, then qualify its physical reboot in the owner's
-shared quiet window. The earlier manual demo's reboot does not qualify this build; its changed
-connection-file hash still needs an explanation.
+Remote dashboard access, Settings on/off and retirement of the old TCP relay are implemented in
+[PR #2543](https://github.com/clintongormley/waitron/pull/2543). Trial details and limits stay in its
+thread. Standby adoption remains unavailable.
 
 Translate all returned one editable menu suggestion on the test box. Address completion still
 needs its trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
