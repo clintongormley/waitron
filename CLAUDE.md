@@ -664,7 +664,7 @@ passed while proving nothing.
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
 - **Server tests send the till's person header through `src/testing/tab-person-setup.ts`; a test of
-  the person check itself leaves its session alone.**
+  a request naming nobody leaves its session alone.**
   [Detail](docs/developers/testing-guide.md#server-tests-send-the-tills-person-header-through-one-setup-file).
 - **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**;
   the table round's `insertTabRound` does not yet, and no sweep has read every insert (see the backlog). Cost: a 2,001-dish order passed locally and

@@ -3727,14 +3727,15 @@ a `personId`. A later request carrying a noted token in its cookie and no person
 token's person (`initNamingPerson` in `apps/server/src/testing/tab-person.ts`). It never replaces a
 header a test set. The notes are a module's map, reset with the module graph for every test file.
 
-A test of the person check itself calls `leaveSessionAlone(token)` from `testing/tab-person.ts`:
-that session's requests then carry only the header the test gives them, or none.
-`till-session.person.test.ts`, `till-api.session-person.test.ts`, `till-api.test.ts` and
-`device-api.test.ts` do. A test that gives a session a token or a person in the database
+A test of a request naming someone else sets the header itself, and the harness keeps it, as the
+person-refusal cases in `till-api.drafts.test.ts`, `draft-recall.test.ts`,
+`till-api.groups.test.ts` and `draft-discard.test.ts` do. A test of a request naming nobody calls
+`leaveSessionAlone(token)` from `testing/tab-person.ts`: that session's requests then carry only the
+header the test gives them, or none. `till-session.person.test.ts`,
+`till-api.session-person.test.ts`, `till-api.test.ts` and `device-api.test.ts` do. A test that gives a session a token or a person in the database
 itself notes it with `noteSessionPerson(token, personId)`, as the allergy suites and
-`testing/kitchen-allergy-fixture.ts` do. The cost: the other server tests do not
-exercise the check, which only those cases and the route walk in
-`till-api.session-person.test.ts` do.
+`testing/kitchen-allergy-fixture.ts` do. The cost: a server test that sets no header sends the
+right person, so it reaches the refusal only when it sets the header itself.
 
 ## Root receipts moved on 2026-10-31
 

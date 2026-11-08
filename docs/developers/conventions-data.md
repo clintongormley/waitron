@@ -6012,8 +6012,8 @@ was caught. `openIfMatching` keeps a listener on its digest stream for this.
 
 ## A till request's person is checked where the sign-in is read
 
-Every till request but the sign-in names the tab's signed-in person in the `x-waitron-person`
-header (`PERSON_HEADER`, `packages/shared/src/person-header.ts`). The server compares it with the
+Every request through the till's API client (`TillApi`) but the sign-in names the tab's
+signed-in person in the `x-waitron-person` header (`PERSON_HEADER`, `packages/shared/src/person-header.ts`). The server compares it with the
 person of the device's open session in one function, `personRefusal` in
 `apps/server/src/till-session.ts`, called from `requireSession`, from `signedInPersonOn` and from
 the sign-out handler (`DELETE /api/session` in `apps/server/src/till-api.ts`). A request naming
@@ -6030,8 +6030,9 @@ must be the refusal or the device-cookie-alone answer, compared by status and er
 body, so
 `GET /api/device/me`'s narrowing has its own cases in `device-api.test.ts`. A route not in its
 `BODIES` gets `"{}"`, so the walk sees nothing past that route's refusal of that body. Its second
-case reads the server's source as text and holds that only `till-session.ts` and the sign-out
-handler name `readSessionToken` or `SESSION_COOKIE`; a cookie name spelt out as a string is missed.
+case reads `apps/server/src` as text, skipping test files and `src/testing/`, and holds that only
+`till-session.ts` and the sign-out handler name `readSessionToken` or `SESSION_COOKIE`; a cookie
+name spelt out as a string is missed.
 
 ## Root receipts moved on 2026-11-06
 

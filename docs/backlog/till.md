@@ -2115,9 +2115,11 @@ language (`PUT /api/session/locale` and the sign-in answer's `locale`, `apps/ser
 request have finished. So when the person leaving uses another language than the sign-in screen's,
 their sign-out waits on a slow save, and the next person's sign-in is still waiting for its answer
 when the sign-out's answer comes back, the server signs the next person in but the till shows the
-PIN pad again, and they must key their PIN again. The cheapest fix, putting the
-language back as soon as the till locks, changes what `apps/till/src/till-app.test.ts` "does not
-revert the locale if the app disconnects mid-logout" asserts, so it needs a decision on that test.
+PIN pad again, and they must key their PIN again. One fix, putting the language back as soon as
+the till locks, changes what `apps/till/src/till-app.test.ts` "does not revert the locale if the
+app disconnects mid-logout" asserts, so it needs a decision on that test. Another: the sign-in
+screen already redraws itself on a language change (`LocaleChangeController` in its constructor),
+so the language could come out of its key; whether that test still passes then is not checked.
 
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
@@ -3128,10 +3130,11 @@ only the bill to the survivor refuses `draft.out_of_date`. Both the direct comma
 survivor's current edit state succeeds and retains the separately marked lines. These cases
 replace Task 7's unrun consumed-draft observation; they do not establish the till's recovery UI.
 
-Every request the till sends, except the sign-in itself (`POST /api/session`), names the person
-signed in on that tab in an `x-waitron-person` header (`PERSON_HEADER`,
-`packages/shared/src/person-header.ts`), added by `TillApi`'s fetch wrapper in
-`apps/till/src/api/client.ts`. A tab nobody has signed in on names nobody. The server checks the
+Every request through the till's API client (`TillApi`, `apps/till/src/api/client.ts`), except
+the sign-in itself (`POST /api/session`), names the person signed in on that tab in an
+`x-waitron-person` header (`PERSON_HEADER`, `packages/shared/src/person-header.ts`). The server
+probes in `apps/till/src/api/server-router.ts` and the `/api/theme` read (`apps/till/src/main.ts`)
+bypass it and name nobody. A tab nobody has signed in on names nobody. The server checks the
 header where it reads the device's sign-in: `requireSession` and `signedInPersonOn` in
 `apps/server/src/till-session.ts`, and the sign-out. While a session is open, a request with no
 header, an empty one, one that is not an id, or one naming anyone but that session's person is
@@ -3149,7 +3152,10 @@ sign-in, the same person's included, or through a client the till no longer hold
 it: that request fails with its usual error.
 
 A sign-out (`DELETE /api/session`) is sent once the person's saves have finished, and names, in the
-same header, the person signed in on that tab when the sign-out began. With a session open, a
+same header, the person signed in on that tab when the sign-out began. None is sent if a later
+sign-in was answered meanwhile (`#onLogout`, `apps/till/src/till-app.ts`); the leaving person's
+session then stays open on the server, since a sign-in ends no other session (`loginWithPin`,
+`packages/identity/src/login.ts`, only adds one). With a session open, a
 sign-out naming its person ends it; one naming nobody or anyone else is refused the same way and
 ends nothing. A sign-out carrying the header never clears the cookie, because its answer can reach
 the browser after the next person's sign-in. With no session open it answers `{ ok: true }`, and
@@ -3157,7 +3163,9 @@ clears the cookie only when it names nobody.
 
 The server cases are in `apps/server/src/till-session.person.test.ts`, the walk of every till,
 device and schedule route in `till-api.session-person.test.ts`, `GET /api/device/me`'s in
-`device-api.test.ts` and more sign-out cases in `till-api.test.ts`. The till's are in
+`device-api.test.ts`, more sign-out cases in `till-api.test.ts`, and the refusals of a save, a
+take-over, a recall, a line split and a discard naming someone else in `till-api.drafts.test.ts`,
+`draft-recall.test.ts`, `till-api.groups.test.ts` and `draft-discard.test.ts`. The till's are in
 `apps/till/src/api/client.test.ts` ("TillApi: the tab's person on every request") and
 `apps/till/src/till-app-person-refusal.test.ts`, which drives the app through its real client. The
 other server tests send the signed-in person's header through
