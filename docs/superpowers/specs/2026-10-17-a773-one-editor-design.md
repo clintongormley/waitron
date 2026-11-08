@@ -101,7 +101,7 @@ one transaction. It uses passive session activity. Save input adds required `exp
 existing `billId`, `draftId` and `revision` must agree with it (`revision=0` for no draft).
 Save returns `BillDraftSnapshot`. Takeover retains
 `POST /api/parties/:id/drafts/:did/take-over`, taking `{revision,expectedEdit,submissionId}` and
-returning `BillDraftSnapshot`. (2026-11-08: since #2534 every request through the till's API client names its
+returning `BillDraftSnapshot`. (2026-11-08: since #2534 every request through the till's API client but the sign-in names its
 person in an `x-waitron-person` header, not in its body; `docs/backlog/till.md`, "One editor per bill".) Its server signature becomes
 `takeOverDraft(tx:Transaction,cfg:TillConfig,partyId:string,draftId:string,operatorId:string,
 ask:{revision:number,expectedEdit:BillEditExpected,submissionId:string},

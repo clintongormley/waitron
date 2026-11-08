@@ -10,6 +10,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loginWithPin, persons } from "@waitron/identity";
 import { PERSON_HEADER } from "@waitron/shared";
 import { SESSION_COOKIE } from "../till-session.js";
+import { DEVICE_COOKIE } from "../device-session.js";
 import { setupPartyVenue } from "./party-venue.js";
 import { fixturePinHash } from "./known-secret-hashes.js";
 import { leaveSessionAlone } from "./tab-person.js";
@@ -33,7 +34,9 @@ function echoApp() {
   return app;
 }
 
-const cookie = (token: string) => `waitron_device=x.y; ${SESSION_COOKIE}=${token}`;
+const cookie = (token: string) => `${DEVICE_COOKIE}=x.y; ${SESSION_COOKIE}=${token}`;
+const sessionToken = (setCookie: string) =>
+  new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(setCookie)![1]!;
 
 let base = "";
 let close: () => Promise<void> = async () => {};
@@ -104,7 +107,7 @@ describe("the test harness naming a session's person", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ personId: viaFetch }),
     });
-    const fetched = /waitron_till_session=([^;]+)/.exec(signedIn.headers.get("set-cookie")!)![1]!;
+    const fetched = sessionToken(signedIn.headers.get("set-cookie")!);
     // The answer's body is still the test's to read.
     expect(((await signedIn.json()) as { personId: string }).personId).toBe(viaFetch);
     const res = await fetch(`${base}/echo`, { headers: { cookie: cookie(fetched) } });
@@ -117,7 +120,7 @@ describe("the test harness naming a session's person", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ personId: viaRequest }),
     });
-    const requested = /waitron_till_session=([^;]+)/.exec(answered.headers.get("set-cookie")!)![1]!;
+    const requested = sessionToken(answered.headers.get("set-cookie")!);
     const again = await app.request("/echo", { headers: { cookie: cookie(requested) } });
     expect(await personSeenBy(again)).toBe(viaRequest);
   });

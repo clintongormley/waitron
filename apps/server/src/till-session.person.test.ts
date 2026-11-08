@@ -121,7 +121,7 @@ async function call(
   return { status: response.status, json: (await response.json()) as unknown };
 }
 
-/** The session token in a cookie string ending `…; waitron_till_session=<token>`. */
+/** The session token in a cookie string whose last cookie is `waitron_till_session=<token>`. */
 const tokenOf = (cookie: string) => cookie.slice(cookie.lastIndexOf("=") + 1);
 
 const refusal = (personId: string | null) => ({
@@ -191,7 +191,7 @@ describe("kitchen screens and the person header", () => {
     ).toMatchObject(refusal(f.ana));
   });
 
-  it("on a kitchen display, answers a request naming someone not signed in as with nobody signed in", async () => {
+  it("on a kitchen display, answers a request naming someone not signed in as with nobody signed in; its pass release reads no session at all", async () => {
     const f = await fixture();
     const station = await f.device("kds", { stationId: f.grill });
     const nobody = await call(f.app, "/api/device/station-screen", station.jar);

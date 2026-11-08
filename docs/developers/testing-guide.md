@@ -3725,7 +3725,9 @@ Hono's `request` and the global `fetch`, and notes the person of each session to
 `loginWithPin` returns, and the cookie a successful `POST /api/session` sets when its answer names
 a `personId`. A later request carrying a noted token in its cookie and no person header gains that
 token's person (`initNamingPerson` in `apps/server/src/testing/tab-person.ts`). It never replaces a
-header a test set. The notes are a module's map, reset with the module graph for every test file.
+header a test set. A `Request` handed over with no init gains the header in place, so a test that
+reuses that object's headers for another person's request still names the first person. The notes
+are a module's map, reset with the module graph for every test file.
 
 A test of a request naming someone else sets the header itself, and the harness keeps it, as the
 person-refusal cases in `till-api.drafts.test.ts`, `draft-recall.test.ts`,
@@ -3734,8 +3736,9 @@ person-refusal cases in `till-api.drafts.test.ts`, `draft-recall.test.ts`,
 header the test gives them, or none. `till-session.person.test.ts`,
 `till-api.session-person.test.ts`, `till-api.test.ts` and `device-api.test.ts` do. A test that gives a session a token or a person in the database
 itself notes it with `noteSessionPerson(token, personId)`, as the allergy suites and
-`testing/kitchen-allergy-fixture.ts` do. The cost: a server test that sets no header sends the
-right person, so it reaches the refusal only when it sets the header itself.
+`testing/kitchen-allergy-fixture.ts` do. The cost: a server test that sets no header and leaves no
+session alone sends the noted person, so it reaches the refusal only by setting the header itself or
+by calling `leaveSessionAlone`.
 
 ## Root receipts moved on 2026-10-31
 
