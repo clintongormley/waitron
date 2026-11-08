@@ -138,7 +138,7 @@ it.each(["node", "environment"])(
     const { deps } = await fixture();
     const run = FISCAL_SLOT.createReconciliation!({
       ...deps,
-      nodeId: different === "node" ? "another-node" : deps.nodeId,
+      nodeId: different === "node" ? "ffffffff-0000-4000-8000-000000000000" : deps.nodeId,
       environment: different === "environment" ? "preproduction" : deps.environment,
     });
     await run(NOW);
