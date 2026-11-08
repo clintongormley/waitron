@@ -6493,7 +6493,9 @@ describe("the publish job carries the producer's settings into the image", () =>
   describe("the tax-number change guard", () => {
     const step = () => publishStepNamed(PRODUCER_CHANGE_STEP);
     const OTHER = "11111111H";
-    const run = ({ published, allowed = "", ref = "refs/heads/main" }) => {
+    const NUMBER = PRODUCER_VALUES.WAITRON_PRODUCER_TAX_ID;
+    const carried = (value) => `WAITRON_PRODUCER_TAX_ID=${value}\n`;
+    const run = ({ published, allowed = "", ref = "refs/heads/main", taxId = NUMBER }) => {
       const dir = mkdtempSync(join(tmpdir(), "producer-change-"));
       try {
         const file = join(dir, "main.env");
@@ -6501,7 +6503,7 @@ describe("the publish job carries the producer's settings into the image", () =>
         return runPublishScript(step().script, {
           MAIN_IMAGE_ENV: file,
           REF: ref,
-          WAITRON_PRODUCER_TAX_ID: PRODUCER_VALUES.WAITRON_PRODUCER_TAX_ID,
+          WAITRON_PRODUCER_TAX_ID: taxId,
           WAITRON_PRODUCER_CHANGE_ALLOWED: allowed,
         });
       } finally {
@@ -6555,6 +6557,67 @@ describe("the publish job carries the producer's settings into the image", () =>
     it("fails when there is no read of `:main` to compare with", () => {
       expect(run({ published: undefined }).status).not.toBe(0);
     });
+
+    it("passes the same number spelled with blanks on `:main`'s side", () => {
+      const result = run({ published: carried(`  ${NUMBER}\t`) });
+      expect(result.status, result.stderr).toBe(0);
+    });
+
+    it("passes the same number spelled with blanks on the secret's side", () => {
+      const result = run({ published: carried(NUMBER), taxId: `  ${NUMBER} ` });
+      expect(result.status, result.stderr).toBe(0);
+    });
+
+    it("passes an allowed change whose variable or secret is spelled with blanks", () => {
+      const onVariable = run({ published: carried(OTHER), allowed: ` ${NUMBER} ` });
+      expect(onVariable.status, onVariable.stderr).toBe(0);
+      const onSecret = run({ published: carried(OTHER), taxId: ` ${NUMBER} `, allowed: NUMBER });
+      expect(onSecret.status, onSecret.stderr).toBe(0);
+    });
+
+    it("still fails a genuinely different number spelled with blanks, printing neither", () => {
+      for (const result of [
+        run({ published: carried(`  ${OTHER} `) }),
+        run({ published: carried(OTHER), taxId: `  ${NUMBER} ` }),
+      ]) {
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("WAITRON_PRODUCER_CHANGE_ALLOWED");
+        expect(result.stdout + result.stderr).not.toContain(OTHER);
+        expect(result.stdout + result.stderr).not.toContain(NUMBER);
+      }
+    });
+
+    it("fails a secret of blanks alone against a published number when nothing allows it", () => {
+      expect(run({ published: carried(OTHER), taxId: "   " }).status).not.toBe(0);
+    });
+
+    // Taken from JavaScript's own trim, which a shell's [[:space:]] does not match.
+    const blanks = Array.from({ length: 0x10000 }, (_, code) => String.fromCharCode(code)).filter(
+      (character) => character.trim() === "",
+    );
+    const named = (character) => `U+${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+
+    it.each(blanks.map((blank) => [named(blank), blank]))(
+      "treats %s as a blank on either side, because a box's trim strips it",
+      (name, blank) => {
+        const padded = `${blank}${NUMBER}${blank}`;
+        const secret = run({ published: carried(NUMBER), taxId: padded });
+        expect(secret.status, `${name} on the secret: ${secret.stderr}`).toBe(0);
+        // A line break cannot sit inside the line a published value is read from.
+        if (blank === "\n") return;
+        const published = run({ published: carried(padded) });
+        expect(published.status, `${name} on :main: ${published.stderr}`).toBe(0);
+      },
+    );
+
+    it.each(["​", "\u0085", "᠎"])(
+      "does not treat %j as a blank, because a box's trim keeps it",
+      (kept) => {
+        const result = run({ published: carried(NUMBER), taxId: `${kept}${NUMBER}${kept}` });
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("WAITRON_PRODUCER_CHANGE_ALLOWED");
+      },
+    );
   });
 
   // Main's path is main-tag-guard.sh, whose suite covers the read; a release tag reads directly.
@@ -6716,8 +6779,8 @@ describe("the publish job carries the producer's settings into the image", () =>
 
   describe("the box's own checks, run in the built image", () => {
     const step = () => publishStepNamed(PRODUCER_VALID_STEP);
-    // `docker run … node /app/server.js check-producer` answered by the server's source under tsx,
-    // with the image's environment taken from the stub's INSIDE_-prefixed variables.
+    // Only this step's shape is tested here; what the program itself answers is tested against the
+    // real bundle in `apps/server/src/bin.commands.test.ts`.
     const bin = mkdtempSync(join(tmpdir(), "producer-valid-bin-"));
     afterAll(() => rmSync(bin, { recursive: true, force: true }));
     writeFileSync(
@@ -6725,18 +6788,14 @@ describe("the publish job carries the producer's settings into the image", () =>
       [
         "#!/usr/bin/env bash",
         'printf \'%s\\n\' "$*" >> "$DOCKER_ARGS"',
-        '[ "${*: -2}" = "/app/server.js check-producer" ] || exit 97',
-        "for name in WAITRON_PRODUCER_NAME WAITRON_PRODUCER_TAX_ID WAITRON_PRODUCER_ADDRESS; do",
-        '  inside="INSIDE_$name"',
-        '  if [ -n "${!inside+set}" ]; then export "$name=${!inside}"; else unset "$name"; fi',
-        '  unset "$inside"',
-        "done",
-        'exec "$TSX" "$ENTRY" check-producer',
+        "printf '%s' \"$STUB_STDOUT\"",
+        "printf '%s' \"$STUB_STDERR\" >&2",
+        'exit "$STUB_STATUS"',
         "",
       ].join("\n"),
     );
     chmodSync(join(bin, "docker"), 0o755);
-    const run = (inside) => {
+    const run = ({ status = 0, stdout = "", stderr = "" } = {}) => {
       const dir = mkdtempSync(join(tmpdir(), "producer-valid-"));
       try {
         const args = join(dir, "docker.args");
@@ -6745,19 +6804,17 @@ describe("the publish job carries the producer's settings into the image", () =>
           {
             CHECK_IMAGE: "waitron:check",
             DOCKER_ARGS: args,
-            TSX: join(repoRoot, "apps", "server", "node_modules", ".bin", "tsx"),
-            ENTRY: join(repoRoot, "apps", "server", "src", "bin.ts"),
-            ...Object.fromEntries(Object.entries(inside).map(([k, v]) => [`INSIDE_${k}`, v])),
+            STUB_STATUS: String(status),
+            STUB_STDOUT: stdout,
+            STUB_STDERR: stderr,
           },
           bin,
-          90_000,
         );
         return { ...result, dockerArgs: existsSync(args) ? readFileSync(args, "utf8") : "" };
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
     };
-    const printed = (result) => result.stdout + result.stderr;
 
     it("runs the loaded image's own entry, without a pull or a network, under a time limit", () => {
       expect(step().envOf("CHECK_IMAGE")).toMatch(/^\S+$/);
@@ -6789,9 +6846,9 @@ describe("the publish job carries the producer's settings into the image", () =>
       ).toBe(false);
     });
 
-    it("passes the made-up producer, printing no value", { timeout: 120_000 }, () => {
-      const result = run(PRODUCER_VALUES);
-      expect(result.status, printed(result)).toBe(0);
+    it("passes on the container's 0, running exactly the image's program with no pull or network", () => {
+      const result = run({ stdout: "verifactu: the settings pass\n" });
+      expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("verifactu: the settings pass");
       expect(result.dockerArgs.trim().split(" ")).toEqual([
         "run",
@@ -6806,38 +6863,11 @@ describe("the publish job carries the producer's settings into the image", () =>
         "/app/server.js",
         "check-producer",
       ]);
-      for (const value of Object.values(PRODUCER_VALUES))
-        expect(printed(result)).not.toContain(value);
     });
 
-    it("refuses an address of spaces alone, as a start does", { timeout: 120_000 }, () => {
-      const result = run({ ...PRODUCER_VALUES, WAITRON_PRODUCER_ADDRESS: "   " });
-      expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain(
-        "verifactu: software_producer.invalid (setting WAITRON_PRODUCER_ADDRESS, reason missing)",
-      );
-      expect(printed(result)).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_NAME);
-      expect(printed(result)).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_TAX_ID);
-    });
-
-    it(
-      "refuses a tax number whose check letter is wrong, printing no value",
-      { timeout: 120_000 },
-      () => {
-        const result = run({ ...PRODUCER_VALUES, WAITRON_PRODUCER_TAX_ID: "00000000A" });
-        expect(result.status).not.toBe(0);
-        expect(result.stderr).toContain(
-          "verifactu: sif.producer_invalid (setting WAITRON_PRODUCER_TAX_ID, reason check_failed)",
-        );
-        expect(printed(result)).not.toContain("00000000A");
-        expect(printed(result)).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_NAME);
-        expect(printed(result)).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_ADDRESS);
-      },
-    );
-
-    it("refuses an image that carries no producer at all", { timeout: 120_000 }, () => {
-      const result = run({});
-      expect(result.status).not.toBe(0);
+    it("fails on the container's refusal and leaves its words in the log", () => {
+      const result = run({ status: 1, stderr: "verifactu: sif.producer_unset\n" });
+      expect(result.status).toBe(1);
       expect(result.stderr).toContain("verifactu: sif.producer_unset");
     });
   });

@@ -4409,16 +4409,27 @@ jobs:
             echo "no read of :main's settings to compare the producer tax number with on $REF" >&2
             exit 1
           fi
-          if [ -z "$WAITRON_PRODUCER_TAX_ID" ]; then
-            echo "the repository secret WAITRON_PRODUCER_TAX_ID is empty or not set" >&2
-            exit 1
-          fi
+          # A box trims this setting, so padding is not a different number. (It refuses a line break: software-producer.ts.)
+          # This is that trim's list of characters, as UTF-8 bytes: `[[:space:]]` varies by locale and
+          # misses the no-break spaces. Guard: `scripts/ci-workflow.test.mjs`, against JavaScript's own.
+          LC_ALL=C
+          shopt -s extglob
+          blank=$'[\t\n\v\f\r ]|\xc2\xa0|\xe1\x9a\x80|\xe2\x80[\x80-\x8a\xa8\xa9\xaf]|\xe2\x81\x9f|\xe3\x80\x80|\xef\xbb\xbf'
+          trimmed() {
+            local value=$1
+            value=${value##+($blank)}
+            value=${value%%+($blank)}
+            printf '%s' "$value"
+          }
           published=$(sed -n 's/^WAITRON_PRODUCER_TAX_ID=//p' "$MAIN_IMAGE_ENV" | head -n 1)
+          published=$(trimmed "$published")
+          tax_id=$(trimmed "$WAITRON_PRODUCER_TAX_ID")
+          allowed=$(trimmed "${WAITRON_PRODUCER_CHANGE_ALLOWED:-}")
           if [ -z "$published" ]; then
             echo ":main carries no producer tax number yet, so this is not a change"
-          elif [ "$published" = "$WAITRON_PRODUCER_TAX_ID" ]; then
+          elif [ "$published" = "$tax_id" ]; then
             echo "the producer tax number is the one :main carries"
-          elif [ "$WAITRON_PRODUCER_CHANGE_ALLOWED" = "$WAITRON_PRODUCER_TAX_ID" ]; then
+          elif [ -n "$allowed" ] && [ "$allowed" = "$tax_id" ]; then
             echo "the producer tax number changes from :main's; WAITRON_PRODUCER_CHANGE_ALLOWED allows it"
           else
             echo "the secret WAITRON_PRODUCER_TAX_ID differs from the one :main carries, and production" >&2
