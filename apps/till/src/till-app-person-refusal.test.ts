@@ -435,8 +435,13 @@ describe("the till through its real client", () => {
     await openAnasTable(el);
     emit(el.shadowRoot!.querySelector("till-table-order-screen")!, "logout");
     await vi.waitFor(() => expect(server.sentTo("DELETE /api/session")).toHaveLength(1));
-    await signIn(el, LUIS, LUIS_PIN);
-    await vi.waitFor(() => expect(afterSignIn(server, 1).length).toBeGreaterThan(0));
+    const luisSignIn = server.hold("POST /api/session");
+    await keyIn(el, LUIS, LUIS_PIN);
+    await luisSignIn.sent;
+    const luisAnswered = server.requests.length;
+    luisSignIn.answer();
+    await vi.waitFor(() => expect(shellOf(el)).not.toBeNull());
+    await vi.waitFor(() => expect(server.requests.length).toBeGreaterThan(luisAnswered));
     chooseLocale(el);
     await vi.waitFor(() => expect(server.sentTo("PUT /api/session/locale")).toHaveLength(1));
 
@@ -450,11 +455,8 @@ describe("the till through its real client", () => {
     expect(named(server.sentTo("DELETE /api/session")[0]!)).toBe(ANA.personId);
     expect(named(server.requests[secondSignIn]!)).toBeUndefined();
     expect(named(server.sentTo("PUT /api/session/locale")[0]!)).toBe(LUIS.personId);
-    const luiss = afterSignIn(server, 1);
-    const firstLuis = luiss.findIndex((request) => named(request) === LUIS.personId);
-    expect(luiss.slice(firstLuis).map(named)).toEqual(
-      Array(luiss.length - firstLuis).fill(LUIS.personId),
-    );
+    const luiss = server.requests.slice(luisAnswered);
+    expect(luiss.map(named)).toEqual(Array(luiss.length).fill(LUIS.personId));
     expect(server.unserved).toEqual([]);
   });
 
