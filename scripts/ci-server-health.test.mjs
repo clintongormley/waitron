@@ -688,13 +688,14 @@ describe("server health recovery", () => {
       reads.push(path);
       if (path.includes("status=completed")) {
         expect(path).toContain("/actions/workflows/ci.yml/runs?");
-        expect(path).toContain("page=1");
+        expect(path).toMatch(/page=[12]$/);
+        const second = path.endsWith("&page=2");
         return {
           total_count: 1500,
-          workflow_runs: Array.from({ length: 100 }, (_, i) => ({
+          workflow_runs: Array.from({ length: second ? 100 : 50 }, (_, i) => ({
             ...f.run,
-            id: i + 100,
-            head_repository: { id: 99 },
+            id: i + (second ? 150 : 100),
+            head_repository: { id: second && i === 50 ? 42 : 99 },
           })),
         };
       }
@@ -702,7 +703,7 @@ describe("server health recovery", () => {
       return { total_count: 0, workflow_runs: [] };
     };
     expect(await health.needsServerProbe(f.options)).toBe(true);
-    expect(reads.filter((path) => path.includes("status=completed"))).toHaveLength(1);
+    expect(reads.filter((path) => path.includes("status=completed"))).toHaveLength(2);
   });
   it("does not read completed history when the active queue needs no recovery", async () => {
     const f = fixture(),
