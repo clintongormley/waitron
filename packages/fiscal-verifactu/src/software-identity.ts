@@ -154,3 +154,10 @@ export function refuseProducerSettings(environment: string, identity: SoftwareId
   if (environment === "production" && identity.producer === PRODUCER_PENDING)
     throw new AppError("sif.producer_unset", { environment });
 }
+
+/** One reading of the settings for a builder of records, refused as a start would refuse it. */
+export function runningIdentity(environment: string): SoftwareIdentity {
+  const identity: SoftwareIdentity = { ...SOFTWARE_IDENTITY, producer: runningProducer() };
+  refuseProducerSettings(environment, identity);
+  return identity;
+}

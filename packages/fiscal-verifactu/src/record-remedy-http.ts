@@ -11,7 +11,7 @@ import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import {
   producerFields,
-  runningProducer,
+  runningIdentity,
   SOFTWARE_IDENTITY,
   softwareVersion,
 } from "./software-identity.js";
@@ -132,10 +132,10 @@ export async function applyCorrectedRecordFacts(
     Subsanacion: "S",
     RechazoPrevio: priorOutcome === "rejected" ? "X" : "N",
     SistemaInformatico: {
-      ...producerFields(
-        { ...SOFTWARE_IDENTITY, producer: runningProducer() },
-        { legalName: tenant.legalName, nif: sif.nif },
-      ),
+      ...producerFields(runningIdentity(generation.environment), {
+        legalName: tenant.legalName,
+        nif: sif.nif,
+      }),
       NombreSistemaInformatico: SOFTWARE_IDENTITY.name,
       IdSistemaInformatico: sif.idSistemaInformatico,
       Version: softwareVersion(),

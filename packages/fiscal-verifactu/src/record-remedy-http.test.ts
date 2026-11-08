@@ -34,6 +34,7 @@ const NOW = new Date("2026-07-20T17:20:35Z");
 let instant: Date;
 let writable: boolean;
 let tradingReady: boolean;
+let environment: "production" | "preproduction";
 let token: string;
 let personId: string;
 let node: SeededNode;
@@ -61,6 +62,7 @@ beforeEach(async () => {
   instant = NOW;
   writable = true;
   tradingReady = true;
+  environment = "preproduction";
   registerModulePermissions(FISCAL_PERMISSIONS);
   node = await seedNode(suite.db);
   generationNode = node.nodeId;
@@ -106,7 +108,7 @@ function send(value: unknown = body, enabled = true, runtime = true) {
       recordGeneration: runtime
         ? {
             nodeId: generationNode,
-            environment: "preproduction",
+            environment,
             clock,
             requireWritable: () => {
               if (!writable) throw new AppError("node.read_only", {});
@@ -773,4 +775,33 @@ it("names the producer from the settings in the correction's software block, kee
   });
   expect(after.records[1]!.nombreRazonEmisor).toBe(before.records[0]!.nombreRazonEmisor);
   expect(after.records[1]!.idEmisorFactura).toBe(before.records[0]!.idEmisorFactura);
+});
+
+it("refuses a production correction while no producer is set, writing nothing", async () => {
+  vi.stubEnv("WAITRON_PRODUCER_NAME", "");
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "");
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "");
+  const saleId = await seedSale(suite.db, node, 2);
+  const decision = await withTransaction(suite.db, async (tx) => {
+    const original = await appendToChain(
+      tx,
+      node.nodeId,
+      altaFor(node, saleId, 2, 2, "production"),
+    );
+    await tx
+      .insert(envios)
+      .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
+    const filingCase = await openFilingCase(tx, {
+      registroId: original.id,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1161, mensaje: null, csv: null },
+      now: NOW,
+    });
+    return { ...body, caseId: filingCase.id, registroId: original.id, actionKey: "http-prod" };
+  });
+  environment = "production";
+  const before = await snapshot();
+  const res = await send(decision);
+  expect(await res.json()).toMatchObject({ error: { code: "sif.producer_unset" } });
+  expect(await snapshot()).toEqual(before);
 });

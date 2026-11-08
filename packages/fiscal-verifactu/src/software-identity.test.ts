@@ -181,7 +181,7 @@ describe("a start, by the producer settings", () => {
   describe("with none set", () => {
     beforeEach(() => setProducer({}));
 
-    it("refuses production, stamped build or not", () => {
+    it("refuses production on a build with no stamp", () => {
       const thrown = refusal("production");
       expect(thrown).toBeInstanceOf(AppError);
       expect(thrown).toMatchObject({

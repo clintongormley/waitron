@@ -5,12 +5,7 @@ import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import type { FiscalBackendDeps, FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
-import {
-  SOFTWARE_IDENTITY,
-  refuseProducerSettings,
-  runningProducer,
-  type SoftwareIdentity,
-} from "./software-identity.js";
+import { runningIdentity } from "./software-identity.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { certificateAlerts } from "./certificate-alerts.js";
 import { claimReminder, reportReminder } from "./certificate-reminders.js";
@@ -43,10 +38,8 @@ export function makeVerifactuBackend({
   clock,
   environment,
 }: FiscalBackendDeps): VerifactuBackend {
-  const identity: SoftwareIdentity = { ...SOFTWARE_IDENTITY, producer: runningProducer() };
-  refuseProducerSettings(environment, identity);
   return new VerifactuBackend({
-    identity,
+    identity: runningIdentity(environment),
     clock,
     db,
     environment,

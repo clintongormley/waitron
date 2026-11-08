@@ -72,8 +72,6 @@ describe("the producer settings at backend construction", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    vi.resetModules();
   });
 
   it("refuses production with none set, on a build with no stamp", () => {

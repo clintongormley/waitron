@@ -526,10 +526,7 @@ it("replays omitted wholeInvoice as false without another number", async () => {
 it.each(["seriesId", "operationDescription"])("requires a nonblank correction %s", async (key) => {
   await refuses({ ...body, correction: { ...correction, [key]: " " } });
 });
-it("binds a production-host synthetic correction to production records", async () => {
-  vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
-  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
-  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
+async function productionOriginal() {
   const backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
@@ -578,6 +575,13 @@ it("binds a production-host synthetic correction to production records", async (
     body.registroId = original.fiscal.recordId;
     body.caseId = filingCase.id;
   });
+}
+
+it("binds a production-host synthetic correction to production records", async () => {
+  vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
+  await productionOriginal();
   generation.environment = "production";
   const res = await send();
   expect(res.status).toBe(200);
@@ -607,4 +611,16 @@ it("names the producer from the settings in the corrective invoice's software bl
   });
   expect(after.records[1]!.nombreRazonEmisor).toBe(before.records[0]!.nombreRazonEmisor);
   expect(after.records[1]!.idEmisorFactura).toBe(before.records[0]!.idEmisorFactura);
+});
+
+it("refuses a production corrective invoice while no producer is set, writing nothing", async () => {
+  vi.stubEnv("WAITRON_PRODUCER_NAME", "");
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "");
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "");
+  await productionOriginal();
+  generation.environment = "production";
+  const before = await snapshot();
+  const res = await send();
+  expect(await res.json()).toMatchObject({ error: { code: "sif.producer_unset" } });
+  expect(await snapshot()).toEqual(before);
 });
