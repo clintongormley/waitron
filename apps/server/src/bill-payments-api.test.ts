@@ -169,14 +169,14 @@ let venue: Venue;
 // a surface reading the wrong one is seen.
 const MENU: { name: string; customer: string; kitchen: string; price: string }[] = [
   { name: "Paella", customer: "Paella valenciana", kitchen: "PAELLA", price: "35.00" },
-  { name: "Chuletón", customer: "Chuletón a la brasa", kitchen: "CHULETA", price: "25.00" },
-  { name: "Botella tinto", customer: "Rioja crianza", kitchen: "TINTO", price: "30.00" },
-  { name: "Ensalada", customer: "Ensalada de la casa", kitchen: "ENSAL", price: "12.00" },
-  { name: "Tarta", customer: "Tarta de queso", kitchen: "TARTA", price: "18.00" },
-  { name: "Caña", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
-  { name: "Mariscada", customer: "Mariscada para dos", kitchen: "MARISC", price: "100.01" },
-  { name: "Pulpo", customer: "Pulpo a la gallega", kitchen: "PULPO", price: "20.00" },
-  { name: "Croquetas", customer: "Croquetas de jamón", kitchen: "CROQ", price: "10.00" },
+  { name: "Steak", customer: "Chuletón a la brasa", kitchen: "STEAK", price: "25.00" },
+  { name: "Wine bottle", customer: "Rioja crianza", kitchen: "WINE", price: "30.00" },
+  { name: "Salad", customer: "Ensalada de la casa", kitchen: "SALAD", price: "12.00" },
+  { name: "Cake", customer: "Tarta de queso", kitchen: "CAKE", price: "18.00" },
+  { name: "Beer", customer: "Caña de cerveza", kitchen: "BEER", price: "3.00" },
+  { name: "Seafood platter", customer: "Mariscada para dos", kitchen: "SEAFOOD", price: "100.01" },
+  { name: "Octopus", customer: "Pulpo a la gallega", kitchen: "OCTOPUS", price: "20.00" },
+  { name: "Croquettes", customer: "Croquetas de jamón", kitchen: "CROQUETTES", price: "10.00" },
 ];
 
 function systemClock(): TrustedClock {
@@ -216,7 +216,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         taxId: "61000001E",
         legalName: "Cuentas SL",
         taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
-        name: "Sala",
+        name: "Dining room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Restaurante",
@@ -230,7 +230,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -252,7 +252,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   };
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: `Bill payments api menu ${cfg.locationId}` });
-    const dishes = await createCategory(tx, { name: "Platos" });
+    const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
@@ -271,7 +271,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Ann", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     const [profile] = await tx
       .insert(deviceProfiles)
@@ -319,7 +319,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       })
       .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(tx, {
-      name: "Recibos",
+      name: "Receipts",
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
       hasCashDrawer: true,
@@ -336,7 +336,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       printerId: printer.id,
     };
   });
-  const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId: seeded.profileId });
+  const device = await enrolDeviceForTest(db, cfg, { name: "Bar", profileId: seeded.profileId });
   const sessionOn = async (deviceId: string) =>
     (
       await withTransaction(db, (tx) =>
@@ -346,7 +346,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const session = { token: await sessionOn(device.deviceId) };
   // Its profile does not allow the drawer, though its drawer printer has one.
   const handheld = await enrolDeviceForTest(db, cfg, {
-    name: "Terraza",
+    name: "Terrace",
     profileId: seeded.handheldProfileId,
   });
   const noCash = await enrolDeviceForTest(db, cfg, {
@@ -354,11 +354,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     profileId: seeded.noCashProfileId,
   });
   const seededHandheld = await enrolDeviceForTest(db, cfg, {
-    name: "Móvil",
+    name: "Mobile",
     profileId: seeded.seededHandheldProfileId,
   });
   const seededHandheldWithDrawer = await enrolDeviceForTest(db, cfg, {
-    name: "Móvil con cajón",
+    name: "Mobile with drawer",
     profileId: seeded.seededHandheldWithDrawerProfileId,
   });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
@@ -443,9 +443,8 @@ async function groupedTabWith(...names: string[]): Promise<string> {
   });
 }
 
-/** The €120.00 bill of the owner's example: Paella, Chuletón, Botella tinto, Ensalada, Tarta. */
 function bill120(): Promise<string> {
-  return tabWith("Paella", "Chuletón", "Botella tinto", "Ensalada", "Tarta");
+  return tabWith("Paella", "Steak", "Wine bottle", "Salad", "Cake");
 }
 
 async function request(
@@ -654,7 +653,7 @@ describe("the balance", () => {
   });
 
   it("reads a presented bill with nothing paid as owing its whole total", async () => {
-    const billId = await tabWith("Tarta");
+    const billId = await tabWith("Cake");
     expect((await request("POST", `/api/working-orders/${billId}/place`)).status).toBe(200);
 
     const { status, json } = await balance(billId);
@@ -669,7 +668,7 @@ describe("the balance", () => {
   });
 
   it("reads a bill settled in one whole payment as owing nothing, though no bill payment records it", async () => {
-    const billId = await tabWith("Tarta");
+    const billId = await tabWith("Cake");
     expect((await request("POST", `/api/working-orders/${billId}/place`)).status).toBe(200);
     const collected = await request("POST", `/api/working-orders/${billId}/collect`, {
       tender: { method: "cash", amount: "18.00" },
@@ -687,7 +686,7 @@ describe("the balance", () => {
   });
 
   it("reads an abandoned bill as owing nothing, keeping its total", async () => {
-    const billId = await tabWith("Tarta");
+    const billId = await tabWith("Cake");
     expect((await request("DELETE", `/api/working-orders/${billId}`)).status).toBe(200);
 
     const { json } = await balance(billId);
@@ -849,12 +848,12 @@ describe("a contribution (design §8 test 2)", () => {
           pollId: `poll-${randomUUID()}`,
           hasCashDrawer: true,
         });
-      const receipt = await printer("Recibos caja");
-      const drawer = await printer("Cajón caja");
+      const receipt = await printer("Counter receipts");
+      const drawer = await printer("Counter drawer");
       return { profileId: profile!.id, receiptId: receipt.id, drawerId: drawer.id };
     });
     const device = await enrolDeviceForTest(suite.db, venue.cfg, {
-      name: "Caja",
+      name: "Counter",
       profileId: till.profileId,
     });
     suite.db.run(
@@ -992,7 +991,7 @@ describe("a contribution (design §8 test 2)", () => {
   });
 
   it("takes the whole bill by card on a device that does not take cash, after refusing its cash part", async () => {
-    const billId = await tabWith("Pulpo");
+    const billId = await tabWith("Octopus");
     const ask = { kind: "contribution", tip: "0.00" } as const;
 
     const cashPart = await request(
@@ -1116,7 +1115,7 @@ describe("a contribution (design §8 test 2)", () => {
   });
 
   it("refuses an allocation other than the one the operator saw, with the new one, and writes nothing", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
 
     const refused = await contribute(billId, "30.00");
 
@@ -1184,7 +1183,7 @@ describe("a contribution (design §8 test 2)", () => {
 
 describe("equal shares (design §8 test 4)", () => {
   it("takes €100.01 as €33.34, €33.34 and €33.33, and the third share issues the invoice", async () => {
-    const billId = await tabWith("Mariscada");
+    const billId = await tabWith("Seafood platter");
     const taken: string[] = [];
     let last: Record<string, unknown> = {};
 
@@ -1220,7 +1219,7 @@ describe("equal shares (design §8 test 4)", () => {
 
 describe("an item already paid for (design §8 test 5)", () => {
   async function steakPaid(): Promise<string> {
-    const billId = await tabWith("Paella", "Chuletón", "Caña");
+    const billId = await tabWith("Paella", "Steak", "Beer");
     const paid = await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 2 }],
@@ -1288,7 +1287,7 @@ describe("an item already paid for (design §8 test 5)", () => {
 
     const refused = await request("PUT", `/api/working-orders/${billId}/lines/2`, {
       revision: lines.json.revision,
-      note: "poco hecho",
+      note: "rare",
     });
 
     expect(refused.status).toBe(409);
@@ -1309,7 +1308,7 @@ describe("an item already paid for (design §8 test 5)", () => {
   });
 
   it("lets the unpaid beers of a line be split off and cut, and refuses cutting the paid one", async () => {
-    const billId = await tabWith("Paella", "Caña");
+    const billId = await tabWith("Paella", "Beer");
     const lines = await request("GET", `/api/working-orders/${billId}/lines`);
     const raised = await request("PUT", `/api/working-orders/${billId}/lines/2`, {
       revision: lines.json.revision,
@@ -1372,7 +1371,7 @@ describe("an item already paid for (design §8 test 5)", () => {
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [
         { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
-        { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
+        { lines: [{ menuItemId: offer("Cake"), quantity: "1" }], release: "hold" },
       ],
     });
     expect(round.status).toBe(200);
@@ -1383,7 +1382,7 @@ describe("an item already paid for (design §8 test 5)", () => {
       sentAt: string | null;
       name: string;
     }[];
-    const held = tabLines.find((line) => line.name === "Tarta")!;
+    const held = tabLines.find((line) => line.name === "Cake")!;
     expect(held.firedAt).toBeNull();
     expect(held.sentAt).toBeNull();
     expect(tabLines.find((line) => line.name === "Paella")!.sentAt).not.toBeNull();
@@ -1409,7 +1408,7 @@ describe("an item already paid for (design §8 test 5)", () => {
       })),
     ).toEqual([
       { state: "fired", summary: "1 × Paella" },
-      { state: "held", summary: "1 × Tarta" },
+      { state: "held", summary: "1 × Cake" },
     ]);
   });
 
@@ -1432,7 +1431,7 @@ describe("an item already paid for (design §8 test 5)", () => {
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [
         { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
-        { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
+        { lines: [{ menuItemId: offer("Cake"), quantity: "1" }], release: "hold" },
       ],
     });
     expect(round.status).toBe(200);
@@ -1444,7 +1443,7 @@ describe("an item already paid for (design §8 test 5)", () => {
           sentAt: string | null;
           firedAt: string | null;
         }[]
-      ).find((line) => line.name === "Tarta")!;
+      ).find((line) => line.name === "Cake")!;
     const cake = await cakeLine();
     const leaving = await pay(billId, {
       kind: "items",
@@ -1542,7 +1541,7 @@ describe("what an item payment may name", () => {
         id: randomUUID(),
         lineNo: Math.max(...lineNos.map((line) => line.lineNo)) + 1,
         parentLineId: dish!.id,
-        name: "Extra de queso",
+        name: "Extra cheese",
         unitPriceGross: cents,
         lineTotal: cents,
       });
@@ -1556,7 +1555,7 @@ describe("what an item payment may name", () => {
     ["more of a line than the bill has", [{ lineNo: 1, quantity: "2" }]],
     ["part of a unit", [{ lineNo: 1, quantity: "0.5" }]],
   ] as const)("refuses %s, taking nothing", async (_name, lines) => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
 
     const refused = await payItems(billId, lines);
 
@@ -1569,7 +1568,7 @@ describe("what an item payment may name", () => {
   });
 
   it("refuses part of a weighed line", async () => {
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     suite.db.run(
       sql`update working_order_lines set unit_precision = 3, quantity = 2500 where working_order_id = ${billId}`,
     );
@@ -1582,7 +1581,7 @@ describe("what an item payment may name", () => {
   });
 
   it("takes a dish's extras with it, and refuses them apart or the dish in part", async () => {
-    const billId = await tabWith("Chuletón", "Caña");
+    const billId = await tabWith("Steak", "Beer");
     await inTx((tx) =>
       tx
         .update(workingOrderLines)
@@ -1664,11 +1663,11 @@ describe("a split after a contribution (design §8 test 6, §4.2)", () => {
 
 describe("the invoice at full payment (design §8 test 8)", () => {
   it("issues a moved bill with the destination department header and receipt mode", async () => {
-    const billId = await tabWith("Ensalada");
+    const billId = await tabWith("Salad");
     const destination = await inTx(async (tx) => {
       const department = await createDepartment(tx, {
-        name: `Destino ${randomUUID()}`,
-        tradingName: "Comedor Nuevo",
+        name: `Destination ${randomUUID()}`,
+        tradingName: "New dining room",
         orderStart: "table",
       });
       await tx.insert(departmentReceipts).values({
@@ -1676,7 +1675,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         receipt: { operationDescription: "Restaurante" },
       });
       const zone = await createServiceZone(tx, {
-        name: `Zona ${randomUUID()}`,
+        name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });
       await tx
@@ -1700,7 +1699,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const paid = await contribute(billId, "12.00");
     expect(paid.status).toBe(200);
     expect(paid.json.invoice).toMatchObject({
-      receiptHeader: { tradingName: "Comedor Nuevo", printTradingName: true },
+      receiptHeader: { tradingName: "New dining room", printTradingName: true },
     });
     const [sale] = await saleOf(billId);
     const [snapshot] = suite.db.all<{
@@ -1711,7 +1710,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     );
     expect(snapshot).toEqual({
       department_id: destination.departmentId,
-      trading_name: "Comedor Nuevo",
+      trading_name: "New dining room",
     });
     expect(
       suite.db.all<{ count: number }>(sql`
@@ -1720,19 +1719,19 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("uses the bill's department for a receipt while retaining each line's original department", async () => {
-    const billId = await tabWith("Ensalada");
+    const billId = await tabWith("Salad");
     const [original] = suite.db.all<{ department_id: string }>(sql`
       select department_id from working_line_contexts c
       join working_order_lines l on l.id = c.working_order_line_id
       where l.working_order_id = ${billId}`);
     const destination = await inTx(async (tx) => {
       const department = await createDepartment(tx, {
-        name: `Destino ${randomUUID()}`,
-        tradingName: "Mesa Nueva",
+        name: `Destination ${randomUUID()}`,
+        tradingName: "New table",
         orderStart: "table",
       });
       const zone = await createServiceZone(tx, {
-        name: `Zona ${randomUUID()}`,
+        name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });
       const offers = await offerProducts(tx, venue.cfg, {
@@ -1746,7 +1745,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       return {
         departmentId: department.id,
         tableId: table.id,
-        beerOfferId: offers.offerFor(venue.productIds.get("Caña")!),
+        beerOfferId: offers.offerFor(venue.productIds.get("Beer")!),
       };
     });
 
@@ -1781,7 +1780,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       { department_id: destination.departmentId },
     ]);
     expect(paid.json.invoice).toMatchObject({
-      receiptHeader: { tradingName: "Mesa Nueva", printTradingName: true },
+      receiptHeader: { tradingName: "New table", printTradingName: true },
     });
     const [sale] = await saleOf(billId);
     expect(
@@ -1791,23 +1790,23 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("keeps the bill department's trading name on its issued receipt", async () => {
-    const billId = await tabWith("Ensalada");
+    const billId = await tabWith("Salad");
     const [previous] = suite.db.all<{ trading_name: string }>(sql`
       select trading_name from departments
       where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
     await suite.db.execute(sql`
-      update departments set trading_name = 'Terraza Azul'
+      update departments set trading_name = 'Blue terrace'
       where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
     try {
       const paid = await contribute(billId, "12.00");
       expect(paid.status).toBe(200);
       expect(paid.json.invoice).toMatchObject({
-        receiptHeader: { tradingName: "Terraza Azul", printTradingName: true },
+        receiptHeader: { tradingName: "Blue terrace", printTradingName: true },
       });
       const [sale] = await saleOf(billId);
       const [snapshot] = suite.db.all<{ trading_name: string }>(sql`
         select trading_name from sale_receipt_headers where sale_id = ${sale!.id}`);
-      expect(snapshot).toEqual({ trading_name: "Terraza Azul" });
+      expect(snapshot).toEqual({ trading_name: "Blue terrace" });
     } finally {
       await suite.db.execute(sql`
         update departments set trading_name = ${previous!.trading_name}
@@ -1816,7 +1815,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("reprints the bill's issued trading name after the department changes", async () => {
-    const billId = await tabWith("Ensalada");
+    const billId = await tabWith("Salad");
     const [profile] = suite.db.all<{ id: string; capabilities: string }>(sql`
       select p.id, p.capabilities from device_profiles p
       join devices d on d.device_profile_id = p.id where d.id = ${venue.deviceId}`);
@@ -1827,7 +1826,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       select print_trading_name from department_sale_policies
       where department_id = ${department!.id}`);
     await suite.db.execute(sql`
-      update departments set trading_name = 'Terraza Azul' where id = ${department!.id}`);
+      update departments set trading_name = 'Blue terrace' where id = ${department!.id}`);
     try {
       expect((await contribute(billId, "12.00")).status).toBe(200);
       const [sale] = await saleOf(billId);
@@ -1839,12 +1838,12 @@ describe("the invoice at full payment (design §8 test 8)", () => {
              from sale_receipt_headers where sale_id = ${sale!.id}`);
       expect(snapshot).toEqual({
         department_id: department!.id,
-        trading_name: "Terraza Azul",
+        trading_name: "Blue terrace",
         print_trading_name: 1,
       });
 
       await suite.db.execute(sql`
-        update departments set trading_name = 'Nombre nuevo' where id = ${department!.id}`);
+        update departments set trading_name = 'New name' where id = ${department!.id}`);
       await suite.db.execute(sql`
         update department_sale_policies set print_trading_name = 0
         where department_id = ${department!.id}`);
@@ -1866,9 +1865,9 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       expect(jobs).toHaveLength(2);
       const paper = jobs.map((job) => printedLines(job.payload).join("\n"));
       for (const copy of paper) {
-        expect(copy).toContain("Terraza Azul");
+        expect(copy).toContain("Blue terrace");
         expect(copy).toContain("Cuentas SL");
-        expect(copy).not.toContain("Nombre nuevo");
+        expect(copy).not.toContain("New name");
       }
       expect(paper.some((copy) => copy.includes("DUPLICADO"))).toBe(true);
       expect(fiscalRecordCount(billId)).toBe(1);
@@ -1890,7 +1889,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   it.each(["F1", "F2"] as const)(
     "changes another box's %s invoice choice here, and files the bill on this box's series and SIF",
     async (invoiceType) => {
-      const billId = await tabWith("Chuletón");
+      const billId = await tabWith("Steak");
       await inTx(async (tx) => {
         const nodeId = await seedNode(tx);
         await tx.update(workingOrders).set({ nodeId }).where(eq(workingOrders.id, billId));
@@ -1965,7 +1964,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   );
 
   it("forwards a printed-original delivery choice through the invoice-choice route", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const [before] = await inTx((tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
     );
@@ -1997,7 +1996,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("refuses an explicitly null delivery choice over HTTP without advancing the bill", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const [before] = await inTx((tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
     );
@@ -2045,7 +2044,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   it.each(["active", "disabled", "missing"] as const)(
     "stages only the active A4 printer over HTTP: %s",
     async (kind) => {
-      const billId = await tabWith("Chuletón");
+      const billId = await tabWith("Steak");
       const [before] = await inTx((tx) =>
         tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
       );
@@ -2159,7 +2158,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     it("answers no invoice printer while the device's invoice printer is a receipt printer, and the A4 printer it chooses instead", async () => {
       const receipt = await inTx((tx) =>
         createPrinter(tx, {
-          name: "Barra",
+          name: "Bar",
           transport: "cloud_poll",
           pollId: `poll-${randomUUID()}`,
         }),
@@ -2240,7 +2239,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     });
 
     it("stages A4 only on the invoice printer, for the signed-in staff member", async () => {
-      const billId = await tabWith("Chuletón");
+      const billId = await tabWith("Steak");
       const office = await pagePrinter({ name: "Office" });
       const invoices = await pagePrinter({ name: "Invoices", onTill: true });
       const [before] = await inTx((tx) =>
@@ -2357,7 +2356,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
             confidence: "anchored",
             anchorAgeSeconds: 0,
           });
-          const billId = await tabWith("Chuletón");
+          const billId = await tabWith("Steak");
           const [before] = await inTx((tx) =>
             tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
           );
@@ -2384,7 +2383,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     it("ignores a consent key and reads the staged email back without its staff member", async () => {
       invoiceMailMode = { onboardingIntent: "demo", devMode: false };
       await withContact(async () => {
-        const billId = await tabWith("Chuletón");
+        const billId = await tabWith("Steak");
         const [before] = await inTx((tx) =>
           tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
         );
@@ -2426,7 +2425,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       async (onboardingIntent) => {
         invoiceMailMode = { onboardingIntent, devMode: false };
         await withContact(async () => {
-          const billId = await tabWith("Chuletón");
+          const billId = await tabWith("Steak");
           const [before] = await inTx((tx) =>
             tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
           );
@@ -2454,7 +2453,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           await inTx((tx) =>
             putCredential(tx, unreadableMailRing, { purpose: "email.smtp", value: SMTP }),
           );
-          const billId = await tabWith("Chuletón");
+          const billId = await tabWith("Steak");
           const [before] = await inTx((tx) =>
             tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
           );
@@ -2493,7 +2492,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
                 value: { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" },
               }),
             );
-            const billId = await tabWith("Chuletón");
+            const billId = await tabWith("Steak");
             const [before] = await inTx((tx) =>
               tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
             );
@@ -2536,7 +2535,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("saves a requested F1 recipient on the bill under its revision before payment", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const [before] = await inTx((tx) =>
       tx
         .select({ revision: workingOrders.revision })
@@ -2581,7 +2580,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("lets another till on this node save the bill's invoice choice", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const saved = await request(
       "PUT",
       `/api/working-orders/${billId}/invoice-choice`,
@@ -2614,7 +2613,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("saves the validated Spanish tax ID and recipient text in canonical form", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
       invoiceType: "F1",
@@ -2654,7 +2653,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     ", 28013 Madrid, Madrid",
     "Main Street, , 28013 Madrid, Madrid",
   ])("refuses incomplete F1 postal address %s before changing the bill", async (address) => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
 
     const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
@@ -2681,7 +2680,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("saves a complete F1 postal address when the street itself contains a comma", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const address = "Main Street, 2, 28013 Madrid, Madrid";
 
     const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
@@ -2706,7 +2705,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("shows the saved invoice choice to another till reading the party's bills", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const [row] = await inTx((tx) =>
       tx
         .select({ partyId: workingOrders.partyId, revision: workingOrders.revision })
@@ -2751,7 +2750,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("refuses a stale invoice choice without replacing the saved recipient", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
       invoiceType: "F1",
@@ -2800,7 +2799,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("refuses an invoice choice while a card payment is pending", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const paymentId = await insertBillPayment(billId, {
       method: "card",
       tendered: null,
@@ -2856,7 +2855,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     ],
     ["address", { taxId: "B12345674", legalName: "Cliente SL", address: " ", countryCode: "ES" }],
   ] as const)("refuses an invalid F1 %s before saving a bill choice", async (field, recipient) => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const [before] = await inTx((tx) =>
       tx
         .select({ revision: workingOrders.revision })
@@ -2882,7 +2881,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("refuses a recipient name beyond the fiscal limit before saving the invoice choice", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const [before] = await inTx((tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
     );
@@ -2911,7 +2910,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   it.each(["Á".repeat(120), "𐐀".repeat(120)])(
     "saves a recipient name of 120 characters without counting UTF-16 units (%s)",
     async (legalName) => {
-      const billId = await tabWith("Chuletón");
+      const billId = await tabWith("Steak");
       const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
         revision: 0,
         invoiceType: "F1",
@@ -2933,7 +2932,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   );
 
   it("saves a Spanish identifier independently of a foreign postal country", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
       invoiceType: "F1",
@@ -2955,7 +2954,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("refuses an unknown invoice type before changing the bill", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
       invoiceType: "R5",
@@ -2973,7 +2972,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("refuses F1 without a recipient as a field error", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
       invoiceType: "F1",
@@ -2990,7 +2989,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("refuses recipient details on a simplified invoice", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
       invoiceType: "F2",
@@ -3014,7 +3013,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("cannot downgrade a chosen F1 after a partial payment", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     expect((await contribute(billId, "5.00")).status).toBe(200);
     const chosen = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: 0,
@@ -3046,7 +3045,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   it("issues a saved F1 bill offline when its cash payment completes", async () => {
     const offline = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
     try {
-      const billId = await tabWith("Chuletón");
+      const billId = await tabWith("Steak");
       await inTx((tx) =>
         tx
           .update(workingOrders)
@@ -3078,7 +3077,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("files nothing while anything is outstanding, then exactly one record", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
 
     expect((await contribute(billId, "20.00")).json.invoice).toBeUndefined();
     expect(fiscalRecordCount(billId)).toBe(0);
@@ -3101,13 +3100,13 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("files each line at the rate of the class recorded on it, not the class its product has when the last payment lands", async () => {
-    const billId = await tabWith("Ensalada");
+    const billId = await tabWith("Salad");
     expect((await contribute(billId, "5.00")).status).toBe(200);
     await inTx((tx) =>
       tx
         .update(products)
         .set({ vatClass: "reduced" })
-        .where(eq(products.id, venue.productIds.get("Ensalada")!)),
+        .where(eq(products.id, venue.productIds.get("Salad")!)),
     );
 
     try {
@@ -3126,13 +3125,13 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         tx
           .update(products)
           .set({ vatClass: "general" })
-          .where(eq(products.id, venue.productIds.get("Ensalada")!)),
+          .where(eq(products.id, venue.productIds.get("Salad")!)),
       );
     }
   });
 
   it("puts every payment on the ticket, each with its own change, and prints the receipt once", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     await pay(billId, {
       kind: "contribution",
       amount: "20.00",
@@ -3177,7 +3176,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("issues the invoice in the transaction of a void that leaves the bill fully paid", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
     const voided = await request(
@@ -3194,9 +3193,9 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   });
 
   it("refuses product.unavailable, changing nothing, for a void that would issue the invoice while an unsent line's product is off sale", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
-    const steakId = venue.productIds.get("Chuletón")!;
+    const steakId = venue.productIds.get("Steak")!;
     const snapshot = () => ({
       order: suite.db.all(sql`select * from working_orders where id = ${billId}`),
       lines: suite.db.all(
@@ -3259,7 +3258,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   });
 
   it("issues the invoice when a void leaves the bill exactly paid", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
     const voided = await request(
@@ -3273,7 +3272,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   });
 
   it("issues the invoice when a split leaves the bill exactly paid", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
     const split = await splitOff(billId, [{ lineNo: 2 }]);
@@ -3283,7 +3282,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   });
 
   it("issues the invoice when a line edit leaves the bill exactly paid", async () => {
-    const billId = await groupedTabWith("Chuletón", "Caña");
+    const billId = await groupedTabWith("Steak", "Beer");
     await raiseLine(billId, 2, "2");
     expect((await contribute(billId, "28.00")).status).toBe(200);
 
@@ -3297,7 +3296,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   });
 
   it("issues the invoice when saving the whole order leaves the bill exactly paid", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
     const [steak] = await inTx((tx) =>
       tx
@@ -3307,7 +3306,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     );
 
     const saved = await request("PUT", `/api/working-orders/${billId}`, {
-      lines: [{ workingOrderLineId: steak!.id, menuItemId: offer("Chuletón"), quantity: "1" }],
+      lines: [{ workingOrderLineId: steak!.id, menuItemId: offer("Steak"), quantity: "1" }],
       revision: await revisionOf(billId),
     });
 
@@ -3318,8 +3317,8 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   async function savedF1WithReceivedMoney(route: "void" | "split" | "line edit" | "held edit") {
     const billId =
       route === "line edit"
-        ? await groupedTabWith("Chuletón", "Caña")
-        : await tabWith("Chuletón", "Tarta");
+        ? await groupedTabWith("Steak", "Beer")
+        : await tabWith("Steak", "Cake");
     if (route === "line edit") await raiseLine(billId, 2, "2");
     const amount = route === "line edit" ? 2800 : 2500;
     const choice = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
@@ -3362,7 +3361,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
         .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 1))),
     );
     return request("PUT", `/api/working-orders/${billId}`, {
-      lines: [{ workingOrderLineId: steak!.id, menuItemId: offer("Chuletón"), quantity: "1" }],
+      lines: [{ workingOrderLineId: steak!.id, menuItemId: offer("Steak"), quantity: "1" }],
       revision: await revisionOf(billId),
     });
   }
@@ -3461,7 +3460,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   );
 
   it("refuses cutting part of a line when the rest would be less than the bill has received", async () => {
-    const billId = await tabWith("Paella", "Caña");
+    const billId = await tabWith("Paella", "Beer");
     await raiseLine(billId, 2, "3");
     expect((await contribute(billId, "42.00")).status).toBe(200);
     const before = await lineTotals(billId);
@@ -3483,7 +3482,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   });
 
   it("requires device proof to void a line of a bill with no payments", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     const body = await cancelBody(suite.db, billId, 2);
     const refused = await request(
       "POST",
@@ -3501,7 +3500,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   });
 
   it("refuses a void that would issue the invoice from a session whose device has been revoked, writing nothing", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
+    const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
     const refused = await request(
@@ -3521,7 +3520,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
 
 describe("the bottle (design §8 test 9, §7)", () => {
   it("files one line of €30.00 and three tenders of €10.00", async () => {
-    const tabId = await tabWith("Paella", "Botella tinto");
+    const tabId = await tabWith("Paella", "Wine bottle");
     const split = await splitOff(tabId, [{ lineNo: 2 }]);
     const bottleBill = split.json.billId as string;
 
@@ -3551,13 +3550,13 @@ describe("a Disable committed after the session check", () => {
         .where(eq(devices.id, venue.deviceId)),
     );
     const device = await enrolDeviceForTest(suite.db, venue.cfg, {
-      name: `Barra ${randomUUID()}`,
+      name: `Bar ${randomUUID()}`,
       profileId: own!.profileId,
     });
     const session = await inTx((tx) =>
       loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
     );
-    const billId = await tabWith("Caña");
+    const billId = await tabWith("Beer");
     let disabled = false;
     const racing = new Hono();
     racing.use("/api/working-orders/:id/payments", async (c, next) => {
@@ -3598,7 +3597,7 @@ describe("a Disable committed after the session check", () => {
 
 describe("retries and reused ids (plan D8, design §5.1)", () => {
   it("answers the same request sent twice with one payment and, once invoiced, one tender", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const submissionId = randomUUID();
 
     const first = await contribute(billId, "25.00", submissionId);
@@ -3624,7 +3623,7 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
   });
 
   it("answers the same request resent with its lines in another order and its added tip spelled out", async () => {
-    const billId = await tabWith("Paella", "Chuletón", "Tarta");
+    const billId = await tabWith("Paella", "Steak", "Cake");
     const submissionId = randomUUID();
     const body = {
       submissionId,
@@ -3768,7 +3767,7 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
   });
 
   it("refuses abandoning or placing a bill holding money", async () => {
-    const billId = await tabWith("Tarta");
+    const billId = await tabWith("Cake");
     expect((await contribute(billId, "5.00")).status).toBe(200);
 
     const abandoned = await request("DELETE", `/api/working-orders/${billId}`);
@@ -3819,7 +3818,7 @@ interface RefundBody {
 function refund(billId: string, paymentId: string, body: RefundBody) {
   return request("POST", `/api/working-orders/${billId}/payments/${paymentId}/refunds`, {
     submissionId: randomUUID(),
-    reason: "El cliente lo pide",
+    reason: "Customer requested it",
     override: { personId: venue.adminId, pin: "1234" },
     ...body,
   });
@@ -3889,7 +3888,7 @@ describe("the device a bill payment and its refund name", () => {
       `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
       {
         submissionId: randomUUID(),
-        reason: "Cobrado de más",
+        reason: "Overcharged",
         override: { personId: venue.adminId, pin: "1234" },
         appliedAmount: "20.00",
         tipAmount: "0.00",
@@ -3973,7 +3972,7 @@ describe("a cash refund before the invoice (design §6)", () => {
     const refunded = await refund(billId, paymentId, {
       appliedAmount: "20.00",
       tipAmount: "0.00",
-      reason: "Cobrado de más",
+      reason: "Overcharged",
     });
 
     expect(refunded.status).toBe(200);
@@ -3982,7 +3981,7 @@ describe("a cash refund before the invoice (design §6)", () => {
         paymentId,
         appliedAmount: "20.00",
         tipAmount: "0.00",
-        reason: "Cobrado de más",
+        reason: "Overcharged",
         state: "completed",
       },
       balance: { total: "120.00", received: "30.00", outstanding: "90.00" },
@@ -4023,7 +4022,7 @@ describe("a cash refund before the invoice (design §6)", () => {
       `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
       {
         submissionId: randomUUID(),
-        reason: "Cobrado de más",
+        reason: "Overcharged",
         override: { personId: venue.adminId, pin: "1234" },
         appliedAmount: "20.00",
         tipAmount: "0.00",
@@ -4139,7 +4138,7 @@ describe("a cash refund before the invoice (design §6)", () => {
   });
 
   it("refunds an item payment only whole, and the refund frees its line to be paid for again", async () => {
-    const billId = await tabWith("Paella", "Chuletón");
+    const billId = await tabWith("Paella", "Steak");
     const paid = await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 2 }],
@@ -4200,7 +4199,7 @@ describe("a cash refund before the invoice (design §6)", () => {
   });
 
   it("lets the line of an item payment refunded whole be voided", async () => {
-    const billId = await tabWith("Paella", "Chuletón");
+    const billId = await tabWith("Paella", "Steak");
     const paymentId = paymentIdOf(
       await pay(billId, {
         kind: "items",
@@ -4347,7 +4346,7 @@ describe("a cash refund before the invoice (design §6)", () => {
         submissionId: randomUUID(),
         appliedAmount: "10.00",
         tipAmount: "0.00",
-        reason: "Devuelto en datáfono",
+        reason: "Refunded on terminal",
         manualConfirmed: true,
       },
       adminCookie,
@@ -4367,7 +4366,7 @@ describe("a cash refund before the invoice (design §6)", () => {
         submissionId: randomUUID(),
         appliedAmount: "10.00",
         tipAmount: "0.00",
-        reason: "Devuelto en datáfono",
+        reason: "Refunded on terminal",
         manualConfirmed: true,
         override: { personId: venue.adminId, pin: "9999" },
       },
@@ -4384,7 +4383,7 @@ describe("a cash refund before the invoice (design §6)", () => {
         submissionId: randomUUID(),
         appliedAmount: "10.00",
         tipAmount: "0.00",
-        reason: "Devuelto en datáfono",
+        reason: "Refunded on terminal",
         manualConfirmed: true,
         override: { personId: venue.adminId, pin: "1234" },
       },
@@ -4471,7 +4470,7 @@ describe("a cash refund before the invoice (design §6)", () => {
   });
 
   it("refuses a refund once the bill is invoiced", async () => {
-    const billId = await tabWith("Tarta");
+    const billId = await tabWith("Cake");
     const paymentId = paymentIdOf(await contribute(billId, "18.00"));
     expect(await statusOf(billId)).toBe("settled");
 
@@ -4572,7 +4571,11 @@ describe("the limit on wrong refund PINs", () => {
       const res = await app.request(`/api/working-orders/${billId}/payments/${paymentId}/refunds`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ submissionId: randomUUID(), reason: "El cliente lo pide", ...body }),
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          reason: "Customer requested it",
+          ...body,
+        }),
       });
       const json = (await res.json()) as Record<string, unknown>;
       return { status: res.status, json: (json.error as Record<string, unknown>) ?? json };
@@ -4760,9 +4763,8 @@ function documentJobs() {
 }
 
 describe("refund first (design §4.3, §6a)", () => {
-  /** €60.00: Botella tinto €30.00, Pulpo €20.00, Croquetas €10.00, with €50.00 contributed. */
   async function sixtyHoldingFifty(): Promise<{ billId: string; paymentId: string }> {
-    const billId = await tabWith("Botella tinto", "Pulpo", "Croquetas");
+    const billId = await tabWith("Wine bottle", "Octopus", "Croquettes");
     const paymentId = paymentIdOf(await contribute(billId, "50.00"));
     return { billId, paymentId };
   }
@@ -4846,7 +4848,7 @@ describe("refund first (design §4.3, §6a)", () => {
 
 describe("the ticket after a refund", () => {
   it("lists only the money actually given back, not a refund that did not complete", async () => {
-    const billId = await tabWith("Botella tinto", "Pulpo", "Croquetas");
+    const billId = await tabWith("Wine bottle", "Octopus", "Croquettes");
     const paymentId = paymentIdOf(await contribute(billId, "50.00"));
     expect(
       (await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" })).status,
@@ -4935,7 +4937,7 @@ describe("a reader payment on a device that changes profile while it is starting
         .where(eq(deviceProfiles.name, "Counter till")),
     );
     const device = await enrolDeviceForTest(suite.db, venue.cfg, {
-      name: `Barra ${randomUUID()}`,
+      name: `Bar ${randomUUID()}`,
       profileId: profile!.id,
     });
     const session = await inTx((tx) =>
@@ -4954,7 +4956,7 @@ describe("a reader payment on a device that changes profile while it is starting
     const [reader] = await inTx((tx) =>
       tx
         .insert(cardReaders)
-        .values({ provider: "stripe", providerRef: `reader_${randomUUID()}`, name: "Barra" })
+        .values({ provider: "stripe", providerRef: `reader_${randomUUID()}`, name: "Bar" })
         .returning({ id: cardReaders.id }),
     );
     await suite.db
@@ -5094,7 +5096,7 @@ describe("a reader payment on a device that changes profile while it is starting
 
 describe("an item payment whose line has gone", () => {
   it("still lists the payment's line, with no line number, once it is refunded and voided", async () => {
-    const billId = await tabWith("Paella", "Caña");
+    const billId = await tabWith("Paella", "Beer");
     const paid = await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 2 }],
@@ -5131,7 +5133,7 @@ describe("an item payment whose line has gone", () => {
 
 describe("abandoning a bill after a full refund (design §8 test 14, §4.5)", () => {
   it("refuses abandoning a bill holding a contribution, and abandons it once that is refunded", async () => {
-    const billId = await tabWith("Tarta");
+    const billId = await tabWith("Cake");
     const paymentId = paymentIdOf(await contribute(billId, "5.00"));
 
     const refused = await request("DELETE", `/api/working-orders/${billId}`);
@@ -5171,7 +5173,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
   }
 
   it("opens the drawer once for a payment that settles the bill, naming the payment and not the invoice, and once only on a resend", async () => {
-    const billId = await tabWith("Chuletón");
+    const billId = await tabWith("Steak");
     const submissionId = randomUUID();
     const body = { ...manualCard, amount: "25.00", applied: "25.00", submissionId };
     const before = drawerJobCount();
@@ -5239,7 +5241,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
         })
         .returning({ id: deviceProfiles.id });
       const printer = await createPrinter(tx, {
-        name: "Recibos terraza",
+        name: "Terrace receipts",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
         hasCashDrawer: false,
@@ -5247,7 +5249,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
       return { profileId: profile!.id, printerId: printer.id };
     });
     const device = await enrolDeviceForTest(suite.db, venue.cfg, {
-      name: "Terraza till",
+      name: "Terrace till",
       profileId: otherTill.profileId,
     });
     suite.db.run(
@@ -5335,7 +5337,7 @@ describe("a till whose profile does not allow the drawer it prints to", () => {
     const refunded = await refund(billId, paymentId, {
       appliedAmount: "20.00",
       tipAmount: "0.00",
-      reason: "Cobrado de más",
+      reason: "Overcharged",
     });
 
     expect(refunded.status).toBe(200);
@@ -5376,7 +5378,11 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
       const res = await app.request(`/api/working-orders/${billId}/payments/${paymentId}/refunds`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ submissionId: randomUUID(), reason: "El cliente lo pide", ...body }),
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          reason: "Customer requested it",
+          ...body,
+        }),
       });
       const json = (await res.json()) as Record<string, unknown>;
       return { status: res.status, json: (json.error as Record<string, unknown>) ?? json };

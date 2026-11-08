@@ -82,7 +82,7 @@ function cashRefund(
     submissionId: randomUUID(),
     appliedAmount: amount,
     tipAmount: "0.00",
-    reason: "Cobrado de más",
+    reason: "Overcharged",
     override: { personId: venue.adminId, pin: "1234" },
   });
 }

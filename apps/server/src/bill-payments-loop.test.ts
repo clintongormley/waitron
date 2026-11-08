@@ -550,7 +550,7 @@ describe("the guests a finished card payment's receipt prints", () => {
   }
 
   it("stores the party's count when the loop files it, and a Reprint after a change prints that count", async () => {
-    const r = await inTx(venue, (tx) => createPrinter(tx, receiptPrinter("Comensales")));
+    const r = await inTx(venue, (tx) => createPrinter(tx, receiptPrinter("Guests")));
     const held = venue.db.all<{ id: string; receipt_printer_id: string | null }>(
       sql`select id, receipt_printer_id from devices where id = ${venue.cfg.origin.deviceId}`,
     );

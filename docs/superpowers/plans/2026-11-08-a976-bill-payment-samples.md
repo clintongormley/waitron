@@ -1,5 +1,7 @@
 # A976: bill-payment display samples
 
+**2026-11-08 status:** the supervising manager approved this six-file, 152-line area at 14:43; implementation began after A974 PR #2603 opened. All 423 cases passed before and after, the expected-wording run had six failures, and the 20 unedited fiscal cases passed. Earlier proposal wording below records the planning state.
+
 **Proposal; no build approval.** Test fixture maintenance; no product behaviour change. Finish every locally owned, non-fiscal display sample across the bill-payment family: English setups, selectors, receipt-header examples and refund notes, preserving existing payment checks.
 
 **Authority.** Lane J `questions.md`, watcher **2026-11-08 00:02**: “one PR covers a whole area”, “roughly 5–10 times what a slice holds now”, with “the same exact-inverse and assertion-preservation checks over the whole set”. Watcher **11:07**: “#2589 changes three test files (+53 test lines)”; “Your next A974 or A976 pull request covers a whole area”; “Overlap with another lane is not a reason to make it smaller.” Owner request, 2026-11-08: “The owner authorises finish-branch and land-branch.” This authorises those workflows, not this new plan. RUNNER §0 says “wait for the watcher's approval before building”: Claude plan read and watcher approval remain required.
