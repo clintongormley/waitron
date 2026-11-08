@@ -6014,7 +6014,7 @@ was caught. `openIfMatching` keeps a listener on its digest stream for this.
 
 Every request through the till's API client (`TillApi`) but the sign-in names the tab's
 signed-in person in the `x-waitron-person` header (`PERSON_HEADER`, `packages/shared/src/person-header.ts`); after a
-sign-out a tab keeps naming its last person until the next sign-in. The server compares it with the
+sign-out a tab keeps naming its last person until the next sign-in or a move to another server. The server compares it with the
 person of the device's open session in one function, `personRefusal` in
 `apps/server/src/till-session.ts`, called from `requireSession`, from `signedInPersonOn` and from
 the sign-out handler (`DELETE /api/session` in `apps/server/src/till-api.ts`). A request naming

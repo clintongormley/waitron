@@ -605,7 +605,7 @@ describe("the till through its real client", () => {
     },
   );
 
-  it("stays locked, ends no session, and gives Ana her lines back, when a read of her sign-in's setup is refused for her person", async () => {
+  it("stays locked and ends no session when a read of her sign-in's setup is refused for her person", async () => {
     const server = tillServer();
     const { el, api } = await mountTill(server);
     let offersSettled = false;

@@ -2905,6 +2905,13 @@ Printer identity is separate from the till route inventory.
 
 ## Decisions and deliberate limits
 
+- **One person check for every till request that needs a signed-in person (owner, 2026-11-07,
+  A1380).** "The till's API client adds the tab's person to every request in one place, and the box
+  refuses, once, any session request whose named person is not the session's person. New routes are
+  then covered with nothing to remember." Requests made before anyone signs in carry no person and
+  are not refused for that. A session request naming nobody is refused too (lane C and the watcher,
+  2026-11-08). Built by #2534: [One editor per bill](#one-editor-per-bill-owner-2026-10-17-a773).
+
 - **An order with no service zone is warned about only once one of its dishes waits (A773-2 PR C,
   D101).** In a venue with zones, the Prep stations coverage warning checks each waiting station
   against each active zone; a dish on an order with no service zone needs a pass screen on every
@@ -3117,12 +3124,13 @@ Every request through the till's API client (`TillApi`, `apps/till/src/api/clien
 the sign-in itself (`POST /api/session`), names the person signed in on that tab in an
 `x-waitron-person` header (`PERSON_HEADER`, `packages/shared/src/person-header.ts`). The server
 probes in `apps/till/src/api/server-router.ts` and the `/api/theme` read (`apps/till/src/main.ts`)
-bypass it and name nobody. A tab nobody has signed in on names nobody; after a sign-out a tab keeps naming its last person until the next sign-in. The server checks the
+bypass it and name nobody. A tab nobody has signed in on names nobody; after a sign-out a tab keeps naming its last person
+until the next sign-in or a move to another server. The server checks the
 header where it reads the device's sign-in: `requireSession` and `signedInPersonOn` in
 `apps/server/src/till-session.ts`, and the sign-out. While a session is open, a request with no
 header, an empty one, one that is not an id, or one naming anyone but that session's person is
-refused `session.person_not_signed_in` (409), before `requireSession` stamps, checks a permission
-or a profile action (owner, 2026-11-07, A1380). A request whose cookie names no open session still gets
+refused `session.person_not_signed_in` (409) (owner, 2026-11-07, A1380; see Decisions), before
+`requireSession` stamps, checks a permission or a profile action. A request whose cookie names no open session still gets
 `session.required`. `GET /api/device/me`, and kitchen-screen requests from a kitchen display, answer
 such a request as if nobody were signed in, so a new tab beside a signed-in one still starts; a
 kitchen-screen request from any other device is refused.

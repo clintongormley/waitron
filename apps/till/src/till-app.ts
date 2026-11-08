@@ -2699,8 +2699,8 @@ export class TillApp extends LitElement {
 
   constructor() {
     super();
-    // Re-renders on a locale switch, so `keyed(currentLocale(), …)` recreates the screens, which read
-    // `t()` at render time.
+    // Re-renders on a locale switch, so `keyed(currentLocale(), …)` recreates the shell's screens,
+    // which read `t()` at render time.
     new LocaleChangeController(this);
     new ThemeChoiceController(this, { applies: true });
     // Subscribed before any widget, so the marks this sets inside the basket's own notification
@@ -21383,8 +21383,8 @@ export class TillApp extends LitElement {
                       .canClockIn=${this.clockSnapshot.state?.state === "out"}
                       .error=${this.#clockMessage()}
                     ></till-clock-in-screen>`
-                  : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
-                    // screen also shows after a boot failure, rather than an empty shell.
+                  : // The shell is keyed on the locale, so a switch rebuilds it in the new language. The
+                    // lock screen also shows after a boot failure, rather than an empty shell.
                     shellFormFactor !== undefined
                     ? keyed(
                         currentLocale(),

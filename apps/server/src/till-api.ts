@@ -1512,7 +1512,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   // next person's sign-in has replaced it.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
-      const namesSomeone = c.req.header(PERSON_HEADER) !== undefined;
+      const carriesPersonHeader = c.req.header(PERSON_HEADER) !== undefined;
       const token = readSessionToken(c);
       if (token !== null && isUuid(token))
         await withTransaction(deps.db, async (tx) => {
@@ -1522,7 +1522,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           if (refusal !== null) throw refusal;
           await endSession(tx, token);
         });
-      if (!namesSomeone) clearSessionCookie(c);
+      if (!carriesPersonHeader) clearSessionCookie(c);
       return c.json({ ok: true });
     }),
   );
