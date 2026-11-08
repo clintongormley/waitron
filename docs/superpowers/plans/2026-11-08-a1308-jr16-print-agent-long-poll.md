@@ -12,7 +12,10 @@ pull only when a job arrives, or after a wait) shows a real saving over today's 
 **Architecture (if built):** the pull route (`apps/server/src/print-api.ts:596-757`) does all of
 today's work at once (agent check, inventory, Bluetooth outcomes, claims); when the claim returns no
 job and the request asks to wait (`?wait=25`), it waits on the `LiveEvents` bus for a `print_jobs`
-change, the stepdown's gate closing, or 25 seconds, then claims once more and answers. The agent
+change, the handover gate closing (a new `closed` signal on `HandoverGate`, which today has only
+`close` and `settled`, `apps/server/src/handover-gate.ts:5-10`), a Bluetooth command for this agent
+being queued, or 25 seconds; then, unless the request's own abort signal has fired, it claims once
+more and answers. The agent
 raises its request limit for the held pull only (`DEFAULT_TIMEOUT_MS`, 3 s,
 `packages/print-agent/src/client.ts:174`) to 30 seconds, and stops sleeping after an empty pull.
 
@@ -32,7 +35,8 @@ as they are (jobs.md §2).
 
 ## Files
 
-- If built — Modify: `apps/server/src/print-api.ts` (`:596-757`), `print-api.test.ts`,
+- If built — Modify: `apps/server/src/handover-gate.ts` (a `closed: AbortSignal`, aborted by
+  `close`), `handover-gate.test.ts`, `apps/server/src/print-api.ts` (`:596-757`), `print-api.test.ts`,
   `packages/print-agent/src/client.ts` (`:154`, `:564-575`), `client.test.ts`,
   `packages/print-agent/src/agent.ts` (the poll loop), `agent.test.ts`, `boot.ts` (hand `liveEvents`
   and the gate's closed signal to `mountPrintApi`)
@@ -41,12 +45,12 @@ as they are (jobs.md §2).
 
 ## Size
 
-If built: code ~120, tests ~200, **~320**. If not: ~10 lines of docs.
+If built: code ~135, tests ~230, **~365**. If not: ~10 lines of docs.
 
 ## Finish line
 
 1. Measure 7's table in the PR description, with the verdict.
-2. If built: `pnpm --filter @waitron/server exec vitest run src/print-api.test.ts src/print-agent-e2e.test.ts src/handover-stepdown.test.ts` and
+2. If built: `pnpm --filter @waitron/server exec vitest run src/print-api.test.ts src/print-agent-e2e.test.ts src/handover-gate.test.ts src/handover-stepdown.test.ts` and
    `pnpm --filter @waitron/print-agent exec vitest run` — pass; typecheck, format; protection list EQUAL.
 
 ## Expected protection-list difference
@@ -69,8 +73,8 @@ jr11 (nothing structural; ordered last in this part).
   §3; guard: the `import-x/no-restricted-paths` zone in `eslint.config.js`).
 - A held pull ends at once when the stepdown closes the gate or the server stops; it never holds a
   stepdown's 180-second admitted-work wait (`handover-stepdown.ts:18`, `:202-206`).
-- An agent whose server does not hold (an older box) still works: an immediate empty answer is
-  followed by the agent's ordinary 2-second sleep.
+- No compatibility path for an older box: nothing is live yet (CLAUDE.md §3, "No
+  backwards-compatibility … until Waitron is in production"), so the agent always asks to wait.
 
 ## Review Focus
 
@@ -82,9 +86,10 @@ jr11 (nothing structural; ordered last in this part).
    30 seconds instead of 3; the router's other checks keep their 3-second limit.
 4. **The secret-hash check on every pull.** Fewer pulls means fewer checks; the cached verification
    (`verifiedAgents`, `packages/printing/src/agent.ts:13, :51`) is unchanged.
-5. **Discovery reports.** They arrive on each pull; with fewer pulls, a discovery window still gets
-   prompt results because the agent ends its hold when a discovery pass finds devices (today it cuts
-   its sleep short, `agent.ts:26-27`).
+5. **Discovery and Bluetooth.** With fewer pulls, a discovery window and a Bluetooth command still
+   get prompt results: the agent ends its hold when a discovery pass finds devices or a Bluetooth
+   command finishes (today both cut its sleep short, `agent.ts:26-27`), and the server ends a held
+   pull when a Bluetooth command for that agent is queued.
 
 ---
 
@@ -103,21 +108,25 @@ jr11 (nothing structural; ordered last in this part).
 
 ### Task 2 (if built): the held pull on the server
 
-**Interfaces:** the route accepts `?wait=<seconds>` (1–25, else refused `print_agent.request_invalid`
-with field `wait`, using the route's existing request-invalid code if it has one); `mountPrintApi`'s
-deps gain `bus: LiveEvents` and `closed: AbortSignal` (aborted when the stepdown closes the gate or
-the server stops).
+**Interfaces:** the route accepts `?wait=<seconds>` (1–25, else refused `management.request_invalid`
+with field `wait`, the code the print API's request checks already use); `HandoverGate` gains
+`readonly closed: AbortSignal`, aborted inside `close()`; `mountPrintApi`'s deps gain
+`bus: LiveEvents` and `stopping: AbortSignal` (`AbortSignal.any([gate.closed, <the server's stop>])`).
 
 - [ ] **Step 1: Failing tests** (`print-api.test.ts`): `"an empty pull asking to wait answers when a job for its printer arrives"`;
   `"a job for another agent's printer does not end the wait"`; `"answers empty after the wait"`;
-  `"the gate closing answers a held pull at once"`; `"a pull with no wait answers at once as today"`.
+  `"the gate closing answers a held pull at once"`; `"a Bluetooth command queued for the agent ends its hold"`;
+  `"a request aborted while held claims nothing"` (abort the request, then emit a `print_jobs`
+  change: no job is claimed for a connection already gone); `"a pull with no wait answers at once as today"`.
+  `handover-gate.test.ts`: `"close aborts closed"`.
 - [ ] **Step 2–4:** FAIL; implement; PASS. Commit: "Hold an empty print agent pull until a job arrives".
 
 ### Task 3 (if built): the agent
 
 - [ ] **Step 1: Failing tests** (`client.test.ts`, `agent.test.ts`): `"a held pull is given 30 seconds"`;
-  `"after an empty held pull the agent pulls again at once"`; `"after an empty immediate answer it sleeps 2 seconds"`;
-  `"a discovery pass that finds devices ends the hold early"` (the agent aborts its held pull and pulls again).
+  `"after an empty held pull the agent pulls again at once"`;
+  `"a discovery pass that finds devices ends the hold early"` and `"a finished Bluetooth command ends the hold early"`
+  (the agent aborts its held pull and pulls again).
 - [ ] **Step 2–4:** FAIL; implement; PASS. Update the print agent's README or runbook sentence that
   says it polls every 2 seconds (`rg -n "2 s|2 seconds|every two seconds" packages/print-agent docs deploy`).
   Commit: "Let the print agent wait on a held pull".

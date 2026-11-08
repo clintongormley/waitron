@@ -15,7 +15,7 @@ connection, so sales and screens do not wait while it copies.
 feed and the venue lock). `packages/store` gains `archiveInWorker(path, target)`, which starts a
 `worker_threads` worker that opens its own read connection to the venue file, runs `VACUUM INTO`,
 and closes it; the main thread awaits a message. `BackupSupervisor`'s `archive` dependency
-(`apps/server/src/backup-supervisor.ts:321`, `archive: (outFile) => venue.venue.archiveTo(outFile)`)
+(`apps/server/src/backup-supervisor.ts:319`, `archive: (outFile) => venue.venue.archiveTo(outFile)`)
 calls it. Writes stay on the main thread.
 
 **Spec:** [jobs.md §1 "Heavy read-only work and the backup copy can use a worker thread"; §5 measure 9](../specs/2026-11-02-rationalisation/jobs.md);
@@ -35,11 +35,11 @@ Heavy reads (reports, exports) on a worker: not in this part (jr8's measure list
 
 - Create: `packages/store/src/archive-worker.ts`, `packages/store/src/archive-worker.test.ts`
 - Modify: `packages/store/src/index.ts` (export; `StoreHandle.archiveTo` stays for other callers),
-  `apps/server/src/backup-supervisor.ts` (`:321`), `backup-supervisor.test.ts`
+  `apps/server/src/backup-supervisor.ts` (`:319`), `backup-supervisor.test.ts`
 
 ## Size
 
-Code ~110 (worker script 50, launcher 40, supervisor 5, exports 15); tests ~150. **~260.**
+Code ~125 (worker script 60, launcher 45, supervisor 5, exports 15); tests ~180. **~305.**
 
 ## Finish line
 
@@ -66,8 +66,13 @@ jr8 and its measure 9 verdict.
 
 - The worker opens a **read** connection (as `openReadConnection` does), never a writer, and never
   takes the venue lock; it runs only while this process holds the lock.
-- A copy is complete or absent: a worker that fails or is terminated leaves no partial `path`
-  (the sweep's existing clean-up, `backup-sweep.ts:349-355`, removes it).
+- The worker keeps every safety step `archiveTo` has (`packages/store/src/archive.ts:25-37`): the
+  same working file (`workingName(path)`), removed first, then pre-created owner-only (0600) so the
+  engine fills it at that mode, then renamed to `path` only once complete, and removed on failure.
+  A reviewer's stand-in run showed `VACUUM INTO` from a worker's read-only connection works beside a
+  writer but leaves a file it creates itself at mode 644, which is why the pre-creation matters.
+- A copy is complete or absent: a worker that fails or is terminated leaves no `path`, and its
+  working file is removed (the sweep's existing clean-up, `backup-sweep.ts:338-339`, removes `path`).
 - The worker is terminated on the sweep's abort signal.
 
 ## Review Focus
@@ -91,13 +96,17 @@ jr8 and its measure 9 verdict.
 - [ ] **Step 1: Failing tests** (`archive-worker.test.ts`, a real file in `mkdtemp`):
   `"copies the database to the target, equal to a main-thread copy of the same quiet file"` (compare
   every table's rows); `"the main thread's timer keeps firing every 20 ms during a copy of a 100 MB file"`
-  (longest gap under 50 ms); `"sales keep committing during a copy"`; `"an abort ends the worker and leaves no target file"`;
+  (longest gap under 50 ms), **with its control** in the same file: `"the same copy on the main thread stalls the timer"`
+  (`archiveTo` on the same file: longest gap over 50 ms — if the control does not stall, the file is
+  too small to prove anything; grow it); `"the copy is created owner-only and appears only when complete"`
+  (mode 0600; no `path` while the working file exists); `"sales keep committing during a copy"`;
+  `"an abort ends the worker and leaves neither the target nor its working file"`;
   `"a worker that fails rejects with its error"`.
 - [ ] **Step 2–4:** FAIL; implement (worker file resolved with `new URL("./archive-worker-main.js", import.meta.url)` or an inline `eval: true` script, whichever the store's build ships; read its `tsconfig`/build first); PASS.
   Commit: "Copy the venue database for a backup on a worker thread".
 
 ### Task 2: Use it for backups
 
-- [ ] **Step 1:** `backup-supervisor.ts:321` → `archive: (outFile) => archiveInWorker(join(this.#deps.venueDir, VENUE_FILE), outFile, signal)`
+- [ ] **Step 1:** `backup-supervisor.ts:319` → `archive: (outFile) => archiveInWorker(join(this.#deps.venueDir, VENUE_FILE), outFile, signal)`
   (the reload's signal). A supervisor test asserts the sweep's archive calls the worker.
 - [ ] **Step 2:** Run the Finish line, including measure 9 again. Commit: "Take backup copies off the main thread".

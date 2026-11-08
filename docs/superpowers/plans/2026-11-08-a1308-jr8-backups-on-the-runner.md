@@ -13,8 +13,11 @@ checks the role once and starts `runBackupSweep`, a loop of its own (`backup-swe
 loop's scheduling (fire time fixed per cycle, the clock-stepped-back escape, the run at every reload)
 moves, unchanged, into a small scheduler object whose `pass` the job calls; `runOnce`
 (`backup-sweep.ts:190-356`) and the staging turn (`:501-516`) do not change. The supervisor keeps the
-settings, the backends, the status and the room note. The deployment holders' change listener
-(jr2) also reloads the supervisor, so a promotion opens the venue copy and the backends.
+settings, the backends, the status and the room note. The job applies on the primary; when its pass
+finds the supervisor last loaded while the box was not primary (so nothing is open and no schedule
+exists), it reloads first. A promotion reaches it at once, because `roleChanged()` ends the job's
+sleep (jr1); nothing else is needed — a job that does not apply sleeps its ceiling (one hour here),
+so waiting for a slow re-check would not do.
 
 **Spec:** [jobs.md §1 "One backup service with several backends"; §2 R12; §3 row "Scheduled backups"; §4 "Data loss"; §5 measures 8 and 9](../specs/2026-11-02-rationalisation/jobs.md);
 README §7 ("Heavy reads and the backup copy move to a worker thread"). Slice rules apply.
@@ -23,7 +26,8 @@ README §7 ("Heavy reads and the backup copy move to a worker thread"). Slice ru
 
 1. `createBackupSchedule(deps)` with `pass(now, signal)`: today's loop logic as passes.
 2. `backups.scheduled` on the runner; `BackupSupervisor` no longer starts a loop.
-3. A role change reloads the supervisor; a settings save (the route's existing `reload()`) wakes the job.
+3. A promoted box reloads the supervisor in its next pass and backs up; a settings save (the route's
+   existing `reload()`) wakes the job.
 4. Measure 9 (Task 1).
 
 ## What it leaves out
@@ -43,9 +47,9 @@ backups configured only on the dashboard and the backup settings document (env5,
 
 | Hand-written | Lines |
 | --- | --- |
-| Code: schedule object 90, supervisor 100, job 40, `boot.ts` 30, duties 10 | **~270** |
-| Tests: loop cases re-pointed through a 20-line driver 90, supervisor 100, job 60, promotion 15 | **~265** |
-| Total | **~535** |
+| Code: schedule object 90, supervisor 110, job 40, `boot.ts` 25, duties 10 | **~275** |
+| Tests: loop cases re-pointed through a 20-line driver 90, supervisor 120, job 70, promotion 15 | **~295** |
+| Total | **~570** |
 
 ## Finish line
 
@@ -80,9 +84,10 @@ where the settings live.
 
 1. **A settings save while a backup is copying.** The reload aborts the copy's signal, as today's
    teardown does (`:510-519`); the job's next pass sees the new schedule and runs at once.
-2. **A promotion.** The holders listener reloads the supervisor, which now opens the venue copy, and
-   the job's next pass makes a backup. Measure 8's case.
-3. **A demotion in process.** The job stops applying; the listener's reload tears the sweep down.
+2. **A promotion.** `roleChanged()` ends the job's sleep; its pass reloads the supervisor, which now
+   opens the venue copy, and makes a backup (a backup runs at every reload). Measure 8's case.
+3. **A demotion in process.** The job stops applying, so no further backup starts; one under way
+   finishes or is cut by the close. The open handle stays until the next reload or the close.
 4. **A clock step back during the wait.** The fire time is worked out again, as the loop does today.
 5. **A stepdown during a backup.** Backups keep running until the close (catalogue); the close stops
    the job first, then the supervisor.
@@ -92,7 +97,8 @@ where the settings live.
 ### Task 1: Measure 9 — what moves off the main thread
 
 - [ ] **Step 1:** On the reference micro PC if the lane can reach it, otherwise on the build machine
-  (recorded as a stand-in), through the real store, on the bench's year-of-trading copy: run
+  (recorded as a stand-in — **any stand-in result is a stop for the watcher**, whatever it shows,
+  never a "not built" decision), through the real store, on the bench's year-of-trading copy: run
   `perf_hooks.monitorEventLoopDelay` (resolution 10 ms) on the server while, one at a time, (a) a
   backup runs (`archiveTo` is one synchronous statement, `packages/store/src/archive.ts:24-34`),
   (b) each report and export read the dashboard offers runs on the year, and (c) a sale write every
@@ -109,7 +115,8 @@ where the settings live.
   - the copy stalls the main thread less than 200 ms → jr9 is not built;
   - a heavy read stalling 200 ms or more is listed in the PR description for the watcher; moving
     reads is not in this part.
-  Stop and ask the watcher with the table (rules §5.4) when the verdict is anything but "not built".
+  Stop and ask the watcher with the table (rules §5.4) when the verdict is anything but "not built"
+  **or the numbers come from a stand-in machine**. A stand-in can only say what to measure next.
 
 ### Task 2: The schedule as passes
 
@@ -140,26 +147,30 @@ behaviour (`onScheduled(null)` while a backup runs, the fire time while waiting)
 **Interfaces:**
 - `BackupSupervisor`: `reload()` builds the schedule (`createBackupSchedule`) instead of starting a
   worker, still only on the primary with backups enabled (`:266-276`); new
-  `pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass>` — `{ nextDueAt: null }` when
-  no schedule is built, else the schedule's pass under `AbortSignal.any([signal, <the reload's controller>])`;
-  new `enabled(): boolean`; deps gain `onReloaded?: () => void`, called at the end of every reload.
-  `stop()` keeps its meaning (terminal).
+  `pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass>` — when the last reload ran
+  while the box was not primary (a new `#loadedAsPrimary` flag, set from `readSingletonRole()` at
+  each reload, `:266-276`), it reloads first; then `{ nextDueAt: null }` when no schedule is built
+  (backups off, or no key), else the schedule's pass under `AbortSignal.any([signal, <the reload's controller>])`.
+  A reload already in progress (`backup.reload_in_progress`) makes the pass return
+  `{ nextDueAt: <now + 60 s> }` instead of throwing. Deps gain `onReloaded?: () => void`, called at
+  the end of every reload. `stop()` keeps its meaning (terminal).
 - `backupsJob(supervisor: BackupSupervisor, isPrimary: () => boolean): JobDefinition` — name
-  `backups.scheduled`; `applies: () => isPrimary() && supervisor.enabled()`; `pass` →
+  `backups.scheduled`; `applies: isPrimary`; `pass` →
   `supervisor.pass`; `minSleepMs: 1_000`; `maxSleepMs: MAX_SLEEP_MS`;
   `backoff { firstMs: 60_000, maxMs: MAX_SLEEP_MS }` (`runOnce`'s failures are already
   caught and logged by `tick`, `backup-sweep.ts:512-515`, so a throw here is unforeseen);
   `onStop`: `supervisor.stop()`.
-- Boot: `onReloaded: () => jobRunner.wake("backups.scheduled")`; `holders.onChange` gains
-  `() => void backupSupervisor.reload().catch((error) => log("warn", "backup.reload_failed", { errorCode: codeOf(error) }))`
-  (a reload already in progress refuses `backup.reload_in_progress`, logged; the 60-second wake of a
-  not-applying job and the next save settle it). `backupSupervisor` leaves `background-duties.ts`
-  (the job's `onStop` stops it).
+- Boot: `onReloaded: () => jobRunner.wake("backups.scheduled")`. No holders listener: the job's own
+  pass reloads on the primary. `backupSupervisor` leaves `background-duties.ts` (the job's `onStop`
+  stops it).
 
 - [ ] **Step 1: Failing tests:** `backup-supervisor.test.ts` — `"reload builds no loop of its own"`;
   `"a pass makes a backup when due and returns the next fire time"`; `"a reload aborts a backup under way"`;
-  `"onReloaded is called after every reload"`. A `backupsJob` case — `"a box that is not primary makes no backup"`;
-  `"a role change reloads the supervisor and the next pass backs up"`. `boot.promote.test.ts`: add
+  `"onReloaded is called after every reload"`; `"a pass on the primary after a reload taken while not primary reloads, then backs up"`;
+  `"a pass while a reload is in progress tries again in a minute"`. A `backupsJob` case —
+  `"a box that is not primary makes no backup"`; `"a promoted box backs up without a restart"` (a
+  local-folder destination saved while the box was a secondary; `roleChanged()`; within 5 s an
+  archive is in the folder). `boot.promote.test.ts`: add
   `backups.scheduled` to `PRIMARY_ONLY` (with a local-folder destination set before the promote).
 - [ ] **Step 2–4:** FAIL; implement; PASS. Re-point the supervisor suites that awaited the worker
   ("stop() landing inside a reload, and a worker that fails", `:684`) to the job. Commit: "Run scheduled backups on the job runner".

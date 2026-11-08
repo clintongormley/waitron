@@ -46,9 +46,9 @@ Backups (`backups.scheduled`) stay on `BackupSupervisor` until jr8; the alert un
 
 | Hand-written | Lines |
 | --- | --- |
-| Code: runner services 110, holders 20, `stream-host.ts` 15, `tunnel-service.ts` 40, `sealed-state.ts` 25, `boot.ts` 50, `background-duties.ts` 15, docs 10 | **~285** |
-| Tests: runner 180, holders 30, stream-host 30, tunnel-service 60, sealed-state 40, stepdown and duties 55, promotion (measure 8) 80 | **~475** |
-| Total | **~760** |
+| Code: runner services 120, holders 20, `stream-host.ts` 25, `tunnel-service.ts` 45, `sealed-state.ts` 25, `boot.ts` 50, `background-duties.ts` 15, docs 10 | **~310** |
+| Tests: runner 180, holders 30, stream-host 50, tunnel-service 60, sealed-state 40, stepdown and duties 55, promotion (measure 8) 100 | **~515** |
+| Total | **~825** |
 
 ## Finish line
 
@@ -123,6 +123,9 @@ export interface ServiceDefinition {
   start(): Promise<void>;            // idempotent while running
   suspend(): Promise<void>;          // stop for now; start() may run it again
   stop(): Promise<void>;             // for good
+  /** What the thing itself reports while active: running, or not running and why (a bucket copy
+   *  with no settings starts nothing, `stream-host.ts:137-157`). */
+  describe(): { running: boolean; reason: string | null };
 }
 export const SERVICE_STOP_ORDER: readonly JobName[] = ["tunnel", "stream"];
 // JobRunner gains:
@@ -143,8 +146,10 @@ Rules the tests pin: each service has one runner-held flag, `active`. A check (a
 `start()`, `active = true`; `!applies() && active` → `suspend()`, `active = false`. A throw from
 `start` or `suspend` is logged as `job.failed` with the service's name, counted in its view, and
 leaves `active` unchanged. After `signalStepdown()` a check may suspend but never starts. A
-service's view `state` is `running` while `active`, `not_applicable` otherwise, `stopped` after
-`stopServices`. `addService` refuses a name missing from `SERVICE_STOP_ORDER`.
+service's view `state` is `not_applicable` while not `active`; while `active` it is `running` when
+`describe().running`, else `waiting`, and the view gains `detail: describe().reason` (a field added
+to `JobView`, `null` for jobs); `stopped` after `stopServices`. The view is never just the
+runner's own flag, because `StreamHost.start()` can return having started nothing. `addService` refuses a name missing from `SERVICE_STOP_ORDER`.
 `refreshDeploymentHolders` calls the listeners only when either axis changed.
 
 - [ ] **Step 1: Failing tests.** `job-runner.test.ts`: `"a service that applies starts before addService resolves"`;
@@ -165,7 +170,9 @@ service's view `state` is `running` while `active`, `not_applicable` otherwise, 
 - `StreamHost.suspend(): Promise<void>` — today's private `#retire()` (`stream-host.ts:207-217`) made
   public, and clears `#notStarted`; unlike `stop()` it leaves `#stopped` false, so `start()` works
   again. `streamService(host: StreamHost, isPrimary: () => boolean): ServiceDefinition` — name
-  `stream`, `applies: isPrimary`, the three methods mapped one to one.
+  `stream`, `applies: isPrimary`, the three methods mapped one to one, and `describe` from
+  `host.status()`: running when its `state` is not `off`, `reason` its `reason` (or `not_configured`
+  when off with none).
 - `tunnelService(deps: { config: TunnelConfig; isPrimary: () => boolean; localPort: number; log: Logger; run?: typeof runTunnelClient }): ServiceDefinition` —
   name `tunnel`; `start` makes an `AbortController` and calls `run` with today's arguments
   (`boot.ts:3373-3384`), keeping the promise and today's `tunnel.worker_rejected` log;
@@ -174,7 +181,11 @@ service's view `state` is `running` while `active`, `not_applicable` otherwise, 
   A951 has removed `@waitron/tunnel` at the base, skip the tunnel half of this task** and drop
   `"tunnel"` from `SERVICE_STOP_ORDER`.
 
-- [ ] **Step 1: Failing tests.** `stream-host.test.ts`: `"suspend stops the copy and a later start runs it again; stop is for good"`.
+- [ ] **Step 1: Failing tests.** `stream-host.test.ts`: `"suspend stops the copy and a later start runs it again; stop is for good"`;
+  `"with a bucket configured, the stream service describes itself running once the host runs"` (the
+  host's `spawn`/`store` seams, as its existing cases set a bucket up); `"with no settings, it
+  describes itself not running, reason not_configured"`. The tunnel service's `describe` is running
+  while its client promise is unsettled.
   `tunnel-service.test.ts`: `"starts the tunnel client on the primary with a relay set"`;
   `"suspend aborts the client and waits for it"`; `"a client that rejects is logged and suspend still settles"`.
 - [ ] **Step 2–4:** Run — FAIL; implement; run — PASS. Commit: "Run the bucket copy and the tunnel as services".
@@ -183,9 +194,10 @@ service's view `state` is `running` while `active`, `not_applicable` otherwise, 
 
 **Files:** `sealed-state.ts`, `sealed-state.test.ts`
 
-- [ ] **Step 1: Measure 5.** Reuse jr1 Task 1's throwaway harness (or rebuild it): count
-  `store.node.onCommit` calls per minute (`packages/store/src/index.ts:275`) during the simulated
-  service, 10 minutes. **Failing result, written in advance: more than one `node.db` commit a minute
+- [ ] **Step 1: Measure 5.** Reuse jr1 Task 1's throwaway harness (or rebuild it): count how often
+  the listener registered through `store.node.onCommit` (`boot.ts:2914`, registered once) is
+  **called** per minute — wrap the listener, do not count registrations — during the simulated
+  service, 10 minutes. Control: the count rises by one when a test write commits to `node.db`. **Failing result, written in advance: more than one `node.db` commit a minute
   on average.** Then the design's fallback (jobs.md §5.5, "add a minimum gap between re-seals")
   applies: the job's `minSleepMs` is `60_000` instead of `1_000`. Stop and ask the watcher before
   taking it (stop point 2).
@@ -208,11 +220,18 @@ service's view `state` is `running` while `active`, `not_applicable` otherwise, 
 - [ ] **Step 1: Failing tests.**
   - `boot.promote.test.ts`, in "historical promote: local secondary → primary, live" (`:247`), a new
     case `"after a live promote, every primary-only job has passed and every primary-only service has started, with no restart"`:
-    before the promote, GET `/health`'s `jobs` shows `menu.activation` `not_applicable` and
-    `stream` `not_applicable`; after `promoteLocalSecondaryToPrimary` resolves, within 5 s,
-    `menu.activation` has a `lastRunAt` after the promote and `stream` is `running`, and the restart
-    seam was never called. Keep the expected names in a `PRIMARY_ONLY` array at the top of the
-    file; jr4, jr5 and jr8 add to it (measure 8, jobs.md §5.8).
+    before the promote, GET `/health`'s `jobs` shows every name in `PRIMARY_ONLY` `not_applicable`;
+    after `promoteLocalSecondaryToPrimary` resolves, within 5 s (reachable because `roleChanged()`
+    skips each job's floor, jr1), each job in it has a `lastRunAt` after the promote, each service
+    in it is no longer `not_applicable`, and the restart seam was never called. `PRIMARY_ONLY`, an
+    array at the top of the file, holds only names that apply on the primary alone and are built in
+    the case's venue: jr2 starts it with `menu.activation`, `stream` and `tunnel` (the case sets a
+    relay in its environment pointing at a closed local port; the client backs off quietly). Later
+    plans add `attendance.end_of_day`, `mail.send`, `fiscal.certificate_reminders` (jr4),
+    `payments.reconcile`, `fiscal.reconciliation` (jr6), `cloud.suggestions` (jr3, when the case
+    has a Cloud connection), `housekeeping` (jr7) and `backups.scheduled` (jr8). Never
+    `box.alert_mail` or `fiscal.drain`, which run on every box (measure 8, jobs.md §5.8). A separate
+    case configures a bucket and asserts `stream` reaches `running`.
   - `handover-stepdown.test.ts`: the closer names change (`streamHost`, `tunnelController`,
     `tunnelWorker`, `stopSealingNodeCommits`, `sealedState` go; `jobRunnerServices` comes, last).
     "backups and Litestream are not stopped before the answer" now asserts `jobRunnerServices` is

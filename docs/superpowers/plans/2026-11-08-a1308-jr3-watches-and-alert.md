@@ -25,16 +25,20 @@ CLAUDE.md §3 (alert wording in English and Spanish). Slice rules apply.
 
 ## What it builds
 
-1. `job.failing`: raised for a job that has failed at least 3 passes in a row **and** has been
-   failing for at least 10 minutes **and** at least one of those passes threw (its view's
-   `lastErrorCode` is set); cleared by its next clean pass. A run of passes that only report undone
-   work (`degraded`: the drain's skips, reconcile's parked runs) raises nothing here, because each
-   such cause has its own alert (for example `fiscal.awaiting_certificate`). Severity `error` for a judged job,
+1. `job.failing`: raised for a job whose view shows at least 3 thrown passes since its last clean
+   pass (`throwsSinceClean >= 3`, jr1) **and** whose first such throw is at least 10 minutes old
+   (`throwingSince`); cleared by its next clean pass. Passes that only report undone work
+   (`degraded`: the drain's skips, reconcile's parked runs) never count, so a drain that threw once
+   and then skips for hours for a missing certificate raises only `fiscal.awaiting_certificate`,
+   its own alert. `lastErrorCode` surviving those skips plays no part. Severity `error` for a judged job,
    `warning` otherwise. Not raised for a job with `ownFailureAlert`. Area `box`, permission
    `system.manage`, screen `box-status` (as `storageAlertSource`, `alert-sources.ts:312-327`).
 2. English and Spanish words for every one of the 20 catalogue names, so no later PR touches the
    dashboard's wording.
 3. R9, R10, R11, R15, R17, R18 on the runner.
+4. `/api/box/status` (a manager's route, `box-status.ts:111-140`) gains `jobs` with the full
+   `JobView`, `lastErrorCode` and `ownFailureAlert` included; unauthenticated `/health` keeps jr1's
+   `PublicJobView`.
 
 ## What it leaves out
 
@@ -43,7 +47,7 @@ Cloud snapshots (`cloudSnapshots`, `boot.ts:3827-3862`) stay on `cloudController
 
 ## Files
 
-- Modify: `apps/server/src/alert-sources.ts`, `alert-sources.test.ts` (or a new
+- Modify: `apps/server/src/box-status.ts`, `box-status.test.ts`, `boot.promote.test.ts`, `apps/server/src/alert-sources.ts`, `alert-sources.test.ts` (or a new
   `alert-sources.job-failing.test.ts`), `apps/dashboard/src/i18n/alert-messages.ts` (`ALERT_MESSAGES`
   and `ALERT_WORDS`, `:455`), `scripts/ongoing-alert-codes.test.ts`,
   `apps/server/src/append-only-watch.ts` (`:78-118`), `append-only-watch.test.ts`,
@@ -58,13 +62,13 @@ Cloud snapshots (`cloudSnapshots`, `boot.ts:3827-3862`) stay on `cloudController
 
 | Hand-written | Lines |
 | --- | --- |
-| Code: alert source 35, wording (message + 20 word pairs) 95, guard 15, six job adapters 170, clock-watch halt 15, `boot.ts` 60, `background-duties.ts` 15 | **~405** |
-| Tests: alert source 70, guard 10, re-pointed watch suites 300, stepdown and duties 30 | **~410** |
-| Total | **~815** |
+| Code: alert source 35, wording (message + 20 word pairs) 95, guard 15, box status 10, six job adapters 170, clock-watch halt 15, `boot.ts` 60, `background-duties.ts` 15 | **~415** |
+| Tests: alert source 80, guard 10, box status 15, re-pointed watch suites 300, stepdown and duties 30, promotion 5 | **~440** |
+| Total | **~855** |
 
 ## Finish line
 
-1. `pnpm --filter @waitron/server exec vitest run src/alert-sources.test.ts src/append-only-watch.test.ts src/clock-watch.test.ts src/clock-watch.start-up.test.ts src/free-space-watch.test.ts src/cloud-worker.test.ts src/content-suggestion-runner.test.ts src/demo-printer.test.ts src/background-duties.test.ts src/handover-stepdown.test.ts src/start-full-disk.e2e.test.ts` — passes, `Tests` count printed.
+1. `pnpm --filter @waitron/server exec vitest run src/alert-sources.test.ts src/append-only-watch.test.ts src/clock-watch.test.ts src/clock-watch.start-up.test.ts src/free-space-watch.test.ts src/cloud-worker.test.ts src/content-suggestion-runner.test.ts src/demo-printer.test.ts src/background-duties.test.ts src/handover-stepdown.test.ts src/box-status.test.ts src/boot.promote.test.ts src/start-full-disk.e2e.test.ts` — passes, `Tests` count printed.
 2. `pnpm exec vitest run scripts/ongoing-alert-codes.test.ts` from the root — passes.
 3. `pnpm --filter @waitron/dashboard exec vitest run src/i18n/alerts.test.ts` — passes.
 4. Typecheck, format clean; protection list EQUAL.
@@ -116,7 +120,7 @@ jr1, jr2.
 **Interfaces:**
 - Produces: `jobFailingAlertSource(deps: { views: () => Readonly<Record<string, JobView>>; now: () => Date }): AlertSource`
   in `alert-sources.ts`; `JOB_FAILING_MIN_FAILURES = 3`, `JOB_FAILING_MIN_MS = 600_000`.
-  The alert: `{ key: \`job.failing:${name}\`, code: "job.failing", params: { job: name }, severity, since: view.failingSince, screen: "box-status" }`.
+  The alert: `{ key: \`job.failing:${name}\`, code: "job.failing", params: { job: name }, severity, since: view.throwingSince, screen: "box-status" }`.
 - Wording (`ALERT_MESSAGES["job.failing"]`), exact copy:
   - en: "The box keeps failing at {job:job_name}. It keeps trying by itself, and sales continue."
   - es: "El equipo sigue fallando en {job:job_name}. Lo sigue intentando por sí solo y las ventas continúan."
@@ -150,14 +154,18 @@ jr1, jr2.
   `"raises nothing for a job that failed twice"`; `"raises nothing for three failures inside ten minutes"`;
   `"raises one warning for a reported job failing three times over ten minutes, since its first failure"`;
   `"raises an error for a judged job"`; `"raises nothing for a job with its own failure alert"`;
-  `"raises nothing for a run of degraded passes with no throw"` (`lastErrorCode: null`);
-  `"a success in between clears the count"` (a view with `consecutiveFailures: 0` after failures);
+  `"raises nothing for a run of degraded passes"` (`consecutiveFailures: 40`, `throwsSinceClean: 0`);
+  `"raises nothing for one throw followed by hours of degraded passes"` (`throwsSinceClean: 1`,
+  `lastErrorCode` set: the fiscal drain's skip case);
+  `"a clean pass in between clears the count"` (a view with `throwsSinceClean: 0` after throws);
   `"one alert per job, keyed by the job's name"`.
   `scripts/ongoing-alert-codes.test.ts`: add `"every job in the catalogue has words"` — imports
   `JOB_NAMES` (`apps/server/src/job-catalogue.ts`) and `ALERT_WORDS`; every name is a key of
   `ALERT_WORDS.job_name.words` with `en` and `es`.
+  `box-status.test.ts`: `"the status carries every runner job with its last error code"`.
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement**; push `jobFailingAlertSource({ views: () => jobRunner.views(), now })`
-  onto `serverAlertSources` (`boot.ts:3047`). **Step 4: Run** — PASS. Commit: "Raise one alert for a background job that keeps failing".
+  onto `serverAlertSources` (`boot.ts:3047`); hand `readJobs: () => jobRunner.views()` to
+  `mountBoxStatusApi` (`box-status.ts:85`, `:134-136`). **Step 4: Run** — PASS. Commit: "Raise one alert for a background job that keeps failing".
 
 ### Task 2: The tamper watch and the free-space watch
 
@@ -237,4 +245,6 @@ jr1, jr2.
   (the runner's `stopJobs` is idempotent, so `stopBackgroundDuties` calling it again is harmless),
   keeping today's order: the Cloud connection stops before the staff listener closes.
 - [ ] **Step 3–4:** Run the Finish line — PASS. `rg -n "startAppendOnlyWatch|startFreeSpaceWatch|startClockWatch|runCloudWorker|startDemoPrinterLoop" apps packages docs`
-  finds nothing but history. Commit: "Run the Cloud connection, suggestions and the practice printer on the job runner".
+  finds nothing but history. `boot.promote.test.ts`: add `cloud.suggestions` to `PRIMARY_ONLY` when
+  the case's venue has a Cloud connection; otherwise the case asserts it is absent from `jobs`.
+  Commit: "Run the Cloud connection, suggestions and the practice printer on the job runner".

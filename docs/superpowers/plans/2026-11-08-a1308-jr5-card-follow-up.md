@@ -2,11 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Owner lands:** no, by rules §6's list: no step's code changes, only when the steps run. One step
-(recovery of paid-but-unrecorded sales) files sales through today's unchanged
-`payWorkingOrderIntegratedOrchestration` (`apps/server/src/pending-card-recovery.ts:86-90`), so the
-watcher may choose to hand it to the owner (open question in the part summary). It is a risk-trigger
-diff (money): full review path.
+**Owner lands: YES.** Two steps write `sales`: recovery of paid-but-unrecorded sales files them
+(`payWorkingOrderIntegratedOrchestration`, `apps/server/src/pending-card-recovery.ts:86-90`), and
+settlement files invoices for bill payments it settles (`boot.ts:715-717`: "Settling files invoices
+and fails payments this process is not driving"). This pull request changes when both run, and
+refund recovery newly runs on a box promoted after start (rules §6, `sales`). Full review path
+(money).
 
 **Goal:** The card payment check loop (four nested steps) and card refund recovery on finished sales
 become one job, `card.follow_up` (R3), with five steps, each running only on the roles it is meant
@@ -55,9 +56,9 @@ it leaves, as refund recovery does today.
 
 | Hand-written | Lines |
 | --- | --- |
-| Code: `card-follow-up.ts` 170 (the four wrappers' bodies move, about 140 lines leave `boot.ts`), `boot.ts` 40, deletions not counted, `background-duties.ts` 15 | **~225** |
-| Tests: `card-follow-up.test.ts` 220 (of which `boot-pending-sweep.test.ts`'s cases move, re-pointed), loop cases re-pointed 80, stepdown and duties 30, promotion 20 | **~350** |
-| Total | **~575** |
+| Code: `card-follow-up.ts` 180 (the four wrappers' bodies move, about 140 lines leave `boot.ts`), `boot.ts` 40, deletions not counted, `background-duties.ts` 15 | **~235** |
+| Tests: `card-follow-up.test.ts` 250 (of which `boot-pending-sweep.test.ts`'s cases move, re-pointed), loop cases re-pointed 80, stepdown and duties 30, promotion 20 | **~380** |
+| Total | **~615** |
 
 ## Finish line
 
@@ -97,9 +98,10 @@ jr1–jr3; the refunds slice; pa1 (`2026-11-08-a1308-pa1-card-follow-ups.md`).
    Task 1's "a burst of payment changes gives one pass per five seconds".
 3. **The job waking on its own writes.** A pass that resolves nothing writes nothing (release writes
    only when it releases), so an idle pass does not wake itself. Task 1.
-4. **A stepdown mid-pass with refund resolvers running.** The refund resolvers are stopped by
-   `onStop`, and a resolver still out at the deadline is logged `tender_refund.shutdown_pending`, as
-   today (`boot.ts:3779-3780`).
+4. **A stepdown mid-pass with refund resolvers running.** The resolvers are stopped by the abort
+   listener at the signal, as today; a resolver still out at the deadline is logged
+   `tender_refund.shutdown_pending` (`boot.ts:3779-3780`). Task 1's "the stepdown signal stops the
+   refund resolvers at once".
 5. **A box promoted after start.** Refund recovery begins on its first pass as primary, with its
    resolvers started then. Task 3's promotion case.
 
@@ -140,8 +142,18 @@ and the next step still runs. **If any step failed, the pass throws `AggregateEr
 so the runner backs off and a lasting failure raises `job.failing` (jr3). Otherwise
 `nextDueAt` is the earliest of: each provider's `resolvePending` `nextDueAt`, now + 60 s while
 settlement reports `pending > 0` (`BILL_PENDING_RECHECK_MS`, `boot.ts:710`), and refund recovery's
-`nextDueAt`; `null` if none. Step 5's resolvers start on the first pass where step 5 runs;
-`onStop` stops them and logs `tender_refund.shutdown_pending` with the ids still out.
+`nextDueAt`; `null` if none. **Per-row errors are not step failures:** `recover`'s and `settle`'s
+returned `errors` lists (one entry per payment that could not be handled) are logged per row as
+today (`payment.automatic_recovery_failed`, `bill_payment.settle_failed`) and do not make the pass
+throw, so one bad payment does not back off every follow-up; only a step that throws counts.
+
+Step 5's resolvers start on the first pass where step 5 runs. **They stop at the stepdown signal
+itself, not when the loop ends:** that first pass adds `ctx.signal.addEventListener("abort", stopRefundResolvers, { once: true })`,
+as today's loop does (`tender-refund-recovery.ts:131-135`), so a stepped-down box asks the card
+provider about no further refund beyond the resolvers' own 2-second grace
+(`tender-refund-sends.ts:42-63`) instead of for up to the stepdown's 180-second wait. `onStop`
+awaits that same stop (a second call shares the first's promise) and logs
+`tender_refund.shutdown_pending` with the ids still out.
 
 - [ ] **Step 1: Failing tests** (`card-follow-up.test.ts`, fake steps, runner with fake timers):
   `"runs the five steps in order on the primary"`; `"a secondary runs only the sweep and the release"`;
@@ -151,7 +163,11 @@ settlement reports `pending > 0` (`BILL_PENDING_RECHECK_MS`, `boot.ts:710`), and
   `"next due is the earliest any step reports, held between 5 and 60 seconds"`;
   `"a payment change wakes it; a burst of payment changes gives one pass per five seconds"`;
   `"an idle pass writes nothing"`; `"does not apply until the trading admission is ready"`;
-  `"refund resolvers start on the first pass that recovers refunds, and stop with the job"`.
+  `"refund resolvers start on the first pass that recovers refunds"`;
+  `"the stepdown signal stops the refund resolvers at once, even mid-pass"` — abort the job's
+  signal while step 1 is awaiting: `stopRefundResolvers` is called before the pass returns, and
+  `tender_refund.shutdown_pending` is logged once, by `onStop`;
+  `"a per-row error is logged and the pass does not throw"`.
   Move `boot-pending-sweep.test.ts`'s cases (each wrapper's own behaviour) here, re-pointed to the
   step functions, assertions unchanged; `sweepOwners` stays exported for its direct test.
 - [ ] **Step 2–4:** Run — FAIL; implement; run — PASS. Commit: "Merge the card checks and refund recovery into one follow-up job".
@@ -169,9 +185,10 @@ settlement reports `pending > 0` (`BILL_PENDING_RECHECK_MS`, `boot.ts:710`), and
 
 ### Task 3: Measure 8 and the finish line
 
-- [ ] **Step 1:** `boot.promote.test.ts`: add `card.follow_up` to `PRIMARY_ONLY`, asserting after the
-  promote that a pass ran step 5 (spy on the refund recovery step through the test's seam, or read
-  the job's `lastRunAt` and a refund recovery log line).
+- [ ] **Step 1:** `boot.promote.test.ts`: `card.follow_up` is **not** in `PRIMARY_ONLY` (it applies
+  on every trading box: the sweep and the release run on a secondary). A separate assertion in the
+  promotion case: after the promote, a pass ran step 5 (spy on the refund recovery step through the
+  test's seam, or read a refund recovery log line written after the promote).
 - [ ] **Step 2:** Run the Finish line — PASS. `rg -n "runPendingCardLoop|runTenderRefundRecoveryLoop|pendingCardPass" apps packages docs` —
   history only; update `docs/developers/conventions-data.md`'s refund and bill-payment loop sentences
   (around `:4108-4117` at `a086eedfb7`) to name `card-follow-up.ts`. Commit: "Run card follow-ups as one job".

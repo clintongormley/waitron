@@ -64,8 +64,12 @@ jr13.
 
 ## Review Focus
 
-1. **A second box joins while tills are connected.** The till's list grows to two at its next
-   `getTill` (`till-app.ts:4572`, `setServers`), and the check restarts at once. Task 1.
+1. **A second box joins while tills are connected.** The till's list of boxes is set only at
+   start-up (`setServers` from `getTill`, `till-app.ts:4572`, and the stored list read at
+   `:4614`), so a running till keeps a one-box list, and no timed check, until it next starts (a
+   reload or a restart). That is today's behaviour for the list itself: today's check also never
+   adds a box. The router still restarts the check at once whenever its list grows (Task 1's case),
+   which covers the next start.
 2. **A one-box venue's box restarts.** The connection drops; the till checks at once, then every
    5 seconds until the connection is back.
 3. **A behind box at a two-box venue, with a till on a live connection.** It still receives the
@@ -82,9 +86,11 @@ jr13.
   `"one box and connected: no timed probe"`; `"one box, the connection drops: probes at once, then every 5 seconds"`;
   `"two boxes and connected: probes every 5 seconds as before"`;
   `"the list growing to two while connected restarts the probe at once"`;
-  **measure 14, second half (jobs.md §5.14):** `"at a venue with two boxes, a till on a live connection still hands the newest chart to a box that is behind"` —
-  two servers, one answering a lower term; `setLive(true)`; within one interval the behind server
-  receives the held chart, as `:486`'s case asserts without a connection. **Failing result, written
+  **measure 14, second half (jobs.md §5.14), as a stand-in:** `"at a venue with two boxes, a till on a live connection still hands the newest chart to a box that is behind"` —
+  two fake servers in the router's fake fetch, one answering a lower term; `setLive(true)`; within
+  one interval the behind server receives the held chart, as `:486`'s case asserts without a
+  connection. This unit test stands in for a real two-box venue; the PR description says so, and a
+  run against two real boxes (or the two-host local simulation) belongs with the go-live checks. **Failing result, written
   in advance:** the behind box receives nothing while the till is connected. Stop (rules §5.4).
 - [ ] **Step 2–4:** FAIL; implement; PASS.
 - [ ] **Step 5:** Wire `router.setLive` to jr13's connection `up`/`down` events in `till-app.ts`.

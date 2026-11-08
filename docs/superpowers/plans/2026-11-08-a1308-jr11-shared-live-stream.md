@@ -41,20 +41,21 @@ The browser halves (jr12 dashboard, jr13/jr14 till); publishing the in-memory st
 - Modify: `live-api.ts` (`:88-183`), `live-api.test.ts`, `department-transfer-api.ts` (`:111-182`),
   `department-transfer-api.test.ts` (or the file holding its events cases), `boot.ts` (`:2215-2225`,
   the device mount beside it), `packages/identity/src/management-session.ts` (`:45`), its test,
-  `apps/server/src/till-session.ts` (a read-only session check), `scripts/live-subscriptions.test.ts`
-  if it pins the mount list
+  `apps/server/src/till-session.ts` (a read-only session read), the reads `monitoringActor` uses
+  (their parameter types only), `apps/server/src/till-api.profile-actions.test.ts` (`:478-490`),
+  `scripts/live-subscriptions.test.ts` if it pins the mount list
 
 ## Size
 
 | Hand-written | Lines |
 | --- | --- |
-| Code: `live-stream.ts` 120 (about 120 lines leave the two mounts), `device-live-api.ts` 60, the two mounts 40, read-only session checks 40, `boot.ts` 10 | **~270** |
-| Tests: `live-stream.test.ts` 180, `device-live-api.test.ts` 120, re-pointed mount cases 60, identity 30 | **~390** |
-| Total | **~660** |
+| Code: `live-stream.ts` 120 (about 120 lines leave the two mounts), `device-live-api.ts` 60, the two mounts 45, read-only session reads and widened parameter types 55, `boot.ts` 10 | **~290** |
+| Tests: `live-stream.test.ts` 180, `device-live-api.test.ts` 120, re-pointed mount cases 70, identity 30, inventory 5 | **~405** |
+| Total | **~695** |
 
 ## Finish line
 
-1. `pnpm --filter @waitron/server exec vitest run src/live-stream.test.ts src/device-live-api.test.ts src/live-api.test.ts src/department-transfer-api.test.ts src/handover-gate.test.ts` — passes.
+1. `pnpm --filter @waitron/server exec vitest run src/live-stream.test.ts src/device-live-api.test.ts src/live-api.test.ts src/department-transfer-api.test.ts src/handover-gate.test.ts src/till-api.profile-actions.test.ts` — passes.
 2. `pnpm --filter @waitron/identity exec vitest run src/management-session.test.ts` — passes.
 3. `pnpm exec vitest run scripts/live-subscriptions.test.ts` — passes. Typecheck, format; protection list EQUAL; measure 6's table in the PR description.
 
@@ -151,24 +152,40 @@ export function parseInterests(raw: string | undefined, allowed: ReadonlySet<str
 - `till-session.ts`: `checkDeviceStillProven(db: Database, deviceId: string, tokenHash: string | null): Promise<void>` —
   the read `assertDeviceStillProven` makes (`device-session.ts:313-332`), on the read connection;
   throws `device.unauthorized` when the device is inactive or its token hash changed.
-  `checkTillSessionOpen(db: Database, token: string): Promise<void>` — `requireSession`'s lookup
-  (`till-session.ts:95-128`) as a plain read with no stamp, no permission, no profile action;
-  throws `session.required` or `device.unauthorized`.
+  `readTillSession(db: Database, token: string): Promise<<requireSession's return type>>` —
+  `requireSession`'s lookup (`till-session.ts:95-128`) as a plain read with no stamp; throws
+  `session.required` or `device.unauthorized`.
 - `device-live-api.ts`: `mountDeviceLiveApi(app, deps: { db; bus: LiveEvents; resourceTypes: readonly string[]; devMode?: boolean }, log)`
   — `GET /api/live/events`; connect: `requireDeviceProof(deps, c, { passive: true })`; interests
   parsed against `resourceTypes` (the same list the dashboard gets, `liveResourceTypes`,
   `boot.ts:2223`); `recheck`: `checkDeviceStillProven`; `invalidCodes`: `device.unauthorized`;
   `sendIds: false`.
 - `department-transfer-api.ts`: its events route uses `liveStreamResponse` with its four types
-  (`:127-130`), `sendIds: false`, its connect check unchanged, and
-  `recheck: () => checkTillSessionOpen(deps.db, <the request's session token>)`. Its route is
-  retired in jr13, when the till moves to the device stream.
+  (`:127-130`), `sendIds: false`, its connect check unchanged, and a `recheck` that keeps **every**
+  check today's wake makes (`authenticate`, `:115-118`), as plain reads: `readTillSession(deps.db, token)`,
+  the `take-orders` profile action on the binding it returns (`assertProfileAction`, in memory),
+  and `monitoringActor(deps.db, session)` (`:39-62`: permission `payment.take`, person active,
+  device still proven, profile admits the person) with its parameter widened from `Transaction` to
+  `Database | Transaction` — every read in it (`authorize`, the `persons` select,
+  `assertDeviceStillProven`, `canUseDeviceProfile`, `readProfileZones`) is widened the same way,
+  and none of them writes (`department-transfer-api.test.ts:798` asserts the profile-admission
+  case through a wake). `invalidCodes` keeps
+  every code today's wake answers with `session-invalid`, with `data` the code only (`:158-163`).
+  Its route is retired in jr13, when the till moves to the device stream.
 
 - [ ] **Step 1: Failing tests** (`device-live-api.test.ts`): `"an enrolled device opens the stream and hears a change, as types only"`;
   `"a request with no device proof is refused device.unauthorized"`;
   `"an unknown interest type refuses the stream"`; `"a device revoked while streaming gets session-invalid at the next wake"`;
   `"a device stream does not hold up a stepdown's admitted-work wait"` (the gate's `settled` resolves
-  with the stream open, as jobs.md §1 test 1). Re-point the transfer stream's cases; assertions unchanged.
+  with the stream open, as jobs.md §1 test 1). Re-point the transfer stream's cases with assertions
+  unchanged — in particular `department-transfer-api.test.ts:1366-1395` (the stream closes with
+  `session-invalid` and `data: {"code":…}` on `person.suspended`, `device.forbidden_action` and
+  `device_profile.not_admitted`) and `:798` (profile admission withdrawn while streaming), now
+  through the lock-free recheck; add
+  `"a transfer stream's recheck takes no write lock"` (the held-lock case of Task 2, on this mount).
+  In `till-api.profile-actions.test.ts`, add `GET /api/live/events` to the route inventory
+  (`:478-490` is the transfer group) in the group of device-proof routes that name no profile action;
+  if the inventory has no such group, stop and ask.
 - [ ] **Step 2–4:** FAIL; implement; mount in `boot.ts` beside `mountLiveApi`, outside the
   `!fencedOrMirror` block only if the dashboard's is (follow `mountLiveApi`'s placement); PASS.
   Commit: "Serve the live stream to device sessions".

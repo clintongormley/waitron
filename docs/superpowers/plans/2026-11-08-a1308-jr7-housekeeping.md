@@ -29,7 +29,7 @@ sessions nobody signs out"). Slice rules apply.
 | Step | Deletes | Rule |
 | --- | --- | --- |
 | `sign_in_challenges` | rows with `expires_at <= now` or `expires_at > now + 10 minutes` | pp2's insert-time sweep predicate (a clock stepped back makes the second half); reuse pp2's helper if it exports one |
-| `dashboard_sessions` | rows whose `last_seen_at <= now - IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:13`, 30 minutes), **except** `MIRROR_VIEWER_SESSION_ID` (`apps/server/src/mirror-session.ts:20`) | tables-people.md: the viewer's keepalive only updates its row, so a deleted row is not recreated until the next start |
+| `dashboard_sessions` | rows that ended (`ended_at` set) or whose `last_seen_at` is more than `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:11`, 30 minutes) away from now **in either direction** — the sign-in check itself treats a session stamped further ahead than that as expired (`Math.abs`, `:79`) — **except** `MIRROR_VIEWER_SESSION_ID` (`apps/server/src/mirror-session.ts:20`), whatever its state | jobs.md R16 ("rows that ended, or idle past `IDLE_TIMEOUT_MS`"); tables-people.md: the viewer's keepalive only updates its row, so a deleted row is not recreated until the next start. After pp3 a sign-out deletes the row, so ended rows are only left by paths pp3 did not convert |
 | `media_blobs` | rows no photo's `original_hash` or `source_hash` names | tables-menu.md §1.23: the photo write deletes its own unused blob; this is the safety net, and the RESTRICT keys make deleting a blob in use impossible |
 | `service_commands` (**off**) | rows whose party or bill closed more than a day ago | tables-ordersales.md §1.8; `HOUSEKEEPING_SERVICE_COMMANDS = false` until M10 is confirmed |
 
@@ -46,8 +46,8 @@ Not pruned, by design: ended `till_sessions`, `staff_activity`, print job payloa
 | Hand-written | Lines |
 | --- | --- |
 | Code: `housekeeping.ts` 150, `boot.ts` 15 | **~165** |
-| Tests: `housekeeping.test.ts` 230, promotion 10 | **~240** |
-| Total | **~405** |
+| Tests: `housekeeping.test.ts` 250, promotion 10 | **~260** |
+| Total | **~425** |
 
 ## Finish line
 
@@ -84,8 +84,10 @@ jr1–jr3; pp2, pp3 (the people slice's `sign_in_challenges` and `dashboard_sess
 2. **A photo replaced mid-run.** The RESTRICT keys refuse deleting a blob a new photo names between
    the select and the delete; the delete selects and deletes in one statement. Task 2's
    "a blob a photo names is never deleted".
-3. **A clock stepped back.** A challenge stamped in the future past the 10-minute window goes;
-   a session's `last_seen_at` in the future is left (it is not idle). Task 2.
+3. **A clock stepped back.** A challenge stamped in the future past the 10-minute window goes; a
+   session stamped more than 30 minutes in the future goes too, because the sign-in check already
+   answers `management_session.expired` for it (`management-session.ts:78-81`); one stamped less
+   than 30 minutes ahead stays. Task 2.
 4. **The box restarting the night the job was due.** The next due time is worked out from the
    schedule at start, so a missed 04:00 runs at the next one; nothing here is urgent.
 5. **A stepdown during a long `media_blobs` run.** No further batch starts once the signal is aborted.
@@ -95,7 +97,10 @@ jr1–jr3; pp2, pp3 (the people slice's `sign_in_challenges` and `dashboard_sess
 ### Task 1: Measure 10 — the batch size against sales
 
 - [ ] **Step 1:** On the bench's year-of-trading copy (slice 0's built year; plan
-  `2026-11-04-a1308-slice-0-bench.md` Task 5), in a throwaway worktree with Task 2's code, run a
+  `2026-11-04-a1308-slice-0-bench.md` Task 5), in a throwaway worktree with Task 2's code, **first
+  seed what the job deletes**, because a year of trading alone gives most steps nothing: 20,000
+  expired sign-in challenges, 5,000 idle and ended dashboard sessions (persons seeded first), and
+  2,000 photo-data rows no photo names (each a 200 KB blob). Then run a
   sale write every 2 seconds for 5 minutes twice: once with the job off, once running all four steps
   (the service-command step switched on in the throwaway copy only, since it is the only large
   table, ≈360,000–1,000,000 rows a year) with `HOUSEKEEPING_BATCH = 500`. Record each run's longest
@@ -129,7 +134,8 @@ export function housekeepingJob(deps: {
 }): JobDefinition;
 ```
 
-Name `housekeeping`; `applies: isPrimary`; `minSleepMs: 60_000`; `maxSleepMs: timings.maxTickMs`
+Name `housekeeping`; `applies: isPrimary`; `minSleepMs: 60_000` (a promotion still wakes it at once:
+`roleChanged()` skips the floor, jr1); `maxSleepMs: timings.maxTickMs`
 (env1, or `config.maxTickMs`); `backoff { firstMs: 60_000, maxMs: 3_600_000 }`; the job keeps its
 `fireAt` in its closure: on its first pass it works out the next 04:00 with
 `nextFireMs({ kind: "wall-clock", days: "daily", at: { hour: 4, minute: 0 } }, clock, now, jitterSeed)`
@@ -138,6 +144,7 @@ and returns it; on a pass at or after `fireAt` it runs every enabled step, then 
 - [ ] **Step 1: Failing tests** (`useVenueDb`; seed persons first, rules §4):
   `"deletes expired challenges and ones stamped more than ten minutes ahead, and keeps live ones"`;
   `"deletes dashboard sessions idle past thirty minutes and keeps active ones"`;
+  `"deletes ended dashboard sessions"`; `"deletes a session stamped more than thirty minutes ahead and keeps one stamped ten minutes ahead"`;
   `"never deletes the mirror viewer's session, however long idle"`;
   `"deletes photo bytes no photo names"`; `"a blob a photo names is never deleted"`;
   `"deletes in batches of HOUSEKEEPING_BATCH, one transaction each"` (count transactions with a
