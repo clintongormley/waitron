@@ -110,7 +110,7 @@ describe("checkRestoreCompatibility", () => {
     const expectedVersions = Object.fromEntries(
       modulesWithSets(ALL_MODULES).map((m) => [m.name, expectedSchemaVersion(m.migrations, null)]),
     );
-    expect(expectedVersions.core).toBe(2);
+    expect(expectedVersions.core).toBe(3);
 
     expect(() =>
       checkRestoreCompatibility(
@@ -125,7 +125,7 @@ describe("checkRestoreCompatibility", () => {
     ).toThrowError(
       expect.objectContaining({
         code: "restore.schema_too_new",
-        params: { module: "core", backup: oldCounts.core, target: 2 },
+        params: { module: "core", backup: oldCounts.core, target: 3 },
       }),
     );
   });

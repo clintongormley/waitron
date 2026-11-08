@@ -343,7 +343,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   });
 
-  describe("bill_payments_guard_update: the state moves one way, and the amounts never change", () => {
+  describe("bill_payments_guard_update: the state moves one way, and received amounts stay fixed", () => {
     it("allows pending to received, stamping the time", async () => {
       const id = await insertPayment();
       await updatePayment(id, `state = 'received', received_at = '${AT}'`);
@@ -412,9 +412,67 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
     });
 
+    it("records the actual amounts as a pending card payment becomes received", async () => {
+      const id = await insertPayment();
+      await updatePayment(id, `applied = 900, tip = 25, state = 'received', received_at = '${AT}'`);
+      const [row] = await inTx((tx) =>
+        tx
+          .select({
+            state: billPayments.state,
+            applied: billPayments.applied,
+            tip: billPayments.tip,
+          })
+          .from(billPayments)
+          .where(eq(billPayments.id, id)),
+      );
+      expect(row).toEqual({ state: "received", applied: 900, tip: 25 });
+    });
+
+    describe.each(["applied", "tip"] as const)(
+      "%s stays fixed outside card confirmation",
+      (column) => {
+        it.each([
+          ["a pending card payment", {}, "state = 'pending'"],
+          ["a card failure", {}, `state = 'failed', failed_at = '${AT}'`],
+          ["a received payment", { state: "received", receivedAt: AT }, "state = 'received'"],
+          [
+            "a received payment being declined",
+            { state: "received", receivedAt: AT },
+            "state = 'declined'",
+          ],
+          ["a failed payment", { state: "failed", failedAt: AT }, "state = 'failed'"],
+          ["a declined payment", { state: "declined", receivedAt: AT }, "state = 'declined'"],
+          [
+            "a cash payment being received",
+            { method: "cash", tendered: 5000 },
+            `state = 'received', received_at = '${AT}'`,
+          ],
+        ] as const)("refuses an amount change on %s", async (_name, start, transition) => {
+          const id = await insertPayment(start as Partial<PaymentValues>);
+          const error = await captureError(() =>
+            updatePayment(id, `${column} = 999, ${transition}`),
+          );
+          expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+          const [row] = await inTx((tx) =>
+            tx
+              .select({
+                state: billPayments.state,
+                applied: billPayments.applied,
+                tip: billPayments.tip,
+              })
+              .from(billPayments)
+              .where(eq(billPayments.id, id)),
+          );
+          expect(row).toEqual({
+            state: "state" in start ? start.state : "pending",
+            applied: 1000,
+            tip: 0,
+          });
+        });
+      },
+    );
+
     it.each([
-      ["the applied amount", `applied = 999`],
-      ["the tip", `tip = 1`],
       ["the cash handed over", `tendered = 5000`],
       ["the kind", `kind = 'items'`],
       ["the share count", `kind = 'share', share_of = 2`],
