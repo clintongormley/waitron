@@ -48,7 +48,10 @@ export function startOrder(paths, seconds) {
 
 export function durationSequencer(
   seconds,
-  { write = (line) => process.stdout.write(`${line}\n`) } = {},
+  {
+    write = (line) => process.stdout.write(`${line}\n`),
+    warn = (line) => process.stderr.write(`${line}\n`),
+  } = {},
 ) {
   return class DurationSequencer {
     static table = seconds;
@@ -79,6 +82,11 @@ export function durationSequencer(
       write(
         `${PREFIX} shard ${index}/${count}: ${mine.length} files, ${Math.round(total)} estimated s, ${absent.length} absent from the table${names}`,
       );
+      if (absent.length > 0) {
+        warn(
+          `::warning::${PREFIX} shard ${index}/${count}: ${absent.length} file${absent.length === 1 ? "" : "s"} absent from the duration table: ${absent.join(", ")}`,
+        );
+      }
       return mine.flatMap((file) => specsByPath.get(file));
     }
 

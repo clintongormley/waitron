@@ -3882,8 +3882,7 @@ jobs:
   # same deadlock the five-required-ids arrangement had, and `always()` is what stops the fix for it
   # reintroducing it one layer up.
   #
-  # Because the job therefore always runs, its own `if` cannot be what decides pass or fail. The two
-  # steps below decide, and either one failing fails the job.
+  # The two gate steps decide pass or fail; the duration warning is advisory.
   ci:
     if: always()
     needs:
@@ -3926,7 +3925,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Naming a permission drops the workflow's defaults. This job checks nothing out, so it holds
-    # `actions: read` alone: the permission GitHub lists for the jobs API the second step reads.
+    # `actions: read` alone for its two jobs-API reads.
     permissions:
       actions: read
     steps:
@@ -4073,6 +4072,65 @@ jobs:
           if [[ $verdict != pass ]]; then
             echo "::error::$reason"
             exit 1
+          fi
+
+      - name: Warn about slow server test jobs
+        if: always()
+        timeout-minutes: 1
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          unavailable() { echo "::warning::Server job durations unavailable: $1"; }
+          if ! selected=$(jq -c '[to_entries[] | select((.key == "test-server" or .key == "test-server-stream") and .value.result != "skipped") | .key]' <<<"$NEEDS"); then
+            unavailable "needed jobs could not be read"
+            exit 0
+          fi
+          if [[ $selected == '[]' ]]; then exit 0; fi
+          if ! api_timeout=$(command -v gnutimeout || command -v gtimeout || command -v timeout); then
+            unavailable "no API timeout command"
+            exit 0
+          fi
+          if ! pages=$("$api_timeout" -k 2s "${SHARD_DURATION_API_TIMEOUT:-45}" gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=30"); then
+            unavailable "jobs API failed or timed out"
+            exit 0
+          fi
+          if ! report=$(jq -sc --argjson selected "$selected" '
+            . as $pages
+            | if length == 0 or any(.[]; (.jobs | type) != "array" or (.total_count | type) != "number") then error("invalid pages") else . end
+            | [.[].jobs[]] as $jobs
+            | if any($pages[]; .total_count != ($jobs | length)) then error("incomplete pages") else . end
+            | [$selected[] as $family
+               | [$jobs[] | select(.name == $family or (.name | startswith($family + " (")))] as $matches
+               | if ($matches | length) == 0 then {warning: ("metadata unavailable for " + $family)}
+                 else $matches[]
+                   | select(.conclusion != "skipped")
+                   | select(.conclusion != "cancelled" or (.runner_id // 0) > 0)
+                   | if .status != "completed" then {warning: ("metadata unavailable for " + .name)}
+                     else (try ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) catch null) as $seconds
+                       | if $seconds == null or $seconds < 0 then {warning: ("metadata unavailable for " + .name)}
+                         else (.name + ": " + ($seconds | tostring) + "s") as $line
+                           | {line: $line} + if $seconds > 240 then {warning: $line} else {} end
+                         end
+                     end
+                 end]
+            | {lines: map(.line // empty), warnings: map(.warning // empty)}
+          ' <<<"$pages"); then
+            unavailable "jobs API metadata could not be read"
+            exit 0
+          fi
+          jq -r '.lines[] | "[shard-duration] " + .' <<<"$report"
+          message=$(jq -r '.warnings | join("; ")' <<<"$report")
+          if [[ -n $message ]]; then
+            message=${message//%/%25}
+            message=${message//$'\r'/%0D}
+            message=${message//$'\n'/%0A}
+            echo "::warning::Inspect server test job timing: $message"
           fi
 
   # Publishes the image to GHCR — a POST-GATE LEAF, downstream of the WHOLE suite rather than of the

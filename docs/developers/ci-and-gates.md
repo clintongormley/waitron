@@ -1929,7 +1929,36 @@ Guards, each weaker than the rule: the 90-second warning above names a slow FILE
 job; the "pin each sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the
 counts, not the times; and each test job's 10-minute `timeout-minutes` (the "bounds every test job"
 case in the same file) is the only one that stops a job: GitHub cancels it at 10 minutes, which fails
-the `ci` check. Nothing measures a job's time against 4 minutes.
+the `ci` check. The final `ci` job also warns when a server or stream job exceeds four minutes,
+as described below.
+
+### Inspect duration warnings before refreshing the table
+
+A file absent from the server's duration table gets the table's mean estimate. The sequencer
+keeps that fallback and emits a missing-file annotation for its shard, so you can see when the
+packing uses an estimate rather than a recorded time.
+
+The final `ci` job reads its attempt's paginated job records and prints each selected server or
+stream job's wall time. It combines jobs over 240 seconds and unavailable selected-job metadata
+into one advisory annotation. Skipped jobs and cancellations without an assigned runner stay
+quiet. An API failure or its 45-second deadline produces an unavailable warning; it does not
+change the two existing CI gates.
+
+Inspect the job's setup and test steps before deciding to refresh the table: wall time includes
+both, and a slow runner is not evidence that the packing changed. The stream job has no duration
+table to refresh. Before using CI timings, check GitHub's incident history for Actions, Git
+Operations, API Requests and Webhooks during those runs. Use runs without download HTTP 5xx
+responses and with the slowest checkout under about ten seconds. Keep the same coverage mode
+across the runs you compare.
+
+After changing the warning, publish your feature branch and run full verification on it with
+`gh workflow run ci.yml --ref "$(git branch --show-current)"`. Read that exact head's warning
+step log as well as the CI result: it must show real server/stream rows without an unavailable
+warning. If the gate accepted final results and completed steps before GitHub published a job's
+completion time, retain that manual run's head, attempt and job ids, then make an authenticated
+timing re-read of those same rows after publication. API access or parsing failures still need
+repair. The local extracted-shell tests use controlled API replies and cannot establish hosted
+API access.
 
 ### What to do when CI fails
 
@@ -2270,8 +2299,10 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
    `apps/server/test-durations.json` (seconds per test file, keyed by its path under `apps/server`).
    Every shard computes the same packing and keeps its own part: files are taken longest estimate
    first (ties by path) and each goes into the shard whose estimates sum least so far. Each shard
-   prints one line, `[duration-sequencer] shard i/n: <files> files, <seconds> estimated s, <k> absent
+   prints one stdout line, `[duration-sequencer] shard i/n: <files> files, <seconds> estimated s, <k> absent
    from the table`, followed, on the same line, by the absent files' names.
+
+   Since 8 November 2026, absent files also produce one stderr annotation per affected shard.
 
 **Why packing, and why 16.** `python3 -I balanced.py files.txt old.kv` and
 `python3 -I firsttable.py files.txt` in the model folder pack each run with a table built from the
@@ -2307,6 +2338,10 @@ makes the shards less even; it does not drop or repeat a file.
 **Refreshing the table.** When a server shard drifts past 4 minutes, or the `[duration-sequencer]`
 lines name many absent files, rebuild the table from the newest six successful `main` runs that ran
 `test-server` (their jobs include `test-server (1)`), keeping the logs outside the worktree:
+
+**8 November 2026:** first inspect setup and test timing, then use qualified runs in the same
+coverage mode, as described in [Inspect duration warnings](#inspect-duration-warnings-before-refreshing-the-table).
+Crossing four minutes alone does not establish that the table needs refreshing.
 
 ```bash
 dir=$(mktemp -d); for run in <six run ids>; do
