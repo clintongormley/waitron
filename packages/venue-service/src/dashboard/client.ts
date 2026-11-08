@@ -305,7 +305,10 @@ export class VenueServiceApi {
     );
   }
 
-  saveDepartmentSettings(departmentId: string, input: DepartmentSettingsInput): Promise<void> {
+  saveDepartmentSettings(
+    departmentId: string,
+    input: DepartmentSettingsInput,
+  ): Promise<VenueServiceModel> {
     return this.request(
       `/management-api/venue-service/departments/${departmentId}/settings`,
       "PUT",

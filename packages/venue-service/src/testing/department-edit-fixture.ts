@@ -3,11 +3,63 @@ import { applyTokens, draftScopeFor, LeaveController, type DraftScope } from "@w
 import { type DashboardRequest } from "@waitron/dashboard-kit";
 import { expect } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { VenueServiceApi } from "../dashboard/client.js";
+import {
+  VenueServiceApi,
+  type VenueServiceView,
+  type DepartmentSettingsInput,
+} from "../dashboard/client.js";
 import { zonesModel } from "./department-zones-fixture.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "../dashboard/department-edit-dialog.js";
 import type { DepartmentTab } from "../dashboard/department-settings.js";
+
+export function departmentSettingsAnswer(
+  model: VenueServiceView,
+  departmentId: string,
+  input: DepartmentSettingsInput,
+): VenueServiceView {
+  const answer = structuredClone(model);
+  Object.assign(
+    answer.departments.find((row) => row.id === departmentId)!,
+    { name: input.name, tradingName: input.tradingName },
+  );
+  const policy = answer.salePolicies.departments.find((row) => row.departmentId === departmentId);
+  const fields = {
+    orderStart: input.orderStart,
+    paidWhen: input.paidWhen,
+    collectionNumber: input.collectionNumber,
+  };
+  if (policy) Object.assign(policy, fields);
+  else
+    answer.salePolicies.departments.push({
+      departmentId,
+      ...fields,
+      receiptPrintMode: "auto",
+      printTradingName: false,
+    });
+  if (input.needsClearing !== undefined)
+    answer.needsClearingDepartmentIds = [
+      ...answer.needsClearingDepartmentIds.filter((id) => id !== departmentId),
+      ...(input.needsClearing ? [departmentId] : []),
+    ];
+  if (input.lateSendNeedsManager !== undefined)
+    answer.lateSendManagerDepartmentIds = [
+      ...answer.lateSendManagerDepartmentIds.filter((id) => id !== departmentId),
+      ...(input.lateSendNeedsManager ? [departmentId] : []),
+    ];
+  if (input.releaseReminderMinutes !== undefined)
+    answer.releaseReminderMinutesByDepartment[departmentId] = input.releaseReminderMinutes;
+  if (input.serviceSteps)
+    answer.serviceSteps = [
+      ...answer.serviceSteps.filter((step) => step.departmentId !== departmentId),
+      ...input.serviceSteps.map((step, index) => ({
+        ...step,
+        departmentId,
+        id: step.id ?? `s${index + 1}`,
+      })),
+    ];
+  return answer;
+}
 
 class DepartmentEditHost extends LitElement {
   readonly leave = new LeaveController(this);
@@ -34,16 +86,23 @@ export async function mountDepartmentEditor(
   await app.updateComplete;
   const el = app.shadowRoot!.querySelector("department-edit-dialog")!;
   const writes: unknown[][] = [];
-  el.api = new VenueServiceApi(
+  const supplied =
     request ??
-      ((async (path, method = "GET", body) => {
-        if (method === "GET")
-          return path.endsWith("/profiles")
-            ? []
-            : { receivingProfileId: null, destinationDepartmentIds: [], profiles: [] };
-        writes.push([path, method, body]);
-      }) as DashboardRequest),
-  );
+    ((async (path, method = "GET", body) => {
+      if (method === "GET")
+        return path.endsWith("/profiles")
+          ? []
+          : { receivingProfileId: null, destinationDepartmentIds: [], profiles: [] };
+      writes.push([path, method, body]);
+      if (path.endsWith("/settings"))
+        return departmentSettingsAnswer(el.model, el.departmentId, body as DepartmentSettingsInput);
+    }) as DashboardRequest);
+  el.api = new VenueServiceApi((async (path, method = "GET", body, options) => {
+    const answer = await supplied(path, method, body, options);
+    return method === "PUT" && path.endsWith("/settings")
+      ? departmentSettingsAnswer(el.model, el.departmentId, body as DepartmentSettingsInput)
+      : answer;
+  }) as DashboardRequest);
   el.model = structuredClone(zonesModel);
   el.departmentId = "d1";
   await el.updateComplete;

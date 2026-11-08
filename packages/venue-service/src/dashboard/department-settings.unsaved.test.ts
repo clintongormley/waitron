@@ -4,9 +4,12 @@ import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { VenueServiceApi, type VenueServiceView } from "./client.js";
+import { VenueServiceApi, type VenueServiceView, type DepartmentSettingsInput } from "./client.js";
 import "./department-settings.js";
-import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
+import {
+  selectDepartmentTab,
+  departmentSettingsAnswer,
+} from "../testing/department-edit-fixture.js";
 const model: VenueServiceView = {
   departments: [
     {
@@ -144,17 +147,22 @@ async function mount(request?: DashboardRequest) {
   const el = app.shadowRoot!.querySelector("department-settings")!;
   el.model = structuredClone(model);
   el.departmentId = "d1";
-  el.api = new VenueServiceApi(
+  const supplied =
     request ??
-      ((async (path) =>
-        path.endsWith("/profiles")
-          ? []
-          : {
-              departmentId: "d1",
-              receivingProfileId: null,
-              destinationDepartmentIds: [],
-            }) as DashboardRequest),
-  );
+    ((async (path) =>
+      path.endsWith("/profiles")
+        ? []
+        : {
+            departmentId: "d1",
+            receivingProfileId: null,
+            destinationDepartmentIds: [],
+          }) as DashboardRequest);
+  el.api = new VenueServiceApi((async (path, method = "GET", body, options) => {
+    const answer = await supplied(path, method, body, options);
+    return method === "PUT" && path.endsWith("/settings")
+      ? departmentSettingsAnswer(el.model!, el.departmentId, body as DepartmentSettingsInput)
+      : answer;
+  }) as DashboardRequest);
   await el.updateComplete;
   expect(el.shadowRoot).not.toBeNull();
   return el;
@@ -352,6 +360,7 @@ it("destination deactivation retains other drafts against their original baselin
   const bodies: unknown[] = [];
   el.api = new VenueServiceApi((async (_path, _method, body) => {
     bodies.push(body);
+    return departmentSettingsAnswer(el.model!, el.departmentId, body as DepartmentSettingsInput);
   }) as DashboardRequest);
   name.dispatchEvent(
     new CustomEvent("wt-change", {

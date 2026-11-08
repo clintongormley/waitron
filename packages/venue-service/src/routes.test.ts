@@ -286,6 +286,29 @@ async function rawSettingsSnapshot() {
 }
 
 describe("whole service settings saves", () => {
+  it("answers with the stored model and assigned service-step ids", async () => {
+    const fx = await settingsFixture();
+    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      serviceSteps: [{ name: "Coffee", start: "seated", courseId: null, minutes: 0 }],
+    });
+    expect(saved.status).toBe(200);
+    const answer = await saved.json();
+    expect(answer).toEqual((await settingsSnapshot(fx)).model);
+    expect(
+      answer.departments.find((row: { id: string }) => row.id === fx.departmentId),
+    ).toMatchObject({ name: departmentSettings.name });
+    expect(answer.serviceSteps).toEqual([
+      {
+        id: expect.any(String),
+        departmentId: fx.departmentId,
+        name: "Coffee",
+        start: "seated",
+        courseId: null,
+        minutes: 0,
+      },
+    ]);
+  });
   it("saves every department field and optional transfers in one PUT", async () => {
     const fx = await settingsFixture();
     const destination = await withTransaction(db, (tx) =>
@@ -298,7 +321,7 @@ describe("whole service settings saves", () => {
       ...departmentSettings,
       transfers: { receivingProfileId: null, destinationDepartmentIds: [destination.id] },
     });
-    expect(saved.status).toBe(204);
+    expect(saved.status).toBe(200);
     const { model, transfers } = await settingsSnapshot(fx);
     expect(model.departments.find((row: { id: string }) => row.id === fx.departmentId)).toEqual({
       id: fx.departmentId,
@@ -331,7 +354,7 @@ describe("whole service settings saves", () => {
           orderStart: "table",
         })
       ).status,
-    ).toBe(204);
+    ).toBe(200);
     const read = await settingsSnapshot(fx);
     expect(read.transfers).toEqual(transfers);
     expect(
@@ -349,7 +372,7 @@ describe("whole service settings saves", () => {
     ).toBe("on_request");
     expect(
       (await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, departmentSettings)).status,
-    ).toBe(204);
+    ).toBe(200);
 
     expect(
       (
@@ -485,7 +508,7 @@ describe("whole service settings saves", () => {
           orderStart: "table",
         })
       ).status,
-    ).toBe(204);
+    ).toBe(200);
     for (const [input, , effective] of [
       [zoneSettings, "prepay", zoneSettings],
       [
@@ -578,13 +601,13 @@ describe("whole service settings saves", () => {
       ...departmentSettings,
       needsClearing: true,
     });
-    expect(on.status).toBe(204);
+    expect(on.status).toBe(200);
     expect(await needsClearingIds(fx)).toEqual([fx.departmentId]);
     const off = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       ...departmentSettings,
       needsClearing: false,
     });
-    expect(off.status).toBe(204);
+    expect(off.status).toBe(200);
     expect(await needsClearingIds(fx)).toEqual([]);
   });
 
@@ -601,7 +624,7 @@ describe("whole service settings saves", () => {
       fx.managerCookie,
       departmentSettings,
     );
-    expect(saved.status).toBe(204);
+    expect(saved.status).toBe(200);
     expect(await needsClearingIds(fx)).toEqual([fx.departmentId]);
   });
 
@@ -635,13 +658,13 @@ describe("whole service settings saves", () => {
       ...departmentSettings,
       lateSendNeedsManager: true,
     });
-    expect(on.status).toBe(204);
+    expect(on.status).toBe(200);
     expect(await lateSendManagerIds(fx)).toEqual([fx.departmentId]);
     const off = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       ...departmentSettings,
       lateSendNeedsManager: false,
     });
-    expect(off.status).toBe(204);
+    expect(off.status).toBe(200);
     expect(await lateSendManagerIds(fx)).toEqual([]);
   });
 
@@ -658,7 +681,7 @@ describe("whole service settings saves", () => {
       fx.managerCookie,
       departmentSettings,
     );
-    expect(saved.status).toBe(204);
+    expect(saved.status).toBe(200);
     expect(await lateSendManagerIds(fx)).toEqual([fx.departmentId]);
   });
 
@@ -694,7 +717,7 @@ describe("whole service settings saves", () => {
         ...departmentSettings,
         releaseReminderMinutes,
       });
-      expect(saved.status).toBe(204);
+      expect(saved.status).toBe(200);
       expect((await reminderMinutes(fx))[fx.departmentId]).toBe(releaseReminderMinutes);
     }
   });
@@ -712,7 +735,7 @@ describe("whole service settings saves", () => {
       fx.managerCookie,
       departmentSettings,
     );
-    expect(saved.status).toBe(204);
+    expect(saved.status).toBe(200);
     expect((await reminderMinutes(fx))[fx.departmentId]).toBe(15);
   });
 
@@ -741,7 +764,7 @@ describe("whole service settings saves", () => {
       ...departmentSettings,
       releaseReminderMinutes: 5,
     });
-    expect(saved.status).toBe(204);
+    expect(saved.status).toBe(200);
     const minutes = await reminderMinutes(fx);
     expect(minutes[fx.departmentId]).toBe(5);
     expect(minutes[other.id]).toBe(10);
@@ -772,7 +795,7 @@ describe("whole service settings saves", () => {
         { name: "Dessert?", start: "course_served", courseId: mains, minutes: 10 },
       ],
     });
-    expect(saved.status).toBe(204);
+    expect(saved.status).toBe(200);
     const model = await modelSteps(fx);
     expect(model.serviceSteps).toEqual([
       {
@@ -818,7 +841,7 @@ describe("whole service settings saves", () => {
       fx.managerCookie,
       departmentSettings,
     );
-    expect(saved.status).toBe(204);
+    expect(saved.status).toBe(200);
     expect((await modelSteps(fx)).serviceSteps).toEqual(before);
   });
 
@@ -3406,7 +3429,7 @@ it("saves combined department settings onto a deleted name", async () => {
     ...departmentSettings,
     name: "Taken",
   });
-  expect(response.status).toBe(204);
+  expect(response.status).toBe(200);
   expect(
     await db.select().from(departments).where(eq(departments.locationId, fx.locationId)),
   ).toEqual(
@@ -3660,7 +3683,7 @@ describe("department editor owns service settings separately from receipt policy
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
     });
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(200);
     const after = await settingsSnapshot(fx);
     expect(
       after.model.salePolicies.departments.find(
@@ -3717,7 +3740,7 @@ it("repairing an absent department policy preserves the previously read receipt 
     paidWhen: "ticket_then_pay",
     collectionNumber: "numbered",
   });
-  expect(response.status).toBe(204);
+  expect(response.status).toBe(200);
   const after = await settingsSnapshot(fx);
   expect(
     after.model.salePolicies.departments.find(

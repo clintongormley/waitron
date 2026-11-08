@@ -493,6 +493,24 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         return fn(tx);
       });
 
+    const readModel = async (tx: Transaction) => ({
+      departments: (await listDepartments(tx)).filter((department) => department.active),
+      zones: await listServiceZones(tx, { withActiveFlag: true }),
+      salePolicies: await listSalePolicies(tx),
+      readiness: [
+        ...(await listVenueReadiness(tx)),
+        ...(ctx.cfg.operationDescriptionRequired === true &&
+        ctx.cfg.operationDescriptionDefault === undefined
+          ? await listDepartmentReceiptReadiness(tx)
+          : []),
+      ],
+      releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx),
+      needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx),
+      lateSendManagerDepartmentIds: await listLateSendManagerDepartmentIds(tx),
+      serviceSteps: await listServiceSteps(tx),
+      courses: await listStepCourses(tx),
+    });
+
     mountFloorPlanSetRoutes(app, ctx, log, run);
 
     app.get("/management-api/venue-service/stations/:stationId/service-times", (c) =>
@@ -729,23 +747,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.get("/management-api/venue-service", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const result = await gated(sessionId, async (tx) => ({
-          departments: (await listDepartments(tx)).filter((department) => department.active),
-          zones: await listServiceZones(tx, { withActiveFlag: true }),
-          salePolicies: await listSalePolicies(tx),
-          readiness: [
-            ...(await listVenueReadiness(tx)),
-            ...(ctx.cfg.operationDescriptionRequired === true &&
-            ctx.cfg.operationDescriptionDefault === undefined
-              ? await listDepartmentReceiptReadiness(tx)
-              : []),
-          ],
-          releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx),
-          needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx),
-          lateSendManagerDepartmentIds: await listLateSendManagerDepartmentIds(tx),
-          serviceSteps: await listServiceSteps(tx),
-          courses: await listStepCourses(tx),
-        }));
+        const result = await gated(sessionId, readModel);
         return c.json(result);
       }),
     );
@@ -808,8 +810,11 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ? {}
             : { serviceSteps: requireServiceSteps(body.serviceSteps) }),
         };
-        await gated(sessionId, (tx) => saveDepartmentEditSettings(tx, departmentId, input));
-        return c.body(null, 204);
+        const result = await gated(sessionId, async (tx) => {
+          await saveDepartmentEditSettings(tx, departmentId, input);
+          return readModel(tx);
+        });
+        return c.json(result);
       }),
     );
 

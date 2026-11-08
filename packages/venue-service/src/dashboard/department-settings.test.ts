@@ -4,11 +4,14 @@ import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import { VenueServiceApi, type VenueServiceView } from "./client.js";
+import { VenueServiceApi, type VenueServiceView, type DepartmentSettingsInput } from "./client.js";
 import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import type { DepartmentSettings } from "./department-settings.js";
 import "./department-settings.js";
-import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
+import {
+  selectDepartmentTab,
+  departmentSettingsAnswer,
+} from "../testing/department-edit-fixture.js";
 const model: VenueServiceView = {
   departments: [
     {
@@ -145,6 +148,7 @@ async function mount(view = structuredClone(model), failure?: unknown) {
     }
     writes.push({ path, method: method!, body });
     if (failure) throw failure;
+    return departmentSettingsAnswer(el.model!, el.departmentId, body as DepartmentSettingsInput);
   }) as DashboardRequest);
   const host = document.createElement("div");
   applyTokens(host);
@@ -607,7 +611,11 @@ it("hiding transfers during a pending save releases the action and never sends h
   el.api = new VenueServiceApi(((_path, method, body) => {
     if (method === "GET") return Promise.resolve([]);
     sent.push(body);
-    return new Promise<void>((r) => (finish = r));
+    return new Promise<unknown>(
+      (r) =>
+        (finish = () =>
+          r(departmentSettingsAnswer(el.model!, el.departmentId, body as DepartmentSettingsInput))),
+    );
   }) as DashboardRequest);
   await change(el, "name", "Submitted");
   save(el).click();
@@ -2171,7 +2179,7 @@ for (const refresh of ["before any refreshed model arrives", "after the refresh 
     await expect.poll(() => writes.length).toBe(2);
     expect((writes[1]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
       ...SENT_STEPS,
-      { name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
+      { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
       { name: "Tea", start: "after_previous", courseId: null, minutes: 0 },
     ]);
   });
@@ -2234,10 +2242,42 @@ function holdSaves(el: DepartmentSettings) {
   el.api = new VenueServiceApi(((_path, method, body) => {
     if (method === "GET") return Promise.resolve([]);
     sent.push(body);
-    return new Promise<void>((resolve) => finishes.push(resolve));
+    return new Promise<unknown>((resolve) =>
+      finishes.push(() =>
+        resolve(
+          departmentSettingsAnswer(el.model!, el.departmentId, body as DepartmentSettingsInput),
+        ),
+      ),
+    );
   }) as DashboardRequest);
   return { sent, finish: () => finishes.shift()!() };
 }
+it("the save reply attaches a new step's id without discarding edits made while it waited", async () => {
+  const { el } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  const { sent, finish } = holdSaves(el);
+  await addStep(el);
+  await editStep(el, 3, "Name", "Coffee");
+  save(el).click();
+  await expect.poll(() => sent.length).toBe(1);
+  await editStep(el, 3, "Minutes", "5");
+  await change(el, "name", "Restaurant revised");
+  finish();
+  await expect.poll(() => cancelButton(el).disabled).toBe(false);
+  await settled(el);
+  expect(field(el, "name").value).toBe("Restaurant revised");
+  expect(stepControl(el, 3, "Minutes").value).toBe("5");
+  expect(stepList(el).steps[3]!.id).toBe("s4");
+  expect(el.hasUnsavedChanges).toBe(true);
+  save(el).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toMatchObject({
+    name: "Restaurant revised",
+    serviceSteps: [...SENT_STEPS, { id: "s4", ...COFFEE, minutes: 5 }],
+  });
+  finish();
+});
 const cancelButton = (el: DepartmentSettings) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=cancel-editor]")!;
 for (const other of ["renamed the first step", "renamed the first step and the trading name"]) {
@@ -2258,7 +2298,7 @@ for (const other of ["renamed the first step", "renamed the first step and the t
     await editStep(el, 4, "Name", "Tea");
     save(el).click();
     await expect.poll(() => writes.length).toBe(2);
-    expect(sentSteps(writes[1]!.body)).toEqual([...SENT_STEPS, COFFEE, TEA]);
+    expect(sentSteps(writes[1]!.body)).toEqual([...SENT_STEPS, { id: "s4", ...COFFEE }, TEA]);
   });
 }
 it("after a save overrides another manager's older copy, a step added before the refresh lands is sent beside the saved step's id", async () => {
@@ -2301,7 +2341,7 @@ for (const during of ["nothing else is edited", "the department is renamed"]) {
     await editStep(el, 4, "Name", "Tea");
     save(el).click();
     await expect.poll(() => sent.length).toBe(2);
-    expect(sentSteps(sent[1])).toEqual([...SENT_STEPS, COFFEE, TEA]);
+    expect(sentSteps(sent[1])).toEqual([...SENT_STEPS, { id: "s4", ...COFFEE }, TEA]);
     if (during === "the department is renamed")
       expect(sent[1]).toMatchObject({ name: "Restaurant revised" });
     finish();

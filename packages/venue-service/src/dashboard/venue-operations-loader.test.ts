@@ -40,31 +40,39 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
   setLocale("en");
 });
-async function mount(path = "/manage/venue-operations") {
+async function mount(path = "/manage/venue-operations", initial = model()) {
   history.replaceState(null, "", path);
   setLocale("en");
-  let value = model();
+  let value = initial;
   let failRead = false;
   let failWrite = false;
   let pendingRead: Promise<VenueServiceView> | undefined;
+  let pendingSave: Promise<VenueServiceView> | undefined;
   const liveData = new LiveData();
-  const request = vi.fn(async (url: string, method = "GET") => {
-    if (method !== "GET") {
-      if (failWrite) throw { code: "connection.failed" };
-      return { id: "new" };
-    }
-    if (url === "/management-api/venue-service") {
-      if (pendingRead) {
-        const pending = pendingRead;
-        pendingRead = undefined;
-        return pending;
+  const request = vi.fn<(url: string, method?: string, body?: unknown) => Promise<unknown>>(
+    async (url, method = "GET") => {
+      if (method !== "GET") {
+        if (failWrite) throw { code: "connection.failed" };
+        if (url.endsWith("/settings") && pendingSave) {
+          const answer = pendingSave;
+          pendingSave = undefined;
+          return answer;
+        }
+        return url.endsWith("/settings") ? structuredClone(value) : { id: "new" };
       }
-      if (failRead) throw new Error("offline");
-      return structuredClone(value);
-    }
-    if (url === "/management-api/zones") return value.floorZones;
-    return [];
-  });
+      if (url === "/management-api/venue-service") {
+        if (pendingRead) {
+          const pending = pendingRead;
+          pendingRead = undefined;
+          return pending;
+        }
+        if (failRead) throw new Error("offline");
+        return structuredClone(value);
+      }
+      if (url === "/management-api/zones") return value.floorZones;
+      return [];
+    },
+  );
   const app = document.createElement("a10-load-ownership-app") as App;
   hosts.push(app);
   applyTokens(app);
@@ -94,6 +102,13 @@ async function mount(path = "/manage/venue-operations") {
     },
     writeFailure: (failed: boolean) => {
       failWrite = failed;
+    },
+    deferSave: () => {
+      let resolve!: (value: VenueServiceView) => void;
+      pendingSave = new Promise((yes) => {
+        resolve = yes;
+      });
+      return { resolve };
     },
     deferRead: () => {
       let resolve!: (value: VenueServiceView) => void;
@@ -509,4 +524,188 @@ it("receipt changes refresh department description setup passively", async () =>
   value(model());
   liveData.invalidate([{ type: "department_receipts", id: "d1" }]);
   await expect.poll(() => shell.model.readiness).toEqual([]);
+});
+
+async function openSettings(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
+  const editor = shell.shadowRoot!.querySelector("department-edit-dialog")!;
+  await editor.updateComplete;
+  const form = editor.shadowRoot!.querySelector("department-settings")!;
+  await form.updateComplete;
+  return form;
+}
+const inputValue = (form: HTMLElementTagNameMap["department-settings"], name: string) =>
+  form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!.value;
+function submit(form: HTMLElementTagNameMap["department-settings"]) {
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+}
+async function reopen(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+  emit(shell.shadowRoot!.querySelector("departments-list")!, "open-department", {
+    departmentId: "d1",
+  });
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeTruthy();
+  return openSettings(shell);
+}
+it.each(["live", "one-off"] as const)(
+  "an older %s read cannot take back a saved department name when its refresh fails",
+  async (kind) => {
+    const { shell, request, liveData, value, deferRead, deferSave, readFailure } = await mount(
+      "/manage/venue-operations/department/d1",
+    );
+    const form = await openSettings(shell);
+    const saved = deferSave();
+    const pending = deferRead();
+    if (kind === "live") await invalidate(liveData, request);
+    value(model("Restaurant revised"));
+    emit(form.shadowRoot!.querySelector("[name=name]")!, "wt-change", {
+      value: "Restaurant revised",
+    });
+    await form.updateComplete;
+    submit(form);
+    await expect
+      .poll(() =>
+        request.mock.calls.some(([path, method]) => path.endsWith("/settings") && method === "PUT"),
+      )
+      .toBe(true);
+    if (kind === "one-off") {
+      emit(shell.shadowRoot!.querySelector("department-edit-dialog")!, "written");
+      await expect.poll(() => reads(request)).toBe(2);
+    }
+    readFailure(true);
+    saved.resolve(model("Restaurant revised"));
+    pending.resolve(model("Restaurant"));
+    await expect.poll(() => shell.model.departments[0]!.name).toBe("Restaurant revised");
+    const shown = await reopen(shell);
+    await expect.poll(() => inputValue(shown, "name")).toBe("Restaurant revised");
+    value(model("Another manager"));
+    readFailure(false);
+    await invalidate(liveData, request);
+    await expect.poll(() => inputValue(shown, "name")).toBe("Another manager");
+  },
+);
+it("an older live copy cannot remove a saved Coffee step from the next save", async () => {
+  const initial = model();
+  initial.serviceSteps = [
+    { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
+    {
+      id: "s2",
+      departmentId: "d1",
+      name: "Take order",
+      start: "after_previous",
+      courseId: null,
+      minutes: 2,
+    },
+    {
+      id: "s3",
+      departmentId: "d1",
+      name: "Dessert?",
+      start: "after_previous",
+      courseId: null,
+      minutes: 10,
+    },
+  ];
+  const { shell, request, liveData, value, deferRead, readFailure } = await mount(
+    "/manage/venue-operations/department/d1/view/service",
+    initial,
+  );
+  const form = await openSettings(shell);
+  const steps = form.shadowRoot!.querySelector("department-service-steps")!;
+  await steps.updateComplete;
+  steps.shadowRoot!.querySelector<HTMLElement>("[data-test=add-service-step]")!.click();
+  await steps.updateComplete;
+  await form.updateComplete;
+  await steps.updateComplete;
+  const names =
+    steps.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>("[name=serviceStepName]");
+  emit(names[3]!, "wt-change", { value: "Coffee" });
+  await form.updateComplete;
+  const pending = deferRead();
+  await invalidate(liveData, request);
+  const saved = structuredClone(initial);
+  saved.serviceSteps.push({
+    id: "coffee-saved",
+    departmentId: "d1",
+    name: "Coffee",
+    start: "after_previous",
+    courseId: null,
+    minutes: 0,
+  });
+  value(saved);
+  readFailure(true);
+  submit(form);
+  await expect
+    .poll(() => request.mock.calls.filter(([, method]) => method === "PUT").length)
+    .toBe(1);
+  pending.resolve(initial);
+  await expect
+    .poll(() => shell.model.serviceSteps.map((step) => step.name))
+    .toEqual(["Set up", "Take order", "Dessert?", "Coffee"]);
+  const shown = await reopen(shell);
+  emit(shown.shadowRoot!.querySelector("[name=tradingName]")!, "wt-change", {
+    value: "New receipt name",
+  });
+  await shown.updateComplete;
+  const list = shown.shadowRoot!.querySelector("department-service-steps")!;
+  await list.updateComplete;
+  expect(list.steps.map((step) => step.name)).toEqual([
+    "Set up",
+    "Take order",
+    "Dessert?",
+    "Coffee",
+  ]);
+  list.shadowRoot!.querySelector<HTMLElement>("[data-test=add-service-step]")!.click();
+  await shown.updateComplete;
+  await list.updateComplete;
+  emit(list.shadowRoot!.querySelectorAll("[name=serviceStepName]")[4] as HTMLElement, "wt-change", {
+    value: "Tea",
+  });
+  await shown.updateComplete;
+  submit(shown);
+  await expect
+    .poll(() => request.mock.calls.filter(([, method]) => method === "PUT").length)
+    .toBe(2);
+  const second = request.mock.calls.filter(([, method]) => method === "PUT")[1]![2] as {
+    serviceSteps: unknown[];
+  };
+  expect(second.serviceSteps).toEqual([
+    ...initial.serviceSteps.map(({ id, name, start, courseId, minutes }) => ({
+      id,
+      name,
+      start,
+      courseId,
+      minutes,
+    })),
+    { id: "coffee-saved", name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
+    { name: "Tea", start: "after_previous", courseId: null, minutes: 0 },
+  ]);
+});
+
+it("a department save answered after leaving reaches its shell without restarting reads", async () => {
+  const { shell, loader, request, value, deferSave } = await mount(
+    "/manage/venue-operations/department/d1",
+  );
+  const form = await openSettings(shell);
+  const saved = deferSave();
+  emit(form.shadowRoot!.querySelector("[name=name]")!, "wt-change", {
+    value: "Restaurant revised",
+  });
+  await form.updateComplete;
+  submit(form);
+  await expect.poll(() => request.mock.calls.some(([, method]) => method === "PUT")).toBe(true);
+  loader.remove();
+  const before = reads(request);
+  value(model("Restaurant revised"));
+  saved.resolve(model("Restaurant revised"));
+  await expect.poll(() => shell.model.departments[0]!.name).toBe("Restaurant revised");
+  await loader.updateComplete;
+  expect(reads(request)).toBe(before);
+  const second = document.createElement("a10-venue-operations-loader") as VenueOperationsLoader;
+  second.api = loader.api;
+  hosts.push(second);
+  document.body.append(second);
+  await expect
+    .poll(
+      () => second.shadowRoot?.querySelector("venue-departments-shell")?.model.departments[0]!.name,
+    )
+    .toBe("Restaurant revised");
 });

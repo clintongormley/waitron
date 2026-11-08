@@ -48,7 +48,7 @@ export class VenueOperationsLoader extends LitElement {
     super.disconnectedCallback();
   }
   protected override willUpdate() {
-    if (this.api && this.api !== this.#watchingApi) {
+    if (this.isConnected && this.api && this.api !== this.#watchingApi) {
       this.#watchingApi = this.api;
       void this.#load();
     }

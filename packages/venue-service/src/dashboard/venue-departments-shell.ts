@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, navigationGuardFor, UrlStateController } from "@waitron/ui";
-import type { VenueServiceApi, VenueServiceView } from "./client.js";
+import type { VenueServiceApi, VenueServiceModel, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import "./departments-list.js";
 import "./department-edit-dialog.js";
@@ -58,6 +58,16 @@ export class VenueDepartmentsShell extends LitElement {
   @state() private busy = false;
   @state() private loadError = "";
   @state() private actionError = "";
+  readonly #publishSaved = (answer: VenueServiceModel): void => {
+    this.model = { ...this.model, ...answer };
+    this.dispatchEvent(
+      new CustomEvent("model-change", {
+        detail: { model: this.model },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
   #generation = {};
   #refreshAgain = false;
   #refreshActive?: Promise<boolean>;
@@ -506,6 +516,7 @@ export class VenueDepartmentsShell extends LitElement {
                 department.id,
                 html`<department-edit-dialog
                   .api=${this.api}
+                  .publishSaved=${this.#publishSaved}
                   .model=${this.model}
                   .departmentId=${department.id}
                   .refreshing=${this.busy}

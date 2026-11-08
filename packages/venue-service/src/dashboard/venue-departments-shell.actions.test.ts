@@ -60,7 +60,7 @@ async function mount(
     if (method !== "GET") {
       if (writeFailure) throw writeFailure;
       await write;
-      return { id: "new" };
+      return url.endsWith("/settings") ? structuredClone(loaded) : { id: "new" };
     }
     if (url === "/management-api/venue-service") {
       await read;
