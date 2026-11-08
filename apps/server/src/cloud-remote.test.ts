@@ -255,16 +255,19 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     });
   try {
     expect(server, JSON.stringify(lines)).toBeDefined();
-    // TLS setup shares busy CI workers; retain the listener log when readiness fails.
-    port = await vi.waitFor(
+    const outcome = await vi.waitFor(
       () => {
-        const listening = lines.find(([, event]) => event === "server.listening");
-        expect(listening, JSON.stringify(lines)).toBeDefined();
-        expect(listening![2]?.port, JSON.stringify(lines)).toBeGreaterThan(0);
-        return Number(listening![2]!.port);
+        const entry = lines.find(
+          ([, event]) => event === "server.listening" || event === "server.listen_failed",
+        );
+        expect(entry, JSON.stringify(lines)).toBeDefined();
+        return entry!;
       },
       { timeout: 10_000 },
     );
+    expect(outcome[1], JSON.stringify(lines)).toBe("server.listening");
+    expect(outcome[2]?.port, JSON.stringify(lines)).toBeGreaterThan(0);
+    port = Number(outcome[2]!.port);
     expect(await ask("/manage")).toEqual({ status: 200, text: "dashboard" });
     expect((await ask("/setup")).status).toBe(404);
     await server!.close();

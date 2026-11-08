@@ -169,12 +169,6 @@ could happen; `startS3TestServer` now recovers from it. A sibling scan found two
 That is not two draws before either bind. The remaining work concerns the release-to-bind
 interval, including single draws.
 
-On 8 November 2026, `cloud-remote.test.ts` reproduced a staff TLS readiness refusal by
-holding its released port (`EADDRINUSE`). Its listener now binds port zero and requests use the
-reported port; readiness failures include the captured listener log. The original CI failure
-(job 128585384324) contained no listener fields, so its cause remains unknown. The other cases
-in that file do not start a listener with a released port. The remaining A80 work above stays open.
-
 ## A1251: setup-test cleanup after a listener-readiness refusal
 
 The retrospective review of [PR #2143](https://github.com/clintongormley/waitron/pull/2143)
