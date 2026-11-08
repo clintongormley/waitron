@@ -12,7 +12,7 @@ import {
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
-import { WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
+import { WORKFORCE_ES_MIGRATIONS, WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
 import { jobOrigin } from "@waitron/shared";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -20,7 +20,7 @@ import { seedAttendanceExport } from "../test/attendance-export-fixture.js";
 import { mountManagementAttendanceApi } from "./management-attendance-api.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
 });
 let fixture: Awaited<ReturnType<typeof seedAttendanceExport>>;
 let staffCookie: string, managerCookie: string, app: Hono;
