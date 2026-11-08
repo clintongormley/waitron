@@ -391,7 +391,9 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Private naming sites remain in the till's boot, counter-payment and split-selection suites,
   shared fixture names in the server split suites, and shared helper consumers
-  such as `made-here.test.ts`. Moved-dish names remain in the till's
+  such as `made-here.test.ts`. Record and submission names also remain in server seed,
+  snapshot and fiscal-identity suites; check protected fixtures and fiscal-provider contracts.
+  Moved-dish names remain in the till's
   `till-table-order-screen.move-dishes.test.ts`.
   Remaining accented bindings include `portion-selection.test.ts`, `counter-portion-rows.test.ts`
   and `till-ticket-view.test.ts`.
@@ -779,6 +781,11 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   Private drink bindings remain in `sale-till-source.receipt.test.ts`,
   `issuance-pass.fiscal-identity.test.ts`, `list-unit-price.fiscal-identity.test.ts` and
   `served-at-huella.test.ts`; audit their fiscal fixture boundaries before renaming.
+  Other record and submission names, including `registros` and `envios`, remain in server seed,
+  provisioning, receipt, clock and fiscal-identity suites. Examples include
+  `scripts/demo-seed/seed-sales.test.ts`, `src/provision.test.ts`, `src/orders-reprint.test.ts`,
+  `src/sale-clock.test.ts` and `src/full-comp.fiscal-identity.test.ts` under `apps/server/`.
+  Check protected golden fixtures and fiscal-provider contracts before changing those names.
   Keep accented search fixtures unchanged. Shared helper display samples and their consumers
   stay with A976.
   Other fixture text stays with A976, including catalogue
