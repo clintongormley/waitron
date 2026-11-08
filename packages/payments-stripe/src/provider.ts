@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { AppError, compareDecimal, decimal, isAppError } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, isAppError, subtractDecimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { UNIQUE_VIOLATION, refusalOn, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -190,15 +190,16 @@ export class StripeTerminalProvider implements PaymentProvider {
     );
 
     if (outcome.kind === "unknown") {
+      const row = (await this.inTransaction((tx) => getPaymentByRef(tx, key)))!;
       return {
         provider: PROVIDER,
         paymentRef,
-        state: "attempting",
+        state: row.state,
         ...((await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
           ? { captureMismatch: true as const }
           : {}),
-        amount: params.amount,
-        settledAt: null,
+        amount: decimal(row.amount),
+        settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       };
     }
 
@@ -217,9 +218,18 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
     const save = () =>
       this.inTransaction(async (tx) => {
-        if (await hasCaptureMismatch(tx, key)) return (await getPaymentByRef(tx, key))!;
+        const current = await getPaymentByRef(tx, key);
+        if (current?.state !== "attempting") return current!;
         if (outcome.kind === "captured") {
-          if (compareDecimal(outcome.amount, params.amount) !== 0) {
+          if (
+            compareDecimal(outcome.amount, params.amount) !== 0 &&
+            !(
+              compareDecimal(outcome.amount, params.amount) > 0 &&
+              outcome.tipAmount !== undefined &&
+              compareDecimal(outcome.tipAmount, subtractDecimal(outcome.amount, params.amount)) ===
+                0
+            )
+          ) {
             await recordCaptureMismatch(
               tx,
               this.opts.captureAlerts,
@@ -232,12 +242,13 @@ export class StripeTerminalProvider implements PaymentProvider {
               },
               outcome.settledAt,
             );
-            return (await getPaymentByRef(tx, key))!;
           }
+          if (compareDecimal(outcome.amount, decimal("0")) === 0) return failAttempting(tx, key);
           return captureAttempting(tx, {
             ...key,
             settledAt: outcome.settledAt,
             externalRef: outcome.piId,
+            amount: outcome.amount,
           });
         }
         return failAttempting(tx, key);
@@ -247,11 +258,10 @@ export class StripeTerminalProvider implements PaymentProvider {
       provider: PROVIDER,
       paymentRef,
       state: row.state,
-      ...(row.state === "attempting" &&
-      (await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
+      ...((await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
         ? { captureMismatch: true as const }
         : {}),
-      amount: params.amount,
+      amount: decimal(row.amount),
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       ...(outcome.kind === "failed" &&
       row.state === "failed" &&
@@ -300,13 +310,12 @@ export class StripeTerminalProvider implements PaymentProvider {
         pending = true;
         break;
       }
-      const key = { provider: PROVIDER, paymentRef: row.paymentRef };
       try {
         const result = await this.resolveInactiveAttempt(row.paymentRef, now, null);
         incidentsRaised += result.incidentsRaised ?? 0;
         if (result.outcome === "captured") forwarded++;
         else if (result.outcome === "failed") declined++;
-        else if (!(await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))) pending = true;
+        else pending = true;
       } catch (error) {
         if (!isAppError(error) || error.code !== "payment.not_found") throw error;
       }
@@ -325,7 +334,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     idempotencyKey: string,
     claim: (piId: string) => Promise<"stamped" | "held_elsewhere" | "not_attempting">,
   ): Promise<
-    | { kind: "captured"; settledAt: Date; piId: string; amount: Decimal }
+    | { kind: "captured"; settledAt: Date; piId: string; amount: Decimal; tipAmount?: Decimal }
     | { kind: "unknown" }
     | { kind: "failed"; failureReason?: string }
     | { kind: "unclaimed"; claim: "held_elsewhere" | "not_attempting" }
@@ -358,6 +367,8 @@ export class StripeTerminalProvider implements PaymentProvider {
             settledAt: new Date(),
             piId,
             amount: fromMinorUnits(intent.amountReceived),
+            tipAmount:
+              intent.tipAmount === undefined ? undefined : fromMinorUnits(intent.tipAmount),
           };
         }
         if (o.status === "failed") {
@@ -420,8 +431,6 @@ export class StripeTerminalProvider implements PaymentProvider {
     const key = { provider: PROVIDER, paymentRef };
     const row = await this.inTransaction((tx) => getPaymentByRef(tx, key));
     if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
-    if (await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
-      return { outcome: "unknown", reason: "ambiguous" };
 
     const settle = { key, now, personId };
     if (row.externalRef === null) {
@@ -444,7 +453,9 @@ export class StripeTerminalProvider implements PaymentProvider {
 
   private async readIntent(
     piId: string,
-  ): Promise<{ id: string; status: string; amountReceived: number } | undefined> {
+  ): Promise<
+    { id: string; status: string; amountReceived: number; tipAmount?: number } | undefined
+  > {
     try {
       return await this.opts.client.retrievePaymentIntent(piId);
     } catch {
@@ -458,40 +469,18 @@ export class StripeTerminalProvider implements PaymentProvider {
   private async settleFrom(
     settle: Settle,
     amount: string,
-    intent: { id: string; status: string; amountReceived: number },
+    intent: { id: string; status: string; amountReceived: number; tipAmount?: number },
   ): Promise<Resolution> {
     if (intent.status === "succeeded") {
-      if (compareDecimal(fromMinorUnits(intent.amountReceived), decimal(amount)) !== 0) {
-        const raised = await this.inTransaction(async (tx) => {
-          const row = await getPaymentByRef(tx, settle.key);
-          if (row?.state !== "attempting") return false;
-          const [payment] = await tx
-            .select({ workingOrderId: payments.workingOrderId })
-            .from(payments)
-            .where(eq(payments.id, row.id));
-          return recordCaptureMismatch(
-            tx,
-            this.opts.captureAlerts,
-            {
-              ...settle.key,
-              workingOrderId: payment!.workingOrderId,
-              externalRef: intent.id,
-              requestedAmount: amount,
-              reportedAmount: fromMinorUnits(intent.amountReceived),
-            },
-            settle.now,
-          );
-        });
-        return {
-          outcome: "unknown",
-          reason: "ambiguous",
-          providerStatus: intent.status,
-          incidentsRaised: raised ? 1 : 0,
-        };
-      }
       return this.resolveRow(
         settle,
-        { outcome: "captured", externalRef: intent.id },
+        {
+          outcome: "captured",
+          externalRef: intent.id,
+          amount: fromMinorUnits(intent.amountReceived),
+          requestedAmount: decimal(amount),
+          tipAmount: intent.tipAmount === undefined ? undefined : fromMinorUnits(intent.tipAmount),
+        },
         intent.status,
       );
     }
@@ -514,29 +503,74 @@ export class StripeTerminalProvider implements PaymentProvider {
   private async resolveRow(
     { key, now, personId }: Settle,
     resolved:
-      | { outcome: "captured"; externalRef: string }
+      | {
+          outcome: "captured";
+          externalRef: string;
+          amount: Decimal;
+          requestedAmount: Decimal;
+          tipAmount?: Decimal;
+        }
       | { outcome: "failed"; cancelledAtProvider: boolean },
     providerStatus: string | null,
   ): Promise<Resolution> {
-    const blocked = await this.inTransaction(async (tx) => {
-      if (await hasCaptureMismatch(tx, key)) return true;
+    return this.inTransaction(async (tx) => {
+      const row = await getPaymentByRef(tx, key);
+      if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
+      let incidentsRaised = 0;
+      const captured =
+        resolved.outcome === "captured" && compareDecimal(resolved.amount, decimal("0")) > 0;
       if (resolved.outcome === "captured") {
-        await captureAttempting(tx, { ...key, settledAt: now, externalRef: resolved.externalRef });
+        const extra = subtractDecimal(resolved.amount, resolved.requestedAmount);
+        const expectedTip =
+          compareDecimal(extra, decimal("0")) > 0 &&
+          resolved.tipAmount !== undefined &&
+          compareDecimal(extra, resolved.tipAmount) === 0;
+        if (compareDecimal(resolved.amount, resolved.requestedAmount) !== 0 && !expectedTip) {
+          const [payment] = await tx
+            .select({ workingOrderId: payments.workingOrderId })
+            .from(payments)
+            .where(eq(payments.id, row.id));
+          if (
+            await recordCaptureMismatch(
+              tx,
+              this.opts.captureAlerts,
+              {
+                ...key,
+                workingOrderId: payment!.workingOrderId,
+                externalRef: resolved.externalRef,
+                requestedAmount: resolved.requestedAmount,
+                reportedAmount: resolved.amount,
+              },
+              now,
+            )
+          )
+            incidentsRaised++;
+        }
+      }
+      if (resolved.outcome === "captured" && captured) {
+        await captureAttempting(tx, {
+          ...key,
+          settledAt: now,
+          externalRef: resolved.externalRef,
+          amount: resolved.amount,
+        });
       } else {
         await failAttempting(tx, key);
       }
+      const outcome = captured ? ("captured" as const) : ("failed" as const);
+      const cancelledAtProvider = resolved.outcome === "failed" && resolved.cancelledAtProvider;
       await recordAttemptResolution(tx, key, {
         personId,
-        outcome: resolved.outcome,
-        cancelledAtProvider: resolved.outcome === "failed" && resolved.cancelledAtProvider,
+        outcome,
+        cancelledAtProvider,
         providerStatus,
         resolvedAt: now,
       });
+      return {
+        ...(outcome === "captured" ? { outcome } : { outcome, cancelledAtProvider }),
+        ...(incidentsRaised === 0 ? {} : { incidentsRaised }),
+      };
     });
-    if (blocked) return { outcome: "unknown", reason: "ambiguous" };
-    return resolved.outcome === "captured"
-      ? { outcome: "captured" }
-      : { outcome: "failed", cancelledAtProvider: resolved.cancelledAtProvider };
   }
 
   async sendRefund(req: RefundSend): Promise<RefundAnswer> {

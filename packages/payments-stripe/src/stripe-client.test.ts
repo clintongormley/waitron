@@ -41,6 +41,26 @@ describe("stripeClient's PaymentIntent binding", () => {
     expect(calls).toEqual(["retrieve pi_1"]);
   });
 
+  it.each([undefined, {}, { tip: {} }, { tip: { amount: 90 } }] as (
+    { tip?: { amount?: number } } | undefined
+  )[])("returns only a reported Stripe tip amount: %j", async (amount_details) => {
+    const client = stripeClient({
+      paymentIntents: {
+        retrieve: () =>
+          Promise.resolve({
+            id: "pi_tip",
+            status: "succeeded",
+            amount: 1210,
+            amount_received: 1300,
+            amount_details,
+          }),
+      },
+    } as unknown as Stripe);
+    expect(
+      ((await client.retrievePaymentIntent("pi_tip")) as { tipAmount?: number }).tipAmount,
+    ).toBe(amount_details?.tip?.amount);
+  });
+
   it("cancelPaymentIntent cancels through the SDK and reports the resulting status", async () => {
     const calls: string[] = [];
     const client = stripeClient(fakeStripe(calls));

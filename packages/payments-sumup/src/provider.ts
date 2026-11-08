@@ -188,14 +188,13 @@ export class SumUpCloudProvider implements PaymentProvider {
         foreignTransactionId: paymentRef,
       });
     } catch {
-      return this.pendingResult(paymentRef, params.amount);
+      return this.pendingResult(paymentRef);
     }
     if (!created.accepted) {
-      const row = await this.inTransaction(async (tx) =>
-        (await hasCaptureMismatch(tx, key))
-          ? (await getPaymentByRef(tx, key))!
-          : failAttempting(tx, key),
-      );
+      const row = await this.inTransaction(async (tx) => {
+        const current = (await getPaymentByRef(tx, key))!;
+        return current.state === "attempting" ? failAttempting(tx, key) : current;
+      });
       return {
         provider: SUMUP_PROVIDER,
         paymentRef,
@@ -204,8 +203,8 @@ export class SumUpCloudProvider implements PaymentProvider {
         (await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
           ? { captureMismatch: true as const }
           : {}),
-        amount: params.amount,
-        settledAt: null,
+        amount: decimal(row.amount),
+        settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       };
     }
 
@@ -219,12 +218,13 @@ export class SumUpCloudProvider implements PaymentProvider {
 
     // T2 — only a captured or failed outcome is a basis for it.
     if (outcome.kind === "pending" || outcome.kind === "deferred") {
-      return this.pendingResult(paymentRef, params.amount);
+      return this.pendingResult(paymentRef);
     }
     const card = outcome.kind === "captured" ? outcome.card : undefined;
     const save = () =>
       this.inTransaction(async (tx) => {
-        if (await hasCaptureMismatch(tx, key)) return (await getPaymentByRef(tx, key))!;
+        const current = await getPaymentByRef(tx, key);
+        if (current?.state !== "attempting") return current!;
         if (outcome.kind === "captured") {
           if (compareDecimal(outcome.amount, params.amount) !== 0) {
             await recordCaptureMismatch(
@@ -239,13 +239,14 @@ export class SumUpCloudProvider implements PaymentProvider {
               },
               outcome.settledAt,
             );
-            return (await getPaymentByRef(tx, key))!;
           }
+          if (compareDecimal(outcome.amount, decimal("0")) === 0) return failAttempting(tx, key);
           return captureAttempting(tx, {
             ...key,
             settledAt: outcome.settledAt,
             externalRef: outcome.transactionId,
             card,
+            amount: outcome.amount,
           });
         }
         return failAttempting(tx, key);
@@ -255,26 +256,28 @@ export class SumUpCloudProvider implements PaymentProvider {
       provider: SUMUP_PROVIDER,
       paymentRef,
       state: row.state,
-      ...(row.state === "attempting" &&
-      (await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
+      ...((await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))
         ? { captureMismatch: true as const }
         : {}),
-      amount: params.amount,
+      amount: decimal(row.amount),
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       card,
     };
   }
 
-  private async pendingResult(paymentRef: string, amount: Decimal): Promise<PaymentResult> {
+  private async pendingResult(paymentRef: string): Promise<PaymentResult> {
     const captureMismatch = await this.inTransaction((tx) =>
       hasCaptureMismatch(tx, { provider: SUMUP_PROVIDER, paymentRef }),
     );
+    const row = (await this.inTransaction((tx) =>
+      getPaymentByRef(tx, { provider: SUMUP_PROVIDER, paymentRef }),
+    ))!;
     return {
       provider: SUMUP_PROVIDER,
       paymentRef,
-      state: "attempting",
-      amount,
-      settledAt: null,
+      state: row.state,
+      amount: decimal(row.amount),
+      settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       ...(captureMismatch ? { captureMismatch: true as const } : {}),
     };
   }
@@ -315,7 +318,6 @@ export class SumUpCloudProvider implements PaymentProvider {
   forward(_now: Date): Promise<ForwardResult> {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
-  // Known amount mismatches stay attempting, including after their alert is handled.
   async resolvePending(
     now: Date,
     owners: CollectionOwners,
@@ -345,13 +347,11 @@ export class SumUpCloudProvider implements PaymentProvider {
         severity: "error",
         detectedAt: now,
       });
-    // Recheck evidence in the same transaction as the outcome; the lookup ran without the lock.
     const failWith = (
       key: { provider: string; paymentRef: string },
       status: string | null,
     ): Promise<{ resolved: boolean; raised: boolean }> =>
       this.inTransaction(async (tx) => {
-        if (await hasCaptureMismatch(tx, key)) return { resolved: false, raised: false };
         if ((await resolve(() => failAttempting(tx, key))) === undefined)
           return { resolved: false, raised: false };
         if (status === null) return { resolved: true, raised: false };
@@ -364,7 +364,6 @@ export class SumUpCloudProvider implements PaymentProvider {
         break;
       }
       const key = { provider: SUMUP_PROVIDER, paymentRef: row.paymentRef };
-      if (await this.inTransaction((tx) => hasCaptureMismatch(tx, key))) continue;
       let t: SumUpTransaction | null;
       try {
         t = await this.opts.client.findTransaction(
@@ -373,10 +372,9 @@ export class SumUpCloudProvider implements PaymentProvider {
             : { clientTransactionId: row.externalRef },
         );
       } catch {
-        if (!(await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))) deferred = true;
+        deferred = true;
         continue;
       }
-      if (await this.inTransaction((tx) => hasCaptureMismatch(tx, key))) continue;
       if (t === null) {
         if (now.getTime() - new Date(row.createdAt).getTime() < NOT_FOUND_GRACE_MS) {
           deferred = true;
@@ -401,7 +399,6 @@ export class SumUpCloudProvider implements PaymentProvider {
               incidentsRaised++;
             return false;
           }
-          if (await hasCaptureMismatch(tx, key)) return false;
           if (compareDecimal(outcome.amount, decimal(row.amount)) !== 0) {
             if (
               await recordCaptureMismatch(
@@ -418,6 +415,10 @@ export class SumUpCloudProvider implements PaymentProvider {
               )
             )
               incidentsRaised++;
+          }
+          if (compareDecimal(outcome.amount, decimal("0")) === 0) {
+            await failAttempting(tx, key);
+            declined++;
             return false;
           }
           await captureAttempting(tx, {
@@ -425,6 +426,7 @@ export class SumUpCloudProvider implements PaymentProvider {
             settledAt: outcome.settledAt,
             externalRef: outcome.transactionId,
             card: outcome.card,
+            amount: outcome.amount,
           });
           return true;
         });

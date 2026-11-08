@@ -139,32 +139,35 @@ describe("capture mismatch evidence", () => {
   });
 });
 
-it.each(["capture", "fail"])("the shared %s writer cannot end a known mismatch", async (action) => {
-  const seeded = await seedWorkingOrder(suite.db);
-  const key = { provider: "stripe", paymentRef: "shared-held" };
-  await withTransaction(suite.db, async (tx) => {
-    await insertAttempting(tx, {
-      ...key,
-      origin: deviceOrigin(seeded.deviceId),
-      workingOrderId: seeded.workingOrderId,
-      nodeId: seeded.nodeId,
-      amount: decimal("12.10"),
+it.each(["capture", "fail"])(
+  "the shared %s writer resolves a payment despite its mismatch alert",
+  async (action) => {
+    const seeded = await seedWorkingOrder(suite.db);
+    const key = { provider: "stripe", paymentRef: "shared-held" };
+    await withTransaction(suite.db, async (tx) => {
+      await insertAttempting(tx, {
+        ...key,
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
+        amount: decimal("12.10"),
+      });
+      await recordCaptureMismatch(
+        tx,
+        sink,
+        { ...mismatch(key.paymentRef), workingOrderId: seeded.workingOrderId },
+        now,
+      );
     });
-    await recordCaptureMismatch(
-      tx,
-      sink,
-      { ...mismatch(key.paymentRef), workingOrderId: seeded.workingOrderId },
-      now,
-    );
-  });
-  await expect(
-    withTransaction(suite.db, (tx) =>
-      action === "capture"
-        ? captureAttempting(tx, { ...key, settledAt: now, externalRef: "pi_final" })
-        : failAttempting(tx, key),
-    ),
-  ).rejects.toMatchObject({ code: "payment.capture_mismatch_unresolved" });
-});
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        action === "capture"
+          ? captureAttempting(tx, { ...key, settledAt: now, externalRef: "pi_final" })
+          : failAttempting(tx, key),
+      ),
+    ).resolves.toMatchObject({ state: action === "capture" ? "captured" : "failed" });
+  },
+);
 
 it("records the existing order number alongside the processor reference", async () => {
   const seeded = await seedWorkingOrder(suite.db);

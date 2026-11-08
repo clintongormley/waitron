@@ -85,25 +85,26 @@ const suite = useVenueDb({
 });
 
 describe("SumUpCloudProvider.collect", () => {
-  it.each(["0.00", "12.00", "13.00"])(
-    "does not report the requested amount as captured when SumUp reports %s",
-    async (amount) => {
+  it.each([
+    ["0.00", "failed", "12.50"],
+    ["12.00", "captured", "12.00"],
+    ["13.00", "captured", "13.00"],
+  ] as const)(
+    "records the actual amount or a zero failure when SumUp reports %s",
+    async (reported, state, amount) => {
       const { fake, provider, params, row } = await setup(suite);
       const findTransaction = fake.findTransaction.bind(fake);
       vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => {
         const transaction = await findTransaction(query);
-        return transaction === null ? null : { ...transaction, amount: decimal(amount) };
+        return transaction === null ? null : { ...transaction, amount: decimal(reported) };
       });
 
       const result = await provider.collect(params);
 
-      expect
-        .soft(result)
-        .toMatchObject({ state: "attempting", amount: params.amount, settledAt: null });
+      expect.soft(result).toMatchObject({ state, amount });
       expect(await row(result.paymentRef)).toMatchObject({
-        state: "attempting",
-        settledAt: null,
-        amount: params.amount,
+        state,
+        amount,
       });
     },
   );
@@ -498,6 +499,7 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
           baseUrl: `http://127.0.0.1:${port}`,
         }),
         db: suite.db,
+        captureAlerts,
         incidents: () => Promise.resolve(true),
       });
       expect(await provider.sendRefund(request("txn_1"))).toEqual(answer);

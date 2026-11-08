@@ -146,8 +146,8 @@ describe("Stripe unknown outcomes", () => {
     {
       status: "succeeded",
       received: 1209,
-      expected: "attempting",
-      forwarded: 0,
+      expected: "captured",
+      forwarded: 1,
       declined: 0,
       incidentsRaised: 1,
     },

@@ -94,10 +94,9 @@ export interface PaymentResult {
   provider: string;
   paymentRef: string;
   state: PaymentResultState;
-  /** A recorded amount mismatch keeps this attempt unresolved and stops provider checks. */
   captureMismatch?: true;
-  /** The requested amount for `collect`, the captured total for `void`/`refund`, or the amount
-   * refunded for `partialRefund`. A mismatch never rewrites the requested amount. */
+  /** The captured total on a successful `collect`, the requested total while pending or failed,
+   * the captured total for `void`/`refund`, or the amount refunded for `partialRefund`. */
   amount: Decimal;
   /** True only on an `accepted_offline` result, which awaits `forward()`. */
   offline?: boolean;
@@ -135,7 +134,6 @@ export interface CollectionOwners {
  * cancelled, so the working order's next card payment must not reuse it. `unknown`: the row is
  * untouched — the processor could not be asked (`unreachable`) or answered something that is
  * neither a charge nor a certain refusal (`ambiguous`, with its own status when it gave one).
- * A known amount mismatch stays `unknown` without asking the processor again.
  */
 export type AbandonedAttemptOutcome =
   | { outcome: "captured" }
@@ -251,7 +249,7 @@ export interface PaymentProvider {
   readonly provider: string;
   readonly capabilities: ProviderCapabilities;
 
-  /** An uncertain charge stays `attempting`; a known amount mismatch needs manual resolution. SumUp's
+  /** An uncertain charge stays `attempting`. SumUp's
    * and Stripe's terminal adapters throw `ChargeNotSavedError` (./charge-not-saved.ts) when saving a
    * charge their processor reported fails for a full disk; the on-device Stripe adapter and the
    * simulator do not. */
@@ -262,13 +260,12 @@ export interface PaymentProvider {
    * A provider with no device-local offline queue answers all-zeros. */
   forward(now: Date): Promise<ForwardResult>;
 
-  /** Resolve uncertain rows owned by this box. Known capture amount mismatches stay attempting
-   * without more processor reads. Other unresolved rows set `nextDueAt`; `forwarded` counts
+  /** Resolve uncertain rows owned by this box. Unresolved rows set `nextDueAt`; `forwarded` counts
    * captures and `declined` failures. An aborted pass leaves unasked rows for a later pass. */
   resolvePending(now: Date, owners: CollectionOwners, signal?: AbortSignal): Promise<ForwardResult>;
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller
-   * guarantees that. Known amount mismatches stay unresolved without a processor read. A `captured` or `failed` outcome
+   * guarantees that. A `captured` or `failed` outcome
    * records `audit`'s person in `payment_resolutions` in the same transaction that changes the row:
    * the order's next card payment reads that record to know the processor's payment is cancelled.
    * Throws `payment.not_found` when the row is missing or no longer `attempting`. Absent on an

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { fullDiskOnCaptureAlert } from "@waitron/payments/test/capture-alert-disk.js";
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, incidents, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { diskFullIn, decimal, deviceOrigin, workingOrderId } from "@waitron/shared";
@@ -54,133 +54,84 @@ async function setup() {
   return { client, make, params, row, attempt };
 }
 
-describe("Stripe capture amount evidence", () => {
-  it.each([0, 1200, 1300])(
-    "holds a sweep mismatch of %s cents and alerts both figures",
-    async (received) => {
-      const { make, attempt, row, params } = await setup();
-      const key = await attempt("succeeded", received);
-      expect(await make().resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
-        nextDueAt: null,
-        forwarded: 0,
-        declined: 0,
-        incidentsRaised: 1,
+it.each(["collect", "sweep"])("records actual Stripe amounts through %s", async (path) => {
+  for (const [received, tipAmount, state, amount, alertCount] of [
+    [1210, undefined, "captured", "12.10", 0],
+    [1200, undefined, "captured", "12.00", 1],
+    [1300, undefined, "captured", "13.00", 1],
+    [1300, 90, "captured", "13.00", 0],
+    [1300, 89, "captured", "13.00", 1],
+    [0, undefined, "failed", "12.10", 1],
+  ] as const) {
+    const { client, make, params, row, attempt } = await setup();
+    vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (id) => ({
+      id,
+      status: "succeeded",
+      amount: 1210,
+      amountReceived: received,
+      tipAmount,
+    }));
+    let paymentRef: string;
+    if (path === "collect") {
+      const result = await make().collect(params);
+      expect(result).toMatchObject({ state, amount });
+      paymentRef = result.paymentRef;
+    } else {
+      paymentRef = (await attempt("succeeded", received)).paymentRef;
+      expect(await make().resolvePending(now, await ownsEveryPayment(suite.db))).toMatchObject({
+        forwarded: state === "captured" ? 1 : 0,
+        declined: state === "failed" ? 1 : 0,
+        incidentsRaised: alertCount,
       });
-      expect(await row(key.paymentRef)).toMatchObject({
-        state: "attempting",
-        amount: "12.10",
-        settledAt: null,
-        externalRef: key.externalRef,
-      });
-      const alerts = await suite.db.select().from(incidents);
-      expect(alerts).toHaveLength(1);
-      expect(alerts[0]!.params).toEqual({
-        payments: [
-          {
-            ...key,
-            provider: "stripe",
-            workingOrderId: params.workingOrderId,
-            orderNumber: 1,
-            requestedAmount: "12.10",
-            reportedAmount: received === 0 ? "0.00" : received === 1200 ? "12.00" : "13.00",
-          },
-        ],
-      });
-    },
-  );
+    }
+    expect(await row(paymentRef)).toMatchObject({ state, amount });
+    const stored = await suite.db.select().from(payments);
+    expect(stored.find((p) => p.paymentRef === paymentRef)?.requestedAmount).toBe(1210);
+    const alerts = await suite.db.select().from(incidents);
+    const evidence = alerts
+      .flatMap((a) => (a.params.payments ?? []) as { paymentRef: string }[])
+      .filter((p) => p.paymentRef === paymentRef);
+    expect(evidence).toHaveLength(alertCount);
+  }
+});
 
-  it.each(["succeeded", "canceled", "requires_payment_method", "processing", "missing"])(
-    "never lets a later %s answer resolve or recheck an acknowledged mismatch",
-    async (status) => {
-      const { client, make, attempt, row } = await setup();
-      const key = await attempt("succeeded", 1200);
-      await make().resolvePending(now, await ownsEveryPayment(suite.db));
-      const [alert] = await suite.db.select().from(incidents);
-      if (alert !== undefined)
-        await withTransaction(suite.db, (tx) =>
-          captureAlerts.handle(tx, { id: alert.id, personId: null, handledAt: now }),
-        );
-      client.setIntent(key.externalRef, { status, amount: 1210, amountReceived: 1210 });
-      const read = vi.spyOn(client, "retrievePaymentIntent");
-      const cancelled = vi.spyOn(client, "cancelPaymentIntent");
-      expect(await make().resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
-        nextDueAt: null,
-        forwarded: 0,
-        declined: 0,
-        incidentsRaised: 0,
-      });
-      expect(await make().resolveAbandonedAttempt(key.paymentRef, now, audit)).toMatchObject({
-        outcome: "unknown",
-        reason: "ambiguous",
-      });
-      expect(read).not.toHaveBeenCalled();
-      expect(cancelled).not.toHaveBeenCalled();
-      expect(await row(key.paymentRef)).toMatchObject({
-        state: "attempting",
-        settledAt: null,
-        saleId: null,
-      });
-      expect(await suite.db.select().from(incidents)).toHaveLength(1);
-    },
+it("continues processor reads even when an old alert exists", async () => {
+  const { make, attempt, row, params } = await setup();
+  const key = await attempt("succeeded", 1200);
+  await withTransaction(suite.db, (tx) =>
+    recordCaptureMismatch(
+      tx,
+      captureAlerts,
+      {
+        ...key,
+        provider: "stripe",
+        workingOrderId: params.workingOrderId,
+        requestedAmount: "12.10",
+        reportedAmount: "12.00",
+      },
+      now,
+    ),
   );
-
-  it("rechecks evidence in the resolving transaction after an exact answer was already in flight", async () => {
-    const { client, make, attempt, row } = await setup();
-    const key = await attempt("succeeded", 1210);
-    const read = client.retrievePaymentIntent.bind(client);
-    vi.spyOn(client, "retrievePaymentIntent").mockImplementationOnce(async (id) => {
-      const answer = await read(id);
-      await withTransaction(suite.db, (tx) =>
-        recordCaptureMismatch(
-          tx,
-          captureAlerts,
-          {
-            ...key,
-            provider: "stripe",
-            workingOrderId: "order",
-            requestedAmount: "12.10",
-            reportedAmount: "12.00",
-          },
-          now,
-        ),
-      );
-      return answer;
-    });
-    expect(await make().resolveAbandonedAttempt(key.paymentRef, now, audit)).toMatchObject({
-      outcome: "unknown",
-    });
-    expect(await row(key.paymentRef)).toMatchObject({ state: "attempting", settledAt: null });
+  expect(await make().resolveAbandonedAttempt(key.paymentRef, now, audit)).toMatchObject({
+    outcome: "captured",
   });
+  expect(await row(key.paymentRef)).toMatchObject({ state: "captured", amount: "12.00" });
+  expect(await suite.db.select().from(incidents)).toHaveLength(1);
+});
 
-  it("keeps ordinary uncertain rows due while skipping a held mismatch", async () => {
-    const { make, attempt } = await setup();
-    await attempt("succeeded", 1200);
-    await attempt("future_status", 0);
-    expect(await make().resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
-      nextDueAt: new Date(now.getTime() + 60000),
-      forwarded: 0,
-      declined: 0,
-      incidentsRaised: 1,
+it.each(["processing", "unreachable"])("leaves collect uncertain for %s", async (status) => {
+  const { client, make, params } = await setup();
+  if (status === "unreachable")
+    vi.spyOn(client, "retrievePaymentIntent").mockRejectedValue(new Error("offline"));
+  else
+    vi.spyOn(client, "retrievePaymentIntent").mockResolvedValue({
+      id: "pi_processing",
+      status,
+      amount: 1210,
+      amountReceived: 0,
     });
-  });
-
-  it.each(["processing", "unreachable"])(
-    "leaves collect uncertain without recording a mismatch for %s",
-    async (status) => {
-      const { client, make, params } = await setup();
-      if (status === "unreachable")
-        vi.spyOn(client, "retrievePaymentIntent").mockRejectedValue(new Error("offline"));
-      else
-        vi.spyOn(client, "retrievePaymentIntent").mockResolvedValue({
-          id: "pi_processing",
-          status,
-          amount: 1210,
-          amountReceived: 0,
-        });
-      expect(await make().collect(params)).toMatchObject({ state: "attempting", settledAt: null });
-      expect(await suite.db.select().from(incidents)).toEqual([]);
-    },
-  );
+  expect(await make().collect(params)).toMatchObject({ state: "attempting", settledAt: null });
+  expect(await suite.db.select().from(incidents)).toEqual([]);
 });
 
 it("reports a known charge when the full disk prevents saving its mismatch alert", async () => {
@@ -209,56 +160,8 @@ it("reports a known charge when the full disk prevents saving its mismatch alert
   expect(await suite.db.select().from(incidents)).toEqual([]);
 });
 
-it.each(["succeeded", "failed"])(
-  "retains evidence written before collect answers %s",
-  async (status) => {
-    const { client, make, params, row } = await setup();
-    const process = client.processPaymentIntent.bind(client);
-    vi.spyOn(client, "processPaymentIntent").mockImplementationOnce(async (reader, intent) => {
-      await process(reader, intent);
-      const stored = await suite.db.select().from(payments);
-      await withTransaction(suite.db, (tx) =>
-        recordCaptureMismatch(
-          tx,
-          captureAlerts,
-          {
-            provider: "stripe",
-            paymentRef: stored[0]!.paymentRef,
-            workingOrderId: params.workingOrderId,
-            externalRef: intent,
-            requestedAmount: "12.10",
-            reportedAmount: "12.00",
-          },
-          now,
-        ),
-      );
-    });
-    vi.spyOn(client, "readerOutcome").mockResolvedValue(
-      status === "succeeded" ? { status } : { status: "failed", failureCode: "card_declined" },
-    );
-    const result = await make().collect(params);
-    expect(result).toMatchObject({ state: "attempting", settledAt: null, amount: "12.10" });
-    expect(await row(result.paymentRef)).toMatchObject({ state: "attempting", settledAt: null });
-  },
-);
-
-it("marks a collect result as a known mismatch instead of a timeout", async () => {
-  const { client, make, params } = await setup();
-  const read = client.retrievePaymentIntent.bind(client);
-  vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (id) => ({
-    ...(await read(id)),
-    status: "succeeded",
-    amountReceived: 1200,
-  }));
-  expect(await make().collect(params)).toMatchObject({
-    state: "attempting",
-    captureMismatch: true,
-    amount: "12.10",
-  });
-});
-
 it.each(["captured", "failed"])(
-  "ignores a stale Stripe sweep after the row becomes %s",
+  "keeps the first %s outcome when a Stripe sweep answers late",
   async (state) => {
     const { client, make, attempt, row } = await setup();
     const key = await attempt("succeeded", 1200);
@@ -271,18 +174,44 @@ it.each(["captured", "failed"])(
               paymentRef: key.paymentRef,
               settledAt: now,
               externalRef: key.externalRef,
+              amount: decimal("11.00"),
             })
           : failAttempting(tx, { provider: "stripe", paymentRef: key.paymentRef }),
       );
       return read(id);
     });
     expect(await make().resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
-      nextDueAt: new Date("2026-11-07T03:01:00.000Z"),
+      nextDueAt: null,
       forwarded: 0,
       declined: 0,
       incidentsRaised: 0,
     });
-    expect(await row(key.paymentRef)).toMatchObject({ state });
+    expect(await row(key.paymentRef)).toMatchObject({
+      state,
+      amount: state === "captured" ? "11.00" : "12.10",
+    });
     expect(await suite.db.select().from(incidents)).toEqual([]);
   },
 );
+
+it("returns an already committed capture when the live Stripe answer remains uncertain", async () => {
+  const { client, make, params } = await setup();
+  vi.spyOn(client, "retrievePaymentIntent").mockImplementationOnce(async (id) => {
+    const [payment] = await suite.db.select().from(payments);
+    await withTransaction(suite.db, (tx) =>
+      captureAttempting(tx, {
+        provider: "stripe",
+        paymentRef: payment!.paymentRef,
+        externalRef: id,
+        settledAt: now,
+        amount: decimal("12.00"),
+      }),
+    );
+    return { id, status: "processing", amount: 1210, amountReceived: 0 };
+  });
+  expect(await make().collect(params)).toMatchObject({
+    state: "captured",
+    amount: "12.00",
+    settledAt: now,
+  });
+});

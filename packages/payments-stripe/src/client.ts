@@ -27,7 +27,13 @@ export interface StripeClient {
   /** Amounts are in minor units, as Stripe reports them. */
   retrievePaymentIntent(
     paymentIntentId: string,
-  ): Promise<{ id: string; status: string; amount: number; amountReceived: number }>;
+  ): Promise<{
+    id: string;
+    status: string;
+    amount: number;
+    amountReceived: number;
+    tipAmount?: number;
+  }>;
   cancelPaymentIntent(paymentIntentId: string): Promise<{ status: string }>;
   refund(params: {
     paymentIntentId: string;

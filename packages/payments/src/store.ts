@@ -197,12 +197,6 @@ async function resolveAttempting(
   state: "captured" | "failed",
   extra: { settledAt?: string; externalRef?: string; card?: CardDetails; amount?: Decimal },
 ): Promise<PaymentRow> {
-  const mismatch = await findActiveCaptureMismatch(tx, { payment: params });
-  if (mismatch !== undefined)
-    throw new AppError("payment.capture_mismatch_unresolved", {
-      workingOrderId: mismatch.workingOrderId,
-      recoveryUrl: "/manage/payments",
-    });
   const [row] = await tx
     .update(payments)
     .set({

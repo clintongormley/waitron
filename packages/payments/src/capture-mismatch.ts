@@ -11,7 +11,6 @@ export type CaptureMismatch = AppError<"payment.capture_mismatch">["params"]["pa
 
 const CODE = "payment.capture_mismatch";
 
-// Acknowledging the alert does not resolve the charge; older snapshots retain its evidence.
 export async function hasCaptureMismatch(
   tx: Transaction,
   key: { provider: string; paymentRef: string },
