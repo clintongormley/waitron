@@ -61,6 +61,17 @@ const familyCases = [
 
 type Family = (typeof familyCases)[number][0];
 
+type FamiliesOutput = {
+  processZone: string;
+  success: boolean;
+  results: {
+    key: string;
+    source: string;
+    casesRun: number;
+    tests: { fullName: string; status: string }[];
+  }[];
+};
+
 export function defineZoneProcessMatrix(families: readonly Family[], includeCalendar = false) {
   const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
   let directory: string | undefined;
@@ -103,7 +114,7 @@ export function defineZoneProcessMatrix(families: readonly Family[], includeCale
     const result = await run(
       [join(directory!, "child.mjs"), mode, dirname(database.file), family],
       {
-        timeout: 90_000,
+        timeout: 320_000,
         env: {
           ...Object.fromEntries(
             Object.entries(process.env).filter(
@@ -157,21 +168,36 @@ export function defineZoneProcessMatrix(families: readonly Family[], includeCale
       });
     }
 
-    it.each(familyCases.filter(([family]) => families.includes(family)))(
+    const selected = familyCases.filter(([family]) => families.includes(family));
+    let output: FamiliesOutput | undefined;
+    let failure: unknown;
+    if (selected.length > 0) {
+      // A failed child must not skip the calendar case beside it, so each family case rethrows it.
+      beforeAll(async () => {
+        try {
+          output = (await child(
+            timeZone,
+            "families",
+            selected.map(([family]) => family).join(","),
+          )) as unknown as FamiliesOutput;
+        } catch (error) {
+          failure = error;
+        }
+      }, 330_000);
+    }
+
+    it.each(selected)(
       "runs %s with its original behavioral assertions",
-      async (family, count, source) => {
-        const output = (await child(timeZone, "families", family)) as unknown as {
-          processZone: string;
-          casesRun: number;
-          success: boolean;
-          results: { key: string; source: string; tests: { fullName: string; status: string }[] }[];
-        };
-        expect(output.processZone).toBe(timeZone);
-        expect(output.success).toBe(true);
-        expect(output.casesRun).toBe(count);
-        expect(output.results.map((row) => row.key)).toEqual([family]);
-        expect(output.results[0]!.source).toBe(source);
-        const tests = output.results[0]!.tests;
+      (family, count, source) => {
+        if (failure !== undefined) throw failure;
+        expect(output!.processZone).toBe(timeZone);
+        expect(output!.success).toBe(true);
+        expect(output!.results.map((row) => row.key)).toEqual(selected.map(([key]) => key));
+        const rows = output!.results.filter((row) => row.key === family);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.casesRun).toBe(count);
+        expect(rows[0]!.source).toBe(source);
+        const tests = rows[0]!.tests;
         expect(tests).toHaveLength(count);
         expect(new Set(tests.map((test) => test.fullName)).size).toBe(count);
         expect(tests.every((test) => test.status === "passed")).toBe(true);
