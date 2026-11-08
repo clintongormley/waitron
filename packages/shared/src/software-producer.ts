@@ -6,11 +6,7 @@ export interface SoftwareProducer {
   readonly address: string;
 }
 
-const SETTINGS = [
-  "WAITRON_PRODUCER_NAME",
-  "WAITRON_PRODUCER_TAX_ID",
-  "WAITRON_PRODUCER_ADDRESS",
-] as const;
+type Setting = "WAITRON_PRODUCER_NAME" | "WAITRON_PRODUCER_TAX_ID" | "WAITRON_PRODUCER_ADDRESS";
 
 const MAX_LENGTH = 200;
 
@@ -21,21 +17,22 @@ const MAX_LENGTH = 200;
 export function readSoftwareProducer(
   env: Readonly<Record<string, string | undefined>>,
 ): SoftwareProducer | null {
-  const unset = SETTINGS.filter((setting) => isUnset(env[setting]));
-  if (unset.length === SETTINGS.length) return null;
-  const firstUnset = unset[0];
-  if (firstUnset !== undefined) refuse(firstUnset, "partial");
+  const name = env.WAITRON_PRODUCER_NAME;
+  const taxId = env.WAITRON_PRODUCER_TAX_ID;
+  const address = env.WAITRON_PRODUCER_ADDRESS;
+  if (isUnset(name) && isUnset(taxId) && isUnset(address)) return null;
+  if (isUnset(name)) refuse("WAITRON_PRODUCER_NAME", "partial");
+  if (isUnset(taxId)) refuse("WAITRON_PRODUCER_TAX_ID", "partial");
+  if (isUnset(address)) refuse("WAITRON_PRODUCER_ADDRESS", "partial");
 
   return {
-    name: readOne(env, "WAITRON_PRODUCER_NAME"),
-    taxId: readOne(env, "WAITRON_PRODUCER_TAX_ID"),
-    address: readOne(env, "WAITRON_PRODUCER_ADDRESS"),
+    name: checked("WAITRON_PRODUCER_NAME", name),
+    taxId: checked("WAITRON_PRODUCER_TAX_ID", taxId),
+    address: checked("WAITRON_PRODUCER_ADDRESS", address),
   };
 }
 
-function readOne(env: Readonly<Record<string, string | undefined>>, setting: string): string {
-  // Checked before trimming: a line break at either end would still split a build argument.
-  const raw = env[setting] ?? "";
+function checked(setting: Setting, raw: string): string {
   const value = raw.trim();
   if (value === "") refuse(setting, "missing");
   if (/[\r\n]/.test(raw)) refuse(setting, "line_break");
@@ -43,12 +40,12 @@ function readOne(env: Readonly<Record<string, string | undefined>>, setting: str
   return value;
 }
 
-function isUnset(raw: string | undefined): boolean {
+function isUnset(raw: string | undefined): raw is undefined | "" {
   return raw === undefined || raw === "";
 }
 
 function refuse(
-  setting: string,
+  setting: Setting,
   reason: ErrorParams["software_producer.invalid"]["reason"],
 ): never {
   throw new AppError("software_producer.invalid", { setting, reason });
