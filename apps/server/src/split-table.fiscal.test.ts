@@ -12,7 +12,7 @@ import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import {
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   seatedWith,
   send,
   statusOf,
@@ -272,7 +272,7 @@ describe("A803 split: issuance", () => {
     const { partyId, tabId, first, leaving } = await atTwoTables("Paella", "Caña");
     await payFor(tabId, 1, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
 
     const answer = await split(partyId, leaving, {
       wholeBillIds: [],
@@ -282,7 +282,7 @@ describe("A803 split: issuance", () => {
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(salesOf(tabId)).toHaveLength(1);
     expect(salesOf(tabId)[0]!.total).toBe("3500");
-    expect(registroCount(venue, tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, tabId)).toBe(1);
     expect(await statusOf(venue, tabId)).toBe("settled");
     expect(partyOfBill(tabId)).toBe(partyId);
     expect(operatorOfSale(tabId)).toBe(venue.operatorId);
@@ -319,7 +319,7 @@ describe("A803 split: issuance", () => {
     const [newBill] = answer.json.billIds as string[];
     expect(namesOn(newBill!)).toEqual(["Caña"]);
     expect(salesOf(newBill!)).toEqual([]);
-    expect(registroCount(venue, newBill!)).toBe(0);
+    expect(fiscalRecordCount(venue, newBill!)).toBe(0);
     expect(await statusOf(venue, newBill!)).toBe("open");
   });
 
@@ -335,7 +335,7 @@ describe("A803 split: issuance", () => {
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(answer.json.billIds).toEqual([tabId]);
     expect(salesOf(tabId)).toEqual([]);
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
     expect(await statusOf(venue, tabId)).toBe("open");
   });
 
@@ -366,7 +366,7 @@ describe("A803 split: issuance", () => {
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(salesOf(tabId)).toEqual([]);
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
     expect(await statusOf(venue, tabId)).toBe("open");
   });
 
@@ -427,8 +427,8 @@ describe("A803 split: issuance", () => {
     expect(await statusOf(venue, bill2)).toBe("open");
     expect(salesOf(bill1)).toEqual([]);
     expect(salesOf(bill2)).toEqual([]);
-    expect(registroCount(venue, bill1)).toBe(0);
-    expect(registroCount(venue, bill2)).toBe(0);
+    expect(fiscalRecordCount(venue, bill1)).toBe(0);
+    expect(fiscalRecordCount(venue, bill2)).toBe(0);
     expect(counts()).toEqual(before);
     expect(joinedTo(partyId)).toContain(leaving);
 

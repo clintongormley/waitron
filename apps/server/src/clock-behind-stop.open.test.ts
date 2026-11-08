@@ -13,7 +13,7 @@ import {
   inTx,
   partyRevisionOf,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   type BillVenue,
 } from "./testing/bill-venue.js";
@@ -243,7 +243,7 @@ describe("while the latest record is a day after the box's clock", () => {
     expect(reprinted.status).toBe(200);
     expect(count(venue.db, "print_jobs")).toBe(jobs + 2);
     expect(records()).toBe(before);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 });
 
@@ -267,7 +267,7 @@ describe("a venue database with no records", () => {
     const sold = await cashSale(open, open.venue.appAt(clockAt(yearBehind)), id);
 
     expect(sold.status).toBe(200);
-    expect(registroCount(open.venue, id)).toBe(1);
+    expect(fiscalRecordCount(open.venue, id)).toBe(1);
     expect(latest(open.venue.db)!.at.getTime()).toBe(Math.floor(yearBehind / 1000) * 1000);
   });
 });

@@ -580,7 +580,7 @@ async function tendersOf(saleId: string) {
   );
 }
 
-function registroCount(billId: string): number {
+function fiscalRecordCount(billId: string): number {
   const [row] = suite.db.all<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
@@ -794,7 +794,7 @@ describe("a contribution (design §8 test 2)", () => {
     expect(paid.json.invoice).toBeUndefined();
     expect(await lineTotals(billId)).toEqual(before);
     expect(await saleOf(billId)).toEqual([]);
-    expect(registroCount(billId)).toBe(0);
+    expect(fiscalRecordCount(billId)).toBe(0);
     expect((await balance(billId)).json).toMatchObject({ outstanding: "70.00" });
   });
 
@@ -1629,7 +1629,7 @@ describe("a split after a contribution (design §8 test 6, §4.2)", () => {
 
     const checkPaid = await contribute(checkId, "30.00");
     expect(checkPaid.json).toMatchObject({ invoice: { total: "30.00" } });
-    expect(registroCount(checkId)).toBe(1);
+    expect(fiscalRecordCount(checkId)).toBe(1);
 
     expect((await balance(billId)).json).toMatchObject({
       total: "90.00",
@@ -1870,7 +1870,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         expect(copy).not.toContain("Nombre nuevo");
       }
       expect(paper.some((copy) => copy.includes("DUPLICADO"))).toBe(true);
-      expect(registroCount(billId)).toBe(1);
+      expect(fiscalRecordCount(billId)).toBe(1);
       expect(
         suite.db.all<{ count: number }>(sql`
         select count(*) as count from drawer_opens`)[0]!.count,
@@ -3038,11 +3038,11 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const billId = await tabWith("Chuletón", "Tarta");
 
     expect((await contribute(billId, "20.00")).json.invoice).toBeUndefined();
-    expect(registroCount(billId)).toBe(0);
+    expect(fiscalRecordCount(billId)).toBe(0);
     const last = await contribute(billId, "23.00");
 
     expect(last.json).toMatchObject({ outcome: "received", invoice: { total: "43.00" } });
-    expect(registroCount(billId)).toBe(1);
+    expect(fiscalRecordCount(billId)).toBe(1);
     const [sale] = await saleOf(billId);
     const filedLines = await inTx((tx) =>
       tx
@@ -3147,7 +3147,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     expect(await statusOf(billId)).toBe("settled");
     const [sale] = await saleOf(billId);
     expect(sale!.total).toBe(2500);
-    expect(registroCount(billId)).toBe(1);
+    expect(fiscalRecordCount(billId)).toBe(1);
   });
 
   it("refuses product.unavailable, changing nothing, for a void that would issue the invoice while an unsent line's product is off sale", async () => {
@@ -3181,7 +3181,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       expect(snapshot()).toEqual(before);
       expect(await statusOf(billId)).toBe("open");
       expect(await saleOf(billId)).toEqual([]);
-      expect(registroCount(billId)).toBe(0);
+      expect(fiscalRecordCount(billId)).toBe(0);
     } finally {
       suite.db.run(sql`update products set available = 1 where id = ${steakId}`);
     }
@@ -3192,7 +3192,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   /** Issued in the write's own transaction, once, and filed under the device that wrote. */
   async function expectInvoicedOnDevice(billId: string, totalCents: number): Promise<void> {
     expect(await statusOf(billId)).toBe("settled");
-    expect(registroCount(billId)).toBe(1);
+    expect(fiscalRecordCount(billId)).toBe(1);
     const [sale] = await saleOf(billId);
     expect(sale!.total).toBe(totalCents);
     expect(sale).toMatchObject({ source: "device", deviceId: venue.deviceId });
@@ -3376,7 +3376,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
         total: route === "line edit" ? "28.00" : "25.00",
         recipient: { taxId: "B12345674", legalName: "Cliente SL" },
       });
-      expect(registroCount(billId)).toBe(1);
+      expect(fiscalRecordCount(billId)).toBe(1);
       expect(await paymentRows(billId)).toEqual(before);
       expect(await inTx((tx) => tx.select().from(invoiceSeries))).toEqual(seriesAfter);
     },
@@ -3413,7 +3413,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
         json: { code: "invoice.recipient_invalid", params: { field: "address" } },
       });
       expect(await snapshot()).toEqual(before);
-      expect(registroCount(billId)).toBe(0);
+      expect(fiscalRecordCount(billId)).toBe(0);
     },
   );
 
@@ -3472,7 +3472,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect(refused.json).toMatchObject({ code: "device.unauthorized" });
     expect(await statusOf(billId)).toBe("open");
     expect(await lineTotals(billId)).toEqual(["25.00", "18.00"]);
-    expect(registroCount(billId)).toBe(0);
+    expect(fiscalRecordCount(billId)).toBe(0);
   });
 });
 
@@ -4764,7 +4764,7 @@ describe("refund first (design §4.3, §6a)", () => {
       params: { workingOrderId: billId, excess: "10.00" },
     });
     expect(await lineTotals(billId)).toEqual(["30.00", "20.00", "10.00"]);
-    expect(registroCount(billId)).toBe(0);
+    expect(fiscalRecordCount(billId)).toBe(0);
 
     expect(
       (await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" })).status,
@@ -4778,7 +4778,7 @@ describe("refund first (design §4.3, §6a)", () => {
 
     expect(voided.status).toBe(200);
     expect(await statusOf(billId)).toBe("settled");
-    expect(registroCount(billId)).toBe(1);
+    expect(fiscalRecordCount(billId)).toBe(1);
     const [sale] = await saleOf(billId);
     expect(sale!.total).toBe(4000);
     expect(await tendersOf(sale!.id)).toEqual([
@@ -5588,7 +5588,7 @@ describe("simplified invoice original HTTP requests", () => {
         expect(copy).toContain(`${series!.code}/${sale.invoiceNumber}`);
         expect(await suite.db.select().from(drawerOpens)).toEqual(drawer);
         expect(await saleOf(billId)).toEqual(invoices);
-        expect(registroCount(billId)).toBe(1);
+        expect(fiscalRecordCount(billId)).toBe(1);
       } finally {
         await suite.db
           .update(deviceProfiles)

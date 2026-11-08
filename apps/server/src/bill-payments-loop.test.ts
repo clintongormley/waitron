@@ -37,7 +37,7 @@ import {
   inTx,
   paymentRows,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   statusOf,
   tabWith,
@@ -246,7 +246,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect(second).toMatchObject({ received: 0, failed: 0 });
     expect(await stateOf(payment!.id)).toBe("received");
     expect(await statusOf(venue, billId)).toBe("settled");
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     expect(await tendersOfBill(venue, billId)).toMatchObject([
       { method: "card", amount: 3500, billPaymentId: payment!.id, saleDeviceId: venue.deviceId },
     ]);
@@ -293,7 +293,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect((await balance(billId)).json).toMatchObject({ reserved: "20.00" });
     expect(voided.status).toBe(409);
     expect(voided.json).toMatchObject({ code: "order.payment_in_flight" });
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
   it("files nothing for a capture of another amount, keeps it pending, and raises one alert", async () => {
@@ -306,7 +306,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect(first).toMatchObject({ received: 0, mismatched: 1 });
     expect(second).toMatchObject({ received: 0, mismatched: 1 });
     expect(await stateOf(id)).toBe("pending");
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
     const raised = await openMismatchIncidents();
     expect(raised).toHaveLength(1);
     expect(raised[0]!.params).toMatchObject({
@@ -379,7 +379,7 @@ describe("the loop's own edges", () => {
       expect((await balance(billId)).json).toMatchObject({
         reserved: automatic ? "0.00" : "20.00",
       });
-      expect(registroCount(venue, billId)).toBe(0);
+      expect(fiscalRecordCount(venue, billId)).toBe(0);
     },
   );
 
@@ -455,7 +455,7 @@ describe("the loop's own edges", () => {
     ]);
     expect(second!.errors).toHaveLength(1);
     expect(await stateOf(id)).toBe("pending");
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
     const raised = await incidentsOf("payment.bill_settle_failed");
     expect(raised).toEqual([
       {

@@ -21,7 +21,13 @@ import {
   parkOrder,
   readInvoiceNumbers,
 } from "./working-order.js";
-import { inTx, provisionBillVenue, registroCount, send, tabWith } from "./testing/bill-venue.js";
+import {
+  inTx,
+  provisionBillVenue,
+  fiscalRecordCount,
+  send,
+  tabWith,
+} from "./testing/bill-venue.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
@@ -297,7 +303,7 @@ describe("handing over a counter order sent without payment", () => {
     const id = await placed("ticket_then_pay", "Tarta");
     await markCollected({ db: venue.db }, venue.cfg, id);
     expect(saleCount(id)).toBe(0);
-    expect(registroCount(venue, id)).toBe(0);
+    expect(fiscalRecordCount(venue, id)).toBe(0);
   });
 });
 
@@ -407,7 +413,7 @@ describe("paying a counter order that was handed over before payment", () => {
       expect(after.collectedAt).toBe(handedOverAt);
       expect(saleCount(id)).toBe(1);
       expect(salesBefore).toBe(mode === "issued" ? 1 : 0);
-      expect(registroCount(venue, id)).toBe(1);
+      expect(fiscalRecordCount(venue, id)).toBe(1);
       expect(ticketItemCount(id)).toBe(tickets);
     },
   );
@@ -626,7 +632,7 @@ describe("payment and handover in either order end with the same facts", () => {
       status: row.status,
       handedOver: row.collectedAt !== null,
       sales: saleCount(id),
-      registros: registroCount(venue, id),
+      registros: fiscalRecordCount(venue, id),
       tickets: ticketItemCount(id),
     };
   }

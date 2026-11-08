@@ -26,7 +26,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   statusOf,
   type BillVenue,
 } from "./testing/bill-venue.js";
@@ -114,7 +114,7 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
     expect(after).toHaveLength(1);
     expect(after[0]!.id).toBe(issued[0]!.id);
     expect(after[0]!.settledAt).not.toBeNull();
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
     expect(await statusOf(venue, id)).toBe("settled");
   });
 
@@ -129,7 +129,7 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
     expect(after).toHaveLength(1);
     expect(after[0]!.total).toBe(1800);
     expect(after[0]!.settledAt).not.toBeNull();
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
     expect(await statusOf(venue, id)).toBe("settled");
   });
 });
@@ -206,7 +206,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(await tendersOf(saleId)).toEqual([{ method: "cash", amount: 1558, cash: 2000 }]);
     expect(ticket.tender).toEqual({ method: "cash", change: "4.42" });
     expect(await statusOf(venue, billId)).toBe("settled");
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   it("settles a manual card collection, and its payment row, at the corrected amount", async () => {
@@ -233,7 +233,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     );
     expect(paid).toEqual([{ amount: 1558, saleId }]);
     expect(await statusOf(venue, billId)).toBe("settled");
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   function drawerOpensOf(saleId: string) {
@@ -277,7 +277,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(await drawerOpensOf(saleId)).toEqual([]);
     expect(ticket.tender).toEqual({ method: "unpaid" });
     expect(await statusOf(venue, billId)).toBe("settled");
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   it("closes a card collection of a bill that owes nothing, with no tender and no payment row", async () => {
@@ -307,7 +307,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(paid).toEqual([]);
     expect(await drawerOpensOf(saleId)).toEqual([]);
     expect(await statusOf(venue, billId)).toBe("settled");
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   it("refuses a cash collection with a malformed amount on a bill that owes nothing, and leaves it open", async () => {
@@ -344,7 +344,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     });
 
     expect(await salesOf(billId)).toEqual([{ id: issued!.id, total: 1800, settledAt: null }]);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     await collectCash(billId);
     expect(await tendersOf(issued!.id)).toEqual([{ method: "cash", amount: 1800, cash: 2000 }]);
     expect(await statusOf(venue, billId)).toBe("settled");

@@ -14,7 +14,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import {
   inTx,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   type BillVenue,
 } from "./testing/bill-venue.js";
@@ -184,7 +184,7 @@ it("refuses a card payment of an order whose invoice was filed before the reader
   const now = nowMs();
   const id = await placedIssuedOrder(clockAt(now));
   const behind = nowMs() - 10 * MINUTE;
-  const records = registroCount(venue, id);
+  const records = fiscalRecordCount(venue, id);
   const before = collects();
 
   const answer = await payStored(venue.appAt(clockAt(behind)), id);
@@ -194,7 +194,7 @@ it("refuses a card payment of an order whose invoice was filed before the reader
   expect(collects()).toBe(before);
   expect(orderRow(id)).toEqual({ status: "placed", attemptAt: null });
   expect(rows("payments", "working_order_id", id)).toBe(0);
-  expect(registroCount(venue, id)).toBe(records);
+  expect(fiscalRecordCount(venue, id)).toBe(records);
 });
 
 it("refuses a stored open order before the reader and leaves no attempt mark", async () => {
@@ -210,13 +210,13 @@ it("refuses a stored open order before the reader and leaves no attempt mark", a
   expect(collects()).toBe(before);
   expect(orderRow(id)).toEqual({ status: "open", attemptAt: null });
   expect(rows("payments", "working_order_id", id)).toBe(0);
-  expect(registroCount(venue, id)).toBe(0);
+  expect(fiscalRecordCount(venue, id)).toBe(0);
 });
 
 it("refuses a cash collection of a filed order and writes no settlement", async () => {
   const id = await placedIssuedOrder(clockAt(nowMs()));
   const behind = nowMs() - 10 * MINUTE;
-  const records = registroCount(venue, id);
+  const records = fiscalRecordCount(venue, id);
   const before = collects();
 
   const answer = await send(
@@ -232,7 +232,7 @@ it("refuses a cash collection of a filed order and writes no settlement", async 
   expect(collects()).toBe(before);
   expect(tendersOfOrder(id)).toBe(0);
   expect(orderRow(id).status).toBe("placed");
-  expect(registroCount(venue, id)).toBe(records);
+  expect(fiscalRecordCount(venue, id)).toBe(records);
 });
 
 it("refuses a cash sale on /api/sales and writes nothing", async () => {

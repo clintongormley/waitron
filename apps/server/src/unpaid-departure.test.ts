@@ -42,7 +42,7 @@ import {
   paymentRows,
   placedCounterBillMovedTo,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   seatedWith,
   send as rawGroupSend,
   statusOf,
@@ -204,7 +204,7 @@ async function expectNothingWritten(
   billId: string,
   billStatus: "open" | "placed" = "open",
 ): Promise<void> {
-  expect(registroCount(venue, billId)).toBe(0);
+  expect(fiscalRecordCount(venue, billId)).toBe(0);
   expect(await departuresOf(billId)).toEqual([]);
   expect(await statusOf(venue, billId)).toBe(billStatus);
   expect((await partyState(partyId)).state).toBe("open");
@@ -281,7 +281,7 @@ describe("recording that a table left without paying", () => {
     });
 
     expect(answer.status, JSON.stringify(answer)).toBe(200);
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(
       venue.db.all(sql`select tipo_factura from registros_facturacion
       where sale_id in (select id from sales where working_order_id = ${party.tabId})`),
@@ -309,7 +309,7 @@ describe("recording that a table left without paying", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     const issued = await salesOf(party.tabId);
     expect(issued).toEqual([{ id: expect.any(String), total: 3000, settledAt: null }]);
     expect(await statusOf(venue, party.tabId)).toBe("placed");
@@ -509,7 +509,7 @@ describe("who may record it", () => {
     );
 
     expect(answer).toMatchObject({ status: 200, json: { state: "closed" } });
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(await departuresOf(party.tabId)).toEqual([
       expect.objectContaining({
         amount: 3000,
@@ -686,12 +686,12 @@ describe("bills already presented", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(registroCount(venue, placedId)).toBe(1);
+    expect(fiscalRecordCount(venue, placedId)).toBe(1);
     expect(await salesOf(placedId)).toEqual([invoiced]);
     expect(await departuresOf(placedId)).toEqual([
       expect.objectContaining({ saleId: invoiced!.id, amount: 1558 }),
     ]);
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 300 })]);
   });
 
@@ -706,7 +706,7 @@ describe("bills already presented", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(registroCount(venue, placedId)).toBe(1);
+    expect(fiscalRecordCount(venue, placedId)).toBe(1);
     const [invoiced] = await salesOf(placedId);
     expect(invoiced).toMatchObject({ total: 1800, settledAt: null });
     expect(await statusOf(venue, placedId)).toBe("placed");
@@ -893,7 +893,7 @@ describe("a bill that owes nothing", () => {
       { id: invoiced!.id, total: 1800, settledAt: expect.any(String) },
     ]);
     expect(await statusOf(venue, placedId)).toBe("settled");
-    expect(registroCount(venue, placedId)).toBe(1);
+    expect(fiscalRecordCount(venue, placedId)).toBe(1);
     const outstanding = (await inTx(venue, listOutstandingSales)).map((sale) => sale.saleId);
     expect(outstanding).not.toContain(invoiced!.id);
     const [owed] = await salesOf(party.tabId);
@@ -925,7 +925,7 @@ describe("a bill that owes nothing", () => {
       expect.objectContaining({ workingOrderId: luis.tabId, amount: "30.00" }),
     ]);
     expect(await departuresOf(ana.tabId)).toEqual([]);
-    expect(registroCount(venue, ana.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, ana.tabId)).toBe(1);
     const [given] = await salesOf(ana.tabId);
     expect(given).toEqual({ id: expect.any(String), total: 0, settledAt: expect.any(String) });
     expect(await statusOf(venue, ana.tabId)).toBe("settled");
@@ -947,7 +947,7 @@ describe("a bill that owes nothing", () => {
 
     expect(answer).toMatchObject({ status: 200, json: { state: "closed", departures: [] } });
     expect(await departuresOf(placedId)).toEqual([]);
-    expect(registroCount(venue, placedId)).toBe(1);
+    expect(fiscalRecordCount(venue, placedId)).toBe(1);
     expect(await salesOf(placedId)).toEqual([
       { id: invoiced!.id, total: 1800, settledAt: expect.any(String) },
     ]);
@@ -967,7 +967,7 @@ describe("a bill that owes nothing", () => {
 
     expect(answer).toMatchObject({ status: 200, json: { state: "closed", departures: [] } });
     expect(await departuresOf(party.tabId)).toEqual([]);
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(await salesOf(party.tabId)).toEqual([
       { id: expect.any(String), total: 0, settledAt: expect.any(String) },
     ]);
@@ -1036,7 +1036,7 @@ describe("two departures at once, and a failure part-way", () => {
     });
     for (const billId of [party.tabId, placedId]) {
       expect(await salesOf(billId)).toHaveLength(1);
-      expect(registroCount(venue, billId)).toBe(1);
+      expect(fiscalRecordCount(venue, billId)).toBe(1);
       expect(await departuresOf(billId)).toHaveLength(1);
     }
   });
@@ -1138,7 +1138,7 @@ describe("a departure sent together with a payment or Finish table on the same p
 
   /** The departure landed alone: the bill invoiced once and left unpaid, the party closed by it. */
   async function expectDepartureAlone(party: { partyId: string; tabId: string; tableId: string }) {
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(await salesOf(party.tabId)).toEqual([
       { id: expect.any(String), total: 3000, settledAt: null },
     ]);
@@ -1207,7 +1207,7 @@ describe("a departure sent together with a payment or Finish table on the same p
           code: "unpaid_departure.nothing_outstanding",
           params: { partyId: party.partyId },
         });
-        expect(registroCount(venue, party.tabId)).toBe(1);
+        expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
         expect(await salesOf(party.tabId)).toEqual([
           { id: expect.any(String), total: 3000, settledAt: expect.any(String) },
         ]);
@@ -1264,7 +1264,7 @@ describe("a departure sent together with a payment or Finish table on the same p
       expect(finished.status).toBe(409);
       // Finish refuses the bill still open with a line when it runs first, and the closed party after.
       expect(["party.bill_outstanding", "party.not_open"]).toContain(finished.json.code);
-      expect(registroCount(venue, party.tabId)).toBe(1);
+      expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
       expect(await salesOf(party.tabId)).toEqual([
         { id: expect.any(String), total: 0, settledAt: expect.any(String) },
       ]);
@@ -1292,7 +1292,7 @@ describe("a departure sent together with a payment or Finish table on the same p
         departed.json.code,
       );
       expect(await departuresOfParty(party.partyId)).toEqual([]);
-      expect(registroCount(venue, party.tabId)).toBe(0);
+      expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
       expect(await statusOf(venue, party.tabId)).toBe("abandoned");
       expect(await partyState(party.partyId)).toEqual({
         state: "closed",
@@ -1386,7 +1386,7 @@ describe("what is refused", () => {
     });
 
     expect(recorded.status).toBe(200);
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(await salesOf(party.tabId)).toEqual([
       { id: expect.any(String), total: 3000, settledAt: null },
     ]);
@@ -1563,7 +1563,7 @@ describe("what is refused", () => {
     const retried = await depart(party.partyId, body);
 
     expect(retried).toMatchObject({ status: 409, json: { code: "party.not_open" } });
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(await departuresOf(party.tabId)).toHaveLength(1);
   });
 });
@@ -1670,7 +1670,7 @@ describe("A773 requested lifecycle", () => {
       });
 
       expect(answer).toMatchObject({ status: 200 });
-      expect(registroCount(venue, party.tabId)).toBe(1);
+      expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
       expect(await departuresOf(party.tabId)).toHaveLength(1);
       expect((await partyState(party.partyId)).state).toBe("closed");
     });
@@ -1748,8 +1748,8 @@ describe("a merged party", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(registroCount(venue, ana.tabId)).toBe(1);
-    expect(registroCount(venue, luis.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, ana.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, luis.tabId)).toBe(1);
     expect(await departuresOf(ana.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
     expect(await departuresOf(luis.tabId)).toEqual([expect.objectContaining({ amount: 2000 })]);
     expect(await tableHeldBy(ana.tableId)).toBeNull();

@@ -434,7 +434,7 @@ export async function statusOf(venue: BillVenue, billId: string): Promise<string
   return row!.status;
 }
 
-export function registroCount(venue: BillVenue, billId: string): number {
+export function fiscalRecordCount(venue: BillVenue, billId: string): number {
   const [row] = venue.db.all<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r

@@ -233,7 +233,7 @@ async function orderState(id: string): Promise<{ status: string }> {
 }
 
 /** How many chained `registros_facturacion` rows exist for this working order's sale. */
-async function registroCount(workingOrderId: string): Promise<number> {
+async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
@@ -331,8 +331,8 @@ describe("parties combined, bills merged → one registro (H2)", () => {
       },
     );
     expect(await saleCount(intoTab)).toBe(1);
-    expect(await registroCount(intoTab)).toBe(1);
-    expect(await registroCount(fromTab)).toBe(0);
+    expect(await fiscalRecordCount(intoTab)).toBe(1);
+    expect(await fiscalRecordCount(fromTab)).toBe(0);
     // Every count above would still pass on a merge that moved NOTHING; a dropped line files 1.50.
     expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
@@ -371,8 +371,8 @@ describe("tables joined across parties, bills merged → one bill covering both 
     expect(await saleCount(intoTab)).toBe(1); // one bill for both tables
     expect(await saleCount(fromTab)).toBe(0); // the abandoned source files nothing
     expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
-    expect(await registroCount(intoTab)).toBe(1);
-    expect(await registroCount(fromTab)).toBe(0);
+    expect(await fiscalRecordCount(intoTab)).toBe(1);
+    expect(await fiscalRecordCount(fromTab)).toBe(0);
     expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
 });

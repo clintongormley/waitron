@@ -13,7 +13,7 @@ import {
   inTx,
   paymentRows,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   statusOf,
   tabWith,
@@ -297,7 +297,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
 
     expect(paid.json).toMatchObject({ outcome: "received", invoice: { total: "53.00" } });
     expect(await statusOf(venue, billId)).toBe("settled");
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     const cardPayment = (await paymentRows(venue, billId)).find((row) => row.method === "card")!;
     const filed = await tendersOfBill(venue, billId);
     expect(filed).toHaveLength(2);
@@ -323,7 +323,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       const paid = await card.answer;
 
       expect(paid.json).toMatchObject({ outcome: "received", invoice: { total: "38.00" } });
-      expect(registroCount(venue, billId)).toBe(1);
+      expect(fiscalRecordCount(venue, billId)).toBe(1);
     } finally {
       venue.db.run(sql`update products set available = 1 where name = 'Caña'`);
     }
@@ -734,7 +734,7 @@ describe("retries (design §8 test 10, §5.1)", () => {
     expect(venue.card.collectCalls.length).toBe(calls + 1);
     expect(await paymentRows(venue, billId)).toHaveLength(1);
     expect(await tendersOfBill(venue, billId)).toHaveLength(1);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   it("answers a retry of a card still at the reader 'pending' and starts no second collect", async () => {
@@ -853,7 +853,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
     expect(card.status).toBe(409);
     expect(card.json).toMatchObject({ code: "order.payment_in_flight" });
     expect(venue.card.collectCalls.length).toBe(calls);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   it("a card first, then cash for the same last €40.00: the cash is refused, and the card's capture issues the invoice", async () => {
@@ -889,7 +889,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       const firstAnswer = await first.answer;
       const afterFirst = {
         status: await statusOf(venue, billId),
-        filed: registroCount(venue, billId),
+        filed: fiscalRecordCount(venue, billId),
       };
       second.release();
       const secondAnswer = await second.answer;
@@ -898,7 +898,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       expect(firstAnswer.json.invoice).toBeUndefined();
       expect(afterFirst).toEqual({ status: "open", filed: 0 });
       expect(secondAnswer.json).toMatchObject({ outcome: "received", invoice: { total: "70.00" } });
-      expect(registroCount(venue, billId)).toBe(1);
+      expect(fiscalRecordCount(venue, billId)).toBe(1);
       const filed = await tendersOfBill(venue, billId);
       expect(filed.map((tender) => centsToDecimal(tender.amount)).sort()).toEqual([
         "30.00",
@@ -912,7 +912,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
     const card = await heldCard(billId, "30.00");
 
     const cash = await cashContribution(billId, "40.00", { cookie: venue.cookie2 });
-    const beforeCapture = registroCount(venue, billId);
+    const beforeCapture = fiscalRecordCount(venue, billId);
     card.release();
     const captured = await card.answer;
 

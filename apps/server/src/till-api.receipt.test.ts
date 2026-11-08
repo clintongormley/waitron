@@ -390,7 +390,7 @@ async function drawerOpensFor(cfg: TradingContext): Promise<
   });
 }
 
-async function registroCount(cfg: TradingContext): Promise<number> {
+async function fiscalRecordCount(cfg: TradingContext): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     return (await tx.select().from(registrosFacturacion)).length;
@@ -615,7 +615,7 @@ describe("GET /api/sales/:id/receipt (original print status)", () => {
     await get();
     expect(await suite.db.select().from(printJobs)).toEqual([job]);
     expect(await saleCount(cfg)).toBe(1);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 
   it("requires a session and refuses unknown or malformed order ids", async () => {
@@ -873,7 +873,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
         receiptCopy: false,
       });
       expect(await saleCount(cfg)).toBe(1);
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
       expect(await drawerOpensFor(cfg)).toEqual([]);
     },
   );
@@ -916,7 +916,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     expect(await repeated.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
     expect(await suite.db.select().from(printJobs)).toEqual(jobs);
     expect(await saleCount(cfg)).toBe(1);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
@@ -1366,7 +1366,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
     const workingOrderId = await ringSale(app, cookie, each.menuItemId);
     // The filed sale exists, but mode 'on_request' enqueued no auto job.
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
     expect(await printJobsFor(cfg)).toEqual([]);
 
@@ -1377,7 +1377,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(res.status).toBe(200);
 
     // NO re-filing: the immutable fiscal record + sale row counts are unchanged.
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
 
     // Exactly ONE new outbox job, to the device's printer, carrying the full receipt and NO drawer kick
@@ -1412,7 +1412,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     }
     // Two paper jobs, one immutable fiscal record — a reprint never re-files.
     expect(await printJobsFor(cfg)).toHaveLength(2);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
   });
 
@@ -1448,7 +1448,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     });
     expect(res.status).toBe(200);
     expect(await printJobsFor(cfg)).toEqual([]); // no printer → nothing enqueued
-    expect(await registroCount(cfg)).toBe(1); // and still no re-file
+    expect(await fiscalRecordCount(cfg)).toBe(1); // and still no re-file
   });
 
   it("refuses a malformed id with working_order.not_found (404) before any query", async () => {
@@ -2269,7 +2269,7 @@ describe("original receipt and payment slip actions", () => {
     expect(Buffer.concat(duplicate.filter((c) => c.text !== marker).map((c) => c.bytes))).toEqual(
       Buffer.from(original),
     );
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
   });
   it("refuses unknown and malformed payment-slip ids", async () => {
@@ -2386,7 +2386,7 @@ describe("payment slip persisted capture facts", () => {
       else expect(text).not.toContain("Tarjeta");
       expect(text).not.toContain("VERI*FACTU");
       expect(commandNames(new Uint8Array(jobs[0]!.payload))).not.toContain("GS ( k");
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
       expect(await saleCount(cfg)).toBe(1);
     },
   );
@@ -2411,7 +2411,7 @@ describe("payment slip persisted capture facts", () => {
       });
       expect(response.status).toBe(200);
       expect(await printJobsFor(cfg)).toHaveLength(automatic ? 0 : 1);
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
       expect(await saleCount(cfg)).toBe(1);
     },
   );
@@ -2582,7 +2582,7 @@ describe("persisted cash receipt facts", () => {
     const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
     expect(text).toMatch(/Efectivo\s+20,00/);
     expect(text).toMatch(/Cambio\s+18,50/);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 });
 
@@ -2642,7 +2642,7 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   expect(text).not.toContain("Changed venue identity");
   expect(text).toContain("Current welcome");
   expect(text).toContain("Current farewell");
-  expect(await registroCount(cfg)).toBe(1);
+  expect(await fiscalRecordCount(cfg)).toBe(1);
 });
 
 describe("the till's sign-in and drawer override derive the PIN's key outside the write lock", () => {

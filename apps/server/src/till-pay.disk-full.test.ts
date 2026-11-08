@@ -18,7 +18,7 @@ import { createDiskFullState, watchForDiskFull, type DiskFullState } from "./dis
 import {
   inTx,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   type BillVenue,
 } from "./testing/bill-venue.js";
@@ -246,7 +246,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
     expect(disk.since()).not.toBeNull();
     expect(collects()).toBe(before);
     expect(count("sales", "working_order_id", id)).toBe(1);
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
   });
 
   describe("a refusal noted while the payment waits for the write queue", () => {

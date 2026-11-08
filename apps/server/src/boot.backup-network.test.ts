@@ -16,7 +16,7 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
-import { provisionBillVenue, registroCount, type BillVenue } from "./testing/bill-venue.js";
+import { provisionBillVenue, fiscalRecordCount, type BillVenue } from "./testing/bill-venue.js";
 import {
   copyMigrationsRoot,
   fetchHealthOk,
@@ -188,7 +188,7 @@ async function bootAndTrade(
       const orderId = randomUUID();
       const sale = await cashSale(base, via, orderId);
       expect(sale.status, await sale.text()).toBe(200);
-      expect(registroCount(venue, orderId)).toBe(1);
+      expect(fiscalRecordCount(venue, orderId)).toBe(1);
       expect((await fetchHealthOk(`${base}/health`, via)).status).toBe(200);
       await afterTrading?.();
     } finally {

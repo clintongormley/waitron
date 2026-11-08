@@ -356,7 +356,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-async function registroCount(workingOrderId: string): Promise<number> {
+async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const rows = suite.db.all<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
@@ -812,7 +812,7 @@ describe("active fiscal conflict stops new money", () => {
       ),
     ).resolves.toEqual(ticket);
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("refuses an invoice-first issue while preserving the open order and counters", async () => {
@@ -1128,7 +1128,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     expect(out.outcome).toBe("captured");
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await paymentsFor(id)).toMatchObject([
       { provider: "simulator", state: "captured", linkedToSale: true },
     ]);
@@ -1178,7 +1178,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     expect(out).toEqual({ outcome: "declined" });
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
     expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
   });
 
@@ -1202,7 +1202,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await preparationTicketCount(id)).toBe(1);
     // A walk-up is not a collect, so its handover marker stays NULL.
     expect(await collectedAtSet(id)).toBe(false);
@@ -1232,7 +1232,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(out.outcome).toBe("declined");
     // Nothing filed; the order stays `open`, so the till can retry.
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
     expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
   });
@@ -1284,7 +1284,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
     expect(sale!.seriesId).toBe(activeId);
     expect(sale!.invoiceNumber).toBe(11);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("issues on a newly active series and replays that invoice after a later switch", async () => {
@@ -1328,7 +1328,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const retry = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
     expect(retry).toEqual(first);
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     const [unchanged] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
     expect(unchanged).toEqual(sale);
   });
@@ -1359,7 +1359,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(second.ticket.qrText).toEqual(first.ticket.qrText);
     expect(client.lastCreateIntent).toBe(firstIntent); // no second createPaymentIntent
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await preparationTicketCount(id)).toBe(1);
     expect(await paymentCount(id)).toBe(1);
   });
@@ -1387,12 +1387,12 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(decodeTicket(payload)).toContain("VERI*FACTU");
     expect(opensDrawer(payload)).toBe(false);
     expect(await drawerOpenCount(cfg)).toBe(0);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
 
     // A lost-response retry replays and never prints a second receipt.
     const second = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(second.outcome).toBe("captured");
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await printJobPayloads(cfg, printerId)).toHaveLength(1);
     expect(await drawerOpenCount(cfg)).toBe(0);
   });
@@ -1535,7 +1535,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     expect(out.outcome).toBe("captured");
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     const payments = await paymentsFor(id);
@@ -1620,7 +1620,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(out.ticket.total).toBe("1.50");
     expect(out.ticket.tender.method).toBe("card");
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
     expect(await paymentsFor(id)).toEqual([
@@ -1653,7 +1653,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     // Rolled back; the walk-up order committed in P1 stays `open`.
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
   });
 
@@ -1841,7 +1841,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(client.lastCreateIntent).toBeUndefined();
     expect(await paymentCount(id)).toBe(1);
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await preparationTicketCount(id)).toBe(1);
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -1992,7 +1992,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(out.outcome).toBe("captured");
     expect(client.lastCreateIntent).toBeUndefined(); // recovery skips P2 — no re-charge
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await paymentCount(id)).toBe(1);
     expect(await preparationTicketCount(id)).toBe(1); // placement fired it; recovery did not re-fire
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -2031,7 +2031,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
     // No sale, no registro; the order stays open; the captured payment is untouched (still an orphan).
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
     expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
   });
@@ -2076,7 +2076,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       reason: { code: "order.payment_in_flight", params: { workingOrderId: id } },
     });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("two concurrent recoveries of one lost capture file ONE sale; the loser replays", async () => {
@@ -2106,7 +2106,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     }
     expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await paymentCount(id)).toBe(1);
     expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
   });
@@ -2147,7 +2147,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     const { id, saleId } = await placedIssuedBill(cfg, coffee);
     // The seeded invoice is outstanding; placement fired the order to the default station.
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
     expect(await stationQueueOrderIds(station)).toEqual([id]);
@@ -2163,7 +2163,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     expect(out.ticket.tender.method).toBe("card");
     // Settled, not re-filed.
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await outstandingSalesFor()).toEqual([]);
     expect(await collectedAtSet(id)).toBe(false);
@@ -2206,7 +2206,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     expect(out.outcome).toBe("declined");
     // A decline files and voids NOTHING: the invoice stays outstanding, retryable.
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
     expect(await tendersFor(id)).toEqual([]);
@@ -2240,7 +2240,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     expect(out.ticket.invoiceNumber).toBe(settled.ticket.invoiceNumber);
     expect(out.ticket.total).toBe("1.50");
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
     expect(await paymentsFor(id)).toEqual([
@@ -2301,7 +2301,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await outstandingSalesFor()).toEqual([]);
       expect(await saleCount(id)).toBe(1);
-      expect(await registroCount(id)).toBe(1);
+      expect(await fiscalRecordCount(id)).toBe(1);
     });
 
     it("refuses a malformed tip without asking the reader, and leaves the bill open", async () => {
@@ -2350,7 +2350,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       expect(await tendersFor(id)).toEqual([]);
       expect(await paymentCount(id)).toBe(0);
       expect(await saleCount(id)).toBe(1);
-      expect(await registroCount(id)).toBe(1);
+      expect(await fiscalRecordCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       expect(await outstandingSalesFor()).toEqual([]);
     });
@@ -2435,7 +2435,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       // Recovery skips P2: no second charge.
       expect(client.lastCreateIntent).toBeUndefined();
       expect(await saleCount(id)).toBe(1);
-      expect(await registroCount(id)).toBe(1);
+      expect(await fiscalRecordCount(id)).toBe(1);
       expect(await paymentCount(id)).toBe(1);
       expect(await filedSaleTotal(id)).toBe("1.50");
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -2512,7 +2512,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       }
       expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
       expect(await saleCount(id)).toBe(1);
-      expect(await registroCount(id)).toBe(1);
+      expect(await fiscalRecordCount(id)).toBe(1);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
       expect(await paymentCount(id)).toBe(1);
       expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
@@ -3518,7 +3518,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         receiptSettings: first.ticket.receiptSettings,
       }).toEqual(first.ticket);
       expect(await saleCount(id)).toBe(1);
-      expect(await registroCount(id)).toBe(1);
+      expect(await fiscalRecordCount(id)).toBe(1);
       expect(await paymentCount(id)).toBe(1);
       expect(before.drawer).toEqual([]);
       expect({

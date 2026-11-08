@@ -35,7 +35,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import {
   inTx,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send as rawSend,
   statusOf,
   tabWith,
@@ -539,7 +539,7 @@ describe("design §8 test 17: the provider refunded and the answer was lost", ()
     expect(await providerRefundsOf(paymentId)).toEqual([]);
     expectRefusedInProgress(await lockedWrites(billId, paymentId), billId);
     expect(await statusOf(venue, billId)).toBe("open");
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
 
     const retried = await asked.again();
 
@@ -1662,7 +1662,7 @@ describe("the single-payment routes on a bill whose only card payment was refund
       code: "bill.payments_received",
       params: { workingOrderId: billId },
     });
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
 
     const rest = await pay(billId, "cash", "30.00");
     expect(rest.answer.json).toMatchObject({ invoice: { total: "30.00" } });
@@ -1897,7 +1897,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
       code: "bill.refund_in_progress",
       params: { workingOrderId: billId },
     });
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
 
     await runLoop();
     const balance = await send(
@@ -1912,7 +1912,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
 
     expect(last.answer.status).toBe(200);
     expect(last.answer.json).toMatchObject({ invoice: { total: "60.00" } });
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     const tenders = await tendersOfBill(venue, billId);
     expect(tenders.map((t) => [t.method, t.amount]).sort()).toEqual(
       [
@@ -1968,7 +1968,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     );
 
     expect(issued).toBeNull();
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 });
 

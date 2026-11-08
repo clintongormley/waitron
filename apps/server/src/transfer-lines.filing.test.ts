@@ -202,7 +202,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
 }
 
 /** How many chained `registros_facturacion` rows exist for this working order's sale. */
-async function registroCount(workingOrderId: string): Promise<number> {
+async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
@@ -264,8 +264,8 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
     // exactly one tab after the split), the H2 invariant the transfer must preserve.
     expect(await saleCount(tabA)).toBe(1);
     expect(await saleCount(tabB)).toBe(1);
-    expect(await registroCount(tabA)).toBe(1);
-    expect(await registroCount(tabB)).toBe(1);
+    expect(await fiscalRecordCount(tabA)).toBe(1);
+    expect(await fiscalRecordCount(tabB)).toBe(1);
 
     // Filed at the LOCKED café price (1.50), never re-priced by the transfer: A = 3 × 1.50, B = 5 × 1.50.
     // Read back from the IMMUTABLE `sales.total` too, not only the returned object.

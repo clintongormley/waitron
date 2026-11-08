@@ -2365,8 +2365,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot, counter-payment and split-selection fixtures; shared fixture
   names in the server split suites;
-  `registroCount` consumers in split-table,
-  bill-editing, move-bill and other order suites;
   the till's moved-dish suite; accented bindings in the portion-selection, counter-portion-rows
   and till-ticket-view tests; shared helper consumers and file names.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price

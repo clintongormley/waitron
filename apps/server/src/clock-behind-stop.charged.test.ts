@@ -20,7 +20,7 @@ import {
   inTx,
   paymentRows,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   statusOf,
   tabWith,
@@ -262,7 +262,7 @@ it("a card charged as the stop begins says so, and Pay records it without chargi
   expect(paid.json.outcome).toBe("captured");
   expect(collects()).toBe(before + 1);
   expect(count("sales", "working_order_id", id)).toBe(1);
-  expect(registroCount(venue, id)).toBe(1);
+  expect(fiscalRecordCount(venue, id)).toBe(1);
   expect(allRecords()).toBe(records + 1);
 });
 
@@ -304,7 +304,7 @@ it("the automatic recovery files nothing during the stop, then files it", async 
   expect(stopped.errors).toEqual([
     { paymentId: expect.any(String), error: expect.stringContaining("clock.behind_chain") },
   ]);
-  expect(registroCount(venue, billId)).toBe(0);
+  expect(fiscalRecordCount(venue, billId)).toBe(0);
 
   const resumed = await recoverAutomaticCardPayments({
     admission: testTradingAdmission(),
@@ -315,7 +315,7 @@ it("the automatic recovery files nothing during the stop, then files it", async 
   expect(resumed).toEqual({ filed: 1, errors: [] });
   expect(collects()).toBe(before);
   expect(await statusOf(venue, billId)).toBe("settled");
-  expect(registroCount(venue, billId)).toBe(1);
+  expect(fiscalRecordCount(venue, billId)).toBe(1);
 });
 
 it("a card on a bill as the stop begins says so, and the pending pass completes it once the clock moves on", async () => {
@@ -335,7 +335,7 @@ it("a card on a bill as the stop begins says so, and the pending pass completes 
   expect(charged.status).toBe(507);
   expect(charged.json).toEqual(chargedNotRecorded(billId));
   expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["pending"]);
-  expect(registroCount(venue, billId)).toBe(0);
+  expect(fiscalRecordCount(venue, billId)).toBe(0);
 
   await settlePendingBillPayments({
     admission: testTradingAdmission(),
@@ -347,7 +347,7 @@ it("a card on a bill as the stop begins says so, and the pending pass completes 
 
   expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["received"]);
   expect(await statusOf(venue, billId)).toBe("settled");
-  expect(registroCount(venue, billId)).toBe(1);
+  expect(fiscalRecordCount(venue, billId)).toBe(1);
   expect(collects()).toBe(before + 1);
 });
 

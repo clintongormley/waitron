@@ -336,7 +336,7 @@ async function frozenUnitLabels(
 }
 
 /** How many chained `registros_facturacion` rows exist for this working order's sale. */
-async function registroCount(workingOrderId: string): Promise<number> {
+async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
@@ -629,7 +629,7 @@ describe("payWorkingOrder", () => {
     // registro reference it.
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("parked: pays the STORED composition at its LOCKED prices and settles it", async () => {
@@ -692,7 +692,7 @@ describe("payWorkingOrder", () => {
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("retrieve → edit → pay files the RE-LOCKED edit, not the pre-edit lock (Finding 2 — no silent drop)", async () => {
@@ -745,7 +745,7 @@ describe("payWorkingOrder", () => {
     ]);
     expect(await filedSaleTotal(id)).toBe("3.00");
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("files a parked line at its LOCKED price after the catalogue price changes (line-add snapshot)", async () => {
@@ -782,7 +782,7 @@ describe("payWorkingOrder", () => {
     // The IMMUTABLE fiscal record carries the locked price.
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("idempotent replay: a second pay with the same id returns the SAME ticket — filed QR and breakdown, no second record", async () => {
@@ -848,7 +848,7 @@ describe("payWorkingOrder", () => {
 
     // No double filing: STILL exactly one sale + one registro after the retry.
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("concurrent double-pay of a PARKED order files ONE sale (two callers, same id)", async () => {
@@ -886,7 +886,7 @@ describe("payWorkingOrder", () => {
     expect(resA.invoiceNumber).toBe(resB.invoiceNumber);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("concurrent double-pay of a WALK-UP (no prior row) files ONE sale and both calls return its invoice number", async () => {
@@ -918,7 +918,7 @@ describe("payWorkingOrder", () => {
     expect(resA.invoiceNumber).toBe(resB.invoiceNumber);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("refuses paying an ABANDONED order (working_order.not_open) and files nothing", async () => {
@@ -943,7 +943,7 @@ describe("payWorkingOrder", () => {
     ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
 
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
   });
 
   it("a retrieved pay IGNORES req.lines — even an unknown offer there — and files the STORED lock", async () => {
@@ -976,7 +976,7 @@ describe("payWorkingOrder", () => {
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("refuses an empty basket and any tender that is neither cash nor card (voucher/transfer/other)", async () => {
@@ -1069,7 +1069,7 @@ describe("card tender (manual / datáfono)", () => {
     // One sale + one chained registro, exactly as the cash path.
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
 
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50" }]);
 
@@ -1133,7 +1133,7 @@ describe("card tender (manual / datáfono)", () => {
     expect(second.tender.method).toBe("card");
 
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await paymentCount(id)).toBe(1);
     expect(await paymentsFor(id)).toEqual([
       { provider: "manual", state: "captured", amount: "1.50", linkedToSale: true },
@@ -1216,7 +1216,7 @@ describe("cross-till end-to-end", () => {
     // B's device while the working order stays stamped with the till it was PARKED on (A).
     expect(await orderState(orderId)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(orderId)).toBe(1);
-    expect(await registroCount(orderId)).toBe(1);
+    expect(await fiscalRecordCount(orderId)).toBe(1);
     expect(tillB.origin.deviceId).not.toBe(tillA.origin.deviceId);
     expect(await saleDeviceAndOrderDevice(orderId)).toEqual({
       orderDeviceId: tillA.origin.deviceId,
@@ -1341,7 +1341,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     expect(placed).toEqual({ id, status: "placed" });
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
     expect(await outstanding()).toEqual([]);
     expect(await ticketStateOf(id)).toBe("queued");
     expect((await readAmendments(id)).map((row) => row.kind)).toEqual(["order_placed"]);
@@ -1366,7 +1366,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     expect(placed).toEqual({ id, status: "placed" });
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
   });
 
   it("placeOrder: open → placed, freezes composition, opens the log with a genesis order_placed entry", async () => {
@@ -1695,7 +1695,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(collected.invoiceNumber).toBe("A/2");
     expect(await orderState(collectId)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(collectId)).toBe(1);
-    expect(await registroCount(collectId)).toBe(1);
+    expect(await fiscalRecordCount(collectId)).toBe(1);
   });
 
   // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The
@@ -1721,7 +1721,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(res.tender).toEqual({ method: "cash", change: "3.50" });
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     // Pay + issue are the same instant, so nothing is ever owed.
     expect(await outstanding()).toEqual([]);
   });
@@ -1777,7 +1777,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
 
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
     expect(await outstanding()).toEqual([]);
 
     const collected = await collectOrder(
@@ -1814,7 +1814,7 @@ describe("prepare & collect — zone payment timing", () => {
     ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await outstanding()).toEqual([]);
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
   });
@@ -1948,7 +1948,7 @@ describe("prepare & collect — zone payment timing", () => {
     // Still exactly ONE sale + ONE registro — the ledger row rides ALONGSIDE the settlement, never a
     // second fiscal file (§5).
     expect(await saleCount(cardId)).toBe(1);
-    expect(await registroCount(cardId)).toBe(1);
+    expect(await fiscalRecordCount(cardId)).toBe(1);
 
     // CASH collect of a SEPARATE issued bill → NO payments row (cash is a tender only), the
     // other branch of the card side-write. Same-state divergence (CLAUDE.md §1): card writes 1, cash 0.
@@ -2002,7 +2002,7 @@ describe("prepare & collect — zone payment timing", () => {
 
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    expect(await fiscalRecordCount(id)).toBe(0);
     expect((await readAmendments(id)).map((row) => row.kind)).toEqual(["order_placed"]);
   });
 
@@ -2042,7 +2042,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]); // one settlement
     expect(await outstanding()).toEqual([]);
   });
@@ -2098,7 +2098,7 @@ describe("prepare & collect — zone payment timing", () => {
     ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1); // filed at collect
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
   });
 
   it("Mode T: a concurrent double collect-pay files ONE sale, and a later sequential collect replays", async () => {
@@ -2137,7 +2137,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
 
     // A further SEQUENTIAL collect of the now-settled order deterministically hits the settled-replay
     // branch: it returns the same ticket and files nothing. Exact cash has zero change.
@@ -2193,7 +2193,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(collected.total).toBe("1.50");
     expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
     expect(await saleCount(id)).toBe(1);
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
@@ -2238,7 +2238,7 @@ describe("prepare & collect — zone payment timing", () => {
     );
     expect(collected.invoiceNumber).toBe("A/1"); // the SAME deferred invoice, read back
     expect(await saleCount(id)).toBe(1); // no second file at collect
-    expect(await registroCount(id)).toBe(1);
+    expect(await fiscalRecordCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
     expect(await collectedAtSet(id)).toBe(false);
@@ -2848,7 +2848,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
       expect(await linesSent(id)).toEqual([true, true]);
       expect(await kitchenJobCount(printerId)).toBe(1);
       expect(await saleCount(id)).toBe(1);
-      expect(await registroCount(id)).toBe(1);
+      expect(await fiscalRecordCount(id)).toBe(1);
     },
   );
 });

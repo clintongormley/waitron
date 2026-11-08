@@ -30,7 +30,7 @@ import {
   inTx,
   paymentRows,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   partyRevisionOf,
   seatedWith,
   send,
@@ -59,7 +59,7 @@ describe("payment reservations and previously received money", () => {
     });
     expect(paid.status).toBe(409);
     expect(paid.json).toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
   it("refuses a new whole payment through /api/pay", async () => {
@@ -90,7 +90,7 @@ describe("payment reservations and previously received money", () => {
     );
     expect(paid.status).toBe(409);
     expect(paid.json).toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
     expect(await statusOf(venue, billId)).toBe("placed");
   });
 
@@ -139,7 +139,7 @@ describe("payment reservations and previously received money", () => {
     );
     expect(result).toMatchObject({ outcome: "captured", ticket: { total: "18.00" } });
     expect(venue.card.collectCalls.length).toBe(calls);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   it.each(["bill", "whole"] as const)(
@@ -218,7 +218,7 @@ describe("payment reservations and previously received money", () => {
       ),
     );
     expect(issued).toBeNull();
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
     expect(await statusOf(venue, billId)).toBe("open");
     await venue.db.delete(orderDraftLines).where(eq(orderDraftLines.draftId, draft.id));
     const after = await inTx(venue, (tx) =>
@@ -231,7 +231,7 @@ describe("payment reservations and previously received money", () => {
       ),
     );
     expect(after).toMatchObject({ total: "5.00" });
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   it("issues after the last recalled draft is submitted, after its reference is removed", async () => {
@@ -291,7 +291,7 @@ describe("payment reservations and previously received money", () => {
         .where(eq(orderDraftRecalledLines.draftId, draft.id)),
     ).toEqual([]);
     expect(await statusOf(venue, p.tabId)).toBe("settled");
-    expect(registroCount(venue, p.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, p.tabId)).toBe(1);
   });
 
   it.each(["empty save", "discard"] as const)(
@@ -344,7 +344,7 @@ describe("payment reservations and previously received money", () => {
             );
       expect(answer.status).toBe(200);
       expect(await statusOf(venue, billId)).toBe("settled");
-      expect(registroCount(venue, billId)).toBe(1);
+      expect(fiscalRecordCount(venue, billId)).toBe(1);
     },
   );
 
@@ -381,7 +381,7 @@ describe("payment reservations and previously received money", () => {
       expect(captured.status).toBe(200);
       expect(captured.json).toMatchObject({ outcome: "received", invoice: { total: "18.00" } });
     }
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     expect(await paymentRows(venue, billId)).toHaveLength(1);
   });
 });
@@ -519,7 +519,7 @@ describe("unsent dishes block new payments on their own bill", () => {
         expect(paid).toEqual(preview);
         expect(await paymentRows(venue, billId)).toEqual([]);
         expect(venue.card.collectCalls.length).toBe(calls);
-        expect(registroCount(venue, billId)).toBe(0);
+        expect(fiscalRecordCount(venue, billId)).toBe(0);
         expect(await statusOf(venue, billId)).toBe("open");
       });
     }
@@ -537,7 +537,7 @@ describe("unsent dishes block new payments on their own bill", () => {
           tender: { method, amount: "18.00" },
         }),
       ).rejects.toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
-      expect(registroCount(venue, billId)).toBe(0);
+      expect(fiscalRecordCount(venue, billId)).toBe(0);
     },
   );
 
@@ -558,7 +558,7 @@ describe("unsent dishes block new payments on their own bill", () => {
     expect(venue.card.collectCalls.length).toBe(calls);
     const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
     expect(bill!.paymentAttemptAt).toBeNull();
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
   it.each(["open empty", "submitted", "discarded", "another bill"] as const)(
@@ -581,7 +581,7 @@ describe("unsent dishes block new payments on their own bill", () => {
       );
       expect(result.total).toBe("18.00");
       expect(await statusOf(venue, billId)).toBe("settled");
-      expect(registroCount(venue, billId)).toBe(1);
+      expect(fiscalRecordCount(venue, billId)).toBe(1);
     },
   );
 });
