@@ -64,7 +64,7 @@ From the venue-id design's "What Cloud must change" (items 1–6) and the coordi
      sealed stream settings (`streamSettingsPayload`, `stream-api.ts:114,245`) or inside a part that is
      deleted with them. env6's `settings.backup` stream part
      (`docs/superpowers/plans/2026-11-08-a1308-env6-backup-document.md:105,131`) planned
-     "new only when stream was null"; env6 reads this field instead (coordinator to align env6).
+     "new only when stream was null"; env6 now reads this field instead (env6 aligned, 2026-11-08).
 2. **Pairing v2** (design "At pairing"), in `apps/server/src/cloud-client.ts`:
    - the signed bytes become `waitron-cloud-pair-v2` (`:269-283`), the venue's Cloud id or `""` where v1
      put `localVenueId`, exactly as the Cloud plan's shared vector says;

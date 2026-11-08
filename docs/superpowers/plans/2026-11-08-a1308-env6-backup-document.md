@@ -25,17 +25,17 @@ settings the dashboard already keeps become the `backup` document … the non-se
 [the slice rules](2026-11-08-a1308-slice-rules.md). Part overview: [env1](2026-11-08-a1308-env1-tuning-constants.md).
 
 **Needs:** env5 (one source for backup settings); env4 (`SERVER_SETTINGS_KEYS`); 1b-i;
-[5f](2026-11-08-a1308-5f-backups-without-venue-id.md), which replaces the sealed bucket copy's
-`venueId` with `streamId` ("a random id made when the owner first saves the stream settings, and kept
-on later saves", 5f's list of what it builds, item 2) and takes `venueId` off the archive's bucket destination
-(item 3). Land before the backup-service part starts (env5, "Coordination").
+[5f](2026-11-08-a1308-5f-backups-without-venue-id.md), which takes `venueId` off the archive's bucket
+destination; and [5g](2026-11-08-a1308-5g-cloud-venue-id.md), which replaces the sealed bucket copy's
+`venueId` with `streamId` and keeps that id in `settings.venue` (`readStreamId`, `ensureStreamId`; 5g
+"What it builds" item 1), so it survives removing and re-adding the bucket-copy settings. Land before the backup-service part starts (env5, "Coordination").
 
 **Also coordinate with A1404** (encrypting the bucket copy with a key the box derives; backlog
 `docs/backlog.md:2458`). Its slice 1 (#2599) changes `stream-api.ts` and the stream package; its
 second pull request derives the bucket-copy key with the stream's id as the salt (a `venueId` before
-5f). That salt is not secret: if A1404's second pull request lands first and stores anything new in
+5g). That salt is not secret: if A1404's second pull request lands first and stores anything new in
 the sealed `backup.stream` payload, this plan moves every non-secret part of it into the document's
-`stream` part beside `streamId`, and only `accessKeyId` and `secretAccessKey` stay sealed; if this plan
+`stream` part, and only `accessKeyId` and `secretAccessKey` stay sealed; if this plan
 lands first, A1404 reads the salt from the document. Whichever lands second rebases; if both are in
 flight on `stream-api.ts`, stop and ask the watcher (rules §5.5).
 
@@ -102,8 +102,9 @@ owner.
    `readArchiveSettingsWithMeta`, `readHeldArchiveSettings*` and `archiveRecord` keep their
    signatures and answers, reading and writing the two stores.
 4. `streamSettingsPayload` is replaced by `writeStreamSettings(tx, ring, bucket)`;
-   `readStreamSettings*` join the two stores. `streamId` (5f) lives in the document's `stream` part:
-   made with `randomUUID()` when the part is first written and kept by every later save, as 5f rules.
+   `readStreamSettings*` join the two stores and answer the stream id from 5g's `readStreamId`; the
+   first save calls 5g's `ensureStreamId(tx)`. The id is not stored in this document, so deleting the
+   stream settings does not lose it.
 5. `ArchiveRecordMeta.keyVersion` becomes `number | null` (null when the archive seals no keys).
 
 ## What it leaves out
@@ -128,7 +129,6 @@ export interface StoredArchive {
   destinationTimeoutMs: number;
 }
 export interface StoredStream {
-  streamId: string;            // 5f's random id; kept across saves, new only when stream was null
   endpoint: string | null; region: string; bucket: string; prefix: string;
 }
 export interface BackupDocument { archive: StoredArchive | null; stream: StoredStream | null }
@@ -199,8 +199,8 @@ EQUAL. Any line is a stop.
 
 ## Stop points (beyond rules §5)
 
-1. At the base the sealed `backup.stream` payload does not hold `streamId` as 5f describes (5f not
-   landed, or landed with another shape): stop and ask; do not reintroduce `venueId`.
+1. At the base 5g has not landed, or `settings.venue` has no `streamId` with `readStreamId` and
+   `ensureStreamId`: stop and ask; do not reintroduce `venueId`.
 2. A recovery-pack or evidence suite fails because it compared an archive revision or digest that
    this plan computes differently: if its assertion has to change, stop (rules §5.3).
 
@@ -250,16 +250,16 @@ EQUAL. Any line is a stop.
 
 - [ ] **Step 1: Failing cases** in `stream-host.test.ts` / `stream-api.route.test.ts`:
   - `"PUT seals the keys and keeps the rest in the document"` — same body as today; the credential
-    holds the two keys; the document's `stream` is `{ streamId, endpoint, region, bucket, prefix }` (absent
+    holds the two keys; the document's `stream` is `{ endpoint, region, bucket, prefix }` (absent
     endpoint → null, empty prefix → `""`); GET answers exactly what it answered before (the suite's
     existing expected body, unchanged).
   - `"a key change moves the credential revision"` — PUT twice with only the secret changed →
     `credentialRevision(tx, { purpose: STREAM_PURPOSE })` differs (the recovery pack's staleness
     still sees it).
   - `"DELETE removes both"` — no credential, `stream: null`, `archive` unchanged.
-  - `"the stream id is made once and kept"` — first PUT → the document's `streamId` is a UUID and
-    `readStreamSettingsIn` answers it; a second PUT with another bucket keeps the same `streamId`;
-    DELETE then PUT makes a new one (5f's rule, unchanged).
+  - `"the stream id is made once and kept"` — first PUT → `readStreamId` answers a UUID and
+    `readStreamSettingsIn` answers the same one; a second PUT with another bucket keeps it; DELETE then
+    PUT keeps it too (5g's rule: the id survives removing and re-adding the settings).
   - `"a save changing only the bucket or the prefix re-seals the keys"` — PUT, then PUT with the
     same keys and only `bucket` changed, then only `prefix` changed → `credentialRevision(tx, { purpose: STREAM_PURPOSE })`
     differs after each, so the recovery pack, which reads only that revision
