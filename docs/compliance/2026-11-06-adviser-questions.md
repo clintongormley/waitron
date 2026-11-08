@@ -488,6 +488,11 @@ These cost nothing, and the gestoría the venue already pays can answer most of 
 
 ## Problems found in Waitron
 
+**2026-11-08:** the findings below record the 6 November reading. A1406-1 supplies the
+[first venue's configuration procedure](../operations/first-venue-work-time.md) and neutral PDF
+headings. Paid continuous breaks, yearly limits and split shifts remain A1406-2. See the
+[backlog](../backlog.md) for the current state of the other findings.
+
 Found by reading code and text, not by running it. None is fixed yet. They are in the backlog as
 A1406, A1407 and A1408.
 

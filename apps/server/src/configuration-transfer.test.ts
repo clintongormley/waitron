@@ -108,7 +108,7 @@ import {
 import { recordSale } from "@waitron/core";
 import { categoryDetails, units, unitSeedStates } from "@waitron/catalogue";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
-import { convenioConfig } from "@waitron/workforce-es";
+import { convenioConfig, resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";
 import {
   adjustmentReasons,
@@ -504,6 +504,51 @@ describe("configuration transfer archive", () => {
 });
 
 describe("configuration transfer database path", () => {
+  it("imports the first venue's explicit agreement limits with the other rule defaults", async () => {
+    const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-11-08T08:00:00Z"),
+      versions,
+    );
+    transferred.tables.convenio_config = [
+      {
+        id: "99999999-aaaa-aaaa-aaaa-999999999999",
+        location_id: await venueLocationId(suite.db),
+        created_at: "2026-11-08T08:00:00.000Z",
+        weekly_rest_minutes: 2880,
+        break_threshold_minutes: 300,
+        min_break_minutes: 20,
+      },
+    ];
+    await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+    });
+    const [row] = await targetSuite.db.select().from(convenioConfig);
+    expect(row!.locationId).toBe(await venueLocationId(targetSuite.db));
+    expect(row!.locationId).not.toBe(await venueLocationId(suite.db));
+    expect(row!.id).not.toBe("99999999-aaaa-aaaa-aaaa-999999999999");
+    expect(await resolveWorkTimeRuleset(targetSuite.db)).toMatchObject({
+      weeklyRestMinutes: 2880,
+      breakThresholdMinutes: 300,
+      minBreakMinutes: 20,
+      breaksCountAsWorked: false,
+      maxWeeklyMinutes: 2400,
+      workingDaysPerWeek: 5,
+    });
+  });
+
   it("rolls the new venue back when an imported row is invalid", async () => {
     const targetRequest = venue("B11111111");
     const coreOnly = [
@@ -765,6 +810,9 @@ describe("configuration transfer database path", () => {
       await tx.insert(convenioConfig).values({
         id: "99999999-aaaa-aaaa-aaaa-999999999999",
         locationId: venueId,
+        weeklyRestMinutes: 2880,
+        breakThresholdMinutes: 300,
+        minBreakMinutes: 20,
       });
       // Raw because `@waitron/payments` does not export `paymentPolicy`, so the two `$defaultFn`
       // timestamps are supplied here.
@@ -977,6 +1025,13 @@ describe("configuration transfer database path", () => {
       target_orders: 0,
       target_payments: 0,
       target_bookings: 0,
+    });
+
+    expect(await resolveWorkTimeRuleset(targetSuite.db)).toMatchObject({
+      weeklyRestMinutes: 2880,
+      breakThresholdMinutes: 300,
+      minBreakMinutes: 20,
+      breaksCountAsWorked: false,
     });
 
     const printerSettings = await targetSuite.db.execute<{

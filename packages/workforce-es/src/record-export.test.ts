@@ -9,6 +9,7 @@ import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
   closePayPeriod,
+  employments,
   type TimeRecord,
 } from "@waitron/workforce";
 import * as api from "./index.js";
@@ -507,3 +508,56 @@ it("names the venue once and gives entries and closures no workplace column", as
     "Centro de trabajo",
   );
 });
+
+it.each([
+  {
+    locale: "en",
+    daily: "Above daily target (minutes)",
+    period: "Above period target (minutes)",
+    reference: "Above selected daily or period target (minutes)",
+  },
+  {
+    locale: "es",
+    daily: "Sobre el objetivo diario (minutos)",
+    period: "Sobre el objetivo del período (minutos)",
+    reference: "Sobre el objetivo diario o del período seleccionado (minutos)",
+  },
+] as const)(
+  "describes a part-time worker's excess without classifying it as overtime in $locale",
+  async ({ locale, daily, period, reference }) => {
+    await suite.db.insert(employments).values({
+      personId: worker,
+      contractedMinutesPerWeek: 1200,
+      contractType: "part_time",
+      startDate: "2026-01-01",
+      payRate: 1500,
+    });
+    await day();
+    await close();
+    const before = (await read()).closures[0]!;
+    const exported = await doc({ personId: worker, locale });
+    const summary = exported.sections.find((s) => s.key === "frozen-summaries")!;
+    expect(summary.columns.find((c) => c.key === "dailyAccrualOvertimeMinutes")!.label).toBe(daily);
+    expect(summary.columns.find((c) => c.key === "periodNetOvertimeMinutes")!.label).toBe(period);
+    expect(summary.columns.find((c) => c.key === "overtimeMinutes")!.label).toBe(reference);
+    const dailySection = exported.sections.find((s) => s.key === "frozen-days")!;
+    expect(dailySection.columns.find((c) => c.key === "contractedTargetMinutes")!.label).toBe(
+      locale === "es" ? "Objetivo diario (minutos)" : "Daily target minutes",
+    );
+    expect(dailySection.columns.find((c) => c.key === "overtimeMinutes")!.label).toBe(daily);
+    expect(summary.rows[0]!.cells).toMatchObject({
+      workedMinutes: 480,
+      contractedMinutes: 5314,
+      dailyAccrualOvertimeMinutes: 240,
+      periodNetOvertimeMinutes: 0,
+      overtimeMinutes: 240,
+    });
+    expect(dailySection.rows[0]!.cells).toMatchObject({
+      workedMinutes: 480,
+      contractedTargetMinutes: 240,
+      overtimeMinutes: 240,
+    });
+    expect(cells(exported, "closures")[0]!.closureHash).toBe(before.closureHash);
+    expect((await read()).closures[0]).toEqual(before);
+  },
+);
