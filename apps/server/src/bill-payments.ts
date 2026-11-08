@@ -48,6 +48,7 @@ import {
   associatePaymentWithSale,
   ChargeNotSavedError,
   findPaymentsByBillPayments,
+  findPaymentByBillPayment,
   findActiveCaptureMismatch,
   MANUAL_PROVIDER,
   recordManualCardPayment,
@@ -1383,9 +1384,21 @@ export async function completeBillPayment(
   guestCount?: GuestCountChoice,
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
+  const [pending] = await tx
+    .select({ applied: billPayments.applied })
+    .from(billPayments)
+    .where(eq(billPayments.id, billPaymentId));
+  const provided = await findPaymentByBillPayment(tx, billPaymentId);
+  const actual =
+    provided !== undefined && ["captured", "accepted_offline", "settled"].includes(provided.state)
+      ? decimalToCents(decimal(provided.amount))
+      : undefined;
+  const applied = actual === undefined ? undefined : Math.min(pending!.applied, actual);
   const [payment] = await tx
     .update(billPayments)
     .set({
+      applied,
+      tip: actual === undefined ? undefined : actual - applied!,
       state: "received",
       receivedAt: receivedAt.toISOString(),
       ...attestationColumns(attestation),

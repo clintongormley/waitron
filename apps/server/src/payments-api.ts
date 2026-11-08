@@ -1298,7 +1298,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const fromRow = async () => {
         const settled = await gated(sessionId, async (tx) => {
           await requireStuckBillPayment(tx, id);
-          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant, "stored");
+          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant);
         });
         switch (settled.settled) {
           case "received":

@@ -1772,6 +1772,26 @@ describe("products_ordering_check_update", () => {
 });
 
 describe("bill_payments_guard_update", () => {
+  it("allows actual amounts only as a pending card becomes received", () => {
+    const statements = [
+      ["bp-actual", "card", "pending", "received", 900, 0, undefined],
+      ["bp-extra", "card", "pending", "received", 1000, 300, undefined],
+      ["bp-no-transition", "card", "pending", "pending", 900, 0, BILL_PAYMENT_CHANGE_REFUSAL],
+      ["bp-failed-amount", "card", "pending", "failed", 900, 0, BILL_PAYMENT_CHANGE_REFUSAL],
+      ["bp-fixed-received", "card", "received", "received", 900, 0, BILL_PAYMENT_CHANGE_REFUSAL],
+      ["bp-cash-amount", "cash", "pending", "received", 900, 0, BILL_PAYMENT_CHANGE_REFUSAL],
+    ];
+    for (const [id, method, from, to, applied, tip, refusal] of statements) {
+      connection.exec(billPayment(id, from).replace("'card'", `'${method}'`));
+      expect(
+        refusalFor(
+          connection,
+          `update bill_payments set state = '${to}', applied = ${applied}, tip = ${tip}, received_at = '${STAMP}' where id = '${id}'`,
+        ),
+      ).toBe(refusal);
+    }
+  });
+
   it("refuses a change to a bill payment's applied amount", () => {
     expect(
       refusalFor(connection, `update bill_payments set applied = 1 where id = 'bp-pending'`),
