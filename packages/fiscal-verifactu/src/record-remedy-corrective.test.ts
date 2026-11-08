@@ -26,6 +26,7 @@ import {
 } from "@waitron/shared";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { VerifactuBackend } from "./backend.js";
 import { readChainHead } from "./chain.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
@@ -517,6 +518,7 @@ it.each([false, true])(
         tx,
         original!.id as Parameters<VerifactuBackend["recordVoid"]>[1],
         "Synthetic cancellation",
+        brandNodeId(original!.nodeId),
       ),
     );
     if (asTarget) input.request.registroId = cancellation.recordId;
@@ -597,4 +599,51 @@ it("replays an omitted optional line value when the caller supplies undefined", 
   const before = await snapshot();
   await expect(apply()).resolves.toEqual(first);
   expect(await snapshot()).toEqual(before);
+});
+
+async function takeOverWithCorrectiveSeries(): Promise<SeededNode> {
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  const [series] = await suite.db
+    .insert(invoiceSeries)
+    .values({ nodeId: successor.nodeId, code: "RB", purpose: "rectificative", nextNumber: 1 })
+    .returning();
+  input.request.correction.seriesId = brandSeriesId(series!.id);
+  return successor;
+}
+
+it("a refused record of the box this one took over from can be remedied here", async () => {
+  const successor = await takeOverWithCorrectiveSeries();
+  input.generation.nodeId = successor.nodeId;
+  const before = await snapshot();
+
+  const result = await apply();
+
+  const [appended] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, result.registroId));
+  expect(appended).toMatchObject({
+    nodeId: successor.nodeId,
+    sifId: successor.sifId,
+    facturasRectificadas: {
+      IDFacturaRectificada: [
+        {
+          IDEmisorFactura: before.records[0]!.idEmisorFactura,
+          NumSerieFactura: before.records[0]!.numSerieFactura,
+          FechaExpedicionFactura: "01-03-2026",
+        },
+      ],
+    },
+  });
+  const [correctiveSale] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
+  expect(correctiveSale).toMatchObject({ correctsSaleId: before.sales[0]!.id });
+  expect((await snapshot()).head).toEqual(before.head);
+});
+
+it("a record of an unrelated box is still refused", async () => {
+  await takeOverWithCorrectiveSeries();
+  const unrelated = await seedNode(suite.db, "C");
+  input.generation.nodeId = unrelated.nodeId;
+  await refuses("fiscal.remedy_invalid");
 });

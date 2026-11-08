@@ -418,12 +418,16 @@ describe("A803 move dishes app:", () => {
     expect(bannerText(el)).toContain(t("table.bills_served_differently"));
   });
 
-  it.each(["department.operation_description_required", "sale.department_missing"])(
+  it.each([
+    ["department.operation_description_required", 400],
+    ["sale.department_missing", 400],
+    ["fiscal.chain_handed_over", 409],
+  ])(
     "%s, from issuing the part-paid bill, shows that code's own sentence",
-    async (code) => {
+    async (code, status) => {
       const { el, order } = await open({
         getPartyBills: vi.fn().mockResolvedValue(partPaid()),
-        moveDishes: vi.fn().mockRejectedValue({ code, status: 400 }),
+        moveDishes: vi.fn().mockRejectedValue({ code, status }),
       });
 
       emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });

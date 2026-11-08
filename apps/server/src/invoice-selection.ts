@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   getCountryPack,
   normalizeRecipientCountryCode,
@@ -91,7 +91,7 @@ export async function selectOrderInvoice(
       receiptLocale: workingOrders.receiptLocale,
     })
     .from(workingOrders)
-    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    .where(eq(workingOrders.id, orderId));
   if (order === undefined) {
     throw new AppError("working_order.not_open", { workingOrderId: orderId });
   }

@@ -543,7 +543,7 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `change_log` | `venue.db` | rebuildable, inside the copy | a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2 |
 | `node_sealed_state` | `venue.db` | source-only, inside the copy | M1's state files sealed with M1's recovery key, which M2 cannot open; M2 writes its own row |
 | `recovery_packs` | `venue.db` | source-only, inside the copy | keyed by M1's node id; M2 reads its own or none |
-| `fiscal_certificate_installs`, `fiscal_certificate_reminders` | `venue.db` | source-only, inside the copy | keyed by M1's node id. The certificate itself is in `tenant_credentials`. Every reader of the install record looks it up by this box's node id, so on M2 they find none (Slice 5's Ruling R51): the backlog's entry "[After a handover the new main box gives no certificate expiry warning](../../backlog/replication-cloud.md#after-a-handover-the-new-main-box-gives-no-certificate-expiry-warning)". A FISCAL follow-up, not patched here |
+| `fiscal_certificate_installs`, `fiscal_certificate_reminders` | `venue.db` | source-only, inside the copy | keyed by M1's node id. The certificate itself is in `tenant_credentials`. Every reader of the install record looks it up by this box's node id, so on M2 they find none (Slice 5's Ruling R51): the backlog's entry "After a handover the new main box gives no certificate expiry warning". A FISCAL follow-up, not patched here (A1341; fixed by A1425 on 2026-11-08, when every reader learned the boxes this one took over from; from then the manifest classes both tables transferred) |
 | `tenant_credentials` | `venue.db` | transferred, inside the copy | sealed under the venue key ring (`packages/credentials/src/schema/tenant-credentials.ts`), so usable on M2 only when M2's ring holds every version: the ring check below |
 | `secrets.env` (key ring) | state | transferred, earlier | reached M2 at joining (A947 3a Task 14a); the indicator lists the ring's key versions and M2 refuses `handover.key_ring_mismatch` when it lacks one (backlog A1273) |
 | `trading.env` | state | destination-owned | M2 keeps its own node id; promotion rewrites it (`boot.ts:3067-3075`) |
@@ -2917,7 +2917,7 @@ boxes in one process, not physical qualification.
   table is on M2; M2's sweep, not M1's, resolves the card payment; a till router pointed at both
   moves to M2; **M1 is then switched off and M2 restarted: M2 starts selling, without waiting**
   (it does not count M1 as a peer, Task 3.4); and the install record M2 cannot find, which the
-  test records as `it.fails` (Slice 5's Ruling R51: wider than the certificate card, see
+  test recorded as `it.fails` until A1425 fixed it on 2026-11-08 (Slice 5's Ruling R51: wider than the certificate card, see
   "Slice 5 as built").
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control, corrected after the 5.10b review: with the restricted start's early return left out alone, M1's start check also waits (an open source operation gives `wait`), so the "no new filing" case still passes (3 failed, 7 passed, M2's cases only, on the 10-case half). The control that fails it removes the early return and also makes the start check answer proceed: 6 failed, with "no new filing" at `expected [3 entries] to deeply equal [2]`.
 - [ ] **Step 3: Commit** `git commit -s -m "server: a controlled handover between two simulated boxes, end to end"`.
@@ -3068,7 +3068,7 @@ name. The receipts are in the slice's ledger and review files, and the PR.
 - R49, a different key under the same ring version is left to the backlog: a box with a wrong key
   ring takes over and cannot open sealed rows.
 - R51, the certificate install record changes no code here: a new main box stays silent about an
-  expiring certificate until the follow-up lands; the first sign is `fiscal.submission_delayed`
+  expiring certificate until the follow-up lands (fixed by A1425 on 2026-11-08); the first sign is `fiscal.submission_delayed`
   about 4 hours after expiry (read, not run).
 - R52, every whole-database copy is created owner-only, a passing module-check fault is no longer
   remembered, a throw on a remembered file clears the record, and the copy check runs
@@ -4114,7 +4114,7 @@ the joint specification and Cloud's half.
   retained selections into M2's preparation file (case 2b). The owner decided on 2026-11-04 that
   such a name counts as used.
 - **Which box a fiscal certificate install record belongs to after a handover** is the owner's
-  question and a FISCAL follow-up (Slice 5's Ruling R51): the backlog's entry "[After a handover the new main box gives no certificate expiry warning](../../backlog/replication-cloud.md#after-a-handover-the-new-main-box-gives-no-certificate-expiry-warning)".
+  question and a FISCAL follow-up (Slice 5's Ruling R51): the backlog's entry "After a handover the new main box gives no certificate expiry warning" (A1341; fixed by A1425 on 2026-11-08, when every reader learned the boxes this one took over from).
 - **A return to a box other than the one the old box handed to** (M2 handed over to M3 before M1
   came back) is not built; Task 13.5 leaves M1 restricted and its records in its archive.
 - **Archive deletion** waits for A664's retention policy; nothing here deletes one.

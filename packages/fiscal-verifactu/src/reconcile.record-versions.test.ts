@@ -216,7 +216,12 @@ it("keeps a pending correction waiting when the lookup still holds its own earli
   const result = await reconcile(
     {
       ...deps(client),
-      scope: { nodeId: node.nodeId, taxpayerId: TEST_NIF, environment: "preproduction" },
+      scope: {
+        nodeId: node.nodeId,
+        historyNodeIds: [node.nodeId],
+        taxpayerId: TEST_NIF,
+        environment: "preproduction",
+      },
     },
     PERIOD,
   );

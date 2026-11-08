@@ -5,8 +5,10 @@ import type { LiquidationPeriod } from "./period.js";
 export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
 
 export interface DailyCloseInput {
-  /** Omit → aggregate across every node in the database (the whole venue). */
-  nodeId?: NodeId;
+  /** The boxes whose records count; omit → every box in the database (the whole venue). */
+  nodeIds?: readonly NodeId[];
+  /** A single box is `nodeIds: [id]`; a `nodeId` field does not compile. */
+  nodeId?: never;
   /** Local calendar date of the business day, "YYYY-MM-DD". */
   businessDay: string;
   /** IANA timezone, e.g. "Europe/Madrid". Required; never defaulted to UTC. */
@@ -17,8 +19,10 @@ export interface DailyCloseInput {
 }
 
 export interface PeriodVatInput {
-  /** Omit → aggregate across every node in the database. */
-  nodeId?: NodeId;
+  /** The boxes whose records count; omit → every box in the database. */
+  nodeIds?: readonly NodeId[];
+  /** A single box is `nodeIds: [id]`; a `nodeId` field does not compile. */
+  nodeId?: never;
   /** Inclusive lower bound, local calendar date of the business day, "YYYY-MM-DD". */
   fromBusinessDay: string;
   /** Inclusive upper bound, local calendar date of the business day, "YYYY-MM-DD". */
@@ -167,19 +171,13 @@ export interface CloseCounts {
 }
 
 export interface DailyClose {
-  /** The node this close covers, or omitted for a venue-wide close (`DailyCloseInput.nodeId`). */
+  /** The first box in `DailyCloseInput.nodeIds`, or omitted for a venue-wide close. */
   nodeId?: NodeId;
   businessDay: string;
   timeZone: string;
   vat: VatSummary;
   cash: CashUp;
   counts: CloseCounts;
-}
-
-/** The manager overview's overdue-orders query: THIS node's currently-open kitchen orders. No
- * business-day range — the read is a live snapshot of right now. */
-export interface OverdueOrdersInput {
-  nodeId: NodeId;
 }
 
 /** One currently-open order whose worst UNSERVED line has crossed into `overdue` or `forgotten` —

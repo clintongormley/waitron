@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { beforeEach, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { StatementSync } from "node:sqlite";
+import { beforeEach, expect, it, vi } from "vitest";
+import { withTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
@@ -14,6 +15,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
@@ -31,6 +33,7 @@ let tradingReady: boolean;
 let token: string;
 let personId: string;
 let node: SeededNode;
+let generationNode: SeededNode["nodeId"];
 let body: Record<string, unknown>;
 const clock: TrustedClock = {
   now: () => ({
@@ -56,6 +59,7 @@ beforeEach(async () => {
   tradingReady = true;
   registerModulePermissions(FISCAL_PERMISSIONS);
   node = await seedNode(suite.db);
+  generationNode = node.nodeId;
   const saleId = await seedSale(suite.db, node, 1);
   await withTransaction(suite.db, async (tx) => {
     const [person] = await tx
@@ -97,7 +101,7 @@ function send(value: unknown = body, enabled = true, runtime = true) {
       db: suite.db,
       recordGeneration: runtime
         ? {
-            nodeId: node.nodeId,
+            nodeId: generationNode,
             environment: "preproduction",
             clock,
             requireWritable: () => {
@@ -504,6 +508,26 @@ it.each([false, true])("rechecks writable admission on an HTTP replay: %s", asyn
   expect(await snapshot()).toEqual(before);
 });
 
+it("refuses a remedy on a box the held chart does not name primary without appending", async () => {
+  await writeNodeMembership(suite.db, {
+    body: {
+      term: 2,
+      nodes: [
+        { nodeId: node.nodeId, contactUrl: "https://this-box", standing: "sell-only" },
+        { nodeId: "new-box", contactUrl: "https://new-box", standing: "serving-primary" },
+      ],
+    },
+    signerNodeId: "new-box",
+    signature: "sig-2",
+    endorsements: [],
+  });
+  const before = await snapshot();
+  const res = await send();
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.chain_handed_over" } });
+  expect(await snapshot()).toEqual(before);
+});
+
 it("refuses a server clock behind the chain without appending", async () => {
   instant = new Date(NOW.getTime() - 120_000);
   const before = await snapshot();
@@ -668,3 +692,65 @@ it.each(["R1", "F3"] as const)(
     });
   },
 );
+
+it("a refused record of the box this one took over from can be remedied here", async () => {
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  generationNode = successor.nodeId;
+  const before = await snapshot();
+
+  const res = await send();
+
+  expect(res.status).toBe(200);
+  const { registroId } = (await res.json()) as { registroId: string };
+  const [appended] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, registroId));
+  expect(appended).toMatchObject({
+    nodeId: successor.nodeId,
+    sifId: successor.sifId,
+    correctsRegistroId: body.registroId,
+    descripcionOperacion: "Corrected restaurant service",
+  });
+  expect(await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId))).toEqual(
+    before.head,
+  );
+});
+
+it("walks the takeover history once to remedy a record of the box this one took over from", async () => {
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  generationNode = successor.nodeId;
+  let reads = 0;
+  const all = StatementSync.prototype.all;
+  const spy = vi.spyOn(StatementSync.prototype, "all").mockImplementation(function (
+    this: StatementSync,
+    ...args
+  ) {
+    if (/\bfrom\s+"handover_activations"/i.test(this.sourceSQL)) reads++;
+    return Reflect.apply(all, this, args) as never;
+  });
+  try {
+    expect((await send()).status).toBe(200);
+  } finally {
+    spy.mockRestore();
+  }
+
+  // One walk reads the activations once for each of the two boxes it lists.
+  expect(reads).toBe(2);
+});
+
+it("a record of an unrelated box is still refused", async () => {
+  const successor = await seedNode(suite.db, "B");
+  const unrelated = await seedNode(suite.db, "C");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  generationNode = unrelated.nodeId;
+  const before = await snapshot();
+
+  const res = await send();
+
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});

@@ -126,7 +126,7 @@ async function operation(kind: "F2" | "F1" | "R5" | "F3" | "cancellation") {
   return (tx: Transaction) => {
     const value = input();
     if (kind === "cancellation")
-      return recordVoid(tx, backend, original!.saleId, "Staff error", { sessionId });
+      return recordVoid(tx, backend, original!.saleId, "Staff error", { sessionId }, node.nodeId);
     if (kind === "R5")
       return recordCorrection(tx, backend, {
         origin: value.origin,

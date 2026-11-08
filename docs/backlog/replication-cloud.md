@@ -507,7 +507,7 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 - `scripts/handover-manifest-complete.test.ts` has no reverse check: a manifest row naming a table
   or file that no longer exists still passes.
 
-## A selling box that takes a newer chart naming another main box keeps selling and filing
+## A box the chart no longer names main keeps filing its earlier records
 
 A1342. The owner chose on 2026-11-05: settle it before A947 3b lands, and a box that sees another
 main box stops selling. Left open by A1018 Slice 5 (Ruling R42). `apps/server/src/node-membership-api.ts` and
@@ -516,33 +516,32 @@ and a third box's promotion leaves a box `serving-secondary`, which does not fen
 starts on the Slice 5 branch; on main since #2436. It needs a third box promoted over a running main
 box, so no real venue reaches it before 3b.
 
+Since A1425 the Veri\*Factu backend's `refuseNewIssuance` and `appendToChain` refuse a box the held
+chart does not name `serving-primary` (`fiscal.chain_handed_over`), so such a box writes no new record
+and refuses sales and bill payments before money moves; refunds call `refuseNewRefund`, which does not
+read the chart, so they still go through. The filing loop (`packages/fiscal-verifactu/src/drain.ts`)
+does not read the chart, so it still sends the records it wrote before.
+
+A venue with no fiscal regime (`NoneBackend`, `packages/fiscal-none/src/backend.ts`) has neither
+check, so neither refuses a GB box left `serving-secondary` with another box named main. In #2570's
+review on 2026-11-08 such a box committed a cash sale through the core write path; the probe did not
+start a real server. The owner's ruling that a box that is not the main one refuses a
+sale before money moves does not yet reach this regime.
+
+A box left `serving-secondary` by a third box's promotion also keeps the tills opened from it, because it still answers
+that it accepts sales, at the same term as the main box, and on a tie the till's server router takes
+the first server in its list, which is the address the till's page came from. So on those tills 'Wait
+for the till to move to the main server' does not come true until this entry is done. In #2570's
+review on 2026-11-08 the real `/api/node` handler and `ServerRouter`, given those answers and opened
+from the old box, stayed on the old box for ten polling rounds, and moved to the main box when the old
+box answered `acceptingSales: false`. A real three-box start has not been run for this.
+
 The same class, from the 5.8b review: a chart naming a third box main with M2 `serving-secondary`,
 saved after the role, then a kill: the real start answers `acceptingSales: true`, with M2 `activated`
 and primary, and the third box is not asked because it has not joined. That chart was hand-signed
 with M1's key. `nextStandings` would give `sell-only`, which does fence, but only for a box that was
 main in the chart it minted from; a third box promoted from M1's first chart would leave M2
 `serving-secondary`, which was not run.
-
-## After a handover the new main box gives no certificate expiry warning
-
-A1341. FISCAL. The owner chose on 2026-11-05: fix it before A947 3b lands, so the certificate's records
-and warnings carry over to the new main box. Left open by A1018 Slice 5 (Ruling R51). Every reader looks the record up
-by this box's node id, and the only row, inside the copy, names the old box: `certificate-card.ts`,
-`certificate-alerts.ts`, `certificate-reminders.ts`, `certificate-diagnosis.ts`,
-`certificate-install.ts`, `provisioning-secret.ts`, and its own SQL in
-`backup-verification-secrets.ts`. Filing reads the sealed certificate, not this record.
-
-Run on M2 after the whole simulated handover, with M1's certificate 5 days from expiry:
-- no certificate alert, where M1 had `fiscal.certificate_expiring`, and no reminder email;
-- the card reads "Installed: not recorded" with a "Replace certificate" button and no dates (the
-  words are read from the card's code and a browser case);
-- a backup of M2's file fails the certificate check as `invalid`;
-- the sealed certificate opens, with the same fingerprint, and a real mutual-TLS request using it
-  answered 200, and a renewal works.
-
-Read, not run: when the certificate expires, sales go on and records wait, and the first thing that
-speaks is `fiscal.submission_delayed` about 4 hours later, with nothing naming the certificate.
-`handover-controlled.e2e.test.ts` records the missing record as `it.fails`.
 
 ## A placed copy can lose a newer chart
 

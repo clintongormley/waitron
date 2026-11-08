@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { nodes, readVenueClock, type Transaction } from "@waitron/db";
 import { businessDayAt, businessDayBoundaryAt, businessDayBounds } from "@waitron/shared";
@@ -242,11 +242,13 @@ export function reversedSalesClause(window: WindowClause): SQL {
 }
 
 /**
- * The optional node predicate: `and <column> = <nodeId>` when a node is fixed, an empty fragment
- * when it is omitted (a venue-wide aggregate). `column` defaults to `s.node_id`, a `sales` row
- * aliased `s`. It carries its own leading `and`, so the caller writes it inline as
- * `${nodeScopeClause(input.nodeId)}`.
+ * The optional box predicate: `and <column> in (…)` for a list of boxes, an empty fragment when the
+ * list is omitted (a venue-wide aggregate). An empty list is refused rather than read as "every
+ * box" or "no box". `column` defaults to `s.node_id`, a `sales` row aliased `s`. It carries its own
+ * leading `and`, so the caller writes it inline as `${nodeScopeClause(input.nodeIds)}`.
  */
-export function nodeScopeClause(nodeId?: NodeId, column: SQL = sql`s.node_id`): SQL {
-  return nodeId ? sql`and ${column} = ${nodeId}` : sql``;
+export function nodeScopeClause(nodeIds?: readonly NodeId[], column: SQL = sql`s.node_id`): SQL {
+  if (nodeIds === undefined) return sql``;
+  if (nodeIds.length === 0) throw new Error("reporting: empty box list");
+  return sql`and ${inArray(column, nodeIds)}`;
 }

@@ -303,8 +303,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   witnesses and fencing (W41s-10b), and the complete old-backup/new-hardware exercise (W41s-11)
   remain queued. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
   restored server, and history before the oldest known month. Task 8's disputed production remedies
-  remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision; a held cancellation
-  from another issuing chain has no qualified release here.
+  remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision. Once its original's
+  correction is accepted, on any issuing chain, an administrator may release a held cancellation
+  through a remedy, which only a test policy enables today (`ENABLED_REMEDIES` is empty,
+  `packages/fiscal-verifactu/src/record-remedy-routes.ts:20`).
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
@@ -1960,16 +1962,13 @@ Not in any track until the standalone primary is done.
   expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
 
 - **A1342. Before A947 3b lands: a selling box that takes a newer chart naming another main box
-  must stop selling.** The owner chose this on 2026-11-05. Today it keeps selling and filing: it
-  stops only when the chart fences it, and a third box's promotion can leave it `serving-secondary`,
-  which does not. Two boxes filing could not be repaired. Left open by A1018 Slice 5 (Ruling R42).
-  [Detail](backlog/replication-cloud.md#a-selling-box-that-takes-a-newer-chart-naming-another-main-box-keeps-selling-and-filing)
-
-- **A1341. FISCAL, before A947 3b lands: after a handover the certificate's records and warnings must
-  follow the new main box.** The owner chose this on 2026-11-05. Today the new main box gives no
-  expiry warning: filing and a renewal work, but every reader looks up the install record by this
-  box's node id, and the record names the old box. Left open by A1018 Slice 5 (Ruling R51).
-  [Detail](backlog/replication-cloud.md#after-a-handover-the-new-main-box-gives-no-certificate-expiry-warning)
+  must stop selling.** The owner chose this on 2026-11-05. Since A1425, on a Veri\*Factu venue, once its held chart does
+  not name it main, it writes no new fiscal record, and refuses sales and bill payments before any
+  money moves (`fiscal.chain_handed_over`); refunds are not refused. It still sends AEAT the
+  records it wrote before: the filing loop does not read the chart, and a third box's promotion can
+  leave it `serving-secondary`, which does not fence it. Two boxes filing could not be repaired.
+  Left open by A1018 Slice 5 (Ruling R42).
+  [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 
 - **Series and module-preparation gaps at handover** (bundle of 3, 2 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 
@@ -2004,13 +2003,11 @@ Not in any track until the standalone primary is done.
   at the next start, a power cut waits a minute, a restart does not wait.
   [A1418 design](superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md), approved 2026-11-07; plan next.
 
-- **A1425. Every restore takes its own identity, and the box that takes over can finish what it
-  inherited (owner, 2026-11-07).** After a handover the selling box cannot take payment for
-  inherited tables, repeats order numbers, chains a cancellation of an old sale on the old box's
-  chain, and leaves the old box's sales out of the day's cash-up (measured). Part 1 fixes those for
-  every takeover; part 3 makes a restore a takeover, after Cloud agrees to change the rule that a restore keeps the old box's identity.
-  [Design](superpowers/specs/2026-11-07-restore-takes-new-identity-design.md), approved 2026-11-07;
-  [part 1 plan](superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md).
+- **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
+  keeps the old box's identity. Part 3 makes a restore a takeover, after Cloud agrees to change the
+  rule that a restore keeps the old box's identity. Part 2, a staff route that cancels a sale, is
+  built only if a venue needs one before go-live.
+  [Design](superpowers/specs/2026-11-07-restore-takes-new-identity-design.md), approved 2026-11-07.
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
   2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. Building waits for

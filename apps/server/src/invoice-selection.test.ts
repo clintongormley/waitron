@@ -240,17 +240,36 @@ describe("stored bill invoice selection", () => {
     ).rejects.toThrow("more than one full series");
   });
 
-  it.each(["missing", "other-node"])(
-    "refuses a %s bill without selecting another node's identity",
-    async (condition) => {
-      const order = await bill(true);
-      const id = condition === "missing" ? randomUUID() : order.id;
-      const cfg = condition === "missing" ? order.cfg : (await bill()).cfg;
-      await expect(
-        withTransaction(suite.db, (tx) => selectOrderInvoice(tx, policy, cfg, id, decimal("3.00"))),
-      ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
-    },
-  );
+  it("refuses a missing bill without selecting another node's identity", async () => {
+    const order = await bill(true);
+    const id = randomUUID();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        selectOrderInvoice(tx, policy, order.cfg, id, decimal("3.00")),
+      ),
+    ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
+  });
+
+  it("selects the selling box's own series for a bill another box opened", async () => {
+    const order = await bill(true);
+    const selling = await bill();
+    const selected = await withTransaction(suite.db, (tx) =>
+      selectOrderInvoice(tx, policy, selling.cfg, order.id, decimal("3.00")),
+    );
+    expect(selected.invoiceType).toBe("F1");
+    expect(selected.sale.seriesId).toBe(selling.fullSeriesId);
+    expect(selected.sale.seriesId).not.toBe(order.fullSeriesId);
+    const [series] = await suite.db
+      .select({ nodeId: invoiceSeries.nodeId, purpose: invoiceSeries.purpose })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, selected.sale.seriesId));
+    expect(series).toEqual({ nodeId: selling.cfg.nodeId, purpose: "full" });
+    const [stamped] = await suite.db
+      .select({ nodeId: workingOrders.nodeId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, order.id));
+    expect(stamped!.nodeId).toBe(order.cfg.nodeId);
+  });
 
   it.each([
     { field: "taxId", change: { recipientTaxId: null } },

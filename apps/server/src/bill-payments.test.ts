@@ -42,7 +42,8 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { payments, SimulatorPaymentProvider } from "@waitron/payments";
@@ -422,10 +423,11 @@ describe("invoice selection before reserving new bill money", () => {
     billId: string,
     cfg: DeviceRequestConfig,
     method: "cash" | "manual" | "reader",
+    amount = "1.00",
   ) {
-    const req = cash("1.00", {
+    const req = cash(amount, {
       method: method === "cash" ? "cash" : "card",
-      tendered: method === "cash" ? "1.00" : undefined,
+      tendered: method === "cash" ? amount : undefined,
     });
     if (method === "reader") {
       return takeReaderBillPayment(
@@ -450,18 +452,32 @@ describe("invoice selection before reserving new bill money", () => {
   }
 
   it.each(["cash", "manual", "reader"] as const)(
-    "refuses a %s reservation when this node does not own the saved invoice choice",
+    "takes a %s payment for a bill another box opened, filing it on this box's series and SIF",
     async (method) => {
       const billId = await tabWith("Beer");
-      const before = await snapshot(billId);
-      const error = await captureError(() =>
-        pay(billId, { ...venue.cfg, nodeId: brandNodeId(randomUUID()) }, method),
-      );
-      expect(error).toMatchObject({
-        code: "working_order.not_open",
-        params: { workingOrderId: billId },
+      await inTx(async (tx) => {
+        const nodeId = await seedNode(tx);
+        await tx.update(workingOrders).set({ nodeId }).where(eq(workingOrders.id, billId));
       });
-      expect(await snapshot(billId)).toEqual(before);
+      const result = await pay(billId, venue.cfg, method, "3.00");
+      expect(result.payment).toMatchObject({ state: "received", applied: "3.00" });
+      expect(await statusOf(billId)).toBe("settled");
+      const filed = await inTx(async (tx) => {
+        const saleRows = await tx
+          .select({ id: sales.id, nodeId: sales.nodeId, seriesNode: invoiceSeries.nodeId })
+          .from(sales)
+          .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+          .where(eq(sales.workingOrderId, billId));
+        const records = await tx
+          .select({ nodeId: registrosFacturacion.nodeId, sifNode: registroSif.nodeId })
+          .from(registrosFacturacion)
+          .innerJoin(registroSif, eq(registroSif.id, registrosFacturacion.sifId))
+          .where(eq(registrosFacturacion.saleId, saleRows[0]?.id ?? ""));
+        return { saleRows, records };
+      });
+      const here = venue.cfg.nodeId;
+      expect(filed.saleRows).toEqual([{ id: expect.any(String), nodeId: here, seriesNode: here }]);
+      expect(filed.records).toEqual([{ nodeId: here, sifNode: here }]);
     },
   );
 

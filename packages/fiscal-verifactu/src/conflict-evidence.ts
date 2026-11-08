@@ -31,6 +31,8 @@ export async function assertNoActiveConflict(tx: Transaction, nodeId: string): P
   }
 }
 
+/** One box only: a conflict stops the box whose identity it concerns. One on a record of a box this
+ * box took over from is recorded but cannot stop this box, which never appends to that chain. */
 export async function readActiveConflicts(
   tx: Transaction,
   nodeId: string,

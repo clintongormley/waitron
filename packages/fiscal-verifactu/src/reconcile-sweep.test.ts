@@ -5,7 +5,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { insertPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
+import { randomUUID } from "node:crypto";
+import { insertPendingAlta, seedPendingEnvios, seedPinnedChain } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { envios } from "./schema/envios.js";
 import { readActiveConflicts } from "./conflict-evidence.js";
@@ -61,7 +62,12 @@ async function fixture() {
     db: suite.db,
     clock: seeded.clock,
     retryMs: RETRY,
-    scope: { nodeId: seeded.nodeId, taxpayerId: seeded.nif, environment: "production" as const },
+    scope: {
+      nodeId: seeded.nodeId,
+      historyNodeIds: [seeded.nodeId],
+      taxpayerId: seeded.nif,
+      environment: "production" as const,
+    },
     resolveClient: staticResolver(client),
   };
   return { seeded, ids, client, deps };
@@ -206,6 +212,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
         ...deps,
         scope: {
           nodeId: different === "node" ? "another-node" : deps.scope.nodeId,
+          historyNodeIds: [different === "node" ? "another-node" : deps.scope.nodeId],
           taxpayerId: different === "taxpayer" ? "B87654324" : deps.scope.taxpayerId,
           environment: different === "environment" ? "preproduction" : "production",
         },
@@ -359,4 +366,35 @@ it("detects an outside invoice in a fully empty intervening month", async () => 
     NumSerieFactura: "S1/99",
     FechaExpedicionFactura: "19-02-2027",
   });
+});
+
+it("a month only the old box filed in is still a candidate", async () => {
+  const old = await seedPendingEnvios(suite.db, { count: 1 });
+  const { chain: spare } = await seedPinnedChain(suite.db, old, {
+    sifId: randomUUID(),
+    firstSecuencia: 50,
+    rows: [],
+  });
+  const aeat = createFakeAeat({ serverNow: START });
+  const sweepFor = (historyNodeIds: readonly string[]) =>
+    createReconciliationSweep({
+      db: suite.db,
+      clock: old.clock,
+      retryMs: RETRY,
+      scope: {
+        nodeId: spare.nodeId,
+        taxpayerId: old.nif,
+        environment: "production",
+        historyNodeIds,
+      },
+      resolveClient: staticResolver(aeat.client()),
+    });
+
+  const taken = await sweepFor([spare.nodeId, old.nodeId])(START);
+  expect(
+    taken.periods.map(({ year, month, result }) => ({ year, month, checked: result?.checked })),
+  ).toEqual([{ year: "2026", month: "07", checked: 1 }]);
+
+  // The control: without the old box in its history, the spare box has no month to check.
+  expect((await sweepFor([spare.nodeId])(START)).periods).toEqual([]);
 });

@@ -102,7 +102,8 @@ function closeInput(businessDay: string) {
 }
 
 function dailyClose(businessDay: string) {
-  return withTransaction(venue.db, (tx) => computeDailyClose(tx, closeInput(businessDay)));
+  const { nodeId, ...input } = closeInput(businessDay);
+  return withTransaction(venue.db, (tx) => computeDailyClose(tx, { ...input, nodeIds: [nodeId] }));
 }
 
 function freeze(businessDay: string, cashCounts: CashCountInput[]) {

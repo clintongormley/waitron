@@ -19,7 +19,7 @@ beforeEach(async () => {
 function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   return {
     cutoverChanges: [],
-    nodeId: venue.nodeId,
+    nodeIds: [venue.nodeId],
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
@@ -122,9 +122,9 @@ describe("computeCloseCounts", () => {
   });
 
   it.each([
-    ["one node", () => venue.nodeId],
+    ["one node", () => [venue.nodeId]],
     ["the whole venue", () => undefined],
-  ])("finds %s's voids by a range search on voided_at, not a scan", async (_label, nodeId) => {
+  ])("finds %s's voids by a range search on voided_at, not a scan", async (_label, nodeIds) => {
     const plan = await withTransaction(suite.db, async (tx) => {
       const statements: SQL[] = [];
       const recording = new Proxy(tx, {
@@ -136,7 +136,7 @@ describe("computeCloseCounts", () => {
               }
             : Reflect.get(target, key, receiver),
       }) as Transaction;
-      await computeCloseCounts(recording, input({ nodeId: nodeId() }));
+      await computeCloseCounts(recording, input({ nodeIds: nodeIds() }));
       const voidCount = statements.find((q) =>
         new SQLiteSyncDialect().sqlToQuery(q).sql.includes("sv.voided_at"),
       );

@@ -41,7 +41,7 @@ beforeEach(async () => {
 function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {
   const input: TopSellersInput = {
     cutoverChanges: [],
-    nodeId: venue.nodeId,
+    nodeIds: [venue.nodeId],
     fromBusinessDay: DAY,
     toBusinessDay: DAY,
     timeZone: TZ,
@@ -604,7 +604,7 @@ describe("computeTopSellers", () => {
         ],
       },
     );
-    const rows = await run({ nodeId: undefined });
+    const rows = await run({ nodeIds: undefined });
     expect(rows).toEqual([{ name: coffeeName, quantity: "13.000", total: "130.00", variants: [] }]);
   });
 
@@ -691,7 +691,7 @@ describe("computeTopSellers", () => {
     await seedVoid(suite.db, { saleId: voided }, new Date("2026-08-05T10:00:00Z").toISOString());
     const voidDay = { fromBusinessDay: "2026-08-05", toBusinessDay: "2026-08-05" };
     expect(await run(voidDay)).toEqual([]);
-    expect(await run({ ...voidDay, nodeId: nodeB.nodeId })).toEqual([
+    expect(await run({ ...voidDay, nodeIds: [nodeB.nodeId] })).toEqual([
       { name: coffeeName, quantity: "-5.000", total: "-50.00", variants: [] },
     ]);
   });

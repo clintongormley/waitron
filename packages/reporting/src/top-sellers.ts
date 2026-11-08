@@ -30,7 +30,7 @@ export async function computeTopSellers(
       `reporting: top-sellers limit must be a positive integer: ${JSON.stringify(input.limit)}`,
     );
   }
-  const nodeClause = nodeScopeClause(input.nodeId);
+  const nodeClause = nodeScopeClause(input.nodeIds);
   // Every sum is taken by the engine over integer counts (cents, thousandths) and handed over as
   // TEXT, so a parent's figures are exact and never re-added here. One row per (parent, variant
   // group); the group with no variant name carries the parent's own sales and is not a nested row.

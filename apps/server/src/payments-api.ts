@@ -140,6 +140,7 @@ const PAYMENTS_MANAGE: Permission = "hardware.manage";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "fiscal.fingerprint_mismatch": 409,
+  "fiscal.chain_handed_over": 409,
   "venue.time_zone_not_ready": 409,
   "management_session.required": 401,
   "management_session.expired": 401,

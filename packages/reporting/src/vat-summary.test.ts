@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, withTransaction } from "@waitron/db";
 import { seriesId as brandSeriesId } from "@waitron/shared";
+import type { NodeId, SeriesId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedNodeAndSeries,
@@ -29,7 +30,7 @@ beforeEach(async () => {
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<import("./types.js").VatSummary> {
   const input: DailyCloseInput = {
     cutoverChanges: [],
-    nodeId: venue.nodeId,
+    nodeIds: [venue.nodeId],
     businessDay: DAY,
     timeZone: TZ,
     dayCutover: "05:00",
@@ -200,7 +201,7 @@ describe("computeVatSummary", () => {
     );
     await seedVoid(suite.db, { saleId: s }, new Date("2026-08-05T10:00:00Z").toISOString());
     expect((await run({ businessDay: "2026-08-05" })).byRate).toEqual([]);
-    expect((await run({ businessDay: "2026-08-05", nodeId: nodeB.nodeId })).byRate).toEqual([
+    expect((await run({ businessDay: "2026-08-05", nodeIds: [nodeB.nodeId] })).byRate).toEqual([
       { rate: "21.00", base: "-100.00", tax: "-21.00" },
     ]);
   });
@@ -287,6 +288,27 @@ describe("computeVatSummary", () => {
     );
     // Close runs for the venue's node A — only its 100.00, never node B's 200.00.
     expect((await run()).byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
+  });
+
+  it("a report for two boxes counts both boxes' sales", async () => {
+    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeC = await seedNodeAndSeries(suite.db, venue, "C");
+    const sales: Array<[{ nodeId: NodeId; seriesId: SeriesId }, string, string]> = [
+      [venue, "121.00", "100.00"],
+      [nodeB, "242.00", "200.00"],
+      [nodeC, "484.00", "400.00"],
+    ];
+    for (const [box, total, lineTotal] of sales) {
+      await seedSale(
+        suite.db,
+        { ...venue, nodeId: box.nodeId, seriesId: box.seriesId },
+        { invoiceNumber: 1, issuedAt: noonUtc, total, lines: [{ vatRate: "21.00", lineTotal }] },
+      );
+    }
+    // Boxes A and B: 100.00 + 200.00; box C's 400.00 is outside the list.
+    expect((await run({ nodeIds: [venue.nodeId, nodeB.nodeId] })).byRate).toEqual([
+      { rate: "21.00", base: "300.00", tax: "63.00" },
+    ]);
   });
 
   it("reports the filed difference-method tax exactly for catalogue sales", async () => {

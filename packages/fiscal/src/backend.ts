@@ -392,7 +392,13 @@ export interface FiscalBackend {
    * regime's record, or `null` when it sets no cap. */
   readonly recipientNameMaxLength: number | null;
 
+  /** Throws an `IssuanceRefusedError` when `nodeId` may not issue a new fiscal record: a sale, a
+   * payment that leads to one, a void or a correction. */
   refuseNewIssuance(tx: Transaction, nodeId: NodeId): Promise<void>;
+
+  /** Throws an `IssuanceRefusedError` when `nodeId` may not give money back. A refund issues no
+   * fiscal record, so this refuses less than `refuseNewIssuance`. */
+  refuseNewRefund(tx: Transaction, nodeId: NodeId): Promise<void>;
 
   /**
    * Throws this regime's refusal when a record stamped with `reading` could never be accepted, so a
@@ -495,7 +501,17 @@ export interface FiscalBackend {
   /** Optional receipt observation, independent of allocation and the original receipt result. */
   invoiceEvidenceFor?(tx: Transaction, saleId: SaleId): Promise<FiledInvoiceEvidence | undefined>;
 
-  recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef>;
+  /**
+   * Cancels a sale. The cancellation is issued by `issuingNodeId`, the box running now, and goes on
+   * that box's chain, which may differ from the box that filed the sale; it still cites the
+   * original invoice exactly.
+   */
+  recordVoid(
+    tx: Transaction,
+    saleId: SaleId,
+    reason: string,
+    issuingNodeId: NodeId,
+  ): Promise<FiscalRecordRef>;
 
   /**
    * Records a corrective invoice of a prior sale. `sale` is the corrective invoice's OWN data — its

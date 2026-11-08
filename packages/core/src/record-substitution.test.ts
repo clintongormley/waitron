@@ -291,7 +291,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     await withTransaction(suite.db, async (tx) => {
-      await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: voidSessionId });
+      await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: voidSessionId }, nodeId);
     });
     await expect(substitute(backend, [saleId])).rejects.toMatchObject({
       code: "sale.voided",

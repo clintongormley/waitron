@@ -110,7 +110,7 @@ async function original(instant = AT) {
   return withTransaction(v.db, (tx) => recordSale(tx, v.backend, input(source(instant))));
 }
 async function voidClock(tx: Transaction, id: SaleId) {
-  return regime.prepareFiscalVoidClock(tx, id, source());
+  return regime.prepareFiscalVoidClock(tx, id, source(), v.cfg.nodeId);
 }
 
 describe("core-only callers prepare the saved writing zone", () => {
@@ -262,7 +262,7 @@ describe("core-only callers prepare the saved writing zone", () => {
         clock,
         environment: "preproduction",
       });
-      return recordVoid(tx, backend, old.saleId, "Operator error", { sessionId });
+      return recordVoid(tx, backend, old.saleId, "Operator error", { sessionId }, v.cfg.nodeId);
     });
     expect(issued.fiscal).toMatchObject({ issuedAt: new Date(AT), offsetMinutes: 120 });
     expect(records(old.saleId)).toHaveLength(2);
@@ -285,6 +285,7 @@ describe("core-only callers prepare the saved writing zone", () => {
           old.saleId,
           "Again",
           { sessionId },
+          v.cfg.nodeId,
         ),
       ),
     ).rejects.toMatchObject({ code: "sale.already_voided" });
@@ -331,6 +332,7 @@ describe("core-only callers prepare the saved writing zone", () => {
               old.saleId,
               "Operator error",
               { sessionId },
+              v.cfg.nodeId,
             );
           }
           const clock = await issuingClock(tx);

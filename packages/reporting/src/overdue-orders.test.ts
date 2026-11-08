@@ -21,7 +21,7 @@ import {
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeOverdueOrders } from "./overdue-orders.js";
-import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
+import type { OverdueOrder } from "./types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
@@ -36,13 +36,9 @@ beforeEach(async () => {
   });
 });
 
-function run(overrides: Partial<OverdueOrdersInput> = {}): Promise<OverdueOrder[]> {
-  const input: OverdueOrdersInput = {
-    nodeId: venue.nodeId,
-    ...overrides,
-  };
+function run(): Promise<OverdueOrder[]> {
   return withTransaction(suite.db, async (tx) => {
-    return computeOverdueOrders(tx, input);
+    return computeOverdueOrders(tx);
   });
 }
 
@@ -449,14 +445,14 @@ describe("computeOverdueOrders", () => {
     expect(rows[0]!.tableLabel).toBeNull();
   });
 
-  it("scopes to nodeId: another node's overdue order in the same tenant is excluded", async () => {
+  it("another box's overdue order is listed", async () => {
     const nodeB = await seedNodeAndSeries(suite.db, venue);
     const stationB = await seedKitchenStation(suite.db, {
       locationId: venue.locationId,
       name: "Counter",
       isDefault: false,
     });
-    await seedFiredOrder(
+    const { orderId } = await seedFiredOrder(
       suite.db,
       {
         deviceId: venue.deviceId,
@@ -466,7 +462,7 @@ describe("computeOverdueOrders", () => {
       },
       { orderNumber: 1, ageMinutes: 20 },
     );
-    expect(await run()).toEqual([]);
+    expect(await run()).toEqual([expect.objectContaining({ orderId, stationName: "Counter" })]);
   });
 
   it("returns [] when there are no ticket items at all", async () => {

@@ -197,7 +197,7 @@ export async function computeCategorySales(
   if (input.mode === "current" && classifyCurrent === undefined) {
     throw new Error("reporting: a current-categories report needs a classifier");
   }
-  const nodeClause = nodeScopeClause(input.nodeId);
+  const nodeClause = nodeScopeClause(input.nodeIds);
   const { rows } = await tx.execute<LineRow>(sql`
     select s.id as sale_id, s.issued_at, sl.line_no,
       cast(sl.line_total as text) as net, cast(sl.line_gross as text) as gross,

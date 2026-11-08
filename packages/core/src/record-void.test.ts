@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, deviceOrigin } from "@waitron/shared";
+import { AppError, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -149,7 +149,7 @@ async function voidSale(
   authz: AuthzInput = { sessionId: managerSessionId },
 ) {
   return withTransaction(suite.db, async (tx) => {
-    return recordVoid(tx, backend, saleId, reason, authz);
+    return recordVoid(tx, backend, saleId, reason, authz, nodeId);
   });
 }
 
@@ -174,10 +174,11 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     clockBehindLatestRecord: () => fake.clockBehindLatestRecord(),
     refuseWhileClockBehind: () => fake.refuseWhileClockBehind(),
     refuseNewIssuance: () => fake.refuseNewIssuance(),
+    refuseNewRefund: () => fake.refuseNewRefund(),
     registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
-    recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
+    recordVoid: (tx, id, reason, issuingNodeId) => fake.recordVoid(tx, id, reason, issuingNodeId),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
     checkIntegrity: (tx, node) => fake.checkIntegrity(tx, node),
@@ -386,6 +387,7 @@ describe("recordVoid — error propagation", () => {
       clockBehindLatestRecord: async () => null,
       refuseWhileClockBehind: async () => {},
       refuseNewIssuance: async () => {},
+      refuseNewRefund: async () => {},
       registerNode: () => {
         throw new Error("not used by this test");
       },
@@ -413,9 +415,14 @@ describe("recordVoid — error propagation", () => {
     };
 
     const error = await captureError(() =>
-      recordVoid(fakeTx, backend, "00000000-0000-4000-8000-000000000000" as SaleId, "reason", {
-        sessionId: "operator-session",
-      }),
+      recordVoid(
+        fakeTx,
+        backend,
+        "00000000-0000-4000-8000-000000000000" as SaleId,
+        "reason",
+        { sessionId: "operator-session" },
+        nodeId,
+      ),
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect(driverErrorCode(error)).toBe("53100");
@@ -492,9 +499,9 @@ describe("recordVoid — stored-predecessor and clock warnings", () => {
         observed.push("checkIntegrity");
         return fake.checkIntegrity(tx, node);
       },
-      async recordVoid(tx, id, reason) {
+      async recordVoid(tx, id, reason, issuingNodeId) {
         observed.push("recordVoid");
-        return fake.recordVoid(tx, id, reason);
+        return fake.recordVoid(tx, id, reason, issuingNodeId);
       },
     });
     const { saleId } = await sell(backend);
@@ -503,5 +510,34 @@ describe("recordVoid — stored-predecessor and clock warnings", () => {
     await voidSale(backend, saleId);
 
     expect(observed).toEqual(["checkIntegrity", "recordVoid"]);
+  });
+
+  it("checks and extends the issuing box's chain, not the box that sold", async () => {
+    const issuingBox = brandNodeId("6ba7b810-9dad-11d1-80b4-00c04fd430cb");
+    const seen: { method: string; node: NodeId }[] = [];
+    const fake = new FakeFiscalBackend(suite.db);
+    const backend = wrapBackend(fake, {
+      async checkIntegrity(tx, node) {
+        seen.push({ method: "checkIntegrity", node });
+        return fake.checkIntegrity(tx, node);
+      },
+      async recordVoid(tx, id, reason, issuingNodeId) {
+        seen.push({ method: "recordVoid", node: issuingNodeId });
+        return fake.recordVoid(tx, id, reason, issuingNodeId);
+      },
+    });
+    const { saleId } = await sell(backend);
+    seen.length = 0;
+
+    await withTransaction(suite.db, (tx) =>
+      recordVoid(tx, backend, saleId, "Wrong table", { sessionId: managerSessionId }, issuingBox),
+    );
+
+    expect(seen).toEqual([
+      { method: "checkIntegrity", node: issuingBox },
+      { method: "recordVoid", node: issuingBox },
+    ]);
+    expect((await fake.recordsFor(issuingBox)).map((r) => r.kind)).toEqual(["void"]);
+    expect((await fake.recordsFor(nodeId)).map((r) => r.kind)).toEqual(["sale"]);
   });
 });

@@ -97,16 +97,16 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
   {
     item: "fiscal_certificate_installs",
     where: "venue.db",
-    class: "source-only",
+    class: "transferred",
     treatment:
-      "inside the copy; keyed by M1's node id; the certificate itself is in tenant_credentials",
+      "inside the copy; keyed by M1's node id, and M2 reads them through its takeover history; the certificate itself is in tenant_credentials",
   },
   {
     item: "fiscal_certificate_reminders",
     where: "venue.db",
-    class: "source-only",
+    class: "transferred",
     treatment:
-      "inside the copy; keyed by M1's node id; the certificate itself is in tenant_credentials",
+      "inside the copy; keyed by M1's node id, and M2 reads them through its takeover history; the certificate itself is in tenant_credentials",
   },
   {
     item: "tenant_credentials",

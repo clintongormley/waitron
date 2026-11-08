@@ -226,7 +226,7 @@ describe("the category report reconciles with the till's sales", () => {
     const vat = await withTransaction(suite.db, (tx) =>
       computeVatSummaryForPeriod(tx, {
         cutoverChanges: [],
-        nodeId: cfg.nodeId,
+        nodeIds: [cfg.nodeId],
         fromBusinessDay: from,
         toBusinessDay: to,
         timeZone: "Europe/Madrid",

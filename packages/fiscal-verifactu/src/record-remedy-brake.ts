@@ -6,7 +6,7 @@ import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError } from "@waitron/shared";
 import { releaseBrakeHold } from "./drain.js";
 import { recordCaseEvent } from "./filing-cases.js";
-import { admitRecordRemedy, type RemedyKind } from "./record-remedy.js";
+import { admitRecordRemedy, isInHistory, type RemedyKind } from "./record-remedy.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
@@ -36,7 +36,7 @@ export async function releaseRecordBrake(
     .where(eq(registrosFacturacion.id, registroId));
   if (
     target === undefined ||
-    target.nodeId !== generation.nodeId ||
+    !(await isInHistory(tx, generation.nodeId, target.nodeId)) ||
     target.entorno !== generation.environment
   )
     throw new AppError("fiscal.remedy_invalid", { registroId });

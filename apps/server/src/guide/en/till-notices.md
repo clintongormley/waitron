@@ -115,3 +115,8 @@ Keep the payment window available. If it says the card was charged, do not charg
 server's current recovery key and follow [Recover an invoice identity](box-status.md#invoice-conflict).
 You can close the payment window without starting a recovery. A completed switch leaves existing
 filing results and cases unchanged.
+
+## When this server is no longer the main server {#not-main-server}
+
+When the till says **This server is no longer the main server**, wait for the till to move to the
+main server, then try again. If you already charged a card on the terminal, refund it there first.

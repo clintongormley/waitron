@@ -8,6 +8,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, nodeId, saleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
 import { pendingAcks, writeAck } from "./acks.js";
 import { appendToChain, readChainHead } from "./chain.js";
@@ -488,6 +489,38 @@ it.each(["node", "environment"])("keeps the current host %s check on replay", as
   else environment = "production";
   const before = await snapshot();
   const response = await send();
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("a refused record of the box this one took over from can be remedied here", async () => {
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  runtimeNode = successor.nodeId;
+  const before = await snapshot();
+
+  const response = await send();
+
+  expect(response.status).toBe(200);
+  const after = await snapshot();
+  expect(after.records).toEqual(before.records);
+  expect(after.deliveries.find((r) => r.registroId === ids[3])).toEqual({
+    ...before.deliveries.find((r) => r.registroId === ids[3]),
+    estado: "pendiente",
+    proximoIntentoEn: NOW,
+  });
+});
+
+it("a record of an unrelated box is still refused", async () => {
+  const successor = await seedNode(suite.db, "B");
+  const unrelated = await seedNode(suite.db, "C");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  runtimeNode = unrelated.nodeId;
+  const before = await snapshot();
+
+  const response = await send();
+
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
   expect(await snapshot()).toEqual(before);

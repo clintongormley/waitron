@@ -25,7 +25,7 @@ beforeEach(async () => {
 function run(input: Partial<DailyCloseInput> = {}) {
   return withTransaction(suite.db, (tx) =>
     computeCashUp(tx, {
-      nodeId: venue.nodeId,
+      nodeIds: [venue.nodeId],
       businessDay: "2026-08-05",
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
@@ -127,7 +127,7 @@ describe("computeCashUp — settled-tender refunds", () => {
       origin: other,
     });
     expect(await run()).toEqual({ byOrigin: [], tenderTotal: "0.00", tipTotal: "0.00" });
-    expect(await run({ nodeId: other.nodeId })).toEqual({
+    expect(await run({ nodeIds: [other.nodeId] })).toEqual({
       byOrigin: [
         {
           source: "device",
@@ -139,7 +139,7 @@ describe("computeCashUp — settled-tender refunds", () => {
       tenderTotal: "-20.00",
       tipTotal: "0.00",
     });
-    expect(await run({ nodeId: undefined })).toEqual(await run({ nodeId: other.nodeId }));
+    expect(await run({ nodeIds: undefined })).toEqual(await run({ nodeIds: [other.nodeId] }));
   });
 
   it("groups the refund's job source separately from its sale's device", async () => {

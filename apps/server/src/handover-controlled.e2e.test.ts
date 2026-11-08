@@ -77,6 +77,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { sealAeatSecret } from "@waitron/fiscal-verifactu";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
+import { toAeatDate } from "@waitron/fiscal-verifactu/src/registro-row.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { withOperationAuthority } from "@waitron/module";
 import { readHandoverOperation, setNodeMode, writeMirrorLink } from "@waitron/node-db";
@@ -94,6 +95,12 @@ import { freePorts } from "./testing/free-ports.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { createHourTestClock, selectPastWaits } from "./testing/hour-test-clock.js";
 import { serverFixture } from "./testing/server-fixture.js";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { recordVoid } from "@waitron/core";
+import { loginWithPin } from "@waitron/identity";
+import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
+import { systemClock } from "./till-backend.js";
+import { deploymentEnvironment } from "./config.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: () =>
@@ -121,6 +128,9 @@ const outside = vi.hoisted(() => ({
     numeroInstalacion: string[];
   }[],
   holdSubmit: null as Promise<void> | null,
+  /** Every cancellation AEAT was sent, by whichever box sent it. */
+  anulaciones: [] as { venueFile: string; record: unknown }[],
+  fake: null as unknown,
 }));
 
 // The pending-card loop sleeps at most 50 ms between passes, so a box that sweeps does so inside the
@@ -190,7 +200,12 @@ vi.mock("@waitron/module", async (importOriginal) => {
         const { createFakeAeat } = await import("@waitron/verifactu/testing");
         const { readCertMaterial } =
           await import("@waitron/fiscal-verifactu/src/aeat-transport.js");
-        const fake = createFakeAeat({ serverNow: new Date(Date.now() + 60_000) }).client();
+        // One AEAT for every box, so a cancellation finds the invoice it cancels.
+        const aeat = (outside.fake ??= createFakeAeat({
+          serverNow: new Date(Date.now() + 60_000),
+        })) as ReturnType<typeof createFakeAeat>;
+        aeat.setServerNow(new Date(Date.now() + 60_000));
+        const fake = aeat.client();
         const venueFile = db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
         const client = {
           ...fake,
@@ -206,6 +221,9 @@ vi.mock("@waitron/module", async (importOriginal) => {
               ),
               numeroInstalacion: altas.map((alta) => alta.SistemaInformatico.NumeroInstalacion),
             });
+            for (const record of submitted[1])
+              if ("RegistroAnulacion" in record)
+                outside.anulaciones.push({ venueFile, record: record.RegistroAnulacion });
             const hold = outside.holdSubmit;
             outside.holdSubmit = null;
             if (hold !== null) await hold;
@@ -280,7 +298,8 @@ const PLACING_MS = START_MS + 40_000 + 15_000;
 const SELLING_MS = 4 * START_MS + 2 * ROUTER_PROBE_MS + 60_000 + 20_000;
 const RESTARTS_MS = 2 * START_MS + 15_000 + 10_000;
 const FIRST_SETUP_MS = 90_000;
-const HOOK_MS = STEPDOWN_MS + PLACING_MS + SELLING_MS + RESTARTS_MS + FIRST_SETUP_MS;
+const INHERITED_MS = 2 * START_MS + 45_000;
+const HOOK_MS = STEPDOWN_MS + PLACING_MS + SELLING_MS + INHERITED_MS + RESTARTS_MS + FIRST_SETUP_MS;
 
 function hold() {
   let release!: () => void;
@@ -759,7 +778,13 @@ interface PlacingSeen {
 interface CertificateCard {
   filing: boolean;
   revision: string | null;
-  installed: { source: string; kind: string } | null;
+  installed: {
+    source: string;
+    kind: string;
+    validFrom: string;
+    validUntil: string;
+    installedAt: string;
+  } | null;
 }
 
 async function certificateCard(boxes: Boxes, box: Box): Promise<CertificateCard> {
@@ -1298,6 +1323,481 @@ async function restartWithM1Off(boxes: Boxes, selling: SellingSeen): Promise<Res
   };
 }
 
+// ---- M2 works with what it inherited from M1. Each step records what came back and never throws,
+// so every case below reports on its own.
+
+/** One request's answer, or the error that stopped it. */
+interface Attempt {
+  status: number;
+  body: unknown;
+}
+
+async function attempt(
+  box: Box,
+  path: string,
+  init: { method?: string; cookie?: string; body?: unknown } = {},
+): Promise<Attempt> {
+  try {
+    const answer = await ask(box, path, init);
+    const text = await answer.text();
+    let body: unknown = text;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // Not JSON: keep the text.
+    }
+    return { status: answer.status, body };
+  } catch (error) {
+    return { status: -1, body: String(error) };
+  }
+}
+
+function caught(error: unknown) {
+  const e = error as { code?: unknown; params?: unknown };
+  return { code: e.code ?? null, params: e.params ?? null, message: String(error) };
+}
+
+/** What a bill route is sent as `expectedEdit`, read the way `whole-payment-fixture.ts` reads it. */
+function editOf(file: string, billId: string) {
+  const [row] = readRows<{
+    editorVersion: number;
+    draftId: string | null;
+    draftRevision: number | null;
+  }>(
+    file,
+    `select coalesce(s.editor_version, 0) as editorVersion, d.id as draftId, d.revision as draftRevision
+     from working_orders o left join bill_edit_states s on s.bill_id = o.id
+     left join order_drafts d on d.bill_id = o.id and d.state = 'open'
+     where o.id = ?`,
+    billId,
+  );
+  return {
+    billId,
+    editorVersion: row?.editorVersion ?? 0,
+    draftId: row?.draftId ?? null,
+    draftRevision: row?.draftRevision ?? null,
+  };
+}
+
+interface InheritedSeen {
+  tab: { linesBefore: number };
+  readOne: Attempt;
+  change: Attempt;
+  linesAfterChange: number;
+  balance: Attempt;
+  pay: Attempt;
+  place: Attempt | null;
+  collect: Attempt | null;
+  tabStatusAfterPay: string | undefined;
+  tabSale: { id: string; node_id: string; code: string; invoice_number: number }[];
+  tabSaleRecord: { id: string; node_id: string; estado?: string }[];
+  newOrder: Attempt;
+  m1Orders: { id: string; node_id: string; order_number: number; status: string }[];
+  m2Orders: { id: string; node_id: string; order_number: number; status: string }[];
+  salesByNode: { node_id: string; n: number }[];
+  overview: Attempt;
+  dailyClose: Attempt;
+  refundSaleNode: string | null;
+  refund: Attempt | null;
+  refundRows: { node_id: string; state: string }[];
+  m1RecordsAroundRefund: { before: number; after: number };
+  voidedInvoice: { serie: string; emisor: string; fecha: string } | null;
+  m2SifId: string | null;
+  voidSaleNode: string | null;
+  voided: { ok: true; fiscal: unknown } | { ok: false; error: ReturnType<typeof caught> } | null;
+  voidRecords: {
+    id: string;
+    node_id: string;
+    sif_id: string;
+    tipo_registro: string;
+    estado?: string;
+  }[];
+  voidHeard: { venueFile: string; record: unknown }[];
+  m2SellingAfterVoidRestart: boolean | null;
+  stageErrors: string[];
+}
+
+async function inheritedWork(
+  boxes: Boxes,
+  stepdown: StepdownSeen,
+  selling: SellingSeen,
+): Promise<InheritedSeen> {
+  const { m1, m2, venue } = boxes;
+  const tabId = boxes.openTabId;
+  const errors: string[] = [];
+  const guard = <T>(what: string, fn: () => T, fallback: T): T => {
+    try {
+      return fn();
+    } catch (error) {
+      errors.push(`${what}: ${String(error)}`);
+      return fallback;
+    }
+  };
+  const lineCount = () =>
+    guard(
+      "line count",
+      () =>
+        readRows<{ n: number }>(
+          m2.venueFile,
+          "select count(*) as n from working_order_lines where working_order_id = ?",
+          tabId,
+        )[0]!.n,
+      -1,
+    );
+  const [tabRow] = guard(
+    "tab row",
+    () =>
+      readRows<{ party_id: string | null }>(
+        m2.venueFile,
+        "select party_id from working_orders where id = ?",
+        tabId,
+      ),
+    [],
+  );
+  const partyId = tabRow?.party_id ?? null;
+  const partyRevision = () =>
+    guard(
+      "party revision",
+      () =>
+        readRows<{ revision: number }>(
+          m2.venueFile,
+          "select revision from parties where id = ?",
+          partyId ?? "",
+        )[0]?.revision ?? 0,
+      0,
+    );
+  const linesBefore = lineCount();
+
+  // Change the inherited table: one more Caña, sent to the kitchen.
+  const readOne = await attempt(m2, `/api/working-orders/${tabId}`, { cookie: venue.cookie });
+  const change = await attempt(m2, `/api/parties/${partyId}/groups`, {
+    cookie: venue.cookie,
+    body: {
+      submissionId: randomUUID(),
+      expectedPartyRevision: partyRevision(),
+      expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null),
+      groups: [{ lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" }],
+    },
+  });
+  const linesAfterChange = lineCount();
+
+  // Pay the inherited table in cash: the whole outstanding amount as one bill payment, and if
+  // that leaves it unsettled, the whole-bill path (place, then collect).
+  const balance = await attempt(m2, `/api/working-orders/${tabId}/payments`, {
+    cookie: venue.cookie,
+  });
+  const linesTotal = guard(
+    "lines total",
+    () =>
+      readRows<{ cents: number }>(
+        m2.venueFile,
+        "select coalesce(sum(line_total), 0) as cents from working_order_lines where working_order_id = ?",
+        tabId,
+      )[0]!.cents,
+    0,
+  );
+  const outstanding =
+    balance.status === 200 &&
+    typeof (balance.body as { outstanding?: unknown }).outstanding === "string"
+      ? (balance.body as { outstanding: string }).outstanding
+      : (linesTotal / 100).toFixed(2);
+  const pay = await attempt(m2, `/api/working-orders/${tabId}/payments`, {
+    cookie: venue.cookie,
+    body: {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: outstanding,
+      method: "cash",
+      tendered: outstanding,
+      applied: outstanding,
+      tip: "0.00",
+      expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null),
+    },
+  });
+  const statusNow = () =>
+    guard(
+      "tab status",
+      () =>
+        readRows<{ status: string }>(
+          m2.venueFile,
+          "select status from working_orders where id = ?",
+          tabId,
+        )[0]?.status,
+      undefined,
+    );
+  let place: Attempt | null = null;
+  let collect: Attempt | null = null;
+  if (statusNow() !== "settled") {
+    place = await attempt(m2, `/api/working-orders/${tabId}/place`, {
+      cookie: venue.cookie,
+      body: { expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null) },
+    });
+    collect = await attempt(m2, `/api/working-orders/${tabId}/collect`, {
+      cookie: venue.cookie,
+      body: {
+        expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null),
+        tender: { method: "cash", amount: outstanding },
+      },
+    });
+  }
+  const tabStatusAfterPay = statusNow();
+  const tabSale = guard(
+    "tab sale",
+    () =>
+      readRows<{ id: string; node_id: string; code: string; invoice_number: number }>(
+        m2.venueFile,
+        `select s.id, s.node_id, series.code, s.invoice_number from sales s
+         join invoice_series series on series.id = s.series_id where s.working_order_id = ?`,
+        tabId,
+      ),
+    [],
+  );
+  if (tabSale.length > 0) await sendOutbox(boxes, m2).catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 2_000));
+  const tabSaleRecord = guard(
+    "tab sale record",
+    () =>
+      readRows<{ id: string; node_id: string }>(
+        m2.venueFile,
+        "select id, node_id from registros_facturacion where sale_id = ?",
+        tabSale[0]?.id ?? "",
+      ).map((row) => ({ ...row, estado: filingStateOf(m2.venueFile, row.id) })),
+    [],
+  );
+
+  // A new order on M2, and the order numbers M1 gave out.
+  const newOrder = await attempt(m2, "/api/working-orders", {
+    cookie: venue.cookie,
+    body: {
+      id: randomUUID(),
+      zoneId: venue.zoneId,
+      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+    },
+  });
+  const ordersOf = (file: string) =>
+    guard(
+      "orders",
+      () =>
+        readRows<{ id: string; node_id: string; order_number: number; status: string }>(
+          file,
+          "select id, node_id, order_number, status from working_orders order by order_number",
+        ),
+      [],
+    );
+
+  // The reports for today, the day M1 sold on.
+  const overview = await attempt(m2, "/management-api/reports/overview", {
+    cookie: boxes.adminCookie,
+  });
+  const day =
+    (overview.body as { businessDay?: string } | null)?.businessDay ??
+    new Date().toISOString().slice(0, 10);
+  const dailyClose = await attempt(m2, `/management-api/reports/daily-close?businessDay=${day}`, {
+    cookie: boxes.adminCookie,
+  });
+  const salesByNode = guard(
+    "sales by node",
+    () =>
+      readRows<{ node_id: string; n: number }>(
+        m2.venueFile,
+        "select node_id, count(*) as n from sales group by node_id",
+      ),
+    [],
+  );
+
+  // A cash refund of an M1 sale other than the one cancelled below.
+  const [refundTarget] = guard(
+    "refund target",
+    () =>
+      readRows<{ sale_id: string; node_id: string; tender_id: string; amount: number }>(
+        m2.venueFile,
+        `select r.sale_id, r.node_id, t.id as tender_id, t.amount from registros_facturacion r
+         join tenders t on t.sale_id = r.sale_id and t.method = 'cash' where r.id = ?`,
+        stepdown.records.inFlight,
+      ),
+    [],
+  );
+  const m1Records = () =>
+    guard(
+      "M1's records",
+      () =>
+        readRows<{ n: number }>(
+          m2.venueFile,
+          "select count(*) as n from registros_facturacion where node_id = ?",
+          m1.nodeId,
+        )[0]!.n,
+      -1,
+    );
+  const m1RecordsBeforeRefund = m1Records();
+  const refund =
+    refundTarget === undefined
+      ? null
+      : await attempt(m2, `/api/transactions/${refundTarget.sale_id}/refunds`, {
+          cookie: venue.cookie,
+          body: {
+            submissionId: randomUUID(),
+            tenderId: refundTarget.tender_id,
+            appliedAmount: (refundTarget.amount / 100).toFixed(2),
+            tipAmount: "0.00",
+            reason: "Goodwill",
+            override: { personId: venue.adminId, pin: "1234" },
+          },
+        });
+  const refundRows = guard(
+    "refund rows",
+    () =>
+      readRows<{ node_id: string; state: string }>(
+        m2.venueFile,
+        "select node_id, state from tender_refunds where sale_id = ?",
+        refundTarget?.sale_id ?? "",
+      ),
+    [],
+  );
+  const m1RecordsAroundRefund = { before: m1RecordsBeforeRefund, after: m1Records() };
+
+  // Cancel one of M1's filed sales. No route reaches `recordVoid` (only test fixtures call it),
+  // so it is called in process on M2's own files, with M2's server closed.
+  const [voidTarget] = guard(
+    "void target",
+    () =>
+      readRows<{
+        sale_id: string;
+        node_id: string;
+        num_serie_factura: string;
+        id_emisor_factura: string;
+        fecha_expedicion_factura: string;
+      }>(
+        m2.venueFile,
+        `select sale_id, node_id, num_serie_factura, id_emisor_factura, fecha_expedicion_factura
+         from registros_facturacion where id = ?`,
+        stepdown.records.filed,
+      ),
+    [],
+  );
+  const [m2Sif] = guard(
+    "M2's SIF",
+    () =>
+      readRows<{ sif_id: string }>(
+        m2.venueFile,
+        "select sif_id from registros_facturacion where id = ?",
+        selling.ownRecord,
+      ),
+    [],
+  );
+  let voided: InheritedSeen["voided"] = null;
+  let voidRecords: InheritedSeen["voidRecords"] = [];
+  let m2SellingAfterVoidRestart: boolean | null = null;
+  const heardBefore = outside.anulaciones.length;
+  if (voidTarget !== undefined) {
+    try {
+      await m2.server!.close();
+      const files = await openVenueDatabase(m2.venueDir);
+      try {
+        const env = deploymentEnvironment(m2.env);
+        const backend = new VerifactuBackend({
+          clock: systemClock(),
+          db: files.venue,
+          environment: env,
+          deploymentEnvironment: env,
+          resolveClient: () => Promise.reject(new Error("a void never submits inline")),
+        });
+        const fiscal = await withTransaction(files.venue, async (tx) => {
+          const session = await loginWithPin(tx, {
+            deviceId: venue.deviceId,
+            personId: venue.adminId,
+            pin: "1234",
+          });
+          return recordVoid(
+            tx,
+            backend,
+            brandSaleId(voidTarget.sale_id),
+            "Rung up twice",
+            { sessionId: session.id },
+            brandNodeId(m2.nodeId),
+          );
+        });
+        voided = { ok: true, fiscal };
+      } catch (error) {
+        voided = { ok: false, error: caught(error) };
+      } finally {
+        await files.close();
+      }
+    } catch (error) {
+      errors.push(`void setup: ${String(error)}`);
+    }
+    try {
+      await start(m2);
+      m2SellingAfterVoidRestart = (await nodeProbe(m2)).acceptingSales;
+      await sendOutbox(boxes, m2);
+      await vi
+        .waitFor(
+          () => {
+            const rows = readRows<{ id: string }>(
+              m2.venueFile,
+              "select id from registros_facturacion where sale_id = ? and tipo_registro = 'anulacion'",
+              voidTarget.sale_id,
+            );
+            expect(rows.length).toBeGreaterThan(0);
+            expect(filingStateOf(m2.venueFile, rows[0]!.id)).toBe("aceptado");
+          },
+          { timeout: 15_000, interval: 250 },
+        )
+        .catch(() => {});
+    } catch (error) {
+      errors.push(`restart after void: ${String(error)}`);
+    }
+    voidRecords = guard(
+      "void records",
+      () =>
+        readRows<{ id: string; node_id: string; sif_id: string; tipo_registro: string }>(
+          m2.venueFile,
+          "select id, node_id, sif_id, tipo_registro from registros_facturacion where sale_id = ? and tipo_registro = 'anulacion'",
+          voidTarget.sale_id,
+        ).map((row) => ({ ...row, estado: filingStateOf(m2.venueFile, row.id) })),
+      [],
+    );
+  }
+
+  return {
+    tab: { linesBefore },
+    readOne,
+    change,
+    linesAfterChange,
+    balance,
+    pay,
+    place,
+    collect,
+    tabStatusAfterPay,
+    tabSale,
+    tabSaleRecord,
+    newOrder,
+    m1Orders: ordersOf(m1.venueFile),
+    m2Orders: ordersOf(m2.venueFile),
+    salesByNode,
+    overview,
+    dailyClose,
+    refundSaleNode: refundTarget?.node_id ?? null,
+    refund,
+    refundRows,
+    m1RecordsAroundRefund,
+    voidedInvoice:
+      voidTarget === undefined
+        ? null
+        : {
+            serie: voidTarget.num_serie_factura,
+            emisor: voidTarget.id_emisor_factura,
+            fecha: voidTarget.fecha_expedicion_factura,
+          },
+    m2SifId: m2Sif?.sif_id ?? null,
+    voidSaleNode: voidTarget?.node_id ?? null,
+    voided,
+    voidRecords,
+    voidHeard: outside.anulaciones.slice(heardBefore),
+    m2SellingAfterVoidRestart,
+    stageErrors: errors,
+  };
+}
+
 describe("a controlled handover between two boxes, simulated in one process", () => {
   let scratch: string | undefined;
   let boxes: Boxes | undefined;
@@ -1309,6 +1809,8 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   let sellingFailure: unknown;
   let restarts: RestartsSeen | undefined;
   let restartsFailure: unknown;
+  let inherited: InheritedSeen | undefined;
+  let inheritedFailure: unknown;
   let stopsAskedAtEnd = 0;
   const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
 
@@ -1332,6 +1834,15 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     if (placing !== undefined) {
       try {
         selling = await within(switchOnToSelling(boxes, stepdown), SELLING_MS, "the selling stage");
+        try {
+          inherited = await within(
+            inheritedWork(boxes, stepdown, selling),
+            INHERITED_MS,
+            "the inherited-work stage",
+          );
+        } catch (error) {
+          inheritedFailure = error;
+        }
         restarts = await within(restartWithM1Off(boxes, selling), RESTARTS_MS, "the restart stage");
       } catch (error) {
         if (selling === undefined) sellingFailure = error;
@@ -1604,10 +2115,103 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(on.m2Certificate.revision).toBe(run.m1Certificate.revision);
   });
 
-  // Fiscal follow-up (A1018 plan Task 5.10): the install record is looked up by this box's node id and
-  // names M1, so the card reads "Installed: not recorded", and expiry alerts, reminders, diagnosis and
-  // backup's certificate check lose it too; filing and a renewal work.
-  it.fails("M2's certificate card shows that certificate", () => {
-    expect(sold().on.m2Certificate.installed).toMatchObject({ source: "setup", kind: "sello" });
+  it("M2's certificate card shows that certificate", () => {
+    const { run, on } = sold();
+    const m1 = run.m1Certificate.installed;
+    expect(m1).not.toBeNull();
+    expect(on.m2Certificate.installed).toMatchObject({
+      source: "setup",
+      kind: "sello",
+      validFrom: m1!.validFrom,
+      validUntil: m1!.validUntil,
+      installedAt: m1!.installedAt,
+    });
+  });
+
+  const inheritedRun = () => {
+    if (inherited === undefined) throw inheritedFailure ?? new Error("no inherited-work stage ran");
+    return { ...sold(), w: inherited };
+  };
+
+  it("M2 adds a dish to the table it took over", () => {
+    const { w } = inheritedRun();
+    expect(w.readOne.status, JSON.stringify(w.readOne.body)).toBe(200);
+    expect(w.change.status, JSON.stringify(w.change.body)).toBe(200);
+    expect(w.linesAfterChange).toBe(w.tab.linesBefore + 1);
+  });
+
+  it("M2 takes cash for that table, on a sale in its own series", () => {
+    const { b, on, w } = inheritedRun();
+    expect(w.balance.status, JSON.stringify(w.balance.body)).toBe(200);
+    expect(
+      w.pay.status === 200 || w.collect?.status === 200,
+      JSON.stringify({ pay: w.pay, place: w.place, collect: w.collect }),
+    ).toBe(true);
+    expect(w.tabStatusAfterPay).toBe("settled");
+    expect(w.tabSale).toHaveLength(1);
+    expect(w.tabSale[0]!.node_id).toBe(b.m2.nodeId);
+    expect(w.tabSale[0]!.code).toBe(`A-${on.selected.identity}`);
+    expect(w.tabSaleRecord).toMatchObject([{ node_id: b.m2.nodeId, estado: "aceptado" }]);
+  });
+
+  it("M2's next order number is above every number given out, and none repeats", () => {
+    const { w } = inheritedRun();
+    expect(w.newOrder.status, JSON.stringify(w.newOrder.body)).toBe(200);
+    const number = (w.newOrder.body as { orderNumber: number }).orderNumber;
+    const given = w.m1Orders.map((row) => row.order_number);
+    expect(number, JSON.stringify(w.m1Orders)).toBeGreaterThan(Math.max(0, ...given));
+    const onM2 = w.m2Orders.map((row) => row.order_number);
+    expect(new Set(onM2).size, JSON.stringify(w.m2Orders)).toBe(onM2.length);
+  });
+
+  it("M2 refunds in cash one of M1's sales", () => {
+    const { b, w } = inheritedRun();
+    expect(w.refundSaleNode).toBe(b.m1.nodeId);
+    expect(w.refund?.status, JSON.stringify(w.refund?.body)).toBe(200);
+    expect(w.refund?.body).toMatchObject({ state: "completed" });
+    expect(w.refundRows).toEqual([{ node_id: b.m2.nodeId, state: "completed" }]);
+    expect(w.m1RecordsAroundRefund.after).toBe(w.m1RecordsAroundRefund.before);
+  });
+
+  it("M2 cancels one of M1's filed sales on its own chain, and files it", () => {
+    const { b, on, w } = inheritedRun();
+    expect(w.voidSaleNode).toBe(b.m1.nodeId);
+    expect(w.voided, JSON.stringify(w.voided)).toMatchObject({ ok: true });
+    expect(w.voidRecords).toHaveLength(1);
+    const [record] = w.voidRecords;
+    expect(record!.node_id).toBe(b.m2.nodeId);
+    expect(record!.sif_id).toBe(w.m2SifId);
+    expect(record!.estado).toBe("aceptado");
+    expect(w.voidHeard).toHaveLength(1);
+    expect(w.voidHeard[0]!.record).toMatchObject({
+      SistemaInformatico: { NumeroInstalacion: on.selected.identity },
+      IDFactura: {
+        IDEmisorFacturaAnulada: w.voidedInvoice?.emisor,
+        NumSerieFacturaAnulada: w.voidedInvoice?.serie,
+        FechaExpedicionFacturaAnulada: w.voidedInvoice && toAeatDate(w.voidedInvoice.fecha),
+      },
+    });
+  });
+
+  it("the day's cash-up on M2 includes M1's sales", () => {
+    const { w } = inheritedRun();
+    const allSales = w.salesByNode.reduce((sum, row) => sum + row.n, 0);
+    expect(w.overview.status, JSON.stringify(w.overview.body)).toBe(200);
+    expect(w.dailyClose.status, JSON.stringify(w.dailyClose.body)).toBe(200);
+    const counts = (w.dailyClose.body as { counts: { sales: number } }).counts;
+    expect(counts.sales, JSON.stringify({ byNode: w.salesByNode, counts })).toBe(allSales);
+  });
+
+  it("the inherited-work stage ran to its end", () => {
+    const { w } = inheritedRun();
+    expect(w.stageErrors).toEqual([]);
+    expect(w.m2SifId).not.toBeNull();
+    expect(w.voidedInvoice).not.toBeNull();
+    expect(w.m1RecordsAroundRefund.before).toBeGreaterThan(0);
+    for (const answer of [w.balance, w.newOrder, w.overview, w.dailyClose])
+      expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    expect(w.voided, JSON.stringify(w.voided)).toMatchObject({ ok: true });
+    expect(w.voidRecords).toHaveLength(1);
+    expect(w.m2SellingAfterVoidRestart).toBe(true);
   });
 });

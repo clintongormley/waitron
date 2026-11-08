@@ -87,9 +87,9 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
   stopSignal?: AbortSignal;
 };
 
-export async function issuanceStopsRefund(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
+export async function refundRefused(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
   try {
-    await deps.backend.refuseNewIssuance(tx, deps.cfg.nodeId);
+    await deps.backend.refuseNewRefund(tx, deps.cfg.nodeId);
     return false;
   } catch (error) {
     if (error instanceof IssuanceRefusedError) return true;
@@ -362,7 +362,7 @@ async function sendCardRefund(
     const target = (await readCardRefund(tx, refundId))!;
     const reading = deps.clock.now();
     if (await clockStopsRefund(tx, deps, null, reading)) return { ...target, stopped: true };
-    if (await issuanceStopsRefund(tx, deps)) return { ...target, stopped: true };
+    if (await refundRefused(tx, deps)) return { ...target, stopped: true };
     const [row] = await tx
       .update(billPaymentRefunds)
       .set({
@@ -683,7 +683,7 @@ export async function refundBillPayment(
           }
           if (earlier.refund.state === "pending") {
             await deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
-            await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+            await deps.backend.refuseNewRefund(tx, cfg.nodeId);
             return { kind: "resume" as const, refundId: earlier.refund.id };
           }
           return {
@@ -696,7 +696,7 @@ export async function refundBillPayment(
         }
         const reading = deps.clock.now();
         await deps.backend.refuseWhileClockBehind(tx, reading);
-        await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+        await deps.backend.refuseNewRefund(tx, cfg.nodeId);
 
         await requireOpenBill(tx, workingOrderId);
         await refusePaymentInFlight(tx, [workingOrderId]);

@@ -1,7 +1,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
-import type { Transaction } from "@waitron/db";
+import { readHistoryNodes, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, type NodeId } from "@waitron/shared";
@@ -38,6 +38,15 @@ export async function admitRecordRemedy(
   return authorizedBy;
 }
 
+/** True when a record on `recordNodeId` is this box's own, or one of a box in its takeover history. */
+export async function isInHistory(
+  tx: Transaction,
+  nodeId: NodeId,
+  recordNodeId: string,
+): Promise<boolean> {
+  return (await readHistoryNodes(tx, nodeId)).some((id) => id === recordNodeId);
+}
+
 export interface RecordCorrectionRequest {
   caseId: string;
   registroId: string;
@@ -58,6 +67,8 @@ export async function applyRecordCorrection(
       priorOutcome: "rejected" | "accepted-with-errors";
     };
     now: Date;
+    /** `readHistoryNodes` of `nodeId`, when the caller has already read it in this transaction. */
+    history?: readonly NodeId[];
   },
 ): Promise<{ registroId: string; eventId: string }> {
   const personId = await admitRecordRemedy(
@@ -74,9 +85,10 @@ export async function applyRecordCorrection(
     .select()
     .from(registrosFacturacion)
     .where(eq(registrosFacturacion.id, request.registroId));
+  const history = input.history ?? (await readHistoryNodes(tx, input.nodeId));
   if (
     target === undefined ||
-    target.nodeId !== input.nodeId ||
+    !history.some((id) => id === target.nodeId) ||
     target.entorno !== input.environment ||
     request.pending.entorno !== input.environment
   ) {
@@ -179,7 +191,7 @@ export async function applyRecordCorrection(
       }),
     });
   }
-  const appended = await appendToChain(tx, input.nodeId, request.pending);
+  const appended = await appendToChain(tx, input.nodeId, request.pending, { history });
   await tx.insert(envios).values({ registroId: appended.id, proximoIntentoEn: input.now });
   const event = await recordCaseEvent(tx, {
     caseId: request.caseId,

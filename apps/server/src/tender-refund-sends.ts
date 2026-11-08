@@ -20,7 +20,7 @@ import { AppError, centsToDecimal } from "@waitron/shared";
 import { raiseTenderRefundConflict } from "./bill-refund-alerts.js";
 import {
   clockStopsRefund,
-  issuanceStopsRefund,
+  refundRefused,
   refundOutcome,
   type RefundEvidence,
 } from "./bill-refunds.js";
@@ -328,7 +328,7 @@ async function send(
     if (expired()) return null;
     const reading = deps.clock.now();
     if (await clockStopsRefund(tx, deps, null, reading)) return null;
-    if (await issuanceStopsRefund(tx, deps)) return null;
+    if (await refundRefused(tx, deps)) return null;
     const [row] = await tx
       .update(tenderRefunds)
       .set({

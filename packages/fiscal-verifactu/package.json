@@ -24,6 +24,7 @@
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/identity": "workspace:*",
+    "@waitron/membership": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/recovery-pack": "workspace:*",
     "@waitron/server-kit": "workspace:*",

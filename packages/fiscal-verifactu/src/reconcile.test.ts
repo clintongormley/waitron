@@ -4,7 +4,9 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
-import { newId, nowIso, withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { newId, nowIso, withTransaction, writeNodeMembership } from "@waitron/db";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -12,7 +14,14 @@ import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
 import { listFilingCases } from "./filing-cases.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { toAeatDate } from "./registro-row.js";
-import { consultaNames, seedPendingEnvios } from "../test/drain-fixtures.js";
+import {
+  appendCancellation,
+  consultaNames,
+  seedPendingEnvios,
+  seedSecondChain,
+} from "../test/drain-fixtures.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -156,7 +165,14 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
 
   const alta = await altaIdentityFor(sale.saleId);
   await withTransaction(suite.db, async (tx) => {
-    await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
+    await recordVoid(
+      tx,
+      backend,
+      sale.saleId,
+      "staff error",
+      { sessionId: voidSession.id },
+      nodeId,
+    );
   });
   expect(await hasAnulacion(alta.id)).toBe(true);
   const { rows: anul } = await suite.db.execute<{ id: string }>(
@@ -808,6 +824,293 @@ describe("reconcile — period normalization", () => {
     expect(result.drift).toEqual([]);
     expect(result.year).toBe("2026");
     expect(result.month).toBe("07");
+  });
+});
+
+describe("reconcile — an invoice the old box issued and the box that took over cancelled", () => {
+  /**
+   * The old box issued the invoice and the box that took over cancelled it on its own chain, so
+   * AEAT holds one invoice whose two records carry different installations. The chart names the
+   * selling box `serving-primary`, so its own issuance check is live in these cases.
+   */
+  async function crossBox() {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const old = await seedPendingEnvios(suite.db, { count: 1 });
+    const head = await seedSecondChain(suite.db, old, 5);
+    await drain(drainDeps(staticResolver(aeat.client())), DRAIN_AT);
+    const [original] = old.registroIds;
+    const cancellation = await appendCancellation(suite.db, old, original!, 6, {
+      otherChainHeadId: head.registroId,
+    });
+    await drain(drainDeps(staticResolver(aeat.client())), new Date("2026-07-21T00:02:00Z"));
+    expect([...(await estadosFor()).values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
+    const records = await suite.db.select().from(registrosFacturacion);
+    const issued = records.find((row) => row.id === original)!;
+    const selling = brandNodeId(records.find((row) => row.id === cancellation)!.nodeId);
+    await recordTakeover(suite.db, old.nodeId, selling);
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 2,
+        nodes: [
+          { nodeId: selling, contactUrl: "https://selling", standing: "serving-primary" },
+          { nodeId: old.nodeId, contactUrl: "https://old", standing: "sell-only" },
+        ],
+      },
+      signerNodeId: selling,
+      signature: "sig-2",
+      endorsements: [],
+    });
+    const deps = (client: VerifactuClient): ReconcileDeps => ({
+      db: suite.db,
+      resolveClient: staticResolver(client),
+      clock: old.clock,
+      scope: {
+        nodeId: selling,
+        taxpayerId: old.nif,
+        environment: "production",
+        historyNodeIds: [selling, old.nodeId],
+      },
+    });
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(aeat.client()),
+    });
+    return { aeat, issued, cancellation, selling, deps, backend };
+  }
+
+  it("raises no conflict when AEAT reports the cancelling box's installation", async () => {
+    const { aeat, issued, cancellation, selling, deps, backend } = await crossBox();
+    const reported = await aeat.client().consultar(
+      { ObligadoEmision: { NombreRazon: "Waitron SL", NIF: issued.idEmisorFactura } },
+      {
+        Ejercicio: "2026",
+        Periodo: "07",
+        DatosAdicionalesRespuesta: { MostrarSistemaInformatico: "S" },
+      },
+    );
+    const record = reported.registros.find(
+      (r) => r.IDFactura.NumSerieFactura === issued.numSerieFactura,
+    )!;
+    const [cancelled] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, cancellation));
+    // The control that this case is the one it names: AEAT reports the cancellation's own record.
+    expect(record.EstadoRegistro).toBe("Anulado");
+    expect(record.DatosRegistroFacturacion.Huella).toBe(cancelled!.huella);
+    expect(
+      (record.DatosRegistroFacturacion.SistemaInformatico as { NumeroInstalacion: string })
+        .NumeroInstalacion,
+    ).toBe((cancelled!.sistemaInformatico as { NumeroInstalacion: string }).NumeroInstalacion);
+
+    const result = await reconcile(deps(aeat.client()), PERIOD);
+
+    expect(result.checked).toBe(3);
+    expect(result.conflicts).toBeUndefined();
+    expect(result.deferred).toBeUndefined();
+    await expect(
+      withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
+    ).resolves.toBeUndefined();
+  });
+
+  it("raises no conflict when AEAT reports the issuing box's installation", async () => {
+    const { aeat, issued, selling, deps, backend } = await crossBox();
+    const client = aeat.client();
+    const issuing = issued.sistemaInformatico as { NumeroInstalacion: string };
+    const reportsTheIssuingRecord: VerifactuClient = {
+      submit: (...args) => client.submit(...args),
+      consultar: async (...args) => {
+        const response = await client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((r) =>
+            r.IDFactura.NumSerieFactura !== issued.numSerieFactura
+              ? r
+              : {
+                  ...r,
+                  DatosRegistroFacturacion: {
+                    ...r.DatosRegistroFacturacion,
+                    Huella: issued.huella,
+                    SistemaInformatico: {
+                      ...(r.DatosRegistroFacturacion.SistemaInformatico as object),
+                      NumeroInstalacion: issuing.NumeroInstalacion,
+                    },
+                  },
+                },
+          ),
+        };
+      },
+    };
+
+    const result = await reconcile(deps(reportsTheIssuingRecord), PERIOD);
+
+    expect(result.checked).toBe(3);
+    expect(result.conflicts).toBeUndefined();
+    expect(result.deferred).toBeUndefined();
+    await expect(
+      withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
+    ).resolves.toBeUndefined();
+  });
+
+  it("raises no conflict when AEAT reports the cancellation's fingerprint with the issuing box's installation", async () => {
+    const { aeat, issued, cancellation, selling, deps, backend } = await crossBox();
+    const client = aeat.client();
+    const issuing = issued.sistemaInformatico as { NumeroInstalacion: string };
+    const [cancelled] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, cancellation));
+    const mixed: VerifactuClient = {
+      submit: (...args) => client.submit(...args),
+      consultar: async (...args) => {
+        const response = await client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((r) =>
+            r.IDFactura.NumSerieFactura !== issued.numSerieFactura
+              ? r
+              : {
+                  ...r,
+                  DatosRegistroFacturacion: {
+                    ...r.DatosRegistroFacturacion,
+                    Huella: cancelled!.huella,
+                    SistemaInformatico: {
+                      ...(r.DatosRegistroFacturacion.SistemaInformatico as object),
+                      NumeroInstalacion: issuing.NumeroInstalacion,
+                    },
+                  },
+                },
+          ),
+        };
+      },
+    };
+
+    const result = await reconcile(deps(mixed), PERIOD);
+
+    expect(result.checked).toBe(3);
+    expect(result.conflicts).toBeUndefined();
+    expect(result.deferred).toBeUndefined();
+    await expect(
+      withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
+    ).resolves.toBeUndefined();
+  });
+
+  it("still reports a conflict when AEAT reports another sale's fingerprint for this invoice", async () => {
+    const { aeat, issued, cancellation, deps } = await crossBox();
+    const client = aeat.client();
+    const other = (await suite.db.select().from(registrosFacturacion)).find(
+      (row) => row.id !== issued.id && row.id !== cancellation,
+    )!;
+    expect(other.saleId).not.toBe(issued.saleId);
+    const othersFingerprint: VerifactuClient = {
+      submit: (...args) => client.submit(...args),
+      consultar: async (...args) => {
+        const response = await client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((r) =>
+            r.IDFactura.NumSerieFactura !== issued.numSerieFactura
+              ? r
+              : {
+                  ...r,
+                  DatosRegistroFacturacion: { ...r.DatosRegistroFacturacion, Huella: other.huella },
+                },
+          ),
+        };
+      },
+    };
+
+    const result = await reconcile(deps(othersFingerprint), PERIOD);
+
+    expect(result.conflicts?.map((row) => row.recordId).sort()).toEqual(
+      [issued.id, cancellation].sort(),
+    );
+  });
+});
+
+describe("reconcile — a conflict on a record of the box this one took over from", () => {
+  it("is recorded on the old box's record and does not stop the selling box", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const old = await seedPendingEnvios(suite.db, { count: 2 });
+    const head = await seedSecondChain(suite.db, old, 5);
+    await drain(drainDeps(staticResolver(aeat.client())), DRAIN_AT);
+    expect([...(await estadosFor()).values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
+    const records = await suite.db.select().from(registrosFacturacion);
+    const inherited = records.find((row) => row.id === old.registroIds[1])!;
+    const selling = brandNodeId(records.find((row) => row.id === head.registroId)!.nodeId);
+    await recordTakeover(suite.db, old.nodeId, selling);
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 2,
+        nodes: [
+          { nodeId: selling, contactUrl: "https://selling", standing: "serving-primary" },
+          { nodeId: old.nodeId, contactUrl: "https://old", standing: "sell-only" },
+        ],
+      },
+      signerNodeId: selling,
+      signature: "sig-2",
+      endorsements: [],
+    });
+    const client = aeat.client();
+    const foreign: VerifactuClient = {
+      submit: (...args) => client.submit(...args),
+      consultar: async (...args) => {
+        const response = await client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((r) =>
+            r.IDFactura.NumSerieFactura !== inherited.numSerieFactura
+              ? r
+              : {
+                  ...r,
+                  DatosRegistroFacturacion: {
+                    ...r.DatosRegistroFacturacion,
+                    Huella: "E".repeat(64),
+                    SistemaInformatico: {
+                      ...(r.DatosRegistroFacturacion.SistemaInformatico as object),
+                      NumeroInstalacion: "FOREIGN",
+                    },
+                  },
+                },
+          ),
+        };
+      },
+    };
+
+    const result = await reconcile(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(foreign),
+        clock: old.clock,
+        scope: {
+          nodeId: selling,
+          historyNodeIds: [selling, old.nodeId],
+          taxpayerId: old.nif,
+          environment: "production",
+        },
+      },
+      PERIOD,
+    );
+
+    expect(result.conflicts?.map((row) => row.recordId)).toEqual([inherited.id]);
+    expect(
+      (await incidentsFor()).map(({ code, params }) => ({ code, registroId: params.registroId })),
+    ).toEqual([{ code: "fiscal.huella_divergente", registroId: inherited.id }]);
+    const { rows: cases } = await suite.db.execute<{ registro_id: string; cause: string }>(
+      sql`select registro_id, cause from filing_cases`,
+    );
+    expect(cases).toEqual([{ registro_id: inherited.id, cause: "fiscal.huella_divergente" }]);
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(client),
+    });
+    await expect(
+      withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
+    ).resolves.toBeUndefined();
   });
 });
 

@@ -1,8 +1,15 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { StatementSync } from "node:sqlite";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { captureError, sales, withTransaction } from "@waitron/db";
+import {
+  captureError,
+  invoiceSeries,
+  sales,
+  withTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
@@ -14,6 +21,7 @@ import {
   multiplyDecimal,
   nodeId as brandNodeId,
   saleId as brandSaleId,
+  seriesId as brandSeriesId,
 } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { currentSif } from "./registro-sif.js";
@@ -266,7 +274,7 @@ describe("the source and device on each record", () => {
 
   it("copies the original alta's source and device onto a void's anulación", async () => {
     const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
-    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId));
     expect(await storedOrigins(saleId)).toEqual([
       { tipo_registro: "alta", source: "device", device_id: deviceId },
       { tipo_registro: "anulacion", source: "device", device_id: deviceId },
@@ -275,7 +283,7 @@ describe("the source and device on each record", () => {
 
   it("copies a job-origin alta's source, with no device, onto its anulación", async () => {
     const { saleId } = await sell({ origin: jobOrigin("readiness_test") });
-    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId));
     expect(await storedOrigins(saleId)).toEqual([
       { tipo_registro: "alta", source: "readiness_test", device_id: null },
       { tipo_registro: "anulacion", source: "readiness_test", device_id: null },
@@ -287,7 +295,12 @@ describe("recordVoid", () => {
   it("throws fiscal.sale_not_recorded for a sale with no prior alta", async () => {
     await expect(
       withTransaction(suite.db, (tx) =>
-        backend.recordVoid(tx, "00000000-0000-4000-8000-000000000000" as never, "staff error"),
+        backend.recordVoid(
+          tx,
+          "00000000-0000-4000-8000-000000000000" as never,
+          "staff error",
+          nodeId,
+        ),
       ),
     ).rejects.toMatchObject({ code: "fiscal.sale_not_recorded" });
   });
@@ -295,7 +308,7 @@ describe("recordVoid", () => {
   it("appends an anulación referencing the original alta's own identity", async () => {
     const { saleId } = await sell();
     const ref = await withTransaction(suite.db, (tx) =>
-      backend.recordVoid(tx, saleId, "staff error"),
+      backend.recordVoid(tx, saleId, "staff error", nodeId),
     );
     expect(ref.backend).toBe("verifactu");
     expect(ref.state).toBe("pending");
@@ -315,6 +328,44 @@ describe("recordVoid", () => {
       .from(envios)
       .where(eq(envios.registroId, anulacion!.id));
     expect(sidecar?.estado).toBe("pendiente");
+  });
+
+  it("a cancellation of another box's sale is chained on the issuing box, citing the original", async () => {
+    const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
+    const m2 = await seedTenantWithSif(suite.db);
+    const m2Sif = await withTransaction(suite.db, (tx) => currentSif(tx, m2.nodeId));
+
+    await withTransaction(suite.db, (tx) =>
+      backend.recordVoid(tx, saleId, "staff error", m2.nodeId),
+    );
+
+    const rows = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, saleId));
+    const alta = rows.find((row) => row.tipoRegistro === "alta")!;
+    const anulacion = rows.find((row) => row.tipoRegistro === "anulacion")!;
+    expect(alta.nodeId).toBe(nodeId);
+    expect({
+      nodeId: anulacion.nodeId,
+      sifId: anulacion.sifId,
+      secuencia: anulacion.secuencia,
+    }).toEqual({ nodeId: m2.nodeId, sifId: m2Sif.id, secuencia: 1 });
+    expect({
+      idEmisorFactura: anulacion.idEmisorFactura,
+      numSerieFactura: anulacion.numSerieFactura,
+      fechaExpedicionFactura: anulacion.fechaExpedicionFactura,
+      source: anulacion.source,
+      deviceId: anulacion.deviceId,
+    }).toEqual({
+      idEmisorFactura: alta.idEmisorFactura,
+      numSerieFactura: alta.numSerieFactura,
+      fechaExpedicionFactura: alta.fechaExpedicionFactura,
+      source: alta.source,
+      deviceId: alta.deviceId,
+    });
+    // The two boxes carry different NIFs here, so the cited issuer is the original's, not M2's.
+    expect(alta.idEmisorFactura).not.toBe(m2Sif.nif);
   });
 });
 
@@ -349,7 +400,9 @@ describe("recordVoid — date reconstruction", () => {
       db: suite.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await withTransaction(suite.db, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(suite.db, (tx) =>
+      voidBackend.recordVoid(tx, saleId, "staff error", nodeId),
+    );
 
     const rows = await suite.db
       .select()
@@ -368,7 +421,9 @@ describe("recordVoid — date reconstruction", () => {
       db: suite.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await withTransaction(suite.db, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(suite.db, (tx) =>
+      voidBackend.recordVoid(tx, saleId, "staff error", nodeId),
+    );
 
     const rows = await suite.db
       .select()
@@ -711,6 +766,158 @@ describe("recordSale — invoice type selection", () => {
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.numSerieFactura, "A/997"));
     expect(rows).toEqual([]);
+  });
+});
+
+describe("the membership chart on each record", () => {
+  /** The statements that read the held chart while `body` runs. */
+  async function chartReads<T>(body: () => Promise<T>): Promise<number> {
+    let reads = 0;
+    const count = (method: "all" | "get") => {
+      const original = StatementSync.prototype[method];
+      return vi.spyOn(StatementSync.prototype, method).mockImplementation(function (
+        this: StatementSync,
+        ...args
+      ) {
+        if (/\bfrom\s+"node_membership"/i.test(this.sourceSQL)) reads++;
+        return Reflect.apply(original, this, args) as never;
+      });
+    };
+    const spies = [count("all"), count("get")];
+    try {
+      await body();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    return reads;
+  }
+
+  beforeEach(async () => {
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 2,
+        nodes: [{ nodeId, contactUrl: "https://primary", standing: "serving-primary" }],
+      },
+      signerNodeId: nodeId,
+      signature: "sig-2",
+      endorsements: [],
+    });
+  });
+
+  it("reads the chart once to record a sale", async () => {
+    expect(await chartReads(() => sell())).toBe(1);
+  });
+
+  it("reads the chart once to record a cancellation", async () => {
+    const { saleId } = await sell();
+    expect(
+      await chartReads(() =>
+        withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId)),
+      ),
+    ).toBe(1);
+  });
+
+  it("reads the chart once to record a correction", async () => {
+    const { saleId: correctsSaleId } = await sell();
+    const reads = await chartReads(() =>
+      withTransaction(suite.db, async (tx) => {
+        const [series] = await tx
+          .insert(invoiceSeries)
+          .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
+          .returning({ id: invoiceSeries.id });
+        const issuedAt = steadyClock.now().instant;
+        const [corrective] = await tx
+          .insert(sales)
+          .values({
+            source: "device",
+            deviceId,
+            nodeId,
+            seriesId: series!.id,
+            invoiceNumber: 1,
+            issuedAt: issuedAt.toISOString(),
+            issuedOffsetMinutes: 60,
+            total: -1441,
+            vatBreakdown: [],
+            correctsSaleId,
+            locale: "es",
+            invoiceLocales: ["es"],
+            fiscalBackend: "verifactu",
+            fiscalState: "recorded",
+          })
+          .returning({ id: sales.id });
+        await backend.recordCorrection(
+          tx,
+          {
+            origin: deviceOrigin(deviceId),
+            nodeId,
+            saleId: brandSaleId(corrective!.id),
+            seriesId: brandSeriesId(series!.id),
+            seriesCode: "R",
+            invoiceNumber: 1,
+            issuedAt,
+            offsetMinutes: 60,
+            descriptionOfOperation: "Rectificacion por diferencias",
+            total: decimal("-14.41"),
+            vatBreakdown: [
+              { rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") },
+              { rate: decimal("10.00"), base: decimal("-2.10"), tax: decimal("-0.21") },
+            ],
+            counterparty: null,
+          },
+          { correctsSaleId },
+        );
+      }),
+    );
+    expect(reads).toBe(1);
+  });
+
+  it("reads the chart once to record a full invoice for tickets", async () => {
+    const { saleId: ticket } = await sell();
+    const reads = await chartReads(() =>
+      withTransaction(suite.db, async (tx) => {
+        const issuedAt = steadyClock.now().instant;
+        const [full] = await tx
+          .insert(sales)
+          .values({
+            source: "device",
+            deviceId,
+            nodeId,
+            seriesId,
+            invoiceNumber: 500,
+            issuedAt: issuedAt.toISOString(),
+            issuedOffsetMinutes: 60,
+            total: 1441,
+            vatBreakdown: [],
+            locale: "es",
+            invoiceLocales: ["es"],
+            fiscalBackend: "verifactu",
+            fiscalState: "recorded",
+          })
+          .returning({ id: sales.id });
+        await backend.recordSubstitution(
+          tx,
+          {
+            origin: deviceOrigin(deviceId),
+            nodeId,
+            saleId: brandSaleId(full!.id),
+            seriesId,
+            seriesCode: "A",
+            invoiceNumber: 500,
+            issuedAt,
+            offsetMinutes: 60,
+            descriptionOfOperation: "Canje de tiques simplificados",
+            total: decimal("14.41"),
+            vatBreakdown: [
+              { rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") },
+              { rate: decimal("10.00"), base: decimal("2.10"), tax: decimal("0.21") },
+            ],
+            counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+          },
+          { substitutedSaleIds: [ticket] },
+        );
+      }),
+    );
+    expect(reads).toBe(1);
   });
 });
 

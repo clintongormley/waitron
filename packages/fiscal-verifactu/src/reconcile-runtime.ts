@@ -1,4 +1,11 @@
-import { readTenant, withTransaction } from "@waitron/db";
+import {
+  readHistoryNodes,
+  readTenant,
+  withTransaction,
+  type Database,
+  type DeploymentEnvironment,
+} from "@waitron/db";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalContribution } from "@waitron/fiscal";
 import {
   aeatClientResolver,
@@ -7,6 +14,17 @@ import {
   type ClientResolver,
 } from "./aeat-transport.js";
 import { createReconciliationSweep, type ReconciliationSweepResult } from "./reconcile-sweep.js";
+import type { ReconcileScope } from "./reconcile.js";
+
+export async function reconciliationScope(
+  db: Database,
+  identity: { nodeId: string; taxpayerId: string; environment: DeploymentEnvironment },
+): Promise<ReconcileScope> {
+  return {
+    ...identity,
+    historyNodeIds: await readHistoryNodes(db, brandNodeId(identity.nodeId)),
+  };
+}
 
 export const createRuntimeReconciliation: NonNullable<
   FiscalContribution["createReconciliation"]
@@ -33,7 +51,11 @@ export const createRuntimeReconciliation: NonNullable<
         sweep = createReconciliationSweep({
           db: deps.db,
           clock: deps.clock,
-          scope: { nodeId: deps.nodeId, taxpayerId, environment: deps.environment },
+          scope: await reconciliationScope(deps.db, {
+            nodeId: deps.nodeId,
+            taxpayerId,
+            environment: deps.environment,
+          }),
           retryMs: deps.skipRetryMs,
           includeCurrentPeriod: true,
           now: () => deps.clock.now().instant,

@@ -76,9 +76,9 @@ export const workingOrders = table(
     // Nullable although `createOpenOrder` always sets it: a NULL node_id skips the FK check below,
     // leaving room for a future writer with no node to omit it.
     nodeId: id("node_id"),
-    // The human-facing order number: allocated per node from working_order_counters, printed on
+    // The human-facing order number: one venue-wide sequence from working_order_counters, printed on
     // the ticket, and typed back in to retrieve the order at any register. No UNIQUE here: the
-    // allocator (`allocateOrderNumber`) owns issuing distinct numbers per node.
+    // allocator (`allocateOrderNumber`) owns issuing distinct numbers.
     orderNumber: count("order_number").notNull(),
     // Optional operator label before issuance; filing freezes the table grouping here for receipts.
     // Walk-up orders without a label or table keep NULL.

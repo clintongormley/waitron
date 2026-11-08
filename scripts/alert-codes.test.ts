@@ -46,6 +46,7 @@ const INCIDENT_CODE_SOURCES = [
 /** Dotted literals in those files that are thrown or name a permission, never recorded. */
 const NOT_RECORDED = new Set([
   "chain.append_contention",
+  "fiscal.chain_handed_over",
   "fiscal.record_invalid",
   "fiscal.remedy_disabled",
   "fiscal.remedy_invalid",

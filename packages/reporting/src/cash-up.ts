@@ -38,14 +38,14 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
       join sales s on s.id = t.sale_id
       where t.bill_payment_id is null
         and ${window(sql`t.settled_at`)}
-        ${nodeScopeClause(input.nodeId)}
+        ${nodeScopeClause(input.nodeIds)}
       union all
       select bp.source, bp.device_id, bp.method, bp.applied + bp.tip, bp.tip
       from bill_payments bp
       join working_orders wo on wo.id = bp.working_order_id
       where bp.state = 'received'
         and ${window(sql`bp.received_at`)}
-        ${nodeScopeClause(input.nodeId, sql`wo.node_id`)}
+        ${nodeScopeClause(input.nodeIds, sql`wo.node_id`)}
       union all
       select r.source, r.device_id, bp.method, -(r.applied_amount + r.tip_amount), -r.tip_amount
       from bill_payment_refunds r
@@ -53,13 +53,13 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
       join working_orders wo on wo.id = bp.working_order_id
       where r.state = 'completed'
         and ${window(sql`r.completed_at`)}
-        ${nodeScopeClause(input.nodeId, sql`wo.node_id`)}
+        ${nodeScopeClause(input.nodeIds, sql`wo.node_id`)}
       union all
       select r.source, r.device_id, r.method, -(r.applied_amount + r.tip_amount), -r.tip_amount
       from tender_refunds r
       where r.state = 'completed'
         and ${window(sql`r.completed_at`)}
-        ${nodeScopeClause(input.nodeId, sql`r.node_id`)}
+        ${nodeScopeClause(input.nodeIds, sql`r.node_id`)}
     ) m
     group by m.source, m.device_id, m.method
     order by m.source, m.device_id, m.method

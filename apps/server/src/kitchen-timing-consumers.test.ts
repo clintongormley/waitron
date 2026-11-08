@@ -99,7 +99,7 @@ describe("each station's own minutes across consumers", () => {
             .soft(signals.get(billId))
             .toEqual(band === "fresh" ? [] : [{ kind: "long_wait", band }]);
         }
-        const overdue = await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId });
+        const overdue = await computeOverdueOrders(tx);
         expect.soft(overdue.map((row) => ({ id: row.orderId, band: row.band }))).toEqual(
           [
             [a.tabId, kitchenBand],
@@ -143,7 +143,7 @@ describe("each station's own minutes across consumers", () => {
           .filter((item) => item.orderId === tabId)
           .map((item) => item.band),
         signals: (await readBillSignals(tx, [tabId], now)).get(tabId),
-        overdue: (await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).map((row) => ({
+        overdue: (await computeOverdueOrders(tx)).map((row) => ({
           id: row.orderId,
           band: row.band,
         })),
@@ -199,7 +199,7 @@ describe("each station's own minutes across consumers", () => {
       expect(boardItems(await readScopedPassBoard(tx, EVERY)).map((item) => item.band)).toEqual([
         "fresh",
       ]);
-      expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
+      expect(await computeOverdueOrders(tx)).toEqual([]);
     });
   });
 });

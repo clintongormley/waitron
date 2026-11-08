@@ -50,6 +50,10 @@ export class FakeFiscalBackend implements FiscalBackend {
     return Promise.resolve();
   }
 
+  refuseNewRefund(): Promise<void> {
+    return Promise.resolve();
+  }
+
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
 
   constructor(
@@ -178,16 +182,17 @@ export class FakeFiscalBackend implements FiscalBackend {
     };
   }
 
-  // `_reason` is unused but kept, so callers on the concrete class are typechecked against the
-  // interface's three-argument signature; the underscore satisfies tsc's `noUnusedParameters`.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
-  async recordVoid(tx: Transaction, saleId: SaleId, _reason: string): Promise<FiscalRecordRef> {
+  async recordVoid(
+    tx: Transaction,
+    saleId: SaleId,
+    _reason: string,
+    issuingNodeId: NodeId,
+  ): Promise<FiscalRecordRef> {
     const rows = await tx.execute<{
-      node_id: string;
       invoice_number: number;
       total: string;
     }>(sql`
-      select node_id, invoice_number, total
+      select invoice_number, total
       from fake_fiscal_records
       where sale_id = ${saleId} and kind = 'sale'
       limit 1
@@ -197,7 +202,7 @@ export class FakeFiscalBackend implements FiscalBackend {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
     return this.append(tx, {
-      nodeId: original.node_id,
+      nodeId: issuingNodeId,
       saleId,
       kind: "void",
       invoiceNumber: original.invoice_number,

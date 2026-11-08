@@ -8345,6 +8345,10 @@ describe("till-app", () => {
 
   it.each([
     [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
+    [
+      { code: "fiscal.chain_handed_over", status: 409, nodeId: "this-box" },
+      () => codeMessage("fiscal.chain_handed_over"),
+    ],
     [{ code: "server.internal", status: 500 }, () => t("held.stale")],
   ])("discard-order refused %o shows that refusal's sentence", async (refused, shown) => {
     const { el } = await mountApp({

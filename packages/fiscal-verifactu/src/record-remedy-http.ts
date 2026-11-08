@@ -1,6 +1,6 @@
 import "./errors.js";
 import { sql } from "drizzle-orm";
-import { readTenant, type Transaction } from "@waitron/db";
+import { readHistoryNodes, readTenant, type Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
 import { AppError, readSaleOrigin, saleId } from "@waitron/shared";
@@ -48,8 +48,9 @@ export async function applyCorrectedRecordFacts(
   } = await tx.execute(sql`select * from registros_facturacion where id = ${registroId}`);
   if (rawTarget === undefined) throw new AppError("fiscal.remedy_invalid", { registroId });
   const target = decodeRegistroRow(rawTarget);
+  const history = await readHistoryNodes(tx, generation.nodeId);
   if (
-    target.node_id !== generation.nodeId ||
+    !history.some((id) => id === target.node_id) ||
     target.entorno !== generation.environment ||
     target.tipo_registro !== "alta"
   )
@@ -144,6 +145,7 @@ export async function applyCorrectedRecordFacts(
     environment: generation.environment,
     enabledRemedies,
     now: reading.instant,
+    history,
     correctionDecision: { ...facts, priorOutcome },
     request: {
       caseId,

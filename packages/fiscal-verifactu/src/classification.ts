@@ -22,11 +22,11 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly(
     "fiscal_certificate_installs",
     "local",
-    "the certificates installed on one node, keyed by its node id; the certificate is sealed under that node's key",
+    "the certificates installed on a node, keyed by its node id; read by that node and every node that took over from it (`readHistoryNodes`)",
   ),
   classify(
     "fiscal_certificate_reminders",
     "local",
-    "the expiry emails one node sent about its own certificate, keyed by its node id",
+    "the expiry emails about a node's certificate, keyed by the node that first wrote the row; read and updated by that node and every node that took over from it (`readHistoryNodes`)",
   ),
 ];

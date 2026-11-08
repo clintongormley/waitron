@@ -159,9 +159,9 @@ async function passItems(tx: Transaction) {
 /**
  * Stand up the one taxpayer row + a location + till + node and a catalogue with two products, all
  * keyed to `LOCALE` so the `working_order_lines_check_locales` trigger (descriptions must hold
- * EXACTLY the location's `invoice_locales`) is satisfied. Each test gets its OWN node, and
- * `allocateOrderNumber` counts per node, so the order number is that test's own — always 1 on the
- * first park — and the suite is order-independent (CLAUDE.md §4).
+ * EXACTLY the location's `invoice_locales`) is satisfied. The helper empties the database between
+ * tests, so the order number is that test's own — always 1 on the first park — and the suite is
+ * order-independent (CLAUDE.md §4).
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
   const eachUnitId = randomUUID();
@@ -1364,7 +1364,7 @@ describe("listHeldOrders", () => {
     const idB = randomUUID();
 
     // A: one Coffee × 2. B: Coffee × 1 and Water × 3, and NO label (the null branch). A is
-    // parked first, so its per-node number is 1 and B's is 2 — the order the list must come back in.
+    // parked first, so its order number is 1 and B's is 2 — the order the list must come back in.
     const linesA = [{ productId: coffeeId, quantity: "2" }];
     const linesB = [
       { productId: coffeeId, quantity: "1" },

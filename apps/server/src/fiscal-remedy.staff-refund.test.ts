@@ -141,9 +141,14 @@ async function cancelAndRefund() {
     json: { state: "completed", appliedAmount: "12.10", tipAmount: "0.00" },
   });
   const cancelled = await inTx(venue, (tx) =>
-    recordVoid(tx, venue.backend, brandSaleId(saleId), "Returned order", {
-      sessionId: session!.id,
-    }),
+    recordVoid(
+      tx,
+      venue.backend,
+      brandSaleId(saleId),
+      "Returned order",
+      { sessionId: session!.id },
+      venue.cfg.nodeId,
+    ),
   );
   const facts = await accounting();
   expect(facts.voids).toMatchObject([
@@ -382,7 +387,7 @@ it.each(["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const)(
   },
 );
 
-it("refuses to release the old chain's cancellation using an accepted correction issued on another chain", async () => {
+it("releases the old chain's cancellation once a correction issued on another chain is accepted", async () => {
   const originalCase = await rejectOriginal();
   const { cancellationId, refundBody, refunded, facts } = await cancelAndRefund();
   const aeat = createFakeAeat({ serverNow: NOW });
@@ -424,25 +429,32 @@ it("refuses to release the old chain's cancellation using an accepted correction
   expect(before.deliveries.find((row) => row.registroId === correction.id)).toMatchObject({
     estado: "aceptado",
   });
-  const refused = await remedy(
+  const released = await remedy(
     {
       kind: "release-held-cancellation",
       caseId: heldCase.id,
       registroId: cancellationId,
       acceptedRegistroId: correction.id,
       actionKey: "other-chain-release",
-      reason: "Unqualified cross-chain release",
+      reason: "Correction accepted on the new issuing chain",
     },
     ["release-held-cancellation"],
   );
-  expect(refused).toMatchObject({
-    status: 400,
-    json: { code: "fiscal.remedy_invalid" },
+  expect(released).toMatchObject({ status: 200 });
+  expect((await drain(deps, new Date(NOW.getTime() + 60_000))).recordsAccepted).toBe(1);
+  expect(aeat.stored()).toMatchObject([{ tipo: "anulacion", estado: "Anulado" }]);
+  const after = await fiscalFacts();
+  expect(after.records).toEqual(before.records);
+  expect(after.head).toEqual(before.head);
+  expect(after.deliveries.find((row) => row.registroId === cancellationId)).toMatchObject({
+    estado: "aceptado",
   });
-  expect(await fiscalFacts()).toEqual(before);
+  expect(after.cases.find((row) => row.id === heldCase.id)).toMatchObject({
+    status: "resolved",
+    events: [{ kind: "resolved", remedyRegistroId: null }],
+  });
   expect(await refund(refundBody)).toEqual(refunded);
-  const after = await accounting();
-  expect(after).toEqual(facts);
+  expect(await accounting()).toEqual(facts);
 });
 
 it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado", "detenido"])(

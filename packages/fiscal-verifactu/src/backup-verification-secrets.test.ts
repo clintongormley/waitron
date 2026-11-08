@@ -15,7 +15,7 @@ import { openBackupQuery } from "@waitron/store";
 import { makeAuthority, type Candidate } from "../test/certificate-fixtures.js";
 import { KEY_ONLY_CANDIDATE, RC2_CANDIDATE } from "../test/openssl-certificates.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { verifyBackupFiscalSecrets } from "./backup-verification-secrets.js";
 
@@ -196,6 +196,7 @@ it("opens captured PFX without signing or network and emits only a fixed result"
     vi.spyOn(checks, "checkWithAuthority").mockImplementation(forbidden),
     vi.spyOn(installs, "installCertificate").mockImplementation(forbidden),
     vi.spyOn(records, "recordInstall").mockImplementation(forbidden),
+    vi.spyOn(records, "installsOf").mockImplementation(forbidden),
     vi.spyOn(credentials, "putCredential").mockImplementation(forbidden),
     vi.spyOn(transport, "mtlsFetch").mockImplementation(forbidden),
     vi.spyOn(crypto.default, "sign").mockImplementation(forbidden),
@@ -235,6 +236,47 @@ it("selects only the source node's latest install while retaining another node's
       .run(TENANT_A.nodeId2),
   );
   expect(await verify()).toEqual(result("passed"));
+});
+function tookOver(db: DatabaseSync, source: string, destination: string) {
+  db.prepare(
+    `insert into handover_activations
+      (operation_id,scenario,source_node_id,destination_node_id,evidence,person_id,activated_at)
+      values (?, 'controlled', ?, ?, '{}', '10000000-0000-4000-8000-000000000014', ?)`,
+  ).run(`${source}-${destination}`, source, destination, createdAt);
+}
+it("accepts the install of the box the source took over from", async () => {
+  await capture();
+  both((db) => tookOver(db, TENANT_A.nodeId, TENANT_B.nodeId));
+  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("passed"));
+});
+it("accepts the install of a box the source took over from two handovers back", async () => {
+  await capture();
+  both((db) => {
+    db.prepare("delete from fiscal_certificate_installs where node_id=?").run(TENANT_A.nodeId2);
+    tookOver(db, TENANT_A.nodeId, TENANT_A.nodeId2);
+    tookOver(db, TENANT_A.nodeId2, TENANT_B.nodeId);
+  });
+  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("passed"));
+});
+it("lists a box once when the source took back from the box that took over from it", async () => {
+  await capture();
+  both((db) => {
+    tookOver(db, TENANT_A.nodeId, TENANT_B.nodeId);
+    tookOver(db, TENANT_B.nodeId, TENANT_A.nodeId);
+  });
+  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("passed"));
+  expect(await verify()).toEqual(result("passed"));
+});
+it("finds no install for a source that took over from no box that has one", async () => {
+  await capture();
+  both((db) => tookOver(db, TENANT_B.nodeId, TENANT_A.nodeId));
+  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("invalid"));
+});
+it("reads only the source's own installs from a file with no handover record", async () => {
+  await capture();
+  both((db) => db.exec("drop table handover_activations"));
+  expect(await verify()).toEqual(result("passed"));
+  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("invalid"));
 });
 it("does not accept an older source-node certificate", async () => {
   await capture();

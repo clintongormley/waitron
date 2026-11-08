@@ -262,6 +262,7 @@ export {
   setNodePublicKey,
   setNodePublicKeyTx,
 } from "./node-identity.js";
+export { readHistoryNodes } from "./history-nodes.js";
 export {
   compareBackupTables,
   verifyCoreBackupData,

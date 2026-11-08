@@ -263,8 +263,9 @@ describe("appendToChain", () => {
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
     const saleId = await seedSale(suite.db, node, 1);
     // Every savepoint attempt loses its race. Contention cannot produce three collisions, because
-    // one write transaction runs on the venue file at a time. The stub is exactly the one method
-    // appendToChain calls on `tx`, so a wider fake cannot hide the retry loop doing something else.
+    // one write transaction runs on the venue file at a time. With the chart supplied (none held),
+    // the stub is exactly the one method appendToChain calls on `tx`, so a wider fake cannot hide
+    // the retry loop doing something else.
     const alwaysCollides = {
       transaction: () =>
         Promise.reject(
@@ -274,11 +275,9 @@ describe("appendToChain", () => {
         ),
     } as never;
 
-    const error = await appendToChain(
-      alwaysCollides,
-      node.nodeId,
-      altaFor(node, saleId, 1, 1),
-    ).catch((caught: unknown) => caught);
+    const error = await appendToChain(alwaysCollides, node.nodeId, altaFor(node, saleId, 1, 1), {
+      chart: null,
+    }).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("chain.append_contention");
@@ -295,7 +294,7 @@ describe("appendToChain", () => {
     // (the chain head still says 0), so the attempt's own insert is refused by the position's
     // unique index; rolling back to the savepoint takes the planted record with it, and the second
     // attempt passes straight through. The only thing wrapped is `transaction`, the one method
-    // appendToChain calls on `tx`.
+    // appendToChain calls on `tx` once the chart is supplied.
     // The controls that fail it are in the pull request that added it.
     const decoy = await seedSale(suite.db, node, 1);
     const saleId = await seedSale(suite.db, node, 2);
@@ -336,7 +335,9 @@ describe("appendToChain", () => {
             });
         },
       } as never;
-      return appendToChain(refusedOnce, node.nodeId, altaFor(node, saleId, 2, 2));
+      return appendToChain(refusedOnce, node.nodeId, altaFor(node, saleId, 2, 2), {
+        chart: null,
+      });
     });
 
     expect(calls).toBe(2);
@@ -380,9 +381,9 @@ describe("appendToChain", () => {
       },
     } as never;
 
-    const error = await appendToChain(alwaysFk, node.nodeId, altaFor(node, saleId, 1, 1)).catch(
-      (caught: unknown) => caught,
-    );
+    const error = await appendToChain(alwaysFk, node.nodeId, altaFor(node, saleId, 1, 1), {
+      chart: null,
+    }).catch((caught: unknown) => caught);
 
     expect(calls).toBe(1);
     expect(error).toBe(refusal);
@@ -400,9 +401,43 @@ describe("appendToChain — pre-fetched SIF", () => {
           ...sif,
           nodeId: "ffffffff-0000-4000-8000-000000000000" as typeof sif.nodeId,
         };
-        return appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1), wrongSif);
+        return appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1), { sif: wrongSif });
       }),
     ).rejects.toThrow(/SIF/i);
+  });
+
+  it("rejects a takeover history that belongs to a different box, writing nothing", async () => {
+    const other = await seedNode(suite.db, "B");
+    const saleId = await seedSale(suite.db, node, 1);
+    const error = await captureError(() =>
+      suite.db.transaction((tx) =>
+        appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1), {
+          history: [other.nodeId, node.nodeId],
+        }),
+      ),
+    );
+
+    expect((error as Error).message).toBe(
+      `appendToChain: supplied history is for node ${other.nodeId}, not ${node.nodeId}`,
+    );
+    expect(
+      await suite.db
+        .select({ id: registrosFacturacion.id })
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.nodeId, node.nodeId)),
+    ).toEqual([]);
+  });
+
+  it("accepts a takeover history that starts with this box", async () => {
+    const other = await seedNode(suite.db, "B");
+    const saleId = await seedSale(suite.db, node, 1);
+    const appended = await suite.db.transaction((tx) =>
+      appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1), {
+        history: [node.nodeId, other.nodeId],
+      }),
+    );
+
+    expect(appended.secuencia).toBe(1);
   });
 });
 

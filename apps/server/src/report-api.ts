@@ -14,6 +14,7 @@ import {
 import {
   devices,
   printers,
+  readHistoryNodes,
   readTenant,
   withTransaction,
   type Database,
@@ -157,7 +158,8 @@ async function countOpenTables(tx: Transaction): Promise<{ open: number; total: 
 /**
  * Mount reporting routes through the shared authorization gate. report.view
  * permits operational reports; report.export permits the modelo 303 export.
- * The overview aggregates all tenant nodes; per-node reports use cfg.nodeId.
+ * The overview aggregates all tenant nodes; per-node reports read cfg.nodeId and the boxes it took
+ * over from.
  * The modelo 303 file remains a candidate requiring uploader validation and asesor
  * confirmation for prorrata handling.
  */
@@ -172,24 +174,25 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       return fn(tx);
     });
 
-  // Every per-node route derives the node and its venue clock here, so they cannot drift.
+  // Every per-node route derives its boxes and venue clock here, so they cannot drift. The boxes
+  // are this one and every box it took over from.
   const buildReportContext = async (
     tx: Transaction,
   ): Promise<{
-    nodeId: NodeId;
+    nodeIds: readonly NodeId[];
     clock: BusinessDayClock;
   }> => {
-    const nodeId = brandNodeId(deps.cfg.nodeId);
+    const nodeIds = await readHistoryNodes(tx, brandNodeId(deps.cfg.nodeId));
     const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
-    return { nodeId, clock };
+    return { nodeIds, clock };
   };
 
   const categoryReport = async (tx: Transaction, req: CategoryRequest): Promise<CategoryReport> => {
-    const { nodeId, clock } = await buildReportContext(tx);
+    const { nodeIds, clock } = await buildReportContext(tx);
     return computeCategorySales(
       tx,
       {
-        nodeId,
+        nodeIds,
         fromBusinessDay: req.from,
         toBusinessDay: req.to,
         timeZone: clock.timeZone,
@@ -248,9 +251,9 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { clock } = await buildReportContext(tx);
+        const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
         const businessDay = currentBusinessDay(clock);
-        // No `nodeId`: venue-wide.
+        // No `nodeIds`: venue-wide.
         const input = {
           businessDay,
           timeZone: clock.timeZone,
@@ -284,15 +287,15 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // The full daily close and top sellers for ONE explicit business day, for this node.
+  // The full daily close and top sellers for ONE explicit business day.
   app.get("/management-api/reports/daily-close", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const businessDay = requirePeriod(c.req.query("businessDay"), "businessDay");
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { nodeId, clock } = await buildReportContext(tx);
+        const { nodeIds, clock } = await buildReportContext(tx);
         const input = {
-          nodeId,
+          nodeIds,
           businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
@@ -301,7 +304,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
         const close = await computeDailyClose(tx, input);
         const topSellers = await computeTopSellers(tx, {
-          nodeId,
+          nodeIds,
           fromBusinessDay: businessDay,
           toBusinessDay: businessDay,
           timeZone: clock.timeZone,
@@ -316,15 +319,15 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // VAT summary and top sellers over an inclusive business-day range, for this node.
+  // VAT summary and top sellers over an inclusive business-day range.
   app.get("/management-api/reports/period", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { nodeId, clock } = await buildReportContext(tx);
+        const { nodeIds, clock } = await buildReportContext(tx);
         const common = {
-          nodeId,
+          nodeIds,
           fromBusinessDay: from,
           toBusinessDay: to,
           timeZone: clock.timeZone,
@@ -340,7 +343,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // Sales by reporting category over an inclusive business-day range, for this node.
+  // Sales by reporting category over an inclusive business-day range.
   app.get("/management-api/reports/categories", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -405,15 +408,14 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // This node's open kitchen orders whose worst unserved line is overdue, worst first. A live
-  // snapshot: only `nodeId` is taken from the report context.
+  // The venue's open kitchen orders whose worst unserved line is overdue, worst first. A live
+  // snapshot.
   app.get("/management-api/reports/overdue-orders", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const orders = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { nodeId } = await buildReportContext(tx);
-        return computeOverdueOrders(tx, { nodeId });
-      });
+      const orders = await gated(sessionId, REPORT_VIEW_PERMISSION, (tx) =>
+        computeOverdueOrders(tx),
+      );
       return c.json({ orders });
     }),
   );

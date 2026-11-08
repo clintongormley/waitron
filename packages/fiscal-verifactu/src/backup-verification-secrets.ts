@@ -27,6 +27,22 @@ async function exists(query: BackupQuery, table: string) {
     ])) !== undefined
   );
 }
+/** The file's own reading of `readHistoryNodes` (`@waitron/db`): the source, then every box it took
+ * over from, however many handovers back. */
+async function historyNodes(query: BackupQuery, nodeId: string): Promise<string[]> {
+  const history = [nodeId];
+  if (!(await exists(query, "handover_activations"))) return history;
+  for (const destination of history) {
+    for await (const row of query.rows(
+      "select source_node_id from handover_activations where destination_node_id=?",
+      [destination],
+    )) {
+      const source = String(row.source_node_id);
+      if (!history.includes(source)) history.push(source);
+    }
+  }
+  return history;
+}
 function result(status: BackupModuleStatus): BackupModuleResult {
   return { status, checks: [{ code: "secret", status }] };
 }
@@ -75,9 +91,10 @@ async function check(
   if (!(await exists(query, "fiscal_certificate_installs"))) return "invalid";
   let latest: Awaited<ReturnType<typeof first>>;
   let ambiguous = false;
+  const history = await historyNodes(query, context.source.nodeId);
   for await (const row of query.rows(
-    "select * from fiscal_certificate_installs where node_id=? order by installed_at desc",
-    [context.source.nodeId],
+    `select * from fiscal_certificate_installs where node_id in (${history.map(() => "?").join(",")}) order by installed_at desc`,
+    history,
   )) {
     if (latest === undefined) latest = row;
     else if (row.installed_at === latest.installed_at) ambiguous = true;

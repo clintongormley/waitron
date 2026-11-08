@@ -1,12 +1,14 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { invoiceSeries, sales, type Database } from "@waitron/db";
+import { invoiceSeries, nodes, sales, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { nodeId as brandNodeId, type NodeId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { currentSif } from "./registro-sif.js";
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
@@ -43,18 +45,22 @@ beforeEach(async () => {
  * One alta registro stamped with `fecha` (the stored `YYYY-MM-DD` form), plus its `envios` sidecar.
  * Not routed through `recordSale`, which derives the expedition date from the clock.
  */
-async function seedAltaOn(db: Database, fecha: string): Promise<string> {
+async function seedAltaOn(
+  db: Database,
+  fecha: string,
+  node: { nodeId: NodeId; sifId: string } = { nodeId: venue.nodeId, sifId },
+): Promise<string> {
   sequence += 1;
   const [series] = await db
     .insert(invoiceSeries)
-    .values({ nodeId: venue.nodeId, code: `P${String(sequence)}` })
+    .values({ nodeId: node.nodeId, code: `P${String(sequence)}` })
     .returning({ id: invoiceSeries.id });
   const [sale] = await db
     .insert(sales)
     .values({
       source: "device",
       deviceId: venue.deviceId,
-      nodeId: venue.nodeId,
+      nodeId: node.nodeId,
       seriesId: series!.id,
       invoiceNumber: sequence,
       issuedAt: `${fecha}T19:20:30+01:00`,
@@ -72,8 +78,8 @@ async function seedAltaOn(db: Database, fecha: string): Promise<string> {
     .values({
       source: "device",
       deviceId: venue.deviceId,
-      nodeId: venue.nodeId,
-      sifId,
+      nodeId: node.nodeId,
+      sifId: node.sifId,
       saleId: sale!.id,
       secuencia: sequence,
       tipoRegistro: "alta",
@@ -165,6 +171,35 @@ describe("reconcile — which calendar month the audit selects", () => {
       1,
     );
     expect((await reconcile(depsAgainstEmptyAeat(), { year: "2026", month: "1" })).checked).toBe(1);
+  });
+});
+
+describe("reconcile — the boxes a period's check covers", () => {
+  it("a period's check includes the records of the box this one took over from", async () => {
+    const [inserted] = await suite.db
+      .insert(nodes)
+      .values({ locationId: venue.locationId, name: "Spare" })
+      .returning({ id: nodes.id });
+    const node = { id: brandNodeId(inserted!.id) };
+    const spare = await suite.db.transaction((tx) =>
+      registerSif(tx, { nodeId: node.id, nif, idSistemaInformatico: "WT" }),
+    );
+    await seedAltaOn(suite.db, "2026-06-30");
+    await seedAltaOn(suite.db, "2026-07-01");
+    await seedAltaOn(suite.db, "2026-07-02", { nodeId: node.id, sifId: spare.id });
+    const scoped = (historyNodeIds: readonly string[]): ReconcileDeps => ({
+      ...depsAgainstEmptyAeat(),
+      scope: { nodeId: node.id, taxpayerId: nif, environment: "production", historyNodeIds },
+    });
+
+    const taken = scoped([node.id, venue.nodeId]);
+    expect((await reconcile(taken, { year: "2026", month: "07" })).checked).toBe(2);
+    expect((await reconcile(taken, { year: "2026", month: "06" })).checked).toBe(1);
+
+    // The control: the same box, its own records alone.
+    const own = scoped([node.id]);
+    expect((await reconcile(own, { year: "2026", month: "07" })).checked).toBe(1);
+    expect((await reconcile(own, { year: "2026", month: "06" })).checked).toBe(0);
   });
 });
 

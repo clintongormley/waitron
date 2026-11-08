@@ -232,15 +232,14 @@ export async function openFilingCasesSummary(
 
 /**
  * Every `detenido` record that has no case of its own: the records held behind another record,
- * or behind a run of refusals with one code. A held cancellation whose original alta (same
- * `sif_id`, same invoice identity) is `detenido` names its original's case; one whose original is
- * `rechazado` is set aside with a case of its own (`./drain.ts`), so it is not listed. Any
- * other held record names the case of the nearest earlier `detenido` record on its chain
- * (`sif_id`): that record's own case, or, when it has none, the case it names in turn. With no
- * earlier `detenido` record, it names the case of the record immediately before it, set-aside
- * records skipped (`recordsBefore`), when that one is `rechazado`: the last refusal of the run
- * that held it. Otherwise it names none. Mirrors the hold
- * rule in `./drain.ts`'s `haltOpenChainClaims`: the two change together.
+ * or behind a run of refusals with one code. A held cancellation whose current original alta
+ * (same `sif_id`, same invoice identity) is `detenido` names its original's case. Any other held
+ * record names the case of the nearest earlier `detenido` record on its chain (`sif_id`): that
+ * record's own case, or, when it has none, the case it names in turn. With no earlier `detenido`
+ * record, it names the case of the record immediately before it, set-aside records skipped
+ * (`recordsBefore`), when that one is `rechazado`: the last refusal of the run that held it.
+ * Otherwise it names none. Mirrors the hold rule in `./drain.ts`'s `haltOpenChainClaims`: the two
+ * change together.
  */
 export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
   const { rows } = await tx.execute<{
@@ -272,7 +271,7 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
     order by r.sif_id, r.secuencia
   `);
   const held: HeldRecord[] = [];
-  // Per chain: the case each original alta answers to, keyed by invoice identity.
+  // Per chain: the case that holds each current held original alta, keyed by invoice identity.
   const altaCases = new Map<string, string | null>();
   let chain: string | null = null;
   let holding: string | null = null;
@@ -294,7 +293,8 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
             : row.refused_before_case_id;
       held.push({ registroId: row.registro_id, caseId });
     }
-    if (row.tipo_registro === "alta") altaCases.set(row.identity, caseId);
+    if (row.tipo_registro === "alta" && row.estado === "detenido")
+      altaCases.set(row.identity, caseId);
     if (row.estado === "detenido") {
       holding = caseId;
       heldEarlier = true;

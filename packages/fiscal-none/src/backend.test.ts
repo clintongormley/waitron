@@ -88,6 +88,7 @@ describe("NoneBackend records nothing", () => {
     const sale = sampleSale();
     const backend = make();
     await backend.refuseNewIssuance(tx, NODE);
+    await backend.refuseNewRefund(tx, NODE);
     const ref = await backend.recordSale(tx, sale);
     expect(ref).toEqual({
       backend: "none",
@@ -101,7 +102,7 @@ describe("NoneBackend records nothing", () => {
 
   it("recordVoid returns a recorded ref for the voided sale, stamped now at a zero offset", async () => {
     const before = Date.now();
-    const ref = await make().recordVoid(tx, SALE, "mistake");
+    const ref = await make().recordVoid(tx, SALE, "mistake", NODE);
     expect(ref).toEqual({
       backend: "none",
       recordId: SALE,

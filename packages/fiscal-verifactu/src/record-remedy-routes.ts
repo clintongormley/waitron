@@ -30,6 +30,7 @@ const run = createErrorBoundary(
     "filing_case.action_mismatch": 409,
     "filing_case.already_resolved": 409,
     "fiscal.record_already_corrected": 409,
+    "fiscal.chain_handed_over": 409,
     "node.read_only": 409,
     "clock.behind_chain": 409,
     "clock.unusable": 409,

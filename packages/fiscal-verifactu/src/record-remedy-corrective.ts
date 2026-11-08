@@ -8,7 +8,7 @@ import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, saleId } from "@waitron/shared";
 import type { VerifactuBackend } from "./backend.js";
 import { recordCaseEvent } from "./filing-cases.js";
-import { admitRecordRemedy, type RemedyKind } from "./record-remedy.js";
+import { admitRecordRemedy, isInHistory, type RemedyKind } from "./record-remedy.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -51,7 +51,7 @@ export async function applyCorrectiveInvoice(
     .where(eq(registrosFacturacion.id, request.registroId));
   if (
     target === undefined ||
-    target.nodeId !== generation.nodeId ||
+    !(await isInHistory(tx, generation.nodeId, target.nodeId)) ||
     target.entorno !== generation.environment ||
     target.tipoRegistro !== "alta"
   )

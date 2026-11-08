@@ -919,6 +919,11 @@ FechaExpedicionFactura)`, the same triple AEAT identifies any record by (#33 §1
 the original's chain at all, so it is *a fortiori* unconstrained as to which SIF issues it — even more
 clearly than the subsanación/anulación the FAQ names.
 
+> **2026-11-08 (A1425, #2570):** the paragraph below is as written then. A box holding a membership
+> chart that names another box main now adds no record, so "across the two active servers" no longer
+> happens on such a box. A new cancellation (`recordVoid`) goes on the chain of the box running now,
+> not of the box that made the sale; no staff route calls it yet.
+
 **Why it is not merely theoretical (server-as-SIF, #33).** A venue runs **more than one SIF** — each
 server is its own SIF with its own chain (#33 §3, "two servers, two SIFs, one venue"). So a correction
 genuinely *can* land on a different server-SIF than the original (across the two active servers, or

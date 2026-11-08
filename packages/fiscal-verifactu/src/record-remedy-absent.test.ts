@@ -13,6 +13,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, saleId as brandSaleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "./drain.js";
@@ -578,4 +579,43 @@ it("submits the explicitly chosen absent-original operation instead of setting i
     sql`select sin_registro_previo from registros_facturacion where id = ${result.registroId}`,
   );
   expect(raw.rows).toEqual([{ sin_registro_previo: "S" }]);
+});
+
+it("a refused record of the box this one took over from can be remedied here", async () => {
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  runtimeNode = successor.nodeId;
+  const before = await snapshot();
+
+  const response = await send();
+
+  expect(response.status).toBe(200);
+  const { registroId } = (await response.json()) as { registroId: string };
+  const [appended] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, registroId));
+  expect(appended).toMatchObject({
+    nodeId: successor.nodeId,
+    sifId: successor.sifId,
+    tipoRegistro: "anulacion",
+    saleId: before.records[0]!.saleId,
+    numSerieFactura: before.records[0]!.numSerieFactura,
+    sinRegistroPrevio: "S",
+  });
+  expect((await snapshot()).head).toEqual(before.head);
+});
+
+it("a record of an unrelated box is still refused", async () => {
+  const successor = await seedNode(suite.db, "B");
+  const unrelated = await seedNode(suite.db, "C");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  runtimeNode = unrelated.nodeId;
+  const before = await snapshot();
+
+  const response = await send();
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+  expect(await snapshot()).toEqual(before);
 });

@@ -10,7 +10,6 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   insertHandoverActivationTx,
-  readActivationRows,
   readHandoverActivation,
   type HandoverActivationRow,
 } from "./activations.js";
@@ -20,7 +19,6 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const OP_X = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OP_Y = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const OP_Z = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const EVIDENCE: SignedHandoverEnvelope<unknown> = {
   purpose: "waitron.handover.relinquishment.v1",
   body: { operationId: OP_X },
@@ -90,45 +88,22 @@ describe("the record of activations", () => {
     expect(await readHandoverActivation(suite.db, OP_X)).toBeNull();
   });
 
-  it("lists only the activations in which the named box took over, oldest first", async () => {
-    const { a, b, c } = await nodes();
-    const later = activation(a, b, { operationId: OP_X, activatedAt: "2026-11-04T12:00:00.000Z" });
-    const earlier = activation(c, b, {
-      operationId: OP_Y,
-      activatedAt: "2026-11-04T09:00:00.000Z",
-      scenario: "emergency",
-    });
-    const elsewhere = activation(b, a, { operationId: OP_Z });
-    await insert(later);
-    await insert(earlier);
-    await insert(elsewhere);
-    expect(await readActivationRows(suite.db, b)).toEqual([earlier, later]);
-    expect(await readActivationRows(suite.db, a)).toEqual([elsewhere]);
-    expect(await readActivationRows(suite.db, c)).toEqual([]);
-  });
-
-  it("sorts by the instant, whatever spelling of a time the caller gave", async () => {
-    const { a, b, c } = await nodes();
+  it("stores one spelling of the time, whatever spelling the caller gave", async () => {
+    const { a, b } = await nodes();
     await insert(
       activation(a, b, { operationId: OP_X, activatedAt: "2026-11-04T12:00:00.000+02:00" }),
     );
-    await insert(activation(c, b, { operationId: OP_Y, activatedAt: "2026-11-04T11:00:00.000Z" }));
-    const rows = await readActivationRows(suite.db, b);
-    expect(rows.map((row) => [row.operationId, row.activatedAt])).toEqual([
-      [OP_X, "2026-11-04T10:00:00.000Z"],
-      [OP_Y, "2026-11-04T11:00:00.000Z"],
-    ]);
+    expect((await readHandoverActivation(suite.db, OP_X))?.activatedAt).toBe(
+      "2026-11-04T10:00:00.000Z",
+    );
   });
 
   it("reads inside a transaction", async () => {
     const { a, b } = await nodes();
     const seen = await withTransaction(suite.db, async (tx) => {
       await insertHandoverActivationTx(tx, activation(a, b));
-      return {
-        one: await readHandoverActivation(tx, OP_X),
-        all: await readActivationRows(tx, b),
-      };
+      return readHandoverActivation(tx, OP_X);
     });
-    expect(seen).toEqual({ one: activation(a, b), all: [activation(a, b)] });
+    expect(seen).toEqual(activation(a, b));
   });
 });

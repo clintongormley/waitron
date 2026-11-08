@@ -4,7 +4,7 @@ import { businessDayWindow, issuedSalesClause, nodeScopeClause } from "./busines
 import type { CloseCounts, DailyCloseInput } from "./types.js";
 
 /**
- * Operational record counts for one node — or the whole venue when `input.nodeId` is omitted — over
+ * Operational record counts for a list of boxes — or the whole venue when `input.nodeIds` is omitted — over
  * one business day. `sales` and `corrections` are selected by `issuedSalesClause`; `voids` counts
  * void EVENTS whose voided_at falls in the day.
  */
@@ -19,7 +19,7 @@ export async function computeCloseCounts(
       count(*) filter (where s.corrects_sale_id is not null) as corrections
     from sales s
     where ${issuedSalesClause(window)}
-      ${nodeScopeClause(input.nodeId)}
+      ${nodeScopeClause(input.nodeIds)}
   `);
 
   const voided = await tx.execute<{ voids: number }>(sql`
@@ -27,7 +27,7 @@ export async function computeCloseCounts(
     from sale_voids sv
     join sales s on s.id = sv.sale_id
     where ${window(sql`sv.voided_at`)}
-      ${nodeScopeClause(input.nodeId)}
+      ${nodeScopeClause(input.nodeIds)}
   `);
 
   return {

@@ -63,7 +63,12 @@ describe("cash sales while reconciliation is unknown", () => {
       const sweep = createReconciliationSweep({
         db: suite.db,
         clock,
-        scope: { nodeId: v.cfg.nodeId, taxpayerId: "61000002T", environment: "preproduction" },
+        scope: {
+          nodeId: v.cfg.nodeId,
+          historyNodeIds: [v.cfg.nodeId],
+          taxpayerId: "61000002T",
+          environment: "preproduction",
+        },
         resolveClient: async () => client,
         retryMs: 300_000,
         includeCurrentPeriod: true,

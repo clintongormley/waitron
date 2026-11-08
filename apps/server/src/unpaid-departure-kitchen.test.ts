@@ -423,7 +423,7 @@ describe("unpaid departure stops kitchen work", () => {
         pass: boardOrderIds(await readScopedPassBoard(tx, EVERY))
           .filter((id) => ids.includes(id))
           .sort(),
-        overdue: (await computeOverdueOrders(tx, { nodeId: venue.cfg.nodeId }))
+        overdue: (await computeOverdueOrders(tx))
           .map((row) => row.orderId)
           .filter((id) => ids.includes(id))
           .sort(),

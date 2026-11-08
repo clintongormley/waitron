@@ -11,6 +11,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -899,6 +900,27 @@ describe("growing a bill with a saved full-invoice choice", () => {
   it("adds a table round above the simplified ceiling to its saved F1 bill", async () => {
     const { partyId, tabId } = await seated(limited, { Lote: 1 });
     await chooseFull(tabId);
+    const before = written();
+    const choice = savedChoice(tabId);
+
+    const added = await send(limited, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: partyRevision(partyId),
+      groups: [{ lines: linesOf(tables, { Céntimo: 1 }), release: "fire" }],
+    });
+
+    expect(added.json.code).toBeUndefined();
+    expect(added.status).toBe(200);
+    expect(storedLines(tabId)).toEqual(["1:1000", "2:1000"]);
+    expect(savedChoice(tabId)).toEqual(choice);
+    expect(written()).toEqual(before);
+  });
+
+  it("adds a table round above the simplified ceiling to a saved F1 bill another box opened", async () => {
+    const { partyId, tabId } = await seated(limited, { Lote: 1 });
+    await chooseFull(tabId);
+    const otherBox = await seedNode(venue.db);
+    venue.db.run(sql`update working_orders set node_id = ${otherBox} where id = ${tabId}`);
     const before = written();
     const choice = savedChoice(tabId);
 

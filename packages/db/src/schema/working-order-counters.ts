@@ -2,7 +2,7 @@ import { foreignKey, primaryKey } from "drizzle-orm/sqlite-core";
 import { count, id, table } from "./columns.js";
 import { nodes } from "./nodes.js";
 
-/** One counter per node, keyed by node_id; read and advanced by `allocateOrderNumber`. */
+/** Each box's high-water mark of the venue-wide order-number sequence, keyed by node_id; read and advanced by `allocateOrderNumber`. */
 export const workingOrderCounters = table(
   "working_order_counters",
   {

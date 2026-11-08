@@ -55,7 +55,12 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
       db: suite.db,
       resolveClient: staticResolver(aeat.client()),
       clock: seeded.clock,
-      scope: { nodeId: seeded.nodeId, taxpayerId: seeded.nif, environment: "production" as const },
+      scope: {
+        nodeId: seeded.nodeId,
+        historyNodeIds: [seeded.nodeId],
+        taxpayerId: seeded.nif,
+        environment: "production" as const,
+      },
     };
 
     const result = await reconcile(deps, PERIOD);
@@ -97,6 +102,7 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
         clock: seeded.clock,
         scope: {
           nodeId: different === "node" ? "another-node" : seeded.nodeId,
+          historyNodeIds: [different === "node" ? "another-node" : seeded.nodeId],
           taxpayerId: different === "taxpayer" ? "B87654324" : seeded.nif,
           environment:
             different === "environment" ? ("preproduction" as const) : ("production" as const),
@@ -139,7 +145,12 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
       db: suite.db,
       resolveClient: staticResolver(client),
       clock: seeded.clock,
-      scope: { nodeId: seeded.nodeId, taxpayerId: seeded.nif, environment: "production" as const },
+      scope: {
+        nodeId: seeded.nodeId,
+        historyNodeIds: [seeded.nodeId],
+        taxpayerId: seeded.nif,
+        environment: "production" as const,
+      },
     };
 
     const result = await reconcile(deps, PERIOD);

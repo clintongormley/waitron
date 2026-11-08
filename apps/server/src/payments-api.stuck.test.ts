@@ -998,6 +998,36 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(v.client.processedReaders).toEqual([]);
   });
 
+  it("refuses to file a captured payment on a box the held chart does not name primary", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 2,
+        nodes: [
+          { nodeId: v.cfg.nodeId, contactUrl: "https://this-box", standing: "sell-only" },
+          { nodeId: randomUUID(), contactUrl: "https://new-box", standing: "serving-primary" },
+        ],
+      },
+      signerNodeId: "new-box",
+      signature: "sig-2",
+      endorsements: [],
+    });
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toMatchObject({
+      code: "fiscal.chain_handed_over",
+      params: { nodeId: v.cfg.nodeId },
+    });
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
   it("(a) files ONE sale for a payment Stripe captured, settles the order, and refuses a second resolve", async () => {
     const v = await setup();
     const orderId = await openOrder(v);

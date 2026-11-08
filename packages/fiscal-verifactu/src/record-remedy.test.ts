@@ -432,3 +432,24 @@ it("refuses a synthetic held absent-original cancellation rather than treating i
   await expect(apply()).rejects.toMatchObject({ code: "fiscal.remedy_invalid" });
   expect(await snapshot()).toEqual(before);
 });
+
+it("refuses a record of a box outside this box's takeover history before reading the case", async () => {
+  const unrelated = await seedNode(suite.db, "C");
+  const before = await snapshot();
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      applyRecordCorrection(tx, {
+        managementSessionId: token,
+        nodeId: unrelated.nodeId,
+        environment: "preproduction",
+        enabledRemedies: new Set(["record-correction"]),
+        request: { ...request, caseId: "missing-case" },
+        now: NOW,
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "fiscal.remedy_invalid",
+    params: { registroId: request.registroId },
+  });
+  expect(await snapshot()).toEqual(before);
+});

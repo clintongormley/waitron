@@ -1,7 +1,8 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -16,6 +17,7 @@ import {
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, resetInFlightClaims, type DrainDeps } from "./drain.js";
 import { heldRecords, listFilingCases, openFilingCase } from "./filing-cases.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -617,6 +619,45 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
 
     await drain(deps(wire.client), new Date("2026-07-21T01:04:00Z"));
     expect(wire.sent.slice(before)).toEqual([[awaited]]);
+  });
+
+  it("a cancellation on another chain, and the record after it, wait while its original is held, and go once the probe is accepted", async () => {
+    const aeat = fakeAeat();
+    const { seeded, held } = await brakeHold(aeat, 1);
+    const [original] = held;
+    const other = await seedSecondChain(suite.db, seeded, 10);
+    const [otherHead] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, other.registroId));
+    const cancellation = await appendCancellation(suite.db, seeded, original!, 11, {
+      otherChainHeadId: other.registroId,
+    });
+    const later = await appendPendingAlta(
+      suite.db,
+      { ...seeded, nodeId: brandNodeId(otherHead!.nodeId), sifId: otherHead!.sifId },
+      12,
+    );
+    const wire = recording(aeat.client());
+
+    await drain(deps(wire.client), at(MINUTE));
+
+    expect(wire.sent).toEqual([[other.registroId]]);
+    expect(await estados([original!, cancellation, later.registroId])).toEqual([
+      "detenido",
+      "pendiente",
+      "pendiente",
+    ]);
+
+    await drain(deps(wire.client), at(HOUR));
+    await drain(deps(wire.client), at(HOUR + MINUTE));
+
+    expect(wire.sent).toEqual([[other.registroId], [original], [cancellation, later.registroId]]);
+    expect(await estados([original!, cancellation, later.registroId])).toEqual([
+      "aceptado",
+      "aceptado",
+      "aceptado",
+    ]);
   });
 
   describe("controls: never probed, never released", () => {

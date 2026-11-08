@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { handoverActivations } from "@waitron/db";
 
@@ -24,16 +24,4 @@ export async function readHandoverActivation(
     .from(handoverActivations)
     .where(eq(handoverActivations.operationId, operationId));
   return row ?? null;
-}
-
-/** The activations in which `destinationNodeId` took over, oldest first. */
-export async function readActivationRows(
-  db: Database | Transaction,
-  destinationNodeId: string,
-): Promise<HandoverActivation[]> {
-  return db
-    .select()
-    .from(handoverActivations)
-    .where(eq(handoverActivations.destinationNodeId, destinationNodeId))
-    .orderBy(asc(handoverActivations.activatedAt));
 }

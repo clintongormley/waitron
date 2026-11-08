@@ -5,6 +5,7 @@ import {
   recallLines,
   sendLines,
   setLineCourse,
+  setOrderReceiptLanguage,
   updateHeldOrder,
   placeOrder,
 } from "./testing/order-writer-fixture.js";
@@ -1288,6 +1289,52 @@ describe("cross-till end-to-end", () => {
       code: "working_order.not_found",
       params: { workingOrderId: orderId },
     });
+  });
+});
+
+describe("an order another box opened", () => {
+  it("an open order stamped with another box is paid and changed here", async () => {
+    const { cfg: here, coffee, zoneId } = await setupVenue();
+    const otherBox = await addNode(here);
+    const orderId = randomUUID();
+    await parkOrder({ db: suite.db }, otherBox, {
+      id: orderId,
+      zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
+    });
+    const stored = async () =>
+      (
+        await suite.db
+          .select({
+            nodeId: workingOrders.nodeId,
+            receiptLocale: workingOrders.receiptLocale,
+            revision: workingOrders.revision,
+          })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, orderId))
+      )[0]!;
+    const before = await stored();
+    expect(before.nodeId).toBe(otherBox.nodeId);
+    expect(before.receiptLocale).not.toBe(LOCALE);
+
+    await expect(
+      setOrderReceiptLanguage(suite.db, orderId, { revision: before.revision, language: LOCALE }),
+    ).resolves.toBe(before.revision + 1);
+    expect(await stored()).toEqual({
+      nodeId: otherBox.nodeId,
+      receiptLocale: LOCALE,
+      revision: before.revision + 1,
+    });
+
+    const res = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      here,
+      { id: orderId, lines: [], tender: { method: "cash", amount: "2.00" } },
+    );
+    expect(res.total).toBe("1.50");
+    expect(res.tender).toEqual({ method: "cash", change: "0.50" });
+    expect(await orderState(orderId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(orderId)).toBe(1);
   });
 });
 

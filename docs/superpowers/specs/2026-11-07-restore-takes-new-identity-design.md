@@ -88,6 +88,10 @@ never remembered the sale being cancelled. That fix belongs in the build.
 `readTakenOverFrom` already walks every box this one took over from, and every box those took over
 from. Today only card payments read it. This design makes it the one answer to "whose history is
 mine?", and records a restore into it the same way a handover activation does.
+**2026-11-08, as built for part 1:** the walk is `readHistoryNodes` in `@waitron/db` (this box and the
+boxes it took over from), which reports, reconciliation, the certificate read, corrections and record remedies read. Card payments still
+call `readTakenOverFrom`, the same list without this box, and the backup check has its own copy of the
+walk.
 
 Each reader that today filters by "this box" is judged on its own, into one of three kinds:
 
@@ -102,6 +106,9 @@ Each reader that today filters by "this box" is judged on its own, into one of t
    and covers everything since its last close, so the old box's cash is counted once. If part 1 lands
    before A1325, a close counts only the old box's sales that no close of the old box's own already
    covers (my call).
+   **2026-11-08, as planned for part 1:** the recorded daily close is left alone for A1325 to
+   replace, and the daily-close report reads the list like every other report (plan decision 5,
+   `docs/superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md`).
 3. **This box only, on purpose**: its own invoice chain and series, its own signing key, its own
    mode and mirror link. A new record always goes on this box's chain.
 
@@ -118,6 +125,9 @@ the plan. A reader that genuinely needs a fourth answer comes back to the owner.
 - **A handed-over or replaced box's chain takes nothing more.** `refuseNewIssuance` refuses any box in
   the taken-over-from list, wherever the request comes from. Today it did not refuse M1 after M1
   relinquished (§1).
+  **2026-11-08, as built for part 1:** a box in that list may have taken back, so the check reads the
+  held membership chart instead and refuses a box the chart does not name `serving-primary` (plan
+  decision 4, `docs/superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md`).
 - **Old records are still sent and reconciled.** Sending is already venue-wide (`drain.ts:151, 474`),
   and records waiting under the old identity are filed under it, as the handover test already shows.
   Reconciliation reads the list (§2, kind 2).
@@ -202,8 +212,7 @@ one current (owner). Wording and placement are the builder's, under the design s
 
 1. The takeover readers and fiscal rules (§2, §3), proved by the probe's five cases turning green in
    `handover-controlled.e2e.test.ts`, plus the certificate card's `it.fails`. Needs nothing from Cloud.
-2. A route that reaches a cancellation, if the venue needs one before go-live (none does today; the
-   builder checks the backlog).
+2. A route that reaches a cancellation, if the venue needs one before go-live.
 3. The restore as a takeover (§4, §5, §6), after Cloud agrees the contract change (§7). This is the
    expensive half. What it buys beyond A1418 alone (a restore takes a term above everything in its
    bucket): an old box is told by its own key's signature that it was replaced, two machines are never
@@ -211,10 +220,12 @@ one current (owner). Wording and placement are the builder's, under the design s
 
 Planning: part 1 is planned in full now; part 3 gets an outline until Cloud has answered.
 
+**2026-11-08:** part 1 is built in #2570 (A1425). Part 2 is not built.
+
 ## 9. Left to the builder
 
 - How a restore is written into the taken-over-from list: a handover activation row or a row of its
-  own, as long as `readTakenOverFrom` reads both.
+  own, as long as `readHistoryNodes` and the backup check's copy of its walk (§2) read both.
 - Order numbers continue from the highest number any box in the list gave out (my call; one counter
   for the venue is also fine). Either way, no number repeats. Numbers the dead box gave out after the
   backup are lost with the rest of that tail, as a restore already accepts.

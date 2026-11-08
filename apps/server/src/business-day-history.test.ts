@@ -149,10 +149,15 @@ async function frozen() {
 async function derived(day: string) {
   return inTx(async (tx) => {
     const clock = await readVenueClock(tx);
-    const range = { ...clock, nodeId: venue.cfg.nodeId, fromBusinessDay: day, toBusinessDay: day };
+    const range = {
+      ...clock,
+      nodeIds: [venue.cfg.nodeId],
+      fromBusinessDay: day,
+      toBusinessDay: day,
+    };
     const close = await computeDailyClose(tx, {
       ...clock,
-      nodeId: venue.cfg.nodeId,
+      nodeIds: [venue.cfg.nodeId],
       businessDay: day,
     });
     const vat = await computeVatSummaryForPeriod(tx, range);

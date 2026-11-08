@@ -1,6 +1,5 @@
-import type { Database, Transaction } from "@waitron/db";
-import { readActivationRows } from "@waitron/handover";
-import { nodeId as brandNodeId, type NodeId } from "@waitron/shared";
+import { readHistoryNodes, type Database, type Transaction } from "@waitron/db";
+import type { NodeId } from "@waitron/shared";
 
 /**
  * The boxes whose open card payments this box collects: every box it took over from, then every box
@@ -11,16 +10,5 @@ export async function readTakenOverFrom(
   db: Database | Transaction,
   nodeId: NodeId,
 ): Promise<readonly NodeId[]> {
-  const seen = new Set<string>([nodeId]);
-  const takenOverFrom: NodeId[] = [];
-  const toFollow: string[] = [nodeId];
-  for (const destination of toFollow) {
-    for (const { sourceNodeId } of await readActivationRows(db, destination)) {
-      if (seen.has(sourceNodeId)) continue;
-      seen.add(sourceNodeId);
-      takenOverFrom.push(brandNodeId(sourceNodeId));
-      toFollow.push(sourceNodeId);
-    }
-  }
-  return takenOverFrom;
+  return (await readHistoryNodes(db, nodeId)).slice(1);
 }

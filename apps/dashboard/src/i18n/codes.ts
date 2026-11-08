@@ -16,6 +16,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Fingerprint check failed; ask a manager.",
     es: "Ha fallado la comprobación de la huella; avisa a un responsable.",
   },
+  "fiscal.chain_handed_over": {
+    en: "This server is no longer the main server, so it cannot add new records for the tax agency. Open this page on the main server.",
+    es: "Este servidor ya no es el servidor principal, así que no puede añadir registros nuevos para Hacienda. Abre esta página en el servidor principal.",
+  },
   "invoice_customer.not_found": {
     en: "No full invoice names that tax number.",
     es: "Ninguna factura completa lleva ese NIF.",

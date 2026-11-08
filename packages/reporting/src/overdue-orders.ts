@@ -9,7 +9,7 @@ import {
 } from "@waitron/db";
 import { BAND_RANK, classifyBand, worstBand } from "@waitron/shared";
 import type { StationThresholds, TimingBand } from "@waitron/shared";
-import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
+import type { OverdueOrder } from "./types.js";
 
 /**
  * Whole minutes from a stored ISO stamp to `nowMs`, floored. A copy of
@@ -20,9 +20,9 @@ function minutesSince(stamp: string, nowMs: number): number {
 }
 
 /**
- * The manager overview's "orders taking too long" query — THIS node's currently-open kitchen orders
- * whose worst UNSERVED kitchen line has crossed into `overdue` or `forgotten`, worst-first. Items
- * made at the till do not age in this report. A line ages from
+ * The manager overview's "orders taking too long" query — the venue's currently-open kitchen
+ * orders, whichever box took them, whose worst UNSERVED kitchen line has crossed into `overdue` or
+ * `forgotten`, worst-first. Items made at the till do not age in this report. A line ages from
  * `ticket_items.queued_at` until it is served (`working_order_lines.served_at`) or the order is
  * collected (`working_orders.collected_at`), and an order stays "open" while it is not abandoned and
  * not yet collected — wider than `status = 'open'` (a `settled` walk-up awaiting counter handover
@@ -31,10 +31,7 @@ function minutesSince(stamp: string, nowMs: number): number {
  * Among the lines tied at an order's WORST band, the one with the GREATEST age is named — the most
  * urgent line to show.
  */
-export async function computeOverdueOrders(
-  tx: Transaction,
-  input: OverdueOrdersInput,
-): Promise<OverdueOrder[]> {
+export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrder[]> {
   // Read ONCE, so every row in this run is aged and classified against the SAME instant.
   const nowMs = Date.now();
   const rows = await tx
@@ -58,7 +55,6 @@ export async function computeOverdueOrders(
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     .where(
       and(
-        eq(ticketItems.nodeId, input.nodeId),
         eq(ticketItems.madeHere, false),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),

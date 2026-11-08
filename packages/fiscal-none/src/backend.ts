@@ -35,6 +35,10 @@ export class NoneBackend implements FiscalBackend {
     return Promise.resolve();
   }
 
+  refuseNewRefund(): Promise<void> {
+    return Promise.resolve();
+  }
+
   clockBehindLatestRecord(): Promise<ClockBehindLatestRecord | null> {
     return Promise.resolve(null);
   }

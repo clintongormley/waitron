@@ -70,7 +70,12 @@ function run(f: Fixture, client = f.client) {
       db: suite.db,
       clock: f.seeded.clock,
       resolveClient: staticResolver(client),
-      scope: { nodeId: f.seeded.nodeId, taxpayerId: f.seeded.nif, environment: "production" },
+      scope: {
+        nodeId: f.seeded.nodeId,
+        historyNodeIds: [f.seeded.nodeId],
+        taxpayerId: f.seeded.nif,
+        environment: "production",
+      },
     },
     PERIOD,
   );
@@ -562,6 +567,7 @@ it.each([false, true])(
           ? {
               scope: {
                 nodeId: f.seeded.nodeId,
+                historyNodeIds: [f.seeded.nodeId],
                 taxpayerId: f.seeded.nif,
                 environment: "production" as const,
               },

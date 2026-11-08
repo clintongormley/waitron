@@ -18,7 +18,7 @@ import {
   openCertificateFile,
   type CertificateDetails,
 } from "./certificate-file.js";
-import { latestInstall, nextInstalledAt, recordInstall } from "./certificate-record.js";
+import { latestInstall, recordInstall } from "./certificate-record.js";
 import { isBase64 } from "./provisioning-secret.js";
 import "./errors.js";
 
@@ -238,10 +238,9 @@ export async function installCertificate(
       purpose: "fiscal.aeat",
       value: { pfxBase64: body.pfxBase64, passphrase: body.passphrase, certKind: body.certKind },
     });
-    const latest = await latestInstall(tx, deps.nodeId);
     await recordInstall(tx, {
       nodeId: deps.nodeId,
-      installedAt: nextInstalledAt(latest, writtenAt),
+      installedAt: writtenAt,
       source: "dashboard",
       personId,
       kind: body.certKind,

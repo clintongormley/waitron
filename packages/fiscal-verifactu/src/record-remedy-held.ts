@@ -6,7 +6,7 @@ import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError } from "@waitron/shared";
 import { deleteAck } from "./acks.js";
 import { recordCaseEvent } from "./filing-cases.js";
-import { admitRecordRemedy, type RemedyKind } from "./record-remedy.js";
+import { admitRecordRemedy, isInHistory, type RemedyKind } from "./record-remedy.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -38,7 +38,7 @@ export async function releaseHeldCancellation(
     .where(eq(registrosFacturacion.id, registroId));
   if (
     target === undefined ||
-    target.nodeId !== generation.nodeId ||
+    !(await isInHistory(tx, generation.nodeId, target.nodeId)) ||
     target.entorno !== generation.environment ||
     target.tipoRegistro !== "anulacion" ||
     target.sinRegistroPrevio === "S"
@@ -80,8 +80,6 @@ export async function releaseHeldCancellation(
     accepted === undefined ||
     accepted.delivery.estado !== "aceptado" ||
     accepted.record.tipoRegistro !== "alta" ||
-    accepted.record.nodeId !== target.nodeId ||
-    accepted.record.sifId !== target.sifId ||
     accepted.record.entorno !== target.entorno ||
     accepted.record.saleId !== target.saleId ||
     accepted.record.idEmisorFactura !== target.idEmisorFactura ||

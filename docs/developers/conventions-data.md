@@ -1475,8 +1475,8 @@ takes part in (`node_handover_operations`), what it decided and received during 
 (`node_handover_events`), and why it no longer acts as the main box (`node_handover_restriction`) — so a spare holding a copy of the main box's `venue.db`
 still knows who it is (A947 slice 3a). `node.db` is never streamed (`packages/stream/src/litestream.ts`
 names only `venue.db`); a backup file carries it whole as `node.dump`, and the bucket's sealed state
-carries a `node.dump` entry. Every other `local` table stays in `venue.db`. A `local` row means
-nothing to another node, so no venue row may depend on one, and a key in either direction would
+carries a `node.dump` entry. Every other `local` table stays in `venue.db`. No venue row may depend
+on a `local` row, and a key in either direction would
 block moving a `local` table into `node.db`. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker
 than its name: it sides tables by class, not by file, so a key from a `node.db` table into one of
 `venue.db`'s `local` tables passes it; SQLite refuses the write instead (`no such table`), because
@@ -1537,7 +1537,9 @@ which of three ties it uses: a `node_id` column every read and write names (`joi
 `node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring
 rotation reads `node_signing_key` whole), a seal only a box holding the key ring opens
 (`tenant_credentials`, whose ring a joining spare receives from the main box), or rows the
-transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2
+transaction that wrote them deletes (`change_log`). `fiscal_certificate_installs` and
+`fiscal_certificate_reminders` use the first tie widened to a list: a `node_id` column every read
+and write names as one of `readHistoryNodes(tx, thisNode)`, this box and every box it took over from. Identity has no `local` table: slice-2
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
 only as its hash (`packages/db/src/classification.ts`; #554, and the owner's decision that a
 login survives a rebuild and a promotion). Pinned,

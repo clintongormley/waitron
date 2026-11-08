@@ -71,7 +71,7 @@ async function sell() {
 
 async function voidSale(saleId: SaleId, reason = "staff error") {
   return withTransaction(suite.db, async (tx) => {
-    return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId });
+    return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId }, nodeId);
   });
 }
 

@@ -230,7 +230,7 @@ describe("reporting over recorded sales", () => {
     await correct(first, "2026-08-04");
     const close = await withTransaction(suite.db, async (tx) =>
       computeDailyClose(tx, {
-        nodeId: issuer.nodeId,
+        nodeIds: [issuer.nodeId],
         businessDay: "2026-08-04",
         ...(await resolveVenueClock(tx, issuer.nodeId)),
       }),
@@ -418,8 +418,8 @@ describe("reporting over recorded sales", () => {
       };
       return [
         await computeVatSummaryForPeriod(tx, range),
-        await computeVatSummaryForPeriod(tx, { ...range, nodeId: issuer.nodeId }),
-        await computeVatSummaryForPeriod(tx, { ...range, nodeId: other.nodeId }),
+        await computeVatSummaryForPeriod(tx, { ...range, nodeIds: [issuer.nodeId] }),
+        await computeVatSummaryForPeriod(tx, { ...range, nodeIds: [other.nodeId] }),
         await computeVatSummaryForPeriod(tx, {
           ...range,
           fromBusinessDay: "2026-08-03",
