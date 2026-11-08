@@ -2136,7 +2136,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **The logo retry checks' deadline and counting** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-the-logo-retry-checks-deadline-and-counting)
 
-- **Replace 15 "if it happens again" entries with one table in `docs/backlog/ci** (bundle of 15, size M). Holds A891, A999, A1230, A1305, A1027, A419. [Detail](backlog/ci.md#bundle-replace-15-if-it-happens-again-entries-with-one-table-in-docsbacklogci)
+- **Replace 15 "if it happens again" entries with one table in `docs/backlog/ci** (bundle of 15, size M). Holds A891, A999, A1230, A1305, A1027, A419 and the store commit-notification failure. [Detail](backlog/ci.md#bundle-replace-15-if-it-happens-again-entries-with-one-table-in-docsbacklogci)
 
 - **Finish the time limits on CI's network steps** (bundle of 6, size M). Holds A1251 and A1424's remaining server/browser/heavy capacity and hosted-fallback qualification. [Detail](backlog/ci.md#bundle-finish-the-time-limits-on-cis-network-steps)
 
