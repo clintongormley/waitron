@@ -82,7 +82,7 @@ const LABELS: Record<string, readonly [string, string]> = {
     "Above selected daily or period target (minutes)",
     "Sobre el objetivo diario o del período seleccionado (minutos)",
   ],
-  contractedTargetMinutes: ["Daily target minutes", "Minutos previstos del día"],
+  contractedTargetMinutes: ["Daily target minutes", "Objetivo diario (minutos)"],
   beforeWorkedMinutes: ["Frozen worked minutes", "Minutos trabajados al cierre"],
   afterWorkedMinutes: ["Current worked minutes", "Minutos trabajados actuales"],
   deltaWorkedMinutes: ["Change in worked minutes", "Cambio en minutos trabajados"],

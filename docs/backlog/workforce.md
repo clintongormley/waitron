@@ -143,6 +143,10 @@ limits, and these, into browser-safe venue-service files and export them.
 
 - pay per hour;
 - contracted hours a week, and the most extra hours a week;
+- distinguish complementary hours for part-time staff from overtime when applying those terms.
+  Today's PDF shows target excess without making that legal classification; the
+  [labour research](../compliance/research/2026-11-06-adviser-labour.md#part-time-staff-l210-answered)
+  records the open distinction;
 - the days-off pattern: two days together, a day and a half together, or one day plus another day
   (or plus a half day) elsewhere in the week;
 - whether they work split shifts, and the most hours they work in one stretch;

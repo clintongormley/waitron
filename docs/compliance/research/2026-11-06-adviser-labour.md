@@ -23,7 +23,7 @@ two memory notes that mention it. The action plan keeps the deli's legal name ou
 so this document does too.
 
 **2026-11-08, A1406-1:** the rest and break-warning thresholds can travel as explicit
-[configuration row values](../../operations/first-venue-work-time.md). The export now describes
+[configuration row values](../../operations/first-venue-work-time.md). The PDF export now describes
 target excess without classifying it as overtime. Paid continuous breaks, yearly limits and
 split-shift rules remain A1406-2. The research below records the earlier state.
 

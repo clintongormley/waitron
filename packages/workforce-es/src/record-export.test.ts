@@ -541,6 +541,9 @@ it.each([
     expect(summary.columns.find((c) => c.key === "periodNetOvertimeMinutes")!.label).toBe(period);
     expect(summary.columns.find((c) => c.key === "overtimeMinutes")!.label).toBe(reference);
     const dailySection = exported.sections.find((s) => s.key === "frozen-days")!;
+    expect(dailySection.columns.find((c) => c.key === "contractedTargetMinutes")!.label).toBe(
+      locale === "es" ? "Objetivo diario (minutos)" : "Daily target minutes",
+    );
     expect(dailySection.columns.find((c) => c.key === "overtimeMinutes")!.label).toBe(daily);
     expect(summary.rows[0]!.cells).toMatchObject({
       workedMinutes: 480,

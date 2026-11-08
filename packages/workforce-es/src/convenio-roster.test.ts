@@ -18,14 +18,12 @@ beforeEach(async () => {
 it("characterizes stored agreement values reaching break and weekly-rest warnings", async () => {
   await suite.db.insert(convenioConfig).values({ locationId: await venueLocationId(suite.db) });
   const baseline = await resolveWorkTimeRuleset(suite.db);
-  await suite.db
-    .update(convenioConfig)
-    .set({
-      weeklyRestMinutes: 2880,
-      breakThresholdMinutes: 300,
-      minBreakMinutes: 20,
-      breaksCountAsWorked: false,
-    });
+  await suite.db.update(convenioConfig).set({
+    weeklyRestMinutes: 2880,
+    breakThresholdMinutes: 300,
+    minBreakMinutes: 20,
+    breaksCountAsWorked: false,
+  });
   const configured = await resolveWorkTimeRuleset(suite.db);
   const shifts: PlannedShift[] = [];
   for (let week = 0; week < 3; week++)
@@ -63,4 +61,21 @@ it("characterizes stored agreement values reaching break and weekly-rest warning
   expect(
     validateRoster([exactThreshold], configured).filter((x) => x.kind === "break_owed"),
   ).toEqual([]);
+  for (const [end, count] of [
+    ["08:00", 0],
+    ["08:01", 1],
+  ] as const) {
+    const boundary = shifts.map((shift) =>
+      shift.shiftId.endsWith("-5")
+        ? {
+            ...shift,
+            startsAt: shift.startsAt.replace("T08:00:", "T07:59:"),
+            endsAt: shift.endsAt.replace("T13:01:", `T${end}:`),
+          }
+        : shift,
+    );
+    expect(
+      validateRoster(boundary, configured).filter((x) => x.kind === "weekly_rest_insufficient"),
+    ).toHaveLength(count);
+  }
 });

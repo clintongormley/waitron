@@ -1,29 +1,64 @@
 # First venue: working-time configuration
 
-For the first venue's agreement, set the rest and break-warning limits in its prepared
-configuration before importing it during setup. Keep the existing schema defaults for other
-agreements. The [labour research](../compliance/research/2026-11-06-adviser-labour.md#limits-to-load-into-the-configuration-l23-to-l26-answered)
+For the first venue's agreement, add the rest and break-warning limits to its prepared
+configuration before importing it during setup. A fresh export has no agreement row. The
+[labour research](../compliance/research/2026-11-06-adviser-labour.md#limits-to-load-into-the-configuration-l23-to-l26-answered)
 identifies the first venue's figures.
 
-In `tables.convenio_config`, set these fields on the venue's row. Keep its other fields, including
-its row and location references and creation time:
+The exported file is encrypted, so you cannot edit it as JSON. From this repository's root, after
+installing its dependencies, run the following with the paths to your export and a **new** output
+file. Enter the same passphrase you used when exporting. This keeps the original file and changes
+only the agreement row in the new encrypted copy; it does not open a venue database.
 
-```json
-{
-  "weekly_rest_minutes": 2880,
-  "break_threshold_minutes": 300,
-  "min_break_minutes": 20
+```bash
+WAITRON_RULES_INPUT=/absolute/path/prepared.wbk \
+WAITRON_RULES_OUTPUT=/absolute/path/prepared-with-time-rules.wbk bash <<'SHELL'
+set -e
+cd apps/server
+IFS= read -r -s -p 'Export passphrase: ' rules_passphrase </dev/tty
+printf '\n' >/dev/tty
+printf '%s' "$rules_passphrase" | node --import tsx --input-type=module -e '
+import { randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { decodeConfigurationBundle, encodeConfigurationBundle } from "@waitron/provisioning";
+
+const passphrase = readFileSync(0, "utf8");
+const bundle = decodeConfigurationBundle(readFileSync(process.env.WAITRON_RULES_INPUT), passphrase);
+if (!Object.hasOwn(bundle.modules, "workforce-es")) {
+  throw new Error("The prepared configuration must already include workforce-es");
 }
+const rows = bundle.tables.convenio_config ??= [];
+if (rows.length > 1) throw new Error("Expected at most one agreement row");
+if (rows.length === 0) rows.push({
+  id: randomUUID(),
+  location_id: randomUUID(),
+  created_at: new Date().toISOString(),
+});
+Object.assign(rows[0], {
+  weekly_rest_minutes: 2880,
+  break_threshold_minutes: 300,
+  min_break_minutes: 20,
+});
+writeFileSync(process.env.WAITRON_RULES_OUTPUT, encodeConfigurationBundle(bundle, passphrase), {
+  flag: "wx",
+  mode: 0o600,
+});
+console.log("Prepared configuration: weekly rest 2880; break threshold 300; minimum break 20 minutes.");
+'
+SHELL
 ```
 
-These are fields of the row inside a complete configuration bundle, not a standalone import file.
-If you are preparing a configuration with no agreement row, include one with its `id`,
-`location_id` and `created_at` as well. The other columns retain their database defaults when
-omitted. The import maps the location reference to the new venue.
+The passphrase travels through standard input, without being put in a command argument or an
+environment variable. The output refuses to overwrite an existing file. The command leaves any
+other fields on an existing agreement row unchanged. For a new row, the other rule columns take
+their database defaults when imported. The import maps the location reference to the new venue;
+the generated location reference above is only a placeholder for that mapping.
 
-After import, rota warnings use a 48-hour weekly rest and request a 20-minute break for a shift
+Import the new encrypted copy during setup. Rota warnings request a 20-minute break for a shift
 longer than five hours. A shift lasting exactly five hours does not raise that break warning.
-The rota can still be published with warnings.
+Weekly-rest warnings compare against 48 hours only for a person with shifts in both an earlier
+and a later week; a one-week rota alone does not get this check. You can still publish a rota
+with warnings.
 
 Paid-break accounting is still open in A1406-2. The existing `breaks_count_as_worked` field describes
 split-shift policy; changing it does not currently add a recorded break to worked minutes.
@@ -36,4 +71,4 @@ keys and recorded amounts stay the same, including the raw CSV column keys.
 
 The row-to-warning case is exercised by `packages/workforce-es/src/convenio-roster.test.ts`.
 The configured source row and imported values are exercised by the “copies declared configuration”
-case in `apps/server/src/configuration-transfer.test.ts`.
+and “first venue” cases in `apps/server/src/configuration-transfer.test.ts`.
