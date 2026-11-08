@@ -312,6 +312,10 @@ sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuen
 una cuenta sin pagar para que la cobres, y **Registrar salida sin pagar** registra que los clientes
 se fueron sin pagar.
 
+**Registrar salida sin pagar** cancela automáticamente los platos pendientes de la cocina y envía
+los tiques de cancelación. No tienes que cancelarlos uno a uno. La cuenta sigue pendiente de pago
+por el importe completo.
+
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba
 registrado, puede cobrar la tarjeta o registrar el efectivo.

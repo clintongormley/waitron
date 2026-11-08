@@ -723,7 +723,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Prep stations' older address cases among them). Move them to `pushState`/`replaceState` spies, as
   the retired-address tests do — left open by A506-12.
 
-- **What happens to the kitchen when guests leave unpaid** (bundle of 2, 1 go-live, 1 important, size M, needs the owner). Holds A908, A1367. [Detail](backlog/kitchen.md#bundle-what-happens-to-the-kitchen-when-guests-leave-unpaid)
 
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
   `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a

@@ -296,6 +296,9 @@ is still unpaid. Take payment before finishing the table** above the foot. **Tak
 unpaid bill on screen so you can take its payment, and **Record unpaid departure** records that the
 guests left without paying.
 
+**Record unpaid departure** stops the kitchen's unserved dishes automatically and sends
+cancellation slips. You do not need to cancel them one by one. The bill remains owed in full.
+
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this
 may charge the card or record the cash payment.

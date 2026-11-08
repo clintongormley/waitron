@@ -165,23 +165,6 @@ fills also run one after the other, so a dish named `Tea {station}` takes the st
   supervisor gets a read-only view, which would now mean offering stations in a read-only
   Calendar's Show — left open by A506-12.
 
-## A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19)
-
-Decide whether departure should ask about each unserved dish and send kitchen
-cancellation slips before closing the party, using Finish table's choices without a refund.
-A773-2 retires the pass's per-device Done action; assess this decision against its service
-lifetime rather than adding another manual clearing action. Owner, 2026-11-06: decide it together
-with A1367, as one rule for what happens when guests leave unpaid. The worked example is with the owner.
-
-## A1367. A table closed by Record unpaid departure keeps its dishes on the kitchen screens (left open by A1344)
-
-A1344 clears a table's paid dishes from the station screens when the table is finished. Departure
-is not Finish, so it clears nothing: the unpaid bills' dishes stay on every station and on the
-manager's overdue report for good (Collect refuses an unpaid table bill); a paid bill of the same
-table, possibly with a dish still cooking, and a departed bill paid later, stay until someone
-presses Collect. Owner, 2026-11-06: decide it together with A908, as one rule for what happens when
-guests leave unpaid; departure stays as it is until then. The worked example is with the owner.
-
 ## The earliest fire time is picked by comparing the stored times as text
 
 - Left by C78's review: the earliest fire time is picked by comparing the stored times as text,
@@ -269,18 +252,6 @@ By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `
 guide's language and a kitchen's can differ. 4b's own new text names no marker, so the question stayed
 open for these older lines only. A1378 replaces the shared-printer explanation; the remaining
 older HOLD CHANGED words above still await that separate answer.
-
-## Bundle: What happens to the kitchen when guests leave unpaid
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19).**
-  Owner, 2026-11-06: decide it together with A1367. Worked example with the owner.
-  [Detail](kitchen.md#a908-kitchen-cancellation-on-record-unpaid-departure-left-open-by-a758s-q43-revision-2026-10-19)
-- **A1367. A table closed by Record unpaid departure keeps its dishes on the kitchen screens (left open by A1344, #2499).**
-  Departure is not Finish, so it clears nothing from the station screens or the overdue report.
-  Owner, 2026-11-06: decide it together with A908. Worked example with the owner.
-  [Detail](kitchen.md#a1367-a-table-closed-by-record-unpaid-departure-keeps-its-dishes-on-the-kitchen-screens-left-open-by-a1344)
 
 ## Bundle: What a kitchen card draws
 

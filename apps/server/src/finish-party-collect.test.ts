@@ -1071,7 +1071,7 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
     expect((await billRow(t.billIds[0]!)).collectedAt).toBeNull();
   });
 
-  it("keeps every bill's card after an unpaid departure", async () => {
+  it("clears paid and unpaid bills' cards after an unpaid departure", async () => {
     const t = await table([{ name: "Burger" }, { name: "Burger" }], "fire", [[2]], ["12.00", null]);
     const [paid, unpaid] = t.billIds as [string, string];
     await serveAll(t, paid);
@@ -1090,9 +1090,15 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
     expect(response.status, await response.clone().text()).toBe(200);
     expect(await response.json()).toMatchObject({ state: "closed" });
 
-    expect(await cardsFor(paid)).toHaveLength(1);
-    expect((await billRow(paid)).collectedAt).toBeNull();
-    expect(await cardsFor(unpaid)).toHaveLength(1);
-    expect(await billRow(unpaid)).toMatchObject({ status: "placed", collectedAt: null });
+    expect(await cardsFor(paid)).toEqual([]);
+    expect(await billRow(paid)).toMatchObject({
+      status: "settled",
+      collectedAt: expect.any(String),
+    });
+    expect(await cardsFor(unpaid)).toEqual([]);
+    expect(await billRow(unpaid)).toMatchObject({
+      status: "placed",
+      collectedAt: expect.any(String),
+    });
   });
 });

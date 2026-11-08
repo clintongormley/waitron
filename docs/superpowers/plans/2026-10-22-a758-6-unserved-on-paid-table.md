@@ -1,5 +1,10 @@
 # A758-6 — Food left on the pass after the table has paid: implementation plan
 
+**2026-11-08:** The unpaid-departure gap left below is superseded by
+[A1403](2026-11-08-a1403-unpaid-kitchen-stop.md), which stops unserved kitchen work
+and clears the family bills from the kitchen lists without changing their charges.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Review path: FULL.** This slice adds a migration (two columns on the append-only `adjustments`

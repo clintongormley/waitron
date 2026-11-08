@@ -362,7 +362,7 @@ describe("recording that a table left without paying", () => {
     }
   });
 
-  it("writes nothing for the kitchen: no ticket item, no kitchen ticket, no print job", async () => {
+  it("removes the unserved kitchen item and queues its cancellation slip", async () => {
     const counts = () =>
       venue.db.all<{ items: number; kitchen: number; prints: number }>(sql`
         select (select count(*) from ticket_items) as items,
@@ -383,7 +383,11 @@ describe("recording that a table left without paying", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(counts()).toEqual(before);
+    expect(counts()).toEqual({
+      items: before!.items - 1,
+      kitchen: before!.kitchen,
+      prints: before!.prints + 1,
+    });
   });
 
   it("refuses a request from a session whose device has been revoked, and writes nothing", async () => {
@@ -972,6 +976,16 @@ describe("a bill that owes nothing", () => {
       { id: expect.any(String), total: 0, settledAt: expect.any(String) },
     ]);
     expect(await statusOf(venue, party.tabId)).toBe("settled");
+    expect(
+      await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ),
+    ).toEqual([]);
+    expect(
+      venue.db.all<{ collected: string | null }>(
+        sql`select collected_at as collected from working_orders where id = ${party.tabId}`,
+      ),
+    ).toEqual([{ collected: expect.any(String) }]);
     expect((await partyState(party.partyId)).state).toBe("closed");
     expect(await tableHeldBy(party.tableId)).toBeNull();
   });

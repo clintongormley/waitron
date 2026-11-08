@@ -90,8 +90,8 @@ by the answers):
     line counts as; `bill_edit_states.editor_id`, who is editing a bill; `parties` (`opened_by`,
     `closed_by`); `daily_closes.closed_by`; `incidents.acknowledged_by`; `membership_clearances` and
     `membership_removals` (`person_id`); and `recovery_packs.made_by`, who made a recovery pack. Core's
-    `line_service_cancellations.actor_id` is covered by `adjustments.json`: every value of it is
-    also an adjustment's requester (S2d decision 3). The guard knows a column by its name;
+    `line_service_cancellations.actor_id` is also not yet in the download: automatic departure
+    stops can name an actor without an adjustment. The guard knows a column by its name;
     `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss
     them (S2c decision 2).
   - **Other modules' actor columns**: bookings, menu publication, fiscal operations, payment holds

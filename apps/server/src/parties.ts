@@ -751,7 +751,11 @@ export async function finishTable(
   return closed;
 }
 
-async function handOverFinishedBills(tx: Transaction, partyId: string): Promise<void> {
+export async function handOverFinishedBills(
+  tx: Transaction,
+  partyId: string,
+  kitchenBillIds?: readonly string[],
+): Promise<void> {
   const [party] = await tx
     .select({ closedAt: parties.closedAt })
     .from(parties)
@@ -762,7 +766,7 @@ async function handOverFinishedBills(tx: Transaction, partyId: string): Promise<
     .where(
       and(
         inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
-        eq(workingOrders.status, "settled"),
+        inArray(workingOrders.status, ["placed", "settled"]),
         isNull(workingOrders.collectedAt),
       ),
     );
@@ -778,7 +782,7 @@ async function handOverFinishedBills(tx: Transaction, partyId: string): Promise<
   await tx
     .update(workingOrders)
     .set({ collectedAt: party!.closedAt })
-    .where(inArray(workingOrders.id, fired));
+    .where(inArray(workingOrders.id, kitchenBillIds === undefined ? fired : [...kitchenBillIds]));
 }
 
 export async function requirePartyClosingEdits(
