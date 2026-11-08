@@ -30,7 +30,7 @@ without `node.dump` is refused (`restore.archive_incomplete`, `apps/server/src/r
 
 ## Capture detailed logs while reproducing a problem
 
-Open **Diagnostics** using an account with `diagnostics.view`. Choose **Turn on detailed
+Open **Diagnostics** using an account with `system.manage`. Choose **Turn on detailed
 logging**, reproduce the problem, and note its time. The dashboard raises logging for 15
 minutes and shows its expiry.
 

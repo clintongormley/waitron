@@ -596,7 +596,7 @@ describe("a presented bill on a handheld", () => {
   it.each([
     [{ code: "order.payment_in_flight" }, "sale.payment_in_flight"],
     [
-      { code: "authorization.not_permitted", permission: "sale.take_payment" },
+      { code: "authorization.not_permitted", permission: "payment.take" },
       "take_payment.not_permitted",
     ],
     [{ code: "fiscal.record_invalid" }, "sale.refused"],

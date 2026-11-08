@@ -308,7 +308,7 @@ describe("the custom theme routes", () => {
     ]) {
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(
-        refusal("authorization.not_permitted", { permission: "layout.configure" }),
+        refusal("authorization.not_permitted", { permission: "venue.configure" }),
       );
     }
     expect(await storedRows()).toEqual(before);
@@ -509,7 +509,7 @@ describe("switching the custom theme in use", () => {
     ]) {
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(
-        refusal("authorization.not_permitted", { permission: "layout.configure" }),
+        refusal("authorization.not_permitted", { permission: "venue.configure" }),
       );
     }
     expect(await rowsInUse()).toEqual([lemon]);
@@ -619,7 +619,7 @@ describe("renaming and deleting a custom theme", () => {
     ]) {
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(
-        refusal("authorization.not_permitted", { permission: "layout.configure" }),
+        refusal("authorization.not_permitted", { permission: "venue.configure" }),
       );
     }
     expect(await storedRows()).toEqual(before);

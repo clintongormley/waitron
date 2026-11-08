@@ -2863,7 +2863,7 @@ describe("till-app table ordering: paying the tab", () => {
       recordSale: vi.fn().mockRejectedValue({
         code: "authorization.not_permitted",
         status: 403,
-        permission: "sale.take_payment",
+        permission: "payment.take",
       }),
     });
     const screen = await toTableOrder(el);

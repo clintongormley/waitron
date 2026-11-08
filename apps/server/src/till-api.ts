@@ -1352,7 +1352,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     const authorizeDemoReader = async (c: Parameters<typeof requireManagementSession>[0]) => {
       const sessionId = requireManagementSession(c);
       await withTransaction(deps.db, (tx) =>
-        authorizeManager(tx, { managementSessionId: sessionId, permission: "payments.manage" }),
+        authorizeManager(tx, { managementSessionId: sessionId, permission: "hardware.manage" }),
       );
     };
     app.get("/management-api/demo-reader/payments", (c) =>
@@ -1381,7 +1381,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     );
     app.post("/api/demo-reader/cancel", (c) =>
       run(c, log, async () => {
-        const session = await requireSession(deps, c, { permission: "sale.take_payment" });
+        const session = await requireSession(deps, c, { permission: "payment.take" });
         await assertRequestDevice(deps, c, session);
         const body = await readJsonBody<{ workingOrderId: string; attemptId?: string }>(c);
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
@@ -1797,7 +1797,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c, { permission: "sale.take_payment" });
+      const session = await requireSession(deps, c, { permission: "payment.take" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<TillSaleRequest>(c);
@@ -1853,7 +1853,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   // manager on this device, which is busy with the payment, waits for it.
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c, { permission: "sale.take_payment" });
+      const session = await requireSession(deps, c, { permission: "payment.take" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const device = session.device;
@@ -2741,7 +2741,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c, { permission: "sale.take_payment" });
+      const session = await requireSession(deps, c, { permission: "payment.take" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");

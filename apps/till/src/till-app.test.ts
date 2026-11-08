@@ -10795,7 +10795,7 @@ describe("till-app", () => {
       recordSale: vi.fn().mockRejectedValue({
         code: "authorization.not_permitted",
         status: 403,
-        permission: "sale.take_payment",
+        permission: "payment.take",
       }),
     });
     const c = await toCounter(el);
@@ -11406,7 +11406,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockRejectedValue({
         code: "authorization.not_permitted",
         status: 403,
-        permission: "sale.take_payment",
+        permission: "payment.take",
       });
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({
@@ -13052,7 +13052,7 @@ describe("till-app", () => {
         collectOrder: vi.fn().mockRejectedValue({
           code: "authorization.not_permitted",
           status: 403,
-          permission: "sale.take_payment",
+          permission: "payment.take",
         }),
       });
       await toCounter(el);
@@ -13322,7 +13322,7 @@ describe("till-app", () => {
         collectOrder: vi.fn().mockRejectedValue({
           code: "authorization.not_permitted",
           status: 403,
-          permission: "sale.take_payment",
+          permission: "payment.take",
         }),
       });
       const c = await toCounter(el);

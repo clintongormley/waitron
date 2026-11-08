@@ -40,14 +40,14 @@ const savedReceipt = {
 };
 afterEach(() => {
   vi.restoreAllMocks();
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
 });
 async function fixture(
   role: "manager" | "staff" = "manager",
   managementFloor: "manager" | "admin" = "manager",
   withFiscal = true,
 ) {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: managementFloor }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: managementFloor }]);
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" });
@@ -223,7 +223,7 @@ describe("replacement department receipt HTTP contract", () => {
       await f.put(body({ policy: { ...policy, printTradingName: false } })),
       403,
       "authorization.not_permitted",
-      { permission: "venue_service.manage" },
+      { permission: "venue.configure" },
     );
     expect(await rows()).toEqual(before);
   });
@@ -458,7 +458,7 @@ describe("replacement department receipt HTTP contract", () => {
   ) {
     registerModulePermissions([
       ...(MEDIA_MODULE.permissions ?? []),
-      { permission: "venue_service.manage", grantedFrom: "manager" },
+      { permission: "venue.configure", grantedFrom: "manager" },
     ]);
     const app = new Hono();
     MEDIA_MODULE.routes!.mount(
@@ -653,7 +653,7 @@ describe("replacement department receipt HTTP contract", () => {
       const response = await f.put(input);
       if (kind === "permission" || kind === "policy")
         await refusal(response, 403, "authorization.not_permitted", {
-          permission: kind === "permission" ? "layout.configure" : "venue_service.manage",
+          permission: kind === "permission" ? "venue.configure" : "venue.configure",
         });
       if (kind === "department")
         await refusal(response, 404, "department.not_found", { departmentId: f.departmentId });
@@ -719,7 +719,7 @@ describe("replacement department receipt HTTP contract", () => {
       ),
       403,
       "authorization.not_permitted",
-      { permission: "venue_service.manage" },
+      { permission: "venue.configure" },
     );
     expect(decode).not.toHaveBeenCalled();
     expect(await rows()).toEqual(before);
@@ -739,10 +739,10 @@ describe("replacement department receipt HTTP contract", () => {
       await f.app.request(f.path, { headers: f.headers }),
       403,
       "authorization.not_permitted",
-      { permission: "layout.configure" },
+      { permission: "venue.configure" },
     );
     await refusal(await f.put(body()), 403, "authorization.not_permitted", {
-      permission: "layout.configure",
+      permission: "venue.configure",
     });
   });
 });

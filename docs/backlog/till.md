@@ -981,9 +981,8 @@ Left open by W97 (#1311), found in its review and not fixed on the branch:
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:
 
-- The profile editor reads people and the venue's departments and zones, so it needs
-  `person.manage` and `venue_service.manage` beside `layout.configure`; no role holds only the
-  last today. Edit and Duplicate fail with a read error when the departments and zones read
+- The profile editor also reads people, so it needs `person.manage` beside
+  `venue.configure`; no role holds only the latter today. Edit and Duplicate fail with a read error when the departments and zones read
   fails, and its lists do not update while the editor is open.
 
 ## The till's menu reads (Task 7, #719)

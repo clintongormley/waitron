@@ -356,7 +356,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // The printers a report may be printed on. The printer settings list needs `printer.manage`,
+  // The printers a report may be printed on. The printer settings list needs `hardware.manage`,
   // which a supervisor printing a report does not hold.
   app.get("/management-api/reports/printers", (c) =>
     run(c, log, async () => {

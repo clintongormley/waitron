@@ -67,8 +67,8 @@ change what deleting a person does.
 **A1002 design approved 2026-11-07, with the 2026-11-08 watcher corrections.**
 The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) and
 [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) keep two working cuts:
-approved same-default permission renames, then the complete roles transition. Both await watcher
-scope; only cut 2 needs A1308's shared activity writer and functional outgoing-mail sender.
+the approved same-default permission names, then the complete roles transition. The roles cut
+needs A1308's shared activity writer and functional outgoing-mail sender.
 The general history screen is a follow-up. Before cut 2 builds, the owner must decide whether the
 existing Admin-default `fiscal.remedy` may be assigned to another role; its behavior stays unchanged.
 Implementation remains open.
@@ -305,7 +305,9 @@ After A760, decide whether to remove the redundant column and read the provider 
 **2026-11-08:** A1002's [approved inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
 is the target. The [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) incorporates
 WATCHER 2026-11-08 03:57: same-default renames form cut 1, with new authority/storage in cut 2.
-Scope/shared-service gates are recorded at [A7](#roles-the-admin-can-edit-a7). Implementation stays open. The dated discussion below is historical;
+The same-default names use `payment.take`, `hardware.manage`, `venue.configure`,
+`schedule.manage`, `system.manage` and `catalogue.manage`. Changes to authority and role storage
+remain in cut 2; its shared-service gates are recorded at [A7](#roles-the-admin-can-edit-a7). The dated discussion below is historical;
 its pending-approval wording is superseded by the 2026-11-07 full approval recorded in design §11.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
@@ -928,7 +930,7 @@ registered as `venue-service:week`, and the others register theirs when they exi
 - **Venue settings' Tables and Kitchen tabs (A261 step 1, #1166; owner amendment, 2026-10-04).**
   Supervisors can read Tables and Kitchen, while writes remain manager-only. (2026-10-19: the Tables
   tab was retired by A757 slice 2; 2026-10-24: the Kitchen tab went with A756 PR 8. Its last
-  setting, Changes after sending, moved to the station editor, which needs `venue_service.manage`,
+  setting, Changes after sending, moved to the station editor, which needs `venue.configure`,
   so a supervisor no longer sees it.)
 
 - **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177,

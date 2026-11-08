@@ -150,7 +150,7 @@ describe("dashboard payment PIN attempts take turns", () => {
       const refused = await v.send(route, { pin: null });
       expect(refused.status).toBe(403);
       expect(await refused.json()).toEqual({
-        error: { code: "authorization.not_permitted", params: { permission: "payments.manage" } },
+        error: { code: "authorization.not_permitted", params: { permission: "hardware.manage" } },
       });
     },
   );

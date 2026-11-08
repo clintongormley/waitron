@@ -288,9 +288,7 @@ export function isPaymentInFlight(error: unknown): boolean {
 
 export function isTakePaymentRefusal(error: unknown): boolean {
   const refused = error as { code?: unknown; permission?: unknown } | undefined;
-  return (
-    refused?.code === "authorization.not_permitted" && refused.permission === "sale.take_payment"
-  );
+  return refused?.code === "authorization.not_permitted" && refused.permission === "payment.take";
 }
 
 /** A refund as confirmed: without its submission id, and without the approver's PIN, which is

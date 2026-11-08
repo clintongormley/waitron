@@ -128,7 +128,7 @@ export class PrepStationsApi {
       change,
     );
   }
-  /** `printerIds` needs `printer.manage` as well. */
+  /** `printerIds` needs `hardware.manage` as well. */
   async createStation(
     input: StationInput & { printerIds?: readonly string[] },
   ): Promise<{ id: string }> {
@@ -149,7 +149,7 @@ export class PrepStationsApi {
           | "changesAfterSending"
         > &
         StationTiming & {
-          /** Needs `printer.manage` as well, and an active station. */
+          /** Needs `hardware.manage` as well, and an active station. */
           printerIds: readonly string[];
         }
     >,

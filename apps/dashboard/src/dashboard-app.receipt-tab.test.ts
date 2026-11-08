@@ -280,7 +280,7 @@ it("Venue settings no longer hosts a global receipt tab or global receipt reads"
 });
 it("a deep link without layout permission opens Details, replacing the address, with no Receipts tab", async () => {
   const push = vi.spyOn(history, "pushState");
-  const { app, fetchImpl } = await mount({ permissions: ["venue_service.manage"] });
+  const { app, fetchImpl } = await mount({ permissions: ["venue.configure"] });
   await expect.poll(() => departmentForm(app)).toBeTruthy();
   await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
   const form = departmentForm(app)!;

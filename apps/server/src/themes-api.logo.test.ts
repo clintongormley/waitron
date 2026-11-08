@@ -290,7 +290,7 @@ describe("refusals", () => {
     ]) {
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(
-        refusal("authorization.not_permitted", { permission: "layout.configure" }),
+        refusal("authorization.not_permitted", { permission: "venue.configure" }),
       );
     }
     const unknown = await save("no-such-theme", { theme });

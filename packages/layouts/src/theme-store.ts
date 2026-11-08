@@ -73,7 +73,7 @@ function nameTakenOr(error: unknown): unknown {
 }
 
 function authorize(tx: Transaction, managementSessionId: string) {
-  return authorizeManager(tx, { managementSessionId, permission: "layout.configure" });
+  return authorizeManager(tx, { managementSessionId, permission: "venue.configure" });
 }
 
 async function requireThemeRow<T>(id: string, read: () => Promise<T | undefined>): Promise<T> {

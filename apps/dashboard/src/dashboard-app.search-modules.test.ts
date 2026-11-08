@@ -155,7 +155,7 @@ async function mount(
     venueLocale: "en-GB",
     sessionDefault: "en-GB",
     venueName: "Search destination checks",
-    permissions: options.permissions ?? ["venue_service.manage", "venue.view", "schedule.manage"],
+    permissions: options.permissions ?? ["venue.configure", "venue.view", "schedule.manage"],
     modules: options.modules ?? ["venue-service", "staffing"],
   };
   const getMe = vi.fn(async () => session);

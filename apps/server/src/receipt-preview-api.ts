@@ -289,7 +289,7 @@ export function mountReceiptPreviewApi(
       await withTransaction(deps.db, (tx) =>
         authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "layout.configure",
+          permission: "venue.configure",
           touch: false,
         }),
       );

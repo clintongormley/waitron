@@ -45,7 +45,7 @@ let taxId: string;
 let departmentId: string;
 const policy = { receiptPrintMode: "auto", printTradingName: false } as const;
 beforeAll(async () => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
   venue = await setupVenue(suite.db);
   const [department] = await suite.db
     .select()

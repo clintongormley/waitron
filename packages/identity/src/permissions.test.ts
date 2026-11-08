@@ -7,17 +7,65 @@ import {
   roleHasPermission,
 } from "./permissions.js";
 
+describe("approved permission names preserve default holders", () => {
+  const roles = ["staff", "supervisor", "manager", "admin"] as const;
+  for (const [permission, holders] of [
+    ["payment.take", [true, true, true, true]],
+    ["hardware.manage", [false, false, true, true]],
+    ["venue.configure", [false, false, true, true]],
+    ["schedule.manage", [false, false, true, true]],
+    ["system.manage", [false, false, true, true]],
+    ["catalogue.manage", [false, false, true, true]],
+  ] as const) {
+    it(`keeps the default holders of ${permission}`, () => {
+      expect(PERMISSIONS).toContain(permission);
+      expect(roles.map((role) => roleHasPermission(role, permission))).toEqual(holders);
+    });
+  }
+
+  it("retires the replaced identifiers from every role", () => {
+    for (const permission of [
+      "sale.take_payment",
+      "device.manage",
+      "printer.manage",
+      "payments.manage",
+      "print.resend",
+      "layout.configure",
+      "venue_service.manage",
+      "swap.approve",
+      "absence.decide",
+      "staffing.manage",
+      "diagnostics.view",
+      "image.manage",
+    ]) {
+      expect(roles.map((role) => roleHasPermission(role, permission))).toEqual([
+        false,
+        false,
+        false,
+        false,
+      ]);
+    }
+  });
+
+  it("projects each permission only once", () => {
+    for (const role of roles) {
+      const permissions = permissionsForRole(role);
+      expect(permissions.length).toBe(new Set(permissions).size);
+    }
+  });
+});
+
 describe("roleHasPermission", () => {
   it("gives staff no permission but taking a payment", () => {
     for (const p of PERMISSIONS) {
-      if (p === "sale.take_payment") continue;
+      if (p === "payment.take") continue;
       expect(roleHasPermission("staff", p)).toBe(false);
     }
   });
   it("lets every role take a payment", () => {
-    expect(PERMISSIONS).toContain("sale.take_payment");
+    expect(PERMISSIONS).toContain("payment.take");
     for (const role of ["staff", "supervisor", "manager", "admin"] as const) {
-      expect(roleHasPermission(role, "sale.take_payment")).toBe(true);
+      expect(roleHasPermission(role, "payment.take")).toBe(true);
     }
   });
   it("lets a supervisor void, refund, discount and rectify but not manage staff", () => {
@@ -44,8 +92,8 @@ describe("roleHasPermission", () => {
   it("gives an admin every permission", () => {
     for (const p of PERMISSIONS) expect(roleHasPermission("admin", p)).toBe(true);
   });
-  it("grants layout.configure, venue.configure and system.manage to manager and admin only", () => {
-    for (const p of ["layout.configure", "venue.configure", "system.manage"] as const) {
+  it("grants venue.configure, venue.configure and system.manage to manager and admin only", () => {
+    for (const p of ["venue.configure", "venue.configure", "system.manage"] as const) {
       expect(PERMISSIONS).toContain(p);
       expect(roleHasPermission("manager", p)).toBe(true);
       expect(roleHasPermission("admin", p)).toBe(true);
@@ -73,8 +121,8 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "schedule.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "schedule.manage")).toBe(false);
   });
-  it("grants swap.approve and absence.decide to manager and admin only (roster slice 2)", () => {
-    for (const p of ["swap.approve", "absence.decide"] as const) {
+  it("grants schedule.manage and schedule.manage to manager and admin only (roster slice 2)", () => {
+    for (const p of ["schedule.manage", "schedule.manage"] as const) {
       expect(roleHasPermission("manager", p)).toBe(true);
       expect(roleHasPermission("admin", p)).toBe(true);
       expect(roleHasPermission("staff", p)).toBe(false);
@@ -99,11 +147,11 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "report.export")).toBe(false);
     expect(roleHasPermission("supervisor", "report.export")).toBe(false);
   });
-  it("grants device.manage to manager and admin only (device-identity-1 station enrolment)", () => {
-    expect(roleHasPermission("manager", "device.manage")).toBe(true);
-    expect(roleHasPermission("admin", "device.manage")).toBe(true);
-    expect(roleHasPermission("staff", "device.manage")).toBe(false);
-    expect(roleHasPermission("supervisor", "device.manage")).toBe(false);
+  it("grants hardware.manage to manager and admin only (device-identity-1 station enrolment)", () => {
+    expect(roleHasPermission("manager", "hardware.manage")).toBe(true);
+    expect(roleHasPermission("admin", "hardware.manage")).toBe(true);
+    expect(roleHasPermission("staff", "hardware.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "hardware.manage")).toBe(false);
   });
   it("grants cash.drawer to supervisor, manager and admin but not staff (cash-drawer authorization)", () => {
     expect(roleHasPermission("supervisor", "cash.drawer")).toBe(true);
@@ -111,17 +159,17 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("admin", "cash.drawer")).toBe(true);
     expect(roleHasPermission("staff", "cash.drawer")).toBe(false);
   });
-  it("grants printer.manage to manager and admin only (printing subsystem central management)", () => {
-    expect(roleHasPermission("manager", "printer.manage")).toBe(true);
-    expect(roleHasPermission("admin", "printer.manage")).toBe(true);
-    expect(roleHasPermission("staff", "printer.manage")).toBe(false);
-    expect(roleHasPermission("supervisor", "printer.manage")).toBe(false);
+  it("grants hardware.manage to manager and admin only (printing subsystem central management)", () => {
+    expect(roleHasPermission("manager", "hardware.manage")).toBe(true);
+    expect(roleHasPermission("admin", "hardware.manage")).toBe(true);
+    expect(roleHasPermission("staff", "hardware.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "hardware.manage")).toBe(false);
   });
-  it("grants payments.manage to manager and admin only (payments configuration screen)", () => {
-    expect(roleHasPermission("manager", "payments.manage")).toBe(true);
-    expect(roleHasPermission("admin", "payments.manage")).toBe(true);
-    expect(roleHasPermission("staff", "payments.manage")).toBe(false);
-    expect(roleHasPermission("supervisor", "payments.manage")).toBe(false);
+  it("grants hardware.manage to manager and admin only (payments configuration screen)", () => {
+    expect(roleHasPermission("manager", "hardware.manage")).toBe(true);
+    expect(roleHasPermission("admin", "hardware.manage")).toBe(true);
+    expect(roleHasPermission("staff", "hardware.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "hardware.manage")).toBe(false);
   });
   it("grants report.view to supervisor, manager and admin, not staff", () => {
     expect(roleHasPermission("supervisor", "report.view")).toBe(true);
@@ -148,12 +196,12 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("admin", "synthetic.floor")).toBe(true);
     expect(roleHasPermission("staff", "synthetic.floor")).toBe(false);
   });
-  it("grants diagnostics.view to manager and admin only (logging & diagnostics foundation)", () => {
-    expect(PERMISSIONS).toContain("diagnostics.view");
-    expect(roleHasPermission("manager", "diagnostics.view")).toBe(true);
-    expect(roleHasPermission("admin", "diagnostics.view")).toBe(true);
-    expect(roleHasPermission("staff", "diagnostics.view")).toBe(false);
-    expect(roleHasPermission("supervisor", "diagnostics.view")).toBe(false);
+  it("grants system.manage to manager and admin only (logging & diagnostics foundation)", () => {
+    expect(PERMISSIONS).toContain("system.manage");
+    expect(roleHasPermission("manager", "system.manage")).toBe(true);
+    expect(roleHasPermission("admin", "system.manage")).toBe(true);
+    expect(roleHasPermission("staff", "system.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "system.manage")).toBe(false);
   });
   it("grants node.promote to admin only (authenticated mirror→primary promotion)", () => {
     expect(PERMISSIONS).toContain("node.promote");
@@ -185,7 +233,7 @@ describe("permissionsForRole", () => {
   it("spans core + module permissions on the ladder", () => {
     // Registered here too so this test does not depend on the order it runs in.
     registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
-    expect(permissionsForRole("staff")).toEqual(["sale.take_payment"]);
+    expect(permissionsForRole("staff")).toEqual(["payment.take"]);
     expect(permissionsForRole("supervisor")).toContain("report.view");
     expect(permissionsForRole("supervisor")).not.toContain("booking.manage");
     expect(permissionsForRole("manager")).toContain("booking.manage");
@@ -193,9 +241,9 @@ describe("permissionsForRole", () => {
   });
 });
 
-it("grants print.resend separately to manager and admin", () => {
-  expect(roleHasPermission("manager", "print.resend")).toBe(true);
-  expect(roleHasPermission("admin", "print.resend")).toBe(true);
-  expect(roleHasPermission("staff", "print.resend")).toBe(false);
-  expect(roleHasPermission("supervisor", "print.resend")).toBe(false);
+it("grants hardware.manage separately to manager and admin", () => {
+  expect(roleHasPermission("manager", "hardware.manage")).toBe(true);
+  expect(roleHasPermission("admin", "hardware.manage")).toBe(true);
+  expect(roleHasPermission("staff", "hardware.manage")).toBe(false);
+  expect(roleHasPermission("supervisor", "hardware.manage")).toBe(false);
 });

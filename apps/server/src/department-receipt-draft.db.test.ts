@@ -19,14 +19,14 @@ const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undef
   .venueFields!;
 const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
 afterEach(() => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
 });
 
 async function fixture(
   role: "manager" | "staff" = "manager",
   managementFloor: "manager" | "admin" = "manager",
 ) {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: managementFloor }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: managementFloor }]);
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" })
@@ -139,7 +139,7 @@ describe("checked department receipt write", () => {
       const before = await suite.db.select().from(departmentReceipts);
       await expect(save(f, body({ policy: changed }))).rejects.toMatchObject({
         code: "authorization.not_permitted",
-        params: { permission: "venue_service.manage" },
+        params: { permission: "venue.configure" },
       });
       expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
       expect((await suite.db.select().from(departmentSalePolicies))[0]).toMatchObject(policy);
@@ -171,7 +171,7 @@ describe("checked department receipt write", () => {
       .where(eq(departmentSalePolicies.departmentId, f.departmentId));
     await expect(save(f, body())).rejects.toMatchObject({
       code: "authorization.not_permitted",
-      params: { permission: "venue_service.manage" },
+      params: { permission: "venue.configure" },
     });
     expect((await suite.db.select().from(departmentSalePolicies))[0]!.printTradingName).toBe(false);
   });
@@ -215,7 +215,7 @@ describe("checked department receipt write", () => {
     await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
     await expect(save(f, body())).rejects.toMatchObject({
       code: "authorization.not_permitted",
-      params: { permission: "layout.configure" },
+      params: { permission: "venue.configure" },
     });
   });
   it("refuses a deleted department", async () => {
@@ -233,7 +233,7 @@ describe("checked department receipt write", () => {
     const f = await fixture("staff");
     await expect(check(f, body())).rejects.toMatchObject({
       code: "authorization.not_permitted",
-      params: { permission: "layout.configure" },
+      params: { permission: "venue.configure" },
     });
   });
 });

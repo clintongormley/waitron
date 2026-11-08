@@ -54,14 +54,12 @@ describe("listActivePersonsWithPermission", () => {
 });
 
 it("lists active managers for a registered module permission, excluding staff and suspended managers", async () => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
   await seedTenant(suite.db);
   const managerId = await seedPerson(suite.db, "Manager", "manager");
   await seedPerson(suite.db, "Staff", "staff");
   await seedPerson(suite.db, "Suspended", "manager", "suspended");
   expect(
-    await withTransaction(suite.db, (tx) =>
-      listActivePersonsWithPermission(tx, "venue_service.manage"),
-    ),
+    await withTransaction(suite.db, (tx) => listActivePersonsWithPermission(tx, "venue.configure")),
   ).toEqual([{ personId: managerId, displayName: "Manager" }]);
 });

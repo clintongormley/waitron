@@ -59,7 +59,7 @@ describe("DASHBOARD_MODULES honesty", () => {
       id: "staff-roles",
       navLabelKey: "nav.staff_roles",
       group: "team",
-      requiresPermission: "staffing.manage",
+      requiresPermission: "schedule.manage",
       readPermission: "venue.view",
     });
   });

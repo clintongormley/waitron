@@ -33,7 +33,6 @@ import {
   type SeasonStaffingEdit,
   type SpecialDayStaffingEdit,
 } from "./paint.js";
-import { STAFFING_PERMISSIONS } from "./permissions.js";
 import {
   createStaffRole,
   deleteStaffRole,
@@ -46,7 +45,7 @@ import {
 } from "./staff-roles.js";
 import "./errors.js";
 
-const [{ permission: MANAGE_STAFFING }] = STAFFING_PERMISSIONS;
+const MANAGE_STAFFING: Permission = "schedule.manage";
 const VIEW_VENUE: Permission = "venue.view";
 const ROOT = "/management-api/staffing";
 const BASE = `${ROOT}/staff-roles`;

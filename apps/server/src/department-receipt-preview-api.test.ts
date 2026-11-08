@@ -18,10 +18,10 @@ let venue: Venue;
 let departmentId: string;
 const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
 afterEach(() =>
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]),
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]),
 );
 beforeEach(async () => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
   venue = await setupVenue(suite.db);
   const [department] = await suite.db
     .select()
@@ -248,7 +248,7 @@ describe("replacement department receipt preview", () => {
     const staff = await ask(null, venue.staffCookie);
     expect(staff.status).toBe(403);
     expect(await staff.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "layout.configure" } },
+      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     });
   });
 });

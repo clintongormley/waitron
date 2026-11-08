@@ -587,7 +587,7 @@ export class PrintersScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  /** The session holds `printer.manage`: the A4 printers panel offers its actions. */
+  /** The session holds `hardware.manage`: the A4 printers panel offers its actions. */
   @property({ type: Boolean }) canManage = false;
   /** Whether the person may open a dashboard screen; a Used by name links only to one they may. */
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;

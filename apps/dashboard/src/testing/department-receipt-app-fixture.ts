@@ -60,8 +60,8 @@ export async function mountReceiptApp(
   } = {},
 ) {
   const permissions = options.permissions ?? [
-    "venue_service.manage",
-    "layout.configure",
+    "venue.configure",
+    "venue.configure",
     "venue.configure",
     "venue.view",
   ];

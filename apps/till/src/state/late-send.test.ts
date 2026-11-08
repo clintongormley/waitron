@@ -208,12 +208,12 @@ describe("lateSendAsked", () => {
 });
 
 describe("isLateSendManagerRefusal", () => {
-  it("is true for a refusal for want of venue_service.manage", () => {
+  it("is true for a refusal for want of venue.configure", () => {
     expect(
       isLateSendManagerRefusal({
         code: "authorization.not_permitted",
         status: 403,
-        permission: "venue_service.manage",
+        permission: "venue.configure",
       }),
     ).toBe(true);
   });
@@ -221,7 +221,7 @@ describe("isLateSendManagerRefusal", () => {
   it.each([
     ["another permission", { code: "authorization.not_permitted", permission: "cash.drawer" }],
     ["no permission", { code: "authorization.not_permitted" }],
-    ["another code", { code: "pin.invalid", permission: "venue_service.manage" }],
+    ["another code", { code: "pin.invalid", permission: "venue.configure" }],
     ["no object", undefined],
     ["null", null],
   ])("is false for %s", (_label, error) => {

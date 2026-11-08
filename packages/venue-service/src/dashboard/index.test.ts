@@ -30,7 +30,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       navLabelKey: "nav.departments_zones",
       group: "operations",
       order: 10,
-      requiresPermission: "venue_service.manage",
+      requiresPermission: "venue.configure",
     });
     expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.departments_zones"]).toBe(
       "Departments and zones",
@@ -174,7 +174,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       navLabelKey: "nav.prep_stations",
       group: "operations",
       order: 12,
-      requiresPermission: "venue_service.manage",
+      requiresPermission: "venue.configure",
     });
     const handle = prep.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
@@ -253,7 +253,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       navLabelKey: "nav.calendar",
       group: "operations",
       order: 15,
-      requiresPermission: "venue_service.manage",
+      requiresPermission: "venue.configure",
       readPermission: "venue.view",
     });
     expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.calendar"]).toBe("Calendar");

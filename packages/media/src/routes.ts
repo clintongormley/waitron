@@ -86,7 +86,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
       withTransaction(ctx.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "image.manage",
+          permission: "catalogue.manage",
         });
         return fn(tx);
       });
@@ -127,13 +127,13 @@ export const MEDIA_ROUTES: ModuleRoutes = {
       (c) =>
         run(c, log, async () => {
           const session = requireManagementSession(c);
-          // Checked before the body is parsed, so a caller without `image.manage` costs no image
+          // Checked before the body is parsed, so a caller without `catalogue.manage` costs no image
           // work. A read outside any transaction, so it must write nothing: `touch: false`.
           // The decode runs outside the write lock, so permission is checked again inside the
           // transaction that stores the photo, and that check is the one that admits the write.
           await authorizeManager(ctx.db, {
             managementSessionId: session,
-            permission: "image.manage",
+            permission: "catalogue.manage",
             touch: false,
           });
           let form: Awaited<ReturnType<typeof c.req.parseBody>>;
@@ -170,7 +170,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
           const session = requireManagementSession(c);
           await authorizeManager(ctx.db, {
             managementSessionId: session,
-            permission: "image.manage",
+            permission: "catalogue.manage",
             touch: false,
           });
           const id = requireUuidParam(c.req.param("id"), "ImageId");

@@ -1637,11 +1637,11 @@ export class DashboardApp extends LitElement {
         permissionContinuation: this.#permissionContinuation,
         liveData: this.api.liveData,
         renderPanel: (panel: string, subject: { id: string; name: string }) =>
-          panel === "department-receipt" && this.#sessionPermissions.includes("layout.configure")
+          panel === "department-receipt" && this.#sessionPermissions.includes("venue.configure")
             ? html`<dashboard-department-receipt-editor
                 .api=${this.api}
                 .subject=${subject}
-                .canManagePolicy=${this.#sessionPermissions.includes("venue_service.manage")}
+                .canManagePolicy=${this.#sessionPermissions.includes("venue.configure")}
               ></dashboard-department-receipt-editor>`
             : null,
         calendarViews,
@@ -2977,7 +2977,7 @@ export class DashboardApp extends LitElement {
       case "appearance":
         return html`<dashboard-appearance-screen
           .api=${this.api}
-          .canEdit=${this.#sessionPermissions.includes("layout.configure")}
+          .canEdit=${this.#sessionPermissions.includes("venue.configure")}
           .legalName=${this.venueName}
         ></dashboard-appearance-screen>`;
       case "content-languages":
@@ -3000,12 +3000,12 @@ export class DashboardApp extends LitElement {
       case "devices":
         return html`<dashboard-devices-screen
           .api=${this.api}
-          .canManageReaders=${this.#sessionPermissions.includes("payments.manage")}
+          .canManageReaders=${this.#sessionPermissions.includes("hardware.manage")}
         ></dashboard-devices-screen>`;
       case "printers":
         return html`<dashboard-printers-screen
           .api=${this.api}
-          .canManage=${this.#sessionPermissions.includes("printer.manage")}
+          .canManage=${this.#sessionPermissions.includes("hardware.manage")}
           .canOpen=${this.#canOpenScreen}
         ></dashboard-printers-screen>`;
       case "floor-plan":

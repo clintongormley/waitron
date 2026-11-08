@@ -23,7 +23,7 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// Every role holds `sale.take_payment`, so no real person can be refused it: `authorize` is wrapped
+// Every role holds `payment.take`, so no real person can be refused it: `authorize` is wrapped
 // to refuse that one permission while `gate.deny` is set, and to record what it was asked.
 const gate = vi.hoisted(() => ({
   deny: false,
@@ -36,7 +36,7 @@ vi.mock("@waitron/identity", async (importOriginal) => {
     authorize: async (...args: Parameters<typeof actual.authorize>) => {
       const [, request] = args;
       gate.calls.push({ sessionId: request.sessionId, permission: request.permission });
-      if (gate.deny && request.permission === "sale.take_payment") {
+      if (gate.deny && request.permission === "payment.take") {
         throw new AppError("authorization.not_permitted", { permission: request.permission });
       }
       return actual.authorize(...args);
@@ -135,15 +135,15 @@ function expectRefused(answer: { status: number; json: Record<string, unknown> }
   expect(answer.status).toBe(403);
   expect(answer.json).toEqual({
     code: "authorization.not_permitted",
-    params: { permission: "sale.take_payment" },
+    params: { permission: "payment.take" },
   });
 }
 
 function expectAsked(): void {
-  expect(gate.calls).toContainEqual({ sessionId, permission: "sale.take_payment" });
+  expect(gate.calls).toContainEqual({ sessionId, permission: "payment.take" });
 }
 
-describe("POST /api/sales needs sale.take_payment", () => {
+describe("POST /api/sales needs payment.take", () => {
   function counterSale(id: string) {
     return send(venue.app, venue.cookie, "POST", "/api/sales", {
       lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
@@ -208,7 +208,7 @@ describe("POST /api/sales needs sale.take_payment", () => {
   });
 });
 
-describe("POST /api/pay needs sale.take_payment", () => {
+describe("POST /api/pay needs payment.take", () => {
   function payOnReader(tabId: string) {
     return send(venue.app, venue.cookie, "POST", "/api/pay", { id: tabId, lines: [] });
   }
@@ -241,7 +241,7 @@ describe("POST /api/pay needs sale.take_payment", () => {
   });
 });
 
-describe("POST /api/working-orders/:id/collect needs sale.take_payment", () => {
+describe("POST /api/working-orders/:id/collect needs payment.take", () => {
   function collectCash(id: string) {
     return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
       tender: { method: "cash", amount: "20.00" },
@@ -273,7 +273,7 @@ describe("POST /api/working-orders/:id/collect needs sale.take_payment", () => {
   });
 });
 
-describe("POST /api/working-orders/:id/payments needs sale.take_payment on every entry", () => {
+describe("POST /api/working-orders/:id/payments needs payment.take on every entry", () => {
   const entries: { name: string; body: Record<string, unknown> }[] = [
     { name: "cash", body: { method: "cash", tendered: "5.00" } },
     { name: "a hand-keyed card", body: { method: "card", entry: "manual", externalRef: "OP-2" } },

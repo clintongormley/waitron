@@ -35,7 +35,7 @@ describe("STAFFING_DASHBOARD", () => {
       id: "staff-roles",
       navLabelKey: "nav.staff_roles",
       group: "team",
-      requiresPermission: "staffing.manage",
+      requiresPermission: "schedule.manage",
       readPermission: "venue.view",
     });
     expect(STAFFING_DASHBOARD.strings.es["nav.staff_roles"]).toBe("Roles de personal");
@@ -64,7 +64,7 @@ describe("STAFFING_DASHBOARD", () => {
       id: "staffing",
       labelKey: "staffing.view.tab",
       order: 10,
-      requiresPermission: "staffing.manage",
+      requiresPermission: "schedule.manage",
       readPermission: "venue.view",
     });
     expect(STAFFING_DASHBOARD.strings.en["staffing.view.tab"]).toBe("Staffing");

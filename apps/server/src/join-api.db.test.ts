@@ -355,7 +355,7 @@ describe("the join window's holds", () => {
       expect({ path, status: res.status }).toEqual({ path, status: 403 });
       expect(await errorOf(res)).toEqual({
         code: "authorization.not_permitted",
-        params: { permission: "device.manage" },
+        params: { permission: "hardware.manage" },
       });
     }
     expect(mode.hasHold(holdId)).toBe(true);
@@ -431,7 +431,7 @@ describe("GET /management-api/join-requests", () => {
     ]);
   });
 
-  it("lists the print_agent kind under printer.manage, not device.manage", async () => {
+  it("lists the print_agent kind under hardware.manage, not hardware.manage", async () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
     const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
@@ -457,13 +457,13 @@ describe("GET /management-api/join-requests", () => {
     expect(refused.status).toBe(403);
     expect(await errorOf(refused)).toEqual({
       code: "authorization.not_permitted",
-      params: { permission: "printer.manage" },
+      params: { permission: "hardware.manage" },
     });
 
     const refusedDevice = await send(app, "GET", "/management-api/join-requests?kind=device", {
       cookie: venue.staffCookie,
     });
-    expect((await errorOf(refusedDevice)).params).toEqual({ permission: "device.manage" });
+    expect((await errorOf(refusedDevice)).params).toEqual({ permission: "hardware.manage" });
   });
 
   it("refuses an absent or unknown kind", async () => {
@@ -514,7 +514,7 @@ describe("GET /management-api/join-requests/:id/challenge", () => {
       { cookie: venue.staffCookie },
     );
     expect(refused.status).toBe(403);
-    expect((await errorOf(refused)).params).toEqual({ permission: "printer.manage" });
+    expect((await errorOf(refused)).params).toEqual({ permission: "hardware.manage" });
   });
 
   it("is 404 for an unknown or malformed id", async () => {
@@ -573,7 +573,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
     expect(await pendingCount()).toBe(1);
   });
 
-  it("denies a print_agent request under printer.manage", async () => {
+  it("denies a print_agent request under hardware.manage", async () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
     const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
@@ -581,7 +581,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
       cookie: venue.staffCookie,
     });
     expect(refused.status).toBe(403);
-    expect((await errorOf(refused)).params).toEqual({ permission: "printer.manage" });
+    expect((await errorOf(refused)).params).toEqual({ permission: "hardware.manage" });
     expect(await pendingCount()).toBe(1);
     const ok = await send(app, "POST", `/management-api/join-requests/${agent.joinId}/deny`, {
       cookie: venue.managerCookie,
@@ -760,7 +760,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     );
     expect(res.status).toBe(404);
     expect((await errorOf(res)).code).toBe("join_request.not_found");
-    // The agent's ask is untouched: a device.manage holder cannot turn it into a device.
+    // The agent's ask is untouched: a hardware.manage holder cannot turn it into a device.
     expect(await pendingCount()).toBe(1);
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from devices where id = ${agent.joinId}`,
@@ -768,7 +768,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(rows[0]!.n).toBe(0);
   });
 
-  it("needs device.manage", async () => {
+  it("needs hardware.manage", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
@@ -789,7 +789,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       },
     );
     expect(res.status).toBe(403);
-    expect((await errorOf(res)).params).toEqual({ permission: "device.manage" });
+    expect((await errorOf(res)).params).toEqual({ permission: "hardware.manage" });
     expect(await pendingCount()).toBe(1);
   });
 
@@ -1042,7 +1042,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     expect(await agentCount()).toBe(0);
   });
 
-  it("needs printer.manage — a staff session is 403 and the request survives", async () => {
+  it("needs hardware.manage — a staff session is 403 and the request survives", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
@@ -1053,7 +1053,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
       { cookie: venue.staffCookie, body: { choice: made.verificationNumber } },
     );
     expect(res.status).toBe(403);
-    expect((await errorOf(res)).params).toEqual({ permission: "printer.manage" });
+    expect((await errorOf(res)).params).toEqual({ permission: "hardware.manage" });
     expect(await pendingCount()).toBe(1);
     expect(await agentCount()).toBe(0);
   });
@@ -1513,7 +1513,7 @@ describe("device pairing: check, claim, approve", () => {
         expect(res.status).toBe(403);
         expect(await errorOf(res)).toEqual({
           code: "authorization.not_permitted",
-          params: { permission: "device.manage" },
+          params: { permission: "hardware.manage" },
         });
       }
     }

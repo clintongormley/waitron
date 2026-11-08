@@ -2571,7 +2571,7 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual(["sale.take_payment"]);
+    expect(permissionsForRole("staff")).toEqual(["payment.take"]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
@@ -2637,7 +2637,7 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual(["sale.take_payment"]);
+    expect(permissionsForRole("staff")).toEqual(["payment.take"]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
@@ -2758,7 +2758,7 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual(["sale.take_payment"]);
+    expect(permissionsForRole("staff")).toEqual(["payment.take"]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
@@ -2787,7 +2787,7 @@ describe("handheld sales and device capability gates", () => {
   });
 
   // Place, and cancel of an order with no invoice, check no permission; collect's
-  // `sale.take_payment` and an invoiced cancel's `sale.rectify` are checked only once the session
+  // `payment.take` and an invoiced cancel's `sale.rectify` are checked only once the session
   // is found, so the refusal tested here is the missing session, which a handheld meets with the
   // same answer as a till.
   it.each(["place", "collect", "cancel"] as const)(

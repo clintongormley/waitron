@@ -870,7 +870,7 @@ describe("stationOutputAlertSource", () => {
         new Map([[station!.id, { open, isDefault: true, active: true, name: "Kitchen" }]]),
     });
     expect(source.area).toBe("kitchen");
-    expect(source.permission).toBe("venue_service.manage");
+    expect(source.permission).toBe("venue.configure");
     expect(await withTransaction(suite.db, (tx) => source.read({ tx, now: NOW }))).toEqual([
       {
         key: `station.printer_down:${station!.id}:${printerId}`,

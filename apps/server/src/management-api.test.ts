@@ -58,7 +58,7 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
-// No real role holds `venue.configure` without `printer.manage`, so a test can refuse that one
+// No real role holds `venue.configure` without `hardware.manage`, so a test can refuse that one
 // permission while every other check stays real.
 const printerGate = vi.hoisted(() => ({ deny: false }));
 vi.mock("@waitron/identity", async (importOriginal) => {
@@ -67,8 +67,8 @@ vi.mock("@waitron/identity", async (importOriginal) => {
   return {
     ...actual,
     authorizeManager: async (...args: Parameters<typeof actual.authorizeManager>) => {
-      if (printerGate.deny && args[1].permission === "printer.manage") {
-        throw new AppError("authorization.not_permitted", { permission: "printer.manage" });
+      if (printerGate.deny && args[1].permission === "hardware.manage") {
+        throw new AppError("authorization.not_permitted", { permission: "hardware.manage" });
       }
       return actual.authorizeManager(...args);
     },
@@ -2355,7 +2355,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       expect(await printersOf(id)).toEqual([]);
     });
 
-    it("without printer.manage, a PATCH with printers is refused and writes nothing, while a name alone saves", async () => {
+    it("without hardware.manage, a PATCH with printers is refused and writes nothing, while a name alone saves", async () => {
       const original = unique("Pastry");
       const id = await createStation(original);
       const kept = await addPrinter();
@@ -2366,7 +2366,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
         const refused = await patch(id, { name: unique("Pastry refused"), printerIds: [other] });
         expect(refused.status).toBe(403);
         expect(await refused.json()).toMatchObject({
-          error: { code: "authorization.not_permitted", params: { permission: "printer.manage" } },
+          error: { code: "authorization.not_permitted", params: { permission: "hardware.manage" } },
         });
         expect(await stationName(id)).toBe(original);
         expect(await printersOf(id)).toEqual([kept]);
@@ -2472,7 +2472,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       expect(await printersOf(id)).toEqual([a, b].sort());
     });
 
-    it("a POST with printers is refused without printer.manage, or with a switched-off printer, and creates no station", async () => {
+    it("a POST with printers is refused without hardware.manage, or with a switched-off printer, and creates no station", async () => {
       const a = await addPrinter();
       const name = unique("Never");
       printerGate.deny = true;
@@ -2484,7 +2484,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
         );
         expect(refused.status).toBe(403);
         expect(await refused.json()).toMatchObject({
-          error: { code: "authorization.not_permitted", params: { permission: "printer.manage" } },
+          error: { code: "authorization.not_permitted", params: { permission: "hardware.manage" } },
         });
       } finally {
         printerGate.deny = false;

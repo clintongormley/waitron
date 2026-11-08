@@ -867,7 +867,7 @@ async function answerAllergy(el: TillApp, who: string, tickDish = false): Promis
 const MANAGER_NEEDED = {
   code: "authorization.not_permitted",
   status: 403,
-  permission: "venue_service.manage",
+  permission: "venue.configure",
 };
 const WRONG_PIN = { code: "pin.invalid", status: 401 };
 const MARTA = { personId: "p-marta", displayName: "Marta" };
@@ -1013,7 +1013,7 @@ describe("a manager's PIN", () => {
     const el = await lateTable({
       submitDraft: vi
         .fn(drafts.submitDraft)
-        .mockRejectedValueOnce({ ...MANAGER_NEEDED, permission: "sale.take_payment" }),
+        .mockRejectedValueOnce({ ...MANAGER_NEEDED, permission: "payment.take" }),
       serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
     });
     await act(el, "send-all");
@@ -2074,9 +2074,7 @@ describe("counter pay with a manager's PIN", () => {
 
   it("opens no dialog for a refusal at cash Pay naming another permission, and says why", async () => {
     const el = await lateCounter({
-      recordSale: vi
-        .fn()
-        .mockRejectedValueOnce({ ...MANAGER_NEEDED, permission: "sale.take_payment" }),
+      recordSale: vi.fn().mockRejectedValueOnce({ ...MANAGER_NEEDED, permission: "payment.take" }),
       serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
     });
     emit(counterScreen(el), "confirm-payment", CASH);

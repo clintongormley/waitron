@@ -996,7 +996,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 - The dashboard's "Test open drawer" calibration
   (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
-  manager holding both `printer.manage` and `cash.drawer`, with no per-till check — left as it
+  manager holding both `hardware.manage` and `cash.drawer`, with no per-till check — left as it
   is (owner, 2026-10-02).
 
 - **A receipt prints in one language; the venue's is the default, and staff may choose another

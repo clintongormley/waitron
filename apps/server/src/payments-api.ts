@@ -136,7 +136,7 @@ export interface PaymentsApiDeps {
   attendance?: AttendanceRecorder;
 }
 
-const PAYMENTS_MANAGE: Permission = "payments.manage";
+const PAYMENTS_MANAGE: Permission = "hardware.manage";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "fiscal.fingerprint_mismatch": 409,

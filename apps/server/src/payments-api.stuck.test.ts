@@ -2445,7 +2445,7 @@ describe("the bill payment attestation checks the manager's PIN before the write
     });
   });
 
-  it("derives no key for a session without payments.manage", async () => {
+  it("derives no key for a session without hardware.manage", async () => {
     const v = await setup();
     const id = await strandedBillPayment(v);
     watchDerivationsAndLock(suite.db, "1234", anotherWriter);

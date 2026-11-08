@@ -22,7 +22,7 @@ export interface LateSendConfirmation {
   confirm(tx: Transaction, needsManager: boolean): Promise<string>;
 }
 
-const PERMISSION = "venue_service.manage";
+const PERMISSION = "venue.configure";
 
 /** `lateSend` from a body, or undefined when it is absent; an explicit null is refused. */
 export function parseLateSend(value: unknown): ParsedLateSend | undefined {
@@ -44,7 +44,7 @@ export function parseLateSend(value: unknown): ParsedLateSend | undefined {
 }
 
 /**
- * Runs `run` with the request's confirmation. When the sender lacks `venue_service.manage`, a
+ * Runs `run` with the request's confirmation. When the sender lacks `venue.configure`, a
  * manager's PIN in it is checked by `withPinCheckAhead` before `run` opens its write transaction,
  * in turn with other override attempts for the same person on this device. A wrong PIN that no
  * confirmation went on to verify is still counted against the wrong-PIN limit, so a send that needs

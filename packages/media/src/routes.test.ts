@@ -15,7 +15,7 @@ import { MEDIA_ROUTES } from "./routes.js";
 import { prepareImage } from "./prepare.js";
 import { sampleImage } from "./testing/sample-image.js";
 
-registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
+registerModulePermissions([{ permission: "catalogue.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });

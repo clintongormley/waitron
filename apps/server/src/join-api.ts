@@ -75,12 +75,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "join.failed");
 
 const PERMISSION_FOR: Record<JoinRequestKind, Permission> = {
-  device: "device.manage",
-  print_agent: "printer.manage",
+  device: "hardware.manage",
+  print_agent: "hardware.manage",
 };
 
 /** The permission a by-id route demands when the id names no row; see `gatedByRowKind` for why. */
-const MISSING_ROW_PERMISSION: Permission = "device.manage";
+const MISSING_ROW_PERMISSION: Permission = "hardware.manage";
 
 /** Required rather than defaulted: which surface's queue is being read is never assumed on the
  * admin's behalf. */
@@ -148,16 +148,11 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     return result;
   };
 
-  // The window routes are gated on `device.manage` ALONE. That excludes nobody only because
-  // `device.manage` and `printer.manage` are held by the same roles
-  // (`packages/identity/src/permissions.ts`, pinned by `join-api.test.ts`); if the map ever
-  // separates them, this gate has to become "either".
-
-  // ── Read the window (device.manage) ─────────────────────────────────────────────────────────────
+  // ── Read the window (hardware.manage) ─────────────────────────────────────────────────────────────
   app.get("/management-api/pairing-mode", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      await authorized(sessionId, "device.manage");
+      await authorized(sessionId, "hardware.manage");
       return c.json({
         open: deps.pairingMode.isOpen(),
         openUntil: deps.pairingMode.openUntil(),
@@ -166,36 +161,36 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     }),
   );
 
-  // ── Take a hold on the window while an Add dialog is open (device.manage) ───────────────────────
+  // ── Take a hold on the window while an Add dialog is open (hardware.manage) ───────────────────────
   app.post("/management-api/pairing-mode/holds", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      await authorized(sessionId, "device.manage");
+      await authorized(sessionId, "hardware.manage");
       return c.json(deps.pairingMode.open(), 200);
     }),
   );
 
-  // ── Renew a hold (device.manage) ────────────────────────────────────────────────────────────────
+  // ── Renew a hold (hardware.manage) ────────────────────────────────────────────────────────────────
   app.post("/management-api/pairing-mode/holds/:holdId/renew", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // Renewal never counts as someone using the dashboard, so an unattended dialog lapses with the
       // login.
-      await withPassiveManagementRead(() => authorized(sessionId, "device.manage"));
+      await withPassiveManagementRead(() => authorized(sessionId, "hardware.manage"));
       const renewed = deps.pairingMode.renew(c.req.param("holdId"));
       if (renewed === null) throw new AppError("device.pairing_hold_lapsed", {});
       return c.json(renewed, 200);
     }),
   );
 
-  // ── Release a hold (device.manage); an unknown hold is not an error ─────────────────────────────
+  // ── Release a hold (hardware.manage); an unknown hold is not an error ─────────────────────────────
   app.delete("/management-api/pairing-mode/holds/:holdId", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const holdId = c.req.param("holdId");
       // The gate discards before its callback, while this hold is still live, so the requests its
       // release strands are discarded here, after it.
-      const dropped = await gated(sessionId, "device.manage", async (tx) => {
+      const dropped = await gated(sessionId, "hardware.manage", async (tx) => {
         deps.pairingMode.release(holdId);
         return discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
       });
@@ -266,7 +261,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     }),
   );
 
-  // ── Check the number a manager tapped against a DEVICE's ask (device.manage) ─────────────────
+  // ── Check the number a manager tapped against a DEVICE's ask (hardware.manage) ─────────────────
   app.post("/management-api/device-join-requests/:id/check", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -276,7 +271,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const body = await readJsonBody<{ choice?: unknown; holdId?: unknown; createdAt?: unknown }>(
         c,
       );
-      const result = await gated(sessionId, "device.manage", async (tx, personId) => {
+      const result = await gated(sessionId, "hardware.manage", async (tx, personId) => {
         // Any string, not a two-digit screen: a value that is not the row's number must delete it.
         const choice = requireString(body.choice, "choice");
         const holdId = requireString(body.holdId, "holdId");
@@ -314,7 +309,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     }),
   );
 
-  // ── Approve a DEVICE's ask this login has checked (device.manage) ───────────────────────────────
+  // ── Approve a DEVICE's ask this login has checked (hardware.manage) ───────────────────────────────
   app.post("/management-api/device-join-requests/:id/accept", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -328,7 +323,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         profileId?: unknown;
         kitchenScreens?: unknown;
       }>(c);
-      const accepted = await gated(sessionId, "device.manage", async (tx) => {
+      const accepted = await gated(sessionId, "hardware.manage", async (tx) => {
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
         const kitchenScreens = parseKitchenScreens(body.kitchenScreens);
@@ -352,14 +347,14 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     }),
   );
 
-  // ── Approve a PRINT AGENT's ask (printer.manage) ─────────────────────────────────────────────────
+  // ── Approve a PRINT AGENT's ask (hardware.manage) ─────────────────────────────────────────────────
   app.post("/management-api/print-agent-join-requests/:id/accept", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
       // PARSED out here, screened inside the gate, for the device accept route's reasons.
       const body = await readJsonBody<{ choice?: unknown }>(c);
-      const result = await gated(sessionId, "printer.manage", (tx) => {
+      const result = await gated(sessionId, "hardware.manage", (tx) => {
         const choice = requireString(body.choice, "choice");
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         return acceptPrintAgentJoinRequest(tx, deps.cfg, id, { choice });

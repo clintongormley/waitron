@@ -228,7 +228,7 @@ export function mountBillPaymentsApi(
 
   app.post("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c, { permission: "sale.take_payment" });
+      const session = await requireSession(deps, c, { permission: "payment.take" });
       await assertRequestDevice(deps, c, session);
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);

@@ -160,7 +160,7 @@ export interface DeviceApiDeps {
   attendanceClock?: TrustedClock;
 }
 
-const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
+const DEVICE_MANAGE_PERMISSION: Permission = "hardware.manage";
 
 /** Milliseconds since the epoch, written as digits only; anything else is not a reading. */
 function deviceClockOf(value: string | undefined): number | undefined {
@@ -750,7 +750,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── List the devices (device.manage) ───────────────────────────────────────────────────────
+  // ── List the devices (hardware.manage) ───────────────────────────────────────────────────────
   app.get("/management-api/devices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -811,7 +811,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── Revoke a device (device.manage) ──────────────────────────────────────────────────────────────────
+  // ── Revoke a device (hardware.manage) ──────────────────────────────────────────────────────────────────
   app.post("/management-api/devices/:id/revoke", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -823,7 +823,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── Delete a device (device.manage) ─────────────────────────────────────────────────────────────────
+  // ── Delete a device (hardware.manage) ─────────────────────────────────────────────────────────────────
   app.get("/management-api/devices/:id/delete-impact", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -850,7 +850,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── Edit a device (device.manage) ────────────────────────────────────────────────────────────────────
+  // ── Edit a device (hardware.manage) ────────────────────────────────────────────────────────────────────
   app.patch("/management-api/devices/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

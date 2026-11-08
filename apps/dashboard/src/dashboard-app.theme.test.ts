@@ -126,7 +126,7 @@ function signedInApi(locale: Locale = "en-GB"): DashboardApi {
       venueLocale: locale,
       sessionDefault: locale,
       venueName: "Deli Test SL",
-      permissions: ["sale.take_payment"],
+      permissions: ["payment.take"],
       modules: [],
     }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),

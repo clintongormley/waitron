@@ -3016,7 +3016,7 @@ describe("mountPrintApi — management: recent jobs", () => {
   });
 });
 
-describe("mountPrintApi — the printer.manage gate", () => {
+describe("mountPrintApi — the hardware.manage gate", () => {
   const DUMMY = "00000000-0000-0000-0000-000000000000";
 
   const routes: ["GET" | "POST" | "PATCH" | "DELETE", string, unknown?][] = [
@@ -3045,7 +3045,7 @@ describe("mountPrintApi — the printer.manage gate", () => {
   });
 
   it("refuses every management route for a staff session → 403 (the gate, proven by deletion)", async () => {
-    // A `staff`-role session holds no `printer.manage`.
+    // A `staff`-role session holds no `hardware.manage`.
     const app = mountApp();
     for (const [method, path, body] of routes) {
       const res = await send(app, method, path, {
@@ -5844,7 +5844,7 @@ describe("office printers in discovery and the receipt-printer create route", ()
     expect(stale.status).toBe(201);
   });
 
-  it("answers a caller without printer.manage with the permission refusal, not the office mark", async () => {
+  it("answers a caller without hardware.manage with the permission refusal, not the office mark", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app, "Office agent");
     const host = "10.9.249.1";

@@ -1201,9 +1201,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     at boot: neither approvals added later nor the signed-in person's admission hide or show it
     until the dialog reads `/api/device/me` again.
     [Detail](backlog/till.md#the-tills-profile-button-shows-whenever-the-device-has-more-than-one-approved-profile)
-  - The profile editor reads people and the venue's departments and zones, so it needs
-    `person.manage` and `venue_service.manage` beside `layout.configure`; no role holds only the
-    last today.
+  - The profile editor also reads people, so it needs `person.manage` beside
+    `venue.configure`; no role holds only the latter today.
     [Detail](backlog/till.md#the-profile-editor-reads-people-and-the-venues-departments-and-zones)
   - `apps/dashboard/src/screens/device-profiles-screen.ts` is over 1,600 lines; "Where it serves"
     and "Who can sign in" could become widgets of their own.
@@ -1519,8 +1518,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **A1002: several roles per person, fixed built-in names and editable ordinary grants.**
   [Approved design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md) and
   [reviewed plan](superpowers/plans/2026-11-08-a1002-custom-roles.md): approved same-default permission
-  renames first, complete roles second. Both await watcher scope; the second also needs A1308's
-  activity writer/mail sender and the owner's `fiscal.remedy` assignability decision.
+  names are used throughout the code. The complete roles cut still needs A1308's activity
+  writer/mail sender and the owner's `fiscal.remedy` assignability decision.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order

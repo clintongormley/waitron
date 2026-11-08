@@ -40,7 +40,7 @@ async function monitoringActor(
   tx: Transaction,
   session: Awaited<ReturnType<typeof requireSession>>,
 ) {
-  await authorize(tx, { sessionId: session.sessionId, permission: "sale.take_payment" });
+  await authorize(tx, { sessionId: session.sessionId, permission: "payment.take" });
   const [person] = await tx
     .select({ status: persons.status })
     .from(persons)

@@ -840,7 +840,7 @@ export interface VenueServiceContribution {
   ): Promise<ReadonlySet<string>>;
   /**
    * Whether a dish sent after its period ended in this department needs someone holding
-   * `venue_service.manage`: the sender, or a manager's PIN.
+   * `venue.configure`: the sender, or a manager's PIN.
    */
   readLateSendNeedsManager(tx: Transaction, departmentId: string): Promise<boolean>;
   readKeepOpen(

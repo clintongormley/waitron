@@ -752,9 +752,9 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
 
 - **A read-only Calendar offers no prep stations in Show ([A722 Part 3](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 12; plan default, sent to the owner as an FYI, 2026-10-17).**
   Stations go only to those who could already open the Times tab, which needs
-  `venue_service.manage`. A read-only Calendar reads no station list and no station times, and
+  `venue.configure`. A read-only Calendar reads no station list and no station times, and
   ignores a `station` in its address. Whether a supervisor (`venue.view` without
-  `venue_service.manage`) gets a read-only station view is the owner's open question: backlog.md,
+  `venue.configure`) gets a read-only station view is the owner's open question: backlog.md,
   "Supervisors have no dashboard path to a prep station's times".
 
 - **A viewer gets the day box too (A720, 2026-10-15).** A viewer's box makes no special day; it

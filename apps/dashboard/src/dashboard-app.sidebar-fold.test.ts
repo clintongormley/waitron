@@ -388,7 +388,7 @@ it("a staff session's strip holds only Overview, with no magnifier", async () =>
     localStorage.setItem(FOLDED_KEY, "true");
     const { el } = await mountApp({
       role: "staff",
-      permissions: ["sale.take_payment"],
+      permissions: ["payment.take"],
       modules: [],
     });
     expect(strip(el).map((button) => button.dataset.test)).toEqual(["strip-overview"]);
@@ -769,7 +769,7 @@ describe("a section with several pages opens a panel beside its icon", () => {
       localStorage.setItem(FOLDED_KEY, "true");
       const { el } = await mountApp({
         role: "staff",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
         modules: [],
       });
       await userEvent.click(stripButton(el, "overview"));

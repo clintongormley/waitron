@@ -21,7 +21,7 @@ const suite = useVenueDb({
 let venue: Venue;
 let departmentId: string;
 beforeEach(async () => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
   venue = await setupVenue(suite.db);
   await suite.db
     .update(contentLanguages)

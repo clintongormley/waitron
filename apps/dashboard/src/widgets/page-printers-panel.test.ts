@@ -347,7 +347,7 @@ it("shows a refused disable as the panel's alert and keeps the row's Disable usa
   expect(reload).not.toHaveBeenCalled();
 });
 
-it("a role without printer.manage sees the list with no row menu and no rename", async () => {
+it("a role without hardware.manage sees the list with no row menu and no rename", async () => {
   const { el } = await mount({ canManage: false });
   const table = q(el, "[data-test=page-printers-table]") as unknown as {
     columns: { key: string }[];

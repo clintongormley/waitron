@@ -536,11 +536,6 @@ export async function applyVenue(
   return authorise(0, new Map());
 }
 
-/**
- * Creates each missing profile through `createDeviceProfile`, the dashboard's own store path, so its
- * capability validation and `till.configure` gate apply here too. That needs a management session,
- * which only the admin seed-admin created can open.
- */
 async function seedDeviceProfiles(
   tx: Transaction,
   profiles: {

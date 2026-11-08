@@ -5076,12 +5076,12 @@ describe("The station editor", () => {
     expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(true);
     expect(a.createStation).not.toHaveBeenCalled();
   });
-  it("Add station keeps a printer refusal until the printers change, and names printer.manage", async () => {
+  it("Add station keeps a printer refusal until the printers change, and names hardware.manage", async () => {
     const a = api({
       load: vi.fn().mockResolvedValue(ticketView),
       createStation: vi.fn().mockRejectedValue({
         code: "authorization.not_permitted",
-        params: { permission: "printer.manage" },
+        params: { permission: "hardware.manage" },
       }),
     });
     const el = await mount(a);

@@ -26,7 +26,7 @@ export async function checkedDepartmentReceiptWrite(
 ) {
   await authorizeManager(tx, {
     managementSessionId,
-    permission: "layout.configure",
+    permission: "venue.configure",
     touch: options.touch,
   });
   const languages = await departmentReceiptLanguages(tx);
@@ -46,7 +46,7 @@ export async function checkedDepartmentReceiptWrite(
   ) {
     await authorizeManager(tx, {
       managementSessionId,
-      permission: "venue_service.manage",
+      permission: "venue.configure",
       touch: options.touch,
     });
   }

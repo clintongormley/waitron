@@ -171,7 +171,7 @@ export async function putReceipt(
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "layout.configure",
+    permission: "venue.configure",
   });
   const config = validateReceiptConfig(input.receipt);
   let receipt: ReceiptConfig & { logoRasters?: ReceiptLogoRasters } = config;
@@ -213,7 +213,7 @@ export async function putVenueReceiptSettings(
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "layout.configure",
+    permission: "venue.configure",
   });
   const settings = validateVenueReceiptSettings(input.settings);
   const { phone, email } = await getReceipt(tx);

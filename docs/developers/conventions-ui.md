@@ -506,7 +506,7 @@ invoice, check no permission, only a signed-in operator; cancelling an order who
 issued needs `sale.rectify` (C126), which staff do not hold, from the operator or from someone
 holding it who enters their PIN, as an unpaid departure, a bill refund and opening the drawer accept (B33);
 collecting, like every route that takes
-a payment, needs `sale.take_payment` (C128), which every role holds. Guard:
+a payment, needs `payment.take` (C128), which every role holds. Guard:
 `apps/server/src/take-payment-permission.test.ts`, weaker than its name — it covers only the four
 routes it names, so a fifth payment route that does not ask for the permission is seen by nothing;
 and since every role holds the permission, it makes the refusal by wrapping `authorize`, so no real
@@ -563,7 +563,7 @@ without `drawerPrinter`, or takes cash without `assertTakesCash`, is seen by not
 
 One path is outside the rule: the dashboard's "Test open drawer" calibration,
 `POST /management-api/printers/:id/test-drawer` (`apps/server/src/print-api.ts`), opens any
-active printer's drawer for a manager holding both `printer.manage` and `cash.drawer`, with no
+active printer's drawer for a manager holding both `hardware.manage` and `cash.drawer`, with no
 device behind it: its audit row names the printer and the manager and no device. The owner chose to
 leave it as it is (2026-10-02, B29).
 
@@ -616,7 +616,7 @@ the server checks each at the route, never trusting the till's copy:
   person there too. A new venue's default kitchen display profile holds
   `take-orders` and `hand-over-orders` beside `prepare-orders` (`DEFAULT_PROFILE_CAPABILITIES`).
   Its station close/open controls use the device routes and require a manager's PIN with
-  `venue_service.manage`; they also check the device's `prepare-orders` action and that its
+  `venue.configure`; they also check the device's `prepare-orders` action and that its
   station screen shows that station now (`assertScreenShowsStation`,
   `apps/server/src/station-today-api.ts`).
   A till's station close/open and zone-extension writes require a session and matching device

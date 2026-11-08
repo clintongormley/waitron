@@ -154,7 +154,7 @@ describe("department receipt write", () => {
     ).toThrow(problem);
   });
   it("does not remap another domain refusal", () => {
-    const problem = new AppError("authorization.not_permitted", { permission: "layout.configure" });
+    const problem = new AppError("authorization.not_permitted", { permission: "venue.configure" });
     expect(() =>
       validateDepartmentReceiptWrite(
         { receipt: { operationDescription: "Meals" }, policy },

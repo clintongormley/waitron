@@ -26,6 +26,7 @@ import {
 import {
   IDENTITY_BACKUP_VERIFICATION,
   IDENTITY_PERSONAL_DATA,
+  PERMISSIONS,
   registerModulePermissions,
   roleHasPermission,
 } from "@waitron/identity";
@@ -69,6 +70,24 @@ import { IDENTITY_TABLES } from "@waitron/identity";
 import { MEDIA_TABLES } from "@waitron/media";
 import { STAFFING_TABLES } from "@waitron/staffing";
 import { VENUE_SERVICE_TABLES } from "@waitron/venue-service";
+
+it("declares merged permissions once and retains their default holders", () => {
+  const modulePermissions = ALL_MODULES.flatMap((module) => module.permissions ?? []);
+  const declared = [...PERMISSIONS, ...modulePermissions.map((entry) => entry.permission)];
+  expect(declared.length).toBe(new Set(declared).size);
+  registerModulePermissions(modulePermissions);
+  const roles = ["staff", "supervisor", "manager", "admin"] as const;
+  for (const [permission, holders] of [
+    ["payment.take", [true, true, true, true]],
+    ["hardware.manage", [false, false, true, true]],
+    ["venue.configure", [false, false, true, true]],
+    ["schedule.manage", [false, false, true, true]],
+    ["system.manage", [false, false, true, true]],
+    ["catalogue.manage", [false, false, true, true]],
+  ] as const) {
+    expect(roles.map((role) => roleHasPermission(role, permission))).toEqual(holders);
+  }
+});
 
 it("only workforce grants correction decisions to supervisors and higher", () => {
   const workforce = ALL_MODULES.find((m) => m.name === "workforce")!;

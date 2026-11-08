@@ -105,6 +105,6 @@ export function isLateSendManagerRefusal(error: unknown): boolean {
   return (
     isRecord(error) &&
     error.code === "authorization.not_permitted" &&
-    error.permission === "venue_service.manage"
+    error.permission === "venue.configure"
   );
 }

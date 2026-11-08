@@ -51,7 +51,7 @@ its import compares such a date with the others in its first year only (`validat
   holiday-area choice for an address. `readHolidayAreaModel` and `saveHolidayArea` in
   `packages/venue-service/src/holidays.ts` read and write that choice; the area control is in the
   Year. The routes in `packages/venue-service/src/routes.ts` require `venue.view` for reads and
-  `venue_service.manage` for writes.
+  `venue.configure` for writes.
 
 ## Official dates follow your address; special days follow your venue
 

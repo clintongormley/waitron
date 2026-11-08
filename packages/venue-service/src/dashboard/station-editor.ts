@@ -207,7 +207,7 @@ export function stationRefusalField(refusal: Refusal | undefined): Field | undef
     refusal.code === "printer.not_found" ||
     (refusal.code === "management.request_invalid" && refusal.params?.field === "printerIds") ||
     (refusal.code === "authorization.not_permitted" &&
-      refusal.params?.permission === "printer.manage")
+      refusal.params?.permission === "hardware.manage")
   )
     return "printers";
   return undefined;
@@ -330,7 +330,7 @@ export class StationEditor extends LitElement {
   @property({ attribute: false }) printers: readonly StationEditorPrinter[] = [];
   /** The active stations, whose names the colour picker shows; the edited one is left out. */
   @property({ attribute: false }) stations: readonly StationColourUser[] = [];
-  /** Whether the person holds `printer.manage`; without it the printers are a read-out. */
+  /** Whether the person holds `hardware.manage`; without it the printers are a read-out. */
   @property({ type: Boolean }) canManagePrinters = false;
   @property({ attribute: false }) refusal?: Refusal;
 

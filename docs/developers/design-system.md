@@ -4399,7 +4399,7 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   Colours set by hand and Text set by hand. Below them comes one warning line for each warning the server
   sends with the theme, then the note about each screen's own Theme setting.
 - **Edit opens the editor in place**, in the same card. It is offered to a person holding
-  `layout.configure`, whichever theme is in use.
+  `venue.configure`, whichever theme is in use.
 - **The editor has three ways in, and its heading and top line follow the latest read** (A841
   slice 13, D6): a stored theme (the Look card's Edit while it is in use, or a Themes row's Edit),
   headed "Look" while it is in use and "Edit theme: {name}" otherwise; Waitron's theme while it is
@@ -4543,7 +4543,7 @@ The Themes card lists Waitron's theme first, then the venue's own, in a `wt-data
   in the Name cell. Measured in Spanish, the wider language, the four columns need a 429 px card
   and Name, Status and Actions a 360 px one; each threshold leaves about a tenth more for a larger
   font. A 390 px window gives a 310 px card, an 800 px window with the side menu open a 420 px one.
-- **The Actions column and Add theme are for `layout.configure` only**; a person without it sees
+- **The Actions column and Add theme are for `venue.configure` only**; a person without it sees
   the list alone. The row menu offers Use on every screen (not on the row in use), Edit and Rename
   (not on Waitron's row), Make a copy, and Delete in the danger colour (not on Waitron's row, and
   not on the row of the theme open in the editor). Add theme sits in the card's action slot as
@@ -4869,7 +4869,7 @@ Choose a prep station in the Calendar's Month or Week Show picker to see its pla
 times (see Calendar below). Each sending department gets its own row, even when only one sends
 to the station. A date with no orders says so once, and the default station shows "Always open:
 this is the default station" in place of the dates. The station choices require
-`venue_service.manage`; a read-only Calendar keeps its department choices.
+`venue.configure`; a read-only Calendar keeps its department choices.
 
 Prep stations itself has only Stations and Routes. Above its tabs, a warning names, zone by zone,
 each station no pass screen can fire there — one set to wait for the pass, or one with a dish
@@ -5052,7 +5052,7 @@ the ready warning is in no order with them, and its own message says "Use whole 
 that names a minutes field (`station.thresholds_invalid` or `management.request_invalid`) shows
 under that field. Printers offers every active printer, shows a
 disabled one as Disabled and lets it stay chosen only where the station already has it. The editor has
-a read-out for a person without `printer.manage`, which the screen cannot yet select. Colour is a
+a read-out for a person without `hardware.manage`, which the screen cannot yet select. Colour is a
 required `wt-colour-chooser`: its closed field shows the chosen colour's square and name,
 and its popup offers the shared calendar palette, naming the other active stations that use each.
 The editor's own station is excluded from those names. Each Stations row also shows its colour
@@ -5062,7 +5062,7 @@ are taken. Station Edit, Make default and Delete actions belong to the Stations 
 which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
 stations appear in Spanish alphabetical order without drag grips. The Routes tab's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
-someone with `venue_service.manage`; a supervisor is not offered it.
+someone with `venue.configure`; a supervisor is not offered it.
 
 Department opening hours belong to `/manage/opening-hours`. No switch picks between the Year, the
 Month and the Week (`opening-hours-screen.ts`): a month's name in the Year opens that month, and the
@@ -5216,7 +5216,7 @@ Opening hours' Year.
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
   today's own inner ring in `--wt-color-primary`. Unless the Calendar is read-only, Show also lists the
   active prep stations under their own heading; the Calendar is read-only for anyone without
-  `venue_service.manage`, the permission Prep stations needs, and a read-only Calendar reads no
+  `venue.configure`, the permission Prep stations needs, and a read-only Calendar reads no
   station list and ignores a `station` in its address. Choosing a station writes `/station/<id>`
   and draws, in place of the departments, the times it gets orders: one row per department that sends it dishes on any date read for the view, named
   by the department even when only one does. A date none of them sends on reads "No orders" once;
@@ -6185,7 +6185,7 @@ because a park stores the order without sending it. The window holds a choice, n
 so it takes no draft scope and has no `*.unsaved.test.ts`; Escape or closing it sends nothing and
 removes nothing. The app draws one at a time (`lateSendWindow` in `apps/till/src/till-app.ts`).
 
-When Kitchen agreed is refused for want of `venue_service.manage`, the manager's PIN step reuses
+When Kitchen agreed is refused for want of `venue.configure`, the manager's PIN step reuses
 `till-supervisor-override-dialog` with `approverRole` `manager` and the people from
 `GET /api/service-day/authorizers`; that dialog registers its own digits with the leave coordinator.
 
@@ -6444,7 +6444,7 @@ under its own heading: “Orders and payment”, with the service settings and t
 PIN to send after a period ends, and “Table states”, with
 the Needs clearing switch and the department's service steps (a list with drag handles, a row menu
 with Delete, and Add step). Receipts, between Service and Transfers, holds the department's receipt
-editor, and is offered only to someone with `layout.configure`. Transfers holds the allowed
+editor, and is offered only to someone with `venue.configure`. Transfers holds the allowed
 destinations and the receiving desk profile, and is offered only while two or more departments are
 active. The dialog is wide whenever it offers Receipts, and standard otherwise, so changing tab
 never changes its width. Details, Service and Transfers share one draft and one Save, in a row below

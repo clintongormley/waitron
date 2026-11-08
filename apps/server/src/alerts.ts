@@ -11,7 +11,7 @@ import "./errors.js";
 export const UNCLAIMED: AlertEventClaim = {
   prefix: "",
   area: "diagnostics",
-  permission: "diagnostics.view",
+  permission: "system.manage",
 };
 
 export const HANDLED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;

@@ -290,7 +290,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
         venueName: "Deli Test SL",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
         modules: [],
       }),
     });

@@ -719,10 +719,10 @@ describe("passScreensDark", () => {
       return withTransaction(suite.db, (tx) => source.read({ tx, now: at }));
     };
 
-    it("is a kitchen alert for venue_service.manage", async () => {
+    it("is a kitchen alert for venue.configure", async () => {
       await passFixture();
       const source = passScreenAlertSource();
-      expect([source.area, source.permission]).toEqual(["kitchen", "venue_service.manage"]);
+      expect([source.area, source.permission]).toEqual(["kitchen", "venue.configure"]);
     });
 
     it("raises one warning for a dark pass screen with a dish waiting", async () => {

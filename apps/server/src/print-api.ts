@@ -115,7 +115,7 @@ export interface PrintApiDeps {
   testPages?: PageTestPages;
 }
 
-const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
+const PRINTER_MANAGE_PERMISSION: Permission = "hardware.manage";
 
 const RECENT_JOBS_LIMIT = 100;
 
@@ -1510,7 +1510,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const result = await gated(
         sessionId,
         (tx, personId) => resendInvoicePrintJob(tx, id, personId, deps.now?.()),
-        "print.resend",
+        "hardware.manage",
       );
       return c.json(result, 202);
     }),

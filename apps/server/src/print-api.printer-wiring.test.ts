@@ -40,7 +40,7 @@ import "./errors.js";
 
 /**
  * The routes only this half of the pair drives: the station ↔ printer mapping, a location's print
- * mode and drawer-open policy, the change events and the job resend, plus the `printer.manage` gate
+ * mode and drawer-open policy, the change events and the job resend, plus the `hardware.manage` gate
  * and the key-scoped claim eligibility.
  */
 const noopLog: Logger = () => {};
@@ -354,8 +354,8 @@ describe("Print API — the agent lifecycle end to end", () => {
     expect(afterRevoke.status).toBe(401);
   });
 
-  it("the management routes require printer.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion)", async () => {
-    // A `staff`-role session holds no `printer.manage`.
+  it("the management routes require hardware.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion)", async () => {
+    // A `staff`-role session holds no `hardware.manage`.
     const app = mountApp();
 
     const unauth = await send(app, "GET", "/management-api/printers");
@@ -376,7 +376,7 @@ describe("Print API — the agent lifecycle end to end", () => {
     expect(manager.status).toBe(200);
   });
 
-  it("the discovery routes require printer.manage — 401 unauth, 403 staff, 2xx manager (gate proven by deletion)", async () => {
+  it("the discovery routes require hardware.manage — 401 unauth, 403 staff, 2xx manager (gate proven by deletion)", async () => {
     const app = mountApp();
     const routes = [
       { method: "POST", path: "/management-api/printer-discovery/start" },
@@ -416,7 +416,7 @@ describe("Print API — the agent lifecycle end to end", () => {
     }
   });
 
-  it("the Bluetooth Pair and Forget routes require printer.manage — 401 unauth, 403 staff, 202 manager", async () => {
+  it("the Bluetooth Pair and Forget routes require hardware.manage — 401 unauth, 403 staff, 202 manager", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Bluetooth");
     const address = "0A:1B:2C:3D:4E:5F";
@@ -455,7 +455,7 @@ describe("Print API — the agent lifecycle end to end", () => {
     }
   });
 
-  it("allow-again reactivates a revoked agent (printer.manage)", async () => {
+  it("allow-again reactivates a revoked agent (hardware.manage)", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app, "Reactivable");
     const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
@@ -493,7 +493,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 });
 
-describe("Station ↔ printer mapping routes (printer.manage)", () => {
+describe("Station ↔ printer mapping routes (hardware.manage)", () => {
   it("attaches, lists both directions, is idempotent, and detaches a pair as a manager", async () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Mapping agent");
@@ -565,7 +565,7 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
   });
 
-  it("require printer.manage — 401 unauth, 403 staff, 204 manager (gate proven by deletion via the shared `gated`)", async () => {
+  it("require hardware.manage — 401 unauth, 403 staff, 204 manager (gate proven by deletion via the shared `gated`)", async () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Gate agent");
     const printerId = await createPrinter(app, agent.agentId, "Gate printer");
@@ -597,7 +597,7 @@ function retainedConfiguration() {
   };
 }
 
-describe("Receipt-printer and drawer config routes (printer.manage)", () => {
+describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
   it("has no till list, and no per-till receipt printer or drawer route", async () => {
     const app = mountApp();
     const tillId = randomUUID();
@@ -759,7 +759,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
     ]);
   });
 
-  it("GET /management-api/printer-profiles requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {
+  it("GET /management-api/printer-profiles requires hardware.manage — 401 unauth, 403 staff, 200 manager", async () => {
     const app = mountApp();
     const unauth = await send(app, "GET", "/management-api/printer-profiles");
     expect(unauth.status).toBe(401);
@@ -918,7 +918,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
     expect(stationIds).toEqual([live]);
   });
 
-  it("GET /management-api/printer-stations requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {
+  it("GET /management-api/printer-stations requires hardware.manage — 401 unauth, 403 staff, 200 manager", async () => {
     const app = mountApp();
     const unauth = await send(app, "GET", "/management-api/printer-stations");
     expect(unauth.status).toBe(401);
@@ -1011,7 +1011,7 @@ it("delivers enqueue and agent completion events with fresh printer aggregates",
 });
 
 describe("print job resend", () => {
-  it("requires print.resend and copies the original bytes without changing its history", async () => {
+  it("requires hardware.manage and copies the original bytes without changing its history", async () => {
     const app = mountApp();
     const printerId = await createUsbPrinter(app, randomUUID(), "Resend");
     const originalId = await enqueue(printerId, new Uint8Array([0, 255, 27, 64, 29, 86, 0]));
@@ -1024,7 +1024,7 @@ describe("print job resend", () => {
     const denied = await send(app, "POST", path, { cookie: staffCookie });
     expect(denied.status).toBe(403);
     expect(await denied.json()).toMatchObject({
-      error: { code: "authorization.not_permitted", params: { permission: "print.resend" } },
+      error: { code: "authorization.not_permitted", params: { permission: "hardware.manage" } },
     });
     const response = await send(app, "POST", path, { cookie: managerCookie });
     expect(response.status).toBe(202);
@@ -1178,7 +1178,7 @@ describe("station printer selection replacement", () => {
     expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
   });
 
-  it("requires a management session and printer.manage for replacement", async () => {
+  it("requires a management session and hardware.manage for replacement", async () => {
     const f = await fixture();
     for (const [cookie, status, code] of [
       [undefined, 401, "management_session.required"],
@@ -1192,7 +1192,7 @@ describe("station printer selection replacement", () => {
   });
 });
 
-describe("printer delete routes (printer.manage)", () => {
+describe("printer delete routes (hardware.manage)", () => {
   const NOW = new Date("2026-10-10T10:00:00.000Z");
 
   /** The rows a printer delete may change, and the history it must not add to. */
@@ -1387,7 +1387,7 @@ describe("printer delete routes (printer.manage)", () => {
     expect(await printingRows()).toEqual(before);
   });
 
-  it("refuses the delete when the manager lost printer.manage after reading the impact", async () => {
+  it("refuses the delete when the manager lost hardware.manage after reading the impact", async () => {
     const app = mountApp(() => NOW);
     const p = await linkedPrinter(app);
     const { personId, cookie } = await withTransaction(suite.db, async (tx) => {

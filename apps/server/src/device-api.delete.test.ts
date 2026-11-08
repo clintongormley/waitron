@@ -201,7 +201,7 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
 }
 
 describe("device delete routes", () => {
-  it("device.manage gates both routes: 401 with no session, 403 for staff, 200 for a manager, and the gate is the file's own", async () => {
+  it("hardware.manage gates both routes: 401 with no session, 403 for staff, 200 for a manager, and the gate is the file's own", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);

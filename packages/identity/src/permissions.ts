@@ -2,12 +2,10 @@ import type { PersonRoleValue } from "@waitron/shared";
 
 /**
  * Call sites gate on a PERMISSION, never a role string, so the role→permission map below can change
- * in one place. Permission ids are never renamed once shipped.
+ * in one place.
  */
 export const PERMISSIONS = [
-  // Held by every role until the permissions review (`docs/backlog.md` → "Review every permission:
-  // fewer, coarser, and consistently named") decides who keeps it.
-  "sale.take_payment",
+  "payment.take",
   "sale.void",
   "sale.refund",
   "sale.discount", // no call site yet
@@ -18,33 +16,26 @@ export const PERMISSIONS = [
   "person.admin",
   // Another person's personal data: admin only, by the owner's A980 O5 decision (2026-10-22).
   "personal_data.export",
-  "layout.configure",
-  "venue.view",
   "venue.configure",
+  "venue.view",
   "system.manage",
   "schedule.manage",
-  "swap.approve",
-  "absence.decide",
   "purchase.manage",
   "recipe.manage",
   "report.export",
   "report.view",
-  "device.manage",
-  "printer.manage",
-  "payments.manage",
-  "print.resend",
+  "hardware.manage",
   "cash.drawer",
   // Decides which machines are in the venue's membership chart and hands one its identity, so
   // admin-only.
   "mirror.create",
   "node.promote",
-  "diagnostics.view",
   "fiscal.view",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
-const STAFF: ReadonlySet<Permission> = new Set(["sale.take_payment"]);
+const STAFF: ReadonlySet<Permission> = new Set(["payment.take"]);
 const SUPERVISOR: ReadonlySet<Permission> = new Set([
   ...STAFF,
   "sale.void",
@@ -59,20 +50,13 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   ...SUPERVISOR,
   "person.manage",
   "catalogue.manage",
-  "layout.configure",
   "venue.configure",
   "system.manage",
   "schedule.manage",
-  "swap.approve",
-  "absence.decide",
   "purchase.manage",
   "recipe.manage",
   "report.export",
-  "device.manage",
-  "printer.manage",
-  "payments.manage",
-  "print.resend",
-  "diagnostics.view",
+  "hardware.manage",
   "fiscal.view",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);

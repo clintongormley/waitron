@@ -45,7 +45,7 @@ const DEFAULT_LIMIT = 200;
 /**
  * Mounts the dashboard's diagnostics routes on an existing Hono app: read the recent log tail,
  * read the current verbosity, and raise verbosity for a bounded window. All three are gated
- * behind `diagnostics.view` — `requireManagementSession` first (401 before any DB work), then
+ * behind `system.manage` — `requireManagementSession` first (401 before any DB work), then
  * `authorizeManager` under `withTransaction`. Each handler is wrapped in the shared `run` boundary
  * so the whole surface maps errors identically.
  */
@@ -54,13 +54,13 @@ export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Lo
 
   // The one authorize gate every route runs its request through: refuse an unauthenticated/forged
   // session (401) first, then open a transaction and confirm the session carries
-  // `diagnostics.view` (403 otherwise).
+  // `system.manage` (403 otherwise).
   const authorize = async (c: Context): Promise<void> => {
     const sessionId = requireManagementSession(c);
     await withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, {
         managementSessionId: sessionId,
-        permission: "diagnostics.view",
+        permission: "system.manage",
       });
     });
   };

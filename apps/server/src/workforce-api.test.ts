@@ -621,7 +621,7 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
     });
   });
 
-  it("403s the swap routes to a staff-role session (no swap.approve)", async () => {
+  it("403s the swap routes to a staff-role session (no schedule.manage)", async () => {
     const res = await send(mountApp(), "GET", "/management-api/swaps", { cookie: staffCookie });
     expect(res.status).toBe(403);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -629,7 +629,7 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
     });
   });
 
-  it("403s the absence routes to a staff-role session (no absence.decide)", async () => {
+  it("403s the absence routes to a staff-role session (no schedule.manage)", async () => {
     const res = await send(mountApp(), "GET", "/management-api/absences", { cookie: staffCookie });
     expect(res.status).toBe(403);
   });

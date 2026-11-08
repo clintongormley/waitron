@@ -2328,7 +2328,7 @@ describe("a handheld's zones", () => {
             .mockResolvedValue(selection(["garden"], "garden")),
           listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()),
         },
-        ["sale.take_payment"],
+        ["payment.take"],
       );
       expect(api.listDefaultZoneOffers).toHaveBeenCalled();
       expect(await floorZoneIds(el)).toEqual(orderedFloorZones.map((zone) => zone.id));
@@ -2699,7 +2699,7 @@ describe("a handheld's zones", () => {
       selection(["garden"], "garden"),
       "phone-portrait",
       { ...transferApi, listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()) },
-      ["sale.take_payment"],
+      ["payment.take"],
     );
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
@@ -2716,7 +2716,7 @@ describe("a handheld's zones", () => {
         listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()),
         setDeviceZones: vi.fn().mockResolvedValue(selection(["garden"], "garden")),
       },
-      ["sale.take_payment"],
+      ["payment.take"],
     );
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
@@ -2747,7 +2747,7 @@ describe("a handheld's zones", () => {
         ...transferApi,
         listDefaultZoneOffers: vi.fn().mockRejectedValue({ code: "server.internal" }),
       },
-      ["sale.take_payment"],
+      ["payment.take"],
     );
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),

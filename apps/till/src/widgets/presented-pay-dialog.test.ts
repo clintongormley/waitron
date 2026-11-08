@@ -673,7 +673,7 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
 
   it("words a person who may not take payments as the till does", async () => {
     const el = await mount({
-      refusal: { code: "authorization.not_permitted", permission: "sale.take_payment" },
+      refusal: { code: "authorization.not_permitted", permission: "payment.take" },
     });
     expect(actions(el).error).toBe(t("take_payment.not_permitted"));
   });

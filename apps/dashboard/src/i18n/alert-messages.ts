@@ -463,7 +463,7 @@ export const ALERT_WORDS: Readonly<
 > = {
   // What an office printer holding a job needs, by the hold code an alert's `hold` param carries
   // (`a4HoldCodes`, `@waitron/db`). The server shows these alerts with `report.view`, which a
-  // supervisor holds without `printer.manage`, so each asks only for something done at the printer.
+  // supervisor holds without `hardware.manage`, so each asks only for something done at the printer.
   printer_hold: {
     words: {
       paper_out: { en: "It is out of paper: load paper.", es: "No tiene papel: carga papel." },

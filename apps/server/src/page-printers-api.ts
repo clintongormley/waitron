@@ -75,7 +75,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
   // Bodies are screened inside the gate, so a caller without the permission learns nothing about them.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await authorizeManager(tx, { managementSessionId: sessionId, permission: "printer.manage" });
+      await authorizeManager(tx, { managementSessionId: sessionId, permission: "hardware.manage" });
       return fn(tx);
     });
 

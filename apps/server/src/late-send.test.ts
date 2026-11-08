@@ -206,7 +206,7 @@ describe("withLateSendCheck", () => {
 
     expect(await refusal(() => confirmed(session, { menuIds: [MENU] }, true))).toEqual({
       code: "authorization.not_permitted",
-      params: { permission: "venue_service.manage" },
+      params: { permission: "venue.configure" },
     });
   });
 
@@ -303,7 +303,7 @@ describe("withLateSendCheck", () => {
       ),
     ).toEqual({
       code: "authorization.not_permitted",
-      params: { permission: "venue_service.manage" },
+      params: { permission: "venue.configure" },
     });
   });
 

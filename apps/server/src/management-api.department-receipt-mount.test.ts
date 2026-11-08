@@ -17,7 +17,7 @@ let venue: Venue;
 let id: string;
 const policy = { receiptPrintMode: "on_request", printTradingName: false } as const;
 beforeEach(async () => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
   venue = await setupVenue(suite.db);
   const [row] = await suite.db
     .select()

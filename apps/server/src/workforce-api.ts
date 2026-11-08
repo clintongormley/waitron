@@ -32,11 +32,11 @@ export interface WorkforceApiDeps {
   cfg: { nodeId: string };
 }
 
-/** `schedule.manage` gates the roster read/write group and planned-vs-actual; `swap.approve` /
- * `absence.decide` gate the two approval queues. */
+/** `schedule.manage` gates the roster read/write group and planned-vs-actual; `schedule.manage` /
+ * `schedule.manage` gate the two approval queues. */
 const SCHEDULE_PERMISSION: Permission = "schedule.manage";
-const SWAP_APPROVE_PERMISSION: Permission = "swap.approve";
-const ABSENCE_DECIDE_PERMISSION: Permission = "absence.decide";
+const SWAP_APPROVE_PERMISSION: Permission = "schedule.manage";
+const ABSENCE_DECIDE_PERMISSION: Permission = "schedule.manage";
 
 // ±14h — the wall-offset domain the `shifts_*_offset_ck` check constraints enforce
 // (`packages/workforce/src/schema/shifts.ts`); an offset outside it is refused by that CHECK at the

@@ -32,7 +32,7 @@ export interface Venue {
   defaultStationId: string;
   cafeId: string;
   aguaId: string;
-  /** A live MANAGEMENT session cookie for a `manager` (holds `device.manage`). */
+  /** A live MANAGEMENT session cookie for a `manager` (holds `hardware.manage`). */
   managerCookie: string;
   /** A live MANAGEMENT session cookie for a `staff` person (holds none of the management
    * permissions the gates check). */

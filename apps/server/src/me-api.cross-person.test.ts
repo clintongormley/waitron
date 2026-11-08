@@ -340,7 +340,7 @@ describe("Me API — the identity property: the session's person, never the body
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       // A staff person holds only the payment permission; this fixture injects no enabled modules.
-      permissions: ["sale.take_payment"],
+      permissions: ["payment.take"],
       modules: [],
     });
 

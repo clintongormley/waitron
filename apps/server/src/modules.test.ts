@@ -51,7 +51,7 @@ describe("alert assembly", () => {
   it("collects sources from the modules it is given only", () => {
     const source: AlertSource = {
       area: "test",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       read: () => Promise.resolve([]),
     };
     const withSource = { ...ALL_MODULES[0]!, alerts: { sources: [source] } } as WaitronModule;

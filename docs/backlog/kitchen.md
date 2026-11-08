@@ -160,7 +160,7 @@ fills also run one after the other, so a dish named `Tea {station}` takes the st
 ## Supervisors have no dashboard path to a prep station's times
 
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
-  show in the Calendar's Show picker, offered only to someone with `venue_service.manage`: a
+  show in the Calendar's Show picker, offered only to someone with `venue.configure`: a
   read-only Calendar offers no stations. The stations service-times route still lets `venue.view` read them (`routes.ts`). Owner to decide whether a
   supervisor gets a read-only view, which would now mean offering stations in a read-only
   Calendar's Show — left open by A506-12.
@@ -339,7 +339,7 @@ older HOLD CHANGED words above still await that separate answer.
 
 - **A1079. Owner question: should a supervisor see each station's "Changes after sending"?** The
   Kitchen tab let a supervisor read it (owner, 2026-10-04); since #2044 it lives only in the station
-  editor, which needs `venue_service.manage`. Decide whether a supervisor gets a read-only view
+  editor, which needs `venue.configure`. Decide whether a supervisor gets a read-only view
   ([decision note](dashboard.md)). Left open by A756 PR 8.
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12).
   [Detail](kitchen.md#supervisors-have-no-dashboard-path-to-a-prep-stations-times)
@@ -418,7 +418,7 @@ the change (plan PR 8 Decision 1).
 
 - Prep stations follows Departments and zones in the sidebar. It has Stations and Routes tabs.
   You view planned station times through Calendar's Show picker; its existing
-  `venue_service.manage` permission stays. The supervisor's read-only Calendar question stays open.
+  `venue.configure` permission stays. The supervisor's read-only Calendar question stays open.
 - Station lists use names, with the default station in its alphabetical place and its Default label
   retained. Stations have no hand-set order, reorder route or stored order column. Courses and
   zones keep their own order.
