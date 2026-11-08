@@ -1,5 +1,7 @@
 # A1404: encrypted bucket copy
 
+> Draft on hold after the 8 November plan review. Permanent backup-key history is withdrawn as a proposed policy. The smaller rotation transition and additional Amazon-test and handover files need a scope decision before this plan is revised and approved. Do not implement this draft.
+
 **Authority.** Owner approval: Lane K `queue.md`, A1404, quoting waitron-21 (2026-11-06 ~14:50): derive from the BACKUP KEY, not the disk recovery key. Parent checks and commits this plan, obtains Claude's `review-branch` read, then writes `PLAN FOR APPROVAL` in `questions.md` with both paths and waits for the watcher's approval. No build before that answer.
 
 **Read, not verified.** `packages/stream/src/litestream.ts:12,74` pins 0.5.18 without customer-key settings. `apps/server/src/backup-env-writer.ts:42` overwrites the backup key; `apps/server/src/backup-recovery-pack-parts.ts:142` carries today's key. `apps/server/src/restore-stream.ts:305,330` downloads before unlocking node secrets. Old keys survive in kept packs (`apps/server/src/backup-recovery-pack-status.ts:169`), not a numbered backup-key ring. Vault key versions are separate.
