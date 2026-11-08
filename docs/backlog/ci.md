@@ -577,8 +577,11 @@ A1424's live qualification was added on 7 November 2026.
   The successful stream job in main run 42506794616 applied loopback MTU 1500 and
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
-  drills. Job-by-job overflow, the remaining workflows, second-host registration and first-day
-  queue measurements remain open. Never drain other lanes' work for a drill.
+  drills. Keep the corrected v40 controller without a new whole-run capacity gate, as the
+  watcher approved on 8 November. A1454 adds capacity and A1461 reduces run sizes; per-job
+  overflow, the remaining workflows, second-host registration and queue measurements remain open. Lane I reports
+  existing-record observations on 15 November; episodic status reads cannot prove the full-day
+  no-avoidable-wait target. Never drain other lanes' work for a drill.
   [Procedure and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
 
 - **`scripts/ci-diff-paths.sh` never looks for `gnutimeout` for its `-k` bound** (left open by
@@ -725,6 +728,13 @@ A1424's live qualification was added on 7 November 2026.
   (#916). [Detail](till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 ## Decisions and deliberate limits
+
+- **A1440: retain v40 without a new capacity gate (watcher, 2026-11-08 22:14).**
+  The [routing comparison](../superpowers/plans/2026-11-08-a1440-capacity-routing.md) is an
+  illustrative replay, not measured alternate outcomes. Its fit-only rules leave more modeled
+  capacity idle; no snapshot-freshness limit was validated. Keep the deployed controller,
+  advance A1454 and A1461, and report existing-record observations on 15 November. No new
+  collector, workflow, reservation service or credential carrier is approved.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
 
