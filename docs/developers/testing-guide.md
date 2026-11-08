@@ -430,7 +430,7 @@ the same day; moved here 2026-10-07.
 
 ## Draw every port a test needs in one `freePorts(n)` call, before binding any of them.
 
-A suite that needs a configured port picks it by binding port 0, reading the number the system
+A suite that needs a released configured port picks it by binding port 0, reading the number the system
 chose, and releasing it, because `WAITRON_HTTP_PORT` refuses `"0"`. Drawing two ports that way one after the
 other can return the same number twice on Linux, and did in CI run 36317643554: the boot's HTTPS
 server took port 40141 and its landing listener was then refused `EADDRINUSE` on 40141 in the same
@@ -447,6 +447,44 @@ server is the one caller that recovers from a port taken in that gap, because ve
 its port is already bound and so can be started again on another (the stream loop test's section
 below, "The S3 test server knows its own server"). A Waitron server using its configured port is not retried:
 a taken HTTP port is `server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
+
+### Keep a process fixture’s socket bound through handoff
+
+For a new server process, reserve a socket with `retainHttpListener` from
+`apps/server/src/testing/retained-http-listener.ts`, and pass its positive `port` and exact `host`
+to the child’s environment. Keep the socket open. Add `--import retainedHttpPreload` to the child’s
+Node arguments and give that child a dedicated `ipc` stdio slot. The preload is plain JavaScript;
+bundled-entry checks still run without a TypeScript loader. A crash fixture’s progress pipe stays
+at fd 3; append the IPC slot after it.
+
+Attach the child’s output and exit handlers before awaiting `transferRetainedListeners`.
+The hour-entry helper requests its landing listener with `{ landing: true }`.
+Transfer both the main and enabled landing sockets. The child asks for the handles after attaching
+its receiver and acknowledges receipt; the parent then closes its copies. Before the real server
+adopts a socket, its holder destroys incoming connections. The preload redirects the matching
+positive-port bind to the held socket, checks its address and requested host, and restores the
+original `listen` after the reservations are consumed. It disconnects its temporary IPC channel.
+Do not apply it to a process whose IPC channel belongs to another caller.
+
+Give each new child its own reservation and update the client destinations after a restart.
+Use one startup deadline for the transfer and readiness checks. The transfer closes the parent’s
+reservations on failure; the caller still owns stopping and collecting the child. When cleanup
+needs only process death, wait for its recorded `exit`. Keep any required pipe draining separate
+and bounded.
+
+The standalone `apps/server/scripts/cloud-integration-fixture.ts` installs `adoptRetainedListeners` directly
+in its own process for the first launch and waits for the actual bind before writing `ready.json`.
+Its reservation uses the configured host, including the external fixture’s wildcard host. It keeps
+Cloud’s existing IPC channel. Its saved-origin restarts retain the configured binding: holding the
+port while that process is dead is work for Cloud’s external runner, recorded in A80.
+
+Run `src/testing/retained-http-listener.test.ts` for HTTP, HTTPS, paired ports, address refusals,
+failed-handoff cleanup and real release checks. The party/kitchen restart suites, the three
+`first-fiscal-hour*.test.ts` entry suites, `first-setup-bundle.test.ts`, `first-fiscal-boot.test.ts`,
+`handover-stepdown.crash.test.ts` and `apps/server/scripts/cloud-integration-fixture.test.ts` exercise the callers.
+Production’s `WAITRON_HTTP_PORT` parser is unchanged; `src/config.test.ts` keeps the zero refusal.
+This fixture does not change a later waiting-start rebind inside one process, nor reserve a port
+that represents an unreachable peer.
 
 ### Select a boot test's port at the real listener bind when its contract permits it
 
@@ -482,7 +520,7 @@ shard 6, at port 46869. The controlled reproduction establishes that an occupied
 can cause that failure; it does not identify the competing process in the historical run.
 The in-process boot siblings use this fixture except cases that assert configured-port,
 advertised-origin, tunnel-target, paired landing-listener, distinct unused-peer or exact listener-release contracts.
-The process-started fixtures and unused-peer reservations remain separate work in
+The unused-peer reservations and Cloud’s fixed-origin stop/relaunch gap remain in
 [the CI backlog](../backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 
 A1221, 30 October 2026, applies the same fixture to both real-listener cases in

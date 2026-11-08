@@ -6,14 +6,19 @@ import { once } from "node:events";
 import { cp, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { freePorts } from "./testing/free-ports.js";
+import {
+  retainHttpListener,
+  retainedHttpPreload,
+  transferRetainedListeners,
+} from "./testing/retained-http-listener.js";
 
 it.each(["bin.ts", "node-entry.ts"])(
   "a bundled %s launch opens exactly one restricted listener and returns from startup",
   async (entrySource) => {
     const root = await mkdtemp(join(tmpdir(), "first-setup-bundle-"));
     let child: ReturnType<typeof spawn> | undefined;
-    let closed: Promise<unknown> | undefined;
+    let exited: Promise<unknown> | undefined;
+    let held: Awaited<ReturnType<typeof retainHttpListener>> | undefined;
     try {
       const stateDir = join(root, "state"),
         venueDir = join(root, "venue");
@@ -52,8 +57,9 @@ it.each(["bin.ts", "node-entry.ts"])(
         },
         logLevel: "silent",
       });
-      const [port] = await freePorts(1);
-      child = spawn(process.execPath, [entry], {
+      held = await retainHttpListener();
+      const port = held.port;
+      child = spawn(process.execPath, ["--import", retainedHttpPreload, entry], {
         env: {
           ...Object.fromEntries(
             Object.entries(process.env).filter(([key]) => !key.startsWith("WAITRON_")),
@@ -64,14 +70,14 @@ it.each(["bin.ts", "node-entry.ts"])(
           WAITRON_HTTP_PORT: String(port),
           WAITRON_HTTP_LANDING_PORT: "0",
         },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
       });
-      closed = once(child, "close");
+      exited = once(child, "exit");
       let output = "";
       child.stderr!.on("data", (chunk) => {
         output += String(chunk);
       });
-      await new Promise<void>((ready, reject) => {
+      const ready = new Promise<void>((ready, reject) => {
         const timer = setTimeout(
           () => reject(new Error("bundle did not finish startup: " + output)),
           30000,
@@ -92,6 +98,7 @@ it.each(["bin.ts", "node-entry.ts"])(
           reject(new Error("bundle exited before ready: " + output));
         });
       });
+      await Promise.all([transferRetainedListeners(child, [held], 30_000), ready]);
       const response = await new Promise<Response>((resolve, reject) => {
         const req = httpsRequest(
           {
@@ -119,8 +126,10 @@ it.each(["bin.ts", "node-entry.ts"])(
       expect(output.match(/"event":"recovery.listening"/g)).toHaveLength(1);
       await expect(stat(join(venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
-      if (child?.pid !== undefined && child.exitCode === null) child.kill("SIGTERM");
-      await closed;
+      if (child?.pid !== undefined && child.exitCode === null && child.signalCode === null)
+        child.kill("SIGTERM");
+      await exited;
+      if (held?.server.listening) await held.close();
       await rm(root, { recursive: true, force: true });
     }
   },

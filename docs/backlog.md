@@ -2237,7 +2237,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
   box's restore over a real network was not measured.
 
-- **Process-started servers, remaining setup/recovery suites and configured-port boot cases still release probes before binding (A80/#740, A907, A1152).**
+- **Remaining setup/recovery and configured-port boot cases, unused-peer ports, and Cloud’s fixed-origin stop/relaunch gap need port ownership (A80/#740, A907, A1152).**
   [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 
 

@@ -64,8 +64,8 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       agentClosed = true;
       await agent.close();
     };
-    let child = childProcess(script, f.env);
-    const origin = `https://127.0.0.1:${f.port}`;
+    let child = await childProcess(script, f.env);
+    let origin = `https://127.0.0.1:${child.port}`;
     try {
       expect(await ready(child, origin, agent)).toEqual({ claimed: true, resolution: true });
       const get = (path: string) => fetch(`${origin}${path}`, { dispatcher: agent } as RequestInit);
@@ -134,13 +134,15 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       expect(await selected.json()).toEqual({ restarting: true });
       await closeAgent();
       await expectRestartExit(child);
-      child = childProcess(script, f.env);
+      child = await childProcess(script, f.env);
+      origin = `https://127.0.0.1:${child.port}`;
       agent = new Agent({ connect: { ca } });
       agentClosed = false;
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect((await stat(join(f.venueDir, "venue.db"))).size).toBeGreaterThan(0);
       await child.stop();
-      child = childProcess(script, f.env);
+      child = await childProcess(script, f.env);
+      origin = `https://127.0.0.1:${child.port}`;
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
       expect(await readdir(join(f.stateDir, "first-setup-start-again-confirmations"))).toHaveLength(

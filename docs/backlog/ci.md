@@ -142,12 +142,11 @@ Audit each case's origin and listener-release assertions before choosing the bin
 The recovery-backup preview suite uses that existing fixture with a competing configured-port
 listener; it needs no change to the shared helper.
 
-Other remaining work is in process-started server fixtures, including
-`bench/sqlite-failover/src/unreachable-store.ts` and the inline reservation in
-`apps/server/scripts/cloud-integration-fixture.ts`, and tests that must exercise configured ports,
-advertised origins or release of a particular listener. Keep those assertions when choosing how
-to remove their hand-off window. A port drawn to represent an unreachable peer can also be taken
-by another worker after release; changing the HTTP listener does not reserve that peer port.
+Cloud’s external `scripts/test-waitron-pairing.mjs:56` stops and relaunches the same saved origin while no process holds its port; retain that socket in Cloud’s runner across restarts (source read, not run).
+
+`bench/sqlite-failover/src/unreachable-store.ts` still releases a port intended to stay unreachable.
+Another worker can bind it later. Tests that must exercise configured ports, advertised origins
+or release of a particular in-process listener also need their handoff audited; keep those assertions.
 
 A1152 applies the bind-time port-zero fixture to the matching in-process `boot*.test.ts`
 siblings. The fixture delegates to real Hono, waits for its real listener, and directs requests

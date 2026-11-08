@@ -29,9 +29,9 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
     });
     const ca = await readFile(join(f.stateDir, "tls", "ca.crt"));
     const agent = new Agent({ connect: { ca } });
-    const child = childProcess(script, { ...f.env, WAITRON_ENV: "production" });
+    const child = await childProcess(script, { ...f.env, WAITRON_ENV: "production" });
     try {
-      const origin = `https://127.0.0.1:${f.port}`;
+      const origin = `https://127.0.0.1:${child.port}`;
       expect(await ready(child, origin, agent)).toEqual({ claimed: true, resolution: true });
       const get = (path: string) => fetch(`${origin}${path}`, { dispatcher: agent } as RequestInit);
       expect(await (await get("/setup-api/status")).json()).toEqual({
@@ -85,10 +85,10 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
   "%s boots a fresh workspace and keeps its trusted setup listener available after restart",
   async (script) => {
     const f = await fixture();
-    let child: ReturnType<typeof childProcess> | undefined;
+    let child: Awaited<ReturnType<typeof childProcess>> | undefined;
     let agent: Agent | undefined;
     try {
-      child = childProcess(script, f.env);
+      child = await childProcess(script, f.env);
       await expect
         .poll(async () => readFile(join(f.stateDir, "tls", "ca.crt")), {
           timeout: 45_000,
@@ -96,11 +96,15 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
         .toBeDefined();
       const ca = await readFile(join(f.stateDir, "tls", "ca.crt"));
       agent = new Agent({ connect: { ca } });
-      expect(await ready(child, `https://127.0.0.1:${f.port}`, agent)).toEqual({ claimed: false });
+      expect(await ready(child, `https://127.0.0.1:${child.port}`, agent)).toEqual({
+        claimed: false,
+      });
       expect((await stat(join(f.venueDir, "venue.db"))).size).toBeGreaterThan(0);
       await child.stop();
-      child = childProcess(script, f.env);
-      expect(await ready(child, `https://127.0.0.1:${f.port}`, agent)).toEqual({ claimed: false });
+      child = await childProcess(script, f.env);
+      expect(await ready(child, `https://127.0.0.1:${child.port}`, agent)).toEqual({
+        claimed: false,
+      });
       expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
     } finally {
       await child?.stop();

@@ -20,7 +20,11 @@ import { readBillEditState } from "./bill-editing.js";
 import { readPartyAllergyView } from "./party-allergy.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
-import { freePorts } from "./testing/free-ports.js";
+import {
+  retainHttpListener,
+  retainedHttpPreload,
+  transferRetainedListeners,
+} from "./testing/retained-http-listener.js";
 import {
   OPERATOR,
   inTx,
@@ -42,20 +46,27 @@ const suite = useVenueDb({
 });
 
 async function boot(env: NodeJS.ProcessEnv) {
+  const startupDeadline = Date.now() + 60_000;
+  const held = await retainHttpListener();
   const child = spawn(
     process.execPath,
     [
       "--import",
+      retainedHttpPreload,
+      "--import",
       pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href,
       fileURLToPath(new URL("./bin.ts", import.meta.url)),
     ],
-    { env, stdio: ["ignore", "pipe", "pipe"] },
+    {
+      env: { ...env, WAITRON_HTTP_PORT: String(held.port) },
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    },
   );
   let output = "";
-  child.stdout.on("data", (chunk: Buffer) => {
+  child.stdout!.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
-  child.stderr.on("data", (chunk: Buffer) => {
+  child.stderr!.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
@@ -77,17 +88,20 @@ async function boot(env: NodeJS.ProcessEnv) {
     expect(await stop(), output).toEqual({ code: 0, signal: null });
   };
   try {
+    await transferRetainedListeners(child, [held], Math.max(1, startupDeadline - Date.now()));
     await vi.waitFor(
       () => {
         expect(child.exitCode, output).toBeNull();
         expect(output, output).toContain('"event":"server.listening"');
       },
-      { timeout: 60_000 },
+      { timeout: Math.max(1, startupDeadline - Date.now()) },
     );
-    return { close, pid: child.pid! };
+    return { close, pid: child.pid!, port: held.port };
   } catch (error) {
     await stop();
     throw error;
+  } finally {
+    if (held.server.listening) await held.close();
   }
 }
 
@@ -176,14 +190,12 @@ describe("A669 consideration through a server process restart", () => {
           join(scratch, "modules.json"),
           JSON.stringify({ modules: { "fiscal-none": false } }),
         );
-        const [firstPort, secondPort] = await freePorts(2);
         const env: NodeJS.ProcessEnv = {
           ...Object.fromEntries(
             Object.entries(process.env).filter(([key]) => !key.startsWith("WAITRON_")),
           ),
           WAITRON_HTTP_HOST: "127.0.0.1",
           WAITRON_HTTP_LANDING_PORT: "0",
-          WAITRON_HTTP_PORT: String(firstPort),
           WAITRON_STATE_DIR: scratch,
           WAITRON_VENUE_DIR: venueDir,
           WAITRON_NODE_ID: v.cfg.nodeId,
@@ -194,7 +206,7 @@ describe("A669 consideration through a server process restart", () => {
           WAITRON_CREDENTIALS_KEY_VERSION: "1",
           WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
         };
-        let port = firstPort;
+        let port: number;
         const request = async <T>(path: string, body?: unknown): Promise<T> => {
           const response = await fetch(`http://127.0.0.1:${port}${path}`, {
             method: body === undefined ? "GET" : "POST",
@@ -208,6 +220,7 @@ describe("A669 consideration through a server process restart", () => {
         };
         const view = () => request<PartyAllergyRead>(`/api/parties/${party.partyId}/allergy`);
         server = await boot(env);
+        port = server.port;
         const firstPid = server.pid;
         const submitted = await request<{ groups: { id: string }[] }>(
           `/api/parties/${party.partyId}/${path === "draft" ? `drafts/${draft.id}/submit` : "groups"}`,
@@ -250,8 +263,8 @@ describe("A669 consideration through a server process restart", () => {
         } finally {
           await inspected.close();
         }
-        port = secondPort;
-        server = await boot({ ...env, WAITRON_HTTP_PORT: String(port) });
+        server = await boot(env);
+        port = server.port;
         expect(server.pid).not.toBe(firstPid);
         expect(await view()).toEqual(before);
         expect(await request<PartyAllergyRead>(previewPath, { kind: "group", groupId })).toEqual(

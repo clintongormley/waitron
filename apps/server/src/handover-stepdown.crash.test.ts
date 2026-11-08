@@ -19,7 +19,11 @@ import { NODE_FILE, VENUE_FILE } from "@waitron/store";
 import type { StartedServer } from "./boot.js";
 import { beginHandover } from "./handover-store.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { freePorts } from "./testing/free-ports.js";
+import {
+  retainHttpListener,
+  retainedHttpPreload,
+  transferRetainedListeners,
+} from "./testing/retained-http-listener.js";
 import { provisionBillVenue } from "./testing/bill-venue.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -253,13 +257,22 @@ afterEach(async () => {
   }
 });
 
-function startChild(at: CrashPoint, env: Record<string, string>, binding: HandoverBinding): Child {
+async function startChild(
+  at: CrashPoint,
+  env: Record<string, string>,
+  binding: HandoverBinding,
+  startupDeadline: number,
+): Promise<Child & { port: number }> {
+  const held = await retainHttpListener();
+  env = { ...env, WAITRON_HTTP_PORT: String(held.port) };
   const base = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => !key.startsWith("WAITRON_")),
   );
   const child = spawn(
     process.execPath,
     [
+      "--import",
+      retainedHttpPreload,
       "--import",
       import.meta.resolve("tsx"),
       "--input-type=module",
@@ -269,7 +282,7 @@ function startChild(at: CrashPoint, env: Record<string, string>, binding: Handov
     ],
     {
       env: { ...base, ...env, WAITRON_TEST_CRASH_AT: at },
-      stdio: ["ignore", "pipe", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe", "pipe", "ipc"],
     },
   );
   children.push(child);
@@ -290,11 +303,27 @@ function startChild(at: CrashPoint, env: Record<string, string>, binding: Handov
       child.once("close", (code, signal) => resolve({ code, signal }));
     },
   );
-  return { process: child, marks, output: () => output, exited };
+  const stopped = new Promise<void>((resolve) => {
+    child.once("exit", () => resolve());
+    child.once("error", () => resolve());
+  });
+  try {
+    await transferRetainedListeners(child, [held], Math.max(1, startupDeadline - Date.now()));
+    return { process: child, marks, output: () => output, exited, port: held.port };
+  } catch (error) {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    await stopped;
+    throw error;
+  } finally {
+    if (held.server.listening) await held.close();
+  }
 }
 
-async function waitForMark(child: Child, mark: string): Promise<void> {
-  const deadline = Date.now() + CHILD_LIMIT_MS;
+async function waitForMark(
+  child: Child,
+  mark: string,
+  deadline = Date.now() + CHILD_LIMIT_MS,
+): Promise<void> {
   while (!child.marks.includes(mark)) {
     if (child.process.exitCode !== null || child.process.signalCode !== null)
       throw new Error(`the child ended before "${mark}": ${child.output()}`);
@@ -382,14 +411,15 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
   };
   const env = { ...childEnv, WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" };
 
-  const [port] = (await freePorts(1)) as [number];
-  const child = startChild(
+  const startupDeadline = Date.now() + CHILD_LIMIT_MS;
+  const child = await startChild(
     at,
-    { ...childEnv, WAITRON_HTTP_HOST: "127.0.0.1", WAITRON_HTTP_PORT: String(port) },
+    { ...childEnv, WAITRON_HTTP_HOST: "127.0.0.1" },
     binding,
+    startupDeadline,
   );
-  await waitForMark(child, "started");
-  const base = `http://127.0.0.1:${port}`;
+  await waitForMark(child, "started", startupDeadline);
+  const base = `http://127.0.0.1:${child.port}`;
   await vi.waitFor(
     async () => {
       expect((await fetch(`${base}/health`)).status).toBe(200);
