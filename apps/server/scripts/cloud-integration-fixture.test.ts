@@ -135,9 +135,9 @@ it.each([false, true])(
         environment: string;
         allocation_key: string;
       }>(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`);
-      expect(getCountryPack("ES")!.taxIdentifier!.validate(allocations[0]!.taxpayer_nif).valid).toBe(
-        true,
-      );
+      expect(
+        getCountryPack("ES")!.taxIdentifier!.validate(allocations[0]!.taxpayer_nif).valid,
+      ).toBe(true);
       expect(allocations).toEqual([
         {
           taxpayer_nif: "73000001W",
