@@ -27,6 +27,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillClockState } from "./till-clock-state.js";
 import { timeEntries, WorkforceBackend } from "@waitron/workforce";
+import { persons, startManagementSession } from "@waitron/identity";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { serverFixture } from "./testing/server-fixture.js";
@@ -340,7 +341,15 @@ for (const [enabled, spain] of [
         beforeServerStarts();
         const venue = await createClockVenue(suite.db, () => new Date(), modules);
         let priorOutId: string | null = null;
+        let managementCookie: string | undefined;
         if (spain) {
+          managementCookie = await withTransaction(suite.db, async (tx) => {
+            const admin = (await tx.select().from(persons)).find(
+              (person) => person.role === "admin",
+            )!;
+            const session = await startManagementSession(tx, { personId: admin.id });
+            return `waitron_management_session=${session.token}`;
+          });
           await suite.db.insert(convenioConfig).values({
             locationId: venue.cfg.locationId,
             breakThresholdMinutes: 300,
@@ -459,6 +468,16 @@ for (const [enabled, spain] of [
             expect((await day.json()).record.sessions).toEqual(
               spain ? [expect.objectContaining({ workedMinutes: 400, breakMinutes: 20 })] : [],
             );
+            if (spain) {
+              const planned = await fetch(
+                `${origin}/management-api/planned-vs-actual?from=2026-01-05&to=2026-01-06`,
+                { headers: { cookie: managementCookie! } },
+              );
+              expect(planned.status).toBe(200);
+              expect(await planned.json()).toContainEqual(
+                expect.objectContaining({ personId: venue.personId, workedMinutes: 400 }),
+              );
+            }
           } else {
             for (const path of ["state", "in", "out", "break-start", "break-end"]) {
               const response = await fetch(`${origin}/api/clock/${path}`, {

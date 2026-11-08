@@ -10,6 +10,11 @@ import {
 import type { RosterBreach } from "@waitron/workforce/roster-validation";
 import { tf } from "./strings.js";
 export function breachText(breach: RosterBreach): string {
+  if (breach.kind === "split_gap_too_short" && breach.gapMinutes < 0)
+    return tf("staffing.breach.split_gap_overlap", {
+      overlapMinutes: String(-breach.gapMinutes),
+      requiredMinutes: String(breach.requiredMinutes),
+    });
   const values: Record<string, string> = {};
   for (const [key, value] of Object.entries(breach)) {
     const wholeMinutes =

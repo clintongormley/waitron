@@ -63,6 +63,8 @@ const en = {
     "Split stretch {plannedMinutes} min; maximum {limitMinutes} min",
   "staffing.breach.split_gap_too_short":
     "Split gap {gapMinutes} min; minimum {requiredMinutes} min",
+  "staffing.breach.split_gap_overlap":
+    "Shifts overlap by {overlapMinutes} min; minimum gap {requiredMinutes} min",
   "staffing.breach.overtime_cap_exceeded": "{overtimeMinutes} h overtime; cap {capMinutes} h",
 
   "staffing.rota.unfilled_count": "{count} unfilled",
@@ -292,6 +294,8 @@ const es: Record<keyof typeof en, string> = {
     "Turno partido de {plannedMinutes} min; máximo {limitMinutes} min",
   "staffing.breach.split_gap_too_short":
     "Pausa entre turnos de {gapMinutes} min; mínimo {requiredMinutes} min",
+  "staffing.breach.split_gap_overlap":
+    "Los turnos se solapan {overlapMinutes} min; pausa mínima de {requiredMinutes} min",
   "staffing.breach.overtime_cap_exceeded": "{overtimeMinutes} h extra; límite {capMinutes} h",
 
   "staffing.rota.unfilled_count": "{count} sin cubrir",

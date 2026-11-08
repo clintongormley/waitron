@@ -505,7 +505,5 @@ The first venue configures continuous-break credit separately from the existing 
 Annual limits and their rota warning remain with A586. Changes to a policy after a saved closure
 remain with the future closure decision above.
 
-The populated `node:sqlite` v26.13.0 rehearsal applied `workforce-es` baseline 0000 and migration
-0001 to one agreement row. It retained that row and every original field, added four null fields,
-and returned no foreign-key failures. This measures that table, not a whole venue reset. Receipt:
-`node ~/waitron-campaign-h/receipts/a1406-2-build/upgrade.mjs`, output `upgrade.log` beside it.
+The additive migration leaves existing agreement values in place; configure the new policy with
+the [first-venue recipe](../operations/first-venue-work-time.md).

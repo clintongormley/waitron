@@ -67,11 +67,17 @@ export async function resolveWorkTimeRuleset(tx: Transaction | Database): Promis
   if (row === undefined) {
     throw new AppError("convenio.not_found", {});
   }
-  // The `.select({...})` above aliases every column to its exact `WorkTimeRuleset` field name and
-  // narrows to precisely the ruleset's columns (no id/createdAt), so `...row` supplies all
-  // but the three fields that need a transform.
+  const splitValid =
+    policyRowFault({
+      split_min_segment_minutes: row.splitMinSegmentMinutes,
+      split_max_segment_minutes: row.splitMaxSegmentMinutes,
+      split_min_gap_minutes: row.splitMinGapMinutes,
+    }) === null;
   return {
     ...row,
+    splitMinSegmentMinutes: splitValid ? row.splitMinSegmentMinutes : null,
+    splitMaxSegmentMinutes: splitValid ? row.splitMaxSegmentMinutes : null,
+    splitMinGapMinutes: splitValid ? row.splitMinGapMinutes : null,
     overtimeModel: DB_TO_OVERTIME_MODEL[row.overtimeModel],
     nightPremiumPct: rateNum(row.nightPremiumPct),
     splitShiftPremium: moneyNum(row.splitShiftPremium),

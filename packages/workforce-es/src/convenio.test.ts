@@ -175,6 +175,20 @@ it("resolves the configured continuous policy independently of the split flag", 
   expect(await convenio.resolvePaidBreakPolicy(suite.db)).toBeNull();
 });
 it.each([
+  [300, 180, 90],
+  [180, 300, -5],
+  [180, null, 90],
+  [null, 300, 90],
+  [180, 300, null],
+  [0, 300, 90],
+  [180.5, 300, 90],
+])("ignores invalid split limits on an ordinary read: %j", async (min, max, gap) => {
+  await seedConvenioConfig(suite.db, { locationId: await venueLocationId(suite.db) });
+  await suite.db.execute(sql`update convenio_config set
+    split_min_segment_minutes=${min}, split_max_segment_minutes=${max}, split_min_gap_minutes=${gap}`);
+  expect(await resolveWorkTimeRuleset(suite.db)).toEqual(DEFAULT_RULESET);
+});
+it.each([
   { continuous_paid_break_minutes: 0 },
   { continuous_paid_break_minutes: "20" },
   { continuous_paid_break_minutes: 1.5 },
