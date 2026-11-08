@@ -517,7 +517,7 @@ Veri\*Factu backend's `refuseNewIssuance` and `appendToChain` refuse a box the h
 name `serving-primary` (`fiscal.chain_handed_over`), so such a box writes no new record and refuses
 sales and bill payments before money moves; refunds call `refuseNewRefund`, which does not read the
 chart, so they still go through. The filing loop (`packages/fiscal-verifactu/src/drain.ts`) does not
-read the chart, so it still sends the records it wrote before. Run through real
+read the chart, so it still sends the records it wrote before. Until then the till does not leave such a box: it still answers that it accepts sales, at the same term as the main box, and the till's server router stays where it is on a tie, so the till's 'Wait for the till to move to the main server' does not come true there. Run through real
 starts on the Slice 5 branch; on main since #2436. It needs a third box promoted over a running main
 box, so no real venue reaches it before 3b.
 

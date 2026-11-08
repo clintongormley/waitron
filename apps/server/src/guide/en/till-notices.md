@@ -119,5 +119,4 @@ filing results and cases unchanged.
 ## When this server is no longer the main server {#not-main-server}
 
 When the till says **This server is no longer the main server**, wait for the till to move to the
-main server, then try again. Refunds still work. If you already charged a card on the terminal,
-refund it there.
+main server, then try again. If you already charged a card on the terminal, refund it there first.

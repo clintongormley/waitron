@@ -575,8 +575,8 @@ called weaker than its name, the topic file lists what it does not see.
   the refusal moved to. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it
   reads drizzle's generated snapshots, not hand-written SQL.
 - **A `local` table says what ties a row to its node** — a `node_id` column that every read and
-  write names (or names among this box's takeover history), a seal only a box holding the key ring opens, or rows the transaction that wrote
-  them deletes. No guard makes a new `local` table say which.
+  write names, as this box's id or one of the boxes in its takeover history, a seal only a box
+  holding the key ring opens, or rows the transaction that wrote them deletes. No guard makes a new `local` table say which.
 - **Store anything that works as a live login as a hash.** Guards: database-copy cases in
   `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash case in
   `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials,

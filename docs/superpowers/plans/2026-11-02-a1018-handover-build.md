@@ -3068,7 +3068,7 @@ name. The receipts are in the slice's ledger and review files, and the PR.
 - R49, a different key under the same ring version is left to the backlog: a box with a wrong key
   ring takes over and cannot open sealed rows.
 - R51, the certificate install record changes no code here: a new main box stays silent about an
-  expiring certificate until the follow-up lands; the first sign is `fiscal.submission_delayed`
+  expiring certificate until the follow-up lands (fixed by A1425 on 2026-11-08); the first sign is `fiscal.submission_delayed`
   about 4 hours after expiry (read, not run).
 - R52, every whole-database copy is created owner-only, a passing module-check fault is no longer
   remembered, a throw on a remembered file clears the record, and the copy check runs
