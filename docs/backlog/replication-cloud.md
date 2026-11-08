@@ -1093,10 +1093,12 @@ Wanted before go-live (owner, 2026-11-04). The
 approval. WATCHER 2026-11-08 02:33 settles the reduced scope: extend Remove / Retirar to a joined
 serving-secondary, including one that once sold, with both declarations checked on the server,
 the existing chart-transaction audit and only the matching pair link cleared. Use the existing
-administrator session and A1002's `node.manage`, governed by the newer OWNER answer relayed
-2026-11-07 22:51. Keep fiscal originals and existing handover recovery/return/archive gates;
-add no returning-key trust path, spare-start check or second audit write. Include EN/ES guide,
-error and recovery wording. The dated A947 pointer replaces its duplicate backlog filing.
+administrator session and whatever permission Remove checks when built (A1002 calls it
+`node.manage`); A1321 adds or renames none, following OWNER 2026-11-07 22:51.
+Keep fiscal originals and existing handover recovery/return/archive gates;
+add no returning-key trust path, spare-start check, client term field or second audit write.
+Repair only a removed/revoked id's matching link on repeated Remove, Clear or replacement join.
+Include EN/ES guide, dialog, error and recovery wording. The dated A947 pointer replaces its duplicate backlog filing.
 Build waits for A947 3b-6 and full-design approval. No build approval.
 
 ## A947. Go-live on two local boxes

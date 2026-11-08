@@ -1,61 +1,58 @@
 # A1321: retire a dead or reset spare
 
-When a joined spare dies or is reset, you should be able to remove it from Servers so the main
-box stops waiting for it at later starts. Extend **Remove / Retirar** with two declarations.
-Keep the old box's data and fiscal originals; notification of an offline machine is unclaimed.
+You can remove a dead or reset spare from Servers, after confirming it is switched off.
+The main box stops waiting for it at later starts. Keep its data and fiscal originals.
 
-**2026-11-08: full design awaits OWNER approval. Build waits for A947 3b-6. No implementation plan.**
+**Proposed, not built. Full design awaits OWNER approval; build waits for A947 3b-6.**
 
-Authority, quoted for the review reader:
+**Recorded authority.** Lane K `/Users/clintongormley/waitron-campaign-k/queue.md`, A1321,
+OWNER 2026-11-04: “Yes, before go-live”. In that lane's `questions.md`, WATCHER 2026-11-07
+21:59: “write the design now (docs only, Claude read”; build waits for 3b-6. WATCHER
+2026-11-08 02:33: “extend the existing Remove to a joined serving-secondary, both declarations
+checked on the server”; “Retiring requires exactly what the existing Remove action requires
+today”. OWNER relayed 2026-11-07 22:51: “node.promote stays merged with node.manage”.
+These authorize this proposal, not its build.
 
-- Lane K `/Users/clintongormley/waitron-campaign-k/queue.md`, A1321, OWNER 2026-11-04:
-  “Yes, before go-live”. This approves the need, not this full design.
-- `/Users/clintongormley/waitron-campaign-k/questions.md`, WATCHER 2026-11-07 21:59:
-  “write the design now (docs only, Claude read, bring it to me past one page). The build waits
-  for A947 slice 3b-6, as the item says.”
-- Same file, WATCHER 2026-11-08 02:33: “extend the existing Remove to a joined serving-secondary,
-  both declarations checked on the server”; “Retiring requires exactly what the existing Remove
-  action requires today”. The reduced scope below follows that answer.
-- Same file, OWNER relayed 2026-11-07 22:51, A1002 item 5: “node.promote stays merged with
-  node.manage, as accepted on 28 October; do not split them again.”
+**SOURCE READ ONLY at `e0e4f5b8fd`; nothing run.** `membership-removal.ts:43-52,71-74`
+checks local rows; completed remote joining remains unbuilt in
+[A947](../plans/2026-11-04-a947-3b-spare-hosts-store.md). Its Task 6.2 writes the spare's row.
+`boot-peer-check.ts:130-138` skips evicted peers. Paths are under `apps/server/src/`.
 
-**SOURCE READ ONLY at `e0e4f5b8fd`; no runtime verification.** `apps/server/src/membership-removal.ts:43-52,71-74`
-checks local node rows and explicitly cannot establish completed remote adoption today.
-`membership-removal-api.ts:45-52` authorizes the existing session; `boot-peer-check.ts:130-138`
-skips evicted peers. `apps/dashboard/src/screens/servers-screen.ts:264-266` uses server eligibility.
-[A947 D17/G/Task 6.10](../plans/2026-11-04-a947-3b-spare-hosts-store.md) describe the unbuilt join
-and dead-spare limit. These are not working joined-spare removal receipts.
+**Interaction.** Extend **Remove / Retirar**, retaining **Cancel / Cancelar**, which changes
+nothing. For joined spares, require “This spare is switched off” and “No other recovery is in
+progress”, naming its address/id. Never-joined removal stays as today. The listing exposes whether
+confirmation is required, derived from the completed-join row; the server rechecks under the lock.
+If joining finished meanwhile, return `membership.standby_joined` asking for these declarations.
+EN: “Confirm that this spare is switched off and no other recovery is in progress.”
+ES: “Confirma que este servidor en espera está apagado y no hay otra recuperación en curso.”
+Use the existing session and whatever permission Remove checks when built, called `node.manage`
+in [A1002](2026-10-22-a1002-custom-roles-design.md). A1321 neither adds nor renames a permission
+and adds no authentication form. If waiting, use existing Carry on first, then Servers.
 
-**Proposed interaction.** Explain the joined spare in the existing dialog, naming address and
-machine id. Require “This spare is switched off” and “No other recovery is in progress”. Keep
-Remove disabled until both are checked; **Stop / Parar** changes nothing. Use the existing
-administrator session with `node.manage`, following A1002, without another password or second-factor
-form. [A1002's document](2026-10-22-a1002-custom-roles-design.md) still says separate promotion;
-the newer recorded answer governs here.
-When the main is waiting, use existing Carry on first, then Servers; add no waiting-page flow.
+**Saved change.** Reuse the chart writer's reread/rejudgment, with no client expected-term field.
+Recheck main authority and target: a `serving-secondary` remains eligible if it once sold;
+current primary/sell-only targets remain refused. An unfinished handover involving it refuses
+with `handover.operation_in_progress`; existing recovery must finish or abandon it first.
+Check declarations server-side but do not store them or add columns.
+Sign the target `evicted` and write the existing removal audit together. Keep its node data.
+Existing Clear later moves its id to `revoked`.
 
-**Proposed saved change.** Under the write locks, check both declarations, expected chart term,
-main-box authority and target. A current `serving-secondary` is eligible even if it once sold;
-refuse current `serving-primary`/`sell-only` targets and unfinished handovers involving it.
-Existing handover recovery is prerequisite: removal neither cancels nor bypasses it.
-Sign the next chart with the target `evicted`; retain its Removed row until existing Clear moves
-the id to `revoked`. Reuse the existing removal audit (`membership-removal.ts:266`) in the chart
-transaction, with no new record/table. Keep node data and fiscal originals. Save the venue change
-first, then clear only the matching pair link; retries repair interruption without broader deletion.
-A replacement joins normally with a fresh id.
+After the venue commit, clear only the matching pair link and reload the stream. Remove's
+already-removed answer and Clear also perform that cleanup. Before refusing a replacement join
+for an existing link, repair it only when the held chart already marks that linked id evicted
+or revoked; preserve every active link. This covers interruption after either chart commit
+without new records or start checks. A replacement gets a fresh id.
 
-**Return boundary.** Existing mirror/promotion rules continue. Delivery to an offline old box is
-unclaimed; add no retired-key trust exception, start check, proof system or future takeover work.
-Preserve [A1018 fiscal-return/archive gates](2026-10-23-a1018-simple-handover-design.md#5-point-3-fiscal-only-return-with-a-visible-business-gap)
-and [A1308 U5's kept second-box path](2026-11-02-rationalisation/README.md#5-decisions-made-across-the-areas).
-Removal grants no permission to wipe a past-selling disk.
+**Return boundary.** An offline box is not promised notification. Existing mirror/promotion rules,
+[A1018 fiscal return/archive](2026-10-23-a1018-simple-handover-design.md#5-point-3-fiscal-only-return-with-a-visible-business-gap)
+and [A1308's retained second box](2026-11-02-rationalisation/README.md#5-decisions-made-across-the-areas)
+continue. No trust exception or permission to wipe a past-selling disk.
 
-**Build acceptance.** Restart no longer counts that id; missing declarations, stale term and
-unfinished handovers refuse without changes; Stop changes nothing. Cover once-selling spares,
-retries, fresh replacement ids and preserved fiscal originals. Update
-`apps/server/src/guide/{en,es}/servers.md` with shared `{#retire-spare}`; revise EN/ES
-`membership.standby_joined` error and A947 G recovery wording.
-The dated A947 pointer replaces D17/Task 6.10's duplicate backlog filing; once built, update those
-behavior descriptions through a dated pointer, preserving historical text.
+**Build checks and copy.** Cover restart, both interruption points, replacement admission,
+unchanged active links, declarations, joining during confirmation, handover refusal and Cancel.
+Update EN/ES Servers guides, dialog explanations and `membership.standby_joined`,
+`mirror.spare_already_joined`, `backup.spare_stream_active`, `credentials.rotation_spare_joined`;
+replace “join from scratch” for past-selling spares. Date A947 D7/D17/G/Task 6.10 updates;
+ask the CLAUDE.md maintainer to clarify active peers. Preserve historical text.
 
-**Owner question:** approve this reduced design for planning, with build held until A947 3b-6?
+**Owner question:** approve this reduced proposal for planning after the watcher's review corrections?
