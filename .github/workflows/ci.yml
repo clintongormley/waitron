@@ -3925,7 +3925,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Naming a permission drops the workflow's defaults. This job checks nothing out, so it holds
-    # `actions: read` alone: the permission GitHub lists for the jobs API the second step reads.
+    # `actions: read` alone for its two jobs-API reads.
     permissions:
       actions: read
     steps:

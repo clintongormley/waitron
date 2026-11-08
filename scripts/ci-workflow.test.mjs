@@ -2170,6 +2170,28 @@ describe("the final shard duration warning", () => {
     expect(result.output.toLowerCase()).not.toContain("refresh");
   });
 
+  it("does not count server merge or stream siblings when only the server family is selected", () => {
+    const result = runWarning([
+      timedJob("test-server (1)", "2026-11-08T00:01:40Z"),
+      timedJob("test-server-merge", "2026-11-08T00:05:00Z"),
+      timedJob("test-server-stream", "2026-11-08T00:05:00Z"),
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("test-server (1): 100s");
+    expect(result.output).not.toContain("test-server-merge");
+    expect(result.output).not.toContain("test-server-stream");
+    expect(result.output).not.toContain("::warning::");
+  });
+
+  it("gives the API its documented default deadline before the step's minute ends", () => {
+    const result = runWarning([timedJob("test-server (1)", "2026-11-08T00:01:40Z")]);
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("test-server (1): 100s");
+    expect(readFileSync(join(result.state, "deadline"), "utf8")).toContain(
+      "-k 2s 45 gh api --paginate",
+    );
+  });
+
   it("stays quiet for skipped families, including an unexpanded matrix, without asking the API", () => {
     const result = runWarning(
       [timedJob("test-server", null, { conclusion: "skipped", runner_id: 0 })],
