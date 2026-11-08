@@ -63,3 +63,8 @@ nightly `server-blob-2` from run 42437905513 has merged coverage, not per-test-f
    Explain that asset/top-level fallbacks may retain the logo example and unmapped fiscal tests.
    Stop at three active hours with exact gaps. Recommend build/drop only from adequate evidence;
    the watcher's later design decides selection, remembered results and a warm large runner.
+
+**Watcher clarification, 2026-11-08 18:01:** report both the item's own-package fallback for
+changed top-level code/config/migrations/lockfiles and the stricter column above. Only the item's
+column decides the 30% early stop. Count reasons in both columns and say whether the best case
+could deliver tens of times fewer test minutes. This supersedes the single-column decision rule.
