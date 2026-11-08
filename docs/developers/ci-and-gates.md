@@ -1903,12 +1903,16 @@ The app image carries `WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID` and
 to the app build only. In order, the publish job:
 
 1. fails when any of the three secrets is empty, printing each one's length and never its value;
-2. asks `main-tag-guard.sh` under `timeout 120`, which also writes the environment it read off
-   `:main` to the file `MAIN_TAG_GUARD_ENV_OUT` names, so no second registry read is made;
+2. reads `:main`'s environment off the registry once, under `timeout 120`, through
+   `scripts/published-image-env.sh` (which owns the exact "not found" match), and writes it to the
+   file `MAIN_TAG_GUARD_ENV_OUT` names. The job publishes only on the nightly schedule, a manual run
+   on `main`, or a `v*` tag; on `main` the read happens inside `main-tag-guard.sh`, which also
+   decides `move` or `hold`, and on a tag the tags step calls the read directly, with no decision.
+   A read error or timeout fails the job;
 3. fails when that environment's `WAITRON_PRODUCER_TAX_ID` differs from the secret, unless the
    repository variable `WAITRON_PRODUCER_CHANGE_ALLOWED` holds the new tax number itself. A `:main`
-   carrying no tax number, or no `:main` at all, is no difference. Only a push to `main` reads
-   `:main`, so a `v*` tag publish stops here until release tags get a read of their own;
+   carrying no tax number, or no `:main` at all, is no difference. A variable left set lets through
+   only a change to that same number, later ones included;
 4. builds the app image with `load: true` (one platform; a second needs this rechecked);
 5. compares each of the three inside that image (`docker run … printenv`) with its secret in the
    shell, printing lengths only;
@@ -1917,9 +1921,11 @@ to the app build only. In order, the publish job:
 
 The pushed image is rebuilt from cache rather than `docker push`ed from the loaded one, so it is
 built from the same arguments but is not byte-for-byte the compared image. Guards:
-`scripts/ci-workflow.test.mjs` (runs the three step scripts against fixtures and a stand-in
-`docker`, and reads the rest as text), `scripts/deploy-image-env.test.ts` (reads the Dockerfile and
-`compose.yml` as text) and `scripts/main-tag-guard.test.mjs` (the hand-back). None runs the job.
+`scripts/ci-workflow.test.mjs` (runs the three producer step scripts, and the tags step on a
+release tag, against fixtures and a stand-in `docker`, and reads the rest as text),
+`scripts/deploy-image-env.test.ts` (reads the Dockerfile and `compose.yml` as text) and
+`scripts/main-tag-guard.test.mjs` (the hand-back and `published-image-env.sh`, against a stubbed
+`docker`). None runs the job.
 
 ### Compare database files as bytes
 

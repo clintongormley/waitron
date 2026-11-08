@@ -6550,7 +6550,92 @@ describe("the publish job carries the producer's settings into the image", () =>
 
     it("fails when there is no read of `:main` to compare with", () => {
       expect(run({ published: undefined }).status).not.toBe(0);
-      expect(run({ published: undefined, ref: "refs/tags/v1.0.0" }).status).not.toBe(0);
+    });
+  });
+
+  // Main's path is main-tag-guard.sh, whose suite covers the read; a release tag reads directly.
+  describe("the tags step on a release tag", () => {
+    const bin = mkdtempSync(join(tmpdir(), "producer-tag-bin-"));
+    afterAll(() => rmSync(bin, { recursive: true, force: true }));
+    writeFileSync(
+      join(bin, "docker"),
+      '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$STUB_DIR/docker.args"\n' +
+        'printf \'%s\' "$STUB_STDOUT"\nprintf \'%s\' "$STUB_STDERR" >&2\nexit "${STUB_STATUS:-0}"\n',
+    );
+    // macOS has no `timeout`; this stands in for it and records that the read ran under one.
+    writeFileSync(
+      join(bin, "timeout"),
+      '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$STUB_DIR/timeout.args"\nshift\nexec "$@"\n',
+    );
+    for (const name of ["docker", "timeout"]) chmodSync(join(bin, name), 0o755);
+    const run = (docker) => {
+      const dir = mkdtempSync(join(tmpdir(), "producer-tag-"));
+      try {
+        const out = join(dir, "main-image.env");
+        writeFileSync(join(dir, "output"), "");
+        const result = spawnSync(
+          "bash",
+          ["-c", publishStepNamed("Work out the tags to publish").script],
+          {
+            cwd: repoRoot,
+            encoding: "utf8",
+            timeout: 30_000,
+            env: {
+              PATH: `${bin}:${process.env.PATH}`,
+              HOME: tmpdir(),
+              OWNER: "Example",
+              REF: "refs/tags/v1.2.3",
+              SHA: "a".repeat(40),
+              REPOSITORY: "example/waitron",
+              GITHUB_OUTPUT: join(dir, "output"),
+              MAIN_TAG_GUARD_ENV_OUT: out,
+              STUB_DIR: dir,
+              STUB_STDOUT: docker.stdout ?? "",
+              STUB_STDERR: docker.stderr ?? "",
+              STUB_STATUS: String(docker.status ?? 0),
+            },
+          },
+        );
+        const read = (name) =>
+          existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : null;
+        return {
+          ...result,
+          handBack: read("main-image.env"),
+          dockerArgs: read("docker.args") ?? "",
+          timeoutArgs: read("timeout.args") ?? "",
+          output: read("output"),
+        };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+
+    it("reads `:main`'s settings once, under a time limit, and still tags the release", () => {
+      const result = run({ stdout: "WAITRON_PRODUCER_TAX_ID=00000000T\n" });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.handBack).toContain("WAITRON_PRODUCER_TAX_ID=00000000T");
+      expect(result.dockerArgs.trim().split("\n")).toHaveLength(1);
+      expect(result.dockerArgs).toContain("ghcr.io/example/waitron:main");
+      expect(result.timeoutArgs).toMatch(/^\d+ scripts\/published-image-env\.sh /);
+      expect(result.output).toContain(
+        "tags=ghcr.io/example/waitron:sha-aaaaaaa,ghcr.io/example/waitron:1.2.3",
+      );
+    });
+
+    it("hands back an empty file when nothing is published under `:main` yet", () => {
+      const result = run({
+        stderr: "ERROR: ghcr.io/example/waitron:main: not found",
+        status: 1,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.handBack).toBe("");
+    });
+
+    it("fails the step when the registry refuses the read", () => {
+      const result = run({ stderr: "ERROR: 403 Forbidden", status: 1 });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("403 Forbidden");
+      expect(result.output).not.toContain("tags=");
     });
   });
 

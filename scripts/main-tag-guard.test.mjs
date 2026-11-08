@@ -62,7 +62,7 @@ for (const name of ["docker", "gh"]) {
   chmodSync(path, 0o755);
 }
 
-function runGuard({ docker, gh, argv = [IMAGE, REPOSITORY, SHA], env = {} }) {
+function runGuard({ docker, gh, argv = [IMAGE, REPOSITORY, SHA], env = {}, path = script }) {
   const dir = mkdtempSync(join(tmpdir(), "main-tag-guard-"));
   temporaryDirectories.push(dir);
 
@@ -74,7 +74,7 @@ function runGuard({ docker, gh, argv = [IMAGE, REPOSITORY, SHA], env = {} }) {
     outputs[`WT_${upper}_STATUS`] = String(status);
   }
 
-  const result = spawnSync(script, argv, {
+  const result = spawnSync(path, argv, {
     encoding: "utf8",
     timeout: SPAWN_TIMEOUT_MS,
     env: {
@@ -229,6 +229,52 @@ describe("main-tag-guard.sh", () => {
     const result = runGuard({ docker: ghMustNotRun, gh: ghMustNotRun, argv: [IMAGE] });
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("usage:");
+    expect(result.dockerArgs).toBe("");
+  });
+});
+
+// The registry read both main-tag-guard.sh and the publish job's release-tag path make.
+describe("published-image-env.sh", () => {
+  const readEnv = (docker, argv = [IMAGE]) =>
+    runGuard({
+      docker,
+      gh: ghMustNotRun,
+      argv,
+      path: join(import.meta.dirname, "published-image-env.sh"),
+    });
+
+  it("prints the published image's environment", () => {
+    const result = readEnv({ stdout: `${imageEnv(SHA)}WAITRON_PRODUCER_TAX_ID=00000000T\n` });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("WAITRON_PRODUCER_TAX_ID=00000000T");
+    expect(result.dockerArgs).toContain(IMAGE);
+    expect(result.dockerArgs).toContain("{{range .Image.Config.Env}}{{println .}}{{end}}");
+  });
+
+  it("answers 3, printing nothing, when nothing is published under the ref", () => {
+    const result = readEnv({ stdout: "", stderr: `ERROR: ${IMAGE}: not found`, status: 1 });
+    expect(result.status).toBe(3);
+    expect(result.stdout).toBe("");
+  });
+
+  it("fails with the registry's words when it refuses the read", () => {
+    const result = readEnv({ stdout: "", stderr: "ERROR: 403 Forbidden", status: 1 });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("403 Forbidden");
+  });
+
+  it("fails, not 3, when `not found` refers to something other than the image", () => {
+    const result = readEnv({
+      stdout: "",
+      stderr: "error getting credentials: docker-credential-osxkeychain not found",
+      status: 1,
+    });
+    expect(result.status).toBe(1);
+  });
+
+  it("refuses to run without its argument, reaching nothing", () => {
+    const result = readEnv(ghMustNotRun, []);
+    expect(result.status).toBe(2);
     expect(result.dockerArgs).toBe("");
   });
 });

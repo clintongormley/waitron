@@ -4373,7 +4373,18 @@ jobs:
               ;;
             # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
             # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.
-            refs/tags/v*) tags="$tags,$repo:${REF#refs/tags/v}"; agent_tags="$agent_tags,$agent_repo:${REF#refs/tags/v}" ;;
+            refs/tags/v*)
+              # A release tag moves no `:main`, but the producer guard below still compares with
+              # `:main`'s settings: the same single registry read, with no decision. Exit 3 means
+              # nothing is published under `:main` yet, which leaves the file empty.
+              read_status=0
+              timeout 120 scripts/published-image-env.sh "$repo:main" >"$MAIN_TAG_GUARD_ENV_OUT" || read_status=$?
+              if [ "$read_status" -ne 0 ] && [ "$read_status" -ne 3 ]; then
+                echo "cannot read :main's settings for the producer guard (exit $read_status)" >&2
+                exit 1
+              fi
+              tags="$tags,$repo:${REF#refs/tags/v}"; agent_tags="$agent_tags,$agent_repo:${REF#refs/tags/v}"
+              ;;
           esac
           echo "$tags"; echo "$agent_tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
@@ -4382,8 +4393,8 @@ jobs:
       # A production box refuses to start on a chain made under another producer tax number
       # (`sif.producer_changed`), and nothing can open the new installation a new producer needs
       # until A993. So a new tax number reaches an image only when the repository variable
-      # WAITRON_PRODUCER_CHANGE_ALLOWED holds that new number: one change, and a value left set
-      # allows nothing further. A change of name or address alone is not compared.
+      # WAITRON_PRODUCER_CHANGE_ALLOWED holds that new number. A value left set lets through only a
+      # change to that same number, later included. A change of name or address alone is not compared.
       - name: Refuse a change of the producer's tax number that nobody allowed
         env:
           REF: ${{ github.ref }}
@@ -4393,7 +4404,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f "$MAIN_IMAGE_ENV" ]; then
-            # Only a push to main reads :main (main-tag-guard.sh, in the step above).
+            # The step above writes it on every run that publishes: the nightly schedule or a manual
+            # run on main (through main-tag-guard.sh), or a `v*` tag (directly).
             echo "no read of :main's settings to compare the producer tax number with on $REF" >&2
             exit 1
           fi

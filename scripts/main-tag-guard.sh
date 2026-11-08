@@ -44,37 +44,25 @@ fi
 errors=$(mktemp)
 trap 'rm -f "$errors"' EXIT
 
-# The image's own environment, one `NAME=value` per line — buildx's Go template rather than JSON, so
-# the script needs no parser. Verified against the real published image on 2026-09-16:
-# `docker buildx imagetools inspect ghcr.io/clintongormley/waitron:main --format
-# '{{range .Image.Config.Env}}{{println .}}{{end}}'` printed 15 lines including
-# `WAITRON_BUILD_ID=1c57940…`, anonymously, on an index carrying a provenance attestation.
-#
-# A tag nothing has published yet is the first publish, not a failure. The match is the exact wording
-# buildx gives for that one case (`ERROR: <ref>: not found`, same command, same day) and nothing
-# wider: `not found` on its own also appears in a missing credential helper, a proxy's 404 page and
-# a missing `docker` binary, and reading any of those as "no tag yet" would publish the backwards
-# tag this script exists to prevent. Anything else, including the `403 Forbidden` GHCR answers for a
-# package that does not exist at all, stops the publish and prints the registry's own words.
 hand_back() {
   if [ -n "${MAIN_TAG_GUARD_ENV_OUT:-}" ]; then
     printf '%s' "$published_env" >"$MAIN_TAG_GUARD_ENV_OUT"
   fi
 }
 
-if published_env=$(docker buildx imagetools inspect "$IMAGE" \
-  --format '{{range .Image.Config.Env}}{{println .}}{{end}}' 2>"$errors"); then
-  hand_back
-elif grep -qF "$IMAGE: not found" "$errors"; then
-  cat "$errors" >&2
-  published_env=
-  hand_back
-  echo move
-  exit 0
-else
-  cat "$errors" >&2
-  exit 1
-fi
+# The one registry read, and its exact "not published yet" match, live in published-image-env.sh.
+read_status=0
+published_env=$("$(dirname "$0")/published-image-env.sh" "$IMAGE") || read_status=$?
+case "$read_status" in
+  0) hand_back ;;
+  3)
+    published_env=
+    hand_back
+    echo move
+    exit 0
+    ;;
+  *) exit 1 ;;
+esac
 
 published=$(printf '%s\n' "$published_env" | sed -n 's/^WAITRON_BUILD_ID=//p' | head -1)
 if [ -z "$published" ]; then
