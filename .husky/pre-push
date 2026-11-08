@@ -108,7 +108,7 @@ run_step() {
 
 check_signoff() {
   if [ -z "$commits" ]; then
-    echo "  no commit range — sign-off not checked here; licence.yml's dco job still will"
+    echo "  no commit range — sign-off not checked here; CI's changes job still will"
     return 0
   fi
 
