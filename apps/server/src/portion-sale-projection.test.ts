@@ -473,7 +473,7 @@ describe("A803 monetary comparison: operations on portions through the real path
             vatClass: "reduced",
           })
         ).id;
-      const croquette = await product("Croqueta", "3.33");
+      const croquette = await product("Croquette", "3.33");
       const burger = await product("Burger", "3.33");
       const cheese = await product("Cheese", "0.35");
       const toppings = (
@@ -787,17 +787,17 @@ describe("A803 monetary comparison: operations on portions through the real path
       // (`reprice`, adjustments-apply.ts), so the two undiscounted dishes keep a list price equal to
       // their price; portions the discount never touched keep none.
       expect(today.rows).toEqual([
-        "Croqueta 1.000 gross 2.33 base 2.12 @10.00 list 3.33",
-        "Croqueta 2.000 gross 6.66 base 6.05 @10.00 list 3.33",
+        "Croquette 1.000 gross 2.33 base 2.12 @10.00 list 3.33",
+        "Croquette 2.000 gross 6.66 base 6.05 @10.00 list 3.33",
       ]);
       expect(candidate.rows).toEqual([
-        "Croqueta 1.000 gross 2.33 base 2.12 @10.00 list 3.33",
-        "Croqueta 2.000 gross 6.66 base 6.05 @10.00 list null",
+        "Croquette 1.000 gross 2.33 base 2.12 @10.00 list 3.33",
+        "Croquette 2.000 gross 6.66 base 6.05 @10.00 list null",
       ]);
       // What a sale row records: a list price only where it differs from what was charged.
       expect(await saleRowsOf(tx, todayBill)).toEqual([
-        "Croqueta 1.000 gross 2.33 base 2.12 @10.00 list 3.33 each 3.33",
-        "Croqueta 2.000 gross 6.66 base 6.05 @10.00 list - each -",
+        "Croquette 1.000 gross 2.33 base 2.12 @10.00 list 3.33 each 3.33",
+        "Croquette 2.000 gross 6.66 base 6.05 @10.00 list - each -",
       ]);
       expect(await saleRowsOf(tx, bill.billId, bill.bindings)).toEqual(
         await saleRowsOf(tx, todayBill),
@@ -826,8 +826,8 @@ describe("A803 monetary comparison: operations on portions through the real path
 
       const today = await fileBill(tx, todayBill);
       expect(today.rows).toEqual([
-        expect.stringMatching(/^Croqueta 1\.000 gross 3\.33 base 3\.03 /),
-        expect.stringMatching(/^Croqueta 1\.000 gross 3\.33 base 3\.03 /),
+        expect.stringMatching(/^Croquette 1\.000 gross 3\.33 base 3\.03 /),
+        expect.stringMatching(/^Croquette 1\.000 gross 3\.33 base 3\.03 /),
       ]);
       expect(baseOf(today, "10.00")).toBe("6.06");
     });

@@ -42,9 +42,9 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedLegacySellingUnits(db);
     await seedVenue(db, {
-      name: "Barra",
+      name: "Counter",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "On-premises sale",
     });
     const locationId = await venueLocationId(db);
     // The default station serves an item no routing cell covers.
@@ -59,7 +59,7 @@ const suite = useVenueDb({
 
     // One sellable product no routing cell covers, routed to the default station.
     await withTransaction(db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Carta" });
+      const catalogue = await createCatalogue(tx, { name: "Menu" });
       const coffee = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
@@ -172,7 +172,7 @@ async function placeAndFire(): Promise<string> {
 async function attachPrinterToDefaultStation(): Promise<string> {
   return withTransaction(suite.db, async (tx: Transaction) => {
     const { id } = await createPrinter(tx, {
-      name: `Cocina ${randomUUID()}`,
+      name: `Kitchen ${randomUUID()}`,
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });

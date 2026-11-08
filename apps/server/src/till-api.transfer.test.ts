@@ -64,12 +64,12 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = makeCfg(await venueLocationId(db), nodeId);
     const offers = await withTransaction(db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Carta" });
-      const drinksCategory = await createCategory(tx, { name: "Bebidas" });
+      const cat = await createCatalogue(tx, { name: "Menu" });
+      const drinksCategory = await createCategory(tx, { name: "Drinks" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: drinksCategory.id,
-        name: "Café",
+        name: "Espresso",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -147,7 +147,7 @@ async function openSession(db: Database): Promise<string> {
   return session.token;
 }
 
-/** Seeds two open bills of one party (tab A carries one café line at quantity `aQty`, tab B is
+/** Seeds two open bills of one party (tab A carries one espresso line at quantity `aQty`, tab B is
  * empty) plus a mounted app and a logged-in cookie, for the tests below to drive
  * `POST /api/bills/:id/transfer` against. */
 async function setupTabsApp(
