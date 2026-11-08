@@ -1,9 +1,24 @@
 import {
   assertNoStartAgainDeletion,
+  assertNotAhead,
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "@waitron/provisioning";
-import { chmod, copyFile, mkdtemp, open, readFile, rename, rm, stat } from "node:fs/promises";
+import { nodes, openVenueDatabase } from "@waitron/db";
+import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
+import { orderedMigrationSets, type OperationBinding, type ProvisionedNode } from "@waitron/module";
+import { eq } from "drizzle-orm";
+import {
+  chmod,
+  copyFile,
+  lstat,
+  mkdtemp,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { VENUE_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
@@ -15,6 +30,7 @@ import { ALL_MODULES } from "./modules.js";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
   lockRestoreTarget,
+  readArtifactNode,
   restoreFromArtifactFile,
   validateArtifactFile,
   validateDatabaseEntries,
@@ -431,6 +447,43 @@ export async function runStagedRestore(
   }
 }
 
+async function restartUncommittedPlacement(
+  deps: StagedRestoreDeps,
+  node: ProvisionedNode,
+  binding: OperationBinding,
+): Promise<boolean> {
+  const refuse = (): never => {
+    throw new AppError("module.operation_invalid", { module: binding.module });
+  };
+  const reader = ALL_MODULES.find((module) => module.name === binding.module)?.operations
+    ?.readRecoveryState;
+  if (reader === undefined) return refuse();
+  try {
+    if (!(await lstat(join(deps.venueDir, VENUE_FILE))).isFile()) return refuse();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw error;
+  }
+  const destination = await openVenueDatabase(deps.venueDir);
+  try {
+    const sets = orderedMigrationSets(ALL_MODULES);
+    await assertNotAhead(destination, sets, deps.migrationsRoot);
+    await applyMigrations(deps.venueDir, migrationOptionsFor(sets, deps.migrationsRoot));
+    const [known] = await destination.venue
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(eq(nodes.id, node.nodeId))
+      .limit(1);
+    if (known === undefined) return true;
+    const state = await reader(destination.venue, node, binding);
+    if (state.priorActivation === "none") return true;
+    if (state.priorActivation === "committed") return false;
+    return refuse();
+  } finally {
+    await destination.close();
+  }
+}
+
 async function runHeld(
   deps: StagedRestoreDeps,
   raw: string,
@@ -440,6 +493,7 @@ async function runHeld(
 ): Promise<boolean> {
   let managedCloud: { requestId: string; pointId: string } | undefined;
   let resuming = false;
+  let restartPlacement = false;
   let markedStarted = false;
   let placed = false;
   let uncommitted = false;
@@ -549,6 +603,12 @@ async function runHeld(
           secret,
           context,
         });
+        if (resuming)
+          restartPlacement = await restartUncommittedPlacement(
+            deps,
+            await readArtifactNode(copy),
+            operation.binding,
+          );
       } finally {
         await copy.discard();
       }
@@ -562,7 +622,9 @@ async function runHeld(
       environment,
       log: deps.log,
       ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
-      ...(resuming && operation !== undefined ? { resumeOperation: operation.binding } : {}),
+      ...(resuming && !restartPlacement && operation !== undefined
+        ? { resumeOperation: operation.binding }
+        : {}),
       onDatabasePlaced: () => {
         placed = true;
       },
@@ -574,7 +636,7 @@ async function runHeld(
     if (marker.kind === "stream") {
       const packed = await readFile(join(deps.stateDir, STREAM_ENTRIES));
       let databasePath = join(deps.stateDir, STREAM_DB);
-      if (marker.nodeRecoveryKey === true && !resuming) {
+      if (marker.nodeRecoveryKey === true && (!resuming || restartPlacement)) {
         databasePath = join(deps.stateDir, STREAM_PLACEMENT);
         await copyFile(join(deps.stateDir, STREAM_DB), databasePath);
         await chmod(databasePath, 0o600);

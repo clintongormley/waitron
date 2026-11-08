@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import nativeFs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
-import { cp, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rename, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -10,6 +10,7 @@ import {
   readStandardSeriesId,
   sales,
   nodes,
+  locations,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -90,12 +91,12 @@ it("refuses a resumed database from a newer image before migration or hour admis
   expect(JSON.parse(await readFile(markerPath, "utf8")).placementStarted).toBe(true);
 });
 
-it("refuses a resume without a placed database instead of treating the stage marker as permission", async () => {
+it("restarts a marked restore without a placed database after authenticating its selected source", async () => {
   const f = await stage("archive");
   await markPlaced(f.stateDir);
   const journal = f.journal();
-  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
-  expect(f.journal()).toBe(journal);
+  await expect(f.run()).resolves.toBe(true);
+  await expectFinishedRetry(f, journal);
 });
 
 it.each([
@@ -420,23 +421,242 @@ it.each(["archive", "stream"] as const)(
   },
 );
 
+async function expectFinishedRetry(f: Awaited<ReturnType<typeof stage>>, journal: string) {
+  expect(f.journal()).toBe(journal);
+  const active = await f.snapshot();
+  expect(active.records).toEqual(f.originalRecords);
+  expect(active.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
+  expect(active.allocations.slice(0, 1)).toEqual(await suite.db.select().from(fiscalAllocations));
+  expect(active.allocations.filter((row) => row.eventKey === f.binding.eventId)).toHaveLength(1);
+  expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
+  const files = await readdir(f.stateDir);
+  for (const file of [
+    "restore-request.json",
+    "restore-request.node-key",
+    "restore-request.artifact",
+    "restore-request.key",
+    "restore-request.db",
+    "restore-request.entries",
+    "restore-request.placement.db",
+  ])
+    expect(files).not.toContain(file);
+  await expect(f.run()).resolves.toBe(false);
+  expect(await f.snapshot()).toEqual(active);
+}
+
 it.each(["archive", "stream"] as const)(
-  "a %s stage marker cannot substitute for a committed activation",
+  "restarts a marked %s placement when its authenticated destination has no committed activation",
   async (kind) => {
     const f = await stage(kind);
     await cp(f.databasePath, join(f.venueDir, "venue.db"));
     await suite.node.archiveTo(join(f.venueDir, "node.db"));
     await markPlaced(f.stateDir);
     const original = await f.snapshot();
-    await expect(f.run()).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "prior_activation_requires_replay" },
-    });
-    expect(await f.snapshot()).toEqual(original);
     expect(original.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
-    await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    const journal = f.journal();
+    await expect(f.run()).resolves.toBe(true);
+    await expectFinishedRetry(f, journal);
+    expect((await f.snapshot()).allocations.slice(0, 1)).toEqual(original.allocations);
+  },
+);
+
+it("migrates a behind-schema destination before deciding whether placement can restart", async () => {
+  const f = await stage("archive");
+  const destination = await openVenueDatabase(f.venueDir);
+  await destination.close();
+  await markPlaced(f.stateDir);
+  const journal = f.journal();
+  await expect(f.run()).resolves.toBe(true);
+  await expectFinishedRetry(f, journal);
+});
+
+it("restarts over a destination that contains only another node", async () => {
+  const f = await stage("archive");
+  await applyMigrations(f.venueDir, migrationOptionsFor(orderedMigrationSets(ALL_MODULES), null));
+  const destination = await openVenueDatabase(f.venueDir);
+  try {
+    const other = (await suite.db.select().from(nodes)).find((row) => row.id !== f.node.nodeId)!;
+    await destination.venue.insert(locations).values(await suite.db.select().from(locations));
+    await destination.venue.insert(nodes).values(other);
+  } finally {
+    await destination.close();
+  }
+  await markPlaced(f.stateDir);
+  const journal = f.journal();
+  await expect(f.run()).resolves.toBe(true);
+  await expectFinishedRetry(f, journal);
+});
+
+it("keeps a started stream request when its fresh placement copy cannot be written", async () => {
+  const f = await stage("stream");
+  await f.seedDestination();
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = await readFile(markerPath, "utf8");
+  const source = await readFile(join(f.stateDir, "restore-request.db"));
+  failEvery(
+    "copyFile",
+    (_from, to) => to === join(f.stateDir, "restore-request.placement.db"),
+    enospc(),
+  );
+  await expect(f.run()).rejects.toMatchObject({ code: "ENOSPC" });
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
+  expect(await readFile(markerPath, "utf8")).toBe(marker);
+  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
+  expect(await readFile(join(f.stateDir, "restore-request.db"))).toEqual(source);
+  const journal = f.journal();
+  await expect(f.run()).resolves.toBe(true);
+  await expectFinishedRetry(f, journal);
+});
+
+it("keeps a request when the original marker cannot be restored after an uncommitted failure", async () => {
+  const f = await stage("archive");
+  let writes = 0;
+  const markerPath = join(f.stateDir, "restore-request.json");
+  const rename = nativeFs.rename;
+  vi.spyOn(nativeFs, "rename").mockImplementation(async (...args) => {
+    if (String(args[1]) === markerPath && ++writes === 2) throw enospc();
+    return rename(...args);
+  });
+  syncBuiltinESMExports();
+  const failure = enospc();
+  const restore = async () => {
+    throw failure;
+  };
+  await expect(runStagedRestore(f.restore, restore)).rejects.toMatchObject({ code: "ENOSPC" });
+  expect(writes).toBe(2);
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
+  expect(JSON.parse(await readFile(markerPath, "utf8")).placementStarted).toBe(true);
+  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
+  const journal = f.journal();
+  await expect(f.run()).resolves.toBe(true);
+  await expectFinishedRetry(f, journal);
+});
+
+it("retains a started request when the destination path is not a regular file", async () => {
+  const f = await stage("archive");
+  await mkdir(join(f.venueDir, "venue.db"));
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = await readFile(markerPath, "utf8");
+  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect(await readFile(markerPath, "utf8")).toBe(marker);
+  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
+});
+
+it("refuses a destination link before opening or migrating its target", async () => {
+  const f = await stage("archive");
+  const target = join(f.root, "linked.db");
+  const original = Buffer.alloc(0);
+  await writeFile(target, original);
+  await symlink(target, join(f.venueDir, "venue.db"));
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = await readFile(markerPath, "utf8");
+  const journal = f.journal();
+  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect((await readFile(target)).byteLength).toBe(original.byteLength);
+  expect(await readFile(markerPath, "utf8")).toBe(marker);
+  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
+  expect(f.journal()).toBe(journal);
+});
+
+it("keeps a corrupt destination as evidence and retries the same request after it is moved aside", async () => {
+  const f = await stage("archive");
+  const file = join(f.venueDir, "venue.db");
+  const corrupt = Buffer.from("not a SQLite database");
+  await writeFile(file, corrupt);
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = await readFile(markerPath, "utf8");
+  const journal = f.journal();
+  await expect(f.run()).rejects.toMatchObject({ code: "ERR_SQLITE_ERROR", errcode: 26 });
+  await expect(f.nextEvent()).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect(await readFile(markerPath, "utf8")).toBe(marker);
+  expect(await readFile(file)).toEqual(corrupt);
+  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
+  const kept = join(f.venueDir, "venue.db.unreadable");
+  await rename(file, kept);
+  await expect(f.run()).resolves.toBe(true);
+  expect(await readFile(kept)).toEqual(corrupt);
+  await expectFinishedRetry(f, journal);
+});
+
+it("refuses a changed target node before reading destination recovery state", async () => {
+  const f = await stage("archive");
+  await f.seedDestination();
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = JSON.parse(await readFile(markerPath, "utf8"));
+  marker.recoveryOperation.binding.targetNodeId = "00000000-0000-4000-8000-000000000001";
+  const altered = JSON.stringify(marker);
+  await writeFile(markerPath, altered);
+  const original = await f.snapshot();
+  const journal = f.journal();
+  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect(await readFile(markerPath, "utf8")).toBe(altered);
+  expect(await f.snapshot()).toEqual(original);
+  expect(f.journal()).toBe(journal);
+});
+
+it("refuses a destination with the selected node but invalid recovery facts", async () => {
+  const f = await stage("archive");
+  await applyMigrations(f.venueDir, migrationOptionsFor(orderedMigrationSets(ALL_MODULES), null));
+  const destination = await openVenueDatabase(f.venueDir);
+  try {
+    await destination.venue.insert(locations).values(await suite.db.select().from(locations));
+    await destination.venue
+      .insert(nodes)
+      .values((await suite.db.select().from(nodes)).find((row) => row.id === f.node.nodeId)!);
+  } finally {
+    await destination.close();
+  }
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = await readFile(markerPath, "utf8");
+  const original = await f.snapshot();
+  await expect(f.run()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+  expect(await readFile(markerPath, "utf8")).toBe(marker);
+  expect(await f.snapshot()).toEqual(original);
+});
+
+it("refuses and retains staging without a module recovery-state reader", async () => {
+  const f = await stage("archive");
+  await f.seedDestination();
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = await readFile(markerPath, "utf8");
+  const original = await f.snapshot();
+  const operations = ALL_MODULES.find((module) => module.name === f.binding.module)!.operations!;
+  const reader = operations.readRecoveryState!;
+  delete operations.readRecoveryState;
+  try {
+    await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
+  } finally {
+    operations.readRecoveryState = reader;
+  }
+  expect(await readFile(markerPath, "utf8")).toBe(marker);
+  expect(await f.snapshot()).toEqual(original);
+  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
+});
+
+it.each(["unknown", "throw"] as const)(
+  "refuses and retains staging when activation state is %s",
+  async (state) => {
+    const f = await stage("archive");
+    await f.seedDestination();
+    const markerPath = await markPlaced(f.stateDir);
+    const marker = await readFile(markerPath, "utf8");
+    const original = await f.snapshot();
+    const operations = ALL_MODULES.find((module) => module.name === f.binding.module)!.operations!;
+    const read = vi.spyOn(operations, "readRecoveryState");
+    if (state === "throw")
+      read.mockRejectedValueOnce(
+        new AppError("module.operation_invalid", { module: f.binding.module }),
+      );
+    else read.mockResolvedValueOnce({ priorActivation: "unknown" } as never);
+    await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
+    expect(await readFile(markerPath, "utf8")).toBe(marker);
+    expect(await f.snapshot()).toEqual(original);
+    expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
   },
 );
 
@@ -720,11 +940,10 @@ for (const kind of ["archive", "stream"] as const)
         const original = await f.snapshot();
         expect(original.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
         expect(original.records).toEqual(f.originalRecords);
-        await expect(f.run()).rejects.toMatchObject({
-          code: "sif.allocation_invalid",
-          params: { reason: "prior_activation_requires_replay" },
-        });
-        expect(await f.snapshot()).toEqual(original);
+        await expect(f.run()).resolves.toBe(true);
+        await expectFinishedRetry(f, journal);
+        expect((await f.snapshot()).allocations.slice(0, 1)).toEqual(original.allocations);
+        return;
       }
       // The settle wait alone ends at 12:40, the killed restore's name (0CNQR).
       vi.setSystemTime(new Date("2026-10-16T12:38:00Z"));
