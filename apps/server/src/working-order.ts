@@ -7188,20 +7188,20 @@ function rowPortions(
 }
 
 /**
- * What makes two stored dishes one Sent row: product, offer, note, options answer and extras, by
- * value, so neither key order nor list order tells two alike dishes apart.
+ * What every dish of one Sent row must share, as the server checks it: product, offer, note,
+ * options answer and extras, by value, so neither key order nor list order tells them apart.
  */
 function sameDishKey(dish: EditableParent): string {
   return canonicalJson({
-    productId: dish.productId?.toLowerCase() ?? null,
-    menuItemId: dish.menuItemId?.toLowerCase() ?? null,
+    productId: dish.productId ?? null,
+    menuItemId: dish.menuItemId ?? null,
     note: dish.note,
     options: dish.optionSnapshots.map(canonicalJson).sort(),
     extras: dish.children
       .map((child) =>
         canonicalJson({
-          listId: child.extraListId?.toLowerCase() ?? null,
-          productId: child.productId?.toLowerCase() ?? null,
+          listId: child.extraListId ?? null,
+          productId: child.productId ?? null,
           perDish: perDishExtraPicks(child.quantity, dish.quantity, child.priceQuantity),
         }),
       )

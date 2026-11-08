@@ -76,6 +76,9 @@ import {
   type OrderLinePatch,
 } from "./working-order.js";
 import { recallToDraft } from "./draft-recall.js";
+import { createPrinter } from "@waitron/printing";
+import { attachPrinterToStation } from "./station-printers.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
 import { finishTable, seatTable, partyRevisionOfOrder } from "./testing/party-close-fixture.js";
 import "./errors.js";
@@ -2769,17 +2772,14 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   });
 
   describe("one save changes every dish of a sent row, and only raises its count", () => {
-    /** A tab with two identical cafés sent as one round, at lines 1 and 2. */
+    /** A tab opened with two identical cafés, sent, at lines 1 and 2, each its own portion. */
     async function tabWithTwoSentCoffees() {
       const venue = await setupVenue();
       const { cfg, tableId, coffeeOffer } = venue;
-      const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-      await asApp(cfg, (tx) =>
-        addTabRound(tx, cfg, tabId, [
-          { menuItemId: coffeeOffer, quantity: "1" },
-          { menuItemId: coffeeOffer, quantity: "1" },
-        ]),
+      const { tabId } = await asApp(cfg, (tx) =>
+        openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: coffeeOffer, quantity: "2" }] }),
       );
+      await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
       const tickets = [await ticketOfLine(tabId, 1), await ticketOfLine(tabId, 2)];
       return { ...venue, tabId, tickets };
     }
@@ -2792,12 +2792,30 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     it("a change to a sent, not-started row recalls and re-fires both of its dishes", async () => {
       const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
       const before = await linesOf(tabId);
+      const printerId = await asApp(cfg, async (tx) => {
+        const { id } = await createPrinter(tx, {
+          name: "Bar printer",
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        });
+        await attachPrinterToStation(tx, { stationId: tickets[0]!.stationId, printerId: id });
+        return id;
+      });
 
       await editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] });
 
+      const slips = (
+        await db
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(eq(printJobs.printerId, printerId))
+      ).map((job) => decodeTicket(job.payload));
+      const recalledSlips = slips.filter((slip) => slip.includes("RECALLED"));
+      expect(recalledSlips).toHaveLength(1);
+      expect(recalledSlips[0]).toContain("2 x ES coffee");
+
       expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([
-        { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
-        { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
+        { kind: "recalled", lineName: "ES coffee", quantity: "2.000", wasStarted: false },
       ]);
       for (const [index, lineNo] of [1, 2].entries()) {
         const fresh = await ticketRow(tabId, lineNo);
@@ -2831,6 +2849,19 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
       expect(added).toMatchObject({ quantity: 1000, state: "queued" });
       expect(added!.firedAt).not.toBeNull();
       expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([]);
+    });
+
+    it("accepts a total equal to the row's count with a change, adding no dish", async () => {
+      const { cfg, tabId } = await tabWithTwoSentCoffees();
+
+      await editRow(cfg, tabId, { quantity: "2", note: "no onions", portionLineNos: [2] });
+
+      expect(await linesOf(tabId)).toEqual([
+        expect.objectContaining({ lineNo: 1, quantity: 1000 }),
+        expect.objectContaining({ lineNo: 2, quantity: 1000 }),
+      ]);
+      expect(await ticketRow(tabId, 1)).toMatchObject({ note: "no onions" });
+      expect(await ticketRow(tabId, 2)).toMatchObject({ note: "no onions" });
     });
 
     it("refuses a change to a row whose second dish is started, changing nothing", async () => {
