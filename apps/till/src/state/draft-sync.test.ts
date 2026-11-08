@@ -1006,6 +1006,40 @@ describe("DraftSync: reads and saves stop passing each other", () => {
     expect(server.saveDraft).toHaveBeenCalledOnce();
   });
 
+  it("a read that waited for saves leaves nothing waiting for an abort once it answers", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    const releaseFirst = holdSaveAnswer();
+    await settle();
+    const listening: AbortSignal[] = [];
+    const add = EventTarget.prototype.addEventListener;
+    const listen = vi.spyOn(EventTarget.prototype, "addEventListener").mockImplementation(function (
+      this: EventTarget,
+      type,
+      ...rest
+    ) {
+      if (this instanceof AbortSignal && type === "abort") listening.push(this);
+      add.call(this, type, ...rest);
+    });
+    try {
+      const reading = draft.load();
+      await vi.advanceTimersByTimeAsync(0);
+      draft.store.addProduct(steak, "1");
+      const releaseSecond = holdSaveAnswer();
+      void draft.flush();
+      releaseFirst();
+      await vi.advanceTimersByTimeAsync(0);
+      releaseSecond();
+
+      expect(await reading).toBe(true);
+      expect(listening.length).toBeGreaterThan(1);
+      expect(listening.filter((signal) => !signal.aborted)).toEqual([]);
+    } finally {
+      listen.mockRestore();
+    }
+  });
+
   it("a save starting while a read is out makes that read not count, and a new one follows the save", async () => {
     const draft = sync();
     await draft.load();

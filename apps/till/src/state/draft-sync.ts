@@ -549,11 +549,14 @@ export class DraftSync {
   ): Promise<boolean> {
     for (;;) {
       const wait = limited(waitLimitMs, stop);
-      while (this.#saveAhead && !this.#readDeclined && !wait.signal.aborted)
+      while (this.#saveAhead && !this.#readDeclined && !wait.signal.aborted) {
+        const turn = new AbortController();
         await Promise.race([
           this.#queue,
-          pause(AbortSignal.any([wait.signal, this.#readWake.signal])),
+          pause(AbortSignal.any([wait.signal, this.#readWake.signal, turn.signal])),
         ]);
+        turn.abort();
+      }
       wait.done();
       if (stop.aborted || this.#saveAhead || this.#readDeclined) return false;
       const queue = this.#queue;
@@ -583,18 +586,20 @@ export class DraftSync {
       bounds?.limitMs ?? this.#options.requestLimitMs,
       stops.length === 0 ? undefined : AbortSignal.any(stops),
     );
+    const answered = new AbortController();
     let answer;
     try {
       // What a read answers past its limit goes nowhere, whether or not its request stopped.
       answer = await Promise.race([
         this.#options.api.listDrafts(this.partyId, { signal: limit.signal }),
-        pause(limit.signal).then(() => {
+        pause(AbortSignal.any([limit.signal, answered.signal])).then(() => {
           throw new DOMException("A drafts read ended", "AbortError");
         }),
       ]);
     } catch {
       return false;
     } finally {
+      answered.abort();
       limit.done();
     }
     if (
