@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { PERSON_HEADER } from "@waitron/shared";
+import clientSource from "./client.ts?raw";
 import {
   SESSION_PERSON_REFUSAL,
   TillApi,
@@ -6185,6 +6186,20 @@ describe("TillApi: the tab's person on every request", () => {
       status: 409,
     });
     expect(onRefused).toHaveBeenCalledOnce();
+  });
+
+  // Reads client.ts as TEXT: it finds the name `#fetchImpl`, not a fetch reached some other way.
+  it("reads #fetchImpl only in its declaration, the constructor and #fetchFor, so no request skips the person (a text check)", () => {
+    const start = clientSource.indexOf("\n  #fetchFor(");
+    const end = clientSource.indexOf("\n  }\n", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(clientSource.slice(start, end)).toContain("this.#fetchImpl");
+    const elsewhere = (clientSource.slice(0, start) + clientSource.slice(end))
+      .split("\n")
+      .filter((line) => line.includes("#fetchImpl"))
+      .map((line) => line.trim());
+    expect(elsewhere).toEqual(["readonly #fetchImpl: FetchLike;", "this.#fetchImpl = fetchImpl;"]);
   });
 
   it("logout takes no argument and sends no body", async () => {

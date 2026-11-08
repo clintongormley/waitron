@@ -3,13 +3,12 @@ export async function readTransferEvents(
   fetchImpl: typeof fetch,
   reload: (event: "ready" | "change") => void,
   signal?: AbortSignal,
-  headers: Record<string, string> = {},
   onRefused: (code: string) => void = () => {},
 ): Promise<void> {
   const response = await fetchImpl(url, {
     method: "GET",
     credentials: "include",
-    headers: { ...headers, accept: "text/event-stream" },
+    headers: { accept: "text/event-stream" },
     ...(signal === undefined ? {} : { signal }),
   });
   if (!response.ok) {

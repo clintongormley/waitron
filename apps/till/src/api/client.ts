@@ -2622,6 +2622,24 @@ export class TillApi {
     this.#personRefused = onRefused;
   }
 
+  /**
+   * The one place a request gets its `fetch`: it names `person` on every call when there is one.
+   * `fetchImpl` is read into a local so it is invoked as a free function, not as a method of `this`
+   * (which would rebind a native `fetch`).
+   */
+  #fetchFor(person: SessionPerson | null): FetchLike {
+    const fetchImpl = this.#fetchImpl;
+    if (person === null) return fetchImpl;
+    return (input, init) =>
+      fetchImpl(input, {
+        ...init,
+        headers: {
+          ...(init?.headers as Record<string, string> | undefined),
+          [PERSON_HEADER]: person.personId,
+        },
+      });
+  }
+
   #noticeRefusal(code: string, person: SessionPerson | null): void {
     if (person === null || code !== SESSION_PERSON_REFUSAL) return;
     try {
@@ -2726,10 +2744,9 @@ export class TillApi {
     const person = this.#personSource?.() ?? null;
     return readTransferEvents(
       this.#baseUrl + "/api/department-transfers/events",
-      this.#fetchImpl,
+      this.#fetchFor(person),
       reload,
       options.signal,
-      person === null ? {} : { [PERSON_HEADER]: person.personId },
       (code) => this.#noticeRefusal(code, person),
     );
   }
@@ -4883,13 +4900,11 @@ export class TillApi {
   }
 
   /**
-   * The one request path every method funnels through. A non-2xx becomes a rejected
+   * The request path every method but the transfer stream takes; both get their `fetch` from
+   * `#fetchFor`. A non-2xx becomes a rejected
    * `{ ...params, code, status }` read from the server's `{ error: { code, params } }` envelope, falling
    * back to `server.internal` when the body names no code, so callers branch on a stable domain code;
    * `status` is the answered HTTP status.
-   *
-   * `fetchImpl` is read into a local so it is invoked as a free function, not as a method of `this`
-   * (which would rebind a native `fetch`).
    *
    * A 2xx with an EMPTY body resolves to `undefined`, where `res.json()` would throw; a method
    * whose route answers one types `T` as `void`.
@@ -4904,7 +4919,6 @@ export class TillApi {
       namesPerson = true,
     }: { headers?: Record<string, string>; namesPerson?: boolean } = {},
   ): Promise<T> {
-    const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
       body === undefined
         ? { method, credentials: "include" }
@@ -4915,11 +4929,10 @@ export class TillApi {
             body: JSON.stringify(body),
           };
     const person = namesPerson ? (this.#personSource?.() ?? null) : null;
-    if (person !== null) headers = { ...headers, [PERSON_HEADER]: person.personId };
     if (headers !== undefined)
       init.headers = { ...(init.headers as Record<string, string> | undefined), ...headers };
     if (signal !== undefined) init.signal = signal;
-    const res = await fetchImpl(this.#baseUrl + path, init);
+    const res = await this.#fetchFor(person)(this.#baseUrl + path, init);
     if (!res.ok) {
       // The body is untrusted: it may not be JSON, and the literal `null` is valid JSON, so the parsed
       // value is checked for being an object before `.error` is read off it.
