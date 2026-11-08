@@ -496,7 +496,7 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 
 ## Bundle: One repeated-run rig, then each named test
 
-8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
 except the last, added on 2026-11-07.
 
 - **A local four-file till browser run ended without a completed-file report.**
@@ -520,14 +520,6 @@ except the last, added on 2026-11-07.
   or a child that exits once its result is flushed), to be proved by a reproduction that delays the
   child's exit.
 
-- **A1434. A handover copy retry reached its second download but not its second comparison.**
-  Main CI [42457416731, server shard 8](https://github.com/clintongormley/waitron/actions/runs/42457416731/job/128659611844)
-  failed `handover-fetch.test.ts:1431` on 2026-11-08: the `copy_mismatch` case saw one comparison
-  instead of a second. Both mismatch/damaged cases pass in a focused local run, which does not
-  reproduce or fix the hosted failure. Capture the second download/comparison boundary under
-  the hosted shard before changing the wait or product code; no matching earlier failure was
-  found in the lane notes/backlog search. A1434 owns the comparison with A1432's parent and
-  the root-cause fix; retain every assertion.
 
 ## Bundle: Replace 14 "if it happens again" entries with one table in `docs/backlog/ci
 

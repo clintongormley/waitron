@@ -1,5 +1,10 @@
 # Testing guide
 
+## A counted copy request has not finished downloading
+
+When you wait for a comparison after a copy request arrives, give that wait time for the
+download and disk flush too. The request counter advances before either has finished.
+
 ## Count image requests as they are delivered
 
 When a retry test counts resource requests, observe the resource entries as they arrive with a
