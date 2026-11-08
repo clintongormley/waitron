@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { nodes, readVenueClock, type Transaction } from "@waitron/db";
 import { businessDayAt, businessDayBoundaryAt, businessDayBounds } from "@waitron/shared";
@@ -250,8 +250,5 @@ export function reversedSalesClause(window: WindowClause): SQL {
 export function nodeScopeClause(nodeIds?: readonly NodeId[], column: SQL = sql`s.node_id`): SQL {
   if (nodeIds === undefined) return sql``;
   if (nodeIds.length === 0) throw new Error("reporting: empty box list");
-  return sql`and ${column} in (${sql.join(
-    nodeIds.map((id) => sql`${id}`),
-    sql`, `,
-  )})`;
+  return sql`and ${inArray(column, [...nodeIds])}`;
 }

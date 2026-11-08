@@ -1,4 +1,4 @@
-import { sql, type SQL } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import type { Database, DeploymentEnvironment, Transaction } from "@waitron/db";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
@@ -40,13 +40,6 @@ export interface ReconcileScope {
   readonly historyNodeIds: readonly string[];
   readonly taxpayerId: string;
   readonly environment: DeploymentEnvironment;
-}
-
-export function inHistory(column: SQL, scope: ReconcileScope): SQL {
-  return sql`${column} in (${sql.join(
-    scope.historyNodeIds.map((id) => sql`${id}`),
-    sql`, `,
-  )})`;
 }
 
 /**
@@ -291,14 +284,16 @@ async function rowsForPeriod(
     scope === undefined
       ? sql``
       : sql`
-    and ${inHistory(sql`r.node_id`, scope)}
+    and ${inArray(sql`r.node_id`, [...scope.historyNodeIds])}
     and r.id_emisor_factura = ${scope.taxpayerId}
     and r.entorno = ${scope.environment}
   `;
   // A box that took over may cancel an invoice another box in its history issued, so the same
   // invoice's records sit on two boxes under two installations.
   const knownNode =
-    scope === undefined ? sql`known.node_id = r.node_id` : inHistory(sql`known.node_id`, scope);
+    scope === undefined
+      ? sql`known.node_id = r.node_id`
+      : inArray(sql`known.node_id`, [...scope.historyNodeIds]);
   const sameInvoice = sql`
         known.sale_id = r.sale_id and ${knownNode}
           and known.id_emisor_factura = r.id_emisor_factura
