@@ -60,6 +60,12 @@ Read from the code on 2026-10-17, not run:
 
 2026-11-04 pointer: A1308 makes the order line the dish's identity, replacing the portion row ([design](2026-11-02-rationalisation/tables-ordersales.md), §1.2).
 
+2026-11-08 (A1308): the order line is the dish's identity. A dish is born with its line, moves with
+it between bills, and is cancelled when its line is deleted; there is no separate portion row. A
+move keeps the line's id; a split leaves the original line its id and gives the split-off row a new
+one (`splitRow`, `apps/server/src/working-order.ts:4988-4995`). Everything else in this section is
+unchanged.
+
 - Every order line holds **one portion of one dish**, with that portion's own extras. "2 ×
   Hamburguesa" is two lines. "Burger with chips" and "burger with double chips" are two different
   lines, so the kitchen and the bill both know which is which.
@@ -155,6 +161,12 @@ Boards 08–10.
 ### 3.9 "La cuenta": the pre-bill
 
 2026-11-04 pointer: the owner chose to build this now without waiting for S2 (backlog A446), and A1308 makes the order line the dish's identity, replacing the portion row.
+
+2026-11-08 (A1308, A446): read "portions" below as "order lines". A printed pre-bill records the
+order line ids it listed, with no foreign key, because a cancelled dish's line is deleted. A moved
+line keeps its id, so the pre-bill still reaches the invoice that line is sold on, through
+`sale_line_dishes`; a row split off after printing has a new id the pre-bill does not list (A446's
+plan decides whether that matters). A pre-bill whose line was deleted later keeps its printed copy.
 
 Subject to the asesor (S2, `docs/compliance/asesor-questions.md`); backlog A446 holds the storage
 rule.
