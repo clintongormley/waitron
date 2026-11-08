@@ -157,12 +157,12 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     const cat = await createCatalogue(tx, {
       name: `Bill payments issue clock menu ${cfg.locationId}`,
     });
-    const platos = await createCategory(tx, { name: "Platos" });
+    const dishes = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
         catalogueId: cat.id,
-        categoryId: platos.id,
+        categoryId: dishes.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },
         kitchenName: item.kitchen,

@@ -138,10 +138,10 @@ async function setupVenue(): Promise<Seeded> {
     offers,
   } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "ES drinks" });
+    const drinks = await createCategory(tx, { name: "ES drinks" });
     const coffeeProduct = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "ES coffee",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -149,7 +149,7 @@ async function setupVenue(): Promise<Seeded> {
     });
     const waterProduct = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
@@ -175,7 +175,7 @@ async function setupVenue(): Promise<Seeded> {
       coffeeMenuItemId: coffeeMenuItem.id,
       waterMenuItemId: waterMenuItem.id,
       menuId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       tableId: table.id,
       offers,
     };
@@ -783,11 +783,11 @@ describe("readTabLines", () => {
     const entrantes = await asApp(cfg, (tx) =>
       createCourse(tx, { name: "Entrantes", displayOrder: 0 }),
     );
-    const postres = await asApp(cfg, (tx) =>
+    const desserts = await asApp(cfg, (tx) =>
       createCourse(tx, { name: "Postres", displayOrder: 1 }),
     );
     await asApp(cfg, (tx) => setProductCourse(tx, coffeeId, entrantes.id));
-    await asApp(cfg, (tx) => setProductCourse(tx, waterId, postres.id));
+    await asApp(cfg, (tx) => setProductCourse(tx, waterId, desserts.id));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -796,15 +796,15 @@ describe("readTabLines", () => {
       ]),
     );
 
-    await asApp(cfg, (tx) => deleteCourse(tx, postres.id));
+    await asApp(cfg, (tx) => deleteCourse(tx, desserts.id));
     const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     const coffeeLine = lines.find((l) => l.productId === coffeeId)!;
     const waterLine = lines.find((l) => l.productId === waterId)!;
     // The earliest course fires on send; a later one is held.
     expect(coffeeLine.courseId).toBe(entrantes.id);
     expect(coffeeLine.firedAt).not.toBeNull();
-    expect(waterLine.courseId).toBe(postres.id);
-    expect(waterLine.course).toEqual({ id: postres.id, name: "Postres", displayOrder: 1 });
+    expect(waterLine.courseId).toBe(desserts.id);
+    expect(waterLine.course).toEqual({ id: desserts.id, name: "Postres", displayOrder: 1 });
     expect(waterLine.firedAt).toBeNull();
     // Held versus fired is `firedAt`: a held line has a ticket item too, still "queued".
     expect(coffeeLine.state).toBe("queued");

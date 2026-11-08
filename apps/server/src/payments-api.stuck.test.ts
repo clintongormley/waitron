@@ -211,10 +211,10 @@ async function setup(
   });
   const seeded = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -223,7 +223,7 @@ async function setup(
     await assignCatalogueToVenue(tx, cat.id);
     const available = (await listAvailableProducts(tx)).products;
     const offers = await offerProducts(tx, cfg);
-    const cafe = available.find((p) => p.name === "Café")!;
+    const coffee = available.find((p) => p.name === "Café")!;
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -242,7 +242,7 @@ async function setup(
       },
     });
     return {
-      menuItemId: offers.offerFor(cafe.id),
+      menuItemId: offers.offerFor(coffee.id),
       zoneId: offers.zoneId,
       managerId: mgr!.id,
       managerSid: (await startManagementSession(tx, { personId: mgr!.id })).token,

@@ -270,9 +270,9 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     expect(flan.groupId).not.toBeNull();
     expect(flan.firedAt).toBeNull();
     expect((await groupRow(flan.groupId!)).state).toBe("held");
-    const agua = lines.find((line) => line.name === "Agua")!;
-    expect(agua.course).toBeUndefined();
-    expect((await groupRow(agua.groupId!)).state).toBe("fired");
+    const water = lines.find((line) => line.name === "Agua")!;
+    expect(water.course).toBeUndefined();
+    expect((await groupRow(water.groupId!)).state).toBe("fired");
   });
 
   describe("A803 waiting mark: the rows' own read says whether a dish waits, as the order screen's released does", () => {
@@ -334,7 +334,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
         ),
       );
       const a = await seatWith([{ names: ["Vino"], release: "hold" }]);
-      const vino = await lineOf(a.billId, "Vino");
+      const wine = await lineOf(a.billId, "Vino");
       expect(await markOf(a.partyId, a.billId, "Vino")).toEqual({
         waits: true,
         firedAt: null,
@@ -344,7 +344,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
       });
 
       const revision = await billRevision(a.billId);
-      await fire(a.partyId, vino.groupId!);
+      await fire(a.partyId, wine.groupId!);
 
       expect(await billRevision(a.billId)).toBeGreaterThan(revision);
       expect(await markOf(a.partyId, a.billId, "Vino")).toEqual({
@@ -473,14 +473,14 @@ describe("A803 waiting copy: copyHeldGroups", () => {
           }),
         );
       await cancel((await lineOf(a.billId, "Flan")).id, 1000);
-      const tarta = await lineOf(a.billId, "Tarta");
+      const cake = await lineOf(a.billId, "Tarta");
       await inTx(v, (tx) =>
         tx
           .update(workingOrderLines)
           .set({ quantity: 2000 })
-          .where(eq(workingOrderLines.id, tarta.id)),
+          .where(eq(workingOrderLines.id, cake.id)),
       );
-      await cancel(tarta.id, 1000);
+      await cancel(cake.id, 1000);
 
       expect(await markOf(a.partyId, a.billId, "Flan")).toMatchObject({
         waits: false,
@@ -2162,8 +2162,8 @@ describe("A803 waiting copy: kitchen paper", () => {
 
   it("A803 split: what the kitchen is told: a loose held dish on HOLD paper prints under HOLD with its copy's number", async () => {
     const t = await paperTable(true);
-    const mesa8 = `Mesa 8 (${t.n})`;
-    const tableId = await v.table(mesa8);
+    const table8 = `Mesa 8 (${t.n})`;
+    const tableId = await v.table(table8);
     const joining = { operatorId: OPERATOR, expectedPartyRevision: await revisionOf(v, t.partyId) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, t.partyId, tableId, joining));
     const marks = {
@@ -2171,7 +2171,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       pastry: (await printed(t.pastry.printer)).length,
     };
     const burger = await lineOf(t.bill2, "Burger");
-    const tarta = await lineOf(t.bill2, "Tarta");
+    const cake = await lineOf(t.bill2, "Tarta");
     const splitting = {
       operatorId: OPERATOR,
       expectedPartyRevision: await revisionOf(v, t.partyId),
@@ -2184,7 +2184,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         v.cfg,
         t.partyId,
         tableId,
-        { wholeBillIds: [], loose: [{ billId: t.bill2, lineIds: [burger.id, tarta.id] }] },
+        { wholeBillIds: [], loose: [{ billId: t.bill2, lineIds: [burger.id, cake.id] }] },
         splitting,
       ),
     );
@@ -2198,7 +2198,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         t.grill.name,
         `${words.order} ${fromNumber} -> ${toNumber}`,
         `Mesa 5 (${t.n}), 8 (${t.n})`,
-        mesa8,
+        table8,
         ["1 x BURG", words.hold, `${words.group} 2 · DESSERTS`, "1 x TARTA"],
       ),
     ]);
@@ -2210,7 +2210,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     await fire(partyId, copyId);
 
     expect((await printed(t.grill.printer)).slice(beforeFire)).toEqual([
-      fireTicket(t.grill.name, mesa8, toNumber, 2, "1 x TARTA"),
+      fireTicket(t.grill.name, table8, toNumber, 2, "1 x TARTA"),
     ]);
   });
 
@@ -2296,9 +2296,9 @@ describe("A803 waiting copy: kitchen paper", () => {
       const t = await paperTable(true, grillHoldPaper);
       await inTx(v, (tx) => setStationsWaitForPass(tx, true, [t.grill.id]));
       await fire(t.partyId, t.g);
-      const tarta = await kitchenItemOf((await lineOf(t.bill2, "Tarta")).id);
-      expect(tarta.requestedAt).not.toBeNull();
-      expect(tarta.firedAt).toBeNull();
+      const cake = await kitchenItemOf((await lineOf(t.bill2, "Tarta")).id);
+      expect(cake.requestedAt).not.toBeNull();
+      expect(cake.firedAt).toBeNull();
       return t;
     }
 
@@ -2689,7 +2689,7 @@ describe("A803 waiting copy: kitchen paper", () => {
 
     it("A1327: Split a table taking the waiting tarta loose lists it under HOLD and its release prints FIRE", async () => {
       const t = await waitingTable();
-      const tarta = await lineOf(t.bill2, "Tarta");
+      const cake = await lineOf(t.bill2, "Tarta");
 
       const {
         table8,
@@ -2699,7 +2699,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         billId: newBill,
       } = await splitOff(t, {
         wholeBillIds: [],
-        loose: [{ billId: t.bill2, lineIds: [tarta.id] }],
+        loose: [{ billId: t.bill2, lineIds: [cake.id] }],
       });
 
       const fromNumber = await orderNumberOf(t.bill2);
@@ -2744,23 +2744,23 @@ describe("A803 waiting copy: kitchen paper", () => {
     /** The party's bill-to-bill moves of Bill 2's waiting Tarta, each by its real writer. */
     const BETWEEN_BILLS = {
       "Split bill": async (t: Awaited<ReturnType<typeof paperTable>>) => {
-        const tarta = await lineOf(t.bill2, "Tarta");
+        const cake = await lineOf(t.bill2, "Tarta");
         const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
         return (
-          await inTx(v, (tx) => splitBill(tx, v.cfg, t.bill2, [{ lineNo: tarta.lineNo }], command))
+          await inTx(v, (tx) => splitBill(tx, v.cfg, t.bill2, [{ lineNo: cake.lineNo }], command))
         ).billId;
       },
       "Move dishes": async (t: Awaited<ReturnType<typeof paperTable>>) => {
-        const tarta = await lineOf(t.bill2, "Tarta");
+        const cake = await lineOf(t.bill2, "Tarta");
         const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
-        await inTx(v, (tx) => moveDishes(tx, v.cfg, t.bill2, t.bill1, [tarta.id], command));
+        await inTx(v, (tx) => moveDishes(tx, v.cfg, t.bill2, t.bill1, [cake.id], command));
         return t.bill1;
       },
       "Transfer items": async (t: Awaited<ReturnType<typeof paperTable>>) => {
-        const tarta = await lineOf(t.bill2, "Tarta");
+        const cake = await lineOf(t.bill2, "Tarta");
         const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
         await inTx(v, (tx) =>
-          transferItems(tx, v.cfg, t.bill2, t.bill1, [{ lineNo: tarta.lineNo }], command),
+          transferItems(tx, v.cfg, t.bill2, t.bill1, [{ lineNo: cake.lineNo }], command),
         );
         return t.bill1;
       },

@@ -2783,24 +2783,24 @@ describe("A803 split", () => {
         }),
       );
       const topped = await lineOn(b1, "Topped burger");
-      const tarta = await lineOn(b1, "Tarta");
+      const cake = await lineOn(b1, "Tarta");
       const preparing = (await kitchenRows(b1)).find(
         (item) => item.workingOrderLineId === topped.id,
       )!;
       await act((tx) => advanceTicketItem(tx, v.cfg, preparing.id, "preparing"));
-      await act((tx) => serveLine(tx, v.cfg, b1, tarta.lineNo));
+      await act((tx) => serveLine(tx, v.cfg, b1, cake.lineNo));
       const leftAsItWas = (line: Awaited<ReturnType<typeof lineRows>>[number]) => ({
         ...line,
         lineNo: 0,
         workingOrderId: "",
         groupId: null,
       });
-      const movedIds = [topped.id, tarta.id];
+      const movedIds = [topped.id, cake.id];
       const family = (await lineRows(b1)).filter(
         (line) => movedIds.includes(line.id) || movedIds.includes(line.parentLineId ?? ""),
       );
       expect(family.map((line) => line.name)).toEqual(["Topped burger", "Cheese", "Tarta"]);
-      const tartaServed = (await lineOn(b1, "Tarta")).servedQuantity;
+      const servedCakeQuantity = (await lineOn(b1, "Tarta")).servedQuantity;
       const sourceOrderNumber = (await billRow(v, b1)).orderNumber;
       const kitchen = (await kitchenRows(b1))
         .filter((item) => movedIds.includes(item.workingOrderLineId!))
@@ -2814,7 +2814,7 @@ describe("A803 split", () => {
 
       const result = await splitSelected(ana.partyId, m5, {
         wholeBillIds: [b2, b3],
-        loose: [loose(b1, topped.id, tarta.id)],
+        loose: [loose(b1, topped.id, cake.id)],
       });
 
       const newBill = result.billIds[2]!;
@@ -2838,8 +2838,8 @@ describe("A803 split", () => {
       expect(await activeTablesOf(v, ana.partyId)).toEqual([m4]);
       const arrived = await lineRows(newBill);
       expect(arrived.map(leftAsItWas)).toEqual(family.map(leftAsItWas));
-      expect((await lineOn(newBill, "Tarta")).servedQuantity).toBe(tartaServed);
-      expect(tartaServed).toBeGreaterThan(0);
+      expect((await lineOn(newBill, "Tarta")).servedQuantity).toBe(servedCakeQuantity);
+      expect(servedCakeQuantity).toBeGreaterThan(0);
       expect(
         (await kitchenRows(newBill)).map((item) => ({ ...item, workingOrderId: null })),
       ).toEqual(kitchen);
@@ -2849,12 +2849,12 @@ describe("A803 split", () => {
       const { ana, m5, b2, b3 } = await threeBillsWithIdsAgainstNumbers("A803 Two sources");
       await order(v, b2, "Agua");
       await order(v, b3, "Caña");
-      const agua = await lineOn(b2, "Agua");
-      const cana = await lineOn(b3, "Caña");
+      const water = await lineOn(b2, "Agua");
+      const draftBeer = await lineOn(b3, "Caña");
 
       const result = await splitSelected(ana.partyId, m5, {
         wholeBillIds: [],
-        loose: [loose(b3, cana.id), loose(b2, agua.id)],
+        loose: [loose(b3, draftBeer.id), loose(b2, water.id)],
       });
 
       expect(result.billIds).toEqual([expect.any(String)]);
@@ -2869,9 +2869,9 @@ describe("A803 split", () => {
 
     it("a loose pick burns no number at the staying table", async () => {
       const { ana, m5, b1 } = await tableFor("A803 No room", "Burger", "Vino");
-      const vino = await lineOn(b1, "Vino");
+      const wine = await lineOn(b1, "Vino");
 
-      await splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, vino.id)] });
+      await splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, wine.id)] });
 
       const next = await act((tx) => insertPartyBill(tx, v.cfg, ana.partyId));
       expect(await numbersOf(v, ana.partyId)).toEqual([
@@ -2919,11 +2919,11 @@ describe("A803 split", () => {
       it("its unpaid dishes can go loose, the payment staying", async () => {
         const { ana, m5, b1 } = await partPaid("A803 Part loose");
         const payments = await paymentsOf(v, b1);
-        const agua = await lineOn(b1, "Agua");
+        const water = await lineOn(b1, "Agua");
 
         const result = await splitSelected(ana.partyId, m5, {
           wholeBillIds: [],
-          loose: [loose(b1, agua.id)],
+          loose: [loose(b1, water.id)],
         });
 
         expect(await namesOn(result.billIds[0]!)).toEqual(["Agua"]);
@@ -3010,13 +3010,13 @@ describe("A803 split", () => {
         );
         expect(decimalToCents(await act((tx) => storedOrderTotal(tx, b2)))).toBe(5200);
         await cashContribution(v, b2, "40.00");
-        const agua = await lineOn(ana.tabId, "Agua");
+        const water = await lineOn(ana.tabId, "Agua");
         const steak = await lineOn(b2, "Steak");
 
         const error = await refusedWithNoRowChanged(() =>
           splitSelected(ana.partyId, m5, {
             wholeBillIds: [],
-            loose: [loose(b2, steak.id), loose(ana.tabId, agua.id)],
+            loose: [loose(b2, steak.id), loose(ana.tabId, water.id)],
           }),
         );
 
@@ -3064,7 +3064,7 @@ describe("A803 split", () => {
       const b1 = ana.tabId;
       const burger = await lineOn(b1, "Burger");
       const flan = await lineOn(b1, "Flan");
-      const tarta = await lineOn(b1, "Tarta");
+      const cake = await lineOn(b1, "Tarta");
       const source = flan.groupId!;
       const firedSource = burger.groupId!;
       const firedBy = randomUUID();
@@ -3121,18 +3121,18 @@ describe("A803 split", () => {
       const firedAt = async (billId: string, lineId: string) =>
         (await ticketsOf(billId)).find((item) => item.lineId === lineId)!.firedAt;
       expect(await firedAt(newBill, flan.id)).toBeNull();
-      expect(await firedAt(b1, tarta.id)).toBeNull();
+      expect(await firedAt(b1, cake.id)).toBeNull();
 
       const firingCopy = { ...(await cmd(result.partyId)), submissionId: randomUUID() };
       await act((tx) => fireGroup(tx, v.cfg, result.partyId, copy!.id, firingCopy));
 
       expect(await firedAt(newBill, flan.id)).toEqual(expect.any(String));
-      expect(await firedAt(b1, tarta.id)).toBeNull();
+      expect(await firedAt(b1, cake.id)).toBeNull();
 
       const firingSource = { ...(await cmd(ana.partyId)), submissionId: randomUUID() };
       await act((tx) => fireGroup(tx, v.cfg, ana.partyId, source, firingSource));
 
-      expect(await firedAt(b1, tarta.id)).toEqual(expect.any(String));
+      expect(await firedAt(b1, cake.id)).toEqual(expect.any(String));
     });
 
     it("a dish recalled into a draft refuses draft.out_of_date, naming the source", async () => {
@@ -3172,10 +3172,10 @@ describe("A803 split", () => {
       it("loose, it refuses bill.presented", async () => {
         const { ana, m5, b2 } = await threeBills("A803 Bill loose");
         await placeByHand(v, b2);
-        const vino = await lineOn(b2, "Vino");
+        const wine = await lineOn(b2, "Vino");
 
         const error = await refusedWithNoRowChanged(() =>
-          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b2, vino.id)] }),
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b2, wine.id)] }),
         );
 
         expect(error).toMatchObject({
@@ -3200,15 +3200,15 @@ describe("A803 split", () => {
       await act((tx) =>
         addTabRound(tx, v.cfg, b1, [{ menuItemId: v.item("Tarta"), quantity: "1", hold: true }]),
       );
-      const tarta = await lineOn(b1, "Tarta");
+      const cake = await lineOn(b1, "Tarta");
 
       const error = await refusedWithNoRowChanged(() =>
-        splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, tarta.id)] }),
+        splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, cake.id)] }),
       );
 
       expect(error).toMatchObject({
         code: "tab.split_held_line",
-        params: { tabId: b1, lineNo: tarta.lineNo },
+        params: { tabId: b1, lineNo: cake.lineNo },
       });
     });
 
@@ -3221,10 +3221,10 @@ describe("A803 split", () => {
       it("on a loose source refuses order.payment_in_flight", async () => {
         const { ana, m5, b1 } = await tableFor("A803 Payment loose", "Burger", "Agua");
         pending(b1);
-        const agua = await lineOn(b1, "Agua");
+        const water = await lineOn(b1, "Agua");
 
         const error = await refusedWithNoRowChanged(() =>
-          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, agua.id)] }),
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, water.id)] }),
         );
 
         expect(error).toMatchObject({
@@ -3277,18 +3277,18 @@ describe("A803 split", () => {
       );
       const { guests } = await act((tx) => readPartyAllergy(tx, ana.partyId));
       const burger = await lineOn(b1, "Burger");
-      const agua = await lineOn(b1, "Agua");
+      const water = await lineOn(b1, "Agua");
       await act((tx) =>
         setAllergyLineTicks(tx, ana.partyId, [
           { guestId: guests[0]!.id, workingLineId: burger.id },
-          { guestId: guests[0]!.id, workingLineId: agua.id },
+          { guestId: guests[0]!.id, workingLineId: water.id },
         ]),
       );
 
       // A loose dish cannot fire on arrival; the whole bill's can, and it needs the allergy copy first.
       const result = await splitSelected(ana.partyId, m5, {
         wholeBillIds: [b2],
-        loose: [loose(b1, agua.id)],
+        loose: [loose(b1, water.id)],
       });
 
       const source = await act((tx) => readPartyAllergy(tx, ana.partyId));
@@ -3298,17 +3298,17 @@ describe("A803 split", () => {
       ]);
       expect(target.guests.map((guest) => guest.who)).toEqual(["Window seat"]);
       expect(target.ticks).toEqual([
-        { guestId: target.guests[0]!.id, draftLineId: null, workingLineId: agua.id },
+        { guestId: target.guests[0]!.id, draftLineId: null, workingLineId: water.id },
       ]);
     });
 
     describe("a selection it cannot read", () => {
       it("a bill both whole and loose", async () => {
         const { ana, m5, b2 } = await threeBills("A803 Both");
-        const vino = await lineOn(b2, "Vino");
+        const wine = await lineOn(b2, "Vino");
 
         const error = await refusedWithNoRowChanged(() =>
-          splitSelected(ana.partyId, m5, { wholeBillIds: [b2], loose: [loose(b2, vino.id)] }),
+          splitSelected(ana.partyId, m5, { wholeBillIds: [b2], loose: [loose(b2, wine.id)] }),
         );
 
         expect(error).toMatchObject({
@@ -3320,12 +3320,12 @@ describe("A803 split", () => {
       it("one bill in two loose entries", async () => {
         const { ana, m5, b1 } = await tableFor("A803 Two entries", "Burger", "Agua");
         const burger = await lineOn(b1, "Burger");
-        const agua = await lineOn(b1, "Agua");
+        const water = await lineOn(b1, "Agua");
 
         const error = await refusedWithNoRowChanged(() =>
           splitSelected(ana.partyId, m5, {
             wholeBillIds: [],
-            loose: [loose(b1, burger.id), loose(b1, agua.id)],
+            loose: [loose(b1, burger.id), loose(b1, water.id)],
           }),
         );
 
@@ -3367,16 +3367,16 @@ describe("A803 split", () => {
 
       it("a line of another bill is tab.line_not_found, and no line of the named bill with that number moves", async () => {
         const { ana, m5, b1, b2 } = await threeBills("A803 Other bill");
-        const vino = await lineOn(b2, "Vino");
-        expect((await lineRows(b1)).map((line) => line.lineNo)).toContain(vino.lineNo);
+        const wine = await lineOn(b2, "Vino");
+        expect((await lineRows(b1)).map((line) => line.lineNo)).toContain(wine.lineNo);
 
         const error = await refusedWithNoRowChanged(() =>
-          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, vino.id)] }),
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, wine.id)] }),
         );
 
         expect(error).toMatchObject({
           code: "tab.line_not_found",
-          params: { tabId: b1, lineId: vino.id },
+          params: { tabId: b1, lineId: wine.id },
         });
       });
     });
