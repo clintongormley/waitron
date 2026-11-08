@@ -3748,8 +3748,64 @@ describe("the lint and root-guards jobs", () => {
   it("leave lint running exactly lint and the format check", () => {
     const runs = job("lint")
       .body.map((line) => /^ {6}- run: (.*)$/.exec(line)?.[1])
-      .filter((run) => run !== undefined);
+      .filter((run) => run !== undefined)
+      .map((run) => run.split(" ${{")[0]);
     expect(runs).toEqual(["pnpm install --frozen-lockfile", "pnpm lint", "pnpm format:check"]);
+  });
+
+  it("reuse lint results only on runs that are not full, and keep them from main alone", () => {
+    const steps = workflowSteps(job("lint").body.join("\n"));
+    const notFull = "needs.changes.outputs.full == 'false'";
+    const indexOfCommand = (command) => steps.findIndex((step) => step.command === command);
+    const indexOfAction = (action) =>
+      steps.findIndex((step) => step.uses?.startsWith(`actions/cache/${action}@`));
+
+    const restoreAt = indexOfAction("restore");
+    const installAt = indexOfCommand("pnpm install --frozen-lockfile");
+    expect(restoreAt, "the restore step").toBeGreaterThan(-1);
+    expect(installAt, "the install step").toBeGreaterThan(-1);
+    expect(restoreAt, "restore before install").toBeLessThan(installAt);
+    const restore = steps[restoreAt];
+    expect(restore.if).toBe(notFull);
+    expect(restore.id, "the id the save step reads").toBe("lint-cache");
+    const keyPrefix =
+      "lint-results-${{ runner.os }}-${{ hashFiles('eslint.config.js', 'pnpm-lock.yaml', '**/package.json') }}-";
+    expect(restore.with["restore-keys"]).toBe(keyPrefix);
+    expect(restore.with.key).toBe(`${keyPrefix}\${{ steps.lint-cache-day.outputs.day }}`);
+    expect(restore.with.path, "the folder holding both tools' results").toBe(
+      "${{ runner.temp }}/lint-cache",
+    );
+
+    const dayAt = steps.findIndex((step) => step.id === "lint-cache-day");
+    expect(dayAt, "the day step").toBeGreaterThan(-1);
+    expect(dayAt, "the day before restore").toBeLessThan(restoreAt);
+    const day = steps[dayAt];
+    expect(day.if, day.step).toBe(notFull);
+    expect(day.command, day.step).toBe('echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"');
+
+    const checkAts = [
+      ["pnpm lint", "eslint"],
+      ["pnpm format:check", "prettier"],
+    ].map(([script, tool]) =>
+      indexOfCommand(
+        `${script} \${{ ${notFull} && '--cache --cache-strategy content --cache-location "$RUNNER_TEMP/lint-cache/${tool}"' || '' }}`,
+      ),
+    );
+    expect(checkAts, "both tools cached only when not full").not.toContain(-1);
+
+    const saveAt = indexOfAction("save");
+    expect(saveAt, "the save step").toBeGreaterThan(Math.max(...checkAts));
+    const save = steps[saveAt];
+    expect(save.if).toBe(
+      `${notFull} && github.ref == 'refs/heads/main' && steps.lint-cache.outputs.cache-hit != 'true'`,
+    );
+    expect(save.with.path).toBe(restore.with.path);
+    expect(save.with.key).toBe("${{ steps.lint-cache.outputs.cache-primary-key }}");
+
+    for (const cacheStep of [restore, save]) {
+      expect(cacheStep.continueOnError, cacheStep.step).toBe("true");
+      expect(cacheStep.timeoutMinutes, cacheStep.step).toBe("1");
+    }
   });
 });
 
