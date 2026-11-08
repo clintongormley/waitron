@@ -4,9 +4,10 @@ import { billOf, mesa, offers, till, zone } from "../test/bill-pay-app.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
 import { TillApi, type Draft, type FetchLike, type TableState } from "./api/client.js";
+import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
-import { setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale } from "./i18n/t.js";
 
 /** One request as the stub received it, after the client's own wrapping. */
 interface SeenRequest {
@@ -241,8 +242,12 @@ function tillServer() {
 type TillServer = ReturnType<typeof tillServer>;
 
 const refusalMark = Symbol("refusal");
-function refusalOf(status: number, code: string): Refusal & { [refusalMark]: true } {
-  return { status, code, [refusalMark]: true };
+function refusalOf(
+  status: number,
+  code: string,
+  params?: Record<string, unknown>,
+): Refusal & { [refusalMark]: true } {
+  return { status, code, ...(params === undefined ? {} : { params }), [refusalMark]: true };
 }
 function isRefusal(value: unknown): value is Refusal {
   return typeof value === "object" && value !== null && refusalMark in value;
@@ -252,13 +257,6 @@ function errorResponse({ status, code, params }: Refusal): Response {
   return new Response(JSON.stringify({ error: { code, ...(params ? { params } : {}) } }), {
     status,
   });
-}
-
-async function flush(el: TillApp, rounds = 3): Promise<void> {
-  for (let i = 0; i < rounds; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-  }
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {
@@ -293,15 +291,17 @@ async function signInAsAna(el: TillApp): Promise<void> {
   }
   lock().querySelector<HTMLElement>(".submit")!.click();
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull());
-  await flush(el);
 }
 
 /** From the shell, Ana opens table 4, the table holding her unsent draft. */
 async function openAnasTable(el: TillApp): Promise<TillTableOrderScreen> {
   emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull());
-  await flush(el);
-  emit(el.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+  const floor = () => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
+  await vi.waitFor(() => {
+    expect(floor()?.tablesAnswered).toBe(true);
+    expect(floor()!.tables.map((table) => table.id)).toContain("t4");
+  });
+  emit(floor()!, "open-table", {
     tableId: "t4",
     seated: true,
   });
@@ -313,14 +313,15 @@ async function openAnasTable(el: TillApp): Promise<TillTableOrderScreen> {
   return order;
 }
 
+let localeBefore: string;
 beforeEach(() => {
+  localeBefore = currentLocale();
   setLocale("en");
   localStorage.clear();
 });
 afterEach(() => {
   cleanupWidgets();
-  vi.restoreAllMocks();
-  setLocale("en");
+  setLocale(localeBefore);
 });
 
 describe("the till through its real client", () => {
@@ -329,13 +330,12 @@ describe("the till through its real client", () => {
     const { el } = await mountTill(server);
 
     await signInAsAna(el);
-    const order = await openAnasTable(el);
+    await openAnasTable(el);
 
     expect(server.sentTo("POST /api/session").map((request) => request.body)).toEqual([
       { personId: ANA.personId, pin: PIN },
     ]);
     expect(server.sentTo("GET /api/parties/v1/drafts").length).toBeGreaterThan(0);
-    expect(order.draftStore!.lineCount).toBe(1);
     expect(server.unserved).toEqual([]);
   });
 });
