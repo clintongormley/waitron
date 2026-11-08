@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { TillCourse } from "../api/client.js";
+import type { PartyBill, TabLine, TillCourse } from "../api/client.js";
+import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import {
@@ -10,7 +11,7 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
-import { mount } from "./till-table-order-screen.test-helpers.js";
+import { flan, mount } from "./till-table-order-screen.test-helpers.js";
 import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const course: TillCourse = {
@@ -26,6 +27,49 @@ afterEach(() => {
   setLocale("en");
 });
 
+const openBill: PartyBill = {
+  workingOrderId: "wo-4",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
+  partyId: "v1",
+  label: null,
+  billNumber: 1,
+  billName: null,
+  status: "open",
+  total: "2.00",
+  outstanding: "2.00",
+  hasPayments: false,
+  receiptAvailable: false,
+};
+
+/** The bill line behind the Sent row "dish", sold as the till's Flan, so its window can change it. */
+function dishLine(kind: "held" | "fired" | "served"): TabLine {
+  const sentAt = "2026-10-10T19:50:00Z";
+  return {
+    changesAfterSending: "held-or-waiting",
+    id: "dish",
+    name: "Recorded dish",
+    lineNo: 1,
+    groupId: "group",
+    productId: flan.id,
+    quantity: "1.000",
+    unitPrecision: 0,
+    unitPriceGross: "2.00",
+    servedAt: kind === "served" ? "2026-10-10T20:00:00Z" : null,
+    courseId: course.id,
+    sentAt,
+    firedAt: kind === "held" ? null : sentAt,
+    state: "queued",
+    note: null,
+    listId: null,
+    menuItemId: flan.menuItemId!,
+    parentProductId: null,
+    stationId: null,
+    movable: false,
+  };
+}
+
 describe("course information after sending", () => {
   it.each(["held", "fired", "served"] as const)(
     "keeps a %s dish's course readable without editing it",
@@ -34,6 +78,8 @@ describe("course information after sending", () => {
       const { el } = await mount({
         groups: [orderGroup("group", 1, state)],
         courses: [course],
+        lines: [dishLine(kind)],
+        bills: [openBill],
         currentOrders: current({
           reminder: null,
           ungrouped: [],
@@ -52,9 +98,11 @@ describe("course information after sending", () => {
       });
       const dialog = await openSentDish(el, "dish", kind);
       expect(dialog.querySelector("[data-sent-course]")?.textContent?.trim()).toBe("Dessert $& $'");
-      expect(
-        dialog.querySelector("wt-combobox, till-modifier-picker, [data-change-line]"),
-      ).toBeNull();
+      const picker = dialog.querySelector<TillModifierPicker>("till-modifier-picker");
+      expect(picker !== null, "the dish's fields are offered").toBe(kind !== "served");
+      await picker?.updateComplete;
+      expect(dialog.querySelector("wt-combobox")).toBeNull();
+      expect(picker?.shadowRoot!.querySelector('wt-combobox[name="course"]') ?? null).toBeNull();
     },
   );
 

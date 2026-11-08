@@ -2246,11 +2246,9 @@ describe("till-table-order-screen", () => {
       expect([fire.open, move.open]).toEqual([false, false]);
     });
 
-    it("takes the app's Cancel offer for a held dish without direct Change", async () => {
+    it("takes the app's Cancel offer for a held dish", async () => {
       const { el } = await mountGroups();
       const asked = capture(el, "adjust");
-      expect(control(el, '[data-change-line="4"]')).toBeNull();
-      expect(control(el, '[data-send-line="3"]')).toBeNull();
 
       el.cancelOffer = 3;
       await el.updateComplete;
@@ -3179,12 +3177,11 @@ describe("till-table-order-screen", () => {
       state: null,
       listId: "list-extras",
     };
-    const neverSentLine: TabLine = { ...burgerLine, lineNo: 12, sentAt: null, firedAt: null };
 
     const mountLines = (lines: TabLine[], over: Partial<TillTableOrderScreen> = {}) =>
       mount({ products: [...products, burger], lines, ...over });
-    const lineAction = (el: TillTableOrderScreen, kind: string, lineNo: number) =>
-      el.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="${lineNo}"]`);
+    const changeDish = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-dialog] [data-sent-change]");
     const editor = (el: TillTableOrderScreen) =>
       [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")]
         .map((basket) =>
@@ -3333,36 +3330,24 @@ describe("till-table-order-screen", () => {
       return seen;
     }
 
-    it.each([burgerLine, recalledLine])(
-      "keeps sent line $lineNo read-only on the screen instead of opening a direct Change editor",
-      async (line) => {
-        const { el } = await mountLines([line]);
-        expect(lineAction(el, "change", line.lineNo)).toBeNull();
-        expect(el.shadowRoot!.querySelector(".change-editor")).toBeNull();
-      },
-    );
-
-    it("offers queued Recall and Void in Sent without a direct Change editor", async () => {
+    it("offers queued Recall and Void in Sent beside Change dish", async () => {
       const { el } = await mountLines([burgerLine]);
-      expect(lineAction(el, "change", 5)).toBeNull();
       expect(await recallControl(el, 5)).not.toBeNull();
       expect(el.shadowRoot!.querySelector("[data-sent-line-void]")).not.toBeNull();
-      expect(el.shadowRoot!.querySelector(".change-editor")).toBeNull();
+      expect(changeDish(el)).not.toBeNull();
     });
 
-    it("keeps recalled and no-route sent rows read-only, whether or not released", async () => {
+    it("offers Change dish on recalled and no-route sent rows, whether or not released", async () => {
       const { el } = await mountLines([recalledLine, noRouteLine, unreleasedNoRouteLine]);
-      expect(lineAction(el, "change", 6)).toBeNull();
-      expect(lineAction(el, "send", 6)).toBeNull();
-      expect(lineAction(el, "change", 7)).toBeNull();
-      expect(lineAction(el, "change", 8)).toBeNull();
+      for (const lineNo of [6, 7, 8]) {
+        await recallControl(el, lineNo);
+        expect(changeDish(el), `line ${lineNo}`).not.toBeNull();
+      }
     });
 
-    it("offers Void in Sent on a recalled line without direct Send or Change", async () => {
+    it("offers Void in Sent on a recalled line", async () => {
       const { el } = await mountLines([recalledLine]);
       expect(await voidControl(el, 6)).not.toBeNull();
-      expect(lineAction(el, "send", 6)).toBeNull();
-      expect(lineAction(el, "change", 6)).toBeNull();
     });
 
     it("closes the recalled line editor when the app switches the bill and its New order", async () => {
@@ -3374,29 +3359,23 @@ describe("till-table-order-screen", () => {
       expect(editor(el)).toBeNull();
     });
 
-    it("offers Void without Change or Recall on a line the kitchen has started", async () => {
+    it("offers Void and Change dish but no Recall on a line the kitchen has started", async () => {
       const { el } = await mountLines([preparingBurger, readyBurger]);
       for (const lineNo of [9, 10]) {
         expect(await voidControl(el, lineNo)).not.toBeNull();
-        expect(lineAction(el, "change", lineNo)).toBeNull();
+        expect(changeDish(el), `line ${lineNo}`).not.toBeNull();
         expect(await recallControl(el, lineNo)).toBeNull();
       }
     });
 
-    it("offers no Change on an extras row, nor on a held line that was never sent", async () => {
-      const { el } = await mountLines([burgerLine, cheeseChild, neverSentLine]);
-      expect(lineAction(el, "change", 11)).toBeNull();
-      expect(lineAction(el, "change", 12)).toBeNull();
-      expect(lineAction(el, "send", 12)).toBeNull();
-    });
-
-    it("offers no Change on a line whose product the till does not have", async () => {
+    it("offers no Change dish on a line whose product the till does not have", async () => {
       const gone: TabLine = { ...burgerLine, productId: "gone", menuItemId: "menu-item-gone" };
       const unnamed: TabLine = { ...burgerLine, lineNo: 6, productId: null, menuItemId: null };
       const { el } = await mountLines([gone, unnamed]);
-      expect(lineAction(el, "change", 5)).toBeNull();
       expect(await recallControl(el, 5)).not.toBeNull();
-      expect(lineAction(el, "change", 6)).toBeNull();
+      expect(changeDish(el)).toBeNull();
+      await recallControl(el, 6);
+      expect(changeDish(el)).toBeNull();
     });
 
     it("at a Not allowed station, Sent offers Void and neither Change nor Recall", async () => {
@@ -3407,11 +3386,12 @@ describe("till-table-order-screen", () => {
         })),
       );
       for (const lineNo of [5, 6, 9]) {
-        expect(lineAction(el, "change", lineNo)).toBeNull();
         expect(await recallControl(el, lineNo)).toBeNull();
+        expect(changeDish(el), `line ${lineNo}`).toBeNull();
         expect(el.shadowRoot!.querySelector("[data-sent-line-void]")).not.toBeNull();
       }
-      expect(lineAction(el, "change", 7)).toBeNull();
+      await recallControl(el, 7);
+      expect(changeDish(el)).toBeNull();
     });
 
     it("opens the note editor on a dish with no choices; saving updates the source-backed New order", async () => {

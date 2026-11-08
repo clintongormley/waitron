@@ -331,10 +331,9 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await el.updateComplete;
     }
 
-    it("has no violations on a sent line with its note shown and no direct Change", async () => {
+    it("has no violations on a sent line with its note shown", async () => {
       const { el, host } = await mountDrawer([sentLine]);
       await settle(el);
-      expect(el.shadowRoot!.querySelector("[data-change-line]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 
