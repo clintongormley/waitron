@@ -2135,7 +2135,7 @@ export class DashboardApp extends LitElement {
               ></wt-button>`
             : nothing
         }
-        <div class="brand-line ${classMap({ "on-lockup": this.#lockupShown() })}">
+        <div class=${classMap({ "brand-line": true, "on-lockup": this.#lockupShown() })}>
           ${this.#brandMark()}
           <span class="venue-row"
             ><span class="venue">
