@@ -2622,7 +2622,8 @@ export class TillApi {
     this.#personRefused = onRefused;
   }
 
-  async #fetchNamingPerson(
+  /** Not `async`: a request naming nobody returns the held fetch's own promise, adding no step. */
+  #fetchNamingPerson(
     fetchImpl: FetchLike,
     input: Parameters<FetchLike>[0],
     init?: RequestInit,
@@ -2632,19 +2633,22 @@ export class TillApi {
     if (person === null) return fetchImpl(input, init);
     const headers = new Headers(init?.headers);
     headers.set(PERSON_HEADER, person.personId);
-    const res = await fetchImpl(input, { ...init, headers });
-    if (!res.ok) {
-      const parsed: unknown = await res
-        .clone()
-        .json()
-        .catch(() => undefined);
-      if (
-        isRecord(parsed) &&
-        isRecord(parsed.error) &&
-        parsed.error.code === SESSION_PERSON_REFUSAL
-      )
+    return fetchImpl(input, { ...init, headers }).then((res) =>
+      res.ok ? res : this.#noticePersonRefusal(res, person),
+    );
+  }
+
+  async #noticePersonRefusal(res: Response, person: SessionPerson): Promise<Response> {
+    const parsed: unknown = await res
+      .clone()
+      .json()
+      .catch(() => undefined);
+    if (isRecord(parsed) && isRecord(parsed.error) && parsed.error.code === SESSION_PERSON_REFUSAL)
+      try {
         this.#personRefused?.(person);
-    }
+      } catch {
+        // The caller still sees the server's refusal, not the listener's failure.
+      }
     return res;
   }
 

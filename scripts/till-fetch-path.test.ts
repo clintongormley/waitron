@@ -1,7 +1,7 @@
 /**
- * Till code outside `apps/till/src/api/` makes no request of its own: every request goes through
- * the `TillApi` client's fetch, which names the tab's person. `main.ts` is the one exception — it
- * builds the client's fetch and the theme's.
+ * No till source file outside `apps/till/src/api/` and `main.ts` (which builds the client's fetch
+ * and the theme's) calls `fetch`, so till requests are left to the `TillApi` client, whose fetch
+ * names the tab's person.
  *
  * Weaker than its name: it reads TEXT, so it sees only a call written as `fetch(…)` or
  * `<something>.fetch(…)`; a fetch reached by another name (`const load = fetch; load(…)`) passes.

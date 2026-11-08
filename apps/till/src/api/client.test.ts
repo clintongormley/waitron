@@ -6122,6 +6122,45 @@ describe("TillApi: the tab's person on every request", () => {
     expect(onRefused).not.toHaveBeenCalled();
   });
 
+  it("names the person on the sign-out, and on the sign-in names nobody", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
+    const api = new TillApi("https://box.test", fetchStub);
+    api.namePersonFrom(
+      () => ({ personId: "p1" }),
+      () => {},
+    );
+
+    await api.logout();
+    await api.login("p1", "1234");
+
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init?.method, personOf(init)])).toEqual([
+      ["https://box.test/api/session", "DELETE", "p1"],
+      ["https://box.test/api/session", "POST", null],
+    ]);
+  });
+
+  it("still rejects with the server's refusal when the refusal listener throws", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: SESSION_PERSON_REFUSAL, params: { personId: "p1" } } }, 409),
+      );
+    const api = new TillApi("", fetchStub);
+    const onRefused = vi.fn(() => {
+      throw new Error("listener broke");
+    });
+    api.namePersonFrom(() => ({ personId: "p1" }), onRefused);
+
+    await expect(api.getTill()).rejects.toEqual({
+      code: SESSION_PERSON_REFUSAL,
+      personId: "p1",
+      status: 409,
+    });
+    expect(onRefused).toHaveBeenCalledOnce();
+  });
+
   it("logout takes no argument and sends no body", async () => {
     const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ ok: true }));
     const api = new TillApi("", fetchStub);
