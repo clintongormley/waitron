@@ -42,7 +42,7 @@ import {
 // file ever starts disagreeing with the workflow.
 
 // eslint.config.js gives `scripts/**/*.mjs` only `console` and `process` as globals.
-const { AbortController, structuredClone } = globalThis;
+const { AbortController } = globalThis;
 
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");

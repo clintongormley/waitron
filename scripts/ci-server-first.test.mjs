@@ -1,17 +1,18 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { URL } from "node:url";
 import { describe, it, expect } from "vitest";
 
 const yaml = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
-const jobs = [...yaml.matchAll(/^  ([\w-]+):\n([\s\S]*?)(?=^  [\w-]+:|$(?![\s\S]))/gm)]
-  .map(([, id, body]) => ({ id, body, route: body.match(/^    runs-on: (.+)$/m)?.[1] }))
+const jobs = [...yaml.matchAll(/^ {2}([\w-]+):\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm)]
+  .map(([, id, body]) => ({ id, body, route: body.match(/^ {4}runs-on: (.+)$/m)?.[1] }))
   .filter((job) => job.route);
 jobs.push({
   id: "image-smoke",
   route: readFileSync(
     new URL("../.github/workflows/image-smoke.yml", import.meta.url),
     "utf8",
-  ).match(/^    runs-on: (.+)$/m)[1],
+  ).match(/^ {4}runs-on: (.+)$/m)[1],
 });
 function route(
   expression,
