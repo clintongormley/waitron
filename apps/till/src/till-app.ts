@@ -664,6 +664,7 @@ const TABLE_REFUSALS = new Set([
   "device.unauthorized",
   "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
+  "fiscal.chain_handed_over",
   "service_zone.closed",
   "order.payment_in_flight",
   "sale.total_exceeds_simplified_limit",
