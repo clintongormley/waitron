@@ -580,7 +580,7 @@ A1424's live qualification was added on 7 November 2026.
   then qualify mixed-workload capacity and the unavailable-label and server-down paths through
   visible failure/cancellation and hosted attempt two.
   Each routed job family has a separate cap defaulting to zero, including the additional PR test
-  families, mutation scoring, typecheck, lint, root guards and bundle smoke. Lane I still qualifies
+  families, shared mutation, typecheck, lint, root guards and bundle smoke. Lane I still qualifies
   each family before enabling it; the stream job stays hosted pending its guest setup. Qualify
   full Chromium and
   its system libraries, venue-service sudo and shared memory, and an actual till browser

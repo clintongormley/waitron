@@ -157,14 +157,14 @@ limits that job family independently. `test-ui` includes both ui and ui-core.
 | `DISPOSABLE_TESTS_LINT_JOBS` | `lint` |
 | `DISPOSABLE_TESTS_ROOT_GUARDS_JOBS` | `root-guards` |
 | `DISPOSABLE_TESTS_BUNDLE_SMOKE_JOBS` | `bundle-smoke` |
-| `DISPOSABLE_TESTS_MUTATION_SHARED_AGGREGATE_JOBS` | `mutation-shared-aggregate` |
 
 Only the first attempt of a same-repository pull request uses this route. Main pushes, tags,
 manual runs, forks and every retry use GitHub-hosted runners. This includes retries that
 retain the successful `changes` job's outputs: routing reads the current attempt directly.
 Same-repository bot branches also satisfy the routing condition; confirm their admission
 with the controller before enabling it. The planner, final CI summary and queue watchdog stay
-hosted. Full-only coverage merges cannot use this PR-only route, and image builds and
+hosted, as does mutation scoring after its shards finish. Full-only coverage merges cannot
+use this PR-only route, and image builds and
 publication retain their hosted runners. The stream job also stays hosted until its guest
 setup is qualified, including loopback MTU, shared memory and the backup test binaries.
 
@@ -203,9 +203,17 @@ prefer `gnutimeout`, then `gtimeout`, then `timeout`. Run the root shell checks 
 these commands installed; the selection test wraps the actual timeout command and checks
 which executable the workflow chooses.
 
-The watchdog keeps common admission in `SHOULD_WATCH` and each family's scope and cap in
-`FAMILIES`. Outside an admitted attempt, or when no family is enabled, the shell exits successfully
-without an API call. The job still reports to the aggregate.
+The watchdog job starts only for an admitted attempt that is not cancelled. It keeps the same
+admission in `SHOULD_WATCH` and each family's scope and cap in `FAMILIES`. With no enabled family,
+the shell exits successfully without an API call. The aggregate accepts a skipped watchdog on
+other attempts.
+
+The watch-list evaluator withholds the four job-status functions from step environment
+expressions. Its “evaluates watch-list environment expressions without job-status functions”
+case guards that boundary; it does not validate every GitHub expression rule. A1429's original
+watch list passed the older local model but failed actionlint 1.7.12. The unchanged base and
+corrected workflow both passed that validator.
+
 
 Before activation, have I confirm Linux tools, `/proc`, Node/pnpm/cache support, measured
 global capacity and ordinary PR admission. Server jobs need Chromium headless-shell
@@ -228,6 +236,7 @@ before enabling a slot.
 | Source, checked 7 November 2026 | Source's words | Application |
 | --- | --- | --- |
 | [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) | “If you attempt to dereference a nonexistent property, it will evaluate to an empty string.” | The unset selection uses the gate's empty-string arm. |
+| [Context availability](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability), checked 8 November 2026 | `jobs.<job_id>.steps.env`: “hashFiles”; `jobs.<job_id>.if`: “always, cancelled, success, failure” | Keep status functions in job conditions; use ordinary booleans in the watch-list environment. |
 | [GitHub runner hardening](https://docs.github.com/en/enterprise-cloud@latest/actions/reference/security/secure-use#hardening-for-self-hosted-runners) | “can be persistently compromised by untrusted code in a workflow” | Disposable VMs and contributor approval reduce exposure without establishing isolation. |
 | [Self-hosted routing](https://docs.github.com/en/actions/reference/runners/self-hosted-runners#routing-precedence-for-self-hosted-runners) | “the job will remain queued until a runner comes online” | Execution limits alone do not stop an unavailable-label queue; the watchdog needs hosted availability. |
 | [REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) | “1,000 requests per hour per repository” | The watchdog uses bounded polling and a 200-call cap; this is not a reservation of the repository's shared allowance. |
