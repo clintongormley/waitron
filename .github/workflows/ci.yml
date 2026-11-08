@@ -367,14 +367,13 @@ jobs:
 
       - name: Control only, break a file the cache holds
         run: |
-          case "$(cat .lint-control 2>/dev/null)" in
-            format) printf 'export   const   brokenControl=1\n' >> scripts/mutation-shard.mjs ;;
-            eslint) printf '\nconst unusedControl = 1;\n' >> scripts/mutation-shard.mjs ;;
-          esac
+          printf 'export   const   brokenControl=1\n' >> scripts/mutation-shard.mjs
+          printf '\nconst unusedControl = 1;\n' >> scripts/test-durations.mjs
 
       - run: pnpm lint ${{ needs.changes.outputs.full == 'false' && '--cache --cache-strategy content --cache-location "$RUNNER_TEMP/lint-cache/eslint"' || '' }}
 
       - run: pnpm format:check ${{ needs.changes.outputs.full == 'false' && '--cache --cache-strategy content --cache-location "$RUNNER_TEMP/lint-cache/prettier"' || '' }}
+        if: always()
 
       - name: Keep the lint results for later runs
         if: needs.changes.outputs.full == 'false' && github.ref == 'refs/heads/main' && steps.lint-cache.outputs.cache-hit != 'true'
