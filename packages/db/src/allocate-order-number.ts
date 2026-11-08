@@ -18,17 +18,13 @@ import { workingOrderCounters } from "./schema/working-order-counters.js";
  * fiscal series that may carry a migrated starting point.
  */
 export async function allocateOrderNumber(tx: Transaction, nodeId: string): Promise<number> {
+  const aboveEveryBox = sql`(select coalesce(max(${workingOrderCounters.nextNumber}), 0) + 1 from ${workingOrderCounters})`;
   const [row] = await tx
     .insert(workingOrderCounters)
-    .values({
-      nodeId,
-      nextNumber: sql`(select coalesce(max(${workingOrderCounters.nextNumber}), 0) + 1 from ${workingOrderCounters})`,
-    })
+    .values({ nodeId, nextNumber: aboveEveryBox })
     .onConflictDoUpdate({
       target: [workingOrderCounters.nodeId],
-      set: {
-        nextNumber: sql`(select max(${workingOrderCounters.nextNumber}) from ${workingOrderCounters}) + 1`,
-      },
+      set: { nextNumber: aboveEveryBox },
     })
     .returning({ allocated: workingOrderCounters.nextNumber });
   return row!.allocated;
