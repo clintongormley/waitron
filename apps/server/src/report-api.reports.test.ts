@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   devices,
-  handoverActivations,
   invoiceSeries,
   saleLines,
   sales,
@@ -14,6 +13,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { insertHandoverActivationTx } from "@waitron/handover";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, personRole, persons, startManagementSession } from "@waitron/identity";
@@ -494,15 +494,17 @@ describe("mountReportApi — boxes taken over from", () => {
   }
 
   async function handover(source: string, destination: string, activatedAt: string) {
-    await suite.db.insert(handoverActivations).values({
-      operationId: randomUUID(),
-      scenario: "controlled",
-      sourceNodeId: source,
-      destinationNodeId: destination,
-      evidence: {} as never,
-      personId: randomUUID(),
-      activatedAt,
-    });
+    await withTransaction(suite.db, (tx) =>
+      insertHandoverActivationTx(tx, {
+        operationId: randomUUID(),
+        scenario: "controlled",
+        sourceNodeId: source,
+        destinationNodeId: destination,
+        evidence: {} as never,
+        personId: randomUUID(),
+        activatedAt,
+      }),
+    );
   }
 
   it("a box's reports include the boxes it took over from, two handovers back", async () => {
