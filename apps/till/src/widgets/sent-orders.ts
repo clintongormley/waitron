@@ -6,18 +6,11 @@ import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, formatDecimalInput, Gestures } from "@waitron/ui";
 import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
-import {
-  MONEY_SCALE,
-  addDecimal,
-  decimal,
-  formatMoney,
-  sumDecimals,
-  toScale,
-} from "@waitron/shared";
+import { MONEY_SCALE, decimal, formatMoney, sumDecimals, toScale } from "@waitron/shared";
 import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.js";
+import { sentItemCount, sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.js";
 import { portionGroups, sentSlicePortionKey } from "../state/portion-groups.js";
 import { reminderDueAt } from "../state/release-reminder.js";
 import { trimQuantity } from "./dish-format.js";
@@ -593,18 +586,15 @@ export class TillSentOrders extends LitElement {
     ].join(" · ");
   }
   #heldCounts(model: SentPanel): string {
-    const counts = new Map<string | null, string>();
+    const counts = new Map<string | null, SentSlice[]>();
     for (const { rows } of model.held)
       for (const slice of rows) {
         const id = slice.row.courseId;
-        counts.set(
-          id,
-          trimQuantity(addDecimal(decimal(counts.get(id) ?? "0"), decimal(slice.quantity))),
-        );
+        counts.set(id, [...(counts.get(id) ?? []), slice]);
       }
     return [...counts]
       .sort(([a], [b]) => this.#courseOrder(a) - this.#courseOrder(b))
-      .map(([id, quantity]) => `${this.#courseName(id)} (${this.#quantity(quantity)})`)
+      .map(([id, slices]) => `${this.#courseName(id)} (${this.#quantity(sentItemCount(slices))})`)
       .join(" · ");
   }
   #heldGroup(entry: SentPanel["held"][number]): TemplateResult {

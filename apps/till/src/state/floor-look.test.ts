@@ -595,6 +595,23 @@ describe("mapLook", () => {
 });
 
 describe("mapLook's description", () => {
+  it("uses station-ready dish counts instead of a legacy quantity count", () => {
+    const ready = {
+      kind: "ready" as const,
+      byStation: [
+        {
+          stationId: "k",
+          stationName: "Kitchen",
+          count: 1,
+          oldestReadyAt: null,
+          readyWarningAfterMinutes: 3,
+        },
+      ],
+    };
+    expect(mapLook([table({ readyToServe: 150, signals: [ready] })], now)).toMatchObject({
+      cue: { icon: "floor-ready", text: "1" },
+    });
+  });
   const startLocale = currentLocale();
   afterEach(() => setLocale(startLocale));
   const words = (members: TableState[]) => mapLook(members, now).description;

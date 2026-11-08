@@ -167,7 +167,7 @@ describe("Sent panel (A773)", () => {
     expect(panel.subtotals).toEqual({ served: "4.00", fired: "0.00", held: "8.00" });
   });
 
-  it("keeps exact fractional counts and large money values, clamps serving to the uncancelled food", () => {
+  it("counts measured food once per state while keeping exact portions and large money values", () => {
     const data = current(
       [],
       [
@@ -196,12 +196,51 @@ describe("Sent panel (A773)", () => {
       { id: "clamped", kind: "cancelled_charged", quantity: "1", amount: "0.01" },
       { id: "clamped", kind: "served", quantity: "1", amount: "0.00" },
     ]);
-    expect(panel.counts).toEqual({ ready: "0", firing: "0.125", held: "0", served: "2.25" });
+    expect(panel.counts).toEqual({ ready: "0", firing: "1", held: "0", served: "3" });
     expect(panel.subtotals).toEqual({
       served: "666666666666.65",
       fired: "333333333333.33",
       held: "0.00",
     });
+  });
+
+  it.each(["150", "330"])(
+    "counts a zero-precision measure of %s once using its classification",
+    (quantity) => {
+      const panel = sentPanel(
+        current([], [row("measure", { quantity, countsWholePortions: false })]),
+        "bill-1",
+        now,
+      );
+      expect(panel.counts).toEqual({ ready: "0", firing: "1", held: "0", served: "0" });
+      expect(panel.fired[0]!.quantity).toBe(quantity);
+      expect(panel.subtotals.fired).toBe("3.00");
+    },
+  );
+
+  it("rounds whole portions left up and assigns the rest of the count to Served", () => {
+    const panel = sentPanel(
+      current([], [row("portions", { quantity: "3", servedQuantity: "1.5", netAmount: "9.00" })]),
+      "bill-1",
+      now,
+    );
+    expect(panel.counts).toEqual({ ready: "0", firing: "2", held: "0", served: "1" });
+    expect(slices(panel.fired)).toEqual([
+      { id: "portions", kind: "fired", quantity: "1.5", amount: "4.50" },
+    ]);
+    expect(slices(panel.served)).toEqual([
+      { id: "portions", kind: "served", quantity: "1.5", amount: "4.50" },
+    ]);
+  });
+
+  it("counts a fractional active quantity once even for a whole-portion unit", () => {
+    const panel = sentPanel(
+      current([], [row("fraction", { quantity: "1.5", countsWholePortions: true })]),
+      "bill-1",
+      now,
+    );
+    expect(panel.counts.firing).toBe("1");
+    expect(panel.fired[0]!.quantity).toBe("1.5");
   });
 
   it("retains the party-wide reminder for a group shared with another bill without redating it", () => {

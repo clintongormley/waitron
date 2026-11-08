@@ -14,6 +14,7 @@ import {
   sales,
   tenders,
   saleSettlements,
+  lineServiceCancellations,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -35,6 +36,9 @@ import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 
 import { readBillBalance, readPaymentsByBill, outstandingOf } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
+import { assignProductUnit, setProductVariants, units } from "@waitron/catalogue";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
+import { readOrderStateCounts } from "./order-state-counts.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
@@ -67,6 +71,140 @@ async function contribute(id: string, amount: string, tip = "0.00") {
 }
 
 describe("Find Bills SQL paging", () => {
+  it("counts whole portions and ignores extras and cancelled portions", async () => {
+    const id = await named("Counted dishes", "Caña", "Tarta");
+    let parentId!: string;
+    await inTx(venue, async (tx) => {
+      const lines = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      parentId = lines[0]!.id;
+      await tx
+        .update(workingOrderLines)
+        .set({ quantity: 3000 })
+        .where(eq(workingOrderLines.id, lines[0]!.id));
+      await tx
+        .update(workingOrderLines)
+        .set({ parentLineId: lines[0]!.id })
+        .where(eq(workingOrderLines.id, lines[1]!.id));
+    });
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: 3 });
+    await inTx(venue, (tx) =>
+      tx.insert(lineServiceCancellations).values({
+        lineId: parentId,
+        quantity: 1000,
+        cancelledAt: new Date().toISOString(),
+        wasStarted: false,
+        actorId: venue.operatorId,
+      }),
+    );
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: 2 });
+    await inTx(venue, (tx) =>
+      tx
+        .update(lineServiceCancellations)
+        .set({ quantity: 3000 })
+        .where(eq(lineServiceCancellations.lineId, parentId)),
+    );
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: 0 });
+  });
+
+  it("counts a zero-precision weighed dish once using its current inherited unit", async () => {
+    const id = await named("Weighed dish", "Caña");
+    await inTx(venue, async (tx) => {
+      const [line] = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      const [gram] = await tx
+        .insert(units)
+        .values({
+          staffName: "Gram",
+          staffAbbreviation: "g",
+          name: { en: "Gram" },
+          abbreviation: { en: "g" },
+          precision: 0,
+          hardwareUnit: "g",
+        })
+        .returning({ id: units.id });
+      await assignProductUnit(tx, line!.productId!, gram!.id);
+      const [variant] = await setProductVariants(
+        tx,
+        line!.productId!,
+        [
+          {
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "3.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      await tx
+        .update(workingOrderLines)
+        .set({ productId: variant!.id, quantity: 150000, unitPrecision: 0 })
+        .where(eq(workingOrderLines.id, line!.id));
+    });
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: 1 });
+  });
+
+  it("sorts by item count before paging in both directions across fifty rows", async () => {
+    const ids: string[] = [];
+    for (let n = 1; n <= 51; n++) {
+      const id = await named(`Count ${n}`);
+      ids.push(id);
+      await inTx(venue, (tx) =>
+        tx
+          .update(workingOrderLines)
+          .set({ quantity: n * 1000 })
+          .where(eq(workingOrderLines.workingOrderId, id)),
+      );
+    }
+    for (const direction of ["ascending", "descending"]) {
+      const expected = direction === "ascending" ? ids : [...ids].reverse();
+      for (const page of [0, 1]) {
+        const result = await list({ sort: "items", direction, page: String(page) });
+        expect(result.total).toBe(51);
+        expect(result.rows.map((r) => r.workingOrderId)).toEqual(
+          expected.slice(page * 50, (page + 1) * 50),
+        );
+      }
+    }
+  });
+
+  it("keeps an open draft outside Find a bill while the current order count includes it", async () => {
+    const seated = await seatedWith(venue, "Tarta");
+    await inTx(venue, (tx) =>
+      saveDraft(tx, venue.cfg, seated.partyId, venue.operatorId, {
+        billId: seated.tabId,
+        draftId: null,
+        revision: 0,
+        lines: [
+          {
+            menuItemId: venue.offerFor("Caña"),
+            variantId: null,
+            menuVersionId: null,
+            options: [],
+            extras: [],
+            note: null,
+            quantity: "3",
+            courseId: null,
+            noMerge: false,
+          },
+        ],
+      }),
+    );
+    expect(await inTx(venue, (tx) => readFindBill(tx, seated.tabId))).toMatchObject({
+      itemCount: 1,
+    });
+    expect(
+      (await inTx(venue, (tx) => readOrderStateCounts(tx, [seated.tabId]))).get(seated.tabId),
+    ).toMatchObject({ ordered: 4, unsent: 3 });
+  });
+
   it("an issued but unsettled projection retains received bill payments until settlement", async () => {
     const id = await parked(venue, "Croquetas");
     await contribute(id, "4.00");

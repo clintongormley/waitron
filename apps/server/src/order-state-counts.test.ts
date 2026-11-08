@@ -51,6 +51,7 @@ import { inTx, provisionBillVenue } from "./testing/bill-venue.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { dishCounts, readOrderStateCounts } from "./order-state-counts.js";
+import { readBillSignals } from "./table-signals.js";
 import type { CountedLine } from "./order-state-counts.js";
 import "./errors.js";
 
@@ -743,6 +744,35 @@ describe("readOrderStateCounts on a party's bill", () => {
 
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 2 });
   });
+
+  it.each([true, false])(
+    "counts a parent dish once at each station (same station: %s)",
+    async (sameStation) => {
+      const { billId } = await seatParty();
+      await sendRound(billId, [withSauce("Tarta")]);
+      const { dish, extra } = await kitchenItems(billId);
+      if (sameStation)
+        await inTx(venue, async (tx) => {
+          const [parent] = await tx
+            .select({ stationId: ticketItems.stationId })
+            .from(ticketItems)
+            .where(eq(ticketItems.id, dish.id));
+          await tx
+            .update(ticketItems)
+            .set({ stationId: parent!.stationId })
+            .where(eq(ticketItems.id, extra!.id));
+        });
+      await advance(dish.id, "preparing", "ready");
+      expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, waiting: 1 });
+      await advance(extra!.id, "preparing", "ready");
+      expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, ready: 1 });
+      const signals = (await inTx(venue, (tx) => readBillSignals(tx, [billId]))).get(billId)!;
+      const ready = signals.find((signal) => signal.kind === "ready");
+      expect(
+        ready?.kind === "ready" ? ready.byStation.map((station) => station.count) : null,
+      ).toEqual(sameStation ? [1] : [1, 1]);
+    },
+  );
 
   it("counts a ready dish waiting while its extra is queued at another station, then ready, and held while the extra is unfired", async () => {
     const { billId } = await seatParty();

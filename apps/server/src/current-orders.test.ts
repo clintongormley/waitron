@@ -1100,6 +1100,7 @@ function row(
     courseId: null,
     quantity: "1.000",
     unitPrecision: 0,
+    countsWholePortions: true,
     servedQuantity: "0.000",
     servedAt: null,
     released: true,

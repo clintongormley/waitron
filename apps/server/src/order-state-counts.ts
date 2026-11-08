@@ -45,6 +45,11 @@ export interface CountedLine extends KitchenPart {
 
 const ZERO: OrderStateCounts = { ordered: 0, unsent: 0, held: 0, waiting: 0, ready: 0 };
 
+export function countsWholePortions(dish: Pick<CountedLine, "unitPrecision" | "unit">): boolean {
+  const places = dish.unitPrecision ?? dish.unit?.precision ?? 0;
+  return (dish.unit?.hardwareUnit ?? null) === null && places === 0 && dish.unit?.measure !== true;
+}
+
 /**
  * One dish's counts. A dish sold by the unit (`takesExtras`'s rule: no hardware unit, no decimal
  * places, not a measure) counts its whole quantity; any other dish, or a fractional quantity,
@@ -62,10 +67,7 @@ export function dishCounts(
   const served =
     dish.servedAt !== null ? active : Math.min(Math.max(0, dish.servedQuantity), active);
   const left = collected ? 0 : active - served;
-  const places = dish.unitPrecision ?? dish.unit?.precision ?? 0;
-  const byTheUnit =
-    (dish.unit?.hardwareUnit ?? null) === null && places === 0 && dish.unit?.measure !== true;
-  const asOne = !byTheUnit || active % 1000 !== 0;
+  const asOne = !countsWholePortions(dish) || active % 1000 !== 0;
   const ordered = asOne ? 1 : active / 1000;
   const counts = { ...ZERO, ordered };
   if (left === 0) return counts;

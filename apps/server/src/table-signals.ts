@@ -1,6 +1,13 @@
 import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { parentJoin, parentProducts, staffPresentationName } from "@waitron/catalogue";
+import {
+  parentJoin,
+  parentProducts,
+  productUnits,
+  staffPresentationName,
+  unitOwnerJoin,
+  units,
+} from "@waitron/catalogue";
 import {
   kitchenStations,
   lineServiceCancellations,
@@ -18,9 +25,11 @@ import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
 import { firedQuantity } from "./kitchen-print.js";
+import { countsWholePortions } from "./order-state-counts.js";
 
 /** A fired or requested line nobody has finished serving, with its station and waiting bands. */
 interface KitchenLine {
+  dishId: string;
   billId: string;
   stationId: string;
   stationName: string;
@@ -43,6 +52,7 @@ async function readKitchenLines(
   const dish = alias(workingOrderLines, "signal_dish");
   const rows = await tx
     .select({
+      dishId: sql<string>`coalesce(${workingOrderLines.parentLineId}, ${workingOrderLines.id})`,
       billId: workingOrderLines.workingOrderId,
       stationId: ticketItems.stationId,
       stationName: kitchenStations.name,
@@ -57,6 +67,12 @@ async function readKitchenLines(
       dishServedQuantity: dish.servedQuantity,
       dishCancelledQuantity: lineServiceCancellations.quantity,
       dishUnitPrecision: dish.unitPrecision,
+      unit: {
+        id: units.id,
+        hardwareUnit: units.hardwareUnit,
+        precision: units.precision,
+        measure: units.measure,
+      },
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -65,6 +81,12 @@ async function readKitchenLines(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .leftJoin(dish, eq(dish.id, workingOrderLines.parentLineId))
+    .leftJoin(
+      products,
+      eq(products.id, sql`coalesce(${dish.productId}, ${workingOrderLines.productId})`),
+    )
+    .leftJoin(productUnits, unitOwnerJoin)
+    .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, dish.id))
     .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .where(
@@ -85,18 +107,20 @@ async function readKitchenLines(
       dishServedQuantity,
       dishCancelledQuantity,
       dishUnitPrecision,
+      unit,
       ...line
-    }) => ({
-      ...line,
-      // A weighed dish is one plate however much it weighs; a counted one is its units left to serve.
-      units:
-        (dishUnitPrecision ?? unitPrecision)
-          ? 1
-          : ((dishQuantity ?? quantity) -
-              (dishCancelledQuantity ?? 0) -
-              (dishServedQuantity ?? servedQuantity)) /
-            1000,
-    }),
+    }) => {
+      const active = (dishQuantity ?? quantity) - (dishCancelledQuantity ?? 0);
+      const left = active - (dishServedQuantity ?? servedQuantity);
+      return {
+        ...line,
+        units:
+          !countsWholePortions({ unitPrecision: dishUnitPrecision ?? unitPrecision, unit }) ||
+          active % 1000 !== 0
+            ? 1
+            : Math.ceil(left / 1000),
+      };
+    },
   );
 }
 
@@ -104,6 +128,7 @@ async function readKitchenLines(
 function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSignal[] {
   const signals: KitchenSignal[] = [];
   const ready = new Map<string, ReadyAtStation>();
+  const readyDishes = new Set<string>();
   for (const line of lines) {
     if (line.state !== "ready") continue;
     const station = ready.get(line.stationId) ?? {
@@ -113,7 +138,9 @@ function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSi
       oldestReadyAt: null,
       readyWarningAfterMinutes: line.readyWarningAfterMinutes,
     };
-    station.count += line.units;
+    const key = `${line.stationId}:${line.dishId}`;
+    if (!readyDishes.has(key)) station.count += line.units;
+    readyDishes.add(key);
     if (
       line.readyAt !== null &&
       (station.oldestReadyAt === null ||

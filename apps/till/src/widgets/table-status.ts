@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { TableParty, TableState } from "../api/client.js";
 import { t } from "../i18n/t.js";
-import { type PinLook, pinLook, readyText } from "../state/floor-look.js";
+import { type PinLook, pinLook, readyCount, readyText } from "../state/floor-look.js";
 import { detailsHeading, groupName, mergeMembersOf, savedNameUnder } from "../state/floor-today.js";
 import { lateBand } from "../state/table-precedence.js";
 import { signalOf } from "../state/table-signals.js";
@@ -24,7 +24,7 @@ function partyRows(tables: readonly TableState[], party: TableParty): TableState
 /** Counts are read from one table, never summed: the server repeats a party's counts on each of
  * its tables (`packages/shared/src/table-signals.ts`). */
 function flashMessage(rows: readonly TableState[]): string {
-  const ready = Math.max(...rows.map((row) => row.readyToServe));
+  const ready = Math.max(...rows.map(readyCount));
   const parts: string[] = [];
   if (ready > 0) parts.push(readyText(ready));
   if (rows.some((row) => lateBand(row) === "forgotten")) parts.push(t("table.flash_forgotten"));

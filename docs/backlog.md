@@ -890,7 +890,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Decide whether Merge bills goes too.
   [Detail](backlog/till.md#a1287-with-no-party-the-s-merge-bills-does-nothing)
 
-- **One count of items everywhere** (bundle of 4, 1 important, size M). Holds A1293, A995, A996, A997. [Detail](backlog/till.md#bundle-one-count-of-items-everywhere)
+- **One count of items everywhere** (bundle of 1, size M). Holds A997. [Detail](backlog/till.md#bundle-one-count-of-items-everywhere)
 
 - **What a row action takes on a grouped row** (bundle of 3, size M, needs the owner). Holds A1193, A1194, A1198. [Detail](backlog/till.md#bundle-what-a-row-action-takes-on-a-grouped-row)
 
