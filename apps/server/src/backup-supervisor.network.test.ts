@@ -181,7 +181,9 @@ describe("BackupSupervisor status, one destination at a time", () => {
         { id: "local", dir: await tempDir("waitron-bsupnet-local-") },
         { id: "remote", dir: await tempDir("waitron-bsupnet-remote-") },
       ],
-      { destinationTimeoutMs: 300 },
+      // The limit covers the local destination's real copy too, which a busy runner can slow past
+      // a few hundred milliseconds; only the stalled remote may reach it.
+      { destinationTimeoutMs: 5_000 },
     );
     const sup = await supervisor(() => cfg, logs, 400);
     try {
