@@ -687,6 +687,7 @@ export class ProfileScreen extends LitElement {
         await this.api.confirmProfileEmail(f.setupCode);
       }
       if (!active()) return;
+      if (this.mode === "email") this.emailStatus = null;
       if (emailResult !== undefined) {
         this.emailStatus =
           emailResult.uncertain === true

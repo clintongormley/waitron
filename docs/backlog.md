@@ -1916,7 +1916,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   save and remove the relay, with manager reads and actionable SMTP tests. Users and Account settings
   distinguish accepted, captured, refused and uncertain account mail, and an immediate invitation
   retry says when nothing changed. Left: sender naming and the Demo account-mail capture policy
-  when SMTP was installed from the terminal; Cloud delivery stays gated on D102.
+  when a stored relay exists; Cloud delivery stays gated on D102.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987

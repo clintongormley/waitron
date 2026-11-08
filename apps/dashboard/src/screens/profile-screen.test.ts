@@ -2005,6 +2005,43 @@ describe("profile confirmation delivery messages", () => {
     expect(el.shadowRoot!.textContent).not.toContain(t("profile.saved"));
   });
 
+  it("clears the mail status after the new address is confirmed", async () => {
+    const view = await apiStub().getProfile();
+    const { el, api } = await mount({
+      getProfile: vi
+        .fn()
+        .mockResolvedValueOnce(view)
+        .mockResolvedValueOnce({ ...view, pendingEmail: "new@example.com" })
+        .mockResolvedValue({ ...view, email: "new@example.com", pendingEmail: null }),
+      saveProfile: vi.fn().mockResolvedValue({ emailVerificationSent: true, delivery: "sent" }),
+    });
+    await editDetails(el);
+    input(el, "email", "new@example.com");
+    await flush(el);
+    input(el, "currentPassword", "current");
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    const saved = new Promise<void>((resolve) =>
+      modal.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await click(el, "save");
+    await saved;
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")?.textContent?.trim()).toBe(
+      t("profile.email_sent"),
+    );
+    await click(el, "confirm-email");
+    input(el, "setupCode", "123456");
+    const confirmed = new Promise<void>((resolve) =>
+      modal.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await click(el, "save");
+    await confirmed;
+    await flush(el);
+    expect(api.confirmProfileEmail).toHaveBeenCalledExactlyOnceWith("123456");
+    expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain("new@example.com");
+  });
+
   it("shows no delivery diagnosis when saving unchanged email details", async () => {
     const { el } = await mount();
     await editDetails(el);
