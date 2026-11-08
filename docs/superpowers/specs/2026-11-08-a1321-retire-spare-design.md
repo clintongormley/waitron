@@ -12,6 +12,8 @@ OWNER 2026-11-04: “Yes, before go-live”. In that lane's `questions.md`, WATC
 checked on the server”; “Retiring requires exactly what the existing Remove action requires
 today”. OWNER relayed 2026-11-07 22:51: “node.promote stays merged with node.manage”.
 These authorize this proposal, not its build.
+WATCHER 2026-11-08 02:53, same file: “delete the client expected-term field and check”;
+“keep the matching-link repair”; “Publish it for the owner's full-design approval”.
 
 **SOURCE READ ONLY at `e0e4f5b8fd`; nothing run.** `membership-removal.ts:43-52,71-74`
 checks local rows; completed remote joining remains unbuilt in
@@ -55,4 +57,4 @@ Update EN/ES Servers guides, dialog explanations and `membership.standby_joined`
 replace “join from scratch” for past-selling spares. Date A947 D7/D17/G/Task 6.10 updates;
 ask the CLAUDE.md maintainer to clarify active peers. Preserve historical text.
 
-**Owner question:** approve this reduced proposal for planning after the watcher's review corrections?
+**Owner question:** approve this reduced proposal for planning, with build held until A947 3b-6?
