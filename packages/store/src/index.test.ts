@@ -1041,6 +1041,11 @@ describe("onCommit", () => {
     store.venue.run(sql`insert into sales (total) values (99)`);
     expect(statSync(wal).size).toBe(before);
     expect(heard).toHaveLength(1);
+    for (let i = 0; i < 5; i += 1) {
+      store.venue.run(sql`insert into sales (total) values (${100 + i})`);
+    }
+    expect(statSync(wal).size).toBe(before);
+    expect(heard).toHaveLength(6);
   });
 
   // The fold-back changes the side file without a commit; compared with the file as it was at the

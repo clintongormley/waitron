@@ -267,7 +267,11 @@ describe("isReadOnlyRefusal", () => {
 });
 
 describe("the side file's mark", () => {
-  const directory = () => mkdtempSync(join(tmpdir(), "waitron-wal-mark-"));
+  const directory = () => {
+    const path = mkdtempSync(join(tmpdir(), "waitron-wal-mark-"));
+    writeFileSync(join(path, "venue.db-shm"), Buffer.alloc(48));
+    return path;
+  };
 
   it("reads a missing side file as absent, and two absent readings as the same", () => {
     const path = join(directory(), "venue.db-wal");
@@ -287,13 +291,14 @@ describe("the side file's mark", () => {
     expect(sameWal(first, walMark(path))).toBe(false);
   });
 
-  it("sees a rewritten WAL header even when size and modification time are unchanged", () => {
-    const path = join(directory(), "venue.db-wal");
-    const header = Buffer.alloc(32);
-    writeFileSync(path, header);
+  it("sees another commit inside a reused WAL even when size, time and WAL header are unchanged", () => {
+    const folder = directory();
+    const path = join(folder, "venue.db-wal");
+    const header = Buffer.alloc(48);
+    writeFileSync(path, Buffer.alloc(32));
     const before = walMark(path);
-    header.writeUInt32BE(1, 16);
-    writeFileSync(path, header);
+    header.writeUInt32LE(1, 8);
+    writeFileSync(join(folder, "venue.db-shm"), header);
     const after = walMark(path);
     if (typeof before === "string" || typeof after === "string") {
       throw new Error("Expected two readable side-file marks");
@@ -301,6 +306,17 @@ describe("the side file's mark", () => {
     expect(after.size).toBe(before.size);
     expect(sameWal(before, { ...after, mtimeNs: before.mtimeNs })).toBe(false);
   });
+
+  it.each([0, 47])(
+    "reports an incomplete shared-memory header of %i bytes as unreadable",
+    (size) => {
+      const folder = directory();
+      const path = join(folder, "venue.db-wal");
+      writeFileSync(path, Buffer.alloc(32));
+      writeFileSync(join(folder, "venue.db-shm"), Buffer.alloc(size));
+      expect(walMark(path)).toBe("unreadable");
+    },
+  );
 
   // A reading that failed says nothing, so the commit is reported rather than lost.
   it("never reads a side file it could not examine as unchanged", () => {

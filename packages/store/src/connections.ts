@@ -65,21 +65,23 @@ const totalChanges = (connection: DatabaseSync): number => {
   return (counter.get() as { n: number }).n;
 };
 
-export type WalMark = { size: bigint; mtimeNs: bigint; header: string } | "absent" | "unreadable";
+export type WalMark =
+  { size: bigint; mtimeNs: bigint; commitHeader: string } | "absent" | "unreadable";
 
 export const walMark = (path: string): WalMark => {
   try {
     const stat = statSync(path, { bigint: true, throwIfNoEntry: false });
     if (stat === undefined) return "absent";
-    const fd = openSync(path, "r");
+    const fd = openSync(`${path.slice(0, -4)}-shm`, "r");
     try {
-      // WAL resets change the header even when filesystem timestamps do not advance.
-      const header = Buffer.alloc(32);
+      // A reused WAL can keep its size, timestamp and WAL header across successive commits.
+      const header = Buffer.alloc(48);
       const length = readSync(fd, header, 0, header.length, 0);
+      if (length !== header.length) return "unreadable";
       return {
         size: stat.size,
         mtimeNs: stat.mtimeNs,
-        header: header.subarray(0, length).toString("hex"),
+        commitHeader: header.toString("hex"),
       };
     } finally {
       closeSync(fd);
@@ -94,7 +96,7 @@ export const sameWal = (a: WalMark, b: WalMark): boolean =>
     ? false
     : a === "absent" || b === "absent"
       ? a === b
-      : a.size === b.size && a.mtimeNs === b.mtimeNs && a.header === b.header;
+      : a.size === b.size && a.mtimeNs === b.mtimeNs && a.commitHeader === b.commitHeader;
 
 /**
  * The connections one database file is opened on, and the rule deciding where a statement goes.
@@ -161,8 +163,8 @@ export interface Connections {
    * listener that throws, or returns a promise that rejects, is skipped rather than allowed to
    * reach the caller, who would otherwise be told a committed write failed.
    *
-   * Size and modification time can stay equal when a checkpoint restarts the side file; its
-   * header distinguishes those rewrites. A commit that changes the side file but no row (DDL)
+   * Size and modification time can stay equal while a reused side file is overwritten; its
+   * shared-memory commit header distinguishes those writes. A commit that changes the side file but no row (DDL)
    * is not reported and does not move the comparison either, so a
    * same-value update right after one IS reported.
    */
