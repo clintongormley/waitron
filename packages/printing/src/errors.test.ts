@@ -29,7 +29,7 @@ describe("the printer / agent error codes carry their declared params", () => {
     expect(error.params).toEqual({ id: "agt_123" });
   });
 
-  it("constructs agent.unauthorized with NO params (the same 401 for every refusal)", () => {
+  it("constructs agent.unauthorized with NO params", () => {
     const error = new AppError("agent.unauthorized", {});
     expect(error.code).toBe("agent.unauthorized");
     expect(error.params).toEqual({});

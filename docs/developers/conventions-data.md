@@ -2898,6 +2898,16 @@ Since A1127 slice 3, the full-disk bar's read (`GET /management-api/disk-stop`,
 `withWriteLock` turn with no drain. The case is "the disk-stop read answers on a full disk with a
 change waiting, for a cashier and a manager" in `apps/server/src/start-full-disk.e2e.test.ts`.
 
+Since A1436, `authenticateAgent` (`packages/printing/src/agent.ts`) gives way the same way: when
+the stamp's `withTransaction` is refused `storage.disk_full`, the row is read again outside any
+turn, a row now gone or holding another token hash is refused, and the request goes on unstamped.
+Cases: the "a print agent with a stamp due" group in `apps/server/src/start-full-disk.e2e.test.ts`
+on a real full filesystem, whose revoked and re-keyed steps are refused before any stamp is
+attempted, and "when the sighting write is refused" in `packages/printing/src/agent.test.ts`,
+through a stand-in database, which is what reaches the re-check. The route's own work still needs
+room: measured 2026-11-08, a `POST /print-api/agent/jobs` poll carrying a new or changed host name
+answers 507 `storage.disk_full`, and no case asserts that.
+
 **What refused them.**
 
 - **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a
@@ -5439,7 +5449,7 @@ in turn, never `Promise.all`.** No guard enforces it.
 ### A housekeeping write on a read path must not take the read down on a full disk.
 
 **A housekeeping write on a read path must not take the read down on a full disk.** The last-seen
-stamp gives way to a full disk (`readDeviceProof`, `requireSession`, and the session checks of the
+stamp gives way to a full disk (`readDeviceProof`, `requireSession`, `authenticateAgent`, and the session checks of the
 Box status routes in `box-health-api.ts` and the bell's reads in `alerts-api.ts`); a read that
 must answer while a change waits reads in `withWriteLock` turns with no drain, as the equipment
 and Box status reads do, and the bell's reads after a full-disk refusal — a stated exception to
