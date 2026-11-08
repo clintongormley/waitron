@@ -708,6 +708,90 @@ describe("design §8 test 19: each outcome, through each resolver", () => {
 });
 
 describe("design §8 test 20: the call's own answer, and which answers settle what", () => {
+  it.each([
+    ["new", true, true],
+    ["never sent", true, true],
+    ["new", false, false],
+    ["resend", true, false],
+    ["generic", true, false],
+    ["clock stop", true, false],
+  ] as const)(
+    "temporary balance explanation: %s, documented %s",
+    async (entry, documented, notice) => {
+      const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+      const card = await pay(billId, "card", "20.00");
+      const submissionId = randomUUID();
+      if (entry === "never sent")
+        await inTx(venue, (tx) =>
+          tx.insert(billPaymentRefunds).values({
+            billPaymentId: card.id,
+            submissionId,
+            fingerprint: refundFingerprint(card.id, "5.00", "0.00", REASON),
+            appliedAmount: 500,
+            reason: REASON,
+            authorizedBy: venue.adminId,
+            requestedBy: venue.operatorId,
+            source: "device",
+            deviceId: venue.deviceId,
+            state: "pending",
+          }),
+        );
+      if (entry === "resend") {
+        venue.card.scriptNextRefund({ made: false, answer: LOST });
+        await refund(billId, card.id, { applied: "5.00", submissionId });
+      }
+      venue.card.scriptNextRefund({
+        made: false,
+        answer: {
+          kind: "refused",
+          httpStatus: 409,
+          documented,
+          ...(entry === "generic" ? {} : { reason: "provider_balance_unavailable" as const }),
+        },
+      });
+      const sent = venue.card.sendRefund.bind(venue.card);
+      const sendSpy =
+        entry !== "clock stop"
+          ? null
+          : vi.spyOn(venue.card, "sendRefund").mockImplementation(async (request) => {
+              const answer = await sent(request);
+              vi.spyOn(venue.backend, "clockBehindLatestRecord").mockResolvedValue({
+                clockAt: "2026-11-08T10:00:00.000Z",
+                offsetMinutes: 0,
+                lastRecordAt: "2026-11-08T10:02:00.000Z",
+                lastRecordOffsetMinutes: 0,
+              });
+              return answer;
+            });
+      let asked: Awaited<ReturnType<typeof refund>>;
+      try {
+        asked = await refund(billId, card.id, { applied: "5.00", submissionId });
+      } finally {
+        if (sendSpy !== null) {
+          sendSpy.mockRestore();
+          vi.mocked(venue.backend.clockBehindLatestRecord).mockRestore();
+        }
+      }
+      const view = asked.answer.json.refund as Record<string, unknown>;
+      expect(view.state).toBe(
+        documented && entry !== "resend" && entry !== "clock stop" ? "failed" : "pending",
+      );
+      expect(view.refusalReason).toBe(notice ? "provider_balance_unavailable" : undefined);
+      expect(await onlyRefundOf(card.id)).toMatchObject({
+        appliedAmount: 500,
+        tipAmount: 0,
+        reason: REASON,
+        sendCount: entry === "resend" ? 2 : 1,
+      });
+      expect(await providerRefundsOf(card.id)).toEqual([]);
+      if (notice) {
+        const replay = await asked.again();
+        expect(replay.answer.json.refund).not.toHaveProperty("refusalReason");
+        expect(callsFor(view.id as string)).toHaveLength(1);
+      }
+    },
+  );
+
   it("fails the refund on a documented refusal of its first and only send, releasing the lock", async () => {
     const { billId, paymentId, row, asked } = await pendingRefund({
       made: false,

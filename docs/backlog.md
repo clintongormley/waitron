@@ -1363,12 +1363,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
-- **A949. Explain the temporary SumUp refund refusal.** Fresh refunds returned 409 with
-  “Not enough available balance to perform the operation at the moment”. Waitron drops that
-  reason and shows a generic failed refund with no next step. Preserve a recognised reason,
-  offer a later new attempt, and retain uncertain-outcome protections; proposal only.
-  [Detail](backlog/payments.md#a949-explain-a-temporary-sumup-refund-refusal)
-
 - **The deli's outage card machine.** Buy the standalone machine and
   replace estimated prices with real quotes.
   [Detail](backlog/payments.md#the-delis-outage-card-machine)

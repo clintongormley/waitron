@@ -19864,6 +19864,9 @@ export class TillApp extends LitElement {
       taken: null,
       refunded: {
         state: result.refund.state,
+        ...(result.refund.refusalReason === "provider_balance_unavailable"
+          ? { refusalReason: result.refund.refusalReason }
+          : {}),
         amount: moneyPlus(result.refund.appliedAmount, result.refund.tipAmount),
         method: open.payment.method,
         terminal: open.asked!.manualConfirmed === true,

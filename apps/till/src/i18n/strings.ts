@@ -128,6 +128,8 @@ export const en = {
   "tender_refund.pending": "The refund is awaiting confirmation. Check or retry this same attempt.",
   "tender_refund.completed": "The money was returned. The original invoice is unchanged.",
   "tender_refund.failed": "The refund failed. No money was returned by this attempt.",
+  "refund.provider_balance_unavailable":
+    "The card provider cannot refund this yet. You can start a new refund later.",
   "tender_refund.status": "Check status",
   "tender_refund.retry": "Retry this refund",
   "tender_refund.pending_payment": "Check pending refund",
@@ -2077,6 +2079,8 @@ export const es: Record<StringKey, string> = {
     "La devolución está pendiente de confirmación. Consulta o reintenta este mismo intento.",
   "tender_refund.completed": "Se ha devuelto el dinero. La factura original no cambia.",
   "tender_refund.failed": "La devolución ha fallado. Este intento no ha devuelto dinero.",
+  "refund.provider_balance_unavailable":
+    "El proveedor de pagos aún no puede hacer esta devolución. Puedes iniciar una nueva devolución más tarde.",
   "tender_refund.status": "Consultar estado",
   "tender_refund.retry": "Reintentar esta devolución",
   "tender_refund.pending_payment": "Consultar devolución pendiente",

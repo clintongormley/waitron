@@ -114,9 +114,11 @@ The reported integer-`40` control returned EUR 0.40. The reported decimal-`0.40`
 after a definite refusal, returned the full EUR 1.00, unlike September's no-movement
 observation. The request bytes were not retained, so an omitted or malformed amount is not
 excluded; its cause is unknown. Current Waitron methods send integer cents; the stale truncation
-comments have been removed. The session also observed temporary 409 balance refusals; the
-proposed correction is below. The watcher's repeated requests departed from the earlier
-single-request checklist and are recorded as such.
+comments have been removed. The session also observed temporary 409 balance refusals.
+_8 November 2026: the till now explains a recognised balance refusal on the failed request’s
+reply and offers a new refund later; later reads keep the generic failed-refund words._
+The watcher's repeated requests departed from the earlier single-request checklist and are
+recorded as such.
 
 The review's read-only follow-up found ids in both raw refund-event arrays. Replaying each
 complete detail through the real adapter matched its refund; the raw 19-row history response
@@ -127,23 +129,6 @@ Still open: pending lookup by supplied reference, signature-required cards, the 
 check, the SIM-only/offline/busy-reader/termination probes, and a second standalone machine's
 matching sample. The phone-app samples below do not establish the latter. No further paid
 request is authorised unattended, and a distinct authorisation void has not been measured.
-
-## A949: explain a temporary SumUp refund refusal
-
-The 5 November session returned HTTP 409 with `detail` “Not enough available balance to perform
-the operation at the moment”, then accepted later requests. The timing does not establish a safe
-wait or a payout-based readiness rule. On current main, `callForStatus` drops the detail; the
-SumUp adapter marks 409 as documented, and shared `refundOutcome` fails a first-send documented
-refusal. Staff get the generic failed-refund words with no explanation of this temporary state
-and no next step. The code-path trace and its test limits are in
-[§10.5](../research/2026-09-10-sumup-solo-experiments.md#105-current-waitron-path-and-proposed-correction).
-
-Next, in A949: preserve a bounded recognised reason for this specific refusal and explain that
-this attempt returned no money and a new refund can be tried later. Keep other 409 causes and
-uncertain outcomes distinct; do not automatically resend an uncertain SumUp refund. Cover the
-real HTTP body and both bill and settled-tender staff paths. First check whether existing
-records can carry the reason; any schema addition waits for the A1308 table hold to lift. This is a
-proposal, not implemented behaviour.
 
 ## The deli's outage card machine
 

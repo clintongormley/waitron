@@ -441,6 +441,47 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
     },
   );
 
+  it.each([
+    {
+      label: "temporary balance refusal",
+      detail: "Not enough available balance to perform the operation at the moment",
+      answer: {
+        kind: "refused",
+        httpStatus: 409,
+        documented: true,
+        reason: "provider_balance_unavailable",
+      },
+    },
+    {
+      label: "another conflict",
+      detail: "Refund already exists",
+      answer: { kind: "refused", httpStatus: 409, documented: true },
+    },
+  ])("carries $label through the real HTTP client", async ({ detail, answer }) => {
+    const server = createServer((_req, res) =>
+      res
+        .writeHead(409, { "content-type": "application/problem+json" })
+        .end(JSON.stringify({ title: "Conflict", status: 409, detail })),
+    );
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const provider = new SumUpCloudProvider({
+        client: sumupClient({
+          apiKey: "k",
+          merchantCode: "MC",
+          baseUrl: `http://127.0.0.1:${port}`,
+        }),
+        db: suite.db,
+        incidents: () => Promise.resolve(true),
+      });
+      expect(await provider.sendRefund(request("txn_1"))).toEqual(answer);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it.each([401, 429])(
     "answers %i, which SumUp does not document for a refund, as a refusal that settles nothing",
     async (httpStatus) => {

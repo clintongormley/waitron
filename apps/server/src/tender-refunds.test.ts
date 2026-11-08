@@ -50,6 +50,7 @@ import {
   resumeTenderRefund,
   tenderRefundIsLive,
   startTenderRefundResolvers,
+  stopTenderRefundResolvers,
 } from "./tender-refund-sends.js";
 import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import type { RefundAnswer, RefundLookup } from "@waitron/payments";
@@ -647,6 +648,105 @@ async function row(id: string) {
 }
 
 describe("settled-tender connected refund orchestration", () => {
+  it.each([
+    ["new", true, true],
+    ["never sent", true, true],
+    ["new", false, false],
+    ["resend", true, false],
+    ["generic", true, false],
+  ] as const)(
+    "temporary balance explanation: %s, documented %s",
+    async (entry, documented, notice) => {
+      const { t, provider } = await connected();
+      const req = request(t);
+      const before = await originalFacts();
+      if (entry === "never sent") await run(t, req);
+      if (entry === "resend") {
+        provider.scriptNextRefund({ made: false, answer: LOST });
+        await refundSettledTender(deps, cfg, t.saleId, req, operator());
+      }
+      provider.scriptNextRefund({
+        made: false,
+        answer: {
+          kind: "refused",
+          httpStatus: 409,
+          documented,
+          ...(entry === "generic" ? {} : { reason: "provider_balance_unavailable" as const }),
+        },
+      });
+      const result = await refundSettledTender(deps, cfg, t.saleId, req, operator());
+      expect(result.state).toBe(documented && entry !== "resend" ? "failed" : "pending");
+      if (notice) expect(result).toHaveProperty("refusalReason", "provider_balance_unavailable");
+      if (!notice) expect(result).not.toHaveProperty("refusalReason");
+      expect(await row(result.id)).toMatchObject({
+        appliedAmount: 200,
+        tipAmount: 0,
+        reason: "Goodwill",
+        sendCount: entry === "resend" ? 2 : 1,
+      });
+      expect(await store.db.select().from(paymentRefunds)).toEqual([]);
+      expect(await originalFacts()).toEqual(before);
+      if (notice) {
+        expect(await refundSettledTender(deps, cfg, t.saleId, req, operator())).not.toHaveProperty(
+          "refusalReason",
+        );
+        expect(await resumeTenderRefund(deps, result.id, "retry")).not.toHaveProperty(
+          "refusalReason",
+        );
+        expect(provider.refundCalls).toHaveLength(1);
+      }
+    },
+  );
+
+  it.each(["deadline", "clock stop", "shutdown"] as const)(
+    "omits a temporary balance explanation after a %s",
+    async (boundary) => {
+      const { t, provider } = await connected();
+      const pending = await run(t);
+      let release!: (answer: RefundAnswer) => void;
+      const held = new Promise<RefundAnswer>((done) => {
+        release = done;
+      });
+      const sent = vi.spyOn(provider, "sendRefund").mockImplementation(() => held);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const response = resumeTenderRefund(deps, pending.id, "retry");
+      await vi.waitFor(() => expect(sent).toHaveBeenCalledTimes(1));
+      if (boundary === "deadline") {
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(await response).not.toHaveProperty("refusalReason");
+      } else if (boundary === "clock stop")
+        vi.spyOn(deps.backend, "clockBehindLatestRecord").mockResolvedValue({
+          clockAt: AT,
+          offsetMinutes: 0,
+          lastRecordAt: "2026-10-16T12:02:00.000Z",
+          lastRecordOffsetMinutes: 0,
+        });
+      else {
+        const stopped = stopTenderRefundResolvers(store.db);
+        await vi.advanceTimersByTimeAsync(2_000);
+        await stopped;
+      }
+      release({
+        kind: "refused",
+        documented: true,
+        httpStatus: 409,
+        reason: "provider_balance_unavailable",
+      });
+      await vi.waitFor(() => expect(tenderRefundIsLive(store.db, pending.id)).toBe(false));
+      expect(await response).not.toHaveProperty("refusalReason");
+      expect(await resumeTenderRefund(deps, pending.id, "loop")).not.toHaveProperty(
+        "refusalReason",
+      );
+      expect(await row(pending.id)).toMatchObject({
+        state: boundary === "deadline" ? "failed" : "pending",
+        sendCount: 1,
+        appliedAmount: 200,
+        tipAmount: 0,
+      });
+      expect(await store.db.select().from(paymentRefunds)).toEqual([]);
+    },
+  );
+
   it("commits pending and its send stamp before I/O, with exact money and a stable attempt key", async () => {
     const { t, provider } = await connected(100);
     const before = await originalFacts();

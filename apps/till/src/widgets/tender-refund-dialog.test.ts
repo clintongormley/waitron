@@ -54,6 +54,33 @@ async function mount(over: Partial<TillTenderRefundDialog> = {}) {
   return el;
 }
 const root = (el: TillTenderRefundDialog) => el.shadowRoot!;
+it.each(["en", "es"] as const)("temporary balance explanation in %s", async (locale) => {
+  setLocale(locale);
+  const el = await mount({
+    result: {
+      id: "r-1",
+      saleId: "sale-1",
+      tenderId: card.tenderId,
+      state: "failed",
+      appliedAmount: "5.00",
+      tipAmount: "0.00",
+      createdAt: "2026-11-08T10:00:00.000Z",
+      completedAt: null,
+      refusalReason: "provider_balance_unavailable",
+    },
+  });
+  const message = () =>
+    root(el).querySelector("[data-outcome]")!.textContent!.replace(/\s+/g, " ").trim();
+  expect(message()).toBe(
+    `${t("tender_refund.failed")} ${t("refund.provider_balance_unavailable")}`,
+  );
+  el.result = { ...el.result!, refusalReason: undefined };
+  await el.updateComplete;
+  expect(message()).toBe(t("tender_refund.failed"));
+  el.result = { ...el.result!, state: "pending", refusalReason: "provider_balance_unavailable" };
+  await el.updateComplete;
+  expect(message()).toBe(t("tender_refund.pending"));
+});
 const field = (el: TillTenderRefundDialog, name: string) =>
   root(el).querySelector<HTMLElementTagNameMap["wt-input"]>(`wt-input[name=${name}]`)!;
 async function fill(el: TillTenderRefundDialog, name: string, value: string) {

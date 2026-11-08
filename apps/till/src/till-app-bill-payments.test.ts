@@ -6722,6 +6722,22 @@ describe("till-app: giving back a bill payment", () => {
     expect(openDrawer).not.toHaveBeenCalled();
   });
 
+  it("keeps the temporary balance explanation when closing the refund editor", async () => {
+    const refundBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        givenBack(
+          readerCard,
+          refundOf({ state: "failed", refusalReason: "provider_balance_unavailable" }),
+        ),
+      );
+    const el = await askRefund({ refundBillPayment }, readerCard);
+    expect(refundDialog(el)).toBeNull();
+    expect(text(inDialog(el, "[data-pay-refunded]"))).toBe(
+      `${t("bill_refund.failed").replace("{amount}", money("50.00"))} The card provider cannot refund this yet. You can start a new refund later.`,
+    );
+  });
+
   it("gives back a hand-keyed card on its terminal first, then records it with one manager's PIN", async () => {
     const refundBillPayment = vi.fn().mockResolvedValue(givenBack(keyedCard, refundOf()));
     const el = await askRefund({ refundBillPayment }, keyedCard);

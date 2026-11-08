@@ -26,6 +26,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it("keeps the balance explanation in memory without storing or resending a failed refund", async () => {
+  const failed = reply({ state: "failed", refusalReason: "provider_balance_unavailable" });
+  const api = {
+    refundTransaction: vi.fn(async () => failed),
+    getTenderRefund: vi.fn(async () => reply()),
+    retryTenderRefund: vi.fn(async () => reply()),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await session.submit("sale-1", ask);
+  expect(await session.resume("sale-1")).toMatchObject({
+    state: "failed",
+    refusalReason: "provider_balance_unavailable",
+  });
+  expect(session.read("sale-1")).toBeNull();
+  const fresh = new TenderRefundSession(scope, api);
+  expect(fresh.read("sale-1")).toBeNull();
+  await expect(fresh.resume("sale-1")).rejects.toMatchObject({ kind: "missing" });
+  expect(api.refundTransaction).toHaveBeenCalledTimes(1);
+});
+
 it.each([
   {
     label: "a submission id containing the PIN digits",

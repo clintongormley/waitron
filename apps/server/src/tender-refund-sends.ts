@@ -13,6 +13,7 @@ import {
   type PaymentProvider,
   type RefundAnswer,
   type RefundLookup,
+  type RefundRefusalReason,
 } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { AppError, centsToDecimal } from "@waitron/shared";
@@ -304,6 +305,7 @@ async function send(
   refund: RefundRow,
   expired: () => boolean,
   signal: AbortSignal,
+  refused?: (reason: RefundRefusalReason) => void,
 ): Promise<RefundRow> {
   signal.throwIfAborted();
   const payment = await capture(deps.db, refund);
@@ -358,7 +360,18 @@ async function send(
     answer.kind === "accepted"
       ? { kind: "lookup", lookup: await lookup(deps, provider, stamped, signal) }
       : { kind: "answer", answer, sendCount: stamped.sendCount };
-  return recordOutcome(deps, refund.id, evidence, signal);
+  const recorded = await recordOutcome(deps, refund.id, evidence, signal);
+  if (
+    stamped.state === "pending" &&
+    stamped.sendCount === 1 &&
+    recorded.state === "failed" &&
+    answer.kind === "refused" &&
+    answer.documented &&
+    answer.reason === "provider_balance_unavailable"
+  ) {
+    refused?.(answer.reason);
+  }
+  return recorded;
 }
 async function resolve(
   deps: TenderRefundDeps,
@@ -366,6 +379,7 @@ async function resolve(
   resolver: "retry" | "manager" | "loop",
   expired: () => boolean,
   signal: AbortSignal,
+  refused?: (reason: RefundRefusalReason) => void,
 ): Promise<RefundRow> {
   signal.throwIfAborted();
   await withTransaction(deps.db, (tx) => requireEconomicWrite(tx, deps.cfg, deps.admission));
@@ -378,7 +392,7 @@ async function resolve(
   if (refund.sentAt === null)
     return provider.sendRefund === undefined || expired()
       ? refund
-      : send(deps, provider, refund, expired, signal);
+      : send(deps, provider, refund, expired, signal, refused);
   const found = await lookup(deps, provider, refund, signal);
   const window = provider.refundResendWindowMs ?? null;
   const age = deps.clock.now().instant.getTime() - Date.parse(refund.sentAt);
@@ -425,6 +439,7 @@ export async function resolveClaimedTenderRefund(
   release: () => void,
 ) {
   let expired = false;
+  let refusalReason: RefundRefusalReason | undefined;
   let timer: ReturnType<typeof setTimeout>;
   // A response deadline does not end the actual provider call or release its resolver ownership.
   const state = resolversOf(deps.db);
@@ -434,7 +449,16 @@ export async function resolveClaimedTenderRefund(
     .then(async (refund) => {
       if (state.stopping) return refund;
       try {
-        return await resolve(deps, refund, resolver, () => expired, controller.signal);
+        return await resolve(
+          deps,
+          refund,
+          resolver,
+          () => expired,
+          controller.signal,
+          (reason) => {
+            refusalReason = reason;
+          },
+        );
       } catch (error) {
         if (controller.signal.aborted) return refund;
         if (deps.stopSignal?.aborted && error === deps.stopSignal.reason) return refund;
@@ -453,7 +477,13 @@ export async function resolveClaimedTenderRefund(
     }, 10_000);
   });
   try {
-    return toTenderRefundView(await Promise.race([task, deadline]));
+    return await Promise.race([
+      task.then((row) => ({
+        ...toTenderRefundView(row),
+        ...(row.state === "failed" && refusalReason !== undefined ? { refusalReason } : {}),
+      })),
+      deadline.then(toTenderRefundView),
+    ]);
   } finally {
     clearTimeout(timer!);
   }

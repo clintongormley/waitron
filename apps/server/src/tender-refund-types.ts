@@ -25,6 +25,7 @@ export interface RefundableTender {
 }
 
 export interface TenderRefundView {
+  refusalReason?: import("@waitron/payments").RefundRefusalReason;
   id: string;
   saleId: string;
   tenderId: string;

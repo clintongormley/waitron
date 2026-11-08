@@ -63,6 +63,44 @@ const root = (el: TillBillPayDialog) => el.shadowRoot!;
 const text = (node: Element | ShadowRoot | null) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 const money = (amount: string) => formatMoney(amount, currentLocale());
+it.each(["en", "es"] as const)("temporary balance explanation in %s", async (locale) => {
+  setLocale(locale);
+  try {
+    const el = await mount({
+      refunded: {
+        state: "failed",
+        amount: "5.00",
+        method: "card",
+        terminal: false,
+        refusalReason: "provider_balance_unavailable",
+      },
+    });
+    await el.updateComplete;
+    const message = () => text(root(el).querySelector("[data-pay-refunded]"));
+    expect(message()).toBe(
+      `${t("bill_refund.failed").replace("{amount}", money("5.00"))} ${t("refund.provider_balance_unavailable")}`.replace(
+        /\s+/g,
+        " ",
+      ),
+    );
+    el.refunded = { ...el.refunded!, refusalReason: undefined };
+    await el.updateComplete;
+    expect(message()).toBe(
+      t("bill_refund.failed").replace("{amount}", money("5.00")).replace(/\s+/g, " "),
+    );
+    el.refunded = {
+      ...el.refunded!,
+      state: "pending",
+      refusalReason: "provider_balance_unavailable",
+    };
+    await el.updateComplete;
+    expect(message()).toBe(
+      t("bill_refund.pending").replace("{amount}", money("5.00")).replace(/\s+/g, " "),
+    );
+  } finally {
+    setLocale("en");
+  }
+});
 const field = (el: TillBillPayDialog, name: string) =>
   root(el).querySelector<
     HTMLElement & {

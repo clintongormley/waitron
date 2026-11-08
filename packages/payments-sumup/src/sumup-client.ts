@@ -1,6 +1,7 @@
 import type { SumUpReader } from "./client.js";
 import { AppError } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
+import type { RefundRefusalReason } from "@waitron/payments";
 // Side-effect only: the registry for `reader.unpair_failed`.
 import "@waitron/payments";
 import {
@@ -82,6 +83,56 @@ function refundEventsOf(t: { transaction_events?: RawEvent[]; events?: RawEvent[
 
 const unpairFailed = (reason: string) =>
   new AppError("reader.unpair_failed", { providerId: SUMUP_PROVIDER }, { reason });
+
+async function refundRefusalReason(
+  response: Response,
+  controller: AbortController,
+): Promise<RefundRefusalReason | undefined> {
+  const { signal } = controller;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abort: (() => void) | undefined;
+  try {
+    if (response.body === null) return undefined;
+    reader = response.body.getReader();
+    if (signal.aborted) return undefined;
+    const stopped = new Promise<undefined>((resolve) => {
+      abort = () => resolve(undefined);
+      signal.addEventListener("abort", abort, { once: true });
+      timer = setTimeout(() => controller.abort(), 2_000);
+    });
+    const owned = reader;
+    const read = async (): Promise<RefundRefusalReason | undefined> => {
+      const decoder = new TextDecoder("utf-8", { fatal: true });
+      let bytes = 0;
+      let text = "";
+      for (;;) {
+        const chunk = await owned.read();
+        if (chunk.done) break;
+        bytes += chunk.value.byteLength;
+        if (bytes > 4096) return undefined;
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+      text += decoder.decode();
+      const problem: unknown = JSON.parse(text);
+      return problem !== null &&
+        typeof problem === "object" &&
+        !Array.isArray(problem) &&
+        (problem as { detail?: unknown }).detail ===
+          "Not enough available balance to perform the operation at the moment"
+        ? "provider_balance_unavailable"
+        : undefined;
+    };
+    return await Promise.race([read(), stopped]);
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+    if (abort !== undefined) signal.removeEventListener("abort", abort);
+    if (reader !== undefined) void reader.cancel().catch(() => undefined);
+    else void response.body?.cancel().catch(() => undefined);
+  }
+}
 
 /**
  * `SumUpClient` over SumUp's REST API (paths and shapes from SumUp's OpenAPI file —
@@ -237,13 +288,23 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       );
     },
     async sendRefund(p: { transactionId: string; amount: Decimal }) {
-      const httpStatus = await callForStatus(
-        "POST",
-        `/v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds`,
-        // In minor units, as `refund` above sends it.
-        { amount: toMinorUnits(p.amount) },
-      );
-      return { httpStatus };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await send(
+          "POST",
+          `/v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds`,
+          controller.signal,
+          { amount: toMinorUnits(p.amount) },
+        );
+        // Keep the known status if its optional explanation cannot be read.
+        const reason =
+          response.status === 409 ? await refundRefusalReason(response, controller) : undefined;
+        if (response.status !== 409) void response.body?.cancel().catch(() => undefined);
+        return { httpStatus: response.status, ...(reason === undefined ? {} : { reason }) };
+      } finally {
+        clearTimeout(timer);
+      }
     },
     async listReaders() {
       const r = await call("GET", `/v0.1/merchants/${mc}/readers`);

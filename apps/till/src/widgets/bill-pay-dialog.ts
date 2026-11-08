@@ -114,6 +114,7 @@ export interface PayTaken {
 /** What a refund just did: the amount given back, how, and whether it was keyed on a separate card
  * terminal; a card refund may still be waiting for its provider, or have failed. */
 export interface RefundNotice {
+  refusalReason?: "provider_balance_unavailable";
   state: "completed" | "pending" | "failed";
   amount: string;
   method: "cash" | "card";
@@ -1260,7 +1261,10 @@ export class TillBillPayDialog extends LitElement {
             : refunded.terminal
               ? "bill_refund.done_terminal"
               : "bill_refund.done_card";
-    return t(key).replace("{amount}", () => this.#money(refunded.amount));
+    const message = t(key).replace("{amount}", () => this.#money(refunded.amount));
+    return refunded.state === "failed" && refunded.refusalReason === "provider_balance_unavailable"
+      ? `${message} ${t("refund.provider_balance_unavailable")}`
+      : message;
   }
 
   /** The bill's payments, oldest first, each with a Refund while it has money to give back. */

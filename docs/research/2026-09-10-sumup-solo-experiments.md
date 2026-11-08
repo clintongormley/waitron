@@ -1208,6 +1208,8 @@ temporary balance refusal nor a payout-based readiness rule was established.
 
 ### 10.5 Current Waitron path and proposed correction
 
+_8 November 2026: both refund windows now explain a recognised temporary balance refusal in the failed request’s reply; see the [refund guide](../../apps/server/src/guide/en/table-service.md#refund-payment)._
+
 This is a code-path trace at main `ccbec1f3c17896b2374bdd360c38359961624494`, supported by the
 existing tests below. It is not a live refund through Waitron or one end-to-end 409 screen test.
 
