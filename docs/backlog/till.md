@@ -2104,23 +2104,6 @@ refusal from any of them locks the till, and the sign-in screen says nothing abo
 2026-11-07: "You have been logged out because somebody else has logged in on this device." They are
 not in yet, and the Spanish is not written.
 
-## A1435. A sign-in keyed while the last person's sign-out waits on a slow save can need keying twice
-
-Left open by A1380 (#2534). The till's sign-in screen is drawn afresh whenever the screen language
-changes: it is keyed by `${currentLocale()}:${this.#operatorSession}` in
-`apps/till/src/till-app.ts`, and a screen drawn afresh drops a sign-in answer the old one was
-waiting for (`#submit` in `apps/till/src/screens/till-lock-screen.ts`). Each person has their own
-language (`PUT /api/session/locale` and the sign-in answer's `locale`, `apps/server/src/till-api.ts`).
-`#onLogout` puts the sign-in screen's language back only after the person's saves and the sign-out
-request have finished. So when the person leaving uses another language than the sign-in screen's,
-their sign-out waits on a slow save, and the next person's sign-in is still waiting for its answer
-when the sign-out's answer comes back, the server signs the next person in but the till shows the
-PIN pad again, and they must key their PIN again. One fix, putting the language back as soon as
-the till locks, changes what `apps/till/src/till-app.test.ts` "does not revert the locale if the
-app disconnects mid-logout" asserts, so it needs a decision on that test. Another: the sign-in
-screen already redraws itself on a language change (`LocaleChangeController` in its constructor),
-so the language could come out of its key; whether that test still passes then is not checked.
-
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
 Left open by A1382, which changed only `device.forbidden_action`. By code:

@@ -528,6 +528,46 @@ describe("the till through its real client", () => {
     expect(named(server.sentTo("DELETE /api/session")[0]!)).toBe(ANA.personId);
   });
 
+  it("signs Luis in on his first PIN when Ana's sign-out, in her own language, waits on a slow save", async () => {
+    const server = tillServer();
+    server.serve("GET /api/locales", () => ({
+      locales: [
+        { code: "en-GB", label: "English" },
+        { code: "es-ES", label: "Español" },
+      ],
+      venueDefault: "en-GB",
+      loginDefault: "en-GB",
+    }));
+    server.serve("POST /api/session", ({ body }) => {
+      const { personId } = body as { personId: string };
+      return { personId, permissions: [], locale: personId === ANA.personId ? "es-ES" : null };
+    });
+    const { el, api } = await mountTill(server);
+    await signInAsAna(el);
+    expect(currentLocale()).toBe("es-ES");
+    const order = await openAnasTable(el);
+    const save = server.hold("PUT /api/parties/v1/drafts");
+    order.draftStore!.setLineExtras(0, { note: "No sugar" });
+    await save.sent;
+    emit(order, "logout");
+    await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
+    let luisAnswered = false;
+    const login = api.login.bind(api);
+    api.login = (...args) => login(...args).finally(() => (luisAnswered = true));
+    const luisSignIn = server.hold("POST /api/session");
+    await keyIn(el, LUIS, LUIS_PIN);
+    await luisSignIn.sent;
+
+    save.answer();
+    await vi.waitFor(() => expect(currentLocale()).not.toBe("es-ES"));
+    luisSignIn.answer();
+    await vi.waitFor(() => expect(luisAnswered).toBe(true));
+    await el.updateComplete;
+
+    await vi.waitFor(() => expect(shellOf(el)).not.toBeNull());
+    expect(server.sentTo("POST /api/session")).toHaveLength(2);
+  });
+
   it("locks once, ends no session, and gives Ana her lines back, when her discard is refused for her person", async () => {
     const server = tillServer();
     const { el } = await mountTill(server);

@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { TillNumericPad, nextPadValue, nextPinValue } from "./numeric-pad.js";
 
 afterEach(cleanupWidgets);
@@ -194,4 +194,22 @@ it("decimal input pad shows the Spanish mark and keeps exact dot-decimal state",
   expect(nextPadValue("2", ",")).toBe("2.");
   expect(nextPadValue("2.8", ",")).toBe("2.8");
   setLocale("en");
+});
+
+it("redraws its key names and decimal mark when the language changes while it is shown", async () => {
+  const before = currentLocale();
+  onTestFinished(() => setLocale(before));
+  setLocale("en");
+  const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", { value: "" });
+  const spoken = (key: string) =>
+    el.shadowRoot!.querySelector(`[data-key="${key}"] .sr-only`)!.textContent!.trim();
+  const mark = () =>
+    el.shadowRoot!.querySelector(`[data-key="."] [aria-hidden="true"]`)!.textContent!.trim();
+  expect(spoken("backspace")).toBe("Backspace");
+  expect(mark()).toBe(".");
+  setLocale("es");
+  await el.updateComplete;
+  expect(spoken("backspace")).toBe("Borrar");
+  expect(spoken(".")).toBe("Punto decimal");
+  expect(mark()).toBe(",");
 });

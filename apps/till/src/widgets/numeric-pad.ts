@@ -2,6 +2,7 @@ import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, dispatchWtChange, decimalMark } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
 
 /**
  * A PARTIAL number the parent normalises before it reaches `decimal()`: never a leading zero
@@ -83,6 +84,11 @@ export class TillNumericPad extends LitElement {
   @property() value = "";
 
   @property() mode: "decimal" | "pin" = "decimal";
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
 
   #keys(): PadKey[] {
     if (this.mode === "pin") {

@@ -2675,6 +2675,9 @@ export class TillApp extends LitElement {
   #setupAsked = 0;
   #setupApplied = 0;
   #preLoginChoice?: string;
+  /** Keys the lock screen: a language picked there draws it afresh, dropping a typed PIN, but one the
+   * till puts back itself must not, or a sign-in still waiting for its answer is lost. */
+  #lockLanguagePicks = 0;
   #venueLocaleReady = false;
   #loginPending = false;
 
@@ -20175,6 +20178,7 @@ export class TillApp extends LitElement {
     const { code } = event.detail;
     if (this.screen === "lock" || this.deviceMode) {
       if (this.operatorName === "") this.#preLoginChoice = code;
+      this.#lockLanguagePicks += 1;
       setLocale(code);
       return;
     }
@@ -21491,7 +21495,7 @@ export class TillApp extends LitElement {
                         </till-shell>`,
                       )
                     : keyed(
-                        `${currentLocale()}:${this.#operatorSession}`,
+                        `${this.#lockLanguagePicks}:${this.#operatorSession}`,
                         html`<till-lock-screen
                           .api=${this.api}
                           .deviceName=${this.deviceName}
