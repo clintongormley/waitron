@@ -351,22 +351,6 @@ and shows a clear message.
 
 <a id="slice-2--the-handheld-nfcqr-link"></a>
 
-## Bundle A1389: Refuse bad tips and compare the amount captured on the whole-order card path
-
-Remaining: the approved manager release, after the migration freeze. Detection compares processor
-amounts in both adapters, retains a mismatch as uncertain, and stops automatic reads immediately.
-The alert names both amounts. Handling the alert leaves the order and reader held.
-
-- Add the owner's `released_unpaid` outcome: record which amount is right and free the unpaid
-  order without filing, rewriting the recorded amount or moving money. Show what the card took.
-  Qualify with A1381 and A1395 before landing detection, and land release immediately after it.
-  Authority: watcher 2026-11-06 23:12 and 2026-11-07 02:53; implementation plan
-  [detection](../superpowers/plans/2026-11-07-a1389-card-mismatch-detection.md).
-
-A1395 joint qualification also covers its stored €1.00 capture on a €3.00 placed order: Pay
-cannot file it, cancellation stays refused, and no second charge is taken. Its review did not
-establish a public route producing that state; keep those protections while checking recovery.
-
 ## Bundle: Stripe adapter upkeep
 
 6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

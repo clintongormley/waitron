@@ -804,6 +804,8 @@ export const en = {
   // Integrated card terminal
   "card.collecting": "Tap or insert card…",
   "card.cancel": "Cancel",
+  "card.capture_warning":
+    "The reader was asked for {requested} and took {actual}. Check the bill balance before taking another payment.",
   "card.declined": "Card declined",
   "card.no_answer": "The card reader did not answer",
   "card.pending_check":
@@ -2737,6 +2739,8 @@ export const es: Record<StringKey, string> = {
   "cancel.reason_prompt": "Motivo de la cancelación",
   "card.collecting": "Acerca o inserta la tarjeta…",
   "card.cancel": "Cancelar",
+  "card.capture_warning":
+    "Se pidieron {requested} al lector y cobró {actual}. Comprueba el saldo de la cuenta antes de aceptar otro pago.",
   "card.declined": "Tarjeta rechazada",
   "card.no_answer": "El lector de tarjetas no ha respondido",
   "card.pending_check":

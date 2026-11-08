@@ -1,3 +1,4 @@
+import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -237,7 +238,9 @@ describe("recovery after a crash (design §8 test 13)", () => {
 
     const crashed = await cardContribution(billId, "35.00");
     const [payment] = await paymentRows(venue, billId);
+    expect(await ordersWithUnfiledPayment(venue.db, [billId])).toEqual(new Set([billId]));
     const first = await settle();
+    expect(await ordersWithUnfiledPayment(venue.db, [billId])).toEqual(new Set());
     const second = await settle();
 
     expect(crashed.status).toBe(500);

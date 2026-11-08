@@ -356,10 +356,6 @@ const PAYMENT_WITH_KEY_COLUMNS = {
   provider: payments.provider,
 };
 
-/** The capture-idempotency pre-check (spec §4). A `failed` or `attempting` row does not count, so
- * a declined card stays re-chargeable. At most one captured payment per working order holds by
- * construction, not by a constraint; if there are two, the most recently settled one is returned
- * rather than throwing, and of two settled at the same instant the one written last. */
 export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
   key: { provider: string; workingOrderId: string },

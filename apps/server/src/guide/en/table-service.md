@@ -47,7 +47,6 @@ export carries payment policy, not card readers or this setting.
 
 When Waitron prints a card slip for a sale, its words, date and amounts follow that sale’s saved receipt language. Changing your screen language or the venue’s current receipt language keeps the earlier sale’s slip in its original language.
 
-
 ## Trust the server before opening the till {#certificate-trust}
 
 The till's **This device hasn't trusted the till yet** page follows your browser's preferred
@@ -312,7 +311,11 @@ may charge the card or record the cash payment.
 If a payment stays pending, or the card was charged but the payment was not recorded, choose
 **Card payments / sign in**. Do not charge an already charged card again. Sign in there to check or
 record the provider’s confirmed outcome. Reopen the bill payment after it is recorded to see the
-result.
+result. If Card payments says **Payment recorded. The rest is still due.**, reopen the bill and
+collect only its outstanding balance.
+
+If the reader took a different amount, compare the requested and taken figures in the warning.
+Check the bill balance before taking another payment, so you collect only what is still owed.
 
 ## Move dishes to another bill {#move-dishes}
 

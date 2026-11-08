@@ -1,6 +1,6 @@
 import { incidents, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { AppError, jobOrigin } from "@waitron/shared";
 import "./errors.js";
 import type { HeldAlertSink } from "./held-alert.js";
@@ -60,9 +60,11 @@ export async function findCaptureWarning(
   const rows = await tx
     .select({ params: incidents.params })
     .from(incidents)
-    .where(eq(incidents.code, CODE));
+    .where(eq(incidents.code, CODE))
+    .orderBy(sql`${incidents}.rowid`);
   return rows
     .flatMap((row) => entries(row.params))
+    .reverse()
     .find((entry) =>
       "orderIds" in filter
         ? filter.orderIds.includes(entry.workingOrderId)

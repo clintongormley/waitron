@@ -9,7 +9,11 @@ import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { payments } from "./schema/payments.js";
 import { seedWorkingOrder } from "../test/seed.js";
 import { deviceOrigin } from "@waitron/shared";
-import { hasCaptureMismatch, recordCaptureMismatch } from "./capture-mismatch.js";
+import {
+  findCaptureWarning,
+  hasCaptureMismatch,
+  recordCaptureMismatch,
+} from "./capture-mismatch.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const sink = { raise: recordIncidentOnce, handle: markIncidentHandled };
@@ -175,5 +179,29 @@ it("records the existing order number alongside the processor reference", async 
   );
   expect((await alerts())[0]?.params).toMatchObject({
     payments: [{ orderNumber: 27, externalRef: "external-order-number" }],
+  });
+});
+
+it("shows the latest differing charge when a bill has more than one payment", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    await recordCaptureMismatch(
+      tx,
+      sink,
+      { ...mismatch("first"), workingOrderId: "one-bill", reportedAmount: "10.00" },
+      now,
+    );
+    await recordCaptureMismatch(
+      tx,
+      sink,
+      { ...mismatch("second"), workingOrderId: "one-bill", reportedAmount: "2.00" },
+      now,
+    );
+    expect(await findCaptureWarning(tx, { orderIds: ["one-bill"] })).toMatchObject({
+      paymentRef: "second",
+      reportedAmount: "2.00",
+    });
+    expect(
+      await findCaptureWarning(tx, { payment: { provider: "stripe", paymentRef: "first" } }),
+    ).toMatchObject({ paymentRef: "first", reportedAmount: "10.00" });
   });
 });

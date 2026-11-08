@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { workingOrders } from "@waitron/db";
+import { withTransaction, workingOrders } from "@waitron/db";
+import { computeDailyClose, currentBusinessDay } from "@waitron/reporting";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
+import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
@@ -72,6 +75,33 @@ it.each(["open", "placed", "invoiced"])(
       received: "34.00",
       outstanding: "1.00",
     });
+    const replay = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      id,
+      lines: [],
+      zoneId: venue.zoneId,
+    });
+    expect(replay.status).toBe(200);
+    expect(replay.json).toMatchObject({
+      outcome: "partial",
+      balance: { received: "34.00", outstanding: "1.00" },
+      captureWarning: { requestedAmount: "35.00", reportedAmount: "34.00" },
+    });
+    expect(create).toHaveBeenCalledOnce();
+    const report = () =>
+      withTransaction(suite.db, (tx) =>
+        computeDailyClose(tx, {
+          nodeId: venue.cfg.nodeId,
+          cutoverChanges: [],
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+          businessDay: currentBusinessDay({
+            timeZone: "Europe/Madrid",
+            dayCutover: "05:00",
+            cutoverChanges: [],
+          }),
+        }),
+      );
+    expect((await report()).cash).toMatchObject({ tenderTotal: "34.00", tipTotal: "0.00" });
     const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(order!.paymentAttemptAt).toBeNull();
     actual = 100;
@@ -94,6 +124,7 @@ it.each(["open", "placed", "invoiced"])(
     );
     expect(fiscalRecordCount(venue, id)).toBe(1);
     expect((await tendersOfBill(venue, id)).map((row) => row.amount)).toEqual([3400, 100]);
+    expect((await report()).cash).toMatchObject({ tenderTotal: "35.00", tipTotal: "0.00" });
   },
 );
 
@@ -163,6 +194,24 @@ it.each(["stripe", "sumup"])(
       payment: { state: "received", applied: "9.00", tip: "0.00" },
       balance: { received: "9.00", outstanding: "26.00", tips: "0.00", reserved: "0.00" },
     });
+    const refund = await send(
+      app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments/${(taken.json.payment as { id: string }).id}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "10.00",
+        tipAmount: "0.00",
+        reason: "Return payment",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(refund.status).toBe(422);
+    expect(refund.json).toMatchObject({
+      code: "bill.refund_exceeds_payment",
+      params: { applied: "9.00" },
+    });
     expect((await pay(first)).json).toMatchObject({ payment: { applied: "9.00", tip: "0.00" } });
     expect(keys).toHaveLength(1);
     actual = "26.00";
@@ -187,3 +236,46 @@ it.each(["stripe", "sumup"])(
     ]);
   },
 );
+
+it("retains a short capture after a lost reader answer and warns the next operator without recharging", async () => {
+  const venue = await provisionBillVenue(suite.db);
+  const id = await tabWith(venue, "Paella");
+  let confirmed = false;
+  const client = new FakeStripe();
+  const read = client.retrievePaymentIntent.bind(client);
+  vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (ref) => ({
+    ...(await read(ref)),
+    status: confirmed ? "succeeded" : "processing",
+    amountReceived: confirmed ? 3400 : 0,
+  }));
+  const create = vi.spyOn(client, "createPaymentIntent");
+  const provider = new StripeTerminalProvider({ db: suite.db, client, captureAlerts, poll });
+  vi.spyOn(venue.pool, "get").mockResolvedValue(
+    Object.assign(Object.create(provider) as PaymentProvider, {
+      collect: (params: Parameters<PaymentProvider["collect"]>[0]) =>
+        provider.collect({ ...params, readerRef: "rdr_test" }),
+    }),
+  );
+  const pay = () =>
+    send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [], zoneId: venue.zoneId });
+  expect((await pay()).json).toEqual({ outcome: "timeout" });
+  confirmed = true;
+  await provider.resolvePending(venue.clock.now().instant, await ownsEveryPayment(suite.db));
+  expect(
+    await recoverAutomaticCardPayments({ ...venue, admission: testTradingAdmission() }),
+  ).toEqual({ filed: 0, errors: [] });
+  expect(await statusOf(venue, id)).toBe("open");
+  expect(fiscalRecordCount(venue, id)).toBe(0);
+  expect(
+    await suite.db
+      .select({ amount: payments.amount, requested: payments.requestedAmount })
+      .from(payments)
+      .where(eq(payments.workingOrderId, id)),
+  ).toEqual([{ amount: 3400, requested: 3500 }]);
+  expect((await pay()).json).toMatchObject({
+    outcome: "partial",
+    balance: { received: "34.00", outstanding: "1.00" },
+    captureWarning: { requestedAmount: "35.00", reportedAmount: "34.00" },
+  });
+  expect(create).toHaveBeenCalledOnce();
+});

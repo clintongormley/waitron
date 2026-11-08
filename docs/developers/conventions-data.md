@@ -2763,8 +2763,8 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   (`packages/payments/src/charge-not-saved.ts`) when the processor reported the card charged and
   that save failed for a full disk, and the two routes translate only that error
   (`collectFailure`, `bill-payments.ts`). Its cause is the full disk, so every other caller still
-  answers `storage.disk_full`. The provider's row stays `attempting`. A later pass may capture an
-  exact charge or record a mismatch and stop checking. A full disk on any other save inside `collect` still answers `storage.disk_full`; for the
+  answers `storage.disk_full`. The provider's row stays `attempting` for a later pass to record the
+  confirmed amount once space is available. A full disk on any other save inside `collect` still answers `storage.disk_full`; for the
   attempt's own first row, `card-charged-not-recorded.test.ts` pins it.
 - Not gated: every route outside those three mounts, among them every dashboard route (the Box
   status page's free-space deletion, `POST /api/box/free-space`, is one, and is how a manager frees

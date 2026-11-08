@@ -83,12 +83,12 @@ export async function recoverAutomaticCardPayments(
           return typeof value === "function" ? value.bind(target) : value;
         },
       });
-      await payWorkingOrderIntegratedOrchestration(
+      const recovered = await payWorkingOrderIntegratedOrchestration(
         { ...deps, provider: recoveryProvider },
         { ...deps.cfg, origin: storedDeviceOrigin(payment) },
         { id: candidate.orderId, lines: [], expectedEdit: null },
       );
-      filed++;
+      if (recovered.outcome === "captured") filed++;
     } catch (error) {
       errors.push({ paymentId: candidate.id, error: String(error) });
     }

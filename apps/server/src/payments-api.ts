@@ -1189,6 +1189,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         { id: stuck.workingOrderId, lines: [], expectedEdit: null },
         stuck.personId,
       );
+      if (paid.outcome === "partial")
+        return c.json({ outcome: "partial", outstanding: paid.balance.outstanding });
       /* v8 ignore start -- unreachable: every path that returns another outcome goes through
          `collect`, which `withoutCollect` makes throw. */
       if (paid.outcome !== "captured") {

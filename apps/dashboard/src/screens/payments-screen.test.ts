@@ -1628,6 +1628,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it.each([
+    [{ outcome: "partial", outstanding: "0.50" }, "Payment recorded. The rest is still due."],
     [
       { outcome: "filed", invoiceNumber: "F-1" },
       "Payment went through — the sale has been recorded.",

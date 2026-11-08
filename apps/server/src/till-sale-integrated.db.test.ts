@@ -85,7 +85,11 @@ import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   releaseStalePaymentAttempts,
 } from "./testing/whole-payment-fixture.js";
-import type { IntegratedPayDeps, IntegratedPayOutcome } from "./till-sale.js";
+import {
+  ordersWithUnfiledPayment,
+  type IntegratedPayDeps,
+  type IntegratedPayOutcome,
+} from "./till-sale.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -2114,15 +2118,18 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
   });
 
-  it("a captured amount BELOW the locked total is corruption: files nothing, leaves the payment for reconcile", async () => {
+  it("retains a recovered short capture as a contribution without filing the unpaid bill", async () => {
     const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const { deps, client } = integratedDeps(app);
-    // The charge cannot cover the locked total: there is no honest figure to file, so recovery
-    // files NOTHING and throws, leaving the captured payment for reconciliation.
     const { id } = await seedLostCapture(cfg, coffee, "1", "1.00");
 
-    await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
+    await expect(
+      payWorkingOrderIntegrated(deps, cfg, { id, lines: [] }, OPERATOR),
+    ).resolves.toMatchObject({
+      outcome: "partial",
+      balance: { received: "1.00", outstanding: "0.50" },
+    });
 
     expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
     expect(await saleCount(id)).toBe(0);
@@ -2562,17 +2569,21 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
     });
 
-    it("a captured amount BELOW the amount due is corruption: settles nothing, leaves the payment for reconcile", async () => {
+    it("keeps a recovered short capture on its issued bill without a second invoice", async () => {
       const { cfg, coffee } = await modeVenue("ticket_then_pay");
       const app = suite.db;
       const { id, saleId } = await placedIssuedBill(cfg, coffee);
-      await seedLostCaptureOnPlaced(cfg, id, "1.00"); // below the 1.50 amount due — cannot even cover it
+      await seedLostCaptureOnPlaced(cfg, id, "1.00");
 
       const { deps, client } = integratedDeps(app);
-      await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
+      await expect(
+        payWorkingOrderIntegrated(deps, cfg, { id, lines: [] }, OPERATOR),
+      ).resolves.toMatchObject({
+        outcome: "partial",
+        balance: { received: "1.00", outstanding: "0.50" },
+      });
 
       expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
-      // Nothing settled, and the captured payment is left for reconciliation.
       expect(await tendersFor(id)).toEqual([]);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
       expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
@@ -3077,20 +3088,27 @@ describe("an order being paid by card cannot be changed from another device (pla
       expect(await markOf(t.tabId)).toBeNull();
     });
 
-    it("stays when the recovery cannot file, because the captured payment still waits to be filed", async () => {
+    it("is cleared when a short capture becomes a bill contribution", async () => {
       const t = await crashedAfterCapture("1.00");
       const { deps } = integratedDeps(suite.db);
 
       await expect(
         payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] }),
-      ).rejects.toThrow(/below the locked total/);
+      ).resolves.toMatchObject({
+        outcome: "partial",
+        balance: { received: "1.00", outstanding: "2.00" },
+      });
 
       expect(await saleCount(t.tabId)).toBe(0);
       await releaseLoopPass();
-      expect(await markOf(t.tabId)).toBe("2026-09-26T10:00:00.000Z");
-      await expect(writes(t, t.tabId)[0]!()).rejects.toMatchObject({
-        code: "order.payment_in_flight",
-      });
+      expect(await markOf(t.tabId)).toBeNull();
+      expect(await ordersWithUnfiledPayment(suite.db, [t.tabId])).toEqual(new Set());
+      await writes(t, t.tabId)[0]!();
+      expect(
+        suite.db.all(
+          sql`select sum(quantity) as quantity from working_order_lines where working_order_id = ${t.tabId}`,
+        ),
+      ).toEqual([{ quantity: 3000 }]);
     });
   });
 

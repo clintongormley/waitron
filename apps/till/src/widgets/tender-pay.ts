@@ -84,7 +84,7 @@ export interface CollectCardDetail extends ReceiptGuestsDetail {
 export type CardProvider =
   "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
 
-export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" }>;
+export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" | "partial" }>;
 
 const KEEP_CARD_REASONS = new Set(["lost_card", "stolen_card", "pickup_card"]);
 const CARD_FAILURE_MESSAGES = new Map<string, StringKey>([

@@ -2233,7 +2233,9 @@ export interface StuckPaymentRow {
 }
 
 export type StuckPaymentResolution =
-  { outcome: "filed"; invoiceNumber: string } | { outcome: "not_charged"; orderUnlocked: boolean };
+  | { outcome: "filed"; invoiceNumber: string }
+  | { outcome: "partial"; outstanding: string }
+  | { outcome: "not_charged"; orderUnlocked: boolean };
 
 export interface StuckBillPaymentRow {
   billPaymentId: string;

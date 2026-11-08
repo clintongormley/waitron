@@ -1195,7 +1195,13 @@ export interface BillUnsent {
   billId: string;
 }
 
+export interface CaptureWarning {
+  requestedAmount: string;
+  reportedAmount: string;
+}
+
 export interface BillBalance {
+  captureWarning?: CaptureWarning;
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
@@ -2039,11 +2045,13 @@ export interface PassReleaseResult {
  * offline refusal is DATA, never a thrown `{ code }` — nothing may block a sale on anything but the
  * sale itself (CLAUDE.md §5) — so the caller branches on `outcome` instead of catching.
  */
-export type PayOutcome =
+export type PayOutcome = (
   | { outcome: "captured"; ticket: TillSaleResult }
+  | { outcome: "partial"; balance: BillBalance }
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
-  | { outcome: "network_unavailable" };
+  | { outcome: "network_unavailable" }
+) & { captureWarning?: CaptureWarning };
 
 /** The `absence_kind` members; the server re-validates against the real enum. */
 export type AbsenceKind = "holiday" | "sick_leave" | "leave" | "unpaid";

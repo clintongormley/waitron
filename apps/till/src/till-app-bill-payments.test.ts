@@ -4212,15 +4212,19 @@ describe("till-app: a partly paid order at the counter", () => {
   });
 
   it("offers to take the rest as a bill payment in place of the single payment, and files the invoice when it is paid", async () => {
-    const takeBillPayment = vi
-      .fn()
-      .mockResolvedValue(
-        takenOf(
-          { applied: "70.00", tendered: "70.00" },
-          { workingOrderId: "wo-1", received: "120.00", outstanding: "0.00", status: "settled" },
-          invoiceOf("120.00"),
-        ),
-      );
+    const takeBillPayment = vi.fn().mockResolvedValue(
+      takenOf(
+        { applied: "70.00", tendered: "70.00" },
+        {
+          workingOrderId: "wo-1",
+          received: "120.00",
+          outstanding: "0.00",
+          status: "settled",
+          captureWarning: { requestedAmount: "120.00", reportedAmount: "50.00" },
+        },
+        invoiceOf("120.00"),
+      ),
+    );
     const el = await retrieved({ takeBillPayment });
     expect(
       grid(el).shadowRoot!.querySelector<HTMLElement & { busy: boolean }>("till-tender-pay")!.busy,
@@ -4247,6 +4251,11 @@ describe("till-app: a partly paid order at the counter", () => {
       "till-ticket-view",
     )!;
     expect(ticket.result.invoiceNumber).toBe("F-0007");
+    const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
+      "[data-capture-warning]",
+    );
+    expect(warning?.open).toBe(true);
+    expect(warning?.message).toContain(money("50.00"));
     expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(listReads);
   });
 
@@ -4439,6 +4448,59 @@ describe("till-app: a partly paid order at the counter", () => {
 
     const [earlier, next] = sent().map((request) => request.submissionId);
     expect(next).toBe(earlier);
+  });
+
+  it("keeps the unexpected extra visible after showing the paid ticket", async () => {
+    const el = await retrieved({
+      pay: vi.fn().mockResolvedValue({
+        outcome: "captured",
+        ticket: invoiceOf("120.00"),
+        captureWarning: { requestedAmount: "120.00", reportedAmount: "125.00" },
+      }),
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValue([held({ outstanding: "120.00", hasPayments: false })]),
+    });
+    emit(counter(el), "collect-card", {});
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    const warning = el.shadowRoot!.querySelector<
+      HTMLElement & { open: boolean; duration: number; message: string }
+    >("[data-capture-warning]");
+    expect(warning?.open).toBe(true);
+    expect(warning?.duration).toBe(0);
+    expect(warning?.message).toContain(money("120.00"));
+    expect(warning?.message).toContain(money("125.00"));
+  });
+
+  it("shows actual reader money and opens payment of the remainder after a short capture", async () => {
+    const warning = {
+      provider: "stripe",
+      paymentRef: "card-1",
+      workingOrderId: "wo-1",
+      externalRef: "pi_1",
+      requestedAmount: "120.00",
+      reportedAmount: "50.00",
+    };
+    const balance = { ...counterBalance, captureWarning: warning };
+    const el = await retrieved({
+      pay: vi.fn().mockResolvedValue({ outcome: "partial", balance, captureWarning: warning }),
+      getBillBalance: vi.fn().mockResolvedValue(balance),
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockResolvedValue([held()]),
+    });
+    emit(counter(el), "collect-card", {});
+    await flush(el);
+    expect(api.pay).toHaveBeenCalledOnce();
+    expect(dialog(el)).not.toBeNull();
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "50.00", "70.00"));
+    expect(text(inDialog(el, "[data-capture-warning]"))).toContain(money("120.00"));
+    expect(text(inDialog(el, "[data-capture-warning]"))).toContain(money("50.00"));
+    expect(payRest(el)).not.toBeNull();
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
 
   it("offers the bill payment once a card at the reader is refused because another till took a payment first", async () => {
@@ -8189,4 +8251,48 @@ describe("till-app: switching bills reads the balance of the bill now shown", ()
     expect(balanceReads()).toEqual(["wo-9"]);
     expect(text(receivedLine(el))).toContain(money("40.00"));
   });
+});
+
+it("a handheld opens the remaining bill payment after a short presented-bill capture", async () => {
+  const balance = balanceOf({
+    status: "placed",
+    received: "110.00",
+    outstanding: "10.00",
+    captureWarning: { requestedAmount: "120.00", reportedAmount: "110.00" },
+  });
+  const { el } = await mountApp({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      formFactor: "phone-portrait",
+      capabilities: ["integrated-card-payment", "take-cash", "hand-keyed-card-payment"],
+      cardProvider: "sumup_cloud",
+      activeReaders: [{ id: "r2", name: "Reader 2", provider: "sumup_cloud" }],
+      defaultReaderId: "r2",
+    }),
+    getDeviceIdentity: vi
+      .fn()
+      .mockResolvedValue({ deviceId: "d1", name: "Phone", formFactor: "phone-portrait" }),
+    getPartyBills: vi
+      .fn()
+      .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
+    getDeviceEquipment: vi
+      .fn()
+      .mockResolvedValue(equipmentWith(equipmentItem("r2", "Reader 2", { provider: "sumup" }))),
+    getBillBalance: vi.fn().mockResolvedValue(balance),
+    pay: vi.fn().mockResolvedValue({ outcome: "partial", balance }),
+  });
+  const order = await openTable(el);
+  await showBillFooter(order);
+  order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+  await flush(el);
+  const presented = el.shadowRoot!.querySelector<HTMLElement>("till-presented-pay-dialog")!;
+  expect(presented).not.toBeNull();
+  emit(presented, "presented-pay", { method: "card", readerId: "r2" });
+  await flush(el);
+  expect(api.pay).toHaveBeenCalledOnce();
+  expect(el.shadowRoot!.querySelector("till-presented-pay-dialog")).toBeNull();
+  expect(dialog(el)).not.toBeNull();
+  expect(text(inDialog(el, "[data-capture-warning]"))).toContain(money("110.00"));
+  expect(shownBalance(el)).toEqual(balanceShows("120.00", "110.00", "10.00"));
+  expect(api.takeBillPayment).not.toHaveBeenCalled();
 });

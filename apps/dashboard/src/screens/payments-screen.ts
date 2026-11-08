@@ -74,6 +74,7 @@ function stuckRefusalText(error: unknown): string {
 }
 
 function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
+  if (resolution.outcome === "partial") return t("payments.stuck.partial");
   if (resolution.outcome === "filed") return t("payments.stuck.filed");
   if (resolution.outcome === "not_charged") {
     return t(

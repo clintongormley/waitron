@@ -1,5 +1,7 @@
 # A1389: detect card amount mismatches
 
+**2026-11-08:** The owner replaced the holds and manager-release proposal with [recording actual card amounts](2026-11-08-a1389-actual-card-amounts.md). The earlier instructions below are historical.
+
 Authority: watcher, 2026-11-07 02:53, in Lane F questions: “No later processor answer ends a known mismatch: not failed, cancelled or exact success. Only the later manager action does.” “Stop automatic reads at the first mismatch.” This replaces the earlier 15-minute limit. The watcher accepts the reader remaining occupied; A1381, A1395 and the later release must be qualified together before landing.
 
 Preserve signed `8b2f940f4a`’s tip/free-sale fixes. No table, migration, payment-state/amount meaning, fiscal writer, refund or release changes. Claude reviews this revision before build. Execute inline, failing tests first.

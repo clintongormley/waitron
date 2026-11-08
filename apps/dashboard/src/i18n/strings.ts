@@ -2785,6 +2785,7 @@ export const en = {
   "payments.stuck.confirm_body":
     "Waitron will ask {provider} what happened to this {amount} payment ({order}). If it went through, the sale is recorded. If it did not, Waitron cancels it at {provider} where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.",
   "payments.stuck.confirm": "Check now",
+  "payments.stuck.partial": "Payment recorded. The rest is still due.",
   "payments.stuck.filed": "Payment went through — the sale has been recorded.",
   "payments.stuck.not_charged_unlocked":
     "Payment did not go through — nothing was charged, and the order is unlocked.",
@@ -6670,6 +6671,7 @@ export const es: Record<StringKey, string> = {
   "payments.stuck.confirm_body":
     "Waitron preguntará a {provider} qué pasó con este cobro de {amount} ({order}). Si se completó, se registra la venta. Si no, Waitron lo cancela en {provider} si todavía se puede cancelar, y desbloquea el pedido para poder cobrarlo de nuevo, salvo que otro pago con tarjeta del pedido siga sin resolver.",
   "payments.stuck.confirm": "Consultar ahora",
+  "payments.stuck.partial": "Pago registrado. Queda parte de la cuenta por cobrar.",
   "payments.stuck.filed": "El pago se completó: la venta ha quedado registrada.",
   "payments.stuck.not_charged_unlocked":
     "El pago no se completó: no se ha cobrado nada y el pedido está desbloqueado.",
