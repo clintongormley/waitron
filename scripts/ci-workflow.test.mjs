@@ -6249,7 +6249,7 @@ describe("scoped selection commands", () => {
       const step = workflowSteps(job(id).body.join("\n")).find((entry) =>
         /^Run the light-[ab] shard$/.test(entry.step),
       );
-      const record = 'pnpm() { printf "%s\\n" "$*"; }; node() { :; };\n';
+      const record = 'pnpm() { printf "%s\\n" "$*"; }; node() { cat >/dev/null; };\n';
       const command = step.command.replaceAll("${{ needs.changes.outputs.full }}", "false");
       const result = spawnSync("bash", ["-c", record + command], {
         env: {
