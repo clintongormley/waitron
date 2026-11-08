@@ -1,5 +1,7 @@
 # A974: Till private English names implementation plan
 
+**2026-11-08 status:** approved by the supervising watcher at 14:13; implemented at `071deac33f`; all 17 suites passed 4,318 cases before and after. Earlier proposal wording below records the planning state.
+
 **Goal:** English private test names across all `apps/till/src` subfolders, unchanged behavior, **one implementation PR within three hours**, excluding watcher waits.
 
 **Approval:** Sources: owner request (2026-11-08), Lane J queue A974, watcher 00:02/11:07/13:51 and `~/waitron-campaign-j/RUNNER.md` section 0. Owner request: “The owner authorises finish-branch and land-branch.” Watcher13:51: “write the one-page plan for your next English-cleanup slice: one whole area” and “Send it through PLAN FOR APPROVAL as usual.” **This plan is unapproved:** driver commits with sign-off, obtains Claude `review-branch` (one read, at most one correction re-read), submits `PLAN FOR APPROVAL` with report/rejected findings, then waits for watcher approval before building.
