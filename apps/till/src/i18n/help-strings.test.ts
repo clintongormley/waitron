@@ -45,23 +45,23 @@ describe("the till's help strings", () => {
   });
 
   it("no Spanish help text says tique", () => {
-    const tiqueWord = /(?<!\p{L})tiques?(?!\p{L})/iu;
-    const saysTique = Object.entries(helpEs).filter(([, text]) =>
-      tiqueWord.test(text.replace(/\{[^}]*\}/g, "")),
+    const ticketWord = /(?<!\p{L})tiques?(?!\p{L})/iu;
+    const saysTicket = Object.entries(helpEs).filter(([, text]) =>
+      ticketWord.test(text.replace(/\{[^}]*\}/g, "")),
     );
-    expect(saysTique).toEqual([]);
+    expect(saysTicket).toEqual([]);
   });
 
   it("no Spanish help text says retenido", () => {
-    const saysRetenido = Object.entries(helpEs).filter(([, text]) => /retenid/i.test(text));
-    expect(saysRetenido).toEqual([]);
+    const saysHeld = Object.entries(helpEs).filter(([, text]) => /retenid/i.test(text));
+    expect(saysHeld).toEqual([]);
   });
 
   it("no Spanish help text says «pedido del mostrador»", () => {
-    const saysDel = Object.entries(helpEs).filter(([, text]) =>
+    const saysCounterOrder = Object.entries(helpEs).filter(([, text]) =>
       /(?<!\p{L})pedidos? del mostrador(?!\p{L})/iu.test(text),
     );
-    expect(saysDel).toEqual([]);
+    expect(saysCounterOrder).toEqual([]);
   });
 });
 

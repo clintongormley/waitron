@@ -180,9 +180,9 @@ describe("A803 selection:", () => {
   });
 
   it("a paid Croqueta's row is blocked paid; its unpaid twins form their own row", () => {
-    const croquetas = [1, 2, 3].map((n) => dish(`k${n}`, n, "Croqueta", "3.00"));
+    const croquettes = [1, 2, 3].map((n) => dish(`k${n}`, n, "Croqueta", "3.00"));
     const paid = balance("9.00", "3.00", [{ lineId: "k1", lineNo: 1, paidQuantity: "1.000" }]);
-    const rows = rowsOf(croquetas, paid);
+    const rows = rowsOf(croquettes, paid);
 
     expect(rows.map(ids)).toEqual([["k1"], ["k2", "k3"]]);
     expect(rows[0]!.blocked).toEqual({ reason: "paid" });
@@ -217,15 +217,15 @@ describe("A803 selection:", () => {
       ...["o1", "o2", "o3", "o4"].map((id, i) => dish(id, i + 4, "Olivas", "0.05")),
     ];
     const paid = balance("0.35", "0.05");
-    const [pan] = rowsOf(lines, paid);
-    const picks = toggleRow(pan!, new Set());
+    const [breadRow] = rowsOf(lines, paid);
+    const picks = toggleRow(breadRow!, new Set());
     expect(sorted(picks)).toEqual(["p1", "p2", "p3"]);
 
-    const olivas = rowsOf(lines, paid, picks)[1]!;
+    const oliveRow = rowsOf(lines, paid, picks)[1]!;
 
-    expect(ids(olivas)).toEqual(["o1", "o2", "o3", "o4"]);
-    expect(olivas.limit).toBe(3);
-    expect(sorted(setCount(olivas, 4, picks))).toEqual(["o1", "o2", "o3", "p1", "p2", "p3"]);
+    expect(ids(oliveRow)).toEqual(["o1", "o2", "o3", "o4"]);
+    expect(oliveRow.limit).toBe(3);
+    expect(sorted(setCount(oliveRow, 4, picks))).toEqual(["o1", "o2", "o3", "p1", "p2", "p3"]);
   });
 
   it("a contribution marks no dish paid", () => {
@@ -372,18 +372,18 @@ describe("A803 selection:", () => {
 
   it("tidyPicks adds the counts of two rows read before that one row now holds: a served k1 and an unserved k2 picked, then all three served, keeps k1 and k2", () => {
     const served = { servedAt: "2026-11-01T12:00:00Z" };
-    const croqueta = (n: number, over: Partial<TabLine> = {}) =>
+    const croquette = (n: number, over: Partial<TabLine> = {}) =>
       line(`k${n}`, n, {
         name: "Croqueta",
         productId: "croqueta",
         menuItemId: "croqueta",
         ...over,
       });
-    const before = rowsOf([croqueta(1, served), croqueta(2), croqueta(3)]);
+    const before = rowsOf([croquette(1, served), croquette(2), croquette(3)]);
     expect(before.map(ids)).toEqual([["k1"], ["k2", "k3"]]);
     const picks = setCount(before[1]!, 1, setCount(before[0]!, 1, new Set()));
 
-    const lines = [croqueta(1, served), croqueta(2, served), croqueta(3, served)];
+    const lines = [croquette(1, served), croquette(2, served), croquette(3, served)];
     expect(rowsOf(lines).map(ids)).toEqual([["k1", "k2", "k3"]]);
     expect(sorted(tidy(before, lines, null, picks))).toEqual(["k1", "k2"]);
   });
@@ -447,10 +447,10 @@ describe("A803 selection:", () => {
   });
 
   it("pickedLineIds leaves out a pick on a row now paid", () => {
-    const croquetas = [1, 2, 3].map((n) => dish(`k${n}`, n, "Croqueta", "3.00"));
+    const croquettes = [1, 2, 3].map((n) => dish(`k${n}`, n, "Croqueta", "3.00"));
     const picks = new Set(["k1", "k2"]);
     const rows = rowsOf(
-      croquetas,
+      croquettes,
       balance("9.00", "3.00", [{ lineId: "k1", lineNo: 1, paidQuantity: "1.000" }]),
       picks,
     );

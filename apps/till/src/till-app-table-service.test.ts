@@ -1956,7 +1956,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       );
     });
 
-    const terraza: TableState = {
+    const terrace: TableState = {
       ...openTable,
       today: {
         placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
@@ -1974,7 +1974,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     };
 
     it("names the old table by its name for today when the change was refused", async () => {
-      const { el, settle } = await changeThenOpenTable3(terraza);
+      const { el, settle } = await changeThenOpenTable3(terrace);
 
       settle.reject(new Error("unexpected"));
       await flush(el);
@@ -1985,7 +1985,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("names the old table by its name for today when the server did not answer", async () => {
-      const { el, settle } = await changeThenOpenTable3(terraza);
+      const { el, settle } = await changeThenOpenTable3(terrace);
 
       settle.reject(new TypeError("Failed to fetch"));
       await flush(el);

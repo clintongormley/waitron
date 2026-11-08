@@ -100,8 +100,12 @@ const tabLine = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLi
   ...over,
 });
 
-/** Croquetas the kitchen has, and a caña at `canaPrice` (given away when not 2.50). */
-function heldOrder(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): HeldOrder {
+/** Croquetas the kitchen has, and a caña at `draughtBeerPrice` (given away when not 2.50). */
+function heldOrder(
+  revision: number,
+  draughtBeerPrice = "2.50",
+  draughtBeerQuantity = "1.000",
+): HeldOrder {
   return {
     id: "wo-9",
     orderNumber: 12,
@@ -123,14 +127,18 @@ function heldOrder(revision: number, canaPrice = "2.50", canaQuantity = "1.000")
       {
         workingOrderLineId: "l-2",
         productId: "cana",
-        quantity: canaQuantity,
-        product: product("cana", "Caña", canaPrice),
+        quantity: draughtBeerQuantity,
+        product: product("cana", "Caña", draughtBeerPrice),
       },
     ],
   } as HeldOrder;
 }
 
-function listing(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): TabLines {
+function listing(
+  revision: number,
+  draughtBeerPrice = "2.50",
+  draughtBeerQuantity = "1.000",
+): TabLines {
   return {
     revision,
     lines: [
@@ -149,9 +157,9 @@ function listing(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): 
         lineNo: 2,
         name: "Caña",
         productId: "cana",
-        quantity: canaQuantity,
-        unitPriceGross: canaPrice,
-        ...(canaPrice === "2.50" ? {} : { listUnitPriceGross: "2.50" }),
+        quantity: draughtBeerQuantity,
+        unitPriceGross: draughtBeerPrice,
+        ...(draughtBeerPrice === "2.50" ? {} : { listUnitPriceGross: "2.50" }),
       }),
     ],
   };

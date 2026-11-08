@@ -1959,10 +1959,10 @@ describe("till-app: comping a stored counter order", () => {
     });
 
     it("reads a started weighed dish back after a raise to exactly one, as the two lines the server keeps", async () => {
-      const jamon: TillProduct = { ...product("jamon", "Jamón", "10.00"), pricingUnit: "weight" };
+      const ham: TillProduct = { ...product("jamon", "Jamón", "10.00"), pricingUnit: "weight" };
       const weighed = (revision: number, extra: HeldOrder["lines"] = []): HeldOrder => {
         const order = heldOrder(revision);
-        const dish = { ...order.lines[0]!, productId: "jamon", quantity: "0.500", product: jamon };
+        const dish = { ...order.lines[0]!, productId: "jamon", quantity: "0.500", product: ham };
         return { ...order, lines: [dish, order.lines[1]!, ...extra] } as HeldOrder;
       };
       const weighedListing = (revision: number): TabLines => {
