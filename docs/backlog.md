@@ -1962,7 +1962,7 @@ Not in any track until the standalone primary is done.
   expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
 
 - **A1342. Before A947 3b lands: a selling box that takes a newer chart naming another main box
-  must stop selling.** The owner chose this on 2026-11-05. Since A1425, once its held chart does
+  must stop selling.** The owner chose this on 2026-11-05. Since A1425, on a Veri\*Factu venue, once its held chart does
   not name it main, it writes no new fiscal record, and refuses sales and bill payments before any
   money moves (`fiscal.chain_handed_over`); refunds are not refused. It still sends AEAT the
   records it wrote before: the filing loop does not read the chart, and a third box's promotion can
@@ -2006,7 +2006,7 @@ Not in any track until the standalone primary is done.
 - **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
   keeps the old box's identity. Part 3 makes a restore a takeover, after Cloud agrees to change the
   rule that a restore keeps the old box's identity. Part 2, a staff route that cancels a sale, is
-  built only if a venue needs one before go-live; none does today.
+  built only if a venue needs one before go-live.
   [Design](superpowers/specs/2026-11-07-restore-takes-new-identity-design.md), approved 2026-11-07.
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,

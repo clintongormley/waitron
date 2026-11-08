@@ -558,7 +558,8 @@ different resolution rolls the delivery and acknowledgement changes back.
 releases the held cancellation, and then submits that same cancellation. Its fiscal rows, chain
 head and sales stay unchanged by the release. This synthetic exercise does not qualify the actual
 staff cancellation/refund path or a production legal remedy. Those remain before whole-item review
-and publication.
+and publication. Since A1425 (#2570) a new cancellation goes on the chain of the box running now,
+whichever box made the sale.
 
 **2 November 2026, Task 8 synthetic absent-original cancellation.** An administrator explicitly
 selects the operation for a current rejected alta with matching case evidence. Unknown outcomes,
@@ -1051,6 +1052,7 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 
 A box the held membership chart does not name `serving-primary` refuses a sale before any money moves.
+So far only on a Veri\*Factu venue: `NoneBackend` has no such check.
 A conflict AEAT reports on a record inherited from a box this one took over from is recorded and does
 not stop this box. Approved with #2570; the note is in the campaign's
 `questions.md`, 2026-11-08 10:44.

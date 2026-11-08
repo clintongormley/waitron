@@ -212,8 +212,7 @@ one current (owner). Wording and placement are the builder's, under the design s
 
 1. The takeover readers and fiscal rules (§2, §3), proved by the probe's five cases turning green in
    `handover-controlled.e2e.test.ts`, plus the certificate card's `it.fails`. Needs nothing from Cloud.
-2. A route that reaches a cancellation, if the venue needs one before go-live (none does today; the
-   builder checks the backlog).
+2. A route that reaches a cancellation, if the venue needs one before go-live.
 3. The restore as a takeover (§4, §5, §6), after Cloud agrees the contract change (§7). This is the
    expensive half. What it buys beyond A1418 alone (a restore takes a term above everything in its
    bucket): an old box is told by its own key's signature that it was replaced, two machines are never
@@ -221,8 +220,7 @@ one current (owner). Wording and placement are the builder's, under the design s
 
 Planning: part 1 is planned in full now; part 3 gets an outline until Cloud has answered.
 
-**2026-11-08:** part 1 is built on branch `feat/a1425-takeover-inherited-work` (A1425). Part 2 is not
-built: no backlog entry needs a staff route that cancels a sale before go-live.
+**2026-11-08:** part 1 is built in #2570 (A1425). Part 2 is not built.
 
 ## 9. Left to the builder
 

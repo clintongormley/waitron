@@ -522,7 +522,13 @@ and refuses sales and bill payments before money moves; refunds call `refuseNewR
 read the chart, so they still go through. The filing loop (`packages/fiscal-verifactu/src/drain.ts`)
 does not read the chart, so it still sends the records it wrote before.
 
-A box left `serving-secondary` this way also keeps the tills opened from it, because it still answers
+A venue with no fiscal regime (`NoneBackend`, `packages/fiscal-none/src/backend.ts`) has neither
+check, so neither refuses a GB box left `serving-secondary` with another box named main. In #2570's
+review on 2026-11-08 such a box committed a cash sale through the core write path; the probe did not
+start a real server. The owner's ruling that a box that is not the main one refuses a
+sale before money moves does not yet reach this regime.
+
+A box left `serving-secondary` by a third box's promotion also keeps the tills opened from it, because it still answers
 that it accepts sales, at the same term as the main box, and on a tie the till's server router takes
 the first server in its list, which is the address the till's page came from. So on those tills 'Wait
 for the till to move to the main server' does not come true until this entry is done. In #2570's
