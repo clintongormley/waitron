@@ -1523,9 +1523,10 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **A1002: several roles per person, fixed built-in names and editable ordinary grants.** Design
   approved 2026-11-07 22:51, with the 22:53 activity/email addition; corrected 2026-11-08.
   [Design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md).
-  [Plan candidate, 2026-11-08](superpowers/plans/2026-11-08-a1002-custom-roles.md): one coherent
-  consumer transition. Claude plan review, watcher pre-build scope read and functional A1308
-  shared activity/mail dependencies remain required; build remains open.
+  [Plan amended, 2026-11-08](superpowers/plans/2026-11-08-a1002-custom-roles.md): WATCHER 03:57
+  resolves the remaining findings with two working PRs: same-default permission renames, then
+  complete roles. Both need watcher scope; only the second waits for A1308's writer/sender.
+  Focused Claude amendment read precedes docs-only publication; no feature delivery or build claimed.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order

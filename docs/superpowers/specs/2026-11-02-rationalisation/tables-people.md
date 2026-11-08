@@ -221,6 +221,7 @@ days-long lifetime and an attempt counter, so not merged with the minutes-long c
 | --- | --- | --- |
 | id | id | PK |
 | person_id | id | not null, FK → persons (restrict) |
+| issued_by | id | null, FK → persons (restrict) — A1002 §5 target, 2026-11-08: administrator issuer's person ID; null for self-service; identity only, no authority snapshot |
 | purpose | text | not null, CHECK invitation/password_reset/email_change |
 | token_hash | text | not null, UNIQUE, CHECK length 64 |
 | code_hash | text | null, CHECK length 64 |

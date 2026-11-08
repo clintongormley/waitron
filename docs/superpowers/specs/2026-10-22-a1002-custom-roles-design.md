@@ -529,6 +529,16 @@ and history display remain dependencies. Direct SMTP exists today; waiting for `
 follows A1308's approved U4 one-queue decision. Reuse those paths when built, without adapting
 domain-specific queues or adding infrastructure.
 
+**Superseding note, WATCHER 2026-11-08 03:57, `/Users/clintongormley/waitron-campaign-k/questions.md`:**
+the general history screen is not a build dependency. Log the events and provide their wording;
+the roles cut waits only for A1308's shared activity writer, functional outgoing-mail sender and
+watcher pre-build scope read. The approved same-default permission renames may form the first
+working cut after watcher scope, without shared-service waits; the complete roles transition is
+the dependent second cut. Keep `recipe.manage` at its current Manager default until its area
+retires the route, and exclude the existing synthetic mirror Admin from the human anchor without
+waiting for A1113. No role names change. The [amended plan](../plans/2026-11-08-a1002-custom-roles.md)
+records the cuts; the earlier dependency paragraph remains a historical reading.
+
 ### Current-source receipts for this correction, 2026-11-08
 
 **SOURCE READ ONLY**, at `e0e4f5b8fda194814a6280340f1b93bb7569307a`; no runtime verification.

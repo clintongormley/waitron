@@ -67,9 +67,11 @@ change what deleting a person does.
 **A1002 design approved 2026-11-07 22:51, with the 22:53 activity/email addition; corrected
 2026-11-08.** The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
 holds the accepted rules, recorded authority, shared activity/mail dependencies and review
-corrections. The [2026-11-08 plan candidate](../superpowers/plans/2026-11-08-a1002-custom-roles.md)
-keeps the consumer transition in one working PR. Claude plan review, the watcher's pre-build scope
-read and functional A1308 shared activity/mail dependencies remain required. Build remains open.
+corrections. The [plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) received Claude's
+2026-11-08 read; WATCHER 03:57 resolves the remaining findings. Two working PRs cover same-default
+permission renames first, then the complete roles transition. Both need watcher scope; only cut 2
+waits for A1308's shared activity writer and functional mail sender, not a history screen.
+The parent obtains a focused Claude amendment read before docs-only publication. No delivery or build is claimed.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -301,9 +303,9 @@ After A760, decide whether to remove the redundant column and read the provider 
 ## Review every permission: fewer, coarser, and consistently named
 
 **2026-11-08:** A1002's [approved inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
-is the target. The [plan candidate](../superpowers/plans/2026-11-08-a1002-custom-roles.md) keeps its
-consumer/default transition with whole-target checks in the coherent roles cut. Implementation
-remains open. The dated discussion below is historical;
+is the target. The [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) incorporates
+WATCHER 2026-11-08 03:57: same-default renames form cut 1, with new authority/storage in cut 2.
+Scope/shared-service gates are recorded at [A7](#roles-the-admin-can-edit-a7). Implementation stays open. The dated discussion below is historical;
 its pending-approval wording is superseded by the 2026-11-07 full approval recorded in design §11.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
@@ -330,6 +332,9 @@ its pending-approval wording is superseded by the 2026-11-07 full approval recor
   roles would name their permissions, so a rename after that has to rewrite those rows as well.
   The roles design was not written when this review was requested; A1002 now proposes those rows
   in the design linked above, still awaiting approval and implementation.
+  **2026-11-08 pointer:** that approval status is historical; design §11 records full approval,
+  and the [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) records corrections
+  and the remaining build blockers. Implementation is still open.
   **Restated by the owner 2026-10-02: "review all permissions and the roles they're assigned to"** —
   the review covers BOTH halves: every permission, and which of the built-in roles holds each. Two
   role questions from that morning's dashboard Orders screen answers (B27s, lane C questions.md
@@ -350,8 +355,10 @@ the new names answer supersedes that allowance only.
 **2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
 records the 2026-11-07 22:51 simplifications and 22:53 activity/email addition. See
 [A7](#roles-the-admin-can-edit-a7) for current status and the
-[plan candidate](../superpowers/plans/2026-11-08-a1002-custom-roles.md). Build remains open pending
-review, watcher scope read and the plan's dependencies.
+[reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md), with independent corrections
+and the WATCHER 03:57 answers incorporated. Two working cuts retain every role name; cut 1 needs
+watcher scope, cut 2 also needs shared writer/sender. Focused Claude amendment review precedes
+publication; no feature delivery is claimed.
 
 ## Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order says so
 

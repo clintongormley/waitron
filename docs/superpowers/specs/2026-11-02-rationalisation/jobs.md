@@ -291,8 +291,8 @@ which is what wakes R5.
 | Column | Type | Rules |
 | --- | --- | --- |
 | `id` | id | Primary key |
-| `kind` | enum | `invoice`, `attendance_question`, `certificate_reminder`, `box_alert`, `account_action`. Each kind has one owner, which words the mail and receives the outcome |
-| `dedupe_key` | text | Not null, unique. What makes "never queued twice" hold: `attendance:<question>`, `certificate:<install>:<stage>:<person>`, `alert:<episode>:<person>`, `invoice:<delivery>`, `account:<action request>` |
+| `kind` | enum | `invoice`, `attendance_question`, `certificate_reminder`, `box_alert`, `account_action`; **2026-11-08 A1002 target:** `role_membership_changed`. Each kind has one owner, which words the mail and receives the outcome |
+| `dedupe_key` | text | Not null, unique. What makes "never queued twice" hold: `attendance:<question>`, `certificate:<install>:<stage>:<person>`, `alert:<episode>:<person>`, `invoice:<delivery>`, `account:<action request>`; **2026-11-08 A1002 target:** `role-membership:<activity-entry-id>` |
 | `subject_id` | id | Null. The row the mail is about: the invoice delivery, question, certificate or incident. A plain id, not a foreign key, because core cannot key into a switchable set (U1) |
 | `person_id` | id | Null, FK → `persons`. Who it goes to. Null only for an invoice, which goes to the customer's address |
 | `requested_by` | id | Null, FK → `persons`. Who asked, on an invitation, so the sender can bind the action to its issuer (A1002 §5) |
@@ -306,6 +306,14 @@ which is what wakes R5.
 | `failure_code` | text | Null. A fixed code, never a provider's words, which can echo credentials (`management-api.ts:198-199`) |
 | `queued_at` | ts | Not null |
 | `finished_at` | ts | Null |
+
+**2026-11-08 A1002 target ownership:** `role_membership_changed` is worded by
+`apps/server/src/role-membership-email.ts` with `apps/server/src/i18n/role-membership-email.ts`'s
+`ROLE_MEMBERSHIP_EMAIL_WORDS`, both planned files. The shared R5 sender calls that kind owner;
+there is no additional sender service. Enqueue with the activity entry in the role-change
+transaction; `subject_id` names the entry, `person_id` the affected recipient and `requested_by`
+the actor. Read the address at claim; params retain role label, `editorName` (masked in logs) and change
+time. Setup/import baseline memberships log without email. See [A1002 §7](../2026-10-22-a1002-custom-roles-design.md#7-replacement-audit-follow-each-consumer-to-its-meaning).
 
 **Indexes:** `outgoing_mail_key_uq` unique on `dedupe_key`; `outgoing_mail_due_idx` on `(status, next_attempt_at, id)`.
 
@@ -335,6 +343,7 @@ which is what wakes R5.
 | `account_action`, password reset and email change | 30 minutes, the link's own life (`ACCOUNT_ACTION_TTL_MS`, `packages/identity/src/account-action.ts:26-30`) |
 | `account_action`, invitation | 24 hours, the link's own life (the same table) |
 | `box_alert` | 24 hours; the alert stays in the dashboard's bell |
+| `role_membership_changed` | 24 hours, like `box_alert` — A1002 §7 target, 2026-11-08 |
 | `certificate_reminder`, `attendance_question` | 7 days |
 | `invoice` | 7 days; the record then shows it was not sent, and a person can send it again |
 
