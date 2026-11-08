@@ -8,6 +8,14 @@ and bundle builds/smoke. The typecheck runs the whole workspace when selected. M
 no package tests or shared mutation in `ci.yml`. The separate UI registry publication retains its
 package checks, and deploy-selected image smoke still runs.
 
+A pull request tests only the changed packages themselves, not the packages that depend on them
+(owner, 2026-11-08, A1461): a change to `packages/db` runs db's tests, not the server's. Within the
+UI job, only whichever of `@waitron/ui` and `@waitron/ui-core` changed runs. The trade-off: the
+`typecheck` job still checks the whole workspace on every code change, so a renamed or changed
+export fails the pull request, but a behaviour break in a dependent shows up only at the next
+nightly or manual full run. To catch it before merging, run the affected dependents' tests
+locally.
+
 Check the event and `changes` outputs before treating a green run as evidence about the workspace.
 On ordinary main pushes, `code`, `scope` and `packages` still describe changed code, but every named
 package gate is false. PRs keep their package gates and mutation floors. Till changes also select
@@ -416,8 +424,8 @@ A successful check prints `Built setup bundle rendered and advanced to the setup
 Chromium must be installed for the setup package's Playwright version.
 
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after lint — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
-also selects the members listed against it (those that read it, or whose CI test job runs it) and
-their dependents, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI
+also selects the members listed against it (those that read it, or whose CI test job runs it),
+which the hook typechecks with their dependents and CI tests alone, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI
 test command loads), which typechecks the whole workspace here and runs every package in CI. A documentation-only push stops after formatting. Deletion-only pushes run no
 checks. Unknown ranges keep the full local gate, including workspace typechecking.
 
@@ -1522,7 +1530,7 @@ The `changes` job skips the expensive `code`-gated jobs when every changed path 
 documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, the root
 `.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
 `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
-the changed packages and their dependents. A root file a member depends on is the exception — a
+the changed packages themselves. A root file a member depends on is the exception — a
 root file `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` lists, because a member file reads
 it or the ci.yml job that tests the member runs it first: that map selects those members, so its
 change is `code=true`. A root file a ci.yml test command loads as a Vitest reporter
@@ -4584,8 +4592,7 @@ anything, checks each archive's digest and extracts each report with the host's 
 those jobs grants `actions: read` alongside `contents: read`; the token goes only to the API
 requests, not to the storage URL. A refused response's body is cancelled before the helper throws.
 The helper's entry in `ROOT_SCOPE_CONSUMERS` names every package whose merge job runs it, so a
-change to the helper selects those packages' jobs and, through CI's dependents widening, every
-package that depends on one of them; the consumer guard recognises `test:merge` jobs
+change to the helper selects those packages' jobs; the consumer guard recognises `test:merge` jobs
 as well as test shards.
 
 The mutation report downloads still use `actions/download-artifact`: the three in `mutation.yml`

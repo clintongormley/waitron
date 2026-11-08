@@ -2938,9 +2938,7 @@ describe("the test shards", () => {
       "@waitron/ui",
       "@waitron/ui-core",
     ]);
-    expect(body).toContain(
-      'pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage',
-    );
+    expect(body).toContain('pnpm "$@" --workspace-concurrency=1 test:coverage');
     expect(body.split("\n").map((line) => line.trim())).toContain(
       "- run: pnpm --filter @waitron/ui-core test:package",
     );
@@ -6076,7 +6074,7 @@ describe("scoped shards retain their empty-selection guard", () => {
 });
 
 describe("brand selection commands", () => {
-  it.each(["brand", "packages"])("%s gates preserve their package selection", (scope) => {
+  const enabledGates = (scope, packages) => {
     const command = workflowSteps(job("changes").body.join("\n")).find(
       (step) => step.id === "gates",
     ).command;
@@ -6087,46 +6085,89 @@ describe("brand selection commands", () => {
         cwd: repoRoot,
         encoding: "utf8",
         timeout: 15000,
-        env: {
-          ...process.env,
-          SCOPE: scope,
-          PACKAGES: "@waitron/dashboard @waitron/setup @waitron/till @waitron/ui",
-          GITHUB_OUTPUT: output,
-        },
+        env: { ...process.env, SCOPE: scope, PACKAGES: packages, GITHUB_OUTPUT: output },
       });
       expect(result.status, result.stderr).toBe(0);
-      const enabled = readFileSync(output, "utf8")
+      return readFileSync(output, "utf8")
         .trim()
         .split("\n")
         .filter((line) => line.endsWith("=true"))
         .sort();
-      if (scope === "brand")
-        expect(enabled).toEqual(["dashboard=true", "setup=true", "till=true", "ui=true"]);
-      else expect(enabled).toContain("server=true");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  };
+
+  it.each(["brand", "packages"])("%s gates select exactly the changed packages", (scope) => {
+    expect(
+      enabledGates(scope, "@waitron/dashboard @waitron/setup @waitron/till @waitron/ui"),
+    ).toEqual(["dashboard=true", "setup=true", "till=true", "ui=true"]);
   });
 
-  it.each(["brand", "packages"])("%s executes the intended UI tests", (scope) => {
-    const step = workflowSteps(job("test-ui").body.join("\n")).find(
-      (entry) => entry.step === "Run the ui shard",
-    );
+  it("packages gates leave a changed package's dependents untested", () => {
+    expect(enabledGates("packages", "@waitron/db")).toEqual(["heavy=true"]);
+  });
+
+  it.each(["test-light-a", "test-light-b"])(
+    "%s selects the changed packages without their dependents",
+    (id) => {
+      const step = workflowSteps(job(id).body.join("\n")).find((entry) =>
+        /^Run the light-[ab] shard$/.test(entry.step),
+      );
+      const record = 'pnpm() { printf "%s\\n" "$*"; }; node() { :; };\n';
+      const command = step.command.replaceAll("${{ needs.changes.outputs.full }}", "false");
+      const result = spawnSync("bash", ["-c", record + command], {
+        env: {
+          ...process.env,
+          GITHUB_WORKSPACE: repoRoot,
+          SCOPE: "packages",
+          PACKAGES: "@waitron/shared @waitron/catalogue",
+        },
+        encoding: "utf8",
+        timeout: 15000,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const filters = result.stdout.split("\n")[0].match(/--filter [^!\s]\S*/g);
+      expect(filters).toEqual(["--filter @waitron/shared", "--filter @waitron/catalogue"]);
+    },
+  );
+
+  it("typechecks the whole workspace whatever the scope", () => {
+    const commands = workflowSteps(job("typecheck").body.join("\n"))
+      .map((entry) => entry.command)
+      .filter((command) => /\btypecheck\b/.test(command ?? ""));
+    expect(commands).toEqual(["pnpm typecheck"]);
+  });
+
+  it.each([
+    ["brand", "@waitron/ui", ["@waitron/ui"]],
+    ["packages", "@waitron/ui", ["@waitron/ui"]],
+    ["packages", "@waitron/db @waitron/ui-core", ["@waitron/ui-core"]],
+    ["packages", "@waitron/ui-core @waitron/ui", ["@waitron/ui", "@waitron/ui-core"]],
+    ["global", "", ["@waitron/ui", "@waitron/ui-core"]],
+  ])("%s scope over %j executes the intended UI tests", (scope, packages, want) => {
+    const ui = workflowSteps(job("test-ui").body.join("\n"));
+    const step = ui.find((entry) => entry.step === "Run the ui shard");
     const command = step.command
       .replaceAll("${{ needs.changes.outputs.scope }}", scope)
       .replaceAll("${{ needs.changes.outputs.full }}", "false");
     const record =
       'pnpm() { :; }; node() { case "$*" in *run-with-deadline*) printf "%s\\n" "$*";; esac; };\n';
     const result = spawnSync("bash", ["-c", record + command], {
-      env: { ...process.env, GITHUB_WORKSPACE: repoRoot },
+      env: { ...process.env, GITHUB_WORKSPACE: repoRoot, SCOPE: scope, PACKAGES: packages },
       encoding: "utf8",
       timeout: 15000,
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.match(/--filter @waitron\/[a-z-]+/g)).toEqual(
-      scope === "brand"
-        ? ["--filter @waitron/ui"]
-        : ["--filter @waitron/ui", "--filter @waitron/ui-core"],
+      want.map((name) => `--filter ${name}`),
+    );
+    const packageCheck = ui.find((entry) => /ui-core test:package/.test(entry.command ?? ""));
+    const needs = { changes: { outputs: { scope, packages } } };
+    const contains = (text, part) => text.toLowerCase().includes(part.toLowerCase());
+    const format = (text, ...args) => text.replace(/\{(\d+)\}/g, (_, at) => args[at]);
+    expect(Boolean(runInNewContext(packageCheck.if, { needs, contains, format }))).toBe(
+      want.includes("@waitron/ui-core"),
     );
   });
 });

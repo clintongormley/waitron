@@ -110,7 +110,8 @@ hook, or how tests are scheduled:
   LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
 - **PR CI runs scoped package tests without package-wide coverage; ordinary main pushes run no
   package tests in `ci.yml`; nightly, manual and release runs enforce `98/98/98/95` coverage.**
-  Root coverage remains on every run. UI registry publication keeps its separate package checks;
+  A PR tests only the changed packages, not their dependents (owner, 2026-11-08, A1461); those are
+  typechecked on the PR and tested nightly. Root coverage remains on every run. UI registry publication keeps its separate package checks;
   deploy-selected image smoke stays on main (owner, 2026-11-08, A1452). Verify the
   current head's selected jobs, and the full run's coverage or merge jobs before claiming full
   coverage. Shard counts must not exceed the package's test-file count. Guard:
@@ -201,7 +202,8 @@ hook, or how tests are scheduled:
 - **Adding a workspace package requires naming it in the root guards' shard lists.**
   A missing entry can crash a guard rather than assert.
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
-  it.** Grep for tests that pin the list, run those guards, and verify CI selects every affected consumer.
+  it.** Grep for tests that pin the list and run those guards. A PR only typechecks dependents and
+  the nightly tests them, so run the affected consumers' tests locally.
 - **Browser-mode packages run real headless Chromium.** Decide concurrency by measured headroom
   (`memory_pressure | grep free`): beside another session only well above 15% free (owner, 2026-09-24),
   never beside background whole-workspace coverage. Chromium launch depends on seat permissions.

@@ -23,8 +23,9 @@ import {
 //
 // So the attribution is ours and it fails CLOSED: a path is attributed to the innermost workspace
 // member DIRECTORY that contains it, and anything outside every member is GLOBAL. Expanding a changed
-// package to its dependents is still pnpm's, via the `--filter "...<pkg>"` arguments both callers
-// build from this file's output. Brand scope uses exact readers instead.
+// package to its dependents is still pnpm's, via the `--filter "...<pkg>"` arguments the hook's
+// typecheck builds from this file's output. CI's test selection, and brand scope in both, take
+// the packages exactly.
 
 /**
  * The workspace's members as `{name, dir}`, `dir` being relative to `repoRoot` — or `null` when the
@@ -114,7 +115,8 @@ function owningPackage(path, packages) {
  *                    `GLOBAL_ROOT_FILES` lists, an unreadable workspace, or a push whose contents
  *                    could not be determined at all.
  *   "brand"          brand assets plus inert paths: exact readers, without dependents.
- *   "packages"       `packages` names the members to narrow to. Non-empty here and for brand.
+ *   "packages"       `packages` names the members to narrow to: CI tests exactly these, and the
+ *                    hook typechecks them and their dependents. Non-empty here and for brand.
  *
  * `root` and `deploy` are orthogonal to `kind`. `root` is true whenever ANY changed path is root
  * scope, so a push of `scripts/x.mjs` beside `packages/db/src/y.ts` is `kind: "packages"` with

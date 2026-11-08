@@ -114,7 +114,8 @@ const TESTS_MEMBER = /pnpm --filter "([^"]+)" test:(?:shard|coverage|merge)\b/;
  * `{ file: memberDirs[] }` of every root `scripts/` file a ci.yml job runs as a command of its own
  * (`node scripts/<file>` at the start of a line), attributed to each member that same job tests
  * with `pnpm --filter "<name>" test:shard`, `test:coverage` or `test:merge`, the script name directly after that
- * one quoted filter. Full-line comments are skipped.
+ * one quoted filter. Full-line comments are skipped. A wrapped command that takes its filters from
+ * `"$@"` is attributed to every positive literal filter the job's `set --` lines name.
  */
 function ciRunReaders(text, members) {
   const readers = new Map();
@@ -139,9 +140,13 @@ function ciRunReaders(text, members) {
           )?.[1];
         if (mutation) return mutation;
         if (aggregate) return `@waitron/${aggregate}`;
-        return wrapped
-          ? [...wrapped[1].matchAll(/--filter "([^"]+)"/g)].map(([, name]) => name)
-          : (TESTS_MEMBER.exec(line)?.[1] ?? []);
+        if (!wrapped) return TESTS_MEMBER.exec(line)?.[1] ?? [];
+        const sources = wrapped[1].startsWith('"$@"')
+          ? code.filter((other) => other.startsWith("set -- "))
+          : [wrapped[1]];
+        return sources.flatMap((source) =>
+          [...source.matchAll(/--filter "([^"!$][^"]*)"/g)].map(([, name]) => name),
+        );
       })
       .flatMap((name) => members.find((member) => member.name === name)?.dir ?? []);
     for (const script of scripts) {

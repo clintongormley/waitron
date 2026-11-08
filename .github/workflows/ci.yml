@@ -247,13 +247,13 @@ jobs:
       # ONE `pnpm ls` for all gates. The gates are answers about the SAME resolved scope. Resolving it once makes
       # them consistent by construction, and keeps this step from growing a stanza per gated job.
       #
-      # That query is where the EXPANSION happens, and it is still pnpm's: one `--filter "...<pkg>"`
-      # per attributed package, whose LEFT-hand ellipsis selects that package AND ITS DEPENDENTS
-      # (`<pkg>...` is the other direction, a package and its dependencies, and would gate on the
-      # wrong set). Only the attribution moved out of pnpm's hands.
+      # The query takes one exact `--filter "<pkg>"` per attributed package, never `"...<pkg>"`:
+      # a pull request tests the changed packages themselves, not their dependents (owner,
+      # 2026-11-08, A1461). The `typecheck` job still checks the whole workspace, and a dependent's
+      # behaviour break surfaces at the next full run.
       #
-      # Ordinary main pushes leave package testing to PRs and full runs. For other events,
-      # brand scope uses exact readers; packages scope includes dependents. Other scopes run unscoped:
+      # Ordinary main pushes leave package testing to PRs and full runs. Brand and packages scopes
+      # select exactly their packages. Other scopes run unscoped:
       # `global` because an unattributable path could affect anything, `documentation` and `root`
       # because the gates are ANDed with `code`
       # anyway, and an empty or unexpected value because a scope nobody can read is not a reason to
@@ -300,9 +300,7 @@ jobs:
             # exits 1 when the corrupted name was the whole scope. This job has no equivalent.
             set -f
             set --
-            prefix="..."
-            [ "$SCOPE" != "brand" ] || prefix=""
-            for pkg in $PACKAGES; do set -- "$@" --filter "$prefix$pkg"; done
+            for pkg in $PACKAGES; do set -- "$@" --filter "$pkg"; done
             set +f
 
             # stderr is deliberately NOT discarded: only stdout is piped, so anything pnpm says goes
@@ -1790,22 +1788,27 @@ jobs:
       # with exit 0 and a line on stdout, so a shard whose filter selects nothing reports success
       # having run no tests.
       - name: Run the ui shard
+        env:
+          SCOPE: ${{ needs.changes.outputs.scope }}
+          PACKAGES: ${{ needs.changes.outputs.packages }}
         run: |
           set -euo pipefail
-          if [ "${{ needs.changes.outputs.scope }}" = "brand" ]; then
-            pnpm --filter "@waitron/ui" ls --depth -1 --json \
-              | node scripts/changed-packages.mjs runnable test:coverage
-            node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
-              --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
-            exit 0
+          set -- --filter "@waitron/ui" --filter "@waitron/ui-core"
+          if [ "$SCOPE" = "brand" ]; then
+            set -- --filter "@waitron/ui"
+          elif [ "$SCOPE" = "packages" ] && [ -n "$PACKAGES" ]; then
+            set --
+            for pkg in @waitron/ui @waitron/ui-core; do
+              case " $PACKAGES " in *" $pkg "*) set -- "$@" --filter "$pkg" ;; esac
+            done
           fi
-          pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" ls --depth -1 --json \
+          pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm "$@" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - run: pnpm --filter @waitron/ui-core test:package
-        if: needs.changes.outputs.scope != 'brand'
+        if: needs.changes.outputs.scope != 'brand' && (needs.changes.outputs.scope != 'packages' || needs.changes.outputs.packages == '' || contains(format(' {0} ', needs.changes.outputs.packages), ' @waitron/ui-core '))
 
   # apps/till alone: the Counter POS browser app, the workspace's SECOND Chromium consumer after
   # packages/ui. It has a shard of its own for the same reason test-ui does — a browser-mode
@@ -3448,7 +3451,7 @@ jobs:
           set -f
           set --
           if [ "$SCOPE" = "packages" ] && [ -n "$PACKAGES" ]; then
-            for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
+            for pkg in $PACKAGES; do set -- "$@" --filter "$pkg"; done
           fi
           set +f
           # OWN_SHARD_PACKAGES — subtracted by both light shards.
@@ -3565,7 +3568,7 @@ jobs:
           set -f
           set --
           if [ "$SCOPE" = "packages" ] && [ -n "$PACKAGES" ]; then
-            for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
+            for pkg in $PACKAGES; do set -- "$@" --filter "$pkg"; done
           fi
           set +f
           # OWN_SHARD_PACKAGES — subtracted by both light shards.
