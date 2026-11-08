@@ -424,10 +424,31 @@ it.each(["counter", "bill"] as const)(
     expect(registroCount(venue, id)).toBe(0);
     expect(allRecords()).toBe(records);
     if (surface === "counter") {
+      const stillStopped = await payStored(venue.appAt(reader.clock), id);
+      expect(stillStopped.status).toBe(507);
+      expect(stillStopped.json).toEqual({
+        code: "sale.charged_not_recorded",
+        params: { workingOrderId: id, reason: "clock_unusable" },
+      });
+      expect(capturedUnlinked(id)).toBe(1);
+      expect(collects()).toBe(before + 1);
+      expect(allRecords()).toBe(records);
       const paid = await payStored(venue.appAt(clockAt(now + 2 * MINUTE)), id);
       expect(paid.status).toBe(200);
       expect(paid.json.outcome).toBe("captured");
     } else {
+      const wholeOrderRetry = await payStored(venue.appAt(reader.clock), id);
+      expect(wholeOrderRetry.status).toBe(409);
+      expect(wholeOrderRetry.json.code).toBe("clock.unusable");
+      await settlePendingBillPayments({
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: reader.clock,
+        cfg: venue.cfg,
+      });
+      expect(collects()).toBe(before + 1);
+      expect(allRecords()).toBe(records);
       expect((await paymentRows(venue, id)).map((row) => row.state)).toEqual(["pending"]);
       await settlePendingBillPayments({
         admission: testTradingAdmission(),

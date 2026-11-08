@@ -96,7 +96,12 @@ import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js
 import { issueMoment, pinnedAt } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
-import { afterCardCharged, collectFailure, refuseBillWithPayments } from "./bill-payments.js";
+import {
+  afterCardCharged,
+  collectFailure,
+  holdsPayment,
+  refuseBillWithPayments,
+} from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -1181,7 +1186,26 @@ async function payIntegrated(
     await requireEconomicWrite(tx, cfg, deps.admission);
     const reading = deps.clock.now();
     await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
-    await deps.backend.refuseWhileClockBehind(tx, reading);
+    try {
+      await deps.backend.refuseWhileClockBehind(tx, reading);
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        error.code === "clock.unusable" &&
+        locked !== undefined &&
+        !(await holdsPayment(tx, req.id))
+      ) {
+        const captured = await findCapturedPaymentForWorkingOrder(tx, {
+          provider: deps.provider.provider,
+          workingOrderId: req.id,
+        });
+        if (captured?.saleId === null)
+          return afterCardCharged(deps, req.id, async () => {
+            throw error;
+          });
+      }
+      throw error;
+    }
 
     if (locked !== undefined && locked.status !== "open" && locked.status !== "placed") {
       throw new AppError("working_order.not_open", { workingOrderId: req.id });

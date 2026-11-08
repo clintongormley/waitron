@@ -1006,7 +1006,7 @@ export class TillBillPayDialog extends LitElement {
   #refusalMessage(field: Field): string {
     return field === "tendered"
       ? t("bill_pay.tendered_short")
-      : refusalText(this.shownRefusal!, this.checkTimeOffered, true);
+      : refusalText(this.shownRefusal!, { checkTime: this.checkTimeOffered, billPayment: true });
   }
 
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
@@ -1022,7 +1022,9 @@ export class TillBillPayDialog extends LitElement {
     const parts: string[] = [];
     if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
     if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(refusalText(this.shownRefusal, this.checkTimeOffered, true));
+      parts.push(
+        refusalText(this.shownRefusal, { checkTime: this.checkTimeOffered, billPayment: true }),
+      );
     if (extra !== undefined) parts.push(extra);
     return parts.join(" ");
   }

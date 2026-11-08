@@ -4131,7 +4131,9 @@ stop begins whose sale would file answers `507 sale.charged_not_recorded` with
 `reason: "clock_behind_chain"`, or `"clock_unusable"` when the clock moves before
 28 October 2024, on the till's two card routes. The two "clock becomes unusable"
 cases in `apps/server/src/clock-behind-stop.charged.test.ts` move the clock while
-the reader is held, then check one charge and one record after recovery. See
+the reader is held, then check one charge and one record after recovery. An early
+whole-order retry under the unusable clock keeps that charged-card answer; a bill
+payment remains pending for its own recovery step. The same cases check both. See
 [A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes).
 
 **Why the routes need their own check** (plan E10, measured 2026-10-22 with only the append's check

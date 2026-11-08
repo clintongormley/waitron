@@ -388,7 +388,7 @@ export class TillFindBillDialog extends LitElement {
                   this.error.clockUnusable.offsetMinutes,
                 )
               : "clockBehind" in this.error
-                ? clockBehindText(this.error.clockBehind, false, true)
+                ? clockBehindText(this.error.clockBehind, { collection: true })
                 : overLimitText(this.error.overLimit)
         : this.cashError
           ? t("form.fix_fields")

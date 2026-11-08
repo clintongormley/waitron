@@ -1668,7 +1668,7 @@ function errorText(
       error.clockUnusable.offsetMinutes,
       checkTime,
     );
-  if ("clockBehind" in error) return clockBehindText(error.clockBehind, checkTime);
+  if ("clockBehind" in error) return clockBehindText(error.clockBehind, { checkTime });
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>

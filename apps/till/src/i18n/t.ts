@@ -130,12 +130,14 @@ function readingText(at: string, offsetMinutes: number): string {
   return `${date}\u00a0${time}`;
 }
 
+type ClockBehindOptions =
+  { collection?: false; checkTime?: boolean } | { collection: true; checkTime?: false };
+
 /** Each reading in its own offset, the one its record carries or would carry; with `checkTime`,
  * pointing at the till's "Check the time". */
 export function clockBehindText(
   behind: ClockBehind,
-  checkTime = false,
-  collection = false,
+  { checkTime = false, collection = false }: ClockBehindOptions = {},
 ): string {
   const clockAt = readingText(behind.clockAt, behind.offsetMinutes);
   const lastRecordAt = readingText(behind.lastRecordAt, behind.lastRecordOffsetMinutes);

@@ -281,3 +281,15 @@ describe("till-cancel-credit-dialog: done", () => {
     );
   });
 });
+
+it.each([
+  ["en-GB", "Can't be recorded: the server's clock is wrong. Tell a manager."],
+  ["es", "No se puede registrar: la hora del servidor es incorrecta. Avisa al encargado."],
+])(
+  "an invoice cancellation clock refusal describes the refused operation in %s",
+  async (locale, message) => {
+    setLocale(locale!);
+    const el = await mount({ refusal: { code: "clock.unusable" } });
+    expect(actions(el).error).toBe(message);
+  },
+);
