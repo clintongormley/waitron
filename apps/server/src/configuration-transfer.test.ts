@@ -8256,16 +8256,14 @@ it.each([true, false])(
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await suite.db
-      .insert(convenioConfig)
-      .values({
-        locationId: await venueLocationId(suite.db),
-        breakThresholdMinutes: 300,
-        splitMinSegmentMinutes: 180,
-        splitMaxSegmentMinutes: 300,
-        splitMinGapMinutes: 90,
-        continuousPaidBreakMinutes: 20,
-      });
+    await suite.db.insert(convenioConfig).values({
+      locationId: await venueLocationId(suite.db),
+      breakThresholdMinutes: 300,
+      splitMinSegmentMinutes: 180,
+      splitMaxSegmentMinutes: 300,
+      splitMinGapMinutes: 90,
+      continuousPaidBreakMinutes: 20,
+    });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
