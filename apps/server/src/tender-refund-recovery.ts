@@ -11,7 +11,7 @@ import {
 } from "./tender-refund-sends.js";
 import { realSleep, sleepMsFor } from "./loop.js";
 import type { TenderRefundDeps } from "./tender-refunds.js";
-import { issuanceStopsRefund } from "./bill-refunds.js";
+import { refundRefused } from "./bill-refunds.js";
 
 const RECHECK_MS = 60_000;
 const UNRESOLVED_MS = 3_600_000;
@@ -34,7 +34,7 @@ export async function recoverTenderRefunds(
     deps.db,
     async (tx) =>
       (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null ||
-      (await issuanceStopsRefund(tx, deps)),
+      (await refundRefused(tx, deps)),
   );
   if (stopped) {
     const [summary] = await deps.db

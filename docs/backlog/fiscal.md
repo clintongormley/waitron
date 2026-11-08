@@ -414,7 +414,7 @@ immutable fiscal rows and chain head after release and filing.
 
 The other cases retain those accounting effects while refusing record-producing remedies for
 unknown outcomes, conflicting invoice identities and an already generated ordinary cancellation.
-Since 7 November 2026 the administrator may release a held cancellation once its original's
+Since A1425 the administrator may release a held cancellation once its original's
 correction is accepted, whichever issuing chain the correction is on. The original rejection in
 these cases is synthetic stored evidence; they do not send a real refund or establish a legal
 remedy. The public permitted-remedy set stays empty. The completed implementation still needs the
@@ -542,7 +542,7 @@ staff cancellation/refund integration remains unfinished; this HTTP milestone do
 aside has its own immutable identity, so this operation submits that existing record. With a test
 policy allowing `release-held-cancellation`, you name the held cancellation, its case and the
 accepted current invoice version. The operation requires the same sale, invoice identity and
-environment, a cancellation written by this box or a box in its takeover history (since 7 November 2026
+environment, a cancellation written by this box or a box in its takeover history (since A1425
 the accepted version may be on any issuing chain), an ordinary cancellation still set aside, and
 its matching `fiscal.anulacion_retenida` case. A pending, unknown, rejected, accepted-with-errors or superseded
 invoice version is refused. Production policy remains empty.

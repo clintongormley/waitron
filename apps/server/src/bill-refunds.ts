@@ -87,7 +87,7 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
   stopSignal?: AbortSignal;
 };
 
-export async function issuanceStopsRefund(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
+export async function refundRefused(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
   try {
     await deps.backend.refuseNewRefund(tx, deps.cfg.nodeId);
     return false;
@@ -362,7 +362,7 @@ async function sendCardRefund(
     const target = (await readCardRefund(tx, refundId))!;
     const reading = deps.clock.now();
     if (await clockStopsRefund(tx, deps, null, reading)) return { ...target, stopped: true };
-    if (await issuanceStopsRefund(tx, deps)) return { ...target, stopped: true };
+    if (await refundRefused(tx, deps)) return { ...target, stopped: true };
     const [row] = await tx
       .update(billPaymentRefunds)
       .set({

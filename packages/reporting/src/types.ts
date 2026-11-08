@@ -7,7 +7,7 @@ export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
 export interface DailyCloseInput {
   /** The boxes whose records count; omit → every box in the database (the whole venue). */
   nodeIds?: readonly NodeId[];
-  /** Renamed to `nodeIds`; an object still carrying `nodeId` must not compile. */
+  /** A single box is `nodeIds: [id]`; a `nodeId` field does not compile. */
   nodeId?: never;
   /** Local calendar date of the business day, "YYYY-MM-DD". */
   businessDay: string;
@@ -21,7 +21,7 @@ export interface DailyCloseInput {
 export interface PeriodVatInput {
   /** The boxes whose records count; omit → every box in the database. */
   nodeIds?: readonly NodeId[];
-  /** Renamed to `nodeIds`; an object still carrying `nodeId` must not compile. */
+  /** A single box is `nodeIds: [id]`; a `nodeId` field does not compile. */
   nodeId?: never;
   /** Inclusive lower bound, local calendar date of the business day, "YYYY-MM-DD". */
   fromBusinessDay: string;

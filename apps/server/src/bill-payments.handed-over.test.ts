@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction, writeNodeMembership } from "@waitron/db";
-import { issuanceStopsRefund } from "./bill-refunds.js";
+import { refundRefused } from "./bill-refunds.js";
 import {
   paymentRows,
   provisionBillVenue,
@@ -135,7 +135,7 @@ describe("refunds on a box the held chart does not name primary", () => {
   it("leaves the refund catch-up loops running", async () => {
     await expect(
       withTransaction(suite.db, (tx) =>
-        issuanceStopsRefund(tx, {
+        refundRefused(tx, {
           db: suite.db,
           backend: venue.backend,
           clock: venue.clock,

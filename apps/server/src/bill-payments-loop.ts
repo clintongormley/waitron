@@ -1,5 +1,5 @@
 import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
-import { issuanceStopsRefund } from "./bill-refunds.js";
+import { refundRefused } from "./bill-refunds.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
@@ -260,7 +260,7 @@ async function settlePendingBillRefunds(
     deps.db,
     async (tx) =>
       (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null ||
-      (await issuanceStopsRefund(tx, deps)),
+      (await refundRefused(tx, deps)),
   );
   if (stopped) return;
   const pending = await withTransaction(deps.db, (tx) =>

@@ -59,6 +59,11 @@ chart names as the serving primary appends to a chain.
    (`readNodeMembership`, `packages/db/src/node-membership.ts:27`) exists and does not name the
    chain's box `serving-primary`. With no chart held there is no refusal. Charts move
    by term, so a take-back names M1 again.
+   **As built (2026-11-08):** the same check also runs in the Veri\*Factu backend's
+   `refuseNewIssuance`, so a sale or bill payment is refused before money moves; refunds call a new
+   `refuseNewRefund`, which checks only for an active conflict, so a box the chart no longer names
+   main still gives refunds. `fiscal.chain_handed_over` answers 409 on the till, payments and remedy
+   routes. A controller ruling, not an owner decision.
 5. **The recorded daily close is left alone**; A1325 replaces it. Nothing outside
    `packages/reporting` calls `recordDailyClose` (plan review, grep). The daily-close REPORT reads the
    list like every other report. This replaces the spec's "if part 1 lands before A1325" call; Task 9
