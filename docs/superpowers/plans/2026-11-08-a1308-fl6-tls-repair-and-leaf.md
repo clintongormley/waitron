@@ -30,9 +30,8 @@ Lines at `649b7576e0`.
 
 **Who lands:** the lane (no fiscal file or value).
 
-**Depends on A1379 part 2?** Not directly. This slice touches no first-setup file and needs only
-fl1–fl3 (Needs), so of fl6 to fl10 it is the one not held behind the owner's three A1379 questions
-(`docs/backlog/setup.md:575`) — unless fl1–fl3's own plans are.
+**Depends on A1379 part 2?** Through fl1–fl3: this slice touches no first-setup file, but fl1–fl5
+all wait for A1379 part 2 (the owner's three questions, `docs/backlog/setup.md:575`), so fl6 does too.
 
 **First line of the pull request:** "On its first start after this change a box opens the
 connection repair page, because its certificate file has a new name and a fresh certificate is
@@ -171,7 +170,7 @@ it.
 
 ## Needs
 
-fl1, fl2 (scratch, for the ending) and fl3 landed. Not A1379 part 2 (see "Depends on A1379 part
+fl1, fl2 (scratch, for the ending) and fl3 landed, and so A1379 part 2 (see "Depends on A1379 part
 2?" above).
 
 ## Review Focus

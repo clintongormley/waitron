@@ -225,19 +225,10 @@ environment plans need not land first.
 ### Task 3: Archives, verification, handover, Start again
 
 - [ ] **Step 1:** Failing case in `restore.test.ts`: `"a restored box takes the module list from the
-  archive's database"`; in `backup-verification-secrets.test.ts`, `"an archive carrying
-  secrets/modules.json is unsupported"`, expecting `{ status: "unsupported", reason:
-  "secret_format_unsupported" }`. What the verifier does today, read: `verifyBackupStateSecrets`
-  (`backup-verification-secrets.ts:58-135`) refuses only the Cloud names by name (`:69-70`,
-  `UNSUPPORTED`) and otherwise ignores a `secrets/` entry it does not name, so once the
-  `modules.json` block (`:95-108`) is deleted an older archive would pass this check with its module
-  list silently dropped. The new case therefore fails until `secrets/modules.json` joins the Cloud
-  names at `:69-70`. Restore itself does not run this check (its only caller is
-  `backup-verification.ts:269`), and `restoreSecrets`/`stageSecrets` write every `secrets/` entry
-  they are given, so restoring such an archive would leave a `modules.json` nothing reads beside a
-  database with no row (every module on). Add a restore case for that archive showing what
-  happens, then stop (rules §5.5) and ask the watcher whether restore should refuse it, rather than
-  choosing a refusal code here.
+  archive's database"`. No case for an older archive that still carries `secrets/modules.json`:
+  none exists (owner, 2026-11-08: "no old backups exist"; CLAUDE.md §3, no backwards-compatibility
+  code before go-live), so the verifier's `modules.json` block (`backup-verification-secrets.ts:95-108`)
+  is simply deleted and nothing refuses or converts such an archive.
 - [ ] **Step 2:** Implement What it builds 6-7. Run the Finish line. Commit.
 
 ## After the tasks

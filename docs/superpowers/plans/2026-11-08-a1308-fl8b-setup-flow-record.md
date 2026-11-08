@@ -105,7 +105,8 @@ Start again; other boxes keep working."
 ## Size
 
 Estimated: code ~340 counted (module ~120, writers and readers ~220 net); tests ~420 (module ~110,
-re-pointed fixtures ~165, T9 ~105, undeclared check ~40); docs ~10. **Total counted ~770.**
+re-pointed fixtures ~165, T9 ~105, undeclared check ~40); docs ~10; Task 5 (the ending) ~150 (code
+~50, tests ~100). **Total counted ~920.** If it passes ~1,050, Task 5 becomes its own pull request.
 
 ## Finish line
 
@@ -191,6 +192,24 @@ fl8a landed (and through it fl7 and A1379 pull request 2; header). fl9 need not 
   helper report it.
 - [ ] **Step 2:** Run; fix any undeclared name by declaring it (if files.md keeps it) or stop.
   Commit.
+
+### Task 5: A finished setup's folder ends
+
+Owner decision, 2026-11-08 ("remove"; fl8a, "Decisions made in this plan"). The folder holds the
+setup administrator's name, email and password verifier, which nothing needs once the box trades.
+
+- [ ] **Step 1: Failing cases** (in the suite that covers `node-entry.ts`'s 120-second hook, beside
+  fl6's repair clean-up case): `"a finished setup's folder is removed once a trading start stays
+  up"` — a finished record and the box trading for the hook's delay → `flows/setup/` is gone, and the
+  next boot treats no record as nothing to check (`first-fiscal-mode.ts:11-12`); `"a start that ends
+  before the hook keeps the folder"`; `"an unlisted file in the folder is kept"` — the ending deletes
+  only the files fl8a's Start again lists, by name, then `rmdir`s the folder, which refuses because
+  the unlisted file is still there; the failure is logged as `setup.finished_cleanup_failed` and the
+  start goes on. The failing case for the first test prints the folder still present.
+- [ ] **Step 2:** Implement: in the hook at `node-entry.ts:689`, beside fl6's repair clean-up, call
+  one function in the setup flow's module that reads the record, does nothing unless it says
+  finished, and removes the folder with fl8a's listed-files-by-name method (never a recursive
+  delete). Run the Finish line. Commit.
 
 ## After the tasks
 

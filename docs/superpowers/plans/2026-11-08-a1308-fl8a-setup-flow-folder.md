@@ -57,18 +57,17 @@ Start again; other boxes keep working."
 
 ## Decisions made in this plan
 
-- **A finished setup keeps its folder — until the owner answers otherwise.** Boot checks the
+- **A finished setup keeps its folder in this slice; fl8b ends it** (owner, 2026-11-08: "remove").
+  Boot checks the
   finished record against `trading.env` at every start (`apps/server/src/first-fiscal-mode.ts:11-27`;
   `first-setup-entry.ts:31-48`), so this slice ends a setup flow only by Start again, as today's
   `first-setup.json` is kept today. That departs from README §7 ("One folder per flow … ended with
   one rename") and keeps the record — the setup administrator's name, email and password verifier
-  (`first-setup-start-again-choose.ts:106` and `:123-127` read them) — on the box for good. **Owner
-  question:** should a finished setup's folder end? **Recommended default:** yes, after the first
-  trading start that stays up (the same 120-second hook fl6 uses, `node-entry.ts:689`): by then
-  boot's check has nothing left to protect, and boot already reads no record as nothing to check
-  (`first-fiscal-mode.ts:11-12`, `readResumable` null returns). **Until it is answered:** this slice
-  keeps the folder (no behaviour change), and the ending, if approved, is its own small pull request
-  after fl8b.
+  (`first-setup-start-again-choose.ts:106` and `:123-127` read them) — on the box for good. The owner decided (2026-11-08) that a finished setup's folder is removed after
+  the first trading start that stays up (the same 120-second hook fl6 uses, `node-entry.ts:689`): by
+  then boot's check has nothing left to protect, and boot already reads no record as nothing to check
+  (`first-fiscal-mode.ts:11-12`, `readResumable` null returns). This slice keeps the folder (no
+  behaviour change); fl8b's Task 5 builds the ending.
 - **`setup-operation.json` becomes `flows/setup/operation.json` and is never folded into the
   record**: the setup server writes it for adopt and restore too (`setup-api.ts:994,1100,1239`), when
   no first setup exists, and a record present for those would read as a claimed setup.
