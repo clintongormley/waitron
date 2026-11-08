@@ -107,7 +107,7 @@ pnpm --filter @waitron/server exec vitest run src/attendance-facts.test.ts src/a
   src/till-sale.test.ts src/payments-api.test.ts
 pnpm --filter @waitron/payments exec vitest run
 pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
-pnpm exec vitest run scripts/classification-complete.test.ts scripts/migrations-match-schema.test.ts \
+pnpm exec vitest run scripts/classification-complete.test.ts scripts/starting-migrations.test.ts \
   scripts/migration-upgrade.test.ts scripts/schema-constraints.test.ts
 git grep -nE 'IntegratedAttendance|attendance-integrated' -- apps packages scripts; test $? -eq 1
 ```

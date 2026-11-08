@@ -154,7 +154,7 @@ pnpm --filter @waitron/server exec vitest run src/attendance-days.test.ts src/at
   src/attendance-cutover-settings.test.ts src/till-clock-attendance.test.ts src/attendance-obligations.test.ts \
   src/attendance-capture.test.ts src/attendance-rota.test.ts src/attendance-facts.test.ts src/till-clock-api.test.ts
 pnpm exec vitest run scripts/attendance-evidence-writers.test.ts scripts/classification-complete.test.ts \
-  scripts/live-subscriptions.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts \
+  scripts/live-subscriptions.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts \
   scripts/schema-constraints.test.ts scripts/claude-md-pointers.test.ts
 git grep -nE 'attendance_source_state|attendanceSourceState|discoverAttendanceDays|beginAttendanceDiscovery|attendanceSchemaBeforeMigrations' -- apps packages scripts ':!**/drizzle/**'; test $? -eq 1
 ```
