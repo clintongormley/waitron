@@ -8,6 +8,7 @@ import {
   cleanupWidgets,
   draftServer,
   mountWidget,
+  notingPersonRefusals,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -232,7 +233,7 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
   for (const id of ["wo-7", "wo-9", "wo-new"]) server.bills.add(id);
-  return {
+  return notingPersonRefusals({
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
@@ -290,7 +291,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     takeOverDraft: server.takeOverDraft,
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as Record<string, ReturnType<typeof vi.fn>>;
+  }) as Record<string, ReturnType<typeof vi.fn>>;
 }
 
 async function mountApp(

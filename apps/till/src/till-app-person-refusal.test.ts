@@ -13,6 +13,7 @@ import {
   type TableState,
 } from "./api/client.js";
 import { ServerRouter } from "./api/server-router.js";
+import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { cleanupWidgets, draftSnapshot, mountWidget } from "./widgets/test-helpers.js";
@@ -699,5 +700,45 @@ describe("the till through its real client", () => {
     await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
     expect(server.sentTo("DELETE /api/session")).toEqual([]);
     await expectNoErrorOnLock(el, settled);
+  });
+
+  it("sends no save naming Luis once his sign-in has answered, while Ana's save goes unanswered past its limit", async () => {
+    const server = tillServer();
+    // As a browser's fetch does, a request whose signal aborts rejects, answered or not.
+    const fetchUntilAborted: FetchLike = (input, init) =>
+      new Promise((resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("The operation was aborted.", "AbortError")),
+        );
+        server.fetch(input, init).then(resolve, reject);
+      });
+    const { el } = await mountTill({ ...server, fetch: fetchUntilAborted });
+    await signInAsAna(el);
+    const order = await openAnasTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const save = server.hold("PUT /api/parties/v1/drafts");
+      order.draftStore!.setLineExtras(0, { note: "No sugar" });
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+      await save.sent;
+      emit(order, "logout");
+      await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
+
+      await keyIn(el, LUIS, LUIS_PIN);
+      await vi.waitFor(() => expect(shellOf(el)).not.toBeNull());
+      const luisAnswered = server.requests.length;
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+
+      expect(named(server.sentTo("PUT /api/parties/v1/drafts")[0]!)).toBe(ANA.personId);
+      const luisSaves = server.requests
+        .slice(luisAnswered)
+        .filter((request) => request.method === "PUT" && request.path === "/api/parties/v1/drafts")
+        .filter((request) => named(request) === LUIS.personId);
+      expect(luisSaves).toEqual([]);
+      expect(shellOf(el)).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
