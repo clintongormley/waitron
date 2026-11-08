@@ -1448,7 +1448,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Wt popups** (bundle of 7, 2 important, size M). Holds A781, A1256, A1258, A625, A1058, A903. [Detail](backlog/dashboard.md#bundle-wt-popups)
 
-- **Theme logo** (bundle of 3, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
+- **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 
 - **A653 — every long dashboard table scrolls the same way, with less above it (owner, 2026-10-14;
   open).**

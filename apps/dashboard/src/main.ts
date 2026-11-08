@@ -1,5 +1,11 @@
 import { html, render } from "lit";
-import { applyTokens, registerIcons, startThemeChoice, startVenueTheme } from "@waitron/ui";
+import {
+  applyTokens,
+  registerIcons,
+  startThemeChoice,
+  startThemedFavicon,
+  startVenueTheme,
+} from "@waitron/ui";
 import {
   BUILD_CHANGED_EVENT,
   createInstrumentedFetch,
@@ -18,6 +24,7 @@ import "./screens/attendance-corrections-screen.js";
 
 applyTokens(document.documentElement);
 startThemeChoice(document.documentElement);
+startThemedFavicon();
 registerIcons(DASHBOARD_ICONS);
 const app = document.querySelector<HTMLElement>("#app")!;
 const publicLocale =

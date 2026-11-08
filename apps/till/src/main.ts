@@ -1,5 +1,5 @@
 import { html, render } from "lit";
-import { applyTokens, startThemeChoice, startVenueTheme } from "@waitron/ui";
+import { applyTokens, startThemeChoice, startThemedFavicon, startVenueTheme } from "@waitron/ui";
 import {
   BUILD_CHANGED_EVENT,
   createInstrumentedFetch,
@@ -25,6 +25,7 @@ startVenueTheme(document.documentElement, {
   fetchImpl: createInstrumentedFetch(watchedFetch, diag),
 });
 startThemeChoice(document.documentElement);
+startThemedFavicon();
 
 installErrorCapture(window, diag);
 

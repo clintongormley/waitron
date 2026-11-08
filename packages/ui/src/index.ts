@@ -148,7 +148,9 @@ export {
   reportVenueLogoLoaded,
   startVenueTheme,
   subscribeVenueLogo,
+  subscribeVenueTheme,
 } from "./venue-theme.js";
+export { startThemedFavicon } from "./themed-favicon.js";
 export type { VenueLogoState, VenueThemeReading } from "./venue-theme.js";
 export type { VenueLogoAddresses, VenueThemeAnswer } from "@waitron/ui-core/theme";
 export {
@@ -202,6 +204,7 @@ export {
   type WtVenueLogoSize,
 } from "./components/wt-venue-logo.js";
 export { WtPoweredBy } from "./components/wt-powered-by.js";
+export { WtWaitronLockup } from "./components/wt-waitron-lockup.js";
 
 export { ReorderController, type ReorderModel } from "./reorder-table.js";
 export { reorder } from "./reorder.js";

@@ -20,7 +20,6 @@ import {
   reportVenueLogoFailure,
   reportVenueLogoLoaded,
   setHelpMode,
-  type ThemeChoice,
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
@@ -43,7 +42,7 @@ import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
 import { applyVenueTheme, readVenueTheme, setContentLanguages } from "@waitron/ui";
-import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
+import "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { DashboardQueries } from "./api/query-controller.js";
 import { createSessionEpoch, type SessionEpoch } from "./session-signals.js";
 import { consumePermissionReturn, PermissionContinuation } from "./permission-continuation.js";
@@ -198,12 +197,6 @@ function storeFold(folded: boolean): void {
   } catch {
     // Remembering the choice is a convenience; the sidebar works without it.
   }
-}
-
-function darkLogoMedia(choice: ThemeChoice): string {
-  if (choice === "dark") return "all";
-  if (choice === "light") return "not all";
-  return "(prefers-color-scheme: dark)";
 }
 
 type AccessRule = {
@@ -656,21 +649,23 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .brand-logo-picture {
-        display: contents;
+      /* Lockup and name line up by baseline in a row of their own: in .brand-identity, the taller
+         navigation toggle would set the line and push both to its top. */
+      .brand-line {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        min-width: 0;
+        gap: var(--wt-space-3);
       }
 
-      /* Hidden because under display: contents it becomes an item of the identity row and adds a
-         gap before the logo. */
-      .brand-logo-picture > source {
-        display: none;
+      .brand-line.on-lockup {
+        align-items: baseline;
       }
 
       .brand-logo {
-        display: block;
         flex: 0 0 auto;
         width: calc(var(--wt-space-6) * 4);
-        height: auto;
       }
 
       .venue-logo {
@@ -688,6 +683,7 @@ export class DashboardApp extends LitElement {
 
       .banner-powered-by {
         flex: 0 0 auto;
+        align-self: center;
         margin-inline-start: auto;
         padding-inline-end: var(--wt-space-3);
         border-inline-end: 1px solid var(--wt-color-border);
@@ -780,7 +776,8 @@ export class DashboardApp extends LitElement {
             "venue venue venue venue";
           gap: var(--wt-space-2) 0;
         }
-        .brand-identity {
+        .brand-identity,
+        .brand-line {
           display: contents;
         }
         .nav-toggle {
@@ -2112,11 +2109,14 @@ export class DashboardApp extends LitElement {
     >`;
   }
 
+  /** The lockup is in the light DOM even while a venue's logo is drawn, so ask what is shown. */
+  #lockupShown(): boolean {
+    const state = this.#venueLogo.state;
+    return state.kind === "none" || (state.kind === "logo" && state.failed);
+  }
+
   #lockup(slot?: string): TemplateResult {
-    return html`<picture class="brand-logo-picture" slot=${slot ?? nothing}>
-      <source media=${darkLogoMedia(this.#theme.choice)} srcset=${WAITRON_LOCKUP_DARK_URL} />
-      <img class="brand-logo" src=${WAITRON_LOCKUP_URL} alt="Waitron" />
-    </picture>`;
+    return html`<wt-waitron-lockup class="brand-logo" slot=${slot ?? nothing}></wt-waitron-lockup>`;
   }
 
   #banner(authenticated: boolean, hasNav: boolean): TemplateResult {
@@ -2135,20 +2135,22 @@ export class DashboardApp extends LitElement {
               ></wt-button>`
             : nothing
         }
-        ${this.#brandMark()}
-        <span class="venue-row"
-          ><span class="venue">
-            <span class="venue-name" data-test="venue-name">${this.venueName}</span>
-            ${
-              this.onboardingIntent === "live"
-                ? html`<span class="mode-indicator" data-test="mode-indicator"
-                    >${t("mode.live")}</span
-                  >`
-                : nothing
-            }
-          </span>
-          ${authenticated ? this.#poweredBy("banner-powered-by") : nothing}</span
-        >
+        <div class=${classMap({ "brand-line": true, "on-lockup": this.#lockupShown() })}>
+          ${this.#brandMark()}
+          <span class="venue-row"
+            ><span class="venue">
+              <span class="venue-name" data-test="venue-name">${this.venueName}</span>
+              ${
+                this.onboardingIntent === "live"
+                  ? html`<span class="mode-indicator" data-test="mode-indicator"
+                      >${t("mode.live")}</span
+                    >`
+                  : nothing
+              }
+            </span>
+            ${authenticated ? this.#poweredBy("banner-powered-by") : nothing}</span
+          >
+        </div>
       </div>
       <div class="banner-actions">
         ${

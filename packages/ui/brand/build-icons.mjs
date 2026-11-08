@@ -24,7 +24,7 @@ const darkToken = (name) => {
 };
 const MARK_BLUE_DARK = darkToken("primary");
 const WORD_INK_DARK = darkToken("text");
-const ICON_CANVAS = 136; // mark is 124.64 x 117.09, so this leaves an even margin on the long axis
+const ICON_CANVAS = 136; // mark is 124 x 84.91, so this leaves an even margin on the long axis
 
 /**
  * The body must carry no fill of its own: a `fill` attribute on an inner element beats an inherited
@@ -41,8 +41,8 @@ function readSource(name) {
 }
 
 /** Run Inkscape, and say what it printed if it fails — a bare spawn error names no cause. */
-function render(src, out, size, { opaque = false } = {}) {
-  const args = [src, "-o", out, "-w", String(size), "-h", String(size)];
+function render(src, out, size, { opaque = false, height = size } = {}) {
+  const args = [src, "-o", out, "-w", String(size), "-h", String(height)];
   if (!opaque) args.push("--export-background-opacity=0");
   try {
     execFileSync(inkscape, args, { stdio: ["ignore", "ignore", "pipe"] });
@@ -98,6 +98,13 @@ if (mark.x !== 0 || mark.y !== 0) {
 if (mark.w > ICON_CANVAS || mark.h > ICON_CANVAS) {
   throw new Error(`waitron-mark.svg is ${mark.w}x${mark.h}, over the ${ICON_CANVAS} icon canvas`);
 }
+// The two drawings are cut to one shared height, so they sit side by side unscaled.
+if (word.x !== 0 || word.y !== 0 || word.h !== mark.h) {
+  throw new Error(
+    `waitron-wordmark.svg: viewBox must be 0 0 <width> ${mark.h}, the mark's height, got ` +
+      `${word.x} ${word.y} ${word.w} ${word.h}`,
+  );
+}
 const written = [];
 const write = (path, text) => {
   writeFileSync(path, text);
@@ -120,14 +127,12 @@ write(
     `<g class="m" transform="${pad(mark.w, mark.h)}">${mark.body}</g></svg>\n`,
 );
 
-// Mark at the wordmark's cap height, feet on its baseline, then the word.
-const scale = 100 / mark.h;
-const gap = 30;
-const wordX = mark.w * scale + gap;
+const gap = 14.44;
+const wordX = mark.w + gap;
 const lockup = (markFill, wordFill) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${word.x} ${word.y} ${wordX + word.w} ${word.h}">` +
-  `<g fill="${markFill}" transform="scale(${scale.toFixed(4)})">${mark.body}</g>` +
-  `<g fill="${wordFill}" transform="translate(${wordX.toFixed(1)},0)">${word.body}</g></svg>\n`;
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${+(wordX + word.w).toFixed(2)} ${mark.h}">` +
+  `<g fill="${markFill}">${mark.body}</g>` +
+  `<g fill="${wordFill}" transform="translate(${wordX.toFixed(2)},0)">${word.body}</g></svg>\n`;
 write(join(here, "waitron-lockup.svg"), lockup(mark.fill, word.fill));
 // For an `<img>` on a dark ground, which cannot read the theme's tokens.
 write(join(here, "waitron-lockup-dark.svg"), lockup(MARK_BLUE_DARK, WORD_INK_DARK));
@@ -157,6 +162,22 @@ try {
     join(pub, "favicon.ico"),
     packIco(icoSizes.map((size) => ({ size, data: readFileSync(join(scratch, `${size}.png`)) }))),
   );
+
+  // The logo as plain images in the stock colours, for places that cannot draw an SVG or read the
+  // theme (documents, slides, other sites). Width fixed, height from each drawing's shape.
+  const rasters = [
+    ["waitron-lockup.svg", "waitron-lockup.png", 1200],
+    ["waitron-lockup-dark.svg", "waitron-lockup-dark.png", 1200],
+    ["waitron-mark.svg", "waitron-mark.png", 512],
+  ];
+  for (const [source, png, width] of rasters) {
+    const box = readFileSync(join(here, source), "utf8").match(/viewBox="([^"]+)"/)[1];
+    const [, , w, h] = box.split(/\s+/).map(Number);
+    render(join(here, source), join(here, "png", png), width, {
+      height: Math.round((width * h) / w),
+    });
+    written.push(`png/${png}`);
+  }
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

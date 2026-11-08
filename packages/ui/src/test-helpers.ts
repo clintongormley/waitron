@@ -246,3 +246,46 @@ export function useMediaPresentations() {
   afterEach(() => vi.restoreAllMocks());
   return replacements;
 }
+
+/**
+ * Where the first line of text inside `element` sits on the page: the bottom of an empty inline
+ * block placed in that line, which the browser sets on the line's baseline.
+ */
+export function textBaseline(element: Element): number {
+  const probe = document.createElement("span");
+  probe.style.cssText = "display: inline-block; width: 0; height: 0";
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node && !node.textContent!.trim()) node = walker.nextNode();
+  node!.parentNode!.insertBefore(probe, node!.nextSibling);
+  const bottom = probe.getBoundingClientRect().bottom;
+  probe.remove();
+  return bottom;
+}
+
+/**
+ * Where the lockup's word sits on the page: the bottom of its "w", the first outline of the word's
+ * path. The path's box would not do: round letters dip below the line the others sit on.
+ */
+export function lockupWordBaseline(lockup: Element): number {
+  const word = [...lockup.shadowRoot!.querySelectorAll("svg > g")].at(-1)!;
+  const path = word.querySelector<SVGPathElement>("path")!;
+  const firstOutline = path.getAttribute("d")!.split(/z/i)[0]!;
+  const ys = [...firstOutline.matchAll(/-?[\d.]+,(-?[\d.]+)/g)].map((m) => Number(m[1]));
+  const point = new DOMPoint(0, Math.max(...ys)).matrixTransform(path.getScreenCTM()!);
+  return point.y;
+}
+
+/**
+ * A lockup file's inks, cloche then word, spelled as computed styles spell them, so a test can
+ * compare them with what the drawn lockup's groups compute to.
+ */
+export function lockupFileInks(svg: string): string[] {
+  return [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)].map(
+    (m) =>
+      `rgb(${m
+        .slice(1, 4)
+        .map((hex) => parseInt(hex, 16))
+        .join(", ")})`,
+  );
+}

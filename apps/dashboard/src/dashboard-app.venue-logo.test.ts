@@ -1,3 +1,4 @@
+import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
@@ -12,6 +13,7 @@ import {
   VENUE_LOGO_RETRY_MS,
   type WtVenueLogo,
 } from "@waitron/ui";
+import { lockupWordBaseline, textBaseline } from "@waitron/ui/src/test-helpers.js";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { DashboardApp } from "./dashboard-app.js";
@@ -60,7 +62,7 @@ async function mount(api: DashboardApi): Promise<{ el: DashboardApp; host: HTMLE
 
 const banner = (el: DashboardApp) => el.shadowRoot!.querySelector("[data-test=brand-banner]")!;
 const venueLogo = (el: DashboardApp) => banner(el).querySelector<WtVenueLogo>("wt-venue-logo");
-const lockup = (el: DashboardApp) => banner(el).querySelector<HTMLImageElement>(".brand-logo");
+const lockup = (el: DashboardApp) => banner(el).querySelector<HTMLElement>(".brand-logo");
 const lockupShown = (el: DashboardApp) => lockup(el)?.checkVisibility() ?? false;
 
 beforeEach(() => {
@@ -120,6 +122,27 @@ it.each([
     expect(at.left >= box.right || at.top >= box.bottom).toBe(true);
   },
 );
+
+it("the legal name is centred on the venue's logo", async () => {
+  store(withLogo(LIGHT, DARK));
+  startVenueTheme(document.documentElement, { fetchImpl: never });
+  const loads = nextLogoLoad();
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await page.viewport(1280, 800);
+    const { el } = await mount(stubApi(true));
+    await loads;
+    const middle = (e: Element) => {
+      const box = e.getBoundingClientRect();
+      return (box.top + box.bottom) / 2;
+    };
+    const name = banner(el).querySelector("[data-test=venue-name]")!;
+    expect(middle(name)).toBeCloseTo(middle(venueLogo(el)!), 0);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
 
 it("an empty place until the answer, never Waitron's first", async () => {
   const first = byHand();
@@ -182,11 +205,72 @@ it("a logo that fails to load shows the lockup through the fallback slot, and ma
   startVenueTheme(document.documentElement, { fetchImpl: never });
   const { el } = await mount(stubApi(false));
   await vi.waitFor(() => expect(venueLogo(el)?.hasAttribute("failed")).toBe(true));
-  const picture = venueLogo(el)!.querySelector(":scope > picture")!;
-  expect(picture.getAttribute("slot")).toBe("fallback");
+  const fallback = venueLogo(el)!.querySelector(":scope > wt-waitron-lockup")!;
+  expect(fallback.getAttribute("slot")).toBe("fallback");
   await vi.waitFor(() => expect(lockupShown(el)).toBe(true));
   const state = currentVenueLogo();
   expect(state.kind === "logo" && state.failed).toBe(true);
+});
+
+it("sets the legal name on the fallback lockup's word, as with no venue logo", async () => {
+  store(withLogo("/no-such.png"));
+  startVenueTheme(document.documentElement, { fetchImpl: never });
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await page.viewport(1280, 800);
+    const { el } = await mount(stubApi(true));
+    await vi.waitFor(() => expect(lockupShown(el)).toBe(true));
+    await el.updateComplete;
+    const fallback = lockup(el) as WtWaitronLockup;
+    expect(fallback.getAttribute("slot")).toBe("fallback");
+    await fallback.updateComplete;
+    const name = banner(el).querySelector("[data-test=venue-name]")!;
+    expect(name.textContent!.trim()).not.toBe("");
+    expect(textBaseline(name)).toBeCloseTo(lockupWordBaseline(fallback), 0);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("the legal name goes back to centred on the venue's logo when a failed logo's retry loads", async () => {
+  store(withLogo(LIGHT, DARK));
+  startVenueTheme(document.documentElement, { fetchImpl: never });
+  const loads = nextLogoLoad();
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await page.viewport(1280, 800);
+    const { el } = await mount(stubApi(true));
+    const { logo, img } = await loads;
+    const middle = (e: Element) => {
+      const box = e.getBoundingClientRect();
+      return (box.top + box.bottom) / 2;
+    };
+    const name = banner(el).querySelector("[data-test=venue-name]")!;
+    expect(middle(name)).toBeCloseTo(middle(logo), 0);
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    img.dispatchEvent(new Event("error"));
+    await logo.updateComplete;
+    await el.updateComplete;
+    expect(logo.failed).toBe(true);
+    expect(lockupShown(el)).toBe(true);
+    const fallback = lockup(el) as WtWaitronLockup;
+    await fallback.updateComplete;
+    expect(textBaseline(name)).toBeCloseTo(lockupWordBaseline(fallback), 0);
+
+    vi.advanceTimersByTime(VENUE_LOGO_RETRY_MS);
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(currentVenueLogo()).toMatchObject({ failed: false }));
+    await logo.updateComplete;
+    await el.updateComplete;
+    expect(lockupShown(el)).toBe(false);
+    expect(middle(name)).toBeCloseTo(middle(logo), 0);
+  } finally {
+    vi.useRealTimers();
+    await page.viewport(width, height);
+  }
 });
 
 it("follows a live answer without a reload", async () => {
@@ -252,11 +336,9 @@ describe("Powered by", () => {
     expect(line.previousElementSibling?.localName).toBe("dashboard-login-screen");
     expect(line.getAttribute("label")).toBe(t("login.powered_by"));
     await line.updateComplete;
-    const lockup = line.shadowRoot!.querySelector<HTMLImageElement>("[part=lockup]")!;
-    if (!(lockup.complete && lockup.naturalWidth > 0)) {
-      await new Promise((resolve) => lockup.addEventListener("load", resolve, { once: true }));
-    }
-    expect(lockup.naturalWidth).toBeGreaterThan(0);
+    const lockup = line.shadowRoot!.querySelector<WtWaitronLockup>("[part=lockup]")!;
+    await lockup.updateComplete;
+    expect(lockup.getBoundingClientRect().width).toBeGreaterThan(0);
     await frame();
     const below = card(el).getBoundingClientRect();
     const at = line.getBoundingClientRect();

@@ -88,9 +88,9 @@ describe("the detector itself", () => {
 });
 
 /**
- * The dashboard's banner shows the lockup through an `<img>`, which cannot read a CSS custom
- * property, so its dark-theme copy carries the dark token values literally. Weaker than its name: it
- * reads `colors.css` as TEXT, takes each light value from the file's first declaration and each dark
+ * The lockup's dark copy is for an `<img>` on a dark ground, which cannot read a CSS custom
+ * property, so it carries the dark token values literally. Weaker than its name: it reads
+ * `colors.css` as TEXT, takes each light value from the file's first declaration and each dark
  * value from the `@media (prefers-color-scheme: dark)` block, so a `[data-theme]` block that
  * disagrees with either is not seen.
  */
@@ -116,15 +116,15 @@ describe("the lockups' colours", () => {
 
   it("paints the light lockup with the light tokens and the dark lockup with the dark ones", () => {
     const light = readFileSync(join(BRAND, "waitron-lockup.svg"), "utf8");
-    const lightWaiter = `<g fill="${token(colors, "primary")}"`;
+    const lightCloche = `<g fill="${token(colors, "primary")}"`;
     const lightWord = `<g fill="${token(colors, "text")}"`;
-    expect({ waiter: light.includes(lightWaiter), word: light.includes(lightWord) }).toEqual({
-      waiter: true,
+    expect({ cloche: light.includes(lightCloche), word: light.includes(lightWord) }).toEqual({
+      cloche: true,
       word: true,
     });
     expect(readFileSync(join(BRAND, "waitron-lockup-dark.svg"), "utf8")).toBe(
       light
-        .replace(lightWaiter, `<g fill="${token(darkBlock, "primary")}"`)
+        .replace(lightCloche, `<g fill="${token(darkBlock, "primary")}"`)
         .replace(lightWord, `<g fill="${token(darkBlock, "text")}"`),
     );
   });

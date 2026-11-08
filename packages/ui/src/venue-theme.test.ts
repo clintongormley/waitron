@@ -9,6 +9,7 @@ import {
   followVenueTheme,
   readVenueTheme,
   startVenueTheme,
+  subscribeVenueTheme,
 } from "./venue-theme.js";
 import {
   FIXTURE_ANSWER as GREEN,
@@ -314,6 +315,56 @@ describe("applyVenueTheme", () => {
     applyVenueTheme("nonsense");
     expect(bg()).toBe(GREEN_LIGHT_BG);
     expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(GREEN);
+  });
+});
+
+describe("subscribeVenueTheme", () => {
+  const subscriptions: (() => void)[] = [];
+  afterEach(() => {
+    for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
+  });
+
+  function listened() {
+    const listener = vi.fn();
+    subscriptions.push(subscribeVenueTheme(listener));
+    return listener;
+  }
+
+  it("tells a subscriber when a start paints the stored copy, once the sheet holds it", () => {
+    storeGreen();
+    const listener = listened();
+    listener.mockImplementation(() => expect(bg()).toBe(GREEN_LIGHT_BG));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("tells a subscriber when an answer with a new hash replaces the colours", () => {
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const listener = listened();
+    listener.mockImplementation(() => expect(bg()).toBe(GREEN_LIGHT_BG));
+    applyVenueTheme(GREEN);
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("says nothing for an answer whose hash is already applied", () => {
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    applyVenueTheme(GREEN);
+    const listener = listened();
+    applyVenueTheme({ ...GREEN, logo: LEMON.logo });
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("says nothing after the subscriber unsubscribes", () => {
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const listener = vi.fn();
+    const unsubscribe = subscribeVenueTheme(listener);
+    applyVenueTheme(GREEN);
+    expect(listener).toHaveBeenCalledOnce();
+    unsubscribe();
+    applyVenueTheme(LEMON);
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    expect(bg()).toBe(LEMON_LIGHT_BG);
+    expect(listener).toHaveBeenCalledOnce();
   });
 });
 

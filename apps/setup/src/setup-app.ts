@@ -17,9 +17,7 @@ import {
 } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { DROPDOWN_ICONS, baseStyles, registerIcons } from "@waitron/ui";
-import waitronLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
 import "./screens/connect-screen.js";
@@ -41,6 +39,7 @@ import "./screens/reset-screen.js";
 import "./screens/done-screen.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-theme-chooser.js";
+import "@waitron/ui/src/components/wt-waitron-lockup.js";
 import type {
   RecoveryRestoreCredentials,
   EmailSettingsDraft,
@@ -570,20 +569,9 @@ export class SetupApp extends LitElement {
         margin-block-end: var(--wt-space-1);
       }
 
-      .logo svg {
-        display: block;
+      .logo {
+        flex: 0 0 auto;
         width: calc(var(--wt-space-6) * 5);
-        height: auto;
-      }
-
-      /* The brand file paints fixed light-theme ink, which an <img> could not change; inlined, its
-         two groups (the waiter, then the word) follow the theme. */
-      .logo svg > g:first-of-type {
-        fill: var(--wt-color-primary);
-      }
-
-      .logo svg > g:last-of-type {
-        fill: var(--wt-color-text);
       }
     `,
   ];
@@ -2190,9 +2178,7 @@ export class SetupApp extends LitElement {
           void this.#onResetRequested(e)}
       >
         <header>
-          <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
-            ${unsafeHTML(waitronLockup)}
-          </div>
+          <wt-waitron-lockup class="logo" data-test="setup-logo"></wt-waitron-lockup>
           <div class="header-controls">
             <wt-theme-chooser
               data-test="theme-chooser"

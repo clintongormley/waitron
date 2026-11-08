@@ -123,6 +123,21 @@ export class VenueLogoController implements ReactiveController {
   }
 }
 
+const sheetListeners = new Set<() => void>();
+
+/** Calls `listener` each time the venue's colours are replaced on the page. */
+export function subscribeVenueTheme(listener: () => void): () => void {
+  sheetListeners.add(listener);
+  return () => {
+    sheetListeners.delete(listener);
+  };
+}
+
+function paint(css: string): void {
+  sheet!.replaceSync(css);
+  for (const listener of sheetListeners) listener();
+}
+
 function readStored(): VenueThemeAnswer | null {
   try {
     const text = window.localStorage.getItem(VENUE_THEME_STORAGE_KEY);
@@ -181,7 +196,7 @@ export function startVenueTheme(root: HTMLElement, options: VenueThemeOptions = 
   sheet ??= new CSSStyleSheet();
   adopt(root, sheet);
   const stored = readStored();
-  sheet.replaceSync(stored?.css ?? "");
+  paint(stored?.css ?? "");
   appliedHash = stored?.hash ?? null;
   failedLogos.clear();
   if (stored === null) setLogoState(WAITING);
@@ -219,7 +234,7 @@ export function applyVenueTheme(answer: unknown, sentAt: number = clock): void {
   appliedAt = ++clock;
   settleLogo(answer.logo);
   if (answer.hash === appliedHash) return;
-  sheet.replaceSync(answer.css);
+  paint(answer.css);
   appliedHash = answer.hash;
   try {
     window.localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));

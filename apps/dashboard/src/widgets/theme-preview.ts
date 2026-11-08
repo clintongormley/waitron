@@ -4,7 +4,7 @@ import { formatMoney } from "@waitron/shared";
 import { ContentLanguageController, applyTokens, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-venue-logo.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
-import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
+import "@waitron/ui/src/components/wt-waitron-lockup.js";
 import {
   MODES,
   themeSheet,
@@ -84,10 +84,12 @@ export class ThemePreview extends LitElement {
         padding: 0 var(--wt-space-3) var(--wt-space-3);
         border-bottom: 1px solid var(--wt-color-border);
       }
+      .strip:has(> .lockup) {
+        align-items: baseline;
+      }
       .lockup {
-        display: block;
         flex: none;
-        height: var(--wt-space-6);
+        height: var(--wt-space-5);
       }
       .legal-name {
         min-width: 0;
@@ -276,11 +278,10 @@ export class ThemePreview extends LitElement {
     root.adoptedStyleSheets = [...root.adoptedStyleSheets, this.#draft];
   }
 
-  #logo(mode: Mode) {
+  #logo() {
     const logo = this.logo;
     if (logo === null) {
-      const src = mode === "dark" ? WAITRON_LOCKUP_DARK_URL : WAITRON_LOCKUP_URL;
-      return html`<img class="lockup" src=${src} alt="" />`;
+      return html`<wt-waitron-lockup class="lockup" label=""></wt-waitron-lockup>`;
     }
     return html`<wt-venue-logo
       size="bar"
@@ -309,9 +310,7 @@ export class ThemePreview extends LitElement {
     return html`<figure data-mode=${mode}>
       <h4>${t(`appearance.preview_${mode}`)}</h4>
       <div class="panel" data-theme=${mode} aria-hidden="true">
-        <div class="strip">
-          ${this.#logo(mode)}<span class="legal-name">${this.legalName}</span>
-        </div>
+        <div class="strip">${this.#logo()}<span class="legal-name">${this.legalName}</span></div>
         <div class="nav">
           <span class="nav-item selected">${t("nav.appearance")}</span>
           <span class="nav-item">${t("nav.devices")}</span>

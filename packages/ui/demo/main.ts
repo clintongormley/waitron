@@ -48,6 +48,7 @@ import "../src/components/wt-language-chooser.js";
 import "../src/components/wt-theme-chooser.js";
 import "../src/components/wt-venue-logo.js";
 import "../src/components/wt-powered-by.js";
+import "../src/components/wt-waitron-lockup.js";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "../src/waitron-lockup.js";
 
 registerIcons({
@@ -317,6 +318,7 @@ const panel = (theme: "light" | "dark") => `
     </div>`,
       )
       .join("")}
+    <wt-waitron-lockup style="width: 120px; margin-top: 16px"></wt-waitron-lockup>
     <wt-powered-by label="Powered by"></wt-powered-by>
   </div>
 `;
