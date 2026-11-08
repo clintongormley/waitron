@@ -29,7 +29,7 @@ import { leaveSessionAlone } from "./testing/tab-person.js";
 
 // Weaker than its name: it walks only the routes the till, device and schedule mount functions add,
 // compares status and error code (never bodies, so `GET /api/device/me` has its own tests), and
-// sends one `"{}"` body per route, so it sees nothing past a route's refusal of that body.
+// sends `"{}"` to any route not in `BODIES`, so it sees nothing past a route's refusal of that body.
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -40,7 +40,7 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 const id = randomUUID();
 
-type Class = "public" | "device only" | "refuses the empty body first";
+type Class = "public" | "device only";
 
 /** Routes that answer Ben's cookies naming Ana exactly as Ben's device cookie alone, which is not
  * `session.required`: none of them acts as the signed-in person on these requests. */
@@ -76,29 +76,32 @@ const BLIND: readonly { route: string; class: Class; reason: string }[] = [
   {
     route: "GET /api/device/stations",
     class: "device only",
-    reason: "kitchen displays only, which judge every sign-in as nobody",
+    reason: "kitchen displays only, where nobody can sign in",
   },
   {
     route: "POST /api/device/working-orders/:id/lines/move-station",
     class: "device only",
-    reason: "kitchen displays only, which judge every sign-in as nobody",
+    reason: "kitchen displays only, where nobody can sign in",
   },
   {
     route: "POST /api/device/orders/:id/courses/:courseId/ready",
     class: "device only",
-    reason: "kitchen displays only, and reads no sign-in",
+    reason: "kitchen displays only, where nobody can sign in",
   },
   {
     route: "POST /api/device/parties/:id/groups/:gid/ready",
     class: "device only",
-    reason: "kitchen displays only, and reads no sign-in",
-  },
-  {
-    route: "PUT /api/device/kitchen-screen-display",
-    class: "refuses the empty body first",
-    reason: "refuses a body naming no screen kind before it reads the sign-in",
+    reason: "kitchen displays only, where nobody can sign in",
   },
 ];
+
+/** A valid body for each route that refuses `"{}"` before it reads the sign-in, so the walk reaches
+ * that read; every walk sends the same one. */
+const BODIES: Readonly<Record<string, () => unknown>> = {
+  // A fresh person each time, so no two sign-in attempts share a PIN throttle entry.
+  "POST /api/session": () => ({ personId: randomUUID(), pin: "1234" }),
+  "PUT /api/device/kitchen-screen-display": () => ({ kind: "pass", showNonPassStations: null }),
+};
 
 /** The owner's named routes, and the kitchen screens, that must be among the refused. */
 const NAMED_REFUSED = [
@@ -113,6 +116,7 @@ const NAMED_REFUSED = [
   "GET /api/device/pass-board",
   "POST /api/device/pass-screen/release",
   "GET /api/device/pass-monitor-board",
+  "PUT /api/device/kitchen-screen-display",
   "DELETE /api/session",
 ];
 
@@ -210,10 +214,7 @@ async function send(
       ...(method === "GET"
         ? {}
         : {
-            body:
-              `${method} ${path}` === "POST /api/session"
-                ? JSON.stringify({ personId: id, pin: "1234" })
-                : "{}",
+            body: JSON.stringify(BODIES[`${method} ${path}`]?.() ?? {}),
           }),
       signal: controller.signal,
     },
@@ -362,7 +363,11 @@ describe("the sign-in cookie's readers", () => {
       if (file === "till-api.ts") {
         const start = text.indexOf('app.delete("/api/session"');
         const end = text.indexOf("\n  );\n", start);
-        expect(start, "the sign-out handler").toBeGreaterThan(-1);
+        expect(start, "the sign-out handler's start").toBeGreaterThan(-1);
+        expect(end, "the sign-out handler's end").toBeGreaterThan(start);
+        expect(text.slice(start, end).match(/\breadSessionToken\b/g), "the handler").toHaveLength(
+          1,
+        );
         text = text.slice(0, start) + text.slice(end);
       }
       if (/\b(readSessionToken|SESSION_COOKIE)\b/.test(text)) readers.push(file);
