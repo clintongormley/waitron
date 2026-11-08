@@ -16,6 +16,8 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  billPaymentLines,
+  billPayments,
   diningTables,
   tableInService,
   nowIso,
@@ -71,7 +73,10 @@ import {
   markServed,
   readTabLines,
   unmarkServed,
+  type OrderLinePatch,
 } from "./working-order.js";
+import { recallToDraft } from "./draft-recall.js";
+import { readBillEditState } from "./bill-editing.js";
 import { finishTable, seatTable, partyRevisionOfOrder } from "./testing/party-close-fixture.js";
 import "./errors.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
@@ -2761,6 +2766,261 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
         updateOrderLine(tx, cfg, tabId, 2, { note: "x" }, await revisionOf(tabId), OPERATOR),
       ),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineNo" } });
+  });
+
+  describe("one save changes every dish of a sent row, and only raises its count", () => {
+    /** A tab with two identical cafés sent as one round, at lines 1 and 2. */
+    async function tabWithTwoSentCoffees() {
+      const venue = await setupVenue();
+      const { cfg, tableId, coffeeOffer } = venue;
+      const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+      await asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [
+          { menuItemId: coffeeOffer, quantity: "1" },
+          { menuItemId: coffeeOffer, quantity: "1" },
+        ]),
+      );
+      const tickets = [await ticketOfLine(tabId, 1), await ticketOfLine(tabId, 2)];
+      return { ...venue, tabId, tickets };
+    }
+
+    const editRow = (cfg: OriginConfig, tabId: string, patch: OrderLinePatch) =>
+      asApp(cfg, async (tx) =>
+        updateOrderLine(tx, cfg, tabId, 1, patch, await revisionOf(tabId), OPERATOR),
+      );
+
+    it("a change to a sent, not-started row recalls and re-fires both of its dishes", async () => {
+      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
+      const before = await linesOf(tabId);
+
+      await editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] });
+
+      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([
+        { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
+        { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
+      ]);
+      for (const [index, lineNo] of [1, 2].entries()) {
+        const fresh = await ticketRow(tabId, lineNo);
+        expect(fresh).toMatchObject({ note: "no onions", quantity: 1000, state: "queued" });
+        expect(fresh!.id).not.toBe(tickets[index]!.id);
+        expect(fresh!.firedAt).not.toBeNull();
+      }
+      expect(await linesOf(tabId)).toEqual(before);
+    });
+
+    it("raising a started row of two to three leaves both preparing and sends one new dish", async () => {
+      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
+      for (const ticket of tickets) {
+        await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+      }
+
+      await editRow(cfg, tabId, { quantity: "3", portionLineNos: [2] });
+
+      expect(await linesOf(tabId)).toEqual([
+        expect.objectContaining({ lineNo: 1, quantity: 1000 }),
+        expect.objectContaining({ lineNo: 2, quantity: 1000 }),
+        expect.objectContaining({ lineNo: 3, quantity: 1000 }),
+      ]);
+      for (const [index, lineNo] of [1, 2].entries()) {
+        expect(await ticketRow(tabId, lineNo)).toMatchObject({
+          id: tickets[index]!.id,
+          state: "preparing",
+        });
+      }
+      const added = await ticketRow(tabId, 3);
+      expect(added).toMatchObject({ quantity: 1000, state: "queued" });
+      expect(added!.firedAt).not.toBeNull();
+      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([]);
+    });
+
+    it("refuses a change to a row whose second dish is started, changing nothing", async () => {
+      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
+      await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, tickets[1]!.id, "preparing"));
+      const before = await linesOf(tabId);
+
+      await expect(
+        editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] }),
+      ).rejects.toMatchObject({
+        code: "ticket.already_started",
+        params: { ticketItemId: tickets[1]!.id },
+      });
+
+      expect(await linesOf(tabId)).toEqual(before);
+      expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
+      expect(await ticketRow(tabId, 2)).toMatchObject({ id: tickets[1]!.id, state: "preparing" });
+      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([]);
+    });
+
+    it("refuses a lower or fractional total, and any dish that is not another of this row's, changing nothing", async () => {
+      const { cfg, tableId, coffeeId, waterId, coffeeOffer, waterOffer } = await setupVenue();
+      const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, coffeeId, waterId));
+      const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+      // 1 and 2 the row's cafés; 3 a water; 4 a café with an extra at 5; 6 a café with a note.
+      await asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [
+          { menuItemId: coffeeOffer, quantity: "1" },
+          { menuItemId: coffeeOffer, quantity: "1" },
+          { menuItemId: waterOffer, quantity: "1" },
+          {
+            menuItemId: coffeeOffer,
+            quantity: "1",
+            extras: [{ listId, picks: [{ productId: waterId, quantity: 1 }] }],
+          },
+          { menuItemId: coffeeOffer, quantity: "1", note: "later" },
+        ]),
+      );
+      // Another table's tab, whose line 7 this tab does not hold.
+      const [{ zoneId }] = (await db
+        .select({ zoneId: diningTables.zoneId })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId))) as [{ zoneId: string }];
+      const other = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2", zoneId }));
+      const { tabId: otherTab } = await asApp(cfg, (tx) =>
+        openPartyTab(tx, cfg, { tableId: other.id }),
+      );
+      await asApp(cfg, (tx) =>
+        addTabRound(
+          tx,
+          cfg,
+          otherTab,
+          Array.from({ length: 7 }, () => ({ menuItemId: coffeeOffer, quantity: "1" })),
+        ),
+      );
+      const stationId = (await ticketOfLine(tabId, 1)).stationId;
+      const before = await linesOf(tabId);
+      const revision = await revisionOf(tabId);
+
+      const refusals: [OrderLinePatch, string][] = [
+        [{ quantity: "1", portionLineNos: [2] }, "quantity"],
+        [{ quantity: "2.5", portionLineNos: [2] }, "quantity"],
+        [{ portionLineNos: [2, 2] }, "portionLineNos"],
+        [{ portionLineNos: [1] }, "portionLineNos"],
+        [{ portionLineNos: [7] }, "portionLineNos"],
+        [{ portionLineNos: [5] }, "portionLineNos"],
+        [{ portionLineNos: [3] }, "portionLineNos"],
+        [{ portionLineNos: [4] }, "portionLineNos"],
+        [{ portionLineNos: [6] }, "portionLineNos"],
+        [{ portionLineNos: null } as unknown as OrderLinePatch, "portionLineNos"],
+        [{ portionLineNos: [1.5] }, "portionLineNos"],
+        [{ portionLineNos: "2" } as unknown as OrderLinePatch, "portionLineNos"],
+      ];
+      for (const [patch, field] of refusals) {
+        await expect(
+          editRow(cfg, tabId, { note: "no onions", ...patch }),
+          JSON.stringify(patch),
+        ).rejects.toMatchObject({ code: "management.request_invalid", params: { field } });
+      }
+
+      expect(await linesOf(tabId)).toEqual(before);
+      expect(await revisionOf(tabId)).toBe(revision);
+      expect(await noticesAt(cfg, stationId)).toEqual([]);
+    });
+
+    it("compares the row's options answers by value, not by key order", async () => {
+      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
+      const answer = {
+        listName: { es: "Leche" },
+        listCustomerName: null,
+        listKitchenName: null,
+        labelName: { es: "Avena" },
+        labelCustomerName: null,
+        labelKitchenName: null,
+      };
+      const reordered = Object.fromEntries(Object.entries(answer).reverse());
+      for (const [lineNo, snapshot] of [
+        [1, answer],
+        [2, reordered],
+      ] as const) {
+        await db
+          .update(workingOrderLines)
+          .set({ optionSnapshots: [snapshot] } as never)
+          .where(
+            and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)),
+          );
+      }
+
+      await editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] });
+
+      expect(await ticketRow(tabId, 2)).toMatchObject({ note: "no onions" });
+      expect((await ticketRow(tabId, 2))!.id).not.toBe(tickets[1]!.id);
+    });
+
+    it("refuses a row whose other dish is recalled into a draft, changing nothing", async () => {
+      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
+      const [order] = await db
+        .select({ partyId: workingOrders.partyId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      const [party] = await db.select().from(parties).where(eq(parties.id, order!.partyId!));
+      const [second] = await db
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2)));
+      await asApp(cfg, async (tx) =>
+        recallToDraft(tx, cfg, party!.id, second!.id, {
+          expectedPartyRevision: party!.revision,
+          operatorId: OPERATOR,
+          submissionId: randomUUID(),
+          expectedEdit: await readBillEditState(tx, tabId),
+        }),
+      );
+      const before = await linesOf(tabId);
+      const notices = await noticesAt(cfg, tickets[0]!.stationId);
+
+      await expect(
+        editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] }),
+      ).rejects.toMatchObject({ code: "draft.out_of_date" });
+
+      expect(await linesOf(tabId)).toEqual(before);
+      expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
+      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual(notices);
+      // The same edit of the first dish alone goes through: the refusal was the recalled one's.
+      await editRow(cfg, tabId, { note: "no onions" });
+      expect(await ticketRow(tabId, 1)).toMatchObject({ note: "no onions" });
+    });
+
+    it("refuses a row whose other dish is paid for, changing nothing", async () => {
+      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
+      const [second] = await db
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2)));
+      const paymentId = randomUUID();
+      await withTransaction(db, async (tx) => {
+        await tx.insert(billPayments).values({
+          id: paymentId,
+          workingOrderId: tabId,
+          submissionId: randomUUID(),
+          fingerprint: "fixture",
+          kind: "items",
+          method: "cash",
+          applied: 150,
+          tendered: 150,
+          state: "received",
+          requestedBy: OPERATOR,
+          source: "demo_seed",
+          receivedAt: new Date().toISOString(),
+        });
+        await tx.insert(billPaymentLines).values({
+          billPaymentId: paymentId,
+          lineId: second!.id,
+          quantity: 1000,
+          amount: 150,
+        });
+      });
+      const before = await linesOf(tabId);
+
+      await expect(
+        editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] }),
+      ).rejects.toMatchObject({
+        code: "bill.line_paid",
+        params: { workingOrderId: tabId, lineNo: 2 },
+      });
+
+      expect(await linesOf(tabId)).toEqual(before);
+      expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
+      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([]);
+    });
   });
 });
 
