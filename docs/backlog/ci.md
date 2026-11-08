@@ -1324,10 +1324,8 @@ within a test file, migrated `heldSetup`'s databases once per file, sealed the t
 under one salt per file and split `first-fiscal-hour.e2e.test.ts`. Its investigators measured or named
 these, which it did not build (local figures, 2 November 2026):
 
-- **Start child servers from a prebuilt bundle instead of `tsx`.** Loading `src/boot.ts` through `tsx`
-  took 2.3–2.5 s per process on a busy machine; `kitchen-allergy.restart.test.ts` starts 15,
-  `hour-recovery-placement-*` 2–4 each. A bundle's start time was not measured, and an earlier attempt
-  to bundle `bin.ts` failed resolving `ui-core` and the assets' font path.
+- **Some child servers still load through `tsx`:** the `hour-recovery-placement-*` tests replace
+  modules at load time, and the kill-child suites run their own test entry files.
 - **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
   8 November 2026). The 0.85 s above predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
   which took the repository from 405 migration files to 7. Timed on one Mac in a new process per run

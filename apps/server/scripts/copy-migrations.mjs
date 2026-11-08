@@ -11,7 +11,7 @@ const manifestUrl = import.meta.resolve("@waitron/migrations/migrations.manifest
 const manifestPath = fileURLToPath(manifestUrl);
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const manifestRoot = dirname(manifestPath);
-const distDir = join(packageRoot, "dist");
+const distDir = process.argv[2] ? resolve(process.argv[2]) : join(packageRoot, "dist");
 const target = join(distDir, "drizzle");
 
 await rm(target, { recursive: true, force: true });
