@@ -1,5 +1,11 @@
 # Servidores
 
+## Cuando abres el equipo de reserva {#spare}
+
+Si ves **Este es el equipo de reserva**, abre la dirección del equipo principal para usar las
+pantallas y los datos del local. La página de reserva muestra su estado; no acepta ventas ni
+ofrece acceso al panel de gestión.
+
 ## Cuando el local ya no funciona con un equipo {#handed-over}
 
 Si abres la dirección de un equipo en un navegador y ves una página titulada **El local ya no

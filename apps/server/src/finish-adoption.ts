@@ -10,7 +10,6 @@ import {
   establishReservedStandbyIdentity,
   type StandbyPublicIdentity,
 } from "./reserved-identity.js";
-import { ensureMirrorViewer } from "./mirror-session.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import type { Logger } from "./logger.js";
 
@@ -73,27 +72,20 @@ type EstablishArgs = {
   reserved: ReservedIdentity;
 };
 
-/**
- * Keep the latch on refusal or an unfinished step. Establish the identity before the viewer;
- * clear the latch only after both succeed, so a later boot can retry the same reservation.
- */
 export async function runFinishAdoption(deps: {
   ownerDb: Database;
   stateDir: string;
   modules: readonly WaitronModule[];
   establish?: (args: EstablishArgs) => Promise<void>;
-  ensureViewer?: () => Promise<void>;
   log: Logger;
 }): Promise<void> {
   const establish =
     deps.establish ?? ((args) => establishReservedStandbyIdentity({ ownerDb: deps.ownerDb }, args));
-  const ensureViewer = deps.ensureViewer ?? (() => ensureMirrorViewer(deps.ownerDb));
 
   const pending = await readPendingAdoption(deps.stateDir);
   if (pending === null) return; // established (file unlinked) or never pending — nothing to finish.
   try {
     assertAdoptionModules(deps.modules);
-    // The file must survive a throw in either step so the next boot retries.
     await establish({
       standby: pending.standby,
       nodeName: pending.nodeName,
@@ -102,9 +94,6 @@ export async function runFinishAdoption(deps: {
       modules: deps.modules,
       reserved: pending.reserved,
     });
-    // The cookie token this returns is dropped: this boot mounts no mirror session, and the boot
-    // that does mints its own, which replaces the hash stored here.
-    await ensureViewer();
     await rm(pendingPath(deps.stateDir), { force: true });
     deps.log("info", "adoption.established", { nodeId: pending.standby.nodeId });
   } catch (error) {

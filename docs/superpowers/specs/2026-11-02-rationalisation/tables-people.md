@@ -2,6 +2,11 @@
 
 # People, sign-in, working time and rota — proposed tables
 
+> **2026-11-08, A1113:** the ambient mirror viewer and its keepalive are removed, and
+> `WAITRON_MIRROR_ALLOW_EXPOSED` is retired. Existing viewer-session revocation remains at boot.
+> The authenticated spare switch screen belongs to A947.
+
+
 > **2026-11-05, A1343:** The every-start history rescan described in §§1 and 8 is superseded by restart reuse tied to the database file, the pre-migration schema version and applied migration versions. An interrupted startup can still cause a conservative rescan. The day-evidence read and write-path marking audit below remain open.
 
 Area: identity (who can sign in and how), roles, workforce (the legal working-time record, the

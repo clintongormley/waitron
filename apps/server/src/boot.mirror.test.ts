@@ -18,15 +18,20 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
-import { persons, resolveManagementSession } from "@waitron/identity";
-import { strFromU8, unzipSync } from "fflate";
+import {
+  persons,
+  managementSessions,
+  mintSessionToken,
+  hashSessionToken,
+  resolveManagementSession,
+} from "@waitron/identity";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
-import { ensureMirrorViewer } from "./mirror-session.js";
+import { MIRROR_VIEWER_PERSON_ID, MIRROR_VIEWER_SESSION_ID } from "./mirror-session.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
@@ -193,7 +198,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
 }
 
 describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
-  it("keeps the ambient mirror viewer off the remote staff entrance", async () => {
+  it("issues no session locally and keeps the remote staff entrance closed", async () => {
     const [localPort, staffPort] = await freePorts(2);
     const certificate = mintSelfSignedServerCert({
       hostnames: ["staff.example.test"],
@@ -212,7 +217,8 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     });
     try {
       const local = await fetch(`http://127.0.0.1:${localPort}/management-api/catalogues`);
-      expect(local.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
+      expect(local.headers.get("set-cookie")).toBeNull();
+      expect(local.status).toBe(403);
       await local.arrayBuffer();
       const remote = new Promise<number>((resolve, reject) => {
         const request = get(
@@ -237,7 +243,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   });
 
-  it("serves dashboard reads, another person's download among them, via the ambient viewer and refuses writes", async () => {
+  it("serves only spare status, refuses private reads and writes, and creates no anonymous session", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -247,36 +253,31 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     });
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      // The viewer's cookie arrives on the first RESPONSE; the same request's gate cannot read it.
-      const primer = await fetch(`${base}/management-api/catalogues`);
-      expect(primer.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
-      const cookie = primer.headers.get("set-cookie")!.split(";")[0]!;
-
-      // Only the ambient cookie, no user login: the gated read resolves through the admin viewer.
-      const read = await fetch(`${base}/management-api/catalogues`, { headers: { cookie } });
-      expect(read.status).toBe(200);
-      expect(await read.json()).toEqual([]);
-
-      // An administrator's download of another person answers on a mirror like every other read.
-      const download = await fetch(
-        `${base}/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
-        { headers: { cookie } },
-      );
-      expect(download.status).toBe(200);
-      expect(download.headers.get("content-type")).toBe("application/zip");
-      const files = unzipSync(new Uint8Array(await download.arrayBuffer()));
-      const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
-      expect([profile.id, profile.displayName]).toEqual([MIRROR_STAFF_ID, "Marta"]);
-
-      // A lookup by a typed tax number stays closed on a mirror, even for the admin viewer.
+      for (const path of ["/", "/manage", "/manage/staff"]) {
+        const page = await fetch(`${base}${path}`, { headers: { accept: "text/html" } });
+        expect(page.status).toBe(200);
+        expect(page.headers.get("set-cookie")).toBeNull();
+        expect(page.headers.get("cache-control")).toBe("no-store");
+        expect(await page.text()).toContain("This box is the spare");
+      }
+      for (const path of [
+        "/management-api/catalogues",
+        `/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
+      ]) {
+        const read = await fetch(`${base}${path}`);
+        expect(read.status).toBe(403);
+        expect(read.headers.get("set-cookie")).toBeNull();
+        expect(await read.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
+      }
+      const cookie = "waitron_management=forged";
       for (const path of ["", "/export"]) {
         const invoiceCustomer = await fetch(
           `${base}/management-api/invoice-customers/personal-data${path}?taxId=12345678Z`,
           { headers: { cookie } },
         );
         expect(invoiceCustomer.status).toBe(403);
-        expect(await invoiceCustomer.json()).toEqual({
-          error: { code: "node.read_only", params: {} },
+        expect(await invoiceCustomer.json()).toMatchObject({
+          error: { code: "node.spare", params: {} },
         });
       }
 
@@ -303,21 +304,17 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       expect(removal.status).toBe(403);
       expect(await removal.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
-      // The agent and device groups are not mounted on a mirror. A GET bypasses the read-only
-      // gate, so a 404 means the route is absent, not gated; the primary control answers 200.
       const printStatus = await fetch(`${base}/print-api/agent/join/status`);
-      expect(printStatus.status).toBe(404);
+      expect(printStatus.status).toBe(403);
       const pageClaim = await fetch(`${base}/print-api/agent/page-jobs/claim`, { method: "POST" });
       expect(pageClaim.status).toBe(403);
       expect(await pageClaim.json()).toEqual({ error: { code: "node.read_only", params: {} } });
       const deviceStation = await fetch(`${base}/api/device/station-screen`);
-      expect(deviceStation.status).toBe(404);
+      expect(deviceStation.status).toBe(403);
 
-      // Till reads ARE mounted on a mirror, but no till can log in: `POST /api/session` is a
-      // write the gate refuses, so the route stops at its session check.
       const heldOrders = await fetch(`${base}/api/working-orders`);
-      expect(heldOrders.status).toBe(401);
-      expect(await heldOrders.json()).toEqual({ error: { code: "session.required", params: {} } });
+      expect(heldOrders.status).toBe(403);
+      expect(await heldOrders.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
 
       const probe = await fetch(`${base}/api/node`);
       expect(probe.status).toBe(200);
@@ -330,6 +327,10 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       await server.close();
     }
     await expect(fetch(`${base}/api/node`)).rejects.toThrow();
+    expect(
+      (await db.mirror.select().from(persons)).some((p) => p.id === MIRROR_VIEWER_PERSON_ID),
+    ).toBe(false);
+    expect(await db.mirror.select().from(managementSessions)).toEqual([]);
   }, 60_000);
 
   it("runs the trivial empty pass on a mirror — the fiscal drain (AEAT submission) is never invoked", async () => {
@@ -488,7 +489,19 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     // Resolving the token before the boot is the control: without it, a refusal afterwards would
     // look the same whether or not boot acted.
     beforeServerStarts();
-    const token = await ensureMirrorViewer(db.primary);
+    const token = mintSessionToken();
+    await withTransaction(db.primary, async (tx) => {
+      await tx
+        .insert(persons)
+        .values({ id: MIRROR_VIEWER_PERSON_ID, displayName: "Old viewer", role: "admin" });
+      await tx
+        .insert(managementSessions)
+        .values({
+          id: MIRROR_VIEWER_SESSION_ID,
+          personId: MIRROR_VIEWER_PERSON_ID,
+          tokenHash: hashSessionToken(token),
+        });
+    });
     await expect(
       withTransaction(db.primary, (tx) => resolveManagementSession(tx, token)),
     ).resolves.toMatchObject({ role: "admin" });
@@ -518,27 +531,51 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     ).rejects.toMatchObject({ code: "management_session.required" });
   }, 60_000);
 
-  it("refuses a mirror boot binding a non-loopback host without the WAITRON_MIRROR_ALLOW_EXPOSED opt-in", async () => {
-    // The mirror's dashboard is an unauthenticated ambient admin, so a routable bind would expose
-    // admin with no auth.
-    let caught: unknown;
+  it("refuses private reads even with a real administrator session cookie", async () => {
+    beforeServerStarts();
+    const token = mintSessionToken();
+    const personId = crypto.randomUUID();
+    await withTransaction(db.mirror, async (tx) => {
+      await tx
+        .insert(persons)
+        .values({ id: personId, displayName: "Administrator", role: "admin" });
+      await tx.insert(managementSessions).values({ personId, tokenHash: hashSessionToken(token) });
+    });
+    await expect(
+      withTransaction(db.mirror, (tx) => resolveManagementSession(tx, token)),
+    ).resolves.toMatchObject({ role: "admin" });
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: venueDir.mirror,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
     try {
-      await startServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: venueDir.mirror,
-        WAITRON_HTTP_HOST: "0.0.0.0",
-        WAITRON_HTTP_PORT: String(await freePort()),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      });
-    } catch (error) {
-      caught = error;
+      for (const path of [
+        "/management-api/catalogues",
+        `/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
+      ]) {
+        const read = await fetch(`http://127.0.0.1:${httpPort()}${path}`, {
+          headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+        });
+        expect(read.status).toBe(403);
+        expect(await read.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
+      }
+      for (const path of ["/setup/trust", "/help/en/products"]) {
+        const read = await fetch(`http://127.0.0.1:${httpPort()}${path}`);
+        expect(read.status).toBe(200);
+        await read.arrayBuffer();
+      }
+    } finally {
+      await server.close();
     }
-    expect(isAppError(caught)).toBe(true);
-    expect(isAppError(caught) && caught.code).toBe("server.mirror_bind_exposed");
-    expect(isAppError(caught) && caught.params).toEqual({ host: "0.0.0.0" });
+    beforeServerStarts();
+    await expect(
+      withTransaction(db.mirror, (tx) => resolveManagementSession(tx, token)),
+    ).resolves.toMatchObject({ role: "admin" });
   }, 60_000);
 
-  it("boots a mirror on a non-loopback host WITH the explicit opt-in (binds 0.0.0.0, guard silenced)", async () => {
+  it("binds a mirror on a non-loopback host while refusing private reads without an opt-in", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -546,19 +583,16 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       WAITRON_HTTP_HOST: "0.0.0.0",
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_MIRROR_ALLOW_EXPOSED: "true",
     });
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      const primer = await fetch(`${base}/management-api/catalogues`);
-      expect(primer.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
-      const cookie = primer.headers.get("set-cookie")!.split(";")[0]!;
-      const read = await fetch(`${base}/management-api/catalogues`, { headers: { cookie } });
-      expect(read.status).toBe(200);
+      const read = await fetch(`${base}/management-api/catalogues`);
+      expect(read.status).toBe(403);
+      expect(read.headers.get("set-cookie")).toBeNull();
+      expect(await read.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
     } finally {
       await server.close();
     }
-    await expect(fetch(`${base}/api/node`)).rejects.toThrow();
   }, 60_000);
 
   it("refuses a mirror boot that has no node_mirror_link row (a mirror REQUIRES its DB connection config)", async () => {

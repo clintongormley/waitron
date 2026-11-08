@@ -326,9 +326,8 @@ On `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run 
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
   load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
 
-  Read during A10-2 planning, not run: non-mirror trading startup calls `endMirrorViewer`
-  (`apps/server/src/boot.ts:1333`), which updates identity-owned `management_sessions`
-  (`apps/server/src/mirror-session.ts:70–80`). Probe real startup with identity and its dependants
+  Trading startup calls `endMirrorViewer` (`apps/server/src/mirror-session.ts`), which updates
+  identity-owned `management_sessions` to revoke an old viewer token. Probe real startup with identity and its dependants
   disabled before changing that path; the runtime outcome remains unverified.
 
 ## A394-5, A394-6, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule

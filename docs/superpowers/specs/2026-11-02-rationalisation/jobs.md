@@ -2,6 +2,11 @@
 
 # Background jobs — a rationalised design
 
+> **2026-11-08, A1113:** the ambient mirror viewer and its keepalive are removed, and
+> `WAITRON_MIRROR_ALLOW_EXPOSED` is retired. Existing viewer-session revocation remains at boot.
+> The authenticated spare switch screen belongs to A947.
+
+
 Cites read against `main` at `e0da0ad18a` (4 November 2026). Every claim about current code cites `file:line` or names the grep
 that was run. Everything is read, not run, unless a sentence names a test. "Pass" means one run of a job; "wake" means cutting a job's sleep short because something
 already knows there is work.

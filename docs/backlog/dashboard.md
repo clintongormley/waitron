@@ -44,9 +44,8 @@ an accented letter — José García beside JOSÉ GARCÍA, on a Spanish product.
 folded key in its own column (`packages/identity/src/fold.ts`: trim, NFC, lower, NFC) and each
 index reads `case when <folded> is null then lower(<raw>) else <folded> end`. **The `case` is why
 this entry exists:** a bare index on the folded column alone would put every row that did not carry
-one OUTSIDE the uniqueness check, which is worse than the defect. The two real paths that create a
-person are routed — `packages/provisioning/src/venue-apply.ts`'s admin insert and
-`apps/server/src/mirror-session.ts` both call the exported `foldForUniqueness`. **What is left
+one OUTSIDE the uniqueness check, which is worse than the defect. The provisioning admin insert (`packages/provisioning/src/venue-apply.ts`) calls the exported
+`foldForUniqueness`. **What is left
 open:** every remaining writer outside `packages/identity` is a fixture or a seed, each still
 folding ASCII-only, and the column is still nullable, so nothing at the compiler stops a new writer
 forgetting it. **Next action:** decide whether the column becomes mandatory — which breaks every

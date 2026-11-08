@@ -8,6 +8,10 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "node.spare": {
+    en: "This box is the spare. Open the main box's address for restaurant screens and data.",
+    es: "Este es el equipo de reserva. Abre la dirección del equipo principal para acceder a las pantallas y los datos del local.",
+  },
   "connection.cancelled": {
     en: "The request was stopped. Its result is unavailable.",
     es: "Se ha parado la solicitud. Su resultado no está disponible.",

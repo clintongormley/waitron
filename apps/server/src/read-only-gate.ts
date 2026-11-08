@@ -2,18 +2,6 @@ import type { Context, MiddlewareHandler } from "hono";
 import { AppError } from "@waitron/shared";
 import "./errors.js"; // makes `node.read_only` reachable (the code is constructed below)
 
-/**
- * A survey of the DASHBOARD read surface found no read behind a non-safe verb (C2a design §5).
- *
- * The gate refuses by HTTP VERB, so a server-side write inside a GET handler (the management-session
- * keepalive in `mirror-session.ts`) still runs: it refuses a CLIENT's write verb, not the server's own
- * bookkeeping.
- *
- * The print and device groups are not gated here: boot does not mount them on a mirror or a fenced node
- * (its `if (!fencedOrMirror)` guard). A slice that re-mounts them there must keep that guard, not the
- * narrower `!isMirror`. Gating the whole surface at request time instead is deferred to promotion
- * Slice 3.
- */
 export const SAFE_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**

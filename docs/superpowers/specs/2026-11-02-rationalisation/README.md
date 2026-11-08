@@ -1,5 +1,10 @@
 # Rationalising Waitron's tables, background jobs, environment variables and files — design
 
+> **2026-11-08, A1113:** the ambient mirror viewer and its keepalive are removed, and
+> `WAITRON_MIRROR_ALLOW_EXPOSED` is retired. Existing viewer-session revocation remains at boot.
+> The authenticated spare switch screen belongs to A947.
+
+
 **Status:** approved by the owner, 4 November 2026, after a file-by-file review. Their decisions are
 applied here and in every appendix, and §10 lists them.
 Counts and cites were checked against `main` at `e0da0ad18a`. The appendices hold the evidence: each

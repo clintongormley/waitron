@@ -96,6 +96,7 @@ describe("the user guides", () => {
     const markdown = readGuide(root, lang, "servers");
     expect(markdown).toBeDefined();
     expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+      "spare",
       "handed-over",
       "waiting",
       "carry-on",

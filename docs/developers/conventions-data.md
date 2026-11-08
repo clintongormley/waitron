@@ -4680,6 +4680,9 @@ a stored time with the clock is in the table below.
 
 #### Jobs that compare a stored time with the clock, across a step of days
 
+**2026-11-08, A1113:** the mirror-viewer keepalive in the historical audit below is removed.
+Trading boot retains only revocation of an already-issued viewer session.
+
 A798-B slice 9b, Task 15. One row per job that compares a stored time with the wall clock. "+400"
 is a step 400 days forward (stored times now look 400 days old), "−400" one 400 days back (stored
 times sit 400 days ahead). A step the box makes moves its clock towards the right time; a time

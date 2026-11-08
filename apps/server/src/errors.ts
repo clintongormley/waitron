@@ -151,13 +151,8 @@ declare module "@waitron/shared" {
     "server.credential_unusable": { purpose: string; field: string };
     /** No node with this id. The id is a caller-supplied uuid, not a secret. */
     "node.not_found": { id: string };
-    /**
-     * A write reached a node running as a read-only MIRROR (node.db's
-     * `node_mode.mode = 'mirror'`): the read-only gate (`read-only-gate.ts`) refuses every non-GET,
-     * and the invoice customer search and download refuse their GETs too. Cleared by promotion,
-     * read live.
-     */
     "node.read_only": Record<string, never>;
+    "node.spare": Record<string, never>;
     /** A change carrying the dashboard's sign-in cookie was sent by a page other than the box's
      * own (`Origin` or `Sec-Fetch-Site`), so it was not run. */
     "management.origin_refused": Record<string, never>;
@@ -352,14 +347,6 @@ declare module "@waitron/shared" {
      * logs the `codeOf` classification under `till.failed`.
      */
     "server.internal": Record<string, never>;
-    /**
-     * A MIRROR node was asked to bind its HTTP listener to a NON-loopback host without the
-     * `WAITRON_MIRROR_ALLOW_EXPOSED` opt-in. A mirror serves an UNAUTHENTICATED admin dashboard, so
-     * the loopback default of `WAITRON_HTTP_HOST` is the only thing keeping it off the network; boot
-     * fails closed here (`assertMirrorBindSafe`) rather than expose it. `host` is the operator's own
-     * `WAITRON_HTTP_HOST` value, not a secret.
-     */
-    "server.mirror_bind_exposed": { host: string };
     /**
      * The container's start-up program was given arguments, which it never takes: `docker compose
      * run app <command>` appends `<command>` to it. No params: the arguments are operator input.

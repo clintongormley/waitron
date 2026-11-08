@@ -74,7 +74,6 @@ describe("runFinishAdoption", () => {
         established = args;
         return Promise.resolve();
       },
-      ensureViewer: () => Promise.resolve(),
       log: ((level: string, event: string, fields: unknown) =>
         logged.push({ level, event, fields })) as never,
     });
@@ -93,11 +92,10 @@ describe("runFinishAdoption", () => {
     expect(await readPendingAdoption(dir)).toBeNull();
   });
 
-  it("establishes the reserved identity, ensures the viewer, and unlinks the file", async () => {
+  it("establishes the reserved identity and unlinks the file", async () => {
     const dir = await tempDir();
     await writePendingAdoption(dir, PENDING);
     let established: unknown;
-    let viewerCalls = 0;
     await runFinishAdoption({
       ownerDb: dummyDb,
       stateDir: dir,
@@ -106,14 +104,9 @@ describe("runFinishAdoption", () => {
         established = args;
         return Promise.resolve();
       },
-      ensureViewer: () => {
-        viewerCalls += 1;
-        return Promise.resolve();
-      },
       log: noop as never,
     });
     expect(established).toMatchObject({ standby: PENDING.standby });
-    expect(viewerCalls).toBe(1);
     expect(await readPendingAdoption(dir)).toBeNull(); // file unlinked
   });
 
@@ -128,7 +121,6 @@ describe("runFinishAdoption", () => {
         establishCalls += 1;
         return Promise.resolve();
       },
-      ensureViewer: () => Promise.resolve(),
       log: noop as never,
     });
     expect(establishCalls).toBe(0);
@@ -137,28 +129,19 @@ describe("runFinishAdoption", () => {
   it("logs establish_failed and KEEPS the file when establish throws, so the next boot retries", async () => {
     const dir = await tempDir();
     await writePendingAdoption(dir, PENDING);
-    let viewerCalls = 0;
     const events: string[] = [];
     await runFinishAdoption({
       ownerDb: dummyDb,
       stateDir: dir,
       modules: [],
       establish: () => Promise.reject(new Error("no tenant row yet")),
-      ensureViewer: () => {
-        viewerCalls += 1;
-        return Promise.resolve();
-      },
       log: ((_l: string, event: string) => events.push(event)) as never,
     });
     expect(events).toContain("adoption.establish_failed");
-    // The viewer never ran (establish comes first) and the latch survives.
-    expect(viewerCalls).toBe(0);
     expect(await readFile(join(dir, PENDING_ADOPTION_FILE), "utf8")).not.toBe("");
   });
 
-  it("KEEPS the file when the viewer step throws after a successful establish", async () => {
-    // The order matters: establish, then the viewer, then the unlink. A viewer failure must leave the
-    // latch in place.
+  it("keeps the latch when removing it fails after establishment", async () => {
     const dir = await tempDir();
     await writePendingAdoption(dir, PENDING);
     const events: string[] = [];
@@ -166,12 +149,14 @@ describe("runFinishAdoption", () => {
       ownerDb: dummyDb,
       stateDir: dir,
       modules: [],
-      establish: () => Promise.resolve(),
-      ensureViewer: () => Promise.reject(new Error("persons insert failed")),
+      establish: async () => {
+        await rm(join(dir, PENDING_ADOPTION_FILE));
+        await mkdir(join(dir, PENDING_ADOPTION_FILE));
+      },
       log: ((_l: string, event: string) => events.push(event)) as never,
     });
     expect(events).toContain("adoption.establish_failed");
-    expect(await readFile(join(dir, PENDING_ADOPTION_FILE), "utf8")).not.toBe("");
+    expect((await stat(join(dir, PENDING_ADOPTION_FILE))).isDirectory()).toBe(true);
   });
 });
 
@@ -213,7 +198,7 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
     expect((await suite.db.execute(sql`select 1 from persons`)).rows).toEqual([]);
   });
 
-  it("establishes the standby's node and the mirror viewer, then clears the record", async () => {
+  it("establishes the standby's node without a viewer, then clears the record", async () => {
     await seedVenue(suite.db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],
@@ -249,7 +234,7 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
     const viewer = await suite.db.execute<{ role: string }>(
       sql`select role from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
     );
-    expect(viewer.rows).toEqual([{ role: "admin" }]);
+    expect(viewer.rows).toEqual([]);
     expect(await readPendingAdoption(dir)).toBeNull();
   });
 });

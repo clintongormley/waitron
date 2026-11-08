@@ -1938,6 +1938,8 @@ Not in any track until the standalone primary is done.
 - **A947 3b must make the held chart vouch for a joined box's key, or the main box can never check
   its answer and waits at every start.** Left open by A1018 Slice 3 (Ruling R13).
   [Detail](backlog/replication-cloud.md#a947-3b-must-make-the-held-chart-vouch-for-a-joined-boxs-key-or-the-main-box-can-never-check-its-answer-and-waits-at-every-start)
+  A947 also owns the spare's authenticated switch screen (watcher, 2026-11-08); the spare's
+  dashboard is retired. [Decision](backlog/replication-cloud.md#decisions-and-deliberate-limits).
 
 - **The boot peer reconcile cannot reach a real box's certificate.** Found by A1018 Slice 3's
   review.
