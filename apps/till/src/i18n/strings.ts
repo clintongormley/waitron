@@ -3,7 +3,6 @@
 // fails typecheck.
 export const en = {
   "recovery.open": "Open recovery",
-  "bill_pay.card_recovery_open": "Card payments / sign in",
   "card.mismatch":
     "The card provider reported a different amount. Waitron has stopped asking it about this payment. Check the charge in Card payments before taking more money on this order or reader.",
   "recovery.issuance_stopped":
@@ -1957,7 +1956,6 @@ export type StringKey = keyof typeof en;
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
   "recovery.open": "Abrir recuperación",
-  "bill_pay.card_recovery_open": "Pagos con tarjeta / acceder",
   "card.mismatch":
     "El proveedor de pagos indicó un importe distinto. Waitron ha dejado de consultar este pago. Comprueba el cobro en Pagos con tarjeta antes de cobrar más en este pedido o con este lector.",
   "recovery.issuance_stopped":
