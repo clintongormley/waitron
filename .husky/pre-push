@@ -189,7 +189,7 @@ run_step "lint" "pnpm lint" check_lint
 
 if [ "$scope_kind" = "root" ]; then
   end_ts=$(date +%s)
-  echo "pre-push: repository machinery only — typecheck and package tests skipped, $((end_ts - start_ts))s"
+  echo "pre-push: repository machinery only — typecheck and tests skipped, $((end_ts - start_ts))s"
   exit 0
 fi
 
