@@ -337,7 +337,7 @@ sits after vb9. No plan in this area moves a file between packages.
 
 ## Needs
 
-- Outside this area: all of batch 1 (1a's rebuild command; 1b, 2, 3a/3b, 4a/4b, 5a–5g landed).
+- Outside this area: all of batch 1 (1a's rebuild command; 1b, 2, 3a/3b, 4a/4b, 5a–5h landed).
 - In this area: none. vb2–vb9 come after it.
 
 ---
