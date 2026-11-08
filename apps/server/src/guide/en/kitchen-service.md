@@ -32,9 +32,6 @@ silently replace the original block on the dish card, the pass or a reprint.
 
 ## Read and acknowledge a correction {#corrections}
 
-When a table is recorded as having left unpaid, follow its cancellation slip and stop preparing
-those dishes.
-
 If the waiter changes instructions for a dish your station still has to prepare or hand over,
 you receive an **Allergy changed** notice with the new block. Removing the assignment, deleting
 its guest or choosing No allergies produces **Allergy removed** instead. Configured kitchen

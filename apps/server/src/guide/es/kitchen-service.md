@@ -34,9 +34,6 @@ una reimpresión.
 
 ## Lee y confirma una corrección {#corrections}
 
-Cuando se registra que una mesa se ha marchado sin pagar, sigue su tique de cancelación y deja de
-preparar esos platos.
-
 Si se cambian las instrucciones de un plato que tu estación aún tiene que preparar o entregar,
 recibes un aviso de **Alergia cambiada** con el bloque nuevo. Quitar la asignación, eliminar a la
 persona o elegir Sin alergias genera **Alergia eliminada**. Las impresoras de cocina configuradas
