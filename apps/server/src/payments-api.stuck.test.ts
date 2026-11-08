@@ -10,6 +10,7 @@ import {
   billPaymentRefunds,
   billPayments,
   devices,
+  incidents,
   withTransaction,
   workingOrders,
   venueLocationId,
@@ -785,7 +786,7 @@ describe("A1381 placed whole-order payments", () => {
   it.each([
     ["requires_payment_method", 150, 200, "not_charged"],
     ["succeeded", 150, 200, "filed"],
-    ["succeeded", 100, 409, "payment.outcome_unknown"],
+    ["succeeded", 100, 409, "payment.capture_mismatch_unresolved"],
   ] as const)(
     "offers a manager fallback for a placed order with Stripe status %s",
     async (status, amountReceived, http, outcome) => {
@@ -814,6 +815,19 @@ describe("A1381 placed whole-order payments", () => {
       else expect(((await res.json()) as { outcome: string }).outcome).toBe(outcome);
       expect((await orderOf(orderId)).status).toBe(outcome === "filed" ? "settled" : "placed");
       expect(saleIdsFor(orderId)).toHaveLength(outcome === "filed" ? 1 : 0);
+      if (http === 409) {
+        const [evidence] = await suite.db
+          .select({ params: incidents.params })
+          .from(incidents)
+          .where(eq(incidents.code, "payment.capture_mismatch"));
+        expect(evidence?.params.payments).toEqual([
+          expect.objectContaining({
+            workingOrderId: orderId,
+            requestedAmount: "1.50",
+            reportedAmount: "1.00",
+          }),
+        ]);
+      }
     },
   );
 });
