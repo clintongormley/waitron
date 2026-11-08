@@ -269,6 +269,20 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": { title: MALFORMED_PRODUCER_EN, action: PRODUCER_ACTION_EN },
     "es-ES": { title: MALFORMED_PRODUCER_ES, action: PRODUCER_ACTION_ES },
   },
+  "sif.producer_changed": {
+    "en-GB": {
+      title:
+        "This box has been given a different software producer from the one its invoices were recorded under. A new producer needs a new fiscal installation, and this version of Waitron cannot open one, so the box will not sell.",
+      action:
+        "Install a Waitron version that names the same producer as this box's invoices. Changing the producer needs a Waitron version that can open a new fiscal installation, which does not exist yet.",
+    },
+    "es-ES": {
+      title:
+        "Este equipo tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el equipo no venderá.",
+      action:
+        "Instala una versión de Waitron que indique el mismo productor que las facturas de este equipo. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
+    },
+  },
   "server.config_missing": {
     "en-GB": {
       title: "The box's configuration is incomplete.",

@@ -376,6 +376,33 @@ describe("the producer the build does not name, or names wrongly", () => {
   }
 });
 
+describe("a chain recorded under another producer", () => {
+  it("names sif.producer_changed, in each language", async () => {
+    const english = await pageFor("sif.producer_changed", undefined, "en-GB");
+    expect(english).toContain(
+      escapeHtml(
+        "This box has been given a different software producer from the one its invoices were recorded under. A new producer needs a new fiscal installation, and this version of Waitron cannot open one, so the box will not sell.",
+      ),
+    );
+    expect(english).toContain(
+      escapeHtml(
+        "Install a Waitron version that names the same producer as this box's invoices. Changing the producer needs a Waitron version that can open a new fiscal installation, which does not exist yet.",
+      ),
+    );
+    const spanish = await pageFor("sif.producer_changed", undefined, SPANISH);
+    expect(spanish).toContain(
+      escapeHtml(
+        "Este equipo tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el equipo no venderá.",
+      ),
+    );
+    expect(spanish).toContain(
+      escapeHtml(
+        "Instala una versión de Waitron que indique el mismo productor que las facturas de este equipo. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
+      ),
+    );
+  });
+});
+
 describe("curated operator text", () => {
   // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
   it("renders the title and action for every code in the table, in each language", async () => {
@@ -453,9 +480,9 @@ describe("curated operator text", () => {
   // worst (CLAUDE.md §5); `restore.membership_invalid` because the page's Retry reads the same copy
   // again, which the generic line does not say; `append_only.triggers_changed` because a box that
   // stopped itself reaches the page at once, and the generic line says only that Waitron could not
-  // start; `sif.producer_unset`, `software_producer.invalid` and `sif.producer_invalid` because a
-  // retry of the same version and settings refuses again, and the generic line does not say what
-  // to change.
+  // start; `sif.producer_unset`, `software_producer.invalid`, `sif.producer_invalid` and
+  // `sif.producer_changed` because a retry of the same version and settings refuses again, and the
+  // generic line does not say what to change.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -480,6 +507,7 @@ describe("curated operator text", () => {
       "sif.producer_unset",
       "software_producer.invalid",
       "sif.producer_invalid",
+      "sif.producer_changed",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
