@@ -163,7 +163,7 @@ export class EmailSettingsPanel extends LitElement {
               ${
                 this.modeKnown
                   ? html`<p>
-                      ${t(view.mode === "smtp" ? "email.settings.gateway" : view.mode === "local_capture" ? "email.settings.captured" : "email.settings.unavailable")}
+                      ${t(view.mode === "smtp" ? "email.settings.gateway" : view.mode === "local_capture" ? "email.settings.captured" : view.settings !== null ? "email.settings.invalid_sender" : "email.settings.unavailable")}
                     </p>`
                   : nothing
               }

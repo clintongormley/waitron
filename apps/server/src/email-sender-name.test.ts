@@ -13,6 +13,12 @@ describe("venue SMTP sender", () => {
       });
     },
   );
+  it("keeps a terminal-configured mailbox's local-part case", () => {
+    expect(venueSmtpFrom("Old Name <Venue.Sales@Example.Test>", "Dining Room")).toEqual({
+      name: "Dining Room",
+      address: "Venue.Sales@Example.Test",
+    });
+  });
   it.each([
     "",
     "not-an-email",

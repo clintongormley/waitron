@@ -12,9 +12,9 @@ antes de guardar. Introduce de nuevo los datos de acceso al cambiar un servidor 
 Waitron nunca muestra la contraseña guardada. Los gerentes pueden consultar los ajustes, pero no
 guardarlos ni quitarlos.
 
-Los mensajes salientes y la prueba de esta página muestran el nombre del local junto a la dirección
-del remitente. Si el correo no está disponible, revisa y corrige la dirección guardada antes de
-repetir la prueba.
+Los mensajes enviados por tu servidor guardado y la prueba de esta página muestran el nombre del
+local junto a la dirección del remitente. Si la página indica que la dirección guardada no es válida,
+elige **Cambiar servidor de correo** y corrige **Dirección del remitente** antes de repetir la prueba.
 
 Antes de completar la configuración en Preparación o En vivo, introduce los ajustes del servidor
 y envía una prueba aceptada a la dirección del administrador. En desarrollo puedes omitir este paso.

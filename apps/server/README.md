@@ -520,7 +520,7 @@ payload to a permission-restricted file rather than putting its password in a sh
 ```json
 {
   "url": "smtps://user:password@smtp.example.com:465",
-  "from": "Waitron <no-reply@example.com>"
+  "from": "no-reply@example.com"
 }
 ```
 

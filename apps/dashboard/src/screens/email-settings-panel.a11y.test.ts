@@ -23,6 +23,7 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
   it.each([
     "configured",
     "unconfigured",
+    "invalid-sender",
     "captured",
     "read-only",
     "initial",
@@ -51,7 +52,16 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
               ? { mode: "local_capture", editable: false, settings: null }
               : {
                   ...stored,
-                  mode: state === "dev-stored" ? "local_capture" : "smtp",
+                  mode:
+                    state === "dev-stored"
+                      ? "local_capture"
+                      : state === "invalid-sender"
+                        ? "unconfigured"
+                        : "smtp",
+                  settings:
+                    state === "invalid-sender"
+                      ? { ...stored.settings!, from: "a,b@example.test" }
+                      : stored.settings,
                   editable: state !== "read-only",
                 };
       const api = {

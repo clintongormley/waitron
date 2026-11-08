@@ -201,3 +201,17 @@ it("refuses overlapping email and fiscal tests and releases the setup latch afte
     await rig.close();
   }
 });
+
+it("refuses a setup sender that named delivery cannot use before SMTP contact", async () => {
+  let contacted = false;
+  const { app } = mount(async () => {
+    contacted = true;
+    return { accepted: true };
+  });
+  const response = await request(app, body({ ...email, from: "a,b@example.test" }));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "email.settings_invalid", params: { field: "from" } },
+  });
+  expect(contacted).toBe(false);
+});

@@ -1,3 +1,4 @@
+import { validateSmtpTestFrom } from "./email-sender-name.js";
 import type { Hono } from "hono";
 import { normalizeAndValidateEmail } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -31,6 +32,7 @@ export function mountSetupEmailTest(
         if (body.mode !== "live" && body.mode !== "prepare")
           throw new AppError("setup.request_invalid", { field: "mode" });
         const settings = parseEmailSettings(object(body.email, "email"));
+        validateSmtpTestFrom(settings.from);
         const admin = object(object(body.venue, "admin.email").admin, "admin.email");
         if (typeof admin.email !== "string") {
           throw new AppError("setup.request_invalid", { field: "admin.email" });

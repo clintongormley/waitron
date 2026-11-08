@@ -48,9 +48,13 @@ it("shows the redacted gateway and opens a quiet credential editor", async () =>
       .disabled,
   ).toBe(true);
 });
-it("explains missing live invoice email and offers setup", async () => {
+it.each([
+  ["en-GB", "Invoices cannot be emailed until you set up a mail server."],
+  ["es-ES", "No se pueden enviar facturas por correo hasta que configures un servidor."],
+])("explains missing live invoice email in %s and offers setup", async (locale, message) => {
+  setLocale(locale);
   const { el } = await mount({ mode: "unconfigured", editable: true, settings: null });
-  expect(q(el, "[data-test=summary]")!.textContent).toContain("Invoices cannot be emailed");
+  expect(q(el, "[data-test=summary]")!.textContent).toContain(message);
   expect(q(el, "[data-test=change]")).not.toBeNull();
 });
 it.each(["local_capture", "smtp"] as const)(
@@ -370,5 +374,24 @@ it.each(["resolve", "reject"] as const)(
     await el.updateComplete;
     expect(q(el, "[data-test=summary]")!.textContent).toContain("smtp.example.test");
     expect(q(el, "[role=alert]")).toBeNull();
+  },
+);
+
+it.each([
+  ["en-GB", "The saved sender address for invoices is not valid. Change it below."],
+  ["es-ES", "La dirección del remitente guardada para las facturas no es válida. Cámbiala abajo."],
+])(
+  "explains an invalid saved invoice sender in %s while preserving its repair actions",
+  async (locale, message) => {
+    setLocale(locale);
+    const { el } = await mount({
+      ...stored,
+      mode: "unconfigured",
+      settings: { ...stored.settings!, from: "a,b@example.test" },
+    });
+    expect(q(el, "[data-test=summary]")!.textContent).toContain(message);
+    expect(q(el, "[data-test=summary]")!.textContent).toContain("smtp.example.test");
+    expect(q(el, "[data-test=change]")).not.toBeNull();
+    expect(q(el, "[data-test=remove]")).not.toBeNull();
   },
 );

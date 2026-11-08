@@ -1,6 +1,6 @@
 import addressparser from "nodemailer/lib/addressparser/index.js";
 import { normalizeAndValidateEmail } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import "./errors.js";
 
 export function venueSmtpFrom(
@@ -14,11 +14,26 @@ export function venueSmtpFrom(
   const parsed = addressparser(storedFrom);
   const mailbox = parsed[0];
   if (parsed.length !== 1 || mailbox === undefined || "group" in mailbox) return invalid();
-  let address: string;
   try {
-    address = normalizeAndValidateEmail(mailbox.address);
+    normalizeAndValidateEmail(mailbox.address);
   } catch {
     invalid();
   }
-  return { name: senderName, address: address! };
+  return { name: senderName, address: mailbox.address };
+}
+
+export function validateSmtpTestFrom(storedFrom: string): void {
+  try {
+    venueSmtpFrom(storedFrom, "");
+  } catch (error) {
+    if (
+      isAppError(error) &&
+      hasCode(error, "server.credential_unusable") &&
+      error.params.purpose === "email.smtp" &&
+      error.params.field === "from"
+    ) {
+      throw new AppError("email.settings_invalid", { field: "from" });
+    }
+    throw error;
+  }
 }

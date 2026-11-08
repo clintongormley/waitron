@@ -1112,6 +1112,8 @@ export const en = {
   "email.settings.change": "Change mail server",
   "email.settings.set_up": "Set up mail server",
   "email.settings.unavailable": "Invoices cannot be emailed until you set up a mail server.",
+  "email.settings.invalid_sender":
+    "The saved sender address for invoices is not valid. Change it below.",
   "email.settings.captured":
     "Invoice email is captured on this box; no invoice email is sent outside it.",
   "email.settings.gateway": "Invoice email uses this mail server.",
@@ -4951,6 +4953,8 @@ export const es: Record<StringKey, string> = {
   "email.settings.set_up": "Configurar servidor de correo",
   "email.settings.unavailable":
     "No se pueden enviar facturas por correo hasta que configures un servidor.",
+  "email.settings.invalid_sender":
+    "La dirección del remitente guardada para las facturas no es válida. Cámbiala abajo.",
   "email.settings.captured":
     "El correo de facturas se guarda en este equipo; no se envía fuera de él.",
   "email.settings.gateway": "El correo de facturas usa este servidor.",

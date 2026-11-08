@@ -1,3 +1,4 @@
+import { validateSmtpTestFrom } from "./email-sender-name.js";
 import {
   activateFirstFiscal,
   finishFirstFiscalSetup,
@@ -221,6 +222,7 @@ export function mountSetupFirstFiscalApi(
             host.assertSelection(state);
             if (Object.keys(body).length !== 1 || !("email" in body)) invalid();
             const settings = parseEmailSettings(object(body.email));
+            validateSmtpTestFrom(settings.from);
             const send = deps.sendEmailTest ?? sendSmtpTestMessage;
             return c.json(await send(settings, state.frozen.request.admin.email));
           }
