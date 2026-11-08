@@ -159,3 +159,13 @@ it("limits wrong recovery keys without letting a changed guess choose a new buck
   expect(refused.status).toBe(429);
   expect(refused.body.error.code).toBe("password.throttled");
 });
+
+it("does not let a malformed person id consume the recovery-key budget", async () => {
+  const service = app();
+  for (let i = 0; i < 4; i++) {
+    expect((await send(service, "", { personId: "recovery-key", password: "wrong" })).status).toBe(
+      401,
+    );
+  }
+  expect((await send(service, "", { breakGlass: "wrong-key" })).status).toBe(401);
+});

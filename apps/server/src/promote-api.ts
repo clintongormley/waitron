@@ -98,7 +98,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
     const key = recoveryKey
       ? "recovery-key"
       : typeof body.personId === "string"
-        ? body.personId
+        ? `person:${body.personId}`
         : "missing-person";
     const finish = throttle.begin(key);
     try {
