@@ -149,7 +149,7 @@ describe("SMTP settings", () => {
       mode: "smtp",
       smtp: {
         url: "smtp://smtp-user:p%40ss%3Aword@smtp.example.test:587?requireTLS=true",
-        from: "venue@example.test",
+        from: { name: "Sala", address: "venue@example.test" },
       },
     });
     const rows = await suite.db.select().from(tenantCredentials);
@@ -192,7 +192,10 @@ describe("SMTP settings", () => {
       }),
     ).toEqual({
       mode: "smtp",
-      smtp: { url: "smtps://next.example.test:465", from: "next@example.test" },
+      smtp: {
+        url: "smtps://next.example.test:465",
+        from: { name: "Sala", address: "next@example.test" },
+      },
     });
     expect(await (await request(app, venue.admin)).json()).toEqual({
       mode: "smtp",
@@ -340,6 +343,7 @@ describe("SMTP settings test request", () => {
       expect(await response.json()).toEqual({ accepted: true });
       expect(rig.messages).toHaveLength(1);
       expect(rig.messages[0]).toContain("To: manager@example.test");
+      expect(rig.messages[0]).toContain("From: Sala <venue@example.test>");
       expect(rig.messages[0]).not.toContain("attacker@example.test");
       expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
       expect(JSON.stringify(logs)).not.toContain("manager@example.test");
@@ -489,7 +493,10 @@ describe("SMTP settings boundary cases", () => {
         onboardingIntent: "live",
         devMode: false,
       }),
-    ).toEqual({ mode: "smtp", smtp: { url: "smtps://[::1]:465", from: "venue@example.test" } });
+    ).toEqual({
+      mode: "smtp",
+      smtp: { url: "smtps://[::1]:465", from: { name: "Sala", address: "venue@example.test" } },
+    });
   });
   it("refuses a test when the authenticated person has no email address", async () => {
     const venue = await setupVenue();
@@ -710,6 +717,7 @@ it("lets a Prepare admin save, read and remove a sealed relay while managers onl
     expect(await tested.json()).toEqual({ accepted: true });
     expect(rig.messages).toHaveLength(1);
     expect(rig.messages[0]).toContain("To: manager@example.test");
+    expect(rig.messages[0]).toContain("From: Sala <proposed@example.test>");
     expect(rig.messages[0]).not.toContain("attacker@example.test");
     expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
     const removed = await app.request(path, { method: "DELETE", headers: { cookie: venue.admin } });
@@ -846,4 +854,53 @@ describe("removing saved SMTP settings", () => {
       expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
     },
   );
+});
+
+it.each([
+  ["Old name <venue@example.test>", "smtp"],
+  ["one@example.test, two@example.test", "unconfigured"],
+] as const)("keeps saved From %s editable with delivery mode %s", async (from, mode) => {
+  const venue = await setupVenue();
+  await withTransaction(suite.db, (tx) =>
+    putCredential(tx, ring, {
+      purpose: "email.smtp",
+      value: { url: "smtps://smtp.example.test:465", from },
+    }),
+  );
+  const response = await request(mount(), venue.admin);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    mode,
+    editable: true,
+    settings: {
+      server: "smtp.example.test",
+      port: 465,
+      encryption: "tls",
+      from,
+      hasAuthentication: false,
+    },
+  });
+});
+
+it("maps an unusable proposed From to its field before any SMTP contact", async () => {
+  const venue = await setupVenue();
+  let contacted = false;
+  const app = mount(
+    "live",
+    () => {},
+    async () => {
+      contacted = true;
+      return { accepted: true };
+    },
+  );
+  const response = await app.request(path + "/test", {
+    method: "POST",
+    headers: { cookie: venue.admin, "content-type": "application/json" },
+    body: JSON.stringify({ ...settings, from: "a,b@x.test" }),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "email.settings_invalid", params: { field: "from" } },
+  });
+  expect(contacted).toBe(false);
 });

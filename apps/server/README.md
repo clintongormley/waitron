@@ -509,6 +509,10 @@ For a new Prepare or Live venue outside development, the setup wizard asks for t
 test message to your administrator address. Continue becomes available when the server accepts a
 test of the current settings. Final setup seals them in the credential vault.
 
+Ordinary outgoing SMTP mail and the Settings test use the venue name as the sender display name,
+keeping the configured mailbox. Settings shows the saved From value so you can repair it when
+it cannot be used for delivery. Setup tests and local capture keep their own sender.
+
 The wizard and the Account email page seal these settings in the encrypted credential vault for you. From a
 terminal you can also put a production or on-prem venue's SMTP relay there yourself. Write the
 payload to a permission-restricted file rather than putting its password in a shell argument:
@@ -516,7 +520,7 @@ payload to a permission-restricted file rather than putting its password in a sh
 ```json
 {
   "url": "smtps://user:password@smtp.example.com:465",
-  "from": "Waitron <no-reply@example.com>"
+  "from": "no-reply@example.com"
 }
 ```
 

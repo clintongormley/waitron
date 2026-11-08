@@ -15,7 +15,7 @@ import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db"
 import type { FiledReceipt, FiscalBackend } from "@waitron/fiscal";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
@@ -188,7 +188,7 @@ describe("invoice SMTP transport", () => {
   });
 
   it("routes successive invoices through rotated stored credentials without restarting the sender", async () => {
-    await seedTenant(suite.db);
+    await seedVenue(suite.db, { name: "Dining Room" });
     const first = await smtpRig("accepted");
     const second = await smtpRig("accepted");
     try {
@@ -216,7 +216,7 @@ describe("invoice SMTP transport", () => {
       expect(first.messages[0]).toContain("To: first@example.test");
       expect(second.messages).toHaveLength(1);
       expect(second.messages[0]).toContain("To: second@example.test");
-      expect(second.messages[0]).toContain("From: new@example.test");
+      expect(second.messages[0]).toContain("From: Dining Room <new@example.test>");
       expect(await attachmentText(second.messages[0]!)).toContain("DUPLICADO");
       await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
       expect(await send({ recipient: "third@example.test", document: fixture })).toEqual({
@@ -228,6 +228,47 @@ describe("invoice SMTP transport", () => {
     } finally {
       await first.close();
       await second.close();
+    }
+  });
+
+  it("names a routed invoice without changing its subject, body or PDF bytes", async () => {
+    await seedVenue(suite.db, { name: "Dining Room" });
+    const rig = await smtpRig("accepted");
+    try {
+      const message = { recipient: "customer@example.test", document: fixture };
+      expect(await createInvoiceEmailSender(rig.config)(message)).toEqual({ status: "sent" });
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, ring, {
+          purpose: "email.smtp",
+          value: rig.config,
+        }),
+      );
+      expect(
+        await createRoutedInvoiceEmailSender({
+          db: suite.db,
+          ring,
+          config: { onboardingIntent: "live", devMode: false },
+        })(message),
+      ).toEqual({ status: "sent" });
+      const [plain, named] = rig.messages as [string, string];
+      expect(named).toContain("From: Dining Room <venue@example.test>");
+      expect(/^Subject: (.*)$/m.exec(named)?.[1]).toBe("Factura FF/1");
+      expect(/^Subject: (.*)$/m.exec(named)?.[1]).toBe(/^Subject: (.*)$/m.exec(plain)?.[1]);
+      expect(textPart(named)).toBe("Factura FF/1");
+      expect(textPart(named)).toBe(textPart(plain));
+      const pdfBytes = (raw: string) =>
+        Buffer.from(
+          raw
+            .split("Content-Type: application/pdf")[1]!
+            .split("\r\n\r\n")[1]!
+            .split("\r\n--")[0]!
+            .replace(/\s/g, ""),
+          "base64",
+        );
+      expect(pdfBytes(named).subarray(0, 5).toString()).toBe("%PDF-");
+      expect(pdfBytes(named)).toEqual(pdfBytes(plain));
+    } finally {
+      await rig.close();
     }
   });
 

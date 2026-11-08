@@ -1,0 +1,33 @@
+# A987 sender naming implementation plan
+
+**Goal:** Ordinary outgoing SMTP and the existing Settings test show the trading/location name while retaining the configured mailbox. Basis: [approved spec, O5A](../specs/2026-10-22-a987-prepare-venue-email-design.md), [existing plan, Tasks 8–13 and Cut D](2026-10-22-a987-prepare-venue-email.md). This cut narrows their naming work; no new delivery mechanism.
+
+**Approval, read directly:** `/Users/clintongormley/waitron-campaign-e/questions.md`, heading **WATCHER 2026-11-08 10:53 — A987 sender naming: smaller route APPROVED; no reservation holds it**, exact text:
+
+> 1. Take the smaller route: name ordinary outgoing mail and the existing Settings test only; no setup fields, no owner-held test naming, no dashboard preview.
+> 2. The older A739 invoice-envelope reservation does not hold you: overlap is never a reason to wait (owner, 2026-11-01), and whoever lands second rebases. Naming the envelope of mail that carries an invoice is not fiscal as long as invoice contents, PDF bytes, fiscal writers and the outbox stay unchanged; say that in the PR with the test that pins it.
+> 3. Apply the review's concrete corrections as you listed them (raw saved values on Settings GET; invalid sender treated as unavailable at the resolver; refuse CR/LF before parsing; errors to the From field; pin the changed expectations).
+> That is your approved plan; build it. Reports from here go in progress.log.
+
+This clears A739 for invoice-envelope naming; whoever lands second rebases. Corrections below follow `/Users/clintongormley/waitron-campaign-e/receipts/a987-sender-naming-20261108/plan-review.md` (source readings, not reproduced defects).
+
+**Every intended changed path:**
+
+| Kind | Paths |
+| --- | --- |
+| Production: create | `apps/server/src/email-sender-name.ts` |
+| Production: modify | `apps/server/src/email-delivery.ts`; `apps/server/src/email-settings-api.ts`; `apps/server/src/invoice-email.ts` |
+| Tests: create | `apps/server/src/email-sender-name.test.ts` |
+| Tests: modify | `apps/server/src/email-delivery.test.ts`; `apps/server/src/email-settings-api.test.ts`; `apps/server/src/invoice-email.test.ts`; `apps/server/src/setup-email-provision.test.ts`; `apps/server/src/restore-email.test.ts`; `apps/server/src/boot.box-emails.test.ts`; `apps/server/src/boot.invoice-delivery.test.ts` |
+| Docs: modify | `docs/superpowers/plans/2026-11-08-a987-sender-naming.md`; `apps/server/README.md`; `apps/server/src/guide/en/email.md`; `apps/server/src/guide/es/email.md`; `docs/backlog.md`; `docs/backlog/box.md` |
+
+**Estimate:** production code 60–100 changed lines/four files; tests 150–220 changed lines/four files; brief documentation updates/six files. Estimates, not measurements. Execute inline, failing test → observed expected failure → minimal implementation → passing test count.
+
+- [ ] **Trace and test.** Follow resolver consumers: both boot account wrappers, invoice availability, attendance/certificate workers, box-alert sending, capture inbox and Settings. Add failing cases below before implementation; retain behavioral assertions.
+- [ ] **Name at delivery.** Add `venueSmtpFrom(storedFrom: string, senderName: string): { name: string; address: string }`, using installed nodemailer's `nodemailer/lib/addressparser`, unflattened, and the existing email validator. Check raw `storedFrom` for CR/LF **before parsing**. Accept one valid bare/display mailbox; reject empty, malformed, multiple/group senders with typed `server.credential_unusable`, `{purpose:"email.smtp",field:"from"}`. Test punctuation, Unicode and header-like names through serialized/parsed headers, unchanged mailbox and no injected headers.
+- [ ] **Separate saved settings from delivery.** Extract `readSavedSmtp(tx, ring): Promise<{url:string;from:string}|null>` in `email-delivery.ts`. Keep raw credential reads and `(await readVenue(tx)).name` outside the conversion catch. Catch only the typed sender refusal from `venueSmtpFrom`, returning `{mode:"unconfigured"}` without capture fallback; propagate unrelated failures. Widen delivery `from` to `SmtpConnection["from"]`; change only the invoice sender's input type to match. Preserve capture sender and transaction/write-lock boundaries.
+- [ ] **Keep Settings repairable.** GET reads settings through `readSavedSmtp` and mode through the named resolver: 200 with raw saved From for display-mailbox and invalid stored senders, retaining editable settings even when unconfigured. Preserve redaction/authority. The existing Settings test derives the name via `readVenue`, converts its proposed sender and maps only that typed refusal to `email.settings_invalid {field:"from"}` before network contact. Retain own-recipient/no-save checks. No setup fields, owner-held naming, response `senderName` or dashboard preview.
+- [ ] **Pin preservation.** Update delivery/invoice-route string-From expectations, including Settings, setup-provision, restore and boot expectations, to name/address objects; keep GET raw. Add a venue row to the setup-provision fake and resolver fixtures that only seed the taxpayer. The documented terminal credential writer also accepts display-mailboxes (`apps/server/README.md`), so retain parsing for that input. Test invalid stored From → unconfigured and unrelated failures → propagated. Add named-invoice coverage asserting exact unchanged subject, body and PDF attachment bytes; retain outcomes, deadlines, retries, outbox, capture, reminder and reset-privacy assertions. No invoice contents, fiscal writers, outbox contents/behavior, schema, dependency, stage-policy or Cloud changes; Lane F retains body wording.
+- [ ] **Verify and document.** Run `pnpm --filter @waitron/server exec vitest run src/{email-sender-name,email-delivery,email-settings-api,invoice-email,setup-email-provision,restore-email,boot.box-emails,account-email,attendance-email,certificate-reminder-email,box-alert-email.context,invoice-delivery,boot.invoice-delivery,guide-content}.test.ts`, `pnpm --filter @waitron/server typecheck`, and `pnpm exec vitest run scripts/guide-links.test.ts`; read passing counts. Update listed guides/README for naming and repair; remove completed naming work from both backlog entries, retaining separate work. No whole-workspace local test run.
+
+**Finish line:** focused checks pass; driver inspects and signs off commits, then finish-branch runs Claude run-it review, normal push hook and current-head scoped CI, followed by separately authorised land-branch/merged-head CI. The PR states A739 clearance and cites the invoice preservation test. This amendment changes only the plan; no build, commit or review runs here.

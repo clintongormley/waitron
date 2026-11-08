@@ -327,7 +327,14 @@ describe.each(paths)("invoice email after %s", (path) => {
             onboardingIntent: "live",
             devMode: false,
           }),
-        ).toEqual(configured ? { mode: "smtp", smtp: SMTP } : { mode: "unconfigured" });
+        ).toEqual(
+          configured
+            ? {
+                mode: "smtp",
+                smtp: { ...SMTP, from: { name: "Restaurant", address: "invoices@example.test" } },
+              }
+            : { mode: "unconfigured" },
+        );
         const session = await withTransaction(opened.venue, async (tx) => {
           const [person] = await tx
             .insert(persons)
@@ -395,7 +402,10 @@ describe.each(paths)("invoice email after %s", (path) => {
               onboardingIntent: "live",
               devMode: false,
             }),
-          ).toEqual({ mode: "smtp", smtp: SMTP });
+          ).toEqual({
+            mode: "smtp",
+            smtp: { ...SMTP, from: { name: "Restaurant", address: "invoices@example.test" } },
+          });
         }
       } finally {
         await opened.close();

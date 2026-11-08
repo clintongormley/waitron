@@ -223,7 +223,10 @@ describe("the running server's managers' email check", () => {
                 mode,
                 smtp:
                   mode === "smtp"
-                    ? { url: "smtp://smtp.example.test:2525", from: "venue@example.test" }
+                    ? {
+                        url: "smtp://smtp.example.test:2525",
+                        from: { name: await venueName(venue), address: "venue@example.test" },
+                      }
                     : {
                         url: "smtp://127.0.0.1:1025",
                         from: "Waitron <no-reply@waitron.test>",

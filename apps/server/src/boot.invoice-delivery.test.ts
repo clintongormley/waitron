@@ -527,7 +527,7 @@ describe("invoice email worker at trading boot", () => {
       );
       expect(smtp.messages).toHaveLength(1);
       expect(smtp.messages[0]).toContain("To: saved-customer@example.test");
-      expect(smtp.messages[0]).toContain("From: boot-venue@example.test");
+      expect(smtp.messages[0]).toContain("From: Bar <boot-venue@example.test>");
       const text = await pdfText(smtp.messages[0]!);
       for (const saved of [
         "F/1",

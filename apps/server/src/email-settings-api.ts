@@ -1,11 +1,12 @@
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
 import { authorizeManager, persons, roleHasPermission, type Permission } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
-import { resolveEmailDeliveryIn } from "./email-delivery.js";
+import { readSavedSmtp, resolveEmailDeliveryIn } from "./email-delivery.js";
+import { venueSmtpFrom } from "./email-sender-name.js";
 import type { Logger } from "./logger.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { OnboardingIntent } from "./trading-config.js";
@@ -49,12 +50,13 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
         const actor = await authorize(tx, c);
         const canEdit = editable && roleHasPermission(actor.role, "person.admin");
         if (!editable) return c.json({ mode: "local_capture", editable: false, settings: null });
+        const saved = await readSavedSmtp(tx, deps.ring);
         const delivery = await resolveEmailDeliveryIn(tx, deps.ring, false);
         const mode = deps.config.devMode ? "local_capture" : delivery.mode;
-        if (delivery.mode !== "smtp") return c.json({ mode, editable: canEdit, settings: null });
+        if (saved === null) return c.json({ mode, editable: canEdit, settings: null });
         let url: URL;
         try {
-          url = new URL(delivery.smtp.url);
+          url = new URL(saved.url);
           if (!["smtp:", "smtps:"].includes(url.protocol) || !url.hostname) throw new Error();
         } catch {
           throw new AppError("server.credential_unusable", { purpose: "email.smtp", field: "url" });
@@ -66,7 +68,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
             server: url.hostname,
             port: Number(url.port || (url.protocol === "smtps:" ? 465 : 587)),
             encryption: url.protocol === "smtps:" ? "tls" : "starttls",
-            from: delivery.smtp.from,
+            from: saved.from,
             hasAuthentication: url.username !== "",
           },
         });
@@ -99,7 +101,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
   );
   app.post("/management-api/email/settings/test", (c) =>
     run(c, log, async () => {
-      const recipient = await withTransaction(deps.db, async (tx) => {
+      const { recipient, senderName } = await withTransaction(deps.db, async (tx) => {
         const session = await authorizeManager(tx, {
           managementSessionId: requireManagementSession(c),
           permission: "system.manage",
@@ -111,10 +113,24 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
           .where(eq(persons.id, session.authorizedBy));
         if (person?.email === null || person?.email === undefined)
           throw new AppError("email.settings_invalid", { field: "recipient" });
-        return person.email;
+        return { recipient: person.email, senderName: (await readVenue(tx)).name };
       });
       const value = parseEmailSettings(await readJsonBody<Record<string, unknown>>(c));
-      return c.json(await (deps.sendTest ?? sendSmtpTestMessage)(value, recipient));
+      let from;
+      try {
+        from = venueSmtpFrom(value.from, senderName);
+      } catch (error) {
+        if (
+          isAppError(error) &&
+          hasCode(error, "server.credential_unusable") &&
+          error.params.purpose === "email.smtp" &&
+          error.params.field === "from"
+        ) {
+          throw new AppError("email.settings_invalid", { field: "from" });
+        }
+        throw error;
+      }
+      return c.json(await (deps.sendTest ?? sendSmtpTestMessage)({ ...value, from }, recipient));
     }),
   );
 }

@@ -11,6 +11,10 @@ In Prepare or Live, open **Settings → Email**. As an admin, choose **Set up ma
 login details when changing an authenticated server; Waitron never shows the saved password.
 Managers can view the settings, but cannot save or remove them.
 
+Mail sent through your saved server and the test on this page use your venue name alongside
+the sender address. If the page says the saved sender address is not valid, choose
+**Change mail server** and correct **Sender address** before testing again.
+
 Before completing Prepare or Live setup, enter your mail server settings and send an accepted
 test to the administrator address. Development setup can skip this step. Saving a mail server
 sends invitations and password-reset links to real inboxes. Check the account delivery status on

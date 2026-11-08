@@ -972,3 +972,28 @@ it("a takeover in the middle of a wait keeps the recorded wait, and the first br
   expect(late.status).toBe(403);
   expect((await late.json()).error.code).toBe("setup.owner_required");
 });
+
+it("refuses a claimed-owner sender that named delivery cannot use before SMTP contact", async () => {
+  let contacted = false;
+  const f = await fixture(async () => {
+    contacted = true;
+    return { accepted: true };
+  });
+  const response = await f.post(
+    "/setup-api/email-test",
+    {
+      email: {
+        server: "smtp.example.test",
+        port: 465,
+        encryption: "tls",
+        from: "a,b@example.test",
+      },
+    },
+    f.headers(),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "email.settings_invalid", params: { field: "from" } },
+  });
+  expect(contacted).toBe(false);
+});

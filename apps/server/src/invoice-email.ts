@@ -1,3 +1,4 @@
+import type { SmtpConnection } from "./smtp-send.js";
 import nodemailer from "nodemailer";
 import { Socket } from "node:net";
 import { receiptLabelsFor } from "@waitron/country-packs";
@@ -69,10 +70,7 @@ export function createRoutedInvoiceEmailSender(deps: {
   };
 }
 
-export function createInvoiceEmailSender(config: {
-  url: string;
-  from: string;
-}): InvoiceEmailSender {
+export function createInvoiceEmailSender(config: SmtpConnection): InvoiceEmailSender {
   return async ({ recipient, document, privacy }) => {
     const pdf = await renderInvoicePdf(document);
     const labels = receiptLabelsFor(document.invoiceLocale);
