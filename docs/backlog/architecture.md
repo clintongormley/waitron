@@ -391,8 +391,6 @@ until A977).
   shared fixture names in the server split suites, and shared helper consumers
   such as `made-here.test.ts`. Record and submission names also remain in server seed,
   snapshot and fiscal-identity suites; check protected fixtures and fiscal-provider contracts.
-  Moved-dish names remain in the till's
-  `till-table-order-screen.move-dishes.test.ts`.
   Fixture strings remain separate from this naming work. Shared helpers' Spanish dish samples
   and their consumers stay with A976, as do the filing and adjustment order-portion samples
   and adjustment test descriptions.
@@ -770,7 +768,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot,
   counter-payment and split-selection fixtures; shared fixture names in the
-  server split suites; the till's moved-dish suite; shared helper consumers and file names.
+  server split suites; shared helper consumers and file names.
   Shared fixture property names such as `cafeId` remain open.
   Private drink bindings remain in `sale-till-source.receipt.test.ts`,
   `issuance-pass.fiscal-identity.test.ts`, `list-unit-price.fiscal-identity.test.ts` and

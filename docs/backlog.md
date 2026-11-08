@@ -2360,7 +2360,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot, counter-payment and split-selection fixtures; shared fixture
   names in the server split suites;
-  the till's moved-dish suite; shared helper consumers and file names.
+  shared helper consumers and file names.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
   identity and served-at-huella fixtures. Keep accented search fixtures unchanged.
   Other record and submission names remain in server seed, snapshot and fiscal-identity suites;
