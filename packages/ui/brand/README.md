@@ -8,9 +8,10 @@ drawn as outlines, so nothing loads a font. The lockup is the two together, side
 
 You edit the two source drawings by hand. `build-icons.mjs` writes the derived files from those
 drawings and the dark colour tokens. The derived files are committed, so run the command whenever
-you change a source drawing or a dark token. One number is kept by hand outside the drawings:
-`WORD_BASELINE` in `packages/ui/src/components/wt-waitron-lockup.ts`, where the word's letters sit;
-update it when the wordmark is redrawn (`wt-waitron-lockup.test.ts` fails if it is off).
+you change a source drawing or a dark token. Two things are kept by hand outside the drawings:
+`WORD_BASELINE` in `packages/ui/src/components/wt-waitron-lockup.ts`, where the word's letters sit,
+which changes when the wordmark is redrawn; and the certificate page's copy of the lockup (below),
+which changes when either drawing is.
 
 | File                          | Kind    | Read by                                                                                                                                                                                                                                                                                                       |
 | ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -35,8 +36,8 @@ Standalone SVGs carry literal colours because an `<img>` cannot read the page's 
 properties. The screens do not use them as images: `wt-waitron-lockup`
 (`packages/ui/src/components/wt-waitron-lockup.ts`) imports `waitron-lockup.svg` through a `?raw`
 import and repaints its first top-level group with `--wt-color-primary` and its last with
-`--wt-color-text`, so the dashboard's banner, `wt-powered-by` and the Look card preview follow light,
-dark and a venue's own colours. When you change a dark token in `packages/ui-core/src/tokens/colors.css`, re-run the
+`--wt-color-text`, so the dashboard's banner, `wt-powered-by`, the Look card preview and the setup
+wizard's header follow light, dark and a venue's own colours. When you change a dark token in `packages/ui-core/src/tokens/colors.css`, re-run the
 generator: it reads `--wt-color-primary` and `--wt-color-text` from that file's
 `@media (prefers-color-scheme: dark)` block for the dark lockup and the favicon's dark rule.
 It expects six-digit hex values and an unindented closing brace for that block; a missing block or
@@ -54,10 +55,10 @@ and each dark value from the `@media (prefers-color-scheme: dark)` block, so a `
 that disagrees with either is not seen, and it checks neither the favicon nor the certificate page's
 copy.
 
-The setup wizard (`apps/setup/src/setup-app.ts`) draws its header logo with `wt-waitron-lockup` too.
-The primitive repaints the file's two top-level groups by position, the first `<g>` (the cloche)
-with `--wt-color-primary` and the last (the word) with `--wt-color-text`. That is the order
-`build-icons.mjs` writes them in, so the primitive depends on it staying that way.
+`wt-waitron-lockup` paints by position, so it relies on the order `build-icons.mjs` writes the groups
+in, cloche first. The
+paint cases in `apps/setup/src/setup-app.test.ts` find each group by the ink this file gives it, so a
+reordered file fails them.
 
 ## Why an .ico and a PNG as well as the SVG
 

@@ -248,8 +248,8 @@ the icons and spinners its `GRAPHIC_USES` list names by file and selector
   `apps/` and `packages/`, files ending `.test.ts`, and `.js` and `.mjs` files.
 
 Two uses of the button colour it cannot see were checked by hand on 2026-10-21 and stay, being
-graphics: the logo's drawing, `fill: var(--wt-color-primary)` (then in `apps/setup/src/setup-app.ts`,
-now in `packages/ui/src/components/wt-waitron-lockup.ts`), and the floor map's drag line, `stroke: var(--wt-color-primary)`
+graphics: the lockup's cloche, `fill: var(--wt-color-primary)` in
+`packages/ui/src/components/wt-waitron-lockup.ts`, and the floor map's drag line, `stroke: var(--wt-color-primary)`
 in `packages/ui/src/components/wt-floor-map.ts:348`. The one text site of that kind found then, the
 printer name's redeclared `--wt-color-text` (`apps/dashboard/src/screens/printers-screen.ts:218`),
 moved to `--wt-color-primary-text`, and a case in `printers-screen.test.ts` sets the two tokens to
