@@ -34,6 +34,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readAdditiveControl } from "../additive-control.ts";
 import { copyUp } from "../copy-up.ts";
 import {
   LITESTREAM_VERSION,
@@ -170,7 +171,7 @@ export default async function copiedReplica({
       detail:
         `version=${litestream.version} source-keys=${source.finalKeys.length} source-deleted=${source.deletedKeys.length} deletion-waited-ms=${source.waitedMs} direct-rows=${direct.records.length} ` +
         `foreign-keys=${mirrored.foreignKeys} copied=${mirrored.copied} mirror-deleted=${mirrored.deleted} copied-rows=${mirrored.rows} copied-sha-equal=${mirrored.shaEqual} ` +
-        `control-foreign-keys=${control.foreignKeys} control-copied=${control.copied} control-stale=${control.stale} control-rows=${control.rows} control-nodes=[${control.nodes}] control-integrity="${control.integrity}" control-refused="${control.refusal}" ` +
+        `control-foreign-keys=${control.foreignKeys} control-copied=${control.copied} control-stale=${control.stale} control-rows=${control.rows ?? "unreadable"} control-nodes=[${control.nodes ?? "unreadable"}] control-integrity="${control.integrity}" control-refused="${control.refusal}" ` +
         // Quoted, like every other free-text value here: `outcome` is `identical` on the recorded
         // runs but otherwise carries a whole sentence — an assertion's, or litestream's own stderr
         // line — colons, spaces and all.
@@ -370,16 +371,8 @@ async function mirrorIntoDirtyDestination(
  * Driving the same function is the point: a control asserting "the rows are box-b's" in words of its
  * own would stay green if Part A's comparison had stopped checking anything.
  *
- * What the additive copy leaves behind is not a litestream error: on the recorded run the restore
- * SUCCEEDS — exit 0, a database written — and hands back a different venue's ledger. So the restore
- * is expected to succeed here, and a run where litestream refused would fail this part loudly rather
- * than be read as the control working.
- *
- * WHICH of Part A's assertions refuses that database is recorded, not assumed, and on the recorded
- * run it is the integrity check rather than the row comparison: the mixed set of files restores a
- * database SQLite itself reports as damaged, while still reading back box-b's nine rows. The verdict
- * carries both `control-integrity` and the refusal's own words, because a later run refusing at the
- * row comparison instead would be a different finding and should read as one.
+ * A mixed replica can restore a file that SQLite cannot read. Only SQLite corruption at that read
+ * counts as the control's rejection; a failed restore command or an unrelated read failure escapes.
  */
 async function additiveIntoDirtyDestination(
   bin: string,
@@ -391,8 +384,8 @@ async function additiveIntoDirtyDestination(
   foreignKeys: number;
   copied: number;
   stale: number;
-  rows: number;
-  nodes: string[];
+  rows: number | null;
+  nodes: string[] | null;
   integrity: string;
   refusal: string;
 }> {
@@ -411,7 +404,7 @@ async function additiveIntoDirtyDestination(
     "the additive copy leaves the foreign lineage's objects under the destination",
   );
 
-  const controlRestore = await restoreFrom(
+  const controlPath = await restorePath(
     bin,
     store,
     dir,
@@ -419,6 +412,20 @@ async function additiveIntoDirtyDestination(
     "restored-control",
     source,
   );
+  const control = readAdditiveControl(() => readRestored(controlPath));
+  if (!control.value) {
+    assert.ok(control.corruption);
+    return {
+      foreignKeys,
+      copied,
+      stale: stale.length,
+      rows: null,
+      nodes: null,
+      integrity: control.corruption,
+      refusal: `SQLite refused to read the additive control: ${control.corruption}`,
+    };
+  }
+  const controlRestore = control.value;
 
   let refusal: string | null = null;
   try {
@@ -656,6 +663,17 @@ async function restoreFrom(
   label: string,
   source: Source,
 ): Promise<Restored> {
+  return readRestored(await restorePath(bin, store, dir, prefix, label, source));
+}
+
+async function restorePath(
+  bin: string,
+  store: Store,
+  dir: string,
+  prefix: string,
+  label: string,
+  source: Source,
+): Promise<string> {
   const config = writeConfig({
     dbPath: source.dbPath,
     store,
@@ -664,7 +682,7 @@ async function restoreFrom(
   });
   const outPath = join(dir, `${label}.db`);
   await restore(bin, config, source.dbPath, outPath);
-  return readRestored(outPath);
+  return outPath;
 }
 
 /**

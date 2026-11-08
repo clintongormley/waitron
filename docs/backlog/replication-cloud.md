@@ -731,19 +731,6 @@ possibly still open: a running `integrity_check` does not stop for it. The bucke
 signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (Ruling R53).
 
 
-## Bundle A1401: Find out why the failover bench reports a corrupt database
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Loose ends left by the SQLite failover-loop prototype gate.** Validate every supported object
-  store. A promoted node's generation and Cloud's recovery orchestration remain; settle the
-  Waitron ↔ Waitron Cloud contract before assigning them.
-  [Detail](replication-cloud.md#loose-ends-left-by-the-sqlite-failover-loop-prototype-gate)
-- **The bench's S3 sometimes throws `database disk image is malformed`.** Seen 2026-11-03 on one
-  Mac in 5 of 14 whole-table `bench/sqlite-failover` runs, including 1 of 7 with S2's file from
-  before A1018 Slice 3, so it also throws with main's bench code; S3 run alone passed 2 of 2. Cause not
-  investigated.
-
 ## Bundle: Series and module-preparation gaps at handover
 
 3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

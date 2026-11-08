@@ -1201,3 +1201,29 @@ evidence for a result is its recorded run in the pull request that produced it, 
 and the assertions that no mutation drives. It has such a section for S0, S2's Parts A to E, S3, S4, S5, `LS` and
 `RUNNER`. **S1, S6 and `smoke` have none** — S1's section states what it does and does not model but
 records no mutation — so what drives those three scenarios' assertions is not written down anywhere.
+
+
+## S3 corruption investigation (2026-11-08, A1401)
+
+The earlier runs above remain historical observations. On 8 November, one full run and ten
+isolated diagnostic runs on Litestream 0.5.18 passed; ten isolated diagnostic runs on 0.5.17
+also passed. Those passes do not establish that either version repaired the intermittent error.
+
+A diagnostic copy changing only the write interval from 250 ms to 50 ms, plus stage logging and
+retention of its temporary directory, reproduced `database disk image is malformed`. The stack
+ended in `openNode`'s schema execution while reading `restored-control.db` in Part B. The direct
+and mirrored restores had already passed their comparisons. Part B intentionally mixes two
+lineages; its control expected a readable damaged database and never handled SQLite refusing to
+read that file. This reproduces a mechanism for the historical symptom; the old failed files
+were not retained here, so their precise failure site remains unverified.
+
+The same faster-write probe after the repair passed with 73 direct and mirrored rows, equal
+restored hashes, `control-rows=unreadable`, and SQLite's corruption message. The repair records
+native SQLite corruption only at Part B's read boundary; restore-command failures, unrelated
+read failures and the other restore paths retain their failure behavior. Native-SQLite checks
+run with `node --test bench/sqlite-failover/test/additive-control.test.ts`; the first run with a
+passthrough reader failed the corruption case while six controls passed, and all seven passed
+with the classification in place. These checks are standalone, outside package CI.
+
+The remaining provider checks and promotion/Cloud contract are still listed under
+[the prototype's loose ends](../backlog/replication-cloud.md#loose-ends-left-by-the-sqlite-failover-loop-prototype-gate).
