@@ -5568,7 +5568,7 @@ describe("till-app: paying a bill by its state", () => {
         .fn()
         .mockRejectedValue({ code: "fiscal.chain_handed_over", status: 409, nodeId: "this-box" }),
     });
-    const order = await openMesa(el);
+    const order = await openPartyTable(el);
 
     emit(order, "pay-tab", { method: "card", amount: "14.00" });
     await flush(el);
