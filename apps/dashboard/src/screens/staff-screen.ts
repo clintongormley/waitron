@@ -240,6 +240,7 @@ export class StaffScreen extends LitElement {
     }
   }
 
+  // Set before awaiting so two clicks cannot create two people.
   #creating = false;
 
   #editing = false;

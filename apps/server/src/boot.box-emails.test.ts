@@ -258,10 +258,13 @@ describe("the running server's managers' email check", () => {
         };
         expect(holder.managementSend).toBeTypeOf("function");
         expect(holder.profileSend).toBeTypeOf("function");
-        await expect(holder.managementSend!(message)).rejects.toThrow("configured");
+        await expect(holder.managementSend!(message)).rejects.toMatchObject({
+          problem: "email.unconfigured",
+          uncertain: false,
+        });
         await expect(
           holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
-        ).rejects.toThrow("configured");
+        ).rejects.toMatchObject({ problem: "email.unconfigured", uncertain: false });
         if (!repair) {
           const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
             headers: { cookie: venue.managerCookie },

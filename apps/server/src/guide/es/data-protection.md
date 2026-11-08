@@ -543,14 +543,14 @@ deshabilitado puede pedir volver y aparecer en **Dispositivos que solicitan el a
 
 **Un móvil o un portátil robado que se usaba para el panel.** Deshabilitar un dispositivo solo
 cierra sus sesiones de caja; una sesión del panel pertenece a la persona. Por eso un administrador
-abre **Usuarios** y elige **Restablecer acceso** para esa persona. Cierra todas sus sesiones, borra
-su PIN, su contraseña, sus llaves de acceso, su verificación en dos pasos, sus códigos de
-recuperación y su vínculo con Google, y le envía una nueva invitación si el correo está configurado.
-Waitron no lo permite para el único administrador activo del local. Si en el último minuto ya se
-envió una invitación a esa persona, se restableció su acceso o se eligió **Habilitar y enviar
-invitación**, no cambia nada y solo indica que no se envió la invitación; vuelve a elegirlo pasado
-un minuto. El navegador también guarda la dirección de correo de la persona si eligió **Recordar mi
-correo en este dispositivo** al iniciar sesión. Si el móvil o el portátil se usaba también como
+abre **Usuarios** y elige **Restablecer acceso** para esa persona. Cierra todas sus sesiones,
+borra su PIN, su contraseña, sus llaves de acceso, su verificación en dos pasos, sus códigos de
+recuperación y su vínculo con Google, y le envía una nueva invitación si el correo está
+configurado. Waitron no lo permite para el único administrador activo del local. Si en el último
+minuto ya se envió una invitación a esa persona, se restableció su acceso o se eligió **Habilitar
+y enviar invitación**, no cambia nada y te indica que esperes un minuto antes de volver a
+intentarlo. El navegador también guarda la dirección de correo de la persona si eligió **Recordar
+mi correo en este dispositivo** al iniciar sesión. Si el móvil o el portátil se usaba también como
 caja, sigue además los pasos para un dispositivo de caja robado.
 
 **Un equipo perdido o robado.** Waitron no cifra la base de datos en el disco del equipo, así que
@@ -604,16 +604,15 @@ que están los datos depende de lo segura que fuera esa frase y de si también s
 pantalla muestra quién descargó una exportación.
 
 **Una cuenta que usó otra persona.** En **Usuarios**, un administrador elige **Deshabilitar** o
-**Restablecer acceso** para la persona. Las dos acciones cierran todas sus sesiones y borran su PIN,
-su contraseña, su verificación en dos pasos, su vínculo con Google, sus llaves de acceso y sus
-códigos de recuperación. **Restablecer acceso** envía una nueva invitación si el correo está
-configurado, y **Deshabilitar**
-mantiene fuera a la persona hasta que un administrador elija **Habilitar y enviar invitación**. Si
-en el último minuto ya se envió una invitación a esa persona, se restableció su acceso o se eligió
-**Habilitar y enviar invitación**, **Restablecer acceso** no cambia nada y solo indica que no se
-envió la invitación; vuelve a elegirlo pasado un minuto. Después revisa lo que se hizo con la
-cuenta: descarga la copia de los datos de la persona y revisa **Pedidos**. Consulta [Acceso a la
-cuenta](staff.md#account-access).
+**Restablecer acceso** para la persona. Las dos acciones cierran todas sus sesiones y borran su
+PIN, su contraseña, su verificación en dos pasos, su vínculo con Google, sus llaves de acceso y
+sus códigos de recuperación. **Restablecer acceso** envía una nueva invitación si el correo está
+configurado, y **Deshabilitar** mantiene fuera a la persona hasta que un administrador elija
+**Habilitar y enviar invitación**. Si en el último minuto ya se envió una invitación a esa
+persona, se restableció su acceso o se eligió **Habilitar y enviar invitación**, **Restablecer
+acceso** no cambia nada y te indica que esperes un minuto antes de volver a intentarlo. Después
+revisa lo que se hizo con la cuenta: descarga la copia de los datos de la persona y revisa
+**Pedidos**. Consulta [Acceso a la cuenta](staff.md#account-access).
 
 **Una factura enviada a una dirección equivocada.** El correo lleva la factura en PDF, que muestra
 el nombre, el NIF y la dirección del cliente y lo que compró. En **Pedidos**, **Ver detalle**

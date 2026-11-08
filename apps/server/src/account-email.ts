@@ -26,6 +26,7 @@ export class AccountEmailFailure extends Error {
   }
 }
 
+// Provider error text can contain credentials in connection addresses; log only these codes.
 export function accountEmailFailure(error: unknown): {
   problem: AccountEmailFailure["problem"];
   uncertain: boolean;
