@@ -226,7 +226,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-async function registroCount(workingOrderId: string): Promise<number> {
+async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
@@ -237,7 +237,7 @@ async function registroCount(workingOrderId: string): Promise<number> {
 }
 
 describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
-  it("openTab + addTabRound → payWorkingOrder settles it, files one sale + registro, table reads free", async () => {
+  it("openTab + addTabRound → payWorkingOrder settles it, files one sale + fiscal record, table reads free", async () => {
     const { cfg, coffee, water, tables } = await setupVenue();
     const tableId = await seedTable(cfg, "Pay-1", suite.db, tables.zoneId);
     const deps = { db: suite.db, backend, clock };
@@ -264,7 +264,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(tabId)).toBe(1);
-    expect(await registroCount(tabId)).toBe(1);
+    expect(await fiscalRecordCount(tabId)).toBe(1);
 
     const { rows } = await suite.db.execute<{ n: string }>(sql`
       select cast(count(*) as text) as n
@@ -293,7 +293,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     // A refused pay files no sale and no record, and the tab stays open.
     expect(await orderState(tabId)).toEqual({ status: "open", settledAtSet: false });
     expect(await saleCount(tabId)).toBe(0);
-    expect(await registroCount(tabId)).toBe(0);
+    expect(await fiscalRecordCount(tabId)).toBe(0);
   });
 });
 

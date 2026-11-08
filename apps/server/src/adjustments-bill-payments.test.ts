@@ -20,7 +20,7 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {
   inTx,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   statusOf,
   tabWith,
@@ -229,7 +229,7 @@ describe("a reduction after contributions (design §8 test 11)", () => {
     ]);
     expect({ lines: await linesOf(billId), revision: await revisionOf(billId) }).toEqual(before);
     expect(await recordedOn(billId)).toEqual([]);
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
 
     expect((await refund(billId, paymentId, "10.00")).status).toBe(200);
     const jobsBefore = new Set((await documentJobs()).map((job) => job.id));
@@ -237,7 +237,7 @@ describe("a reduction after contributions (design §8 test 11)", () => {
 
     expect(comped.status).toBe(200);
     expect(await statusOf(venue, billId)).toBe("settled");
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     expect(await tendersOfBill(venue, billId)).toEqual([
       expect.objectContaining({ method: "cash", amount: 4000, tip: 0, billPaymentId: paymentId }),
     ]);
@@ -301,7 +301,7 @@ describe("the invoice waits for the refund (design §8 test 23)", () => {
       409,
       { code: "bill.refund_in_progress", params: { workingOrderId: billId } },
     ]);
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
     expect(await recordedOn(billId)).toEqual([]);
     expect((await linesOf(billId)).map((line) => centsToDecimal(line.lineTotal))).toEqual([
       "30.00",
@@ -327,7 +327,7 @@ describe("the invoice waits for the refund (design §8 test 23)", () => {
 
     expect(last.status).toBe(200);
     expect(last.json).toMatchObject({ invoice: { total: "60.00" } });
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     const tenders = await tendersOfBill(venue, billId);
     expect(tenders.map((tender) => [tender.method, tender.amount]).sort()).toEqual(
       [

@@ -20,7 +20,7 @@ import {
   partyRevisionOf,
   placedCounterBillMovedTo,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   seatedWith,
   send,
   statusOf,
@@ -221,7 +221,7 @@ describe("a kitchen send", () => {
     expect(ticketItemsOf(party.tabId)).toBe(tickets);
     expect(printJobs()).toBe(jobs);
     expect(salesOf(party.tabId)).toBe(0);
-    expect(registroCount(venue, party.tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
   });
 
   it("sends a draft completing a part-paid bill a minute inside the last record", async () => {
@@ -232,7 +232,7 @@ describe("a kitchen send", () => {
 
     expect(answer.status).toBe(200);
     expect(await statusOf(venue, party.tabId)).toBe("settled");
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
   });
 
   it("sends the same draft on a bill with no payments", async () => {
@@ -244,7 +244,7 @@ describe("a kitchen send", () => {
 
     expect(answer.status).toBe(200);
     expect(ticketItemsOf(party.tabId)).toBeGreaterThan(tickets);
-    expect(registroCount(venue, party.tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
   });
 });
 
@@ -296,7 +296,7 @@ describe("a line edit", () => {
     expect(answer.status).toBe(409);
     expect(answer.json).toEqual(behindChain(behind));
     expect(lineQuantity(billId)).toBe(before);
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
   it("takes the same edit a minute inside the last record", async () => {
@@ -306,7 +306,7 @@ describe("a line edit", () => {
     const answer = await setQuantity(at(now - INSIDE), billId, "1");
 
     expect(answer.status).toBe(200);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 });
 
@@ -375,7 +375,7 @@ describe("a held-order save", () => {
     expect(answer.json).toEqual(behindChain(behind));
     expect(dishLines(billId)).toEqual(before);
     expect(before.reduce((sum, line) => sum + line.quantity, 0)).toBe(2000);
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
   it("takes the same save a minute inside the last record", async () => {
@@ -386,7 +386,7 @@ describe("a held-order save", () => {
 
     expect(answer.status).toBe(200);
     expect(dishLines(billId).map((line) => line.quantity)).toEqual([1000]);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 });
 
@@ -403,7 +403,7 @@ describe("an unpaid departure", () => {
   async function withFiledInvoice(now: number) {
     const party = await seatedWith(venueAt(now));
     const placedId = await placedCounterBillMovedTo(venueAt(now), counterZone, party, true);
-    expect(registroCount(venue, placedId)).toBe(1);
+    expect(fiscalRecordCount(venue, placedId)).toBe(1);
     return { party, placedId };
   }
 
@@ -418,7 +418,7 @@ describe("an unpaid departure", () => {
     expect(answer.json).toEqual(behindChain(behind));
     expect(partyStateOf(party.partyId)).toBe("open");
     expect(salesOf(party.tabId)).toBe(0);
-    expect(registroCount(venue, party.tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
     expect(departureRowsOf(party.partyId)).toBe(0);
   });
 
@@ -429,7 +429,7 @@ describe("an unpaid departure", () => {
     const answer = await depart(at(now - INSIDE), party.partyId);
 
     expect(answer.status).toBe(200);
-    expect(registroCount(venue, party.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(departureRowsOf(party.partyId)).toBe(1);
   });
 

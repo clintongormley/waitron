@@ -23,7 +23,7 @@ import {
   inTx,
   provisionBillVenue,
   tabWith,
-  registroCount,
+  fiscalRecordCount,
   type BillVenue,
 } from "./testing/bill-venue.js";
 
@@ -251,7 +251,7 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
         ? { outcome: "captured", ticket: { total: "35.00" } }
         : { total: "35.00" },
     );
-    expect(registroCount(venue, p.id)).toBe(1);
+    expect(fiscalRecordCount(venue, p.id)).toBe(1);
     expect(await edit(p.id)).toEqual(current);
     expect(await edit(id)).toEqual(owned.edit);
   });
@@ -321,7 +321,7 @@ describe.each(["reader", "reader-placed"] as const)("%s captured recovery", (mod
     const outcome = await run(mode, p, null);
     expect(outcome).toMatchObject({ outcome: "captured", ticket: { total: "35.00" } });
     expect(venue.card.collectCalls.length).toBe(calls);
-    expect(registroCount(venue, p.id)).toBe(1);
+    expect(fiscalRecordCount(venue, p.id)).toBe(1);
     expect(await edit(p.id)).toEqual(before);
   });
 });
@@ -378,7 +378,7 @@ describe.each(["sale", "collect", "reader"] as const)("%s HTTP authority", (mode
           ? { outcome: "captured", ticket: { total: "35.00" } }
           : { total: "35.00" },
     });
-    expect(registroCount(venue, p.id)).toBe(1);
+    expect(fiscalRecordCount(venue, p.id)).toBe(1);
     expect(await edit(p.id)).toEqual(current);
   });
 });

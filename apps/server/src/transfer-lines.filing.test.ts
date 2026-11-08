@@ -202,7 +202,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
 }
 
 /** How many chained `registros_facturacion` rows exist for this working order's sale. */
-async function registroCount(workingOrderId: string): Promise<number> {
+async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
@@ -235,8 +235,8 @@ beforeAll(() => {
   });
 });
 
-describe("H2 — after a partial transfer, each tab files its OWN single registro (no double-file, no re-price)", () => {
-  it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one registro each, at the locked price", async () => {
+describe("H2 — after a partial transfer, each tab files its OWN single fiscal record (no double-file, no re-price)", () => {
+  it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one fiscal record each, at the locked price", async () => {
     const { cfg, tabA, tabB } = await setupTwoTabs(); // A: café×4, B: café×4
     await withTransaction(suite.db, async (tx) => {
       const party = (await partyRevisionOfOrder(tx, tabA))!;
@@ -260,12 +260,12 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
       tender: { method: "cash", amount: "20.00" },
     });
 
-    // Each tab files EXACTLY one sale + one chained registro — no café double-files (every café lives on
+    // Each tab files EXACTLY one sale + one chained fiscal record — no café double-files (every café lives on
     // exactly one tab after the split), the H2 invariant the transfer must preserve.
     expect(await saleCount(tabA)).toBe(1);
     expect(await saleCount(tabB)).toBe(1);
-    expect(await registroCount(tabA)).toBe(1);
-    expect(await registroCount(tabB)).toBe(1);
+    expect(await fiscalRecordCount(tabA)).toBe(1);
+    expect(await fiscalRecordCount(tabB)).toBe(1);
 
     // Filed at the LOCKED café price (1.50), never re-priced by the transfer: A = 3 × 1.50, B = 5 × 1.50.
     // Read back from the IMMUTABLE `sales.total` too, not only the returned object.

@@ -55,7 +55,7 @@ import {
 import {
   placedCounterBillMovedTo,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   seatedWith,
   send,
   tendersOfBill,
@@ -1262,7 +1262,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
         .where(eq(sales.workingOrderId, billId)),
     );
     expect(filed).toEqual([{ id: expect.any(String), settledAt: null }]);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     const t = await seatedWith(venue);
 
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${t.partyId}/join`, {
@@ -1336,7 +1336,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       tender: { method: "cash", change: "2.00" },
     });
     // The invoice filed at placing is the one settled: no second record, for this bill or any other.
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     expect(venue.db.all(sql`select id from sales`)).toEqual([{ id: filed[0]!.id }]);
     const settled = await inTx(suite, (tx) =>
       tx

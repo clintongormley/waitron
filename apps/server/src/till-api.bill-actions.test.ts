@@ -13,7 +13,7 @@ import { createTable } from "./testing/live-table.js";
 import {
   inTx,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   statusOf,
   type BillVenue,
@@ -440,7 +440,7 @@ describe("the bill action routes", () => {
       },
       operator,
     );
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
 
     const answer = await post(`/api/bills/${tabId}/split`, {
       transfers: [{ lineNo: 2 }],
@@ -448,9 +448,9 @@ describe("the bill action routes", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(registroCount(venue, tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, tabId)).toBe(1);
     expect(await statusOf(venue, tabId)).toBe("settled");
-    expect(registroCount(venue, answer.json.billId as string)).toBe(0);
+    expect(fiscalRecordCount(venue, answer.json.billId as string)).toBe(0);
   });
 });
 

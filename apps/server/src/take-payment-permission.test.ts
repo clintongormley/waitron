@@ -14,7 +14,7 @@ import {
   inTx,
   paymentRows,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   statusOf,
   tabWith,
@@ -116,7 +116,7 @@ async function presentedTarta(): Promise<string> {
   });
   await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   expect(await statusOf(venue, id)).toBe("placed");
-  expect(registroCount(venue, id)).toBe(0);
+  expect(fiscalRecordCount(venue, id)).toBe(0);
   return id;
 }
 
@@ -169,7 +169,7 @@ describe("POST /api/sales needs sale.take_payment", () => {
     expectAsked();
     expect(workingOrderCount(id)).toBe(0);
     expect(salesCount(id)).toBe(0);
-    expect(registroCount(venue, id)).toBe(0);
+    expect(fiscalRecordCount(venue, id)).toBe(0);
   });
 
   it("sells the same cash counter sale when the permission is held", async () => {
@@ -180,7 +180,7 @@ describe("POST /api/sales needs sale.take_payment", () => {
     expect(answer.status).toBe(200);
     expectAsked();
     expect(await statusOf(venue, id)).toBe("settled");
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
   });
 
   it("refuses a hand-keyed card payment of a tab and leaves the tab open and unpaid", async () => {
@@ -192,7 +192,7 @@ describe("POST /api/sales needs sale.take_payment", () => {
     expectAsked();
     expect(await statusOf(venue, tabId)).toBe("open");
     expect(salesCount(tabId)).toBe(0);
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
     expect(await tendersOfBill(venue, tabId)).toEqual([]);
   });
 
@@ -225,7 +225,7 @@ describe("POST /api/pay needs sale.take_payment", () => {
     expect(await statusOf(venue, tabId)).toBe("open");
     expect(await paymentAttemptOf(tabId)).toBeNull();
     expect(await providerPaymentsOf(tabId)).toEqual([]);
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
   });
 
   it("charges the reader when the permission is held", async () => {
@@ -257,7 +257,7 @@ describe("POST /api/working-orders/:id/collect needs sale.take_payment", () => {
     expectAsked();
     expect(await statusOf(venue, id)).toBe("placed");
     expect(salesCount(id)).toBe(0);
-    expect(registroCount(venue, id)).toBe(0);
+    expect(fiscalRecordCount(venue, id)).toBe(0);
     expect(await tendersOfBill(venue, id)).toEqual([]);
   });
 
@@ -269,7 +269,7 @@ describe("POST /api/working-orders/:id/collect needs sale.take_payment", () => {
     expect(answer.status).toBe(200);
     expectAsked();
     expect(await statusOf(venue, id)).toBe("settled");
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
   });
 });
 
@@ -292,7 +292,7 @@ describe("POST /api/working-orders/:id/payments needs sale.take_payment on every
     expect(await providerPaymentsOf(billId)).toEqual([]);
     expect(venue.card.collectCalls.length).toBe(readerCalls);
     expect(await statusOf(venue, billId)).toBe("open");
-    expect(registroCount(venue, billId)).toBe(0);
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
   it.each(entries)("takes $name when the permission is held", async ({ body }) => {

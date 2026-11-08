@@ -12,7 +12,7 @@ import { createTable } from "./testing/live-table.js";
 import {
   inTx,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   statusOf,
   type BillVenue,
@@ -382,19 +382,19 @@ describe("A803 move dishes route:", () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     await contribute(tabId, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
 
     const answer = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], null));
 
     expect(answer.status).toBe(200);
     expect(await statusOf(venue, tabId)).toBe("settled");
-    expect(registroCount(venue, tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, tabId)).toBe(1);
     const sales = salesOf(tabId);
     expect(sales).toHaveLength(1);
     expect(sales[0]!.invoiceNumber).toBeGreaterThanOrEqual(1);
     expect(sales[0]!.total).toBe("3500");
     const moved = answer.json.billId as string;
-    expect(registroCount(venue, moved)).toBe(0);
+    expect(fiscalRecordCount(venue, moved)).toBe(0);
     expect(salesOf(moved)).toEqual([]);
     expect(await statusOf(venue, moved)).toBe("open");
   });
@@ -408,7 +408,7 @@ describe("A803 move dishes route:", () => {
 
     expect(answer.status).toBe(200);
     expect(await statusOf(venue, tabId)).toBe("open");
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
     expect(salesOf(tabId)).toEqual([]);
   });
 
@@ -445,7 +445,7 @@ describe("A803 move dishes route:", () => {
       expect(after.json.payments).toEqual(before.json.payments);
       expect(after.json.paidLines).toEqual(before.json.paidLines);
       expect(lineIdsOf(destination)).toContain(cakeLineId);
-      expect(registroCount(venue, destination)).toBe(0);
+      expect(fiscalRecordCount(venue, destination)).toBe(0);
 
       const rest = await pay(destination, {
         kind: "contribution",
@@ -457,7 +457,7 @@ describe("A803 move dishes route:", () => {
 
       expect(rest.status, JSON.stringify(rest.json)).toBe(200);
       expect(await statusOf(venue, destination)).toBe("settled");
-      expect(registroCount(venue, destination)).toBe(1);
+      expect(fiscalRecordCount(venue, destination)).toBe(1);
       expect(salesOf(destination).map((sale) => sale.total)).toEqual(["5600"]);
       expect(invoiced(destination).names).toContain("Tarta");
       expect(invoiced(destination).tenders).toEqual([2100, 3500]);
@@ -480,10 +480,10 @@ describe("A803 move dishes route:", () => {
 
     expect(moved.status, JSON.stringify(moved.json)).toBe(200);
     expect(await statusOf(venue, tabId)).toBe("settled");
-    expect(registroCount(venue, tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, tabId)).toBe(1);
     expect(salesOf(tabId).map((sale) => sale.total)).toEqual(["3500"]);
     expect(await statusOf(venue, destination)).toBe("open");
-    expect(registroCount(venue, destination)).toBe(0);
+    expect(fiscalRecordCount(venue, destination)).toBe(0);
     expect(salesOf(destination)).toEqual([]);
     expect((await paymentsRead(destination)).json).toMatchObject({
       total: "28.00",

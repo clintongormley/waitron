@@ -25,7 +25,7 @@ import {
   inTx,
   paymentRows,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   tabWith,
   type BillVenue,
@@ -226,7 +226,7 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
     expect(again.json.outcome).toBe("captured");
     expect(collects()).toBe(before + 1);
     expect(count("sales", "working_order_id", id)).toBe(1);
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
   });
 
   it("says so when a placed order's settlement fails after the charge", async () => {
@@ -488,7 +488,7 @@ describe("a bill's reader payment when the bill's sale fails for a full disk aft
     });
 
     expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["received"]);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     expect(collects()).toBe(before + 1);
   });
 
@@ -670,7 +670,7 @@ describe.each(REAL_PROVIDERS)(
       expect(again.status).toBe(200);
       expect(again.json.outcome).toBe("captured");
       expect(await real.charges()).toEqual([charged]);
-      expect(registroCount(venue, id)).toBe(1);
+      expect(fiscalRecordCount(venue, id)).toBe(1);
     });
 
     it("says the card was charged on a bill's reader payment, and the pending pass completes it", async () => {
@@ -706,7 +706,7 @@ describe.each(REAL_PROVIDERS)(
 
       expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["received"]);
       expect(await real.charges()).toEqual([charged]);
-      expect(registroCount(venue, billId)).toBe(1);
+      expect(fiscalRecordCount(venue, billId)).toBe(1);
     });
 
     it("still says the sale is not recorded when the attempt cannot be saved, before any charge", async () => {

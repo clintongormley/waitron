@@ -18,7 +18,7 @@ import {
   inTx,
   paymentRows,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   seatedWith,
   send,
   statusOf,
@@ -265,7 +265,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     expect(paid.status).toBe(200);
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, firstParty.tabId)).toBe("settled");
-    expect(registroCount(venue, firstParty.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(1);
     expect(kitchenItems(firstParty.tabId)).toEqual({ items: 1, fired: 1 });
   });
 
@@ -278,7 +278,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     expect(moved.status).toBe(200);
     expect(paid.status).toBe(200);
     expect(await statusOf(venue, firstParty.tabId)).toBe("settled");
-    expect(registroCount(venue, firstParty.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(1);
     expect(kitchenItems(firstParty.tabId)).toEqual({ items: 1, fired: 1 });
   });
 
@@ -297,7 +297,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
       expect(moved.status).toBe(200);
       expect(paid.status).toBe(200);
       expect(await statusOf(venue, firstParty.tabId)).toBe("settled");
-      expect(registroCount(venue, firstParty.tabId)).toBe(1);
+      expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(1);
       expect(kitchenItems(firstParty.tabId)).toEqual({ items: 1, fired: 1 });
     },
   );
@@ -311,7 +311,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     expect(moved.status).toBe(200);
     expect(placed.status).toBe(200);
     expect(placed.json).toEqual({ id: firstParty.tabId, status: "placed" });
-    expect(registroCount(venue, firstParty.tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(0);
     expect(
       venue.db.all(sql`select id from sales where working_order_id = ${firstParty.tabId}`),
     ).toEqual([]);
@@ -326,7 +326,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
     });
     expect(await statusOf(venue, firstParty.tabId)).toBe("settled");
-    expect(registroCount(venue, firstParty.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(1);
     expect(kitchenItems(firstParty.tabId)).toEqual({ items: 1, fired: 1 });
   });
 
@@ -343,7 +343,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     expect(moved.json).toEqual({ partyId: seatedParty.partyId, billId: orderId });
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, orderId)).toBe("settled");
-    expect(registroCount(venue, orderId)).toBe(1);
+    expect(fiscalRecordCount(venue, orderId)).toBe(1);
     expect(kitchenItems(orderId)).toEqual({ items: 1, fired: 1 });
   });
 
@@ -359,7 +359,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     expect(sent).toEqual({ items: 1, fired: 1 });
     expect(paid.status).toBe(200);
     expect(await statusOf(venue, orderId)).toBe("settled");
-    expect(registroCount(venue, orderId)).toBe(1);
+    expect(fiscalRecordCount(venue, orderId)).toBe(1);
     expect(kitchenItems(orderId)).toEqual({ items: 1, fired: 1 });
   });
 });
@@ -413,7 +413,7 @@ describe("money on a moved bill", () => {
     expect(retry.json).toMatchObject({ outcome: "received", invoice: { total: "20.00" } });
     expect(venue.card.collectCalls.length).toBe(calls + 1);
     expect(await paymentRows(venue, billId)).toHaveLength(1);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
     expect(await statusOf(venue, billId)).toBe("settled");
     const [row] = venue.db.all<{ party_id: string }>(
       sql`select party_id from working_orders where id = ${billId}`,
@@ -504,7 +504,7 @@ describe("money on a moved bill", () => {
         .orderBy(saleLines.lineNo),
     );
     expect(invoiced).toEqual([{ name: "Pulpo" }, { name: "Croquetas" }]);
-    expect(registroCount(venue, billId)).toBe(1);
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
   it("collects a presented counter bill moved into a party in another zone by settling its one invoice", async () => {
@@ -542,7 +542,7 @@ describe("money on a moved bill", () => {
     expect(moved.json).toEqual({ partyId: firstParty.partyId, billId: id });
     expect(collected.status).toBe(200);
     expect(venue.db.all(sql`select id from sales where working_order_id = ${id}`)).toEqual(issued);
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
     expect(await statusOf(venue, id)).toBe("settled");
   });
 });
@@ -632,7 +632,7 @@ describe("paying a moved bill, by its state", () => {
     expect(rest.status).toBe(200);
     expect(rest.json).toMatchObject({ outcome: "received", invoice: { total: "20.00" } });
     expect(await statusOf(venue, firstParty.tabId)).toBe("settled");
-    expect(registroCount(venue, firstParty.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(1);
   });
 
   it("refuses a presented bill moved into a party as a bill payment, collects it with its one sale, and the party then finishes", async () => {
@@ -705,7 +705,7 @@ describe("paying a moved bill, by its state", () => {
     ]);
     expect(collected.status).toBe(200);
     expect(venue.db.all(sql`select id from sales where working_order_id = ${id}`)).toEqual(issued);
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
     expect(await statusOf(venue, id)).toBe("settled");
     expect(finished.status).toBe(200);
     const [party] = venue.db.all<{ state: string }>(
@@ -728,7 +728,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     expect(moved.json).toEqual({ partyId: secondParty.partyId, billId });
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, secondParty.tabId)).toBe("settled");
-    expect(registroCount(venue, secondParty.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, secondParty.tabId)).toBe(1);
     expect(linesNamed(secondParty.tabId)).toEqual(["Caña"]);
     expect(await statusOf(venue, billId)).toBe("open");
     expect(partyOfBill(billId)).toBe(secondParty.partyId);
@@ -748,7 +748,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     expect(moved.json).toEqual({ partyId: seatedParty.partyId, billId: orderId });
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, orderId)).toBe("settled");
-    expect(registroCount(venue, orderId)).toBe(1);
+    expect(fiscalRecordCount(venue, orderId)).toBe(1);
     expect(partyOfBill(orderId)).toBe(seatedParty.partyId);
     expect(linesNamed(orderId)).toEqual(["Tarta"]);
     expect(await statusOf(venue, seatedParty.tabId)).toBe("open");

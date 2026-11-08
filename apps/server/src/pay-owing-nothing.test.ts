@@ -26,7 +26,7 @@ import {
   inTx,
   partyRevisionOf,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   seatedWith,
   send,
   statusOf,
@@ -145,7 +145,7 @@ function drawerJobCount(): number {
 /** The bill closed as one owing nothing: one invoice of 0.00, settled, and nothing paid. */
 async function expectClosedOwingNothing(billId: string): Promise<void> {
   expect(await statusOf(venue, billId)).toBe("settled");
-  expect(registroCount(venue, billId)).toBe(1);
+  expect(fiscalRecordCount(venue, billId)).toBe(1);
   expect(await salesOf(billId)).toEqual([
     { id: expect.any(String), total: 0, settledAt: expect.any(String) },
   ]);
@@ -210,7 +210,7 @@ describe("Pay on a bill whose every line was given away", () => {
 
     expect(answer.json).toMatchObject({ code: "shared.invalid_decimal" });
     expect(await statusOf(venue, tabId)).toBe("open");
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
   });
 
   it("lets Finish table close the party once the bill is paid and its food served", async () => {
@@ -276,7 +276,7 @@ describe("the card reader on a bill whose every line was given away", () => {
 
     expect(answer.json).toMatchObject({ code: "shared.invalid_decimal" });
     expect(await statusOf(venue, tabId)).toBe("open");
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
   });
 
   it("leaves a party's unsent dish unsent in a zone that sends before payment, where the same dish with no party is sent once", async () => {
@@ -374,7 +374,7 @@ async function presentedGivenAway(): Promise<string> {
   await giveAway(venue, id, 1);
   await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   expect(await statusOf(venue, id)).toBe("placed");
-  expect(registroCount(venue, id)).toBe(0);
+  expect(fiscalRecordCount(venue, id)).toBe(0);
   return id;
 }
 
@@ -400,7 +400,7 @@ describe("other ways a bill owing nothing is paid", () => {
 
     expect([answer.status, answer.json.code]).toEqual([400, "sale.tender_shortfall"]);
     expect(await statusOf(venue, tabId)).toBe("open");
-    expect(registroCount(venue, tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, tabId)).toBe(0);
   });
 
   it("closes a presented order given away before it was presented, on the reader without charging", async () => {
