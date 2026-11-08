@@ -186,7 +186,7 @@ describe("a start whose node's chain was recorded under another producer", () =>
   it("trades when the running producer is the one the chain was recorded under", async () => {
     const { server, cleanUp } = await startWith(HEAD_PRODUCER_NIF);
     try {
-      expect(await poll(() => server.health.lastPassAt ?? undefined)).not.toBeNull();
+      await poll(() => server.health.lastPassAt ?? undefined);
     } finally {
       await server.close();
       await cleanUp();
@@ -194,6 +194,7 @@ describe("a start whose node's chain was recorded under another producer", () =>
   }, 60_000);
 
   // The same node and chain head, started as a mirror: a mirror adds no record, so it is not asked.
+  // Stays last: it leaves the shared venue a mirror.
   it("trades as a mirror with the other producer", async () => {
     await writeMirrorLink(node, NODE_ID, {
       relayUrl: "http://127.0.0.1:1/",
@@ -204,7 +205,7 @@ describe("a start whose node's chain was recorded under another producer", () =>
     await setNodeMode({ venue: db, node }, NODE_ID, "mirror");
     const { server, cleanUp } = await startWith(undefined);
     try {
-      expect(await poll(() => server.health.lastPassAt ?? undefined)).not.toBeNull();
+      await poll(() => server.health.lastPassAt ?? undefined);
     } finally {
       await server.close();
       await cleanUp();
