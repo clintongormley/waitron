@@ -199,7 +199,7 @@ jobs:
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
           # emit nothing, and it matters for ONE of the outputs rather than being a nicety for all of
           # them: `code`. An empty `scope` would be safe: it is neither `packages` nor `brand`, so
-          # every branch below falls through to running everything. An empty `code` would NOT be —
+          # non-main gates fall through to unscoped selection. An empty `code` would NOT be —
           # every code-gated job tests `needs.changes.outputs.code == 'true'` (bundle-smoke,
           # typecheck, all test shards and both mutation runs), so an empty value skips them, and
           # the `ci` aggregate counts a skip as a pass by design. That is a green pull request with
@@ -267,6 +267,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${MAIN_PUSH:-}" = "true" ]; then
+            echo "Main push: package tests run on pull requests and full runs." >&2
             printf '[]\n' | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           elif { [ "$SCOPE" != "packages" ] && [ "$SCOPE" != "brand" ]; } || [ -z "$PACKAGES" ]; then
             node scripts/changed-scope.mjs --unscoped >> "$GITHUB_OUTPUT"

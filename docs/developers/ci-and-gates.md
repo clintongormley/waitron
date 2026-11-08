@@ -1525,13 +1525,16 @@ on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's
 root `scripts/` is scanned.
 
 `lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) run on every
-CI run except a `server_probe` dispatch, so a regression in a path the gated test jobs skip is caught there only as far as the root
-suites exercise it. On a pull request or ordinary `main` push, `lint` restores results an earlier
-`main` run kept for the same inputs, if there are any (see "The lint job reuses earlier results
-except on a full run").
+CI run except a `server_probe` dispatch, so a regression in a path the gated test jobs skip is
+caught there only as far as the root suites exercise it. On a pull request or ordinary `main`
+push, `lint` restores results an earlier `main` run kept for the same inputs, if there are any
+(see "The lint job reuses earlier results except on a full run").
 
-Read the `changes` job's `code`, `scope` and `packages` outputs
-before treating a green PR as evidence about the workspace. Designed and built in #27.
+Main uses the newest completed successful main ancestor to scope quick checks. A later docs
+push includes earlier failed or unfinished changes in that range, but starts no package tests
+in `ci.yml`. Use a manual full run or the next nightly run to test the combined packages.
+Read the event and the `changes` job's `code`, `scope`, `packages` and named package gates
+before treating a green run as evidence about the workspace.
 
 ### Main can reuse an identical pull-request tree
 
@@ -1723,8 +1726,10 @@ from the cancellation above: there is no run to rerun.
 
 Main pushes compare against the newest completed successful main ancestor among the latest 100
 push, schedule and dispatch runs. The range includes failed or unfinished changes, so a later docs
-push still selects their packages. No eligible ancestor, unavailable API/history, or unsafe,
-oversized or partial diff output selects all packages. PRs retain merge-base scope.
+push still selects their quick checks, not package tests. No eligible ancestor, unavailable
+API/history, or unsafe, oversized or partial diff output selects global change scope. Main's
+package gates remain false. PRs retain merge-base scope. A missed code commit gets full package
+verification through the manual run below or the next nightly run.
 
 Use `gh workflow run ci.yml --ref main` for an immediate full run. Record its SHA and run ID and
 read its result; the run verifies the selected tree and publishes its images after success.
