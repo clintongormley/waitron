@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Fast feedback before upload: sign-off, locked install, formatting, lint, root guards and types.
-# Package tests and coverage belong to CI; focused behavioral tests run during implementation.
+# Fast feedback before upload: sign-off, locked install, formatting, lint and types.
+# Tests and coverage belong to CI; focused behavioral tests run during implementation.
 # Git starts hooks at the repository root; Husky invokes this script with sh -e.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
@@ -143,9 +143,41 @@ if [ "$scope_kind" = "packages" ] && [ -n "$scope_packages" ]; then
   scope_label="$scope_packages + dependents"
 fi
 
+check_changed() {
+  tool_args=$#
+  while IFS= read -r path; do
+    if [ -f "$path" ] && [ ! -L "$path" ]; then set -- "$@" "$path"; fi
+  done <<EOF
+$(printf '%s\n' "$changed_paths" | sort -u)
+EOF
+  if [ "$#" -eq "$tool_args" ]; then
+    echo "  no changed files to check"
+    return 0
+  fi
+  "$@"
+}
+
+check_format() {
+  case "$scope_kind" in
+  packages|root|documentation)
+    check_changed pnpm exec prettier --check --ignore-unknown --cache --cache-strategy content \
+      --cache-location node_modules/.cache/waitron-pre-push/prettier -- ;;
+  *) pnpm format:check ;;
+  esac
+}
+
+check_lint() {
+  case "$scope_kind" in
+  packages|root|documentation)
+    check_changed pnpm exec eslint --no-warn-ignored --cache --cache-strategy content \
+      --cache-location node_modules/.cache/waitron-pre-push/eslint -- ;;
+  *) pnpm lint ;;
+  esac
+}
+
 run_step "install (--frozen-lockfile)" "pnpm install --frozen-lockfile" \
   pnpm install --frozen-lockfile
-run_step "format check" "pnpm format:check" pnpm format:check
+run_step "format check" "pnpm format:check" check_format
 
 if [ "$scope_kind" = "documentation" ]; then
   end_ts=$(date +%s)
@@ -153,14 +185,11 @@ if [ "$scope_kind" = "documentation" ]; then
   exit 0
 fi
 
-run_step "lint" "pnpm lint" pnpm lint
-
-# Root guards read the whole tree and must not be narrowed to selected packages.
-run_step "repo-level suite" "pnpm vitest run --coverage" pnpm vitest run --coverage
+run_step "lint" "pnpm lint" check_lint
 
 if [ "$scope_kind" = "root" ]; then
   end_ts=$(date +%s)
-  echo "pre-push: repository machinery only — typecheck and package tests skipped, $((end_ts - start_ts))s"
+  echo "pre-push: repository machinery only — typecheck and tests skipped, $((end_ts - start_ts))s"
   exit 0
 fi
 
@@ -176,4 +205,4 @@ fi
 
 run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
 end_ts=$(date +%s)
-echo "pre-push: all local checks passed in $((end_ts - start_ts))s ($scope_label); package tests and coverage run in CI"
+echo "pre-push: all local checks passed in $((end_ts - start_ts))s ($scope_label); tests and coverage run in CI"

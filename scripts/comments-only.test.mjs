@@ -7,8 +7,6 @@ import { checkCommentsOnly, compareSources, main } from "./comments-only.mjs";
 
 const SCRIPT = join(import.meta.dirname, "comments-only.mjs");
 
-// Git sets GIT_DIR for every hook it runs, and it outranks `cwd`: without dropping these a fixture
-// commit made under the pre-push hook lands in the real repository (scripts/check-signoff.test.mjs).
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
   "GIT_WORK_TREE",

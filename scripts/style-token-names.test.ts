@@ -41,8 +41,6 @@ const repoRoot = join(import.meta.dirname, "..");
 const GIT_SPAWN_TIMEOUT_MS = 30_000;
 const SPAWN_TEST_TIMEOUT_MS = 60_000;
 
-// Git exports `GIT_DIR` to every hook and `.husky/pre-push` runs this suite; an inherited override
-// would point `git ls-files` at another repository.
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
   "GIT_WORK_TREE",

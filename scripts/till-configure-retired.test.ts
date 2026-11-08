@@ -4,8 +4,6 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 
-// Git exports `GIT_DIR` to every hook and `.husky/pre-push` runs this suite; an inherited override
-// would point `git grep` at another repository.
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
   "GIT_WORK_TREE",

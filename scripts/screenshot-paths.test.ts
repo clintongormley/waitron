@@ -27,7 +27,6 @@ const ROOTS = ["apps", "packages"];
 const GIT_SPAWN_TIMEOUT_MS = 30_000;
 const SPAWN_TEST_TIMEOUT_MS = 60_000;
 
-/** Git exports `GIT_DIR` to every hook and `.husky/pre-push` runs this suite. */
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
   "GIT_WORK_TREE",

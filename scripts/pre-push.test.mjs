@@ -1,5 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -17,7 +26,11 @@ const HOOK_TIMEOUT_MS = 15_000;
 vi.setConfig({ testTimeout: HOOK_TIMEOUT_MS + 10_000 });
 
 // Exercise the real shell and classifiers; pnpm records requests without launching nested suites.
-function fixture(path, run, { signed = true, fail = "", emptySelection = false } = {}) {
+function fixture(
+  path,
+  run,
+  { signed = true, fail = "", emptySelection = false, realFormat = false } = {},
+) {
   const dir = mkdtempSync(join(tmpdir(), "waitron-push-"));
   // Outside `dir`, because the fixture runs `git add .` there.
   const remote = mkdtempSync(join(tmpdir(), "waitron-push-remote-"));
@@ -60,6 +73,8 @@ function fixture(path, run, { signed = true, fail = "", emptySelection = false }
         }),
       );
     }
+    mkdirSync(join(dir, "packages/source/src"), { recursive: true });
+    writeFileSync(join(dir, "packages/source/src/deleted.ts"), "base\n");
     mkdirSync(join(dir, "bin"));
     writeFileSync(
       join(dir, "bin", "pnpm"),
@@ -68,8 +83,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.PUSH_LOG, JSON.stringify(args) + "\\n");
-const kind = args.includes("ls") ? "ls" : args.includes("vitest") ? "root-tests" : args.at(-1);
+const kind = args.includes("ls") ? "ls" : args.includes("vitest") ? "root-tests" : args.includes("prettier") ? "format:check" : args.includes("eslint") ? "lint" : args.at(-1);
 if (process.env.PUSH_FAIL === kind) process.exit(17);
+if (process.env.PUSH_REAL_FORMAT === "1" && kind === "format:check") {
+  const result = require("node:child_process").spawnSync(process.execPath,
+    [${JSON.stringify(join(root, "node_modules/prettier/bin/prettier.cjs"))}, ...(args[0] === "exec" ? args.slice(2) : ["--check", "."])], { stdio: "inherit" });
+  process.exit(result.status ?? 1);
+}
 if (kind === "ls") {
   const selected = process.env.PUSH_EMPTY === "1" && args.includes("--filter") ? [] :
     ["source", "consumer"].map(name => ({ name: "@waitron/" + name, path: path.join(process.cwd(), "packages", name) }));
@@ -111,6 +131,7 @@ if (kind === "ls") {
           PUSH_LOG: log,
           PUSH_FAIL: fail,
           PUSH_EMPTY: emptySelection ? "1" : "0",
+          PUSH_REAL_FORMAT: realFormat ? "1" : "0",
           WAITRON_PRE_PUSH_FETCH_SECONDS: "5",
           ...extraEnv,
         },
@@ -139,40 +160,60 @@ function rebaseOntoUnsignedMain({ git, dir, base, head }) {
   return { main, rebased: git("rev-parse", "HEAD") };
 }
 
-const cheap = [
-  ["install", "--frozen-lockfile"],
-  ["format:check"],
-  ["lint"],
-  ["vitest", "run", "--coverage"],
+const install = ["install", "--frozen-lockfile"];
+const whole = [install, ["format:check"], ["lint"]];
+const cached = ["--cache", "--cache-strategy", "content", "--cache-location"];
+const cheap = (...paths) => [
+  install,
+  [
+    "exec",
+    "prettier",
+    "--check",
+    "--ignore-unknown",
+    ...cached,
+    "node_modules/.cache/waitron-pre-push/prettier",
+    "--",
+    ...paths,
+  ],
+  [
+    "exec",
+    "eslint",
+    "--no-warn-ignored",
+    ...cached,
+    "node_modules/.cache/waitron-pre-push/eslint",
+    "--",
+    ...paths,
+  ],
 ];
+const checks = cheap("packages/source/src/index.ts");
 
 describe("pre-push fast checks", () => {
-  it("runs guards and dependent typechecks, leaving package tests to CI", () => {
+  it("checks changed files and dependent types, leaving tests to CI", () => {
     fixture("packages/source/src/index.ts", ({ invoke }) => {
       const result = invoke();
       expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.checks).toEqual([...cheap, ["--filter", "...@waitron/source", "typecheck"]]);
+      expect(result.checks).toEqual([...checks, ["--filter", "...@waitron/source", "typecheck"]]);
     });
   });
   it("uses the main merge base for a new branch", () => {
     fixture("packages/source/src/index.ts", ({ invoke, ref, head }) => {
       const result = invoke(ref(head, zero));
       expect(result.status, result.stderr).toBe(0);
-      expect(result.checks).toEqual([...cheap, ["--filter", "...@waitron/source", "typecheck"]]);
+      expect(result.checks).toEqual([...checks, ["--filter", "...@waitron/source", "typecheck"]]);
     });
   });
-  it("runs root guards but no package work for repository machinery", () => {
+  it("checks changed machinery without running tests or package work", () => {
     fixture("scripts/helper.mjs", ({ invoke }) => {
       const result = invoke();
       expect(result.status, result.stderr).toBe(0);
-      expect(result.checks).toEqual(cheap);
+      expect(result.checks).toEqual(cheap("scripts/helper.mjs"));
     });
   });
   it("checks the install and formatting for documentation", () => {
     fixture("docs/guide.md", ({ invoke }) => {
       const result = invoke();
       expect(result.status, result.stderr).toBe(0);
-      expect(result.checks).toEqual(cheap.slice(0, 2));
+      expect(result.checks).toEqual(cheap("docs/guide.md").slice(0, 2));
     });
   });
   it("skips deletion-only pushes and still checks an update beside a deletion", () => {
@@ -181,7 +222,7 @@ describe("pre-push fast checks", () => {
       expect(invoke(deleted).calls).toEqual([]);
       expect(invoke(deleted).status).toBe(0);
       expect(invoke(deleted + ref()).checks).toEqual([
-        ...cheap,
+        ...checks,
         ["--filter", "...@waitron/source", "typecheck"],
       ]);
     });
@@ -196,8 +237,66 @@ describe("pre-push fast checks", () => {
             kind === "empty" ? "" : kind === "unknown" ? ref(head, "f".repeat(40)) : ref(),
           );
           expect(result.status, result.stdout + result.stderr).toBe(0);
-          expect(result.checks).toEqual([...cheap, ["typecheck"]]);
+          expect(result.checks).toEqual([...whole, ["typecheck"]]);
         },
+      );
+    },
+  );
+  it("keeps literal filenames and skips deleted paths and symlinks", () => {
+    fixture("packages/source/src/a [literal] $name.ts", ({ invoke, ref, git, dir }) => {
+      const kept = "packages/source/src/a [literal] $name.ts";
+      git("rm", "packages/source/src/deleted.ts");
+      symlinkSync("a [literal] $name.ts", join(dir, "packages/source/src/link.ts"));
+      git("add", ".");
+      git("commit", "-qs", "-m", "Delete a path and add a symlink");
+      const result = invoke(ref(git("rev-parse", "HEAD")));
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.checks.slice(0, 3)).toEqual(cheap(kept));
+    });
+  });
+  it("skips empty file lists without losing the remaining checks", () => {
+    fixture("packages/source/src/index.ts", ({ invoke, dir }) => {
+      rmSync(join(dir, "packages/source/src/index.ts"));
+      const result = invoke();
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.checks).toEqual([install, ["--filter", "...@waitron/source", "typecheck"]]);
+    });
+  });
+  it("blocks a malformed changed file with real cached Prettier, then accepts its correction", () => {
+    fixture(
+      "packages/source/src/index.ts",
+      ({ invoke, dir }) => {
+        const file = join(dir, "packages/source/src/index.ts");
+        writeFileSync(
+          join(dir, ".prettierignore"),
+          ".husky/\nscripts/\nbin/\npackages/*/package.json\npackages/source/src/deleted.ts\ncalls.jsonl\n",
+        );
+        writeFileSync(file, "const value={answer:42}\n");
+        const bad = invoke();
+        expect(bad.status, bad.stdout + bad.stderr).toBe(1);
+        expect(bad.stdout).toContain("'format check' failed");
+        expect(bad.stderr).toContain("packages/source/src/index.ts");
+        writeFileSync(file, "const value = { answer: 42 };\n");
+        expect(invoke().status).toBe(0);
+        expect(existsSync(join(dir, "node_modules/.cache/waitron-pre-push/prettier"))).toBe(true);
+        writeFileSync(file, "const value={answer:43}\n");
+        expect(invoke().status).toBe(1);
+      },
+      { realFormat: true },
+    );
+  });
+  it.each([".husky/pre-push", "docs/guide.md"])(
+    "accepts unsupported or ignored changed file %s",
+    (path) => {
+      fixture(
+        path,
+        ({ invoke, dir }) => {
+          if (path === ".husky/pre-push") cpSync(join(root, path), join(dir, path));
+          writeFileSync(join(dir, ".prettierignore"), "docs/\n");
+          const result = invoke();
+          expect(result.status, result.stdout + result.stderr).toBe(0);
+        },
+        { realFormat: true },
       );
     },
   );
@@ -219,7 +318,7 @@ describe("pre-push fast checks", () => {
       const result = invoke(ref(rebased, head));
       expect(result.status, result.stdout + result.stderr).toBe(0);
       expect(result.checks).toEqual([
-        ...cheap,
+        ...cheap("packages/consumer/src/index.ts", "packages/source/src/index.ts"),
         ["--filter", "...@waitron/consumer", "--filter", "...@waitron/source", "typecheck"],
       ]);
     });
@@ -303,7 +402,7 @@ describe("pre-push fast checks", () => {
       { fail: "lint" },
     );
   });
-  it.each(["--frozen-lockfile", "format:check", "lint", "root-tests", "typecheck"])(
+  it.each(["--frozen-lockfile", "format:check", "lint", "typecheck"])(
     "blocks a failed %s check",
     (fail) => {
       fixture(
@@ -312,15 +411,9 @@ describe("pre-push fast checks", () => {
           const result = invoke();
           expect(result.status).not.toBe(0);
           expect(result.stdout).toContain("pre-push BLOCKED");
-          const index = [
-            "--frozen-lockfile",
-            "format:check",
-            "lint",
-            "root-tests",
-            "typecheck",
-          ].indexOf(fail);
+          const index = ["--frozen-lockfile", "format:check", "lint", "typecheck"].indexOf(fail);
           expect(result.checks).toEqual(
-            [...cheap, ["--filter", "...@waitron/source", "typecheck"]].slice(0, index + 1),
+            [...checks, ["--filter", "...@waitron/source", "typecheck"]].slice(0, index + 1),
           );
         },
         { fail },
@@ -334,7 +427,7 @@ describe("pre-push fast checks", () => {
         const result = invoke();
         expect(result.status).not.toBe(0);
         expect(result.stdout + result.stderr).toContain("no workspace member was selected");
-        expect(result.checks).toEqual(cheap);
+        expect(result.checks).toEqual(checks);
       },
       { emptySelection: true },
     );

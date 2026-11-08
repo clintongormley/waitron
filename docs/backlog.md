@@ -2521,6 +2521,8 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 
 ## Standing decisions
 
+- **Keep the pre-push hook quick, with typechecking retained (owner, 2026-11-08, A1449).** [Decision and limits](backlog/ci.md#decisions-and-deliberate-limits).
+
 - **Older PR heads may lack a newer workflow's browser smoke script (watcher, 2026-11-08, A1402).** Skip only an absent script with a notice; current source guards require it and existing script failures stay fatal. [Decision and limits](backlog/ci.md#decisions-and-deliberate-limits).
 
 - **Investigate CI failures before retrying (owner, 2026-10-31, A1243).**

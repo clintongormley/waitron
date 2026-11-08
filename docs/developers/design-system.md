@@ -4821,13 +4821,13 @@ feedback on sign-offs, dependency consistency, formatting, lint and types while 
 suites and enforces their coverage thresholds. You do not need a full local workspace test run just
 to open a PR.
 
-The Husky hook (`.husky/pre-push`) runs `pnpm install --frozen-lockfile`, `pnpm format:check`,
-`pnpm lint` and the root guard suite (`pnpm vitest run --coverage`), then typechecks changed packages
-and their dependents. Root guards stay local because they check the code that selects CI work.
+The Husky hook (`.husky/pre-push`) runs `pnpm install --frozen-lockfile`, checks formatting and lint
+on changed files with content caches, then typechecks changed packages and their dependents.
+Global or unknown scopes keep whole-repository formatting and lint. Root guards run in CI.
 The hook checks commit sign-offs first and stops at a failed check with a command to reproduce it.
 
 A documentation-only push stops after formatting. Repository machinery changes (`scripts/`,
-`.husky/`, `.github/`) stop after the root guards, unless they touch a file `ROOT_SCOPE_CONSUMERS`
+`.husky/`, `.github/`) stop after lint, unless they touch a file `ROOT_SCOPE_CONSUMERS`
 or `GLOBAL_ROOT_FILES` lists. Shared configuration, a file `GLOBAL_ROOT_FILES` lists, or an unknown push range selects all workspace typechecks. Deleting
 branches without updating any ref skips the hook. Package browser and database suites run in CI
 rather than in the hook.
