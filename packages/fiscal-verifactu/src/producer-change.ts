@@ -21,8 +21,8 @@ export async function refuseProducerChange(
   environment: string,
 ): Promise<void> {
   const producer = identity.producer;
+  if (typeof producer === "object" && "invalid" in producer) throw producer.invalid;
   if (environment !== "production" || producer === PRODUCER_PENDING) return;
-  if ("invalid" in producer) throw producer.invalid;
   const [head] = await tx
     .select({ software: registrosFacturacion.sistemaInformatico })
     .from(cadenas)

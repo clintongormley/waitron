@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import type { SistemaInformatico } from "@waitron/verifactu";
 import { captureError } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -21,7 +22,11 @@ function running(producer: SoftwareIdentity["producer"]): SoftwareIdentity {
   return { ...SOFTWARE_IDENTITY, producer };
 }
 
-async function append(node: SeededNode, number: number) {
+async function append(
+  node: SeededNode,
+  number: number,
+  software: Record<string, unknown> = FILED_UNDER,
+) {
   const sale = await seedSale(suite.db, node, number);
   const [sif] = suite.db.all<{ nif: string; numero_instalacion: string }>(
     sql`select nif, numero_instalacion from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
@@ -30,9 +35,9 @@ async function append(node: SeededNode, number: number) {
   pending.input.SistemaInformatico = {
     ...pending.input.SistemaInformatico,
     IDOtro: undefined,
-    ...FILED_UNDER,
+    ...software,
     NumeroInstalacion: sif!.numero_instalacion,
-  };
+  } as SistemaInformatico;
   pending.input.IDEmisorFactura = sif!.nif;
   pending.input.NumSerieFactura = `${node.nodeId}/${number}`;
   return suite.db.transaction((tx) => appendToChain(tx, node.nodeId, pending));
@@ -129,6 +134,38 @@ describe("refuseProducerChange", () => {
     const error = await captureError(() => check(node, running({ invalid })));
 
     expect(error).toBe(invalid);
+  });
+
+  it("refuses an invalid producer setting in preproduction too", async () => {
+    const node = await seedNode(suite.db);
+    const invalid = new AppError("sif.producer_invalid", {
+      setting: "WAITRON_PRODUCER_TAX_ID",
+      reason: "check_failed",
+    });
+
+    const error = await captureError(() => check(node, running({ invalid }), "preproduction"));
+
+    expect(error).toBe(invalid);
+  });
+
+  it("refuses a production chain whose latest record names a producer by a foreign id", async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1, {
+      NombreRazon: "PRODUCER PERSON",
+      NIF: undefined,
+      IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR00000000000" },
+    });
+    const [stored] = suite.db.all<{ software: string }>(
+      sql`select sistema_informatico as software from registros_facturacion where node_id = ${node.nodeId}`,
+    );
+    expect(JSON.parse(stored!.software)).toMatchObject({ IDOtro: { ID: "FR00000000000" } });
+    expect(JSON.parse(stored!.software)).not.toHaveProperty("NIF");
+
+    const error = await captureError(() =>
+      check(node, running({ name: "PRODUCER PERSON", nif: "00000000T" })),
+    );
+
+    expect(error).toMatchObject({ code: "sif.producer_changed" });
   });
 });
 
