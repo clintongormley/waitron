@@ -1086,6 +1086,15 @@ when it is paired; no path was found that delivers a later one, so after a
 rename its copy would name the old address until it is paired again. No reader routing by a
 mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/2026-10-20-a917-box-local-name-design.md#72-at-the-confirm-one-chart-write-then-a-swap-decided-from-what-is-on-disk)
 
+## A1321. Retire a dead or reset spare from Servers
+
+Wanted before go-live (owner, 2026-11-04). The
+[one-page proposal](../superpowers/specs/2026-11-08-a1321-retire-spare-design.md) awaits owner
+approval, including its permission and returning-box defaults. It proposes the existing signed
+evicted/revoked chart, switched-off/no-parallel-recovery declarations in the Servers dialog,
+retained audit/data, and a restricted chart read for returning retired boxes. Build waits for
+A947 3b-6; the proposed fiscal start change requires the owner to land it. No build approval.
+
 ## A947. Go-live on two local boxes
 
 The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
