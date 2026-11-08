@@ -113,7 +113,8 @@ External provenance, read 2026-11-06:
 ## Disposable server-test runners
 
 When hosted jobs spend longer waiting than testing, you can move selected server, heavy and
-browser test jobs to Lane I's disposable Linux runners. Routing is disabled by default.
+browser test jobs, mutation jobs and PR checks to Lane I's disposable Linux runners. Routing
+is disabled by default.
 After the runner qualification below, set `DISPOSABLE_TESTS_MODE=server` and
 `DISPOSABLE_TESTS_SERVER_JOBS=1` for the first measured slot. Increase the job count only
 from measured capacity; one runner slot does not make several shards run in parallel. Count
@@ -146,15 +147,29 @@ limits that job family independently. `test-ui` includes both ui and ui-core.
 | `DISPOSABLE_TESTS_MEDIA_JOBS` | `test-media` |
 | `DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS` | `test-payments-stripe` |
 | `DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS` | `test-payments-sumup` |
+| `DISPOSABLE_TESTS_PROVISIONING_JOBS` | `test-provisioning` |
+| `DISPOSABLE_TESTS_IDENTITY_JOBS` | `test-identity` |
+| `DISPOSABLE_TESTS_WORKFORCE_JOBS` | `test-workforce` |
+| `DISPOSABLE_TESTS_LIGHT_A_JOBS` | `test-light-a` |
+| `DISPOSABLE_TESTS_LIGHT_B_JOBS` | `test-light-b` |
+| `DISPOSABLE_TESTS_MUTATION_SHARED_JOBS` | `mutation-shared` |
+| `DISPOSABLE_TESTS_TYPECHECK_JOBS` | `typecheck` |
+| `DISPOSABLE_TESTS_LINT_JOBS` | `lint` |
+| `DISPOSABLE_TESTS_ROOT_GUARDS_JOBS` | `root-guards` |
+| `DISPOSABLE_TESTS_BUNDLE_SMOKE_JOBS` | `bundle-smoke` |
+| `DISPOSABLE_TESTS_MUTATION_SHARED_AGGREGATE_JOBS` | `mutation-shared-aggregate` |
 
 Only the first attempt of a same-repository pull request uses this route. Main pushes, tags,
 manual runs, forks and every retry use GitHub-hosted runners. This includes retries that
 retain the successful `changes` job's outputs: routing reads the current attempt directly.
 Same-repository bot branches also satisfy the routing condition; confirm their admission
-with the controller before enabling it.
+with the controller before enabling it. The planner, final CI summary and queue watchdog stay
+hosted. Full-only coverage merges cannot use this PR-only route, and image builds and
+publication retain their hosted runners. The stream job also stays hosted until its guest
+setup is qualified, including loopback MTU, shared memory and the backup test binaries.
 
 `DISPOSABLE_TESTS_LABEL_PREFIX` defaults to `dt`. Each selected shard requests `self-hosted`
-and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-test-FAMILY-N`, where FAMILY is the job suffix in the
+and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-JOB-N`, where JOB is the job name in the
 table and N is its existing shard number, or 1 for an unsharded job. Lane I currently
 provisions the `dt` prefix. Use a deliberately unavailable prefix only for the fallback
 drill; do not register a runner for that prefix. The settings affect the existing jobs,
@@ -167,8 +182,9 @@ failures. Each complete paginated read has ten seconds. It polls at thirty-secon
 for up to twenty minutes, at most forty polls and 200 API calls including pagination and
 cancellation. It requires every member of each enabled family, unique job IDs, consistent
 totals within that read and matching run, attempt, head and routing labels. Totals may grow
-between reads. A family is enabled only when its package is in scope and its cap is
-positive. Unsharded jobs match their exact API name; sharded jobs match their numbered
+between reads. A family is enabled only when its ordinary job condition holds and its cap is
+positive. Lint and root guards run even when classification fails, so their watcher entries do
+too. Unsharded jobs match their exact API name; sharded jobs match their numbered
 names. Each enabled family must contain a routed job; an entirely hosted enabled family
 fails immediately without cancellation, even when another family is assigned. A routed job
 is assigned when it is in progress with a positive runner ID; a completed job also ends its
