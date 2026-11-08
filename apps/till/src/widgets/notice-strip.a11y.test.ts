@@ -29,8 +29,39 @@ const UNSENT: StaffNotice = {
 };
 
 const BEHIND: StaffNotice = { ...DISK, key: "behind", code: "clock.behind_chain" };
+const EXPIRED: StaffNotice = { ...SPACE, key: "drawer", code: "print_job.drawer_expired" };
 
 describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (theme) => {
+  it("has no violations while the drawer opening is in flight", async () => {
+    const { host } = await mountWidget<TillNoticeStrip>(
+      "till-notice-strip",
+      {
+        notices: [EXPIRED],
+        canOpenDrawer: true,
+        drawerBusy: true,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    ["drawer without permission", [EXPIRED], false],
+    ["drawer alone", [EXPIRED], true],
+    ["drawer first, open", [EXPIRED, DISK], true],
+    ["drawer second, open", [DISK, EXPIRED], true],
+  ])("has no violations with %s", async (_state, notices, canOpenDrawer) => {
+    const { el, host } = await mountWidget<TillNoticeStrip>(
+      "till-notice-strip",
+      { notices, canOpenDrawer },
+      theme,
+    );
+    const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>("button[aria-expanded]");
+    if (toggle !== null) await userEvent.click(toggle);
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   it.each([
     ["one error", [DISK]],
     ["one warning", [SPACE]],

@@ -21,8 +21,7 @@ function toneOf(severity: string): Tone {
   return (TONES as readonly string[]).includes(severity) ? (severity as Tone) : "notice";
 }
 
-/** A notice's icon and words; a clock stop's hint is a "Check the time" button while `checkTime`. */
-function words(notice: StaffNotice, checkTime: boolean, host: HTMLElement): TemplateResult {
+function words(notice: StaffNotice, checkTime: boolean, host: TillNoticeStrip): TemplateResult {
   const { main, hint } = staffNoticeText(notice, checkTime);
   return html`<wt-icon name=${`staff-notice-${toneOf(notice.severity)}`}></wt-icon
     ><span class="words"
@@ -37,14 +36,21 @@ function words(notice: StaffNotice, checkTime: boolean, host: HTMLElement): Temp
                 )}
               >${hint}</wt-button
             >`
-          : html` · <span class="hint">${hint}</span>`
+          : notice.code === "print_job.drawer_expired"
+            ? host.canOpenDrawer
+              ? html` <wt-button
+                  data-open-drawer
+                  variant="secondary"
+                  .disabled=${host.drawerBusy}
+                  @click=${() => host.dispatchEvent(new CustomEvent("till-open-drawer", { bubbles: true, composed: true }))}
+                  >${t("action.open_drawer")}</wt-button
+                >`
+              : nothing
+            : html` · <span class="hint">${hint}</span>`
       }</span
     >`;
 }
 
-/** The till's staff notices under its top bar: the first notice, and with more a tap that opens
- * the rest in the page's flow. Never a dialog and never dismissed; its one event is
- * `till-check-time`, from a clock stop's "Check the time" while `checkTimeOffered`. */
 @customElement("till-notice-strip")
 export class TillNoticeStrip extends LitElement {
   static override styles = [
@@ -160,6 +166,8 @@ export class TillNoticeStrip extends LitElement {
   @property({ attribute: false }) notices: readonly StaffNotice[] = [];
   /** The box offers this till "Check the time". */
   @property({ attribute: false }) checkTimeOffered = false;
+  @property({ attribute: false }) canOpenDrawer = false;
+  @property({ attribute: false }) drawerBusy = false;
 
   @state() private open = false;
 
@@ -202,10 +210,11 @@ export class TillNoticeStrip extends LitElement {
       >
         ${content}
       </button>`;
-    // A button never holds another, so the "Check the time" line keeps its toggle beside it.
+    // An action and the notice-list toggle are siblings, so a button never holds another button.
     return html`<div class="strip" data-notice-strip>
       ${
-        checksTime(first, checkTime)
+        checksTime(first, checkTime) ||
+        (first.code === "print_job.drawer_expired" && this.canOpenDrawer)
           ? html`<div class="line" data-notice-tone=${toneOf(first.severity)}>
               ${words(first, checkTime, this)} ${toggle("toggle", moreWords)}
             </div>`

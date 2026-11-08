@@ -76,6 +76,7 @@ export const printJobs = table(
   },
   (t) => [
     index("print_jobs_pull_idx").on(t.printerId, t.status),
+    index("print_jobs_printer_kind_idx").on(t.printerId, t.kind),
     index("print_jobs_resend_of_idx").on(t.resendOf),
     index("print_jobs_sale_id_idx").on(t.saleId),
     check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer')`),

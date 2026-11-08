@@ -3494,6 +3494,7 @@ export class TillApp extends LitElement {
   @state() private staffNotices: readonly StaffNotice[] = [];
   /** The box offers this till "Check the time", from the latest equipment read applied. */
   @state() private checkTimeOffered = false;
+  @state() private drawerOpening = false;
   @state() private boxTimeOpen = false;
   /** Numbers each equipment read when sent, so a slower earlier read cannot replace the notices a
    * later one brought. */
@@ -9864,16 +9865,27 @@ export class TillApp extends LitElement {
    * policy changes mid-shift; `authorization.not_permitted` opens the supervisor override.
    */
   async #onOpenDrawer(): Promise<void> {
-    this.errorKey = undefined;
+    if (this.drawerOpening) return;
+    this.drawerOpening = true;
+    this.#clearErrorKeepingLateChange();
     try {
       await this.api.openDrawer();
+      await this.#readEquipment();
     } catch (error) {
       if ((error as { code?: string }).code === "authorization.not_permitted") {
         await this.#openOverrideDialog();
       } else {
-        this.errorKey = drawerErrorKey((error as { code?: string }).code);
+        this.#showDrawerError((error as { code?: string }).code);
       }
+    } finally {
+      this.drawerOpening = false;
     }
+  }
+
+  #showDrawerError(code?: string): void {
+    const late = this.#lateChangeShown();
+    const key = drawerErrorKey(code);
+    this.errorKey = late === undefined ? key : { lateChange: late, also: key };
   }
 
   /** Reads the equipment again first, so a profile list changed since boot is offered; a failed
@@ -10628,7 +10640,7 @@ export class TillApp extends LitElement {
       this.overrideError = null;
       this.overrideAuthorizers = authorizers;
     } catch {
-      this.errorKey = "drawer.error";
+      this.#showDrawerError();
     }
   }
 
@@ -10640,13 +10652,14 @@ export class TillApp extends LitElement {
     try {
       await this.api.openDrawer({ personId, pin });
       this.#closeOverrideDialog();
+      await this.#readEquipment();
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "pin.invalid" || code === "pin.throttled") {
         this.overrideError = code;
       } else {
         this.#closeOverrideDialog();
-        this.errorKey = drawerErrorKey(code);
+        this.#showDrawerError(code);
       }
     }
   }
@@ -21462,6 +21475,9 @@ export class TillApp extends LitElement {
                                     slot="notices"
                                     .notices=${this.staffNotices}
                                     .checkTimeOffered=${this.checkTimeOffered}
+                                    .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+                                    .drawerBusy=${this.drawerOpening}
+                                    @till-open-drawer=${() => void this.#onOpenDrawer()}
                                     @till-check-time=${() => (this.boxTimeOpen = true)}
                                   ></till-notice-strip
                                   >${

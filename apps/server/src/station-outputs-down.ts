@@ -63,7 +63,10 @@ export function stationPrintersDownQuery(
     .from(stationPrinters)
     .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
     .innerJoin(printers, eq(printers.id, stationPrinters.printerId))
-    .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
+    .innerJoin(
+      sql`${printJobs} indexed by print_jobs_pull_idx`,
+      eq(printJobs.printerId, printers.id),
+    )
     .where(
       and(
         options.withSwitchedOff === true ? undefined : eq(kitchenStations.active, true),
@@ -72,7 +75,7 @@ export function stationPrintersDownQuery(
         inArray(printJobs.status, ["queued", "printing", "failed"]),
         printJobInTrouble(now),
         or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
-        sql`not exists (select 1 from ${printJobs} as ${laterDocument}
+        sql`not exists (select 1 from ${printJobs} as ${laterDocument} indexed by print_jobs_pull_idx
         where ${laterDocument.printerId} = ${printJobs.printerId}
         and ${laterDocument.kind} = 'document'
         and ${laterDocument.status} = 'done'

@@ -9,11 +9,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   devices,
+  drawerOpens,
   kitchenStations,
   pagePrinters,
   printerHolders,
   printers,
   printJobs,
+  printAgents,
   stationPrinters,
   withTransaction,
 } from "@waitron/db";
@@ -33,7 +35,7 @@ import {
   setProfileReaderList,
   type CardProviderContribution,
 } from "@waitron/payments";
-import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import { claimPrintJobs, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { printingAlertSource } from "./alert-sources.js";
 import {
@@ -1646,6 +1648,159 @@ describe("GET /api/device/equipment's notices", () => {
     }
     const printerNotices = async (app: Hono, cookie: string) =>
       (await noticesOf(app, cookie)).filter((n) => n.owner === "printers");
+
+    async function expiredDrawer(printerId: string): Promise<string> {
+      const id = await job(printerId, ago(MINUTE), { status: "failed" });
+      await suite.db
+        .update(printJobs)
+        .set({ kind: "drawer", lastError: "print_job.drawer_expired" })
+        .where(eq(printJobs.id, id));
+      return id;
+    }
+
+    it("shows the notice after a real expired drawer is settled at an agent pull", async () => {
+      expect((await choose(venue.cookie, "cash_drawer", { id: dr }, "list")).status).toBe(200);
+      const [agent] = await suite.db
+        .insert(printAgents)
+        .values({
+          locationId: venue.cfg.locationId,
+          name: "Expiry test",
+          tokenHash: "scrypt$expiry-fixture",
+        })
+        .returning({ id: printAgents.id });
+      const id = await job(dr, new Date(Date.now() - 31000).toISOString());
+      await suite.db.update(printJobs).set({ kind: "drawer" }).where(eq(printJobs.id, id));
+      const app = printerApp();
+      expect((await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers")).toEqual([]);
+      expect(await inTx((tx) => claimPrintJobs(tx, agent!.id, { visibleKeys: [] }))).toEqual([]);
+      expect(
+        (await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers"),
+      ).toMatchObject([
+        { code: "print_job.drawer_expired", key: `print_job.drawer_expired:${id}` },
+      ]);
+      expect(await suite.db.select().from(printJobs).where(eq(printJobs.id, id))).toMatchObject([
+        { status: "failed", lastError: "print_job.drawer_expired", attempts: 0 },
+      ]);
+    });
+
+    it.each(["active", "hasCashDrawer"] as const)(
+      "hides the drawer notice while %s is off, then shows it when usable again",
+      async (field) => {
+        expect((await choose(venue.cookie, "cash_drawer", { id: dr }, "list")).status).toBe(200);
+        await expiredDrawer(dr);
+        const app = printerApp();
+        expect(
+          (await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers"),
+        ).toHaveLength(1);
+        await suite.db
+          .update(printers)
+          .set({ [field]: false })
+          .where(eq(printers.id, dr));
+        expect((await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers")).toEqual(
+          [],
+        );
+        await suite.db
+          .update(printers)
+          .set({ [field]: true })
+          .where(eq(printers.id, dr));
+        expect(
+          (await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers"),
+        ).toHaveLength(1);
+      },
+    );
+
+    it("reads the latest drawer through both index keys without sorting printer history", () => {
+      const plan = suite.db.all<{
+        detail: string;
+      }>(sql`explain query plan select id, status, last_error
+        from print_jobs where printer_id=${dr} and kind='drawer' order by rowid desc limit 1`);
+      expect(plan.some((step) => step.detail.includes("printer_id=? AND kind=?"))).toBe(true);
+      expect(plan.some((step) => step.detail.includes("TEMP B-TREE"))).toBe(false);
+    });
+
+    it("shows a drawer expiry on both devices using that drawer, without changing any job", async () => {
+      const app = printerApp();
+      for (const cookie of [venue.cookie, venue.cookie2]) {
+        expect((await choose(cookie, "cash_drawer", { id: dr }, "list")).status).toBe(200);
+      }
+      await expiredDrawer(fp);
+      expect(await noticesOf(app, venue.cookie)).toEqual([]);
+      const id = await expiredDrawer(dr);
+      const before = await suite.db.select().from(printJobs);
+      for (const cookie of [venue.cookie, venue.cookie2]) {
+        expect(await noticesOf(app, cookie)).toContainEqual({
+          owner: "drawers",
+          key: `print_job.drawer_expired:${id}`,
+          code: "print_job.drawer_expired",
+          severity: "warning",
+          params: {},
+        });
+      }
+      expect(await suite.db.select().from(printJobs)).toEqual(before);
+    });
+
+    it("a new audited manual opening clears the drawer expiry without resending the expired job", async () => {
+      expect((await choose(venue.cookie, "cash_drawer", { id: dr }, "list")).status).toBe(200);
+      const id = await expiredDrawer(dr);
+      const app = printerApp();
+      expect(
+        (await noticesOf(app, venue.cookie)).some((n) => n.code === "print_job.drawer_expired"),
+      ).toBe(true);
+      await job(dr, READING.instant.toISOString(), { status: "done" });
+      expect(
+        (await noticesOf(app, venue.cookie)).some((n) => n.code === "print_job.drawer_expired"),
+      ).toBe(true);
+      const before = await suite.db.select().from(printJobs).where(eq(printJobs.id, id));
+      const audit = await suite.db.select().from(drawerOpens);
+      const refused = await send(venue.app, venue.cookie, "POST", "/api/drawer/open", {});
+      expect(refused).toMatchObject({ status: 403, json: { code: "authorization.not_permitted" } });
+      expect(await suite.db.select().from(drawerOpens)).toEqual(audit);
+      const result = await send(venue.app, venue.cookie, "POST", "/api/drawer/open", {
+        override: { personId: venue.adminId, pin: "1234" },
+      });
+      expect(result).toMatchObject({ status: 200 });
+      expect(await suite.db.select().from(drawerOpens)).toMatchObject([
+        ...audit,
+        {
+          reason: "manual",
+          printerId: dr,
+          deviceId: a,
+          authorizedBy: venue.adminId,
+          viaOverride: true,
+        },
+      ]);
+      const jobs = await suite.db.select().from(printJobs).where(eq(printJobs.printerId, dr));
+      expect(jobs.filter((j) => j.kind === "drawer")).toHaveLength(2);
+      expect(jobs.find((j) => j.id !== id && j.kind === "drawer")).toMatchObject({
+        status: "queued",
+        resendOf: null,
+      });
+      expect(await suite.db.select().from(printJobs).where(eq(printJobs.id, id))).toEqual(before);
+      expect((await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers")).toEqual([]);
+    });
+
+    it.each(["queued", "printing", "done", "failed"] as const)(
+      "a newer %s drawer job clears the notice, even after a clock step",
+      async (status) => {
+        expect((await choose(venue.cookie, "cash_drawer", { id: dr }, "list")).status).toBe(200);
+        await expiredDrawer(dr);
+        const app = printerApp();
+        expect(
+          (await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers"),
+        ).toHaveLength(1);
+        await suite.db.insert(printJobs).values({
+          locationId: venue.cfg.locationId,
+          printerId: dr,
+          payload: Uint8Array.from([1]),
+          kind: "drawer",
+          status,
+          createdAt: ago(2 * MINUTE),
+        });
+        expect((await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers")).toEqual(
+          [],
+        );
+      },
+    );
 
     it("a stuck kitchen printer shows on both tills", async () => {
       const id = await kitchenPrinter();

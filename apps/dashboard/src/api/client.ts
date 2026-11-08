@@ -1444,6 +1444,7 @@ export interface PrintJobRow {
   status: PrintJobStatus;
   attempts: number;
   lastError: string | null;
+  waitReason?: "printer.not_visible";
   createdAt: string;
   deliveredAt: string | null;
 }

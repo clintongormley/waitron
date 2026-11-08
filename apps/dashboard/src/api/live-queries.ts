@@ -601,7 +601,7 @@ export function dashboardQuery<N extends DashboardQueryName>(
         ? 30_000
         : name === "pairingMode" || name === "listDiscoveredPrinters"
           ? 5_000
-          : name === "getBoxHealth"
+          : name === "getBoxHealth" || name === "listRecentJobs"
             ? 15_000
             : name === "getEmailInbox" || name === "getBackupStatus" || name === "getStreamSettings"
               ? 10_000

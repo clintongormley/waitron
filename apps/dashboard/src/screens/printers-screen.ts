@@ -142,8 +142,14 @@ interface PrinterDraft {
  * `PRINTER_DELETED`, packages/printing/src/printer-delete-jobs.ts). */
 const ENDED_BY_SERVER = new Set(["printer.unpaired", "printer.deleted"]);
 
+const LOCALIZED_JOB_REASONS = new Set([
+  ...ENDED_BY_SERVER,
+  "print_job.drawer_expired",
+  "print_job.drawer_outcome_unknown",
+]);
+
 const jobReason = (lastError: string): string =>
-  ENDED_BY_SERVER.has(lastError) ? codeMessage(lastError) : lastError;
+  LOCALIZED_JOB_REASONS.has(lastError) ? codeMessage(lastError) : lastError;
 
 const refusedField = (error: unknown): unknown =>
   (error as { params?: { field?: unknown } } | null)?.params?.field;
@@ -3381,7 +3387,7 @@ export class PrintersScreen extends LitElement {
         cell: (j) =>
           html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
               >${jobStatusName(j.status)}</span
-            >${j.lastError === null ? nothing : html`<p part="job-reason" data-test=${`job-error-${j.id}`}>${jobReason(j.lastError)}</p>`}`,
+            >${j.lastError === null ? nothing : html`<p part="job-reason" data-test=${`job-error-${j.id}`}>${jobReason(j.lastError)}</p>`}${j.waitReason === undefined ? nothing : html`<p part="job-reason" data-test=${`job-wait-${j.id}`}>${codeMessage(j.waitReason)}</p>`}`,
       },
       {
         key: "attempts",

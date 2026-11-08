@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type {
   DeviceEquipment,
   DeviceEquipmentRead,
@@ -227,6 +228,168 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
   afterEach(() => {
     vi.useRealTimers();
     cleanupWidgets();
+  });
+
+  it("uses the existing manual opening action from a drawer expiry notice", async () => {
+    const expired: StaffNotice = {
+      owner: "drawers",
+      key: "expired:one",
+      code: "print_job.drawer_expired",
+      severity: "warning",
+      params: {},
+    };
+    let opened = false;
+    const openDrawer = vi.fn(async () => {
+      opened = true;
+    });
+    const { el } = await mountEquipmentApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "open-cash-drawer"] }),
+      getDeviceEquipment: vi.fn(async () => withNotices(opened ? [] : [expired])),
+      openDrawer,
+    });
+    await signIn(el);
+    await vi.waitFor(() => expect(strip(el).words).toContain("Drawer didn’t open"));
+    await userEvent.click(strip(el).drawn!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await vi.waitFor(() => expect(openDrawer).toHaveBeenCalledWith());
+    expect(openDrawer).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(strip(el).drawn).toBeNull());
+  });
+
+  it.each([false, true])(
+    "keeps a shown unconfirmed-change warning while opening the drawer (refused: %s)",
+    async (refused) => {
+      const openDrawer = refused
+        ? vi.fn().mockRejectedValue({ code: "drawer.not_attached" })
+        : vi.fn().mockResolvedValue(undefined);
+      const { el } = await mountEquipmentApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "open-cash-drawer"] }),
+        getDeviceEquipment: vi.fn().mockResolvedValue(
+          withNotices([
+            {
+              owner: "drawers",
+              key: "one",
+              code: "print_job.drawer_expired",
+              severity: "warning",
+              params: {},
+            },
+          ]),
+        ),
+        openDrawer,
+      });
+      await signIn(el);
+      Object.assign(el, {
+        errorKey: { lateChange: { lineName: "Fish", tableLabel: "4", unanswered: true } },
+      });
+      await el.updateComplete;
+      const before = el.shadowRoot!.querySelector('[role="alert"]')!.textContent;
+      expect(before).toContain("Fish");
+      await userEvent.click(strip(el).drawn!.querySelector<HTMLElement>("[data-open-drawer]")!);
+      await vi.waitFor(() => expect(openDrawer).toHaveBeenCalledOnce());
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(before);
+    },
+  );
+
+  it("does not send another opening while the drawer notice request is in flight", async () => {
+    const opening = held<void>();
+    const openDrawer = vi.fn(() => opening.promise);
+    const { el } = await mountEquipmentApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "open-cash-drawer"] }),
+      getDeviceEquipment: vi.fn().mockResolvedValue(
+        withNotices([
+          {
+            owner: "drawers",
+            key: "one",
+            code: "print_job.drawer_expired",
+            severity: "warning",
+            params: {},
+          },
+        ]),
+      ),
+      openDrawer,
+    });
+    await signIn(el);
+    await vi.waitFor(() => expect(strip(el).drawn).not.toBeNull());
+    const button = strip(el).drawn!.querySelector<HTMLElement>("[data-open-drawer]")!;
+    await userEvent.click(button);
+    await el.updateComplete;
+    expect(
+      button.hasAttribute("disabled") || (button as unknown as { disabled: boolean }).disabled,
+    ).toBe(true);
+    emit(strip(el).node!, "till-open-drawer");
+    expect(openDrawer).toHaveBeenCalledTimes(1);
+    opening.resolve();
+    await vi.waitFor(() =>
+      expect((button as unknown as { disabled: boolean }).disabled).toBe(false),
+    );
+  });
+
+  it("keeps a drawer expiry visible without an action on a profile that cannot open it", async () => {
+    const { el } = await mountEquipmentApp({
+      getDeviceEquipment: vi.fn().mockResolvedValue(
+        withNotices([
+          {
+            owner: "drawers",
+            key: "one",
+            code: "print_job.drawer_expired",
+            severity: "warning",
+            params: {},
+          },
+        ]),
+      ),
+    });
+    await signIn(el);
+    await vi.waitFor(() => expect(strip(el).words).toContain("Drawer didn’t open"));
+    expect(strip(el).drawn!.querySelector("[data-open-drawer]")).toBeNull();
+  });
+
+  it("offers the existing supervisor override when the drawer notice action is refused", async () => {
+    const openDrawer = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockResolvedValueOnce(undefined);
+    const { el } = await mountEquipmentApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "open-cash-drawer"] }),
+      getDeviceEquipment: vi.fn().mockResolvedValue(
+        withNotices([
+          {
+            owner: "drawers",
+            key: "one",
+            code: "print_job.drawer_expired",
+            severity: "warning",
+            params: {},
+          },
+        ]),
+      ),
+      openDrawer,
+      listDrawerAuthorizers: vi
+        .fn()
+        .mockResolvedValue([{ personId: "supervisor", displayName: "Supervisor" }]),
+    });
+    await signIn(el);
+    await vi.waitFor(() => expect(strip(el).words).toContain("Drawer didn’t open"));
+    await userEvent.click(strip(el).drawn!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).not.toBeNull(),
+    );
+    emit(el.shadowRoot!.querySelector("till-supervisor-override-dialog")!, "override-confirm", {
+      personId: "supervisor",
+      pin: "4321",
+    });
+    await vi.waitFor(() =>
+      expect(openDrawer).toHaveBeenNthCalledWith(2, { personId: "supervisor", pin: "4321" }),
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull(),
+    );
   });
 
   it("shows a till's red notice under its top bar", async () => {

@@ -15,15 +15,18 @@ Por ejemplo, **No se puede guardar nada: el servidor no tiene espacio · Avisa a
 línea roja significa que algo no se puede guardar, una ámbar que algo necesita atención pero el trabajo se sigue guardando y una
 azul que es información.
 
-Cuando hay más de un aviso, la línea termina con un número como **+1**. Toca la línea para abrir
+Cuando hay más de un aviso, la línea termina con un número como **+1**. Toca ese número para abrir
 la lista de todos los avisos, del más grave al menos grave. La lista aparece bajo la línea y
-desplaza la pantalla hacia abajo, así que nunca tapa el pedido. Vuelve a tocar la línea para
+desplaza la pantalla hacia abajo, así que nunca tapa el pedido. Vuelve a tocar el número para
 cerrarla.
 
-No hay botón para cerrar un aviso. El aviso desaparece solo cuando el servidor deja de tener el
-problema. Una pantalla de cocina no muestra la línea de avisos.
+No hay botón para cerrar un aviso. Una pantalla de cocina no muestra la línea de avisos.
 
 ## Qué significa cada aviso {#notices}
+
+**El cajón no se abrió** significa que la solicitud caducó antes de poder enviarse. Comprueba la
+alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si
+se te pide, elige a alguien que pueda autorizar la apertura e introduce su PIN.
 
 **No se puede guardar nada: el servidor no tiene espacio · Avisa al encargado** es rojo. El servidor
 no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. El

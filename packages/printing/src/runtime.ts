@@ -11,6 +11,8 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
  * not be repeated automatically. */
 export const PRINT_JOB_LEASE_MS = 60_000;
 
+const DRAWER_QUEUE_WAIT_MS = 30_000;
+
 export interface AgentRuntimeDeps {
   tx: Transaction;
   /** Not an eligibility filter: it is stamped into `claimed_by`, and only the claimer may report. */
@@ -65,6 +67,28 @@ function dueNow(): { claimedAt: string; due: SQL } {
   };
 }
 
+async function endStaleDrawerJobs(tx: Transaction): Promise<void> {
+  const now = Date.parse(nowIso());
+  const queueCutoff = new Date(now - DRAWER_QUEUE_WAIT_MS).toISOString();
+  const queueAhead = new Date(now + DRAWER_QUEUE_WAIT_MS).toISOString();
+  const claimCutoff = new Date(now - PRINT_JOB_LEASE_MS).toISOString();
+  const claimAhead = new Date(now + PRINT_JOB_LEASE_MS).toISOString();
+  await tx.execute(sql`
+    update print_jobs as j
+    set status = 'failed', last_error = case when j.status = 'queued'
+      then 'print_job.drawer_expired' else 'print_job.drawer_outcome_unknown' end
+    where j.id in (
+      select pending.id from printers p
+      cross join print_jobs pending indexed by print_jobs_pull_idx
+      where pending.printer_id = p.id and p.deleted_at is null
+        and pending.status in ('queued', 'printing') and pending.kind = 'drawer'
+        and ((pending.status = 'queued'
+              and (pending.created_at <= ${queueCutoff} or pending.created_at > ${queueAhead}))
+          or (pending.status = 'printing'
+              and (pending.claimed_at is null or pending.claimed_at <= ${claimCutoff}
+                   or pending.claimed_at > ${claimAhead}))))`);
+}
+
 /** Remote callers must commit this claim before sending its payload. */
 export async function claimPrintJobs(
   tx: Transaction,
@@ -78,6 +102,7 @@ export async function claimPrintJobs(
     invoiceReceiptsAheadAt?: string;
   },
 ): Promise<ClaimedJob[]> {
+  await endStaleDrawerJobs(tx);
   const { claimedAt, due } = dueNow();
   const usbBt =
     ctx.visibleKeys.length > 0

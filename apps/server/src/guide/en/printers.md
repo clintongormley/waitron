@@ -31,3 +31,13 @@ on the printer's details runs it again.
 Choose a printer's name in the **Printers** tab or the **Print Queue** to open its details.
 **Active** switches the printer on or off at once. **Edit** changes its name and, for a network
 printer, its address. **Calibrate printer** runs calibration again.
+
+## Print Queue {#print-queue}
+
+Open **Print Queue** to see why a job is waiting. If no print agent sees a USB or Bluetooth
+printer, check the printer connection and its print agent. A connection message can appear
+alongside the last reported printing error.
+
+Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, check the printer’s
+power and connection, then use **Open drawer** if you still need it open. If no result was
+reported, check whether the drawer opened before opening it again.

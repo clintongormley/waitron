@@ -429,11 +429,11 @@ describe("remote agents with an aged print queue", () => {
         const queued = await enqueuePrintJob(tx, printerId, new Uint8Array([2]), kind);
         await tx
           .update(printJobs)
-          .set({ createdAt: "2026-01-01T00:00:00.000Z" })
+          .set({ createdAt: new Date(Date.now() - 2_000).toISOString() })
           .where(eq(printJobs.id, first));
         await tx
           .update(printJobs)
-          .set({ createdAt: "2026-01-01T00:00:01.000Z" })
+          .set({ createdAt: new Date(Date.now() - 1_000).toISOString() })
           .where(eq(printJobs.id, queued.jobId));
         return queued.jobId;
       });
@@ -495,7 +495,7 @@ describe("remote agents with an aged print queue", () => {
   );
   it.each([
     { kind: "document" as const, expected: [[7], [7]], status: "done" },
-    { kind: "drawer" as const, expected: [[7]], status: "printing" },
+    { kind: "drawer" as const, expected: [[7]], status: "failed" },
   ])("a lost $kind report preserves its recovery policy", async ({ kind, expected, status }) => {
     const app = mountApp();
     app.get("/api/node", (c) =>
@@ -550,7 +550,9 @@ describe("remote agents with an aged print queue", () => {
       expect(listed.status).toBe(200);
       const rows = (await listed.json()) as { id: string; status: string; canResend: boolean }[];
       expect(rows.find((row) => row.id === job.jobId)).toMatchObject({
-        status: "printing",
+        status: "failed",
+        attempts: 0,
+        lastError: "print_job.drawer_outcome_unknown",
         canResend: false,
       });
     }
@@ -607,7 +609,7 @@ describe("remote agents with an aged print queue", () => {
       expect(sink.written.map((entry) => [...entry.bytes])).toEqual([[27, 112, 0, 25, 250]]);
       expect(await jobRow(pulse.jobId)).toMatchObject(
         mode === "lost report"
-          ? { status: "printing", attempts: 0 }
+          ? { status: "failed", attempts: 0, last_error: "print_job.drawer_outcome_unknown" }
           : { status: "failed", attempts: 1, last_error: "connection reset after pulse" },
       );
     },
@@ -2145,6 +2147,28 @@ describe("printer cash-drawer calibration", () => {
     expect(audit.rows).toEqual([
       { person_id: manager!.id, device_id: null, reason: "calibration" },
     ]);
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: "2020-01-01T00:00:00.000Z" })
+      .where(eq(printJobs.id, jobId));
+    const agent = await joinAndAccept(app);
+    expect((await pull(app, agent.token)).jobs).toEqual([]);
+    expect(await jobRow(jobId)).toMatchObject({
+      status: "failed",
+      attempts: 0,
+      last_error: "print_job.drawer_expired",
+    });
+    const afterExpiry = await suite.db.execute(
+      sql`select person_id, device_id, reason from drawer_opens where printer_id = ${id}`,
+    );
+    expect(afterExpiry.rows).toEqual(audit.rows);
+    const expiredResend = await send(app, "POST", `/management-api/print-jobs/${jobId}/resend`, {
+      cookie: managerCookie,
+    });
+    expect(expiredResend.status).toBe(409);
+    expect(await expiredResend.json()).toMatchObject({
+      error: { code: "print_job.not_resendable" },
+    });
     await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, jobId));
     const resend = await send(app, "POST", `/management-api/print-jobs/${jobId}/resend`, {
       cookie: managerCookie,
@@ -5859,5 +5883,218 @@ describe("office printers in discovery and the receipt-printer create route", ()
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+});
+
+describe("drawer expiry and printer visibility in the queue", () => {
+  afterEach(() => vi.useRealTimers());
+
+  async function listed(app: Hono) {
+    const response = await send(app, "GET", "/management-api/print-jobs", {
+      cookie: managerCookie,
+    });
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      id: string;
+      status: string;
+      attempts: number;
+      lastError: string | null;
+      waitReason?: string;
+      canResend: boolean;
+    }[];
+  }
+
+  it("leaves failed drawers out of pending counts without pretending they had five attempts", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    await suite.db.insert(printJobs).values([
+      {
+        locationId,
+        printerId,
+        payload: Buffer.from([1]),
+        kind: "drawer",
+        status: "failed",
+        attempts: 0,
+        lastError: "print_job.drawer_expired",
+      },
+      {
+        locationId,
+        printerId,
+        payload: Buffer.from([2]),
+        kind: "drawer",
+        status: "failed",
+        attempts: 1,
+        lastError: "uncertain send",
+      },
+      {
+        locationId,
+        printerId,
+        payload: Buffer.from([3]),
+        kind: "document",
+        status: "failed",
+        attempts: 1,
+        lastError: "paper out",
+      },
+    ]);
+    const response = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+    expect(response.status).toBe(200);
+    expect(
+      ((await response.json()) as { id: string; pendingJobs: number }[]).find(
+        (row) => row.id === printerId,
+      ),
+    ).toMatchObject({ pendingJobs: 1 });
+    const rows = await listed(app);
+    expect(rows.filter((row) => row.lastError === "print_job.drawer_expired")).toMatchObject([
+      { status: "failed", attempts: 0, canResend: false },
+    ]);
+  });
+
+  it.each(["usb", "bluetooth"] as const)(
+    "explains %s waits using every agent's fresh visibility",
+    async (transport) => {
+      const app = mountApp();
+      const a = await joinAndAccept(app, "Agent A");
+      const b = await joinAndAccept(app, "Agent B");
+      const printerId = await createPrinterVia(app, a.agentId);
+      const localKey = transport === "usb" ? "QUEUE-USB" : "5A:4A:45:D4:FB:BB";
+      await suite.db
+        .update(printers)
+        .set({ transport, localKey, host: null, port: null })
+        .where(eq(printers.id, printerId));
+      const doc = await enqueue(printerId, new Uint8Array([1]));
+      const drawer = await withTransaction(suite.db, (tx) =>
+        enqueuePrintJob(tx, printerId, new Uint8Array([2]), "drawer"),
+      );
+      await suite.db
+        .update(printJobs)
+        .set({ status: "failed", attempts: 1, lastError: "paper out" })
+        .where(eq(printJobs.id, doc));
+      const start = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(start);
+      expect((await listed(app)).filter((row) => [doc, drawer.jobId].includes(row.id))).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: doc,
+            waitReason: "printer.not_visible",
+            lastError: "paper out",
+            attempts: 1,
+          }),
+          expect.objectContaining({
+            id: drawer.jobId,
+            waitReason: "printer.not_visible",
+            status: "queued",
+            attempts: 0,
+          }),
+        ]),
+      );
+      await pull(app, a.token, {
+        scanned: [{ transport, localKey }],
+        ...(transport === "bluetooth" ? { pairedBluetooth: [{ localKey }] } : {}),
+      });
+      expect((await listed(app)).find((row) => row.id === doc)?.waitReason).toBe(
+        "printer.not_visible",
+      );
+      await pull(app, b.token, { visible: [{ transport, localKey }] });
+      await pull(app, a.token);
+      expect((await listed(app)).find((row) => row.id === doc)?.waitReason).toBeUndefined();
+      for (const offset of [15_001, -15_001]) {
+        vi.setSystemTime(start + offset);
+        expect((await listed(app)).find((row) => row.id === doc)?.waitReason).toBe(
+          "printer.not_visible",
+        );
+      }
+      vi.setSystemTime(start);
+      expect((await listed(mountApp())).find((row) => row.id === doc)?.waitReason).toBe(
+        "printer.not_visible",
+      );
+      await pull(app, b.token, { visible: [{ transport, localKey }] });
+      expect((await listed(app)).find((row) => row.id === doc)?.waitReason).toBeUndefined();
+      await suite.db.update(printers).set({ active: false }).where(eq(printers.id, printerId));
+      expect((await listed(mountApp())).find((row) => row.id === doc)?.waitReason).toBeUndefined();
+      const [stored] = await suite.db.select().from(printJobs).where(eq(printJobs.id, doc));
+      expect(stored).toMatchObject({ lastError: "paper out", attempts: 1 });
+    },
+  );
+
+  it("explains an old queued drawer on a read without expiring it or adding a network wait reason", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    const network = await enqueue(printerId, new Uint8Array([1]));
+    await suite.db
+      .update(printers)
+      .set({ transport: "usb", localKey: "UNSEEN", host: null, port: null })
+      .where(eq(printers.id, printerId));
+    const drawer = await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(tx, printerId, new Uint8Array([2]), "drawer"),
+    );
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: "2020-01-01T00:00:00.000Z" })
+      .where(eq(printJobs.id, drawer.jobId));
+    const rows = await listed(app);
+    expect(rows.find((row) => row.id === drawer.jobId)).toMatchObject({
+      status: "queued",
+      waitReason: "printer.not_visible",
+      lastError: null,
+    });
+    const [stored] = await suite.db.select().from(printJobs).where(eq(printJobs.id, drawer.jobId));
+    expect(stored).toMatchObject({ status: "queued", attempts: 0, lastError: null });
+    await suite.db
+      .update(printers)
+      .set({ transport: "network_tcp", localKey: null, host: "10.0.0.9", port: 9100 })
+      .where(eq(printers.id, printerId));
+    expect((await listed(app)).find((row) => row.id === network)?.waitReason).toBeUndefined();
+  });
+  it("only gives unfinished jobs a visibility reason", async () => {
+    const app = mountApp();
+    const printerId = await createUsbPrinter(app, "MATRIX-USB", "Queue matrix");
+    const states = [
+      { kind: "document", status: "queued", attempts: 0, waiting: true },
+      { kind: "document", status: "printing", attempts: 0, waiting: true },
+      { kind: "document", status: "failed", attempts: 4, waiting: true },
+      { kind: "document", status: "failed", attempts: 5, waiting: false },
+      { kind: "document", status: "done", attempts: 0, waiting: false },
+      { kind: "drawer", status: "queued", attempts: 0, waiting: true },
+      { kind: "drawer", status: "printing", attempts: 0, waiting: true },
+      { kind: "drawer", status: "failed", attempts: 0, waiting: false },
+      { kind: "drawer", status: "failed", attempts: 1, waiting: false },
+      { kind: "drawer", status: "done", attempts: 0, waiting: false },
+    ] as const;
+    const jobs = states.map((state) => ({
+      id: randomUUID(),
+      locationId,
+      printerId,
+      payload: Buffer.from([1]),
+      kind: state.kind,
+      status: state.status,
+      attempts: state.attempts,
+    }));
+    await suite.db.insert(printJobs).values(jobs);
+    const before = await suite.db
+      .select()
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId))
+      .orderBy(printJobs.id);
+    const rows = await listed(app);
+    for (const [index, state] of states.entries()) {
+      const row = rows.find((item) => item.id === jobs[index]!.id);
+      expect(row).toBeDefined();
+      expect(row!.waitReason).toBe(state.waiting ? "printer.not_visible" : undefined);
+    }
+    expect(
+      await suite.db
+        .select()
+        .from(printJobs)
+        .where(eq(printJobs.printerId, printerId))
+        .orderBy(printJobs.id),
+    ).toEqual(before);
+  });
+
+  it("does not give the in-process Demo printer an agent-visibility reason", async () => {
+    const app = mountApp({ practiceMode: true });
+    const printerId = await createUsbPrinter(app, "WAITRON-DEMO-PRINTER", "Demo printer");
+    const jobId = await enqueue(printerId, new Uint8Array([1]));
+    expect((await listed(app)).find((row) => row.id === jobId)?.waitReason).toBeUndefined();
   });
 });
