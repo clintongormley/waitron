@@ -2,11 +2,16 @@
 
 ## Scoped tests and full verification
 
-To reduce repeated work, pull requests and main landings run only selected packages, without
-collecting package-wide coverage. Check `changes` outputs `code`, `scope`, `packages` and `full`
-before treating a green run as evidence about the workspace. Root coverage, mutation floors and
-other selected checks remain in place. Till changes also select the server: its handover test
-loads the till router by path, outside the workspace dependency graph.
+Pull requests run selected packages without collecting package-wide coverage. Ordinary main
+pushes run the change classifier, lint, root guards and their coverage, and code-selected typechecks
+and bundle builds/smoke. The typecheck runs the whole workspace when selected. Main pushes start
+no package tests or shared mutation in `ci.yml`. The separate UI registry publication retains its
+package checks, and deploy-selected image smoke still runs.
+
+Check the event and `changes` outputs before treating a green run as evidence about the workspace.
+On ordinary main pushes, `code`, `scope` and `packages` still describe changed code, but every named
+package gate is false. PRs keep their package gates and mutation floors. Till changes also select
+the server: its handover test loads the till router by path, outside the workspace dependency graph.
 
 Brand PNG, SVG and ICO files under `packages/ui/brand/`, and its `README.md`, select
 exactly UI, dashboard, setup and till tests. Paths already classified as documentation may
@@ -33,9 +38,11 @@ for manual smoke checks; its former nightly schedule is replaced by full CI.
 Each non-PR run has a unique concurrency group. Only a newer PR run cancels its predecessor.
 Equal-tree PR reuse has been removed. Main selects changes since the newest completed successful
 push, scheduled or manual main ancestor among the latest 100 runs. Queued, running, failed and
-cancelled runs do not become baselines. Missing history or an unreadable API selects all packages;
-failed, partial, unsafe or oversized path output also selects all packages. A successful docs run
-cannot hide failed code: that code is included in its range before the docs run can succeed.
+cancelled runs do not become baselines. Missing history or an unreadable API selects global change
+scope; failed, partial, unsafe or oversized path output does the same. Main uses that scope for quick
+checks, not package tests. A successful docs run cannot hide a failed quick check on earlier code:
+that code is included in its range before the docs run can succeed. Failures caused only by combining
+branches wait for the next full package run; the owner accepted this delay on 8 November 2026.
 
 For immediate full verification, run `gh workflow run ci.yml --ref main`, record the selected SHA
 and run ID, then read the final result. A failed nightly needs a fix followed by this manual run;
@@ -614,7 +621,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
-| `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on main it uses the same resolved package scope; full runs select every package |
+| `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package, or a full run; ordinary main pushes skip shared mutation |
 | `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
@@ -985,7 +992,7 @@ on the actual CI head to check those.
 ### Full verification measures coverage
 
 For nightly, manual and release full verification, check the selected head’s coverage results.
-PR and landing runs use the scoped mode described above. Run `pnpm --filter <pkg> test:coverage`
+PR runs use the scoped mode described above; ordinary main pushes run quick checks without package tests. Run `pnpm --filter <pkg> test:coverage`
 locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way and twenty-four-way file shards, each with a `-merge` job that enforces the thresholds on
@@ -3539,9 +3546,9 @@ same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=pa
 `packages=@waitron/server`; and `pnpm --filter "...@waitron/server" ls --depth -1 --json | node
 scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
 every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for `code` and
-`server` both true. PR and ordinary main ranges now select those server jobs without package
-coverage; their merge job runs only in full verification. Type checks and bundle checks also run
-when code is selected. Full scheduled/manual verification selects all packages and image smoke,
+`server` both true. PR ranges select those server jobs without package coverage; ordinary main
+pushes emit `server=false` and skip them. Their merge job runs only in full verification. Type
+checks and bundle checks run when code is selected. Full scheduled/manual verification selects all packages and image smoke,
 then publishes main images through the existing tag guard. The PR #682 runs above record the
 older job layout, before A1427 scoped main landings and moved full coverage to the nightly run.
 

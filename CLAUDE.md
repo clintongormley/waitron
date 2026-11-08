@@ -75,7 +75,7 @@ The instances behind each rule are in [writing-claims.md](docs/developers/writin
 ## 2. The gate
 
 Run focused behavioral tests while implementing, including a failing test before a fix. Let the
-normal pre-push hook run the local checks once; scoped package tests run in PR and landing CI; the nightly or manual full run enforces package coverage.
+normal pre-push hook run the local checks once; scoped package tests run in PR CI; main pushes run quick checks; the nightly or manual full run enforces package coverage.
 Do not add a whole-workspace local run solely to finish a branch. Broader local runs remain useful
 for investigating failures or behavior across packages. Required CI checks must pass on the current head.
 
@@ -108,8 +108,10 @@ hook, or how tests are scheduled:
   `"ignored": true`.
 - **Check every command's exit status.** A shell sequence separated by newlines reports only its
   LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
-- **PR and landing CI run scoped package tests without package-wide coverage; nightly, manual and
-  release runs enforce `98/98/98/95` coverage.** Root coverage remains on every run. Verify the
+- **PR CI runs scoped package tests without package-wide coverage; ordinary main pushes run no
+  package tests in `ci.yml`; nightly, manual and release runs enforce `98/98/98/95` coverage.**
+  Root coverage remains on every run. UI registry publication keeps its separate package checks;
+  deploy-selected image smoke stays on main (owner, 2026-11-08, A1452). Verify the
   current head's selected jobs, and the full run's coverage or merge jobs before claiming full
   coverage. Shard counts must not exceed the package's test-file count. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than the rule: workflow text and controlled shell fixtures,
@@ -131,8 +133,9 @@ hook, or how tests are scheduled:
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
 - **CI does not run every check on every push.** Read `changes` outputs `code`, `scope`, `packages`
-  and `full`. Main uses the newest completed successful main ancestor as its baseline; no baseline
-  runs all packages. PR evidence is not reused. Container publication, including `:main`, follows
+  and `full`. Main uses the newest completed successful main ancestor to scope quick checks;
+  no baseline selects global change scope. Main's named package gates are false even when `scope`
+  and `packages` name code changes. PR evidence is not reused. Container publication, including `:main`, follows
   full scheduled/manual main verification or a fully checked release tag, never an ordinary main
   push. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
 - **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server reads
@@ -928,7 +931,9 @@ before treating an implementation as a rule violation.
   (owner decision 2026-09-05): if what `main` gained is documentation, or code only in files this
   branch did not touch, land it with `gh pr merge --squash --admin` — which bypasses the up-to-date
   requirement and NOTHING else, never a failing check or an open review. Rebase only for `CONFLICTING`,
-  or when `main` touched a code file this branch also changed. **Never `gh pr update-branch`** — its
+  or when `main` touched a code file this branch also changed. Package-level failures caused only
+  by combining branches are checked at the next full run, not at merge; the owner accepted this
+  delay on 2026-11-08 (A1452). **Never `gh pr update-branch`** — its
   merge commit carries no sign-off and fails DCO.
 - **Treat Dependabot PRs like any other, including strict sign-off** (owner, 2026-09-27).
   Check version-pinning guards and front-end qualification for npm-only bumps.

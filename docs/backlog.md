@@ -2516,6 +2516,8 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 
 ## Standing decisions
 
+- **Main pushes keep quick checks; package tests run on PRs and full runs (owner, 2026-11-08, A1452).** [Exceptions and merge-risk decision](backlog/ci.md#decisions-and-deliberate-limits).
+
 - **Keep the pre-push hook quick, with typechecking retained (owner, 2026-11-08, A1449).** [Decision and limits](backlog/ci.md#decisions-and-deliberate-limits).
 
 - **Older PR heads may lack a newer workflow's browser smoke script (watcher, 2026-11-08, A1402).** Skip only an absent script with a notice; current source guards require it and existing script failures stay fatal. [Decision and limits](backlog/ci.md#decisions-and-deliberate-limits).

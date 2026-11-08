@@ -51,9 +51,10 @@ the current head and every conversation resolved, when GitHub still reports it `
 what `main` gained since the merge-base is documentation, or code only in files this branch did
 not touch, it lands as it is with `gh pr merge --squash --admin`. `--admin` there bypasses
 the up-to-date requirement and nothing else — never a failing check or an open review. The
-up-to-date rule guards against semantic conflicts, which documentation cannot cause, and the
-post-merge `main` run tests selected packages against the merged tree (verified #119 with code, #240 with five
-docs commits; `/land-branch` step 2 classifies it). Rebase in the worktree only for
+post-merge `main` run checks lint, types, root guards and builds as selected, but runs no package
+tests in `ci.yml`. Two branches that break each other only when combined are checked by the next
+full package run, not at merge. The owner accepted this delay on 8 November 2026 (A1452), retaining
+the BEHIND rule; `/land-branch` step 2 still classifies the changed paths. Rebase in the worktree only for
 `CONFLICTING`, or when `main` touched a code file this branch also changed — `pnpm install`, then
 push through the hook, never `--no-verify`. **Never `gh pr update-branch`**, whose merge commit
 carries no sign-off and fails DCO (#160).
@@ -172,8 +173,9 @@ before deleting; the scratch copy was 113 lines behind what landed.
 **Before a PR**, run focused tests for the behavior you changed, then `/finish-branch`. Let the
 normal hook run the §2 local checks once; let CI run mandatory package tests and coverage. Do not
 add a whole-workspace local run solely because the branch is being finished. Verify the current-head
-CI scope and results. Main checks selected packages since the newest successful main baseline;
-full scheduled/manual runs enforce package coverage and publish main images.
+CI scope and results. Main uses the newest successful main baseline to select quick checks;
+it runs no package tests in `ci.yml`. Full scheduled/manual runs enforce package coverage and
+publish main images.
 [Modes and limits](ci-and-gates.md#scoped-tests-and-full-verification).
 
 ### First Live setup qualification

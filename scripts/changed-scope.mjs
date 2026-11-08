@@ -427,7 +427,7 @@ export function packagesInScope(scopedPackagesJson) {
 /**
  * Renders every gate in `SCOPE_GATES` as a GitHub Actions output line, from ONE resolved scope.
  *
- * Pass `null` for "no narrowing applies": an unscoped run on `main`, or a `pnpm ls` result that
+ * Pass `null` for "no narrowing applies": an unscoped run, or a `pnpm ls` result that
  * could not be parsed. Both fail closed to every gate running, because running a job that was not
  * needed costs runner time while skipping one that was needed ships an untested package. That check
  * lives HERE rather than in the gates, so no gate can be written without it.
@@ -448,7 +448,7 @@ export function gateOutputs(inScope) {
 }
 
 // CLI: one `pnpm ls --json` result on stdin → one `<gate>=<bool>` line per gate. With `--unscoped`
-// (main, where there is no scope to resolve) stdin is never read and every gate is true.
+// stdin is never read and every gate is true.
 //
 // stdout is appended verbatim to `$GITHUB_OUTPUT`, so it carries the output lines and nothing else,
 // while the reason goes to stderr for whoever reads the job log.
