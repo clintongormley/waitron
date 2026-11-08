@@ -444,6 +444,18 @@ describe("remaining disposable PR jobs", () => {
 });
 
 describe("disposable server routing", () => {
+  it("keeps the A1446 experiment on hosted server runners", () => {
+    const routing = job("test-server").body.find((line) => /^ {4}runs-on:/.test(line));
+    const context = routingContext();
+    context.github.head_ref = "perf/a1446-server-module-cache";
+    expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+    context.github.head_ref = "another-branch";
+    expect(expressionValue(routing, context)).toEqual([
+      "self-hosted",
+      "dt-42-1234-1-test-server-1",
+    ]);
+  });
+
   // GitHub supplies an unset vars key as ""; see the CI guide's contexts provenance.
   it.each([
     ["", true],
@@ -462,7 +474,7 @@ describe("disposable server routing", () => {
 
   it("routes only the first attempt of same-repository server PR shards within the configured budget", () => {
     expect(job("test-server").body).toContain(
-      "    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('[\"self-hosted\",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}",
+      "    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && github.head_ref != 'perf/a1446-server-module-cache' && fromJSON(format('[\"self-hosted\",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}",
     );
     for (const entry of jobs.filter(
       ({ id }) =>

@@ -1042,7 +1042,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')
-    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && github.head_ref != 'perf/a1446-server-module-cache' && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:

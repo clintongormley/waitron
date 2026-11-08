@@ -1,3 +1,4 @@
+// A1446 disposable CI baseline: select the unchanged server behavior for measurement.
 import addressparser from "nodemailer/lib/addressparser/index.js";
 import { normalizeAndValidateEmail } from "@waitron/identity";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
