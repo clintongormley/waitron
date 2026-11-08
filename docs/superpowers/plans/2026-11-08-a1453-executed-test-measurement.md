@@ -68,3 +68,8 @@ nightly `server-blob-2` from run 42437905513 has merged coverage, not per-test-f
 changed top-level code/config/migrations/lockfiles and the stricter column above. Only the item's
 column decides the 30% early stop. Count reasons in both columns and say whether the best case
 could deliver tens of times fewer test minutes. This supersedes the single-column decision rule.
+
+**As measured, 2026-11-08:** the watcher resolved the two-column choice at 18:01, approved the
+labelled cache ceiling at 18:57, and required the static-versus-recorded worker comparison at 19:51.
+The [A1453 decision](../../backlog/ci.md#decisions-and-deliberate-limits) records the drop recommendation
+and its limits; the full local receipt is `~/waitron-campaign-d/receipts/a1453-20261108/measurement-results.md`.

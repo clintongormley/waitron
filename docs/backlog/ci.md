@@ -730,6 +730,61 @@ A1424's live qualification was added on 7 November 2026.
 
 - **A1452, owner 2026-11-08:** ordinary main pushes keep quick checks and skip package tests/shared mutation in `ci.yml`. PR selection and full nightly/manual/release testing remain. UI registry publication and deploy-selected image smoke keep their checks. BEHIND merges retain their existing rule; package-level failures caused only by combining branches wait for the next full run. Watcher approval and owner risk acceptance: Lane F, 17:48, confirming the owner’s 17:35 decision.
 
+- **A1453 — drop this measured selector and remembered-result prototype (2026-11-08).**
+  The initial 82.17% retention figure used a conservative static scan for worker paths.
+  Direct child-process API records cover 12,452.6 of 78,421.8 qualified scoped file-seconds (15.88%).
+  Positive V8 counts also show execution of the one-line worker factory in files accounting for
+  61,871.0 seconds (78.90%); its body is `new Worker(source, options)` at the captured revision's
+  `packages/store/src/venue-liveness.ts:223`. Their union is 64,135.2 seconds (81.78%). These are
+  calls, not proof that every process started successfully or coverage of the worker body.
+
+  **This sample does not support tens of times fewer test minutes.** Keeping that union, as the
+  approved plan requires, caps savings at 18.22% even if every other file is free, below the 30% bar.
+  Keeping only the directly recorded child-process files still leaves 15.88% of the file-time;
+  a tenfold cut would need 10% or less. The original rule also retains 3.7 static-only seconds and
+  297 seconds with no baseline map, giving its 17.83% ceiling. Keep package scoping; this does not
+  establish a limit on every possible cache, another workload or the watcher's warm-runner proposal.
+
+  The frozen sample ends at PR #2611, merged at 17:54 CET on 8 November, and contains 40 PRs.
+  Ten scoped rows qualify: six ran measured tests and four ran none. Qualification checks incident history, download 5xx
+  and checkout under about ten seconds. A separate coverage-enabled row has 2,517.6 file-seconds;
+  other rows remain in the receipt with their disqualifying evidence. File-time sums concurrent
+  file elapsed times: it is not runner minutes or the time a person waits.
+
+  | Qualified scoped sample | Own-package fallbacks | Stricter dependent-package fallbacks |
+  | --- | ---: | ---: |
+  | Selection saving | 4.11% | 2.43% |
+  | Additional conservative remembered passes | 0 | 0 |
+  | Combined saving: ceiling, not verified safe | 5.36% | 5.36% |
+
+  These are gross estimates before map download, matching and installation costs. No qualified
+  whole job becomes empty: zero whole-job minutes avoided; partial-job wall-time savings are unmeasured.
+
+  The ceiling adds only 1.25 percentage points over the own-package result (1.30% of its remaining work). The extra ceiling permits an old executed-function fingerprint to bypass
+  a fallback. Each extra reuse has a risk line in the receipt: changed code the old map never ran,
+  or an unrecorded input, can invalidate that result. Its key includes the whole test, recorded
+  function bodies, their files' top-level code, helpers and configuration/runtime dependency
+  identity. The retained history yields 2,981 ceiling keys, modelled as 539,561 serialized bytes. No production selector, cache or recurring workflow was installed.
+
+  All 2,537 expected files have one record; 2,194 remain gap-marked, including 1,177 unreadable source-map paths. Maps are captured before Vitest merges coverage, with one test path per record;
+  Node and concurrent Chromium controls distinguish called functions from merely imported ones.
+  Worker exclusions come from a static scan of mapped source files, not proof each test starts a worker.
+  The historical map base is `147914ca764a66a6dfc7fbe8500ea66c53763100`. Raw maps occupy 213.4 MB; hosted artifacts 30.7 MB. The 36 successful jobs took 150.25 summed job-minutes, including 119.50 capture-step minutes; conversion timers sum to 51.28 minutes within those steps.
+  Rebuild costs are observed instrumented jobs, not measured savings or an incremental nightly cost.
+  All 36 had no relevant incident or setup/download 5xx and checkout at most 10 seconds.
+  Hosted receipts: [24 server jobs](https://github.com/clintongormley/waitron/actions/runs/42506976544)
+  and [12 browser jobs](https://github.com/clintongormley/waitron/actions/runs/42510919846).
+
+  All eleven observed failed PR file/head pairs and one main pair remain selected by the gap rule; none is reused. Six predate the map. The audit retains one unavailable attempt-metadata response and one missing
+  failed-job log. Earlier-pass history requested 202 PR/main attempts; 42 archives were unavailable,
+  supplemented where exact job logs survived. Missing history limits the ceiling; retaining those
+  observed files does not prove safety. Other packages and required checks stay unchanged.
+
+  Receipts: `~/waitron-campaign-d/receipts/a1453-20261108/measurement-results.md`, with all 40
+  per-PR rows, failure heads, fallback reasons, risk lines, map/store sizes and commands.
+  The [approved measurement plan](../superpowers/plans/2026-11-08-a1453-executed-test-measurement.md)
+  records the scope; its prototype and temporary hosted workflow are not part of the product.
+
 - **A1448 — keep plain typechecks (watcher, 2026-11-08).** Do not adopt TypeScript 7.0.2’s incremental build information: in the retained reproduction, renaming `WtModal.heading` in `packages/ui/src/components/wt-dialog.ts` left two warm dashboard checks passing, while plain `tsc --noEmit` reported 119 errors. The affected callers receive the component type through the global `HTMLElementTagNameMap`; imported-dependency controls did catch errors and did not expose this case. The watcher closed the item and kept the implementation private. Reproduction and results: `~/waitron-campaign-k/receipts/a1448-20261108/reproduce-global-error.py` and `global-error-results.json`.
 
 - **A1449, owner and watcher 2026-11-08:** the pre-push hook keeps sign-off, frozen install, formatting, lint and scoped typechecks. Root tests and coverage run in CI. Known package, machinery and documentation scopes check changed files with content caches; global or unknown scopes retain full format/lint scans.
