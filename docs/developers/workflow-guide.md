@@ -74,8 +74,8 @@ passed: Dependabot's commit in each of #764 (compose), #765 and #766 (npm) carri
 `Signed-off-by: dependabot[bot] <support@github.com>`, and each PR's `Every commit is signed off`
 check passed (with the repository's "Require contributors to sign off on web-based commits" setting
 off). The GitHub Actions and Dockerfile update jobs also ran that day and opened no pull request, so
-no commit of theirs has been seen. A commit without the line now fails the sign-off step of the `ci`
-check (that check became a step of `ci.yml`'s `changes` job on 2026-11-08, A1455); the repair is the one
+no commit of theirs has been seen. A commit without the line fails the sign-off step of CI's `changes` job,
+and with it the required `ci` check; the repair is the one
 the pre-push hook prints, `git rebase --signoff <base>`, run on the Dependabot branch (checked out as
 the next item describes) and pushed with `--force-with-lease` through the hook.
 

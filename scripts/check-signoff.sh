@@ -1,9 +1,7 @@
 #!/usr/bin/env sh
 # The sign-off (DCO) predicate and the walk over a push's commits — the one copy, called by both
-# gates: `.husky/pre-push`'s `check_signoff` and the sign-off step of ci.yml's `changes` job. Each
-# kept its own byte-identical `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and its own loop until
-# 2026-08-01. The two agreeing is the whole point of the check, and two copies is not how that is
-# kept true.
+# gates: `.husky/pre-push`'s `check_signoff` and the sign-off step of ci.yml's `changes` job. The
+# two agreeing is the whole point of the check, and two copies is not how that is kept true.
 #
 # CONTRACT
 #
