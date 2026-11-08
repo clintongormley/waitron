@@ -323,6 +323,34 @@ async function mountTill(server: TillServer) {
   return { ...mounted, api };
 }
 
+/** The app on a real `TillApi` over `server`, with a real `ServerRouter` whose own probes fail. */
+async function mountRoutedTill(server: TillServer) {
+  const stored = new Map<string, string>();
+  const router = new ServerRouter({
+    origin: location.origin,
+    fetchImpl: (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch,
+    storage: {
+      getItem: (key) => stored.get(key) ?? null,
+      setItem: (key, value) => void stored.set(key, value),
+    },
+  });
+  const { el } = await mountWidget<TillApp>("till-app", {
+    api: new TillApi("", server.fetch),
+    router,
+  });
+  return { el, router };
+}
+
+function switchServer(router: ServerRouter): void {
+  router.dispatchEvent(
+    new CustomEvent("server-changed", {
+      detail: { from: location.origin, to: "https://cloud.deli.test" },
+    }),
+  );
+}
+
 const lockScreen = (el: TillApp) => el.shadowRoot!.querySelector("till-lock-screen");
 const shellOf = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-shell");
 
@@ -596,29 +624,11 @@ describe("the till through its real client", () => {
 
   it("names nobody on the server the till switches to, until someone signs in there", async () => {
     const server = tillServer();
-    const stored = new Map<string, string>();
-    const router = new ServerRouter({
-      origin: location.origin,
-      fetchImpl: (async () => {
-        throw new TypeError("Failed to fetch");
-      }) as unknown as typeof fetch,
-      storage: {
-        getItem: (key) => stored.get(key) ?? null,
-        setItem: (key, value) => void stored.set(key, value),
-      },
-    });
-    const { el } = await mountWidget<TillApp>("till-app", {
-      api: new TillApi("", server.fetch),
-      router,
-    });
+    const { el, router } = await mountRoutedTill(server);
     await signInAsAna(el);
     const switchedAt = server.requests.length;
 
-    router.dispatchEvent(
-      new CustomEvent("server-changed", {
-        detail: { from: location.origin, to: "https://cloud.deli.test" },
-      }),
-    );
+    switchServer(router);
     await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
     const signInThere = server.hold("POST /api/session");
     await keyIn(el, LUIS, LUIS_PIN);
@@ -632,6 +642,26 @@ describe("the till through its real client", () => {
       expect.arrayContaining(["GET /api/till", "GET /api/staff"]),
     );
     expect(before.map(named)).toEqual(Array(before.length).fill(undefined));
+    signInThere.answer();
+    await vi.waitFor(() => expect(shellOf(el)).not.toBeNull());
+    expect(server.unserved).toEqual([]);
+  });
+
+  it("still says the server switched on the lock a person refusal left", async () => {
+    const server = tillServer();
+    const { el, router } = await mountRoutedTill(server);
+    await signInAsAna(el);
+    server.refuse("PUT /api/session/locale", 409, SESSION_PERSON_REFUSAL);
+    chooseLocale(el);
+    await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
+
+    switchServer(router);
+
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".error")?.textContent ?? "").toContain(
+        t("server.switched"),
+      ),
+    );
   });
 
   it("still locks for a request sent before a profile switch", async () => {
@@ -704,12 +734,17 @@ describe("the till through its real client", () => {
 
   it("sends no save naming Luis once his sign-in has answered, while Ana's save goes unanswered past its limit", async () => {
     const server = tillServer();
-    // As a browser's fetch does, a request whose signal aborts rejects, answered or not.
+    // The shared stub ignores signals; like a browser's fetch, this rejects with an AbortError when
+    // the signal aborts before an answer.
+    const aborted: string[] = [];
     const fetchUntilAborted: FetchLike = (input, init) =>
       new Promise((resolve, reject) => {
-        init?.signal?.addEventListener("abort", () =>
-          reject(new DOMException("The operation was aborted.", "AbortError")),
-        );
+        init?.signal?.addEventListener("abort", () => {
+          aborted.push(
+            `${init.method ?? "GET"} ${new URL(String(input), location.origin).pathname}`,
+          );
+          reject(new DOMException("The operation was aborted.", "AbortError"));
+        });
         server.fetch(input, init).then(resolve, reject);
       });
     const { el } = await mountTill({ ...server, fetch: fetchUntilAborted });
@@ -726,13 +761,13 @@ describe("the till through its real client", () => {
 
       await keyIn(el, LUIS, LUIS_PIN);
       await vi.waitFor(() => expect(shellOf(el)).not.toBeNull());
-      const luisAnswered = server.requests.length;
       await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
       await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
 
       expect(named(server.sentTo("PUT /api/parties/v1/drafts")[0]!)).toBe(ANA.personId);
-      const luisSaves = server.requests
-        .slice(luisAnswered)
+      expect(aborted).toContain("PUT /api/parties/v1/drafts");
+      expect(server.sentTo("DELETE /api/session")).toEqual([]);
+      const luisSaves = afterSignIn(server, 1)
         .filter((request) => request.method === "PUT" && request.path === "/api/parties/v1/drafts")
         .filter((request) => named(request) === LUIS.personId);
       expect(luisSaves).toEqual([]);

@@ -3458,7 +3458,12 @@ export class TillApp extends LitElement {
     return this.#errorKey;
   }
   private set errorKey(value: CounterError | undefined) {
-    if (value !== undefined && this.#refusedPerson === this.#tabPerson) return;
+    if (
+      value !== undefined &&
+      this.#refusedPerson !== undefined &&
+      this.#refusedPerson === this.#tabPerson
+    )
+      return;
     this.#errorKey = value;
   }
   #errorKey?: CounterError;
