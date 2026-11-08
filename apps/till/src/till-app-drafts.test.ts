@@ -3277,7 +3277,7 @@ describe("till-app: signing out while a save is out", () => {
     expect(api.logout).toHaveBeenCalledWith();
   });
 
-  it("sends one sign-out for whoever signed in last, on a tab with no sign-out between them", async () => {
+  it("sends one sign-out after a second sign-in on a tab with no sign-out between them", async () => {
     const { el } = await mountApp();
     await openTable(el);
     emit(shell(el), "device-unauthorized");
