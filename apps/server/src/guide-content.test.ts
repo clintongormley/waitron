@@ -230,6 +230,7 @@ it.each(GUIDE_LANGUAGES)("serves the till notices guide in %s with its sections"
     "notice-line",
     "notices",
     "invoice-conflict",
+    "not-main-server",
   ]);
 });
 

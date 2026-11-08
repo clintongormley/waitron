@@ -10,8 +10,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ha fallado la comprobación de la huella; avisa a un responsable.",
   },
   "fiscal.chain_handed_over": {
-    en: "This server is no longer the main server, so it cannot record this.",
-    es: "Este servidor ya no es el servidor principal, así que no puede registrar esto.",
+    en: "This server is no longer the main server, so it cannot record this. Wait for the till to move to the main server, then try again.",
+    es: "Este servidor ya no es el servidor principal, así que no puede registrar esto. Espera a que la caja pase al servidor principal y vuelve a intentarlo.",
   },
   "allergy.unanswered": { en: en["allergy.unanswered"], es: es["allergy.unanswered"] },
   "allergy.out_of_date": { en: en["allergy.stale"], es: es["allergy.stale"] },

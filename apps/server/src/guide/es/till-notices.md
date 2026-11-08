@@ -129,3 +129,9 @@ cobrar. Usa la clave de recuperación actual de este servidor y sigue
 [Recuperar una identidad de facturación](box-status.md#invoice-conflict).
 Puedes cerrar la ventana de pago sin iniciar una recuperación. El cambio de identidad conserva
 los resultados de envío y las incidencias existentes.
+
+## Cuando este servidor ya no es el servidor principal {#not-main-server}
+
+Cuando la caja diga **Este servidor ya no es el servidor principal**, espera a que pase al
+servidor principal y vuelve a intentarlo. Las devoluciones siguen funcionando. Si ya has cobrado
+con tarjeta en el datáfono, devuelve el importe ahí.
