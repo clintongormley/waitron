@@ -14,8 +14,8 @@ usan los datos personales. Por eso las obligaciones son tuyas. Waitron es el pro
 cumplir algunas de ellas. Entre tus obligaciones están estas:
 
 - Informar a las personas sobre sus datos cuando los recoges. Las secciones siguientes te dan
-  avisos breves para el personal, los clientes con factura y los clientes que reservan, y una lista
-  de lo que debe decir tu aviso completo.
+  avisos breves para el personal, los clientes con factura, los que reservan y los que tienen alergias,
+  y una lista de lo que debe decir tu aviso completo.
 - Responder a quien pida ver, corregir o suprimir sus datos, o limitar u oponerse a su uso, o
   recibirlos para llevarlos a otro sitio, sin dilación indebida y en el plazo de un mes desde que
   recibes la solicitud. Si la solicitud es compleja o tienes muchas, la ley te permite prorrogar el
@@ -64,8 +64,9 @@ Copia y adapta el párrafo siguiente:
 **Protección de datos.** Responsable: _razón social del local_ (_NIF del local_), _dirección del
 local_, _correo de privacidad del local_. Tratamos tus datos para gestionar tu contrato, tu acceso a
 Waitron y el registro diario de jornada, que la ley nos obliga a conservar cuatro años. Waitron
-anota qué persona del personal cobró una venta, autorizó una anulación, pidió o autorizó una
-devolución, y abrió el cajón de efectivo o autorizó su apertura. Puedes ejercer tus derechos de
+anota qué persona del personal cobró una venta, cambió un pedido, autorizó una anulación, pidió o
+autorizó una devolución, y abrió el cajón de efectivo o autorizó su apertura. También registra el
+dispositivo usado para fichar la entrada. Puedes ejercer tus derechos de
 acceso, rectificación, supresión, limitación, oposición y portabilidad escribiendo a _correo de
 privacidad del local_, y reclamar ante la AEPD. Más información: _dirección de la página de
 privacidad_.
@@ -120,7 +121,7 @@ factura. Derechos y más información: _dirección de la página de privacidad_.
 
 Pregunta a tu asesor si la ley pide una línea de privacidad en la propia factura.
 
-## Qué decir a un cliente que reserva {#booking-notice}
+## Qué decir a los clientes que reservan o tienen alergias {#booking-notice}
 
 Una reserva en Waitron guarda el nombre del cliente, un teléfono opcional y notas, y ninguna
 dirección de correo, así que Waitron no puede escribir al cliente. Es el personal quien toma la
@@ -133,14 +134,28 @@ una alergia, la anotamos para preparar su comida con seguridad. Puede pedirnos v
 borrar sus datos, o ejercer sus demás derechos de protección de datos, y tiene más información en
 _dirección de la página de privacidad_.
 
+La caja pide al personal que responda **¿Hay alergias en esta mesa?** antes del primer envío.
+Da el aviso de alergias antes de tomar los datos, tanto si el cliente reservó como si llegó sin
+reserva. Puedes ponerlo en la carta o en la hoja de alérgenos y explicarlo en la mesa. El campo
+**Quién** puede contener el nombre del cliente, así que incluye también a estos clientes en tu
+aviso de privacidad.
+
+Copia y adapta el párrafo siguiente:
+
+**Alergias.** _Razón social del local_ anota a quién afecta una alergia, los alérgenos y la nota
+para cocina que nos indique, para preparar su comida con seguridad. Estos datos se comunican a
+la cocina. Puede pedirnos que le mostremos, rectifiquemos o suprimamos sus datos, o ejercer sus
+otros derechos de protección de datos. Más información: _correo de privacidad del local_,
+_dirección de la página de privacidad_.
+
 ## El aviso completo en tu página web {#full-notice}
 
 El aviso completo es al que remite cada aviso breve. Ponlo en tu propia página web y usa la
 dirección de esa página en los avisos breves. Indica la misma dirección en la tarjeta **Privacidad**,
 para que Waitron enlace a ella (consulta
 [Tu página y tu correo de privacidad en Waitron](data-protection.md#privacy-settings)). Cubre cada
-grupo de personas de las que tienes datos: el personal, los clientes con factura y los clientes que
-reservan. Para cada grupo, la ley pide que el aviso diga:
+grupo de personas de las que tienes datos: el personal, los clientes con factura, los que reservan
+y los que tienen alergias. Para cada grupo, la ley pide que el aviso diga:
 
 - quién eres y cómo contactar contigo; si tienes representante, quién es y cómo contactar con él;
 - cómo contactar con tu delegado de protección de datos, si tienes uno;
@@ -237,6 +252,11 @@ entradas, así que no se repiten en cada una:
   proveedores que elegiste, y Waitron no comprueba dónde guardan los datos, así que consúltalo con
   cada proveedor.
 
+Para el bucket, usa una clave de acceso limitada a ese bucket y mantén bloqueado el acceso público.
+Activa la verificación en dos pasos de tu cuenta con el proveedor de almacenamiento para añadir
+una segunda comprobación al iniciar sesión. Son ajustes de tu proveedor; Waitron no los configura
+por ti.
+
 Copia y adapta el párrafo siguiente para abrir el registro, y después cada entrada que le sigue,
 hasta el siguiente encabezado:
 
@@ -292,12 +312,13 @@ registro diario de jornada que exige la ley.
 - Seguridad: Waitron se niega a cambiar o borrar un fichaje una vez escrito. La copia de los propios
   datos de cada persona incluye su registro de jornada.
 
-**Quién hizo qué en la caja.** Waitron anota quién cobró las ventas, quién autorizó las anulaciones,
-quién pidió o autorizó las devoluciones, y quién abrió el cajón de efectivo o lo autorizó.
+**Quién hizo qué en la caja.** Waitron anota quién cobró las ventas, quién cambió los pedidos, quién
+autorizó las anulaciones, quién pidió o autorizó las devoluciones, y quién abrió el cajón de efectivo
+o lo autorizó.
 
-- Finalidad: saber quién hizo cada venta, anulación, devolución y apertura del cajón de efectivo.
+- Finalidad: saber quién hizo cada venta, cambio de pedido, anulación, devolución y apertura del cajón de efectivo.
 - Interesados: el personal.
-- Datos: quién cobró una venta, quién autorizó una anulación, quién pidió, autorizó o registró el
+- Datos: quién cobró una venta, quién cambió un pedido, quién autorizó una anulación, quién pidió, autorizó o registró el
   resultado de una devolución, quién abrió el cajón de efectivo o lo autorizó, y cuándo; y quién
   confirmó o puso la hora del equipo desde una caja, guardado en una tabla cuyas filas no pueden
   modificarse ni borrarse.
@@ -360,14 +381,15 @@ la caja y escribir notas en un pedido o en un plato para la cocina.
 - Seguridad: como en todas las entradas. Las notas son texto libre, así que pide al personal que
   escriba solo lo que necesita el servicio.
 
-**Alergias.** El personal anota las alergias de una mesa para que la cocina prepare la comida con
-seguridad.
+**Alergias.** Antes del primer envío a cocina, el personal debe responder si alguien de la mesa
+tiene alergias. Anota los detalles para que la cocina prepare la comida con seguridad.
 
 - Finalidad: preparar con seguridad la comida de cada cliente.
 - Interesados: los clientes de una mesa.
-- Datos: una breve descripción de quién tiene la alergia, qué alérgenos y una nota. Waitron guarda
-  una copia con cada comanda de cocina. Puede ser un dato relativo a la salud, así que pide a tu
-  asesor que confirme cómo tratarlo.
+- Datos: quién tiene la alergia, que puede ser el nombre del cliente, los alérgenos y una nota.
+  Waitron guarda una copia con cada comanda de cocina. Los datos de alergias vinculados a un
+  cliente son datos relativos a la salud; acuerda con tu asesor su base jurídica y su plazo de
+  conservación antes de usar las notas.
 - Destinatarios: _cualquiera con quien los compartas_.
 - Plazo de conservación: _fijar con tu asesor_. Waitron guarda cada comanda que envía a una
   impresora de cocina y no borra ninguna, así que los datos de alergias impresos en las comandas de
@@ -489,6 +511,9 @@ Esto es lo que el panel puede mostrarte.
 - **Diagnóstico** muestra las últimas líneas del registro del equipo. Cuando Waitron escribe el
   nombre, el correo o el NIF de una persona como un dato que marca como personal, la línea muestra
   solo unos pocos de sus caracteres. **Avisos** muestra los avisos que ha generado el equipo.
+  Las líneas enmascaradas siguen siendo datos personales: los caracteres que quedan, los
+  identificadores y otros detalles pueden vincularlas con alguien. Limita quién puede verlas o
+  recibir una copia, como haces con los demás datos personales.
 
 Waitron no registra quién abrió o leyó un registro en una pantalla, ni la dirección de red desde la
 que llegó un inicio de sesión. La única dirección que toma de la conexión de una petición y guarda
