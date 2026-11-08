@@ -41,8 +41,8 @@ function readSource(name) {
 }
 
 /** Run Inkscape, and say what it printed if it fails — a bare spawn error names no cause. */
-function render(src, out, size, { opaque = false } = {}) {
-  const args = [src, "-o", out, "-w", String(size), "-h", String(size)];
+function render(src, out, size, { opaque = false, height = size } = {}) {
+  const args = [src, "-o", out, "-w", String(size), "-h", String(height)];
   if (!opaque) args.push("--export-background-opacity=0");
   try {
     execFileSync(inkscape, args, { stdio: ["ignore", "ignore", "pipe"] });
@@ -162,6 +162,22 @@ try {
     join(pub, "favicon.ico"),
     packIco(icoSizes.map((size) => ({ size, data: readFileSync(join(scratch, `${size}.png`)) }))),
   );
+
+  // The logo as plain images in the stock colours, for places that cannot draw an SVG or read the
+  // theme (documents, slides, other sites). Width fixed, height from each drawing's shape.
+  const rasters = [
+    ["waitron-lockup.svg", "waitron-lockup.png", 1200],
+    ["waitron-lockup-dark.svg", "waitron-lockup-dark.png", 1200],
+    ["waitron-mark.svg", "waitron-mark.png", 512],
+  ];
+  for (const [source, png, width] of rasters) {
+    const box = readFileSync(join(here, source), "utf8").match(/viewBox="([^"]+)"/)[1];
+    const [, , w, h] = box.split(/\s+/).map(Number);
+    render(join(here, source), join(here, "png", png), width, {
+      height: Math.round((width * h) / w),
+    });
+    written.push(`png/${png}`);
+  }
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

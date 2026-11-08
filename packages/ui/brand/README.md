@@ -11,15 +11,18 @@ drawings and the dark colour tokens, so the geometry exists in exactly one place
 redrawing the mark is one edit plus one command. The derived files are committed, so run the command
 whenever you change a source drawing or a dark token.
 
-| File                          | Kind    | Read by                                                                                                                                                               |
-| ----------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `waitron-mark.svg`            | source  | The cloche alone, fixed blue, transparent, tight viewBox. Use for anything that is not a favicon.                                                                     |
-| `waitron-wordmark.svg`        | source  | The word alone, ink, cut to the mark's height: its viewBox is `0 0 <width> <the mark's height>`, and the generator refuses any other.                                 |
-| `waitron-lockup.svg`          | derived | The mark, a gap, then the word, both unscaled. The logo. `wt-waitron-lockup` draws it inline.                                                                         |
-| `waitron-lockup-dark.svg`     | derived | The lockup in the dark theme's colours, for an `<img>` on a dark ground (addresses in `packages/ui/src/waitron-lockup.ts`; outside tests, only the UI demo reads it). |
-| `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. Carries a `prefers-color-scheme` rule; the rasters below cannot.                                                                   |
-| `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs.                                                                     |
-| `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                                                                                        |
+| File                          | Kind    | Read by                                                                                                                                                                                                                                                                                                       |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `waitron-mark.svg`            | source  | The cloche alone, fixed blue, transparent, tight viewBox. Use for anything that is not a favicon.                                                                                                                                                                                                             |
+| `waitron-wordmark.svg`        | source  | The word alone, ink, cut to the mark's height: its viewBox is `0 0 <width> <the mark's height>`, and the generator refuses any other.                                                                                                                                                                         |
+| `waitron-lockup.svg`          | derived | The mark, a gap, then the word, both unscaled. The logo. `wt-waitron-lockup` draws it inline.                                                                                                                                                                                                                 |
+| `waitron-lockup-dark.svg`     | derived | The lockup in the dark theme's colours, for an `<img>` on a dark ground (addresses in `packages/ui/src/waitron-lockup.ts`; outside tests, only the UI demo reads it).                                                                                                                                         |
+| `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. Carries a `prefers-color-scheme` rule; the rasters below cannot. Once a page starts, `startThemedFavicon` (`packages/ui/src/themed-favicon.ts`) replaces it with a copy painted in the page's `--wt-color-primary`, so it follows the Theme setting and a venue's colours. |
+| `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs.                                                                                                                                                                                                             |
+| `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                                                                                                                                                                                                                                |
+| `png/waitron-lockup.png`      | derived | The lockup in the light colours, 1200 px wide, transparent: for places that cannot draw an SVG or read the theme.                                                                                                                                                                                             |
+| `png/waitron-lockup-dark.png` | derived | The same in the dark theme's colours, for a dark ground.                                                                                                                                                                                                                                                      |
+| `png/waitron-mark.png`        | derived | The cloche alone in the light blue, 512 px wide, transparent.                                                                                                                                                                                                                                                 |
 
 `public/` is what the apps serve: `apps/{till,dashboard,setup}/vite.config.ts` each point `publicDir`
 at it, so there is one copy rather than three. Vite prefixes the URLs with each app's `base` at build
@@ -97,6 +100,8 @@ left all seven files it wrote — `public/favicon.svg`, `waitron-lockup.svg`,
 `public/icon-512.png` and `public/favicon.ico` — byte for byte unchanged (`git status` reported none
 of them modified). That is the whole experiment: it is not a claim about other Inkscape builds,
 which may well render differently.
+
+Since the cloche logo it also writes the three images under `png/`; that re-run was not repeated.
 
 ## If the mark is redrawn
 
