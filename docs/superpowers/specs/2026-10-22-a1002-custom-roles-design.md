@@ -11,12 +11,24 @@ changes, stored Admin grants, approval-role snapshots and special import hardeni
 No further design approval is requested. The required Claude read still precedes any plan/build;
 this revision contains neither and authorizes neither to start in this firing.
 
+**Plain-English summary of the 2026-11-08 03:24 decisions:**
+
+- Activity log, **decided by the watcher, open to the owner**: creating, copying, retiring or
+  deleting a role gets one entry carrying its initial or removed permissions. Each permission
+  added to or removed from an existing role still gets its own entry, recording who changed which
+  permission on which role and whether it was added or removed. Membership changes keep their entries.
+- Email, **decided by the watcher, open to the owner**: use A1308's shared queue with kind/template
+  `role_membership_changed`, keyed by the activity-entry ID and queued in the role-change transaction.
+  Read the address when claiming the message and use the box-alert 24-hour expiry. Log setup/import
+  baseline memberships without email; email every later membership change, including removals by
+  deletion or retirement, when the person has an email address.
+
 The historical source audit stays pinned to `2e63a28a87f3f43e2f665f6fb8649fe2766aee84`.
 Those references are reading-only receipts, not runtime verification. Bounded additional readings
 at `e0f3e261c3811333d91db376fcab900eab216151` and `e0da0ad18a` remain labelled in §7.
 The 2026-11-08 **SOURCE READ ONLY** additions use
 `e0e4f5b8fda194814a6280340f1b93bb7569307a`. Target behavior follows the approved policy;
-§7 labels integration defaults awaiting watcher confirmation. None of this claims working
+§7 records integration defaults decided by the watcher, open to the owner. None of this claims working
 implementation. No executable schema or implementation plan is supplied.
 
 ## 1. The problem, through one shift
@@ -470,7 +482,9 @@ There is no primary/first/senior role or Staff default; `roleIds: []` has no ope
 Record each membership/permission edit and role lifecycle action in the venue activity log:
 actor identity, subject, change and time. Bulk membership removals each get an entry; no-op saves
 get none. Create/copy/retire/delete has one lifecycle entry carrying its initial/removed permission
-list, without separate permission entries. Store the role label at the time, including on deletion;
+list, without separate permission entries for that action. Adding or removing a permission on an
+existing role still gets its own entry: who, which role, which permission, added or removed.
+Store the role label at the time, including on deletion;
 keep old/new labels for rename. These are target facts, never the approver's role set. The two
 membership codes below replace A1308's proposed `person.roles_changed`, not add a second event.
 
@@ -500,7 +514,7 @@ Format `{when}` in the recipient's language and venue time zone. Use the shared 
 policy; SMTP never holds the role-change transaction. No new log, queue, notification service,
 transactional-delivery guarantee or retry scheme.
 
-**Proposed integration defaults, for watcher confirmation:** write the activity entry and queue
+**Integration defaults, decided by the watcher, open to the owner (2026-11-08 03:24):** write the activity entry and queue
 row in the role-change transaction. Queue kind/template `role_membership_changed` uses
 `dedupe_key = role-membership:<activity-entry-id>`, `subject_id` for that entry, `person_id` for
 the recipient and `requested_by` for the actor. Keep role label, actor display name and change time
@@ -685,3 +699,8 @@ Recorded authority:
 > 1. Activity log: every role given to or taken from a person, every permission added to or removed from a role, and creating, renaming, retiring or deleting a role is one entry in the venue's existing activity log: who did it, to whom or to which role, what changed, when. Use the existing activity log, no new log.
 > 2. Email: when a person is given or loses a role, email that person (in their language) saying which role, who changed it and when. Only people with an email address on file; someone without one gets no message and the log entry still stands. Permission changes to a role do not email everyone who holds it. Use the existing email path.
 > Name the log entry codes and the email template in the design; English and Spanish wording.
+
+**Same location, WATCHER 2026-11-08 03:24, decided by the watcher, open to the owner:**
+
+> 1. Yes to one create/copy/retire/delete entry carrying its initial or removed permission list. But the owner said (22:53) "permissions changed we should log that": adding or removing a permission on an EXISTING role keeps its own entry (who, which role, which permission, added or removed). Membership changes keep theirs.
+> 2. Yes to the mail defaults as proposed: kind role_membership_changed on the A1308 queue, keyed by the activity-entry id, queued in the role-change transaction, address read at claim, the box-alert 24-hour expiry, and setup/import baseline memberships logged but not emailed while every later membership change (including removals by deletion or retirement) is emailed.
