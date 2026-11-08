@@ -24,11 +24,16 @@ more"), [tables-venuebox.md](../specs/2026-11-02-rationalisation/tables-venuebox
 §5 (the `tenants_*` and `tenant_credentials` rows); environment.md's `WAITRON_VENUE_DOMAIN` row
 (`docs/superpowers/specs/2026-11-02-rationalisation/environment.md:221, :299`).
 
-**Lands:** the lane (rules §6), unless the watcher rules otherwise — **open question 1** in this
-area's return: the PR renames the table that holds the fiscal identity, and the fiscal code that
-reads it (`readTenant` → `readTaxpayer` in `packages/fiscal-verifactu/src/backend.ts:292-316`,
-`allocation.ts:68-86`, `allocation-operation.ts:54-58`), by name only. No value, column, hash input,
-AEAT wire field, numbering or series changes. The PR's first line after the reset line says so.
+**Lands:** the lane (rules §6; decided at plan review, 2026-11-08 — the fiscal module's own
+"tenant" leftovers stay with fi1, owner-landed). What it touches near fiscal code, by name only:
+the script edits 48 files under `packages/fiscal-verifactu` (19 of them source, such as
+`readTenant` → `readTaxpayer` in `backend.ts:292-316`, `allocation.ts:68-86`,
+`allocation-operation.ts:54-58`) and `packages/core/src/record-sale.ts` (`tenants` →
+`taxpayer` at `:11, :265`), which is a collision file needing one hand edit inside the
+sale-recording code (the collision rule below). No value, column, hash input, AEAT wire field,
+numbering or series changes; Finish-line item 9 checks that every change under
+`packages/fiscal-verifactu/src` and `packages/core/src` is a script rename or a listed collision
+rename. The PR's first line after the reset line names those two places.
 
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2).
@@ -48,14 +53,19 @@ cannot be restored or imported." (rules §2).
 4. `WAITRON_TENANT_DOMAIN` → `WAITRON_VENUE_DOMAIN`, `config.tenantDomain` → `config.venueDomain`,
    `loadTenantDomain` → `loadVenueDomain` (`apps/server/src/config.ts:110-114, :228-238, :576`;
    `device-session.ts:34-73`; `device-api.ts:139, :323`; `boot.ts:2525`). Nothing outside
-   `config.test.ts` sets it (environment.md :299); Waitron Cloud does not name it
-   (`git -C ~/workspace/repos/waitron-cloud grep -n TENANT_DOMAIN` finds one design doc only).
+   `config.test.ts` sets it (environment.md :299); it appears nowhere in compose files,
+   `deploy/waitron.sh`, `deploy/`, `.github/` or Waitron Cloud (reviewer's search, 2026-11-08).
+   For the Cloud lane, one line in the PR: Cloud's `scripts/cloud-cost/conformance-prepare.mjs:21`
+   points at `packages/db/src/schema/tenants.ts` at a pinned revision, which this PR renames to
+   `taxpayer.ts`; the pin still resolves, and a later bump must follow the new path.
 5. Files renamed: `packages/db/src/read-tenant.ts` (+ test) → `read-taxpayer.ts`;
    `packages/db/src/schema/tenants.ts` → `taxpayer.ts`; `schema/tenants.singleton.test.ts` →
    `taxpayer.singleton.test.ts`; `schema/credentials/tenant-credentials.ts` → `venue-credentials.ts`;
    `packages/provisioning/src/tenant-guard.ts` (+ `.test.ts`, `.db.test.ts`) → `taxpayer-guard.*`;
    `apps/server/src/me-api.no-tenant.test.ts` → `me-api.no-taxpayer.test.ts`;
-   `packages/payments-stripe/src/tenant-scoping.test.ts` → `venue-scoping.test.ts`. JSON keys that
+   `packages/payments-stripe/src/tenant-scoping.test.ts` → `no-bare-transaction.test.ts`, named for
+   what it checks (no source file opens a bare `.transaction(`, its header `:5`), which finishes the
+   backlog point at `docs/backlog/payments.md:371-372` (deleted). JSON keys that
    name these paths follow (`packages/db/mutation-costs.json:25, :52, :118`,
    `apps/server/test-durations.json:692`).
 6. The wire key between two boxes in the mirror bundle, `tenant` → `taxpayer`
@@ -76,7 +86,7 @@ cannot be restored or imported." (rules §2).
 | Left out | Owner |
 | --- | --- |
 | `registros_tenant_node_secuencia_uq`, `TenantTransport`, `tenantsWithWork`, `drain.tenant_skipped` | fiscal slice fi1 (README U9; [fi1](2026-11-08-a1308-fi1-verifactu-names.md) :77), owner lands |
-| The fiscal pair (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`, `inmutabilidad.test.ts`) and the fiscal fixture names they import — `TENANT_A`, `TENANT_B`, `seedTenantWithSif`, `seedTenantNodeSif`, `seedTenants` (`packages/fiscal-verifactu/test/fixtures.ts:29-104, :297`) | fi1: the pair is never edited by a lane-landed PR (A1301 plan, "The fiscal pair"; `scripts/a1301-seed-codemod.mjs:92-97`). fi1 :105 assumes this PR renames them; its stop point 4 (:309) already says to leave them and tell the watcher — **coordination point 2** in the return |
+| The fiscal pair (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`, `inmutabilidad.test.ts`) and the fiscal fixture names they import — `TENANT_A`, `TENANT_B`, `seedTenantWithSif`, `seedTenantNodeSif`, `seedTenants` (`packages/fiscal-verifactu/test/fixtures.ts:29-104, :297`) | fi1, which says so ([fi1](2026-11-08-a1308-fi1-verifactu-names.md) :85-88): the pair is never edited by a lane-landed PR (A1301 plan, "The fiscal pair"; `scripts/a1301-seed-codemod.mjs:92-97`) |
 | `persons_tenant_email_uq`, `_live_display_name_uq`, `_pending_email_uq`, `_google_subject_uq` | people, [pp4](2026-11-08-a1308-pp4-person-folded-keys.md) (renames to `persons_*_uq`; three are matched by name in `packages/identity/src/person-constraints.ts`) |
 | `working_orders_tenant_status_idx`, `sales_tenant_issued_idx` | orders, [os1](2026-11-08-a1308-os1-order-numbers.md) :38 and [os8](2026-11-08-a1308-os8-sale-receipt-facts.md) :41 (`sales` is owner-landed) |
 | `print_agents_tenant_node_key`, `purchase_invoices_tenant_received_idx` | devices and menu area slices: no plan names them yet — **coordination point 3** in the return. This PR does not take them: rules §7 keeps another area's tables out of this lane's PRs |
@@ -107,8 +117,10 @@ unchanged): the four fiscal leftovers; the five fiscal fixture names; the eight 
 names in the table above; the retired column's spellings the guards pin — `tenant_id`, `tenant_ids`,
 `tenantId`, `tenantIds`, `tenantID`, `TenantId`, `source_tenant_id`, `sourceTenantId`; retired tables
 and files named in history tests — `tenant_receipts`, `tenantReceipts`, `tenant_themes`,
-`tenants_nif_key` (`packages/db/src/schema/nodes.test.ts:123`), `bootstrap-tenant`; and
-`tenants_country_tax_id_key` (removed by hand, Task 3). Longest first, so `tenantsWithWork` is
+`tenants_nif_key` (`packages/db/src/schema/nodes.test.ts:123`), `bootstrap-tenant`; the retired
+command-line flag `--tenant`, which tests check is refused (`packages/credentials/src/cli.test.ts:113-118,
+:255, :304`) and a history sentence names (`apps/server/README.md:385`); and
+`tenants_country_tax_id_key` (removed by hand, Task 2). Longest first, so `tenantsWithWork` is
 shielded before `tenants` can match inside it.
 
 **The map,** applied as ordered, case-sensitive substring replacements (first match wins, longest
@@ -116,7 +128,7 @@ first within each group):
 
 | Group | From → to |
 | --- | --- |
-| Venue or box meaning | `WAITRON_TENANT_DOMAIN` → `WAITRON_VENUE_DOMAIN`; `TenantDomain` → `VenueDomain`; `tenantDomain` → `venueDomain`; `tenant_credentials` → `venue_credentials`; `tenantCredentials` → `venueCredentials`; `tenant-credentials` → `venue-credentials`; `TenantIncident` → `VenueIncident`; `tenantIncident` → `venueIncident`; `sumupClientForTenant` → `sumupClientForVenue`; `setupTenant` → `setupVenue`; `provisionTenant` → `provisionVenue`; `asTenant` → `asVenue`; `UnderNewTenant` → `UnderNewVenue`; `tenant-scoping` → `venue-scoping` |
+| Venue or box meaning | `WAITRON_TENANT_DOMAIN` → `WAITRON_VENUE_DOMAIN`; `TenantDomain` → `VenueDomain`; `tenantDomain` → `venueDomain`; `tenant_credentials` → `venue_credentials`; `tenantCredentials` → `venueCredentials`; `tenant-credentials` → `venue-credentials`; `TenantIncident` → `VenueIncident`; `tenantIncident` → `venueIncident`; `sumupClientForTenant` → `sumupClientForVenue`; `setupTenant` → `setupVenue`; `provisionTenant` → `provisionVenue`; `asTenant` → `asVenue`; `UnderNewTenant` → `UnderNewVenue`; `tenant-scoping` → `no-bare-transaction` (a file name, item 5) |
 | Taxpayer meaning | `tenants_singleton_ck` → `taxpayer_singleton_ck`; `TENANTS` → `TAXPAYERS`; `Tenants` → `Taxpayers`; `tenants` → `taxpayer`; `TENANT` → `TAXPAYER`; `Tenant` → `Taxpayer`; `tenant` → `taxpayer` |
 
 `tenants` maps to the singular because it is the table's name in code and SQL (`schema/tenants.js`,
@@ -124,9 +136,11 @@ first within each group):
 fixes such comments by hand. Path renames apply the same map to each tracked path's segments and use
 `git mv`; content follows.
 
-**Collision rule:** after the script, `tsc` may find a renamed local `taxpayer` (from `tenant` or
-`tenants`) that clashes with an existing `taxpayer` in the same scope. Where both hold the same
-value, delete the duplicate declaration; otherwise name the renamed one `taxpayerRow`. A renamed
+**Collision rule:** after the script, `tsc` finds files where the drizzle table import (`tenants`)
+and a row variable (`tenant`) both became `taxpayer` (the reviewer's trial run on a scratch copy:
+158 errors in 17 files, every one such a name clash). In each, **the row variable becomes
+`taxpayerRow`** and the table import keeps `taxpayer`. Where a renamed local clashes with an
+existing `taxpayer` that holds the same value, delete the duplicate declaration. A renamed
 `setupVenue`/`provisionVenue`/`asVenue` that clashes with an existing declaration in the same file
 is renamed `setupTestVenue`/`provisionTestVenue`/`asTestVenue`. Each such edit is a hand edit,
 listed in the PR description (rules §1). Measured 2026-11-08 at `a086eedfb7`: no file that names
@@ -171,8 +185,12 @@ Modify by hand:
 - `docs/developers/conventions-ui.md:779, :2313`, `design-system.md:3816, :4480`,
   `products.md:950` ("tenant" → "taxpayer"), `authorised-cloud-restore-fixture.md:31` (unchanged:
   `TENANT_A` keeps its name until fi1). `grants-retirement-audit.md` is a dated record and stays.
-- `docs/backlog.md:2544-2548` (the decision record): add one dated sentence, "Since A1308 vb1 the
-  table is `taxpayer`"; do not rewrite the record.
+- `docs/backlog.md:2544-2548` (a decision in the record that starts at `:2538`): add one dated
+  sentence, "Since A1308 vb1 the table is `taxpayer`"; do not rewrite the record.
+- `docs/developers/testing-guide.md:381`, `conventions-data.md:1539` and `:5960`, and
+  `docs/backlog/replication-cloud.md:260`: the current-code sentences that name `tenants`,
+  `tenant_credentials` or a renamed helper take the new name.
+- `docs/backlog/payments.md:371-372`: deleted (item 5's file rename finishes it).
 - `docs/backlog/architecture.md:281-293` and `:716-719` as in "What it builds" 9.
 - Comments the map made read wrongly ("other taxpayer", "multi-taxpayer"), found by
   `git diff -U0 | grep -E '^\+.*(//|\*).*taxpayer'` and read: delete the comment if it only retells
@@ -189,10 +207,10 @@ Regenerated, never by hand: `packages/db/drizzle/**`, `scripts/migration-baselin
 | Script | ~180 |
 | Script test | ~120 |
 | Madrid table-rename helper and its test, baseline wiring | ~60 |
-| Collision fixes, comment fixes (estimate) | ~80 |
+| Collision fixes (17 files, the reviewer's trial run) and comment fixes | ~100 |
 | Schema index, guards, controls | ~20 |
-| CLAUDE.md, docs, backlog | ~40 |
-| **Total** | **~500** |
+| CLAUDE.md, docs, backlog | ~50 |
+| **Total** | **~530** |
 
 Not counted: the script's output (about 3,900 lines in about 790 files), the regenerated migration
 files. About 3 hours; the implementer dispatch splits after Task 2 (rules §1, 150-call handover).
@@ -204,8 +222,10 @@ Read the `Tests` count of every Vitest run (CLAUDE.md §4).
 1. `pnpm exec vitest run scripts/a1308/rename-tenant.test.mjs` passes; `node scripts/a1308/rename-tenant.mjs`
    (no `--write`) exits 0 on the branch; `node scripts/a1308/rename-tenant.mjs --report` exits 0.
 2. The reviewer's check (rules §1): in a throwaway worktree of the base,
-   `node scripts/a1308/rename-tenant.mjs --write`, then `git diff --stat <base>..<branch> -- apps packages scripts`
-   differs from the worktree's diff only by the hand edits the PR lists.
+   `node scripts/a1308/rename-tenant.mjs --write`, then
+   `git diff --stat <base>..<branch> -- apps packages scripts ':!**/drizzle/**' ':!scripts/migration-baseline-epoch.json'`
+   differs from the worktree's diff only by the hand edits the PR lists (the regenerated migration
+   files are checked by item 3 instead).
 3. `pnpm --filter @waitron/server migration-baseline rebuild --set core` prints `unchanged core` on
    the branch.
 4. Root guards: `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/write-path-tables.test.ts scripts/classification-complete.test.ts scripts/no-tenant-column.test.ts scripts/live-subscriptions.test.ts scripts/starting-migrations.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/errors-reachable.test.ts scripts/english-only.test.ts scripts/personal-log-params.test.ts scripts/mutation-shard.test.mjs scripts/claude-md-pointers.test.ts`.
@@ -219,6 +239,10 @@ Read the `Tests` count of every Vitest run (CLAUDE.md §4).
 7. From `apps/server`: `pnpm migration-baseline controls --reference <list B> --out <empty dir>`
    prints `PASS` for every control; `pnpm protection-list compare` prints exactly the next section.
 8. The pre-push hook's typecheck passes (every package is in scope).
+9. The fiscal and sale-recording check: `git diff <base>..<branch> -- packages/fiscal-verifactu/src packages/core/src`
+   holds only lines the script's map produces from the base text (re-run the script on the base's
+   copy of each file and compare) plus the collision renames the PR lists by file and line. Any
+   other change there is a stop.
 
 ## Expected protection-list difference
 
