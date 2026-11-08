@@ -12,6 +12,7 @@ import {
   type FetchLike,
   type TableState,
 } from "./api/client.js";
+import { ServerRouter } from "./api/server-router.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { cleanupWidgets, draftSnapshot, mountWidget } from "./widgets/test-helpers.js";
@@ -570,6 +571,66 @@ describe("the till through its real client", () => {
     expect(lockScreen(el)).toBeNull();
     expect(shellOf(el)).not.toBeNull();
     expect(server.sentTo("DELETE /api/session")).toHaveLength(signOuts);
+  });
+
+  it("does nothing when a refusal comes back through a client the app no longer holds", async () => {
+    const server = tillServer();
+    const { el } = await mountTill(server);
+    await signInAsAna(el);
+    const earlier = server.hold("PUT /api/session/locale");
+    chooseLocale(el);
+    await earlier.sent;
+    el.api = new TillApi("", server.fetch);
+    await el.updateComplete;
+
+    earlier.refuse(409, SESSION_PERSON_REFUSAL);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".error")?.textContent ?? "").not.toBe(""),
+    );
+
+    expect(lockScreen(el)).toBeNull();
+    expect(shellOf(el)).not.toBeNull();
+    expect(server.sentTo("DELETE /api/session")).toEqual([]);
+  });
+
+  it("names nobody on the server the till switches to, until someone signs in there", async () => {
+    const server = tillServer();
+    const stored = new Map<string, string>();
+    const router = new ServerRouter({
+      origin: location.origin,
+      fetchImpl: (async () => {
+        throw new TypeError("Failed to fetch");
+      }) as unknown as typeof fetch,
+      storage: {
+        getItem: (key) => stored.get(key) ?? null,
+        setItem: (key, value) => void stored.set(key, value),
+      },
+    });
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api: new TillApi("", server.fetch),
+      router,
+    });
+    await signInAsAna(el);
+    const switchedAt = server.requests.length;
+
+    router.dispatchEvent(
+      new CustomEvent("server-changed", {
+        detail: { from: location.origin, to: "https://cloud.deli.test" },
+      }),
+    );
+    await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
+    const signInThere = server.hold("POST /api/session");
+    await keyIn(el, LUIS, LUIS_PIN);
+    await signInThere.sent;
+
+    const before = server.requests.slice(
+      switchedAt,
+      server.requests.indexOf(await signInThere.sent),
+    );
+    expect(before.map((request) => `${request.method} ${request.path}`)).toEqual(
+      expect.arrayContaining(["GET /api/till", "GET /api/staff"]),
+    );
+    expect(before.map(named)).toEqual(Array(before.length).fill(undefined));
   });
 
   it("still locks for a request sent before a profile switch", async () => {
