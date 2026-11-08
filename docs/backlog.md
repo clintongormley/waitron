@@ -2165,7 +2165,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **One repeated-run rig, then each named test** (bundle of 7, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
+- **One repeated-run rig, then each named test** (bundle of 8, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 
@@ -2380,8 +2380,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The party bill-action suite still uses Spanish dish samples. Bill-move, arriving-dish,
   receipt-guest, till-API bill-move/groups/fiscal-sale and order-portion filing/adjustment suites
   still use Spanish display samples; fiscal-sale and adjustment order-portion test descriptions,
-  other bill-payment fixtures such as `bill-payments.test.ts`, shared helpers and their
-  consumers' dish selectors and screen expectations remain.
+  other bill-payment fixtures in `bill-payments-api.test.ts` and `bill-payments.issue-clock.test.ts`,
+  shared helpers and their consumers' dish selectors and screen expectations remain.
   Triage made-here route and receipt-document fixture
   text there while preserving Spanish receipt output and locale checks. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
