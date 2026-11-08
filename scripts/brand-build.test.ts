@@ -21,10 +21,11 @@ else writeFileSync(process.argv[process.argv.indexOf("-o") + 1], "raster stub");
 );
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-function generate(css: string) {
+function generate(css: string, prepare: (brand: string) => void = () => {}) {
   const fixture = mkdtempSync(join(scratch, "fixture-"));
   const brand = join(fixture, "packages", "ui", "brand");
   cpSync(join(REPO_ROOT, "packages", "ui", "brand"), brand, { recursive: true });
+  prepare(brand);
   const tokens = join(fixture, "packages", "ui-core", "src", "tokens");
   mkdirSync(tokens, { recursive: true });
   writeFileSync(join(tokens, "colors.css"), css);
@@ -79,6 +80,30 @@ describe("brand generation reads the dark theme at run time", () => {
     expect(readFileSync(join(brand, "waitron-lockup-dark.svg"), "utf8")).toBe(
       readFileSync(join(REPO_ROOT, "packages", "ui", "brand", "waitron-lockup-dark.svg"), "utf8"),
     );
+  });
+
+  it("refuses a wordmark not cut to the mark's height before writing", () => {
+    const { brand, result } = generate(
+      `@media (prefers-color-scheme: dark) {
+  --wt-color-primary: #123456;
+  --wt-color-text: #abcdef;
+}
+`,
+      (dir) => {
+        const path = join(dir, "waitron-wordmark.svg");
+        const source = readFileSync(path, "utf8");
+        const taller = source.replace(/viewBox="0 0 ([\d.]+) [\d.]+"/, 'viewBox="0 0 $1 90"');
+        expect(taller).not.toBe(source);
+        writeFileSync(path, taller);
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("waitron-wordmark.svg: viewBox must be 0 0 <width>");
+    for (const file of ["public/favicon.svg", "waitron-lockup.svg", "waitron-lockup-dark.svg"]) {
+      expect(readFileSync(join(brand, file), "utf8"), file).toBe(
+        readFileSync(join(REPO_ROOT, "packages", "ui", "brand", file), "utf8"),
+      );
+    }
   });
 
   it("refuses a missing dark media block before writing", () => {

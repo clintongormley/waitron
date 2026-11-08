@@ -98,6 +98,13 @@ if (mark.x !== 0 || mark.y !== 0) {
 if (mark.w > ICON_CANVAS || mark.h > ICON_CANVAS) {
   throw new Error(`waitron-mark.svg is ${mark.w}x${mark.h}, over the ${ICON_CANVAS} icon canvas`);
 }
+// The two drawings are cut to one shared height, so they sit side by side unscaled.
+if (word.x !== 0 || word.y !== 0 || word.h !== mark.h) {
+  throw new Error(
+    `waitron-wordmark.svg: viewBox must be 0 0 <width> ${mark.h}, the mark's height, got ` +
+      `${word.x} ${word.y} ${word.w} ${word.h}`,
+  );
+}
 const written = [];
 const write = (path, text) => {
   writeFileSync(path, text);
@@ -120,13 +127,6 @@ write(
     `<g class="m" transform="${pad(mark.w, mark.h)}">${mark.body}</g></svg>\n`,
 );
 
-// The two drawings are cut to one shared height, so they sit side by side unscaled.
-if (word.x !== 0 || word.y !== 0 || word.h !== mark.h) {
-  throw new Error(
-    `waitron-wordmark.svg: viewBox must be 0 0 <width> ${mark.h}, the mark's height, got ` +
-      `${word.x} ${word.y} ${word.w} ${word.h}`,
-  );
-}
 const gap = 14.44;
 const wordX = mark.w + gap;
 const lockup = (markFill, wordFill) =>
