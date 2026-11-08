@@ -5,6 +5,8 @@
 > owns how a spare listens on the network and the authenticated switch screen. See the
 > [narrowed A1113 plan](2026-11-08-a1113-spare-screen.md).
 
+> **2026-11-08 13:34 update:** The owner approved A1321’s reduced design for planning. Its [one-page plan](2026-11-08-a1321-retire-spare.md) awaits watcher approval and 3b-6 before build. The earlier status and implementation text below remain historical.
+
 > **2026-11-08: A1321 design pending OWNER approval.**
 > [Retire a dead or reset spare](../specs/2026-11-08-a1321-retire-spare-design.md) already tracks
 > D17/Task 6.10's proposed backlog filing; do not create a duplicate. Its build waits for 3b-6

@@ -1045,8 +1045,9 @@ mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/20
 ## A1321. Retire a dead or reset spare from Servers
 
 Wanted before go-live (owner, 2026-11-04). The
-[one-page proposal](../superpowers/specs/2026-11-08-a1321-retire-spare-design.md) awaits owner
-approval. WATCHER 2026-11-08 02:33 settles the reduced scope: extend Remove / Retirar to a joined
+[reduced design](../superpowers/specs/2026-11-08-a1321-retire-spare-design.md) was approved by the
+owner on 2026-11-08 at 13:34 (answered “y”, relayed in Lane K’s `questions.md`). The
+[one-page plan](../superpowers/plans/2026-11-08-a1321-retire-spare.md) awaits watcher approval. WATCHER 2026-11-08 02:33 settles the reduced scope: extend Remove / Retirar to a joined
 serving-secondary, including one that once sold, with both declarations checked on the server,
 the existing chart-transaction audit and only the matching pair link cleared. Use the existing
 administrator session and whatever permission Remove checks when built (A1002 calls it
@@ -1055,7 +1056,7 @@ Keep fiscal originals and existing handover recovery/return/archive gates;
 add no returning-key trust path, spare-start check, client term field or second audit write.
 Repair only a removed/revoked id's matching link on repeated Remove, Clear or replacement join.
 Include EN/ES guide, dialog, error and recovery wording. The dated A947 pointer replaces its duplicate backlog filing.
-Build waits for A947 3b-6 and full-design approval. No build approval.
+Build waits for A947 3b-6 and watcher approval of the plan. No build approval.
 
 ## A947. Go-live on two local boxes
 

@@ -1,3 +1,5 @@
+> **2026-11-08 13:34:** The owner approved this reduced design for planning (answered “y”, relayed in Lane K’s `questions.md`). The [implementation plan](../plans/2026-11-08-a1321-retire-spare.md) awaits the watcher’s approval; build remains held until A947 3b-6 lands. The proposal below records its earlier status.
+
 # A1321: retire a dead or reset spare
 
 You can remove a dead or reset spare from Servers, after confirming it is switched off.
