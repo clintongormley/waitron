@@ -17,6 +17,7 @@ import { createStation } from "./kitchen.js";
 import { inTx, setupPartyVenue } from "./testing/party-venue.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { BASIC_ACTIONS, revokedDeviceSessionCookie } from "./testing/session-device.js";
+import { leaveSessionAlone } from "./testing/tab-person.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -142,6 +143,7 @@ describe("a session route and the person header", () => {
 
   it("serves a request with no header as before", async () => {
     const f = await fixture();
+    leaveSessionAlone(f.till.ben.slice(f.till.ben.indexOf("=") + 1));
     expect((await call(f.app, "/api/stations", f.till.ben)).status).toBe(200);
   });
 

@@ -96,6 +96,7 @@ import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { leaveSessionAlone } from "./testing/tab-person.js";
 import "./errors.js";
 
 /** Sends `lines` to a seated party's tab as one group released now, at the party's current revision. */
@@ -586,6 +587,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     // A cookie naming a session that was already closed: `endSession` matches nothing, but a logout
     // naming nobody still answers 200 and clears the cookie.
     const token = await openSession(suite.db);
+    leaveSessionAlone(token);
     await closeSession(suite.db, token);
 
     const del = await app.request("/api/session", {
@@ -705,6 +707,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       async (_what, body) => {
         const app = signOutApp();
         const token = await openSession(suite.db);
+        leaveSessionAlone(token);
 
         const del = await signOut(app, token, body === undefined ? {} : { body });
 

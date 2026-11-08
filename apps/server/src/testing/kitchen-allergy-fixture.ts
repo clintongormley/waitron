@@ -34,6 +34,7 @@ import { mountTillApi } from "../till-api.js";
 import { sessionCookieForTest } from "./session-device.js";
 import { saveDraftForTest } from "./draft-command-fixture.js";
 import { OPERATOR, counterOrder, inTx, revisionOf, seat, setupPartyVenue } from "./party-venue.js";
+import { noteSessionPerson } from "./tab-person.js";
 
 export const kitchenOriginal: KitchenAllergyBlock = {
   who: "Window guest",
@@ -57,6 +58,7 @@ export async function kitchenFixture(db: Database) {
     .update(sessions)
     .set({ tokenHash: hashSessionToken(token) })
     .where(eq(sessions.id, v.operator.sessionId));
+  noteSessionPerson(token, v.operator.personId);
   const tableId = await v.table("Atomic kitchen");
   const party = await seat(v, tableId);
   await inTx(v, async (tx) =>
