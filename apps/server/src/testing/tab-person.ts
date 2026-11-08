@@ -1,4 +1,6 @@
-import { PERSON_HEADER } from "@waitron/shared";
+// The file, not the package: loading `@waitron/shared` whole from a setup file would load it before a
+// test file's own `vi.mock` of one of its modules could take effect.
+import { PERSON_HEADER } from "@waitron/shared/src/person-header.js";
 
 // Which person each till session token belongs to, for the requests this test file sends. Filled
 // by `tab-person-setup.ts`; reset with the module graph for every test file.
@@ -29,19 +31,28 @@ function personForCookies(cookieHeader: string | null): string | null {
 }
 
 /** The init to send in place of `init`: the same, plus the person header when the request carries
- * a known token and names no one itself. `undefined` when nothing is to be added. */
+ * a known token and names no one itself. `undefined` when nothing is to be added; a `Request` sent
+ * with no init gains the header in place, so a test's own hooks on that object still run. */
 export function initNamingPerson(
   input: unknown,
   init: RequestInit | undefined,
 ): RequestInit | undefined {
+  if (input instanceof Request && init === undefined) {
+    const person = personToName(input.headers);
+    if (person !== null) input.headers.set(PERSON_HEADER, person);
+    return undefined;
+  }
   const headers = new Headers(
     init?.headers ?? (input instanceof Request ? input.headers : undefined),
   );
-  if (headers.has(PERSON_HEADER)) return undefined;
-  const person = personForCookies(headers.get("cookie"));
+  const person = personToName(headers);
   if (person === null) return undefined;
   headers.set(PERSON_HEADER, person);
   return { ...init, headers };
+}
+
+function personToName(headers: Headers): string | null {
+  return headers.has(PERSON_HEADER) ? null : personForCookies(headers.get("cookie"));
 }
 
 /** Notes the person of a sign-in answer: a successful `POST …/api/session` whose body names a

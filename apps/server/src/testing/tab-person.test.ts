@@ -75,6 +75,22 @@ describe("the test harness naming a session's person", () => {
     expect(await personSeenBy(res)).toBe(personId);
   });
 
+  it("hands app.request the Request the test built, so the test's own hooks on it still run", async () => {
+    const { token, personId } = await signIn();
+    const app = echoApp();
+    app.post("/echo", async (c) =>
+      c.json({ person: c.req.header(PERSON_HEADER) ?? null, body: await c.req.text() }),
+    );
+    const raw = new Request("http://localhost/echo", {
+      method: "POST",
+      headers: { cookie: cookie(token) },
+      body: "sent",
+    });
+    raw.text = async () => "read through the test's hook";
+    const res = await app.request(raw);
+    expect(await res.json()).toEqual({ person: personId, body: "read through the test's hook" });
+  });
+
   it("names it on the global fetch against a started listener", async () => {
     const { token, personId } = await signIn();
     const res = await fetch(`${base}/echo`, { headers: { cookie: cookie(token) } });
