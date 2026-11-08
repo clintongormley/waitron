@@ -1091,7 +1091,6 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
         "POST",
         `/api/parties/${bill.partyId}/lines/${lineId}/recall`,
         {
-          personId: venue.staffId,
           submissionId: randomUUID(),
           expectedPartyRevision: (
             await inTx(venue, (tx) =>
@@ -1961,7 +1960,6 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     const party = `/api/parties/${bill.partyId}`;
     const recalled = ok(
       await send(venue.app, venue.cookie.manager, "POST", `${party}/lines/${lineId}/recall`, {
-        personId: venue.managerId,
         submissionId: randomUUID(),
         ...(await expected()),
       }),
@@ -1974,7 +1972,6 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
           revision: recalled.revision,
           expectedEdit: (await expected()).expectedEdit,
           lines: [{ ...recalled.lines[0]!, quantity }],
-          personId: venue.managerId,
         }),
       ) as unknown as BillDraftSnapshot
     ).draft!;
@@ -3239,7 +3236,6 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         "POST",
         `/api/parties/${bill.partyId}/lines/${lineId}/recall`,
         {
-          personId: venue.managerId,
           submissionId: randomUUID(),
           expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
@@ -3405,7 +3401,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         venue.cookie.manager,
         "POST",
         `${party}/lines/${burger}/recall`,
-        { personId: venue.managerId, submissionId: randomUUID(), ...(await expected()) },
+        { submissionId: randomUUID(), ...(await expected()) },
       );
       expect(recalled.status, JSON.stringify(recalled.json)).toBe(200);
       const draft = (recalled.json as { draft: Draft }).draft;
@@ -3415,7 +3411,6 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         revision: draft.revision,
         expectedEdit: (await expected()).expectedEdit,
         lines: [{ ...draft.lines[0]!, quantity: "3" }],
-        personId: venue.managerId,
       });
       expect(saved.status, JSON.stringify(saved.json)).toBe(200);
       await inTx(venue, async (tx) => {

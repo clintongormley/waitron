@@ -1100,12 +1100,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/groups/split-line",
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups/split-line`,
-    () => ({
-      submissionId: randomUUID(),
-      expectedPartyRevision: 0,
-      lineId: randomUUID(),
-      personId,
-    }),
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, lineId: randomUUID() }),
     deliTableZone,
   ],
   [
@@ -1119,7 +1114,7 @@ const ROUTES: readonly Row[] = [
     "PUT /api/parties/:id/drafts",
     "PUT",
     (x) => `/api/parties/${x.deliParty}/drafts`,
-    () => ({ draftId: null, revision: 0, personId }),
+    () => ({ draftId: null, revision: 0 }),
     deliTableZone,
   ],
   [
@@ -1140,7 +1135,6 @@ const ROUTES: readonly Row[] = [
       revision: 0,
       draftRevision: 0,
       groups: [],
-      personId,
     }),
     deliTableZone,
   ]),
@@ -1152,7 +1146,6 @@ const ROUTES: readonly Row[] = [
       submissionId: randomUUID(),
       expectedPartyRevision: 0,
       expectedEdit: { billId: x.deliOrder, editorVersion: 0, draftId: null, draftRevision: null },
-      personId,
     }),
     deliTableZone,
   ],

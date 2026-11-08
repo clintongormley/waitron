@@ -2130,7 +2130,6 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     expect(submitted.status).toBe(200);
     const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const body = {
-      personId: venue.operatorId,
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
       lineId: group.lineIds[0],
@@ -2251,7 +2250,6 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     });
     try {
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
-        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         lineId: group.lineIds[0],
@@ -2279,7 +2277,6 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       );
       const before = await snapshot(party);
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
-        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         lineId,
@@ -2296,7 +2293,6 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       const party = await withGroups();
       const before = await snapshot(party);
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
-        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         lineId,
@@ -2315,7 +2311,6 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const path = `/api/parties/${party.partyId}/groups/split-line`;
     const command = {
-      personId: venue.operatorId,
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
     };
@@ -2348,7 +2343,6 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     const copy = vi.spyOn(VENUE_SERVICE, "copyLineContext");
     try {
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
-        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         lineId,
@@ -2380,7 +2374,6 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     expect(payment.status).toBe(200);
     const before = await snapshot(party);
     const body = {
-      personId: venue.operatorId,
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
       lineId: group.lineIds[0]!,

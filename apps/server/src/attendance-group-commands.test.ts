@@ -120,11 +120,7 @@ function command(app: Hono, action: Action, p: Awaited<ReturnType<typeof prepare
       heldGroupIds: [p.otherGroupId, p.groupId],
     });
   if (action === "split")
-    return send(app, v.cookie, "POST", `${base}/split-line`, {
-      ...common,
-      lineId: p.lineId,
-      personId: v.operatorId,
-    });
+    return send(app, v.cookie, "POST", `${base}/split-line`, { ...common, lineId: p.lineId });
   return send(app, v.cookie, "POST", `${base}/move`, {
     ...common,
     moves: [{ lineId: p.lineId, quantity: "1" }],

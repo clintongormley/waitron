@@ -433,7 +433,6 @@ describe("bill editor in real save and takeover commands", () => {
       revision: 0,
       lines: [fresh()],
       expectedEdit: blank(p.tabId),
-      personId: venue.operatorId,
     };
     const response = await send(
       venue.app,
@@ -456,7 +455,6 @@ describe("bill editor in real save and takeover commands", () => {
       revision: first.draft!.revision,
       expectedEdit: first.edit,
       submissionId: randomUUID(),
-      personId: venue.operatorId,
     };
     const path = `/api/parties/${p.partyId}/drafts/${first.draft!.id}/take-over`;
     const response = await send(venue.app, venue.cookie, "POST", path, body);
@@ -617,7 +615,6 @@ describe("bill editor in real save and takeover commands", () => {
       draftId: null,
       revision: 0,
       lines: [fresh()],
-      personId: venue.operatorId,
     });
     expect(answer).toEqual({
       status: 400,
@@ -639,7 +636,6 @@ describe("bill editor in real save and takeover commands", () => {
       "POST",
       `/api/parties/${p.partyId}/lines/${source.id}/recall`,
       {
-        personId: venue.operatorId,
         submissionId: randomUUID(),
         expectedPartyRevision: party!.revision,
         expectedEdit: blank(p.tabId),
@@ -661,7 +657,6 @@ describe("bill editor in real save and takeover commands", () => {
       revision: saved.draft!.revision,
       expectedEdit: saved.edit,
       submissionId: randomUUID(),
-      personId: venue.operatorId,
     };
     expect((await send(venue.app, venue.cookie, "POST", path, body)).status).toBe(200);
     const before = await rows();

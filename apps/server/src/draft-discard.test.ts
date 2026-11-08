@@ -81,7 +81,6 @@ async function recall(partyId: string, lineId: string) {
     .from(workingOrderLines)
     .where(eq(workingOrderLines.id, lineId));
   const answer = await call("POST", `/api/parties/${partyId}/lines/${lineId}/recall`, {
-    personId: venue.staffId,
     expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, line!.workingOrderId)),
     submissionId: randomUUID(),
     expectedPartyRevision: party!.revision,
@@ -278,7 +277,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
-        personId: venue.staffId,
       });
       expect(saved.status).toBe(200);
       const draft = (saved.json as unknown as BillDraftSnapshot).draft!;
@@ -321,7 +319,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
-        personId: venue.managerId,
       },
       venue.cookie.manager,
     );
@@ -348,7 +345,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
         revision: p.draft.revision,
         submissionId: randomUUID(),
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
-        personId: venue.managerId,
       },
       venue.cookie.manager,
     );
@@ -482,7 +478,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
       draftId: current.id,
       revision: current.revision,
       lines: [...current.lines, { menuItemId: venue.item("Bread"), quantity: "1" }],
-      personId: venue.staffId,
     });
     expect(saved.status, JSON.stringify(saved.json)).toBe(200);
     p.draft = (saved.json as unknown as BillDraftSnapshot).draft!;
@@ -784,7 +779,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
       draftId: null,
       revision: 0,
       lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
-      personId: venue.staffId,
     });
     expect(saved.status).toBe(200);
     const draft = (saved.json as unknown as BillDraftSnapshot).draft!;

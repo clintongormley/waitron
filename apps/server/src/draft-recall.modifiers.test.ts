@@ -809,7 +809,6 @@ describe("mixed New order persistence through authenticated requests", () => {
         submissionId: randomUUID(),
         revision: draft.revision,
         expectedEdit: snapshot.edit,
-        personId: venue.adminId,
       });
       expect(taken.status, JSON.stringify(taken.json)).toBe(200);
       const transferred = taken.json as unknown as BillDraftSnapshot;

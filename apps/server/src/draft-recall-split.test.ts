@@ -103,7 +103,6 @@ async function setup(
     expect(discount.status, JSON.stringify(discount.json)).toBe(200);
   }
   const answer = await call("POST", `/api/parties/${p.partyId}/lines/${line!.id}/recall`, {
-    personId: venue.staffId,
     submissionId: randomUUID(),
     expectedPartyRevision: await revision(p.partyId),
     expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
@@ -111,14 +110,8 @@ async function setup(
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   return { ...p, line: line!, draft: (answer.json as unknown as { draft: Draft }).draft };
 }
-async function split(
-  partyId: string,
-  lineId: string,
-  cookie = venue.cookie.staff,
-  personId = venue.staffId,
-) {
+async function split(partyId: string, lineId: string, cookie = venue.cookie.staff) {
   const body = {
-    personId,
     submissionId: randomUUID(),
     expectedPartyRevision: await revision(partyId),
     lineId,
@@ -201,7 +194,6 @@ describe("splitting a recalled dish through the public group command", () => {
         revision: p.draft.revision,
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
         submissionId: randomUUID(),
-        personId: venue.managerId,
       },
       venue.cookie.manager,
     );
@@ -213,7 +205,7 @@ describe("splitting a recalled dish through the public group command", () => {
       params: { draftId: p.draft.id, ownerId: venue.managerId },
     });
     expect(await frozen()).toEqual(before);
-    const answer = await split(p.partyId, p.line.id, venue.cookie.manager, venue.managerId);
+    const answer = await split(p.partyId, p.line.id, venue.cookie.manager);
     expect(answer.answer.status, JSON.stringify(answer.answer.json)).toBe(200);
     expect(await readDraft(p.partyId, p.draft.id)).toMatchObject({
       ownerId: venue.managerId,
@@ -261,7 +253,6 @@ describe("splitting a recalled dish through the public group command", () => {
     const p = await setup();
     const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
       billId: p.billId,
-      personId: venue.staffId,
       draftId: p.draft.id,
       revision: p.draft.revision,
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
@@ -294,7 +285,6 @@ describe("splitting a recalled dish through the public group command", () => {
     const stable = await frozen();
     const stale = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
       billId: p.billId,
-      personId: venue.staffId,
       draftId: p.draft.id,
       revision: old.revision,
       expectedEdit: {

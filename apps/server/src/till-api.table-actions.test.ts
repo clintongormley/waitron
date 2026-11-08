@@ -1987,7 +1987,6 @@ describe("A803 split: the panel's read", () => {
         "POST",
         `/api/parties/${ana.partyId}/lines/${octopus!.id}/recall`,
         {
-          personId: venue.operatorId,
           submissionId: randomUUID(),
           expectedPartyRevision: revisionOf(ana.partyId),
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, octopusBill)),
@@ -2080,7 +2079,6 @@ describe("A803 split: the panel's read", () => {
         "POST",
         `/api/parties/${ana.partyId}/lines/${octopus!.id}/recall`,
         {
-          personId: venue.operatorId,
           submissionId: randomUUID(),
           expectedPartyRevision: revisionOf(ana.partyId),
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, octopusBill)),

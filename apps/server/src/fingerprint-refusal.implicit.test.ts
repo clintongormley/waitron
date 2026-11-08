@@ -156,7 +156,6 @@ describe("late issuance rolls back its initiating command", () => {
     if (kind.startsWith("draft")) {
       const saved = await send(venue.app, venue.cookie, "PUT", `/api/parties/${partyId}/drafts`, {
         billId,
-        personId: venue.operatorId,
         draftId: null,
         revision: 0,
         expectedEdit: await readBillEditState(suite.db, billId),
@@ -190,7 +189,6 @@ describe("late issuance rolls back its initiating command", () => {
         path = `/api/parties/${partyId}/drafts`;
         body = {
           billId,
-          personId: venue.operatorId,
           draftId: state.draft!.id,
           revision: state.draft!.revision,
           expectedEdit: state.edit,
