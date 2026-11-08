@@ -1,4 +1,4 @@
-# A1308 menu and photos, PR mn8: the preselected option as a flag, and the lists' small checks — implementation plan
+# A1308 menu and photos, PR mn9: the preselected option as a flag, and the lists' small checks — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -23,7 +23,7 @@ November 2026" (rows for `option_lists`, `option_labels`, `extra_lists`);
 (`option_lists` "gains `option_labels_one_default_uq`"); [slice rules](2026-11-08-a1308-slice-rules.md).
 
 **Base and names:** cites are `file:line` at `a086eedfb7` with mn1/mn3's paths and names. Batch 1 and
-mn1–mn7 have landed. Backlog entries are named by their text at `a086eedfb7` (mn3 changed
+mn1–mn8 have landed. Backlog entries are named by their text at `a086eedfb7` (mn3 changed
 "catalogue" to "menu"; the file is `docs/backlog/menu.md`). A missing identifier this plan does not
 explain is a stop (rules §5.1).
 
@@ -77,7 +77,7 @@ cannot be restored or imported." (rules §2)
    `seed-extra-lists.ts`; find with `git grep -n -E "insert\\((optionLists|optionLabels|extraLists)\\)" -- apps packages ':!*.test.ts'`)
    goes through the parser or writes non-blank names; any production path that does not is a stop.
 4. **Backlog** (rules §9): from `docs/backlog/architecture.md`'s bundle delete "A product's name can be
-   stored blank" (mn5 narrowed it to these three tables) and "Loose ends left by A263 (#1151)"
+   stored blank" (mn6 narrowed it to these three tables) and "Loose ends left by A263 (#1151)"
    (`:1196-1197`); in `docs/backlog/menu.md` (today `catalogue.md:495-512`) delete the first bullet
    ("The database still accepts a maximum of 0") and add one line back to `docs/backlog.md`'s "Menus and
    the catalogue" list pointing at that section for the two bullets that are not A1308's.
@@ -182,7 +182,7 @@ new: <with is_default>
 
 Why: tables-menu.md §5, "option_lists: (none; `default_label_id` unchecked) → gains
 `option_labels_one_default_uq`"; README "Additions of 6 November 2026" for the four CHECKs (the
-products one landed in mn5). `extra_lists`' columns do not change, so its change-feed trigger does not.
+products one landed in mn6). `extra_lists`' columns do not change, so its change-feed trigger does not.
 
 ## Stop points (beyond rules §5)
 
@@ -193,7 +193,7 @@ products one landed in mn5). `extra_lists`' columns do not change, so its change
 ## Needs
 
 - **Outside this area:** batch 1.
-- **In this area:** mn3 (names). It touches no table mn4–mn7 changed and may be built any time after
+- **In this area:** mn3 (names). It touches no table mn4–mn8 changed and may be built any time after
   mn3 if the lane wants a small pull request between larger ones.
 
 ## Global Constraints

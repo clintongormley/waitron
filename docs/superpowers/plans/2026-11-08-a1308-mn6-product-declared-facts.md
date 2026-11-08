@@ -1,4 +1,4 @@
-# A1308 menu and photos, PR mn5: a product stores what people declared, and the database checks it — implementation plan
+# A1308 menu and photos, PR mn6: a product stores what people declared, and the database checks it — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -29,9 +29,9 @@ reviewed stays"; ordering CHECK), §3 (`product.archived`), §5, §6, §8 item 1
 example `packages/menu/src/product-names.ts:63` is today's `packages/catalogue/src/product-names.ts:63`).
 Slice 4a rewrote parts of `operations.ts` this plan touches: it removed `applyRecipeDerivation`,
 `applyDietDerivation`, `RecipeDerivation`, `republish` and `deriveDietProfile`, and introduced
-`publishedAllergens` and `UNDECLARED_DIET` (4a plan, "D1"). mn4 removed `products.menu_id`,
+`publishedAllergens` and `UNDECLARED_DIET` (4a plan, "D1"). mn4 and mn5 removed `products.menu_id`,
 `pricing_unit` and `product_units`. Backlog entries are named by their text at `a086eedfb7`; mn3
-changed "catalogue" to "menu" in them and mn1 moved `docs/backlog/catalogue.md` to
+changed "catalogue" to "menu" in them and moved `docs/backlog/catalogue.md` to
 `docs/backlog/menu.md`. A missing identifier this plan does not explain is a stop (rules §5.1).
 
 **Who lands:** the lane (rules §6). Allergens and diet reach a sale line only as a frozen copy at
@@ -49,7 +49,7 @@ cannot be restored or imported." (rules §2)
    (rules §5.4) before taking it.
 2. **`name_key` and `products_name_key_idx` go** (when item 1 passes). `nameColumns`
    (`packages/menu/src/product-names.ts:11-13`) and `storeProductNameKeys` (`:16-34`) go, with the
-   import hook that calls it (`packages/menu/src/configuration-transfer.ts:240`, `afterImport`) and the
+   import hook that calls it (`packages/menu/src/configuration-transfer.ts:238`, `afterImport`) and the
    export's `omit: ["name_key"]` (`packages/db/src/configuration-transfer.ts:72`).
    `assertProductNamesFree` (`product-names.ts:63-90`) selects `name` of active rows with the same
    parent (minus the family) and keeps those whose `foldName` equals a wanted key, then refuses as
@@ -111,7 +111,7 @@ cannot be restored or imported." (rules §2)
 11. **Backlog** (rules §9): delete from `docs/backlog/architecture.md` "Repeated allergen kinds from
     direct callers" (`:1240-1244`), "Catalogue names (W72) …" (`:1245-1246`), "A negative catalogue
     price …" (`:1191-1192`) and its detail `docs/backlog/menu.md` (today `catalogue.md:34-43`); edit
-    "A product's name can be stored blank" (`:1198-1201`) to drop `products` (mn8 deletes the rest);
+    "A product's name can be stored blank" (`:1198-1201`) to drop `products` (mn9 deletes the rest);
     edit `docs/backlog/menu.md`'s W72 section (today `catalogue.md:218-236`) to drop its first
     paragraph (the index and the backfill) and add one line to that file's "Decisions and deliberate
     limits" (today `:1244`): "Two active products of one parent may not share a staff name, checked in
@@ -139,9 +139,9 @@ cannot be restored or imported." (rules §2)
 
 | Left out | Who takes it |
 | --- | --- |
-| Blank-name CHECKs on `option_lists`, `option_labels`, `extra_lists` | mn8 |
-| The photo index on `sections` | mn7 |
-| `menu.archived`, `menu_edition.rescheduled`, `photo.deleted` | mn6, mn9, mn12 |
+| Blank-name CHECKs on `option_lists`, `option_labels`, `extra_lists` | mn9 |
+| The photo index on `sections` | mn8 |
+| `menu.archived`, `menu_edition.rescheduled`, `photo.deleted` | mn7, mn10, mn13 |
 | Removing `diet` from the menu document or the till | not planned: the document and the till read the computed value |
 
 ## Files
@@ -211,7 +211,7 @@ missing table products.columns[name_key]
 missing table products.columns[manual_allergens]
 missing table products.columns[diet]
 changed table products.columnOrder
-old: [<mn4's order>]
+old: [<mn5's order>]
 new: [<without name_key, manual_allergens, diet>]
 extra table products.checks[products_name_ck]
 extra table products.checks[products_ordering_ck]
@@ -263,7 +263,7 @@ first block do not print (`name_key` and its index stay).
 
 - **Outside this area:** slice 2 (`recordActivity`, the kind registry), slice 4a (`publishedAllergens`,
   `UNDECLARED_DIET`, recipes gone).
-- **In this area:** mn4 (the products table without `menu_id`, `pricing_unit`, `product_units`).
+- **In this area:** mn4 and mn5 (the products table without `menu_id`, `pricing_unit`, `product_units`; mn5's property-removal script).
 
 ## Global Constraints
 
@@ -330,9 +330,9 @@ tests named in Files.
     `{ tag: "x" }`, and `"refuses a contains list that is not a list"` with the same code.
 - [ ] **Step 3: Run; see them fail.**
 - [ ] **Step 4: Implement** items 2–5; rebuild core.
-- [ ] **Step 5: Remove `manualAllergens`** from object literals the type checker refuses, with mn4's
+- [ ] **Step 5: Remove `manualAllergens`** from object literals the type checker refuses, with mn5's
   script: `node scripts/a1308/remove-refused-property.mjs --property manualAllergens <tsc output>`
-  (Task 2 step 4 of mn4 describes the loop). Hand-fix the rest (listed).
+  (mn5's Task 2 describes the loop). Hand-fix the rest (listed).
 - [ ] **Step 6: Run — PASS. Commit.**
 
 ### Task 3: The CHECKs, the refusals, the index

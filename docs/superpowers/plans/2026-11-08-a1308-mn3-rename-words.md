@@ -65,6 +65,11 @@ are not `[A-Za-z0-9_]`; a dotted or hyphenated key matches as written):
 | `catalogue.title`, `catalogue.add_product`, `catalogue.empty_prompt` | `products.title`, `products.add_product`, `products.empty_prompt` | string keys of the Products screen (`strings.ts:1418`, `:1463-1464`) |
 | `catalogue_settings.` (prefix of a string key) | `menu_settings.` | `strings.ts:802-803`, `:4643-4644` |
 | `catalogue.not_found`, `catalogue.failed`, `catalogue.manage` | `menu.not_found`, `menu.failed`, `menu.manage` | error codes and the permission (`packages/identity/src/permissions.ts:10`, `:48`) |
+| `cataloguePrice` | `productPrice` | the product's own price in a test helper (`apps/dashboard/src/widgets/test-helpers.ts:477`, `:487`, `:497`); "menu price" would mean the opposite |
+| the property and binding `catalogue` of `CombineInput` (`packages/shared/src/menu-document/menu-combine-types.ts:24`), in every file that names `CombineInput` or `combineOffer` (the dry run lists them: `packages/menu/src/menu-combine.ts:29`, its test, `apps/dashboard/src/widgets/menu-price-inheritance.test.ts:160`, and any builder of a `CombineInput`) | `product` | the product's own prices beside the menu's `own`; the catch-all would give `{ menu, own }`, reversing the two meanings |
+| `ZoneOfferCatalogue` | `ZoneOffers` | the till's set of a zone's offers (`apps/till/src/till-app.ts:2866`); the catch-all's `ZoneOfferMenu` would read as one menu, and its `catalogue` field would become `menu.menus` |
+| `#zoneCatalogues` | `#zoneOffers` | the till's cache of those sets (`till-app.ts:2866-2868`, `:6468`); the catch-all would give `#zoneMenus` and a second `#rememberZoneMenu` beside the existing one (`till-app.ts:6353`, `:6472`), and a use before declaration in `till-app.test.ts` |
+| `rememberZoneCatalogue`, `forgetZoneCatalogues`, `zoneCatalogueGeneration` | `rememberZoneOffers`, `forgetZoneOffers`, `zoneOffersGeneration` | the same cache's helpers, kept consistent with the two rows above |
 | in `apps/dashboard/**` only: the quoted literal `"catalogue"` and the path segment `/catalogue/` | `"products"`, `/products/` | the screen's id and its address (`apps/dashboard/src/dashboard-app.ts:146`, `:250`, `:2307-2308`, `:2968`; `apps/dashboard/src/screens/products-screen.ts:150`, `:161`, `:205`) |
 
 **Protected spans**, masked after the exact replacements and before the catch-all, restored
@@ -75,6 +80,9 @@ unchanged:
 | K1 | every file | the tokens `registerCatalogue`, `I18N_CATALOGUES`, `helpCatalogues`, `guide-catalogue` (and `./guide-catalogue.js`) |
 | K2 | `apps/*/src/i18n/**`, `packages/dashboard-kit/src/i18n*.ts`, `packages/*/src/dashboard/strings*.ts`, `packages/recovery-pack/src/i18n/**`, `scripts/english-only.test.ts`, `packages/db/src/english-only.ts` | the words `catalogue`, `catalogues`, `Catalogue`, `Catalogues` (a string catalogue: for example `export const catalogues` at `apps/dashboard/src/i18n/strings.ts:7712` and `apps/setup/src/i18n/strings.ts:35`) |
 | K3 | `packages/fiscal-verifactu/src/inmutabilidad.test.ts` | the words, which mean a database's system catalogue (`:21`, `:25`) |
+| K5 | `packages/store/src/append-only.ts` (`CatalogueTarget`, `:11`), `packages/db/src/schema/menu/migrations.test.ts` ("the engine's own catalogue", `:66`) | a database's system catalogue |
+| K6 | `packages/staffing/src/dashboard/painter-parts.ts` (`catalogueText`, `:2`), `apps/dashboard/src/screens/card-provider-panel.ts` (comment, `:19`), `packages/payments-stripe/src/dashboard/index.ts` (comment, `:1`) | a string catalogue |
+| K7 | `docs/developers/testing-guide.md` ("AEAT error catalogue", `:131`) | AEAT's list of error codes |
 | K4 | whole files, never read | the `NEVER` list of mn1's script, plus `apps/server/src/guide-catalogue.ts` and its test |
 
 **Catch-all**, applied last, keeping case, plural before singular, anywhere in a word:
@@ -92,27 +100,50 @@ the live-update name `"catalogues"` → `"menus"`, and the till's `catalogueId`
 `docs/developers/**`, `docs/backlog/**`, `docs/backlog.md`) and the guides
 `apps/server/src/guide/**`. Historical documents stay (CLAUDE.md §6).
 
+**Local renames before the catch-all.** Some files already hold a local binding with the name the
+catch-all would produce, most often `const menus = await tx.select({ id: catalogues.id … }).from(catalogues)`
+(`packages/menu/src/section-graph.ts:122-124`, `packages/venue-service/src/menu-timetable.ts:699-701`,
+about ten more): after the catch-all it reads `.from(menus)` inside its own declaration. The script
+holds a committed table `LOCAL_RENAMES: { file, name, to }[]` and applies it first, renaming in that
+file every whole-word `name` that is not preceded by `.` or `?.` and not an object key (`name:`); the
+usual entry is `{ name: "menus", to: "menuRows" }` (or `menu` → `menuRow`). The table is filled from
+the script's `--clashes` mode, which lists each file where the catch-all would produce an identifier
+that the file already declares (`const`/`let`/`var`/`function`/`class X`, a parameter `X`, or `X` in a
+destructuring). A shorthand `{ menus }` in a listed file is shown by the dry run; where it builds a
+wire object whose key must stay, the builder writes `{ menus: menuRows }` by hand (listed). The
+reviewer reads the table and the clash report.
+
+**Moved by this PR:** `docs/backlog/catalogue.md` → `docs/backlog/menu.md` (`git mv`, a step of the
+script). Its links are relative (`catalogue.md#…`, about 85 lines in `docs/backlog.md` and
+`docs/backlog/*.md`), and the catch-all rewrites them to `menu.md#…` in the same run, so they point
+at the moved file. Links into it from historical documents, which the script does not read, point at
+the old name.
+
 **Not by script, by hand** (counted, listed in the description):
 - Spanish: "catálogo" → "carta", the dashboard's word (`strings.ts:5192`), with the grammar it
   needs: `apps/server/src/guide/es/kitchen-service.md:32`, `apps/server/src/guide/es/products.md:360`
   (and `strings.ts:6289` only if 4a left it). `packages/country-es/src/data/sources/BOE-A-2015-2294.xml`
   is the law's text and stays.
-- Name clashes the type check or lint finds after the catch-all (a `catalogue` variable next to a
-  `menu` one in the same scope; `{ menuId: menuId }` that lint wants as shorthand).
+- Name clashes the type check or lint still finds after the local renames (a `catalogue` variable next
+  to a `menu` one in the same scope that `--clashes` cannot see, for example a parameter in an inner
+  function; `{ menuId: menuId }` that lint wants as shorthand). The review's approximate run on
+  2026-11-08 saw about 40 distinct type errors across the packages before any local rename; the
+  local-rename table is expected to clear most.
 - Doubled words the catch-all makes in prose ("menu menu", "menus' menu"): found by Task 2 step 4.
 
 ## What it leaves out
 
 | Left out | Who takes it |
 | --- | --- |
-| Dropping `products.menu_id` (any menu offers any product) | mn4 |
-| Reshaping `listAvailableProducts` once products have no menu (4a-ii already deleted `listAccessibleCatalogues`) | mn4 |
-| `diet.invalid_origin`'s name (4a left it to this area) | mn5, with the diet change |
+| Dropping `products.menu_id` (any menu offers any product) | mn5 |
+| Reshaping `listAvailableProducts` once products have no menu (4a-ii already deleted `listAccessibleCatalogues`) | mn5 |
+| `diet.invalid_origin`'s name (4a left it to this area) | mn6, with the diet change |
 | Comments in i18n files that use "catalogue" in the menu sense (for example `apps/dashboard/src/i18n/codes.ts:1047`); K2 keeps them | hand-edited here when the report shows them, otherwise left: they are comments, and K2 cannot tell the senses apart |
 
 ## Files
 
 - Create: `scripts/a1308/rename-catalogue-words.mjs`, `scripts/a1308/rename-catalogue-words.test.mjs`
+- Moved by the script: `docs/backlog/catalogue.md` → `docs/backlog/menu.md`.
 - Rewritten by the script (not counted): measured on 2026-11-08 before batch 1, "catalogue" appears
   on 9,698 lines in 858 files under `apps`, `packages` and `scripts` (excluding drizzle), plus 451
   lines in the living docs (`docs/developers` 226, `docs/backlog` 181, `docs/backlog.md` 44)
@@ -130,11 +161,12 @@ the live-update name `"catalogues"` → `"menus"`, and the till's `catalogueId`
 
 | | Lines |
 | --- | --- |
-| Script | about 200 |
+| Script | about 220 |
 | Script tests | about 220 |
 | Madrid table-rename transform and its test | about 90 |
-| Hand edits: Spanish, format, clashes (estimate; the description lists the real ones) | about 80 |
-| **Counted** | **about 590** |
+| Hand edits: Spanish, format, clashes left after the local renames, shorthand keys (estimate; the description lists the real ones) | about 150 |
+| Local-rename table and `--clashes` mode (in the script and its tests) | about 80 |
+| **Counted** | **about 760** |
 
 Not counted: the script's output, generated migration files. About 3 hours.
 
@@ -142,7 +174,7 @@ Not counted: the script's output, generated migration files. About 3 hours.
 
 1. `node scripts/a1308/rename-catalogue-words.mjs` prints `rewrote 0`; `git status --porcelain` is empty.
 2. `node scripts/a1308/rename-catalogue-words.mjs --report` prints only kept occurrences, each with
-   K1, K2 or K3; the pull request pastes this report.
+   its K-rule (K1–K3, K5–K7); the pull request pastes this report.
 3. `git grep -n -I -i catalogue -- apps packages scripts .github CLAUDE.md README.md docs/developers docs/backlog docs/backlog.md`
    prints only lines the report lists, plus the K4 files.
 4. `pnpm --filter @waitron/menu typecheck`, `pnpm --filter @waitron/server typecheck`,
@@ -220,7 +252,7 @@ new: <the same, naming menu_id>
 
 Why: README §5 U9 renames the table and its id column; every protection keeps its home under the new
 names (tables-menu.md §5 first rows; `products_id_catalogue_key` and the composite key are dropped
-only by mn4, which drops the column). No hand-written trigger in `packages/db/triggers/core.sql`
+only by mn5, which drops the column). No hand-written trigger in `packages/db/triggers/core.sql`
 names `catalogues` or `catalogue_id` (`grep -c -i catalogue` over core's baseline trigger tail,
 lines 3008–3856 at `a086eedfb7`, prints 0), so no trigger body changes.
 
@@ -262,10 +294,11 @@ same answer on their trees: that is why it is idempotent and works file by file.
 1. **The report (Finish line 2) holds only the other meanings.** Read every line.
 2. **The exact table is complete for the Products screen.** Anything the screen calls itself
    should say "products"; a leftover `menu` that means the Products screen is a missed row.
-3. **No semantic merge.** Every pre-existing `menuId` already meant a row of `catalogues`
-   (`menu_items.menu_id`, `menu_versions.menu_id` and the rest, `0000_baseline.sql`), so a renamed
-   `catalogueId` next to a `menuId` is the same kind of value; only a different kind would be a merge
-   (stop point 2).
+3. **Every place the catch-all would join two different meanings has an exact row or a local
+   rename.** The known cases are the product-meaning rows above (`cataloguePrice`, `CombineInput`'s
+   `catalogue`, the till's zone-offer cache). Read the clash report and the type errors for others;
+   a renamed `catalogueId` beside a pre-existing `menuId` is only safe where both name a row of
+   `catalogues`, which the reviewer checks site by site (stop point 2).
 4. **The re-run on the base reproduces the pull request** (Finish line 8).
 
 ---
@@ -278,7 +311,10 @@ same answer on their trees: that is why it is idempotent and works file by file.
 
 ```js
 export const EXACT;      // [{ from, to, files? }] in table order; `files` limits a row to globs
-export const PROTECTED;  // [{ id: "K1" | "K2" | "K3", files, pattern }]
+export const PROTECTED;  // [{ id: "K1" … "K7" (no K4: K4 is NEVER), files, pattern }]
+export const LOCAL_RENAMES; // [{ file, name, to }], applied before EXACT
+/** Each file where the catch-all would produce a name the file already declares. */
+export function clashes(root: string): { file: string; name: string; produced: string }[];
 export const CATCH_ALL;  // [[from, to]] in table order
 export const SCOPE, NEVER; // as mn1's, plus apps/server/src/guide/** in SCOPE, guide-catalogue* in NEVER
 /** The rewritten text and the kept spans for one file. */
@@ -301,7 +337,18 @@ export function run(options: { root: string; dryRun?: boolean; report?: boolean 
   - `"keeps K2 words in string-catalogue files but still applies exact rows there"`: in
     `apps/dashboard/src/i18n/strings.ts`, `export const catalogues` unchanged and
     `"nav.catalogue": "Products"` → `"nav.products": "Products"`.
-  - `"keeps K3 words"` in the fiscal immutability test file.
+  - `"keeps K3 words"` in the fiscal immutability test file; `"keeps K5, K6 and K7 spans"` in their
+    files (`CatalogueTarget`, `catalogueText`, "AEAT error catalogue").
+  - `"limits the CombineInput row to files that name it"`: `catalogue: { price }` in a file naming
+    `CombineInput` → `product: { price }`; the same text elsewhere → `menu: { price }`.
+  - `"renames a listed local before the catch-all"`: with `LOCAL_RENAMES` `{ file, name: "menus",
+    to: "menuRows" }`, `const menus = tx.select({ id: catalogues.id }).from(catalogues)` becomes
+    `const menuRows = tx.select({ id: menus.id }).from(menus)`, and `row.menus` and `{ menus: 1 }`
+    in the same file are unchanged.
+  - `"reports a clash"`: `clashes` on a file declaring `const menus` and using `catalogues` lists it.
+  - `"moves the backlog file"`: `run` on a tree with `docs/backlog/catalogue.md` leaves
+    `docs/backlog/menu.md`, and a link `[x](catalogue.md#a-catalogue-price)` in `docs/backlog.md`
+    reads `[x](menu.md#a-menu-price)`.
   - `"never reads K4 files"`: a `drizzle/0000_baseline.sql` naming `catalogues` is byte-identical.
   - `"does not touch Spanish"`: `"Elige un catálogo"` unchanged.
   - `"is idempotent"`: `rewriteWords(rewriteWords(t).text)` equals `rewriteWords(t).text` for a
@@ -318,6 +365,8 @@ export function run(options: { root: string; dryRun?: boolean; report?: boolean 
 - [ ] **Step 2: Dry run.** `node scripts/a1308/rename-catalogue-words.mjs --dry-run > <scratch>/words.txt`.
   Read the catch-all hits in prose (comments, Markdown) for a meaning other than a menu (stop point
   1). Read the report: every kept line is K1–K3.
+- [ ] **Step 2b: Clashes.** `node scripts/a1308/rename-catalogue-words.mjs --clashes > <scratch>/clashes.txt`;
+  fill `LOCAL_RENAMES` from it (a script change: commit it with the script), and re-run the dry run.
 - [ ] **Step 3: Run it**, then `pnpm --filter @waitron/server migration-baseline rebuild --set core`.
 - [ ] **Step 4: Doubled words.** `git diff -U0 | grep -n -i -E "\\bmenus?'?s? menus?\\b"` and fix each
   sentence by hand (listed).

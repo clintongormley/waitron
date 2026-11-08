@@ -1,4 +1,4 @@
-# A1308 menu and photos, PR mn6: a menu is one row, a category is one row — implementation plan
+# A1308 menu and photos, PR mn7: a menu is one row, a category is one row — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -21,12 +21,12 @@ is created fresh.
 
 **Spec:** [design README](../specs/2026-11-02-rationalisation/README.md) §3 R1, R6;
 [tables-menu.md](../specs/2026-11-02-rationalisation/tables-menu.md) §1.1 (columns, CHECKs, dropped
-`version`), §1.2, §1.14 (the one-root index only; the root-name CHECK is mn7's), §3 (`menu.archived`),
+`version`), §1.2, §1.14 (the one-root index only; the root-name CHECK is mn8's), §3 (`menu.archived`),
 §5, §6; [slice rules](2026-11-08-a1308-slice-rules.md).
 
 **Base and names:** cites are `file:line` at `a086eedfb7` with mn1/mn3's paths and names
 (`packages/menu/src/menu-structure.ts:44` is today's `packages/catalogue/src/menu-structure.ts:44`;
-`menus` is today's `catalogues`; `createMenu` is `createCatalogue`). Batch 1 and mn1–mn5 have landed;
+`menus` is today's `catalogues`; `createMenu` is `createCatalogue`). Batch 1 and mn1–mn6 have landed;
 slice 5 added `menus.is_default` (its index name is whatever slice 5 chose, renamed by mn3). A missing
 identifier this plan does not explain is a stop (rules §5.1).
 
@@ -76,7 +76,7 @@ cannot be restored or imported." (rules §2)
    (one root and one home per menu)").
 5. **`categories` gains** `parent_id` (key to `categories.id` `on delete restrict`, index
    `categories_parent_idx`) and `color`; `category_details` goes. Readers and writers:
-   `packages/menu/src/categories.ts` (8 sites), `product-items.ts` (6), `category-names.ts` (4),
+   `packages/menu/src/categories.ts` (8 sites), `product-items.ts` (5; today `catalogue-items.ts`), `category-names.ts` (4),
    `sale-classification.ts` (3), `packages/venue-service/src/menu-timetable.ts` (3),
    `packages/venue-service/src/routing-store.ts` (5) — counts from
    `git grep -c categoryDetails` at `a086eedfb7`. A category write that set both its row and its
@@ -97,8 +97,8 @@ cannot be restored or imported." (rules §2)
 
 | Left out | Who takes it |
 | --- | --- |
-| The root section's staff name moving to `menus.name` (`sections_root_name_ck`) | mn7 |
-| `section_members.folder_overrides` split, the four triggers, the sections photo index | mn7 |
+| The root section's staff name moving to `menus.name` (`sections_root_name_ck`) | mn8 |
+| `section_members.folder_overrides` split, the four triggers, the sections photo index | mn8 |
 | `menus.is_default` | slice 5 (already landed) |
 | The dashboard's display of a category's colour source (`docs/backlog/menu.md`, "A category's naming square…") | its backlog entry; no table change |
 
@@ -216,9 +216,9 @@ Why, from tables-menu.md §5: `menu_details`' primary key and menu key "not need
 `menus`)"; its root and Home keys and `menu_details_root_uq` → `sections_one_root_per_menu_uq`;
 `category_details`' primary key and cascade "not needed"; its parent key and index →
 `categories.parent_id` and `categories_parent_idx`; the six CHECKs are new (owner, 2026-11-04); the
-`version` column has no protection. `categories`' and `menus`' change-feed triggers exist only if
-their tables are change sources at the base; if either is not, its `changed trigger` pair does not
-print (read `CORE_CHANGE_SOURCES`, `packages/db/src/classification.ts:492-498`, before predicting).
+`version` column has no protection. `categories` and `menus` (today `catalogues`) are change sources
+(`CORE_CHANGE_SOURCES`, `packages/db/src/classification.ts:492-498`), so their update triggers'
+`when` clauses change.
 
 ## Stop points (beyond rules §5)
 
@@ -231,7 +231,7 @@ print (read `CORE_CHANGE_SOURCES`, `packages/db/src/classification.ts:492-498`, 
 ## Needs
 
 - **Outside this area:** slice 2 (`recordActivity`); slice 5 (`menus.is_default` exists).
-- **In this area:** mn3 (names); mn5 (none of its columns, but it rebuilt core last; take `main`'s
+- **In this area:** mn3 (names); mn6 (none of its columns, but it rebuilt core last; take `main`'s
   generated files and re-run the rebuild on rebase, rules §2.4).
 
 ## Global Constraints

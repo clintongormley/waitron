@@ -85,10 +85,14 @@ cannot be restored or imported." (rules §2)
   under sweep 5's `settings.venue` revision in the same request. Sending a revision from these two
   screens would only turn "the later choice stands" into a refusal with nothing to merge. Stated
   here so the reviewer can disagree.
-- **D2. "Starter units are created at most once" keeps its guarantee.** Today the claim is
-  `insert … on conflict do nothing returning` on `unit_seed_states` (`provisioning.ts:90-94`). Now
-  the seed saves the document with the revision it read; a second seed racing the first is refused
-  `settings.out_of_date`, and its transaction, units included, rolls back (tables-menu.md §2).
+- **D2. "Starter units are created at most once" keeps its guarantee, by turn-taking plus reading
+  the flag in the same transaction.** Today the claim is `insert … on conflict do nothing returning`
+  on `unit_seed_states` (`provisioning.ts:90-94`). Write transactions on the venue file take turns:
+  a second one does not start while the first is open (`racePair` asserts exactly that,
+  `packages/menu/test/fixtures.ts:254-267`). So the second seed reads the flag the first saved and
+  inserts nothing; `settings.out_of_date` cannot fire here, and the plan does not rely on it. The
+  marker's other job also stays: a starter unit someone deleted is not recreated, because the flag
+  stays true (`packages/db/src/schema/menu/units.ts:30-31`).
 - **D3. `run_total`'s first position is 1**, not 0 as tables-menu.md §1.19 says: runs start at 1
   (`content-suggestion-jobs.ts:67`) and the update already targets 1
   (`content-suggestion-store.ts:271`).
@@ -135,7 +139,7 @@ cannot be restored or imported." (rules §2)
 | Madrid baseline transform | 30 | 30 |
 | **Counted** | **245** | **340** |
 
-About 585 counted lines; not counted: generated migration files, deleted schema lines. About 2½
+About 595 counted lines; not counted: generated migration files, deleted schema lines. About 2½
 hours.
 
 ## Finish line
@@ -211,7 +215,8 @@ its update trigger's `when` does not either.
 
 ## Review Focus
 
-1. **Two seeds cannot both create starter units** (D2), pinned by a race test.
+1. **Two seeds cannot both create starter units, and a deleted starter unit is not recreated** (D2),
+   pinned by a race test and a re-seed test.
 2. **A venue that never saved reads the defaults** the old table defaults gave (`general`, null),
    and the seed's values (pack VAT class, `#abcced`) appear only after provisioning.
 3. **The document travels in an export and is checked on import** through 1b-ii's path, with the
@@ -276,9 +281,11 @@ export function saveCatalogueDefaultColor(tx: Transaction, color: unknown): Prom
     seed, the document is `{ defaultProductVatClass: <ES pack's>, defaultColor: "#abcced",
     starterUnitsCreated: true }`; running the seed again leaves revision unchanged and inserts no unit.
   - `"creates the starter units once, even when two seeds race"`: two seeds through `racePair`
-    (`packages/menu/test/fixtures.ts`), each in its own transaction; afterwards exactly
-    `STARTER_UNITS.length` units exist and one of the two transactions was refused
-    `settings.out_of_date` (or waited and saw the flag set).
+    (`packages/menu/test/fixtures.ts`), each in its own transaction; `racePair`'s own assertion shows
+    the second waited; afterwards exactly `STARTER_UNITS.length` units exist, the second seed inserted
+    none, and the document's revision is 1.
+  - `"does not recreate a starter unit someone deleted"`: seed, delete one starter unit, seed again;
+    that unit stays deleted.
   - `"keeps a saved VAT class when the seed runs again"`: save `zero`, run the seed, read `zero`.
   - Re-point the existing seed cases that read `unit_seed_states` or `catalogue_settings` to the
     document; expected values unchanged.

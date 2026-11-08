@@ -123,7 +123,7 @@ seed under `apps/server/scripts/demo-seed/` (not `src`).
 
 **Where the move sits in this area's sequence:** after mn3, before mn4. Then every later menu PR
 edits the moved files with final names, and the move itself carries no rename. If A1453 puts this
-area's move later, it goes after mn11; plans mn4–mn11 cite `apps/server/src` paths, and a file found
+area's move later, it goes after mn13; plans mn4–mn13 cite `apps/server/src` paths, and a file found
 under its new package by the same name and identifier is not a stop.
 
 ## Files

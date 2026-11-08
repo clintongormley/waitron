@@ -1,4 +1,4 @@
-# A1308 menu and photos, PR mn9: one row says where each menu version stands — implementation plan
+# A1308 menu and photos, PR mn10: one row says where each menu version stands — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -32,7 +32,7 @@ trigger file.
 
 **Base and names:** cites are `file:line` at `a086eedfb7` with mn1/mn3's paths and names
 (`packages/menu/src/menu-publication.ts:55` is today's `packages/catalogue/src/menu-publication.ts:55`).
-Batch 1 and mn1–mn8 have landed. A missing identifier this plan does not explain is a stop (rules §5.1).
+Batch 1 and mn1–mn9 have landed. A missing identifier this plan does not explain is a stop (rules §5.1).
 
 **Who lands:** the lane (rules §6). A sale line points at `menu_versions` (`sale_lines.menu_version_id`,
 `packages/db/src/schema/sales.ts:206`), which keeps its rows and protections; nothing about a sale or a
@@ -56,7 +56,7 @@ cannot be restored or imported." (rules §2)
    - `state` text not null, CHECK `menu_releases_state_ck` in `queued`, `live`, `superseded`,
      `cancelled` (`enumType`/`enumCheck`);
    - `activates_at` ts not null;
-   - `cancelled_at` ts null, `cancelled_by` text null (its key to `persons` is mn10's);
+   - `cancelled_at` ts null, `cancelled_by` text null (its key to `persons` is mn11's);
    - CHECK `menu_releases_settled_ck`: `(state = 'cancelled') = (cancelled_at is not null) and (cancelled_at is null) = (cancelled_by is null)`;
    - `menu_releases_one_live_uq`: unique `(menu_id) where state = 'live'`;
    - `menu_releases_queued_time_uq`: unique `(menu_id, activates_at) where state = 'queued'`.
@@ -153,7 +153,7 @@ and output go in the pull request description, with the machine named (README §
 
 | Left out | Who takes it |
 | --- | --- |
-| Keys from `menu_versions.created_by` and `menu_releases.cancelled_by` to `persons` | mn10 |
+| Keys from `menu_versions.created_by` and `menu_releases.cancelled_by` to `persons` | mn11 |
 | A547's button order and list visibility (`docs/backlog/menu.md`) | its backlog entry; no table change |
 
 ## Files
@@ -198,7 +198,7 @@ and output go in the pull request description, with the machine named (README §
 | Madrid transform, docs | 30 | 30 |
 | **Counted** | **395** | **330** |
 
-About 725 counted lines; the three measurement scripts are not committed. About 3 hours.
+About 735 counted lines; the three measurement scripts are not committed. About 3 hours.
 
 ## Finish line
 
@@ -290,7 +290,7 @@ index prints as one more `extra index` line, which the watcher's confirmation ad
 
 - **Outside this area:** slice 2 (`recordActivity`); slice 1a's trigger file. Slice 0's bench is used
   if present, not needed.
-- **In this area:** mn3 (names); mn7 (it last changed `core.sql`'s media triggers; take `main`'s
+- **In this area:** mn3 (names); mn8 (it last changed `core.sql`'s media triggers; take `main`'s
   generated files on rebase and re-run the rebuild, rules §2.4).
 
 ## Global Constraints

@@ -1,4 +1,4 @@
-# A1308 menu and photos, PR mn10: who published or cancelled a menu version is a checked person — implementation plan
+# A1308 menu and photos, PR mn11: who published or cancelled a menu version is a checked person — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -22,7 +22,7 @@ call sites, which now name a person that exists.
 person first").
 
 **Base and names:** cites are `file:line` at `a086eedfb7` with mn1/mn3's paths and names. Batch 1 and
-mn1–mn9 have landed (mn9 created `menu_releases` and renamed `published_by` to `created_by`). A
+mn1–mn10 have landed (mn10 created `menu_releases` and renamed `published_by` to `created_by`). A
 missing identifier this plan does not explain is a stop (rules §5.1).
 
 **Who lands:** the lane (rules §6).
@@ -129,7 +129,7 @@ Why: README §5 U11, "every column naming a person gets a key to `persons`"; tab
 ## Needs
 
 - **Outside this area:** batch 1 (identity's tables in core since A760).
-- **In this area:** mn9.
+- **In this area:** mn10.
 
 ## Global Constraints
 

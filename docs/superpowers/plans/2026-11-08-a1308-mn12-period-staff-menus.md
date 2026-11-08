@@ -1,4 +1,4 @@
-# A1308 menu and photos, PR mn11: a period's staff menus are a list on the period — implementation plan
+# A1308 menu and photos, PR mn12: a period's staff menus are a list on the period — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -26,7 +26,7 @@ in Task 4); [slice rules](2026-11-08-a1308-slice-rules.md).
 
 **Base and names:** cites are `file:line` at `a086eedfb7` with mn1/mn3's paths and names (`menus` is
 today's `catalogues`; `menuId: menuId` in an error's params was `catalogueId: menuId`). Batch 1,
-dv0 and mn1–mn10 have landed. A missing identifier this plan does not explain is a stop (rules §5.1).
+dv0 and mn1–mn11 have landed. A missing identifier this plan does not explain is a stop (rules §5.1).
 
 **Who lands:** the lane (rules §6).
 
@@ -129,7 +129,7 @@ stop (rules §5.4).
 | Madrid transform, docs | 25 | 25 |
 | **Counted** | **195** | **245** |
 
-About 440 counted lines. About 2 hours.
+About 450 counted lines. About 2 hours.
 
 ## Finish line
 
@@ -186,7 +186,7 @@ own. If the side table's primary key is not a named composite key in the base (i
 
 - **Outside this area:** dv0 (JSON-list machinery; its plan says it lands before its first user and
   waits on nothing); batch 1.
-- **In this area:** mn3 (names). It touches no table mn4–mn10 changed.
+- **In this area:** mn3 (names). It touches no table mn4–mn11 changed, and mn13 none of its.
 
 ## Global Constraints
 
