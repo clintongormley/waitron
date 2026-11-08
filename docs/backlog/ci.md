@@ -566,18 +566,15 @@ except the last, added on 2026-11-07.
 The original entries retain their text from the index (backlog review, 2026-11-06).
 A1424's live qualification was added on 7 November 2026.
 
-- **A1424: finish qualifying disposable server, heavy and browser runners before general activation.** Routing
-  and its bounded metadata watchdog share the optional `DISPOSABLE_TESTS_HEAD` selection;
-  keep it set during selected-head trials. Finish the selected PR's coverage merge and aggregate,
-  then qualify mixed-workload capacity and the unavailable-label and server-down paths through
-  visible failure/cancellation and hosted attempt two.
-  Each routed job family has a separate cap defaulting to zero, including the additional PR test
-  families, shared mutation, typecheck, lint, root guards and bundle smoke. Lane I still qualifies
-  each family before enabling it; the stream job stays hosted pending its guest setup. Qualify
-  full Chromium and
-  its system libraries, venue-service sudo and shared memory, and an actual till browser
-  job within its existing deadline. Retain runner identity, unchanged source head, coverage
-  merge and aggregate results.
+- **A1424 / A1440: finish qualifying server routing and recovery on real workloads.**
+  CI routes ordinary same-repository jobs through the measured global pool; family caps
+  have been removed, and routing, recovery, the final aggregate and publication stay hosted.
+  The health check chooses hosted while the server queue is stuck, and the independent
+  watchdog cancels and reruns stuck workflows. Qualify its actual workflow-token permissions,
+  the idle probe, browser/stream guest requirements and current-head coverage/aggregate results.
+  Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
+  drills. Job-by-job overflow, the remaining workflows, second-host registration and first-day
+  queue measurements remain open. Never drain other lanes' work for a drill.
   [Procedure and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
 
 - **`scripts/ci-diff-paths.sh` never looks for `gnutimeout` for its `-k` bound** (left open by

@@ -42,7 +42,7 @@ import {
 // file ever starts disagreeing with the workflow.
 
 // eslint.config.js gives `scripts/**/*.mjs` only `console` and `process` as globals.
-const { AbortController, structuredClone } = globalThis;
+const { AbortController } = globalThis;
 
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
@@ -78,8 +78,11 @@ const ADDITIONAL_ROUTES = [
 const familyCap = (family) => `DISPOSABLE_TESTS_${family.replaceAll("-", "_").toUpperCase()}_JOBS`;
 function routingContext(family = "server") {
   return {
+    inputs: { server_probe: false },
     github: {
       run_attempt: 1,
+      sha: "a".repeat(40),
+      workflow: "CI",
       event_name: "pull_request",
       repository_id: 42,
       repository: "o/r",
@@ -99,6 +102,7 @@ function routingContext(family = "server") {
       changes: {
         outputs: {
           code: "true",
+          server_route: "server",
           ...Object.fromEntries(
             DISPOSABLE_FAMILIES.map((name) => [
               name.replaceAll("-", "_"),
@@ -154,343 +158,179 @@ describe("disposable family routing", () => {
     expect(() => watchFamilies(routingContext())).not.toThrow();
   });
 
-  it.each(DISPOSABLE_FAMILIES)("routes only admitted %s jobs within their own cap", (family) => {
-    const routing = job(`test-${family}`).body.find((line) => /^ {4}runs-on:/.test(line));
-    const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
+  it.each(DISPOSABLE_FAMILIES)("routes every %s shard independently of old type caps", (family) => {
+    const entry = job(`test-${family}`);
+    const routing = entry.body.find((line) => /^ {4}runs-on:/.test(line));
     const context = routingContext(family);
-    expect(
-      expressionValue(watch, context) && watchFamilies(context).some((row) => row.enabled),
-    ).toBe(true);
-    if (matrixShards(job(`test-${family}`).body) === undefined) {
-      delete context.matrix;
-      expect(routing).not.toContain("matrix.");
-      expect(routing).toContain("1 <=");
+    const shards = matrixShards(entry.body);
+    if (!shards) delete context.matrix;
+    for (const cap of ["", "0", "1", "invalid"]) {
+      context.vars[familyCap(family)] = cap;
+      for (const shard of shards ?? [1]) {
+        if (shards) context.matrix.shard = shard;
+        expect(expressionValue(routing, context)).toEqual([
+          "self-hosted",
+          `dt-42-1234-1-test-${family}-${shard}`,
+        ]);
+      }
     }
-    expect(expressionValue(routing, context)).toEqual([
-      "self-hosted",
-      `dt-42-1234-1-test-${family}-1`,
-    ]);
-    for (const change of [
-      (c) => {
-        c.github.event_name = "push";
-      },
-      (c) => {
-        c.github.event_name = "workflow_dispatch";
-      },
-      (c) => {
-        c.github.event_name = "schedule";
-      },
-      (c) => {
-        c.github.event.pull_request.head.repo.id = 9;
-      },
-      (c) => {
-        c.github.event.pull_request.head.repo.full_name = "other/repo";
-      },
-      (c) => {
-        c.github.run_attempt = 2;
-      },
-      (c) => {
-        c.vars.DISPOSABLE_TESTS_MODE = "";
-      },
-      (c) => {
-        c.vars.DISPOSABLE_TESTS_MODE = "hosted";
-      },
-      (c) => {
-        c.vars.DISPOSABLE_TESTS_HEAD = "b".repeat(40);
-      },
-      (c) => {
-        c.vars[familyCap(family)] = "";
-      },
-      (c) => {
-        c.vars[familyCap(family)] = "0";
-      },
-      (c) => {
-        c.vars[familyCap(family)] = "invalid";
-      },
-    ]) {
-      const rejected = routingContext(family);
-      if (context.matrix === undefined) delete rejected.matrix;
-      change(rejected);
-      expect(expressionValue(routing, rejected)).toBe("ubuntu-latest");
-      expect(
-        expressionValue(watch, rejected) && watchFamilies(rejected).some((row) => row.enabled),
-      ).toBe(false);
-    }
-    context.vars.DISPOSABLE_TESTS_HEAD = "a".repeat(40);
-    expect(expressionValue(routing, context)).toEqual([
-      "self-hosted",
-      `dt-42-1234-1-test-${family}-1`,
-    ]);
-    if (context.matrix !== undefined) {
-      context.matrix.shard = 2;
-      expect(expressionValue(routing, context)).toBe("ubuntu-latest");
-    }
+    const row = () => watchFamilies(context).find((value) => value.id === `test-${family}`);
+    expect(row().enabled).toBe(true);
+    expect(row().count).toBe(shards?.length ?? 1);
+    expect(row().matrix).toBe(!!shards);
+    context.needs.changes.outputs[family.replaceAll("-", "_")] = "false";
+    expect(row().enabled).toBe(false);
+    context.needs.changes.outputs[family.replaceAll("-", "_")] = "true";
+    context.needs.changes.outputs.code = "false";
+    expect(row().enabled).toBe(false);
   });
 
-  it("ties every watched family to its actual job gate, cap, label and inventory", () => {
-    const context = routingContext();
-    const watchdog = job("server-queue-watchdog").body;
-    const rows = watchFamilies(context);
+  it("ties every watched family to its actual job scope, label and inventory", () => {
+    const rows = watchFamilies(routingContext());
     expect(rows.map((row) => row.id).sort()).toEqual(
       [
-        ...DISPOSABLE_FAMILIES.map((f) => `test-${f}`),
+        ...DISPOSABLE_FAMILIES.map((family) => `test-${family}`),
         ...ADDITIONAL_ROUTES.map(([id]) => id),
       ].sort(),
     );
-    for (const family of DISPOSABLE_FAMILIES) {
-      const body = job(`test-${family}`).body;
-      const row = rows.find((entry) => entry.id === `test-${family}`);
-      expect(row.count).toBe(matrixShards(body)?.length ?? 1);
-      expect(row.matrix).toBe(matrixShards(body) !== undefined);
-      const selected = routingContext(family);
-      expect(
-        watchFamilies(selected)
-          .filter((entry) => entry.enabled)
-          .map((entry) => entry.id),
-      ).toEqual([`test-${family}`]);
-      selected.needs.changes.outputs[family.replaceAll("-", "_")] = "false";
-      expect(watchFamilies(selected).filter((entry) => entry.enabled)).toEqual([]);
-      const routing = body.find((line) => /^ {4}runs-on:/.test(line));
-      expect(routing).toContain(`vars.${familyCap(family)} || '0'`);
-      expect(routing).toContain(`-test-${family}-`);
-    }
     for (const row of rows) {
       const body = job(row.id).body;
+      const context = routingContext();
+      for (const key of Object.keys(context.needs.changes.outputs))
+        context.needs.changes.outputs[key] = "true";
+      for (const match of body.join("\n").matchAll(/needs\.changes\.outputs\.(\w+)/g))
+        context.needs.changes.outputs[match[1]] = "true";
+      context.needs.changes.outputs.server_route = "server";
       const routing = body.find((line) => /^ {4}runs-on:/.test(line));
-      const condition = body.find((line) => /^ {4}if:/.test(line));
-      const admitted = routingContext();
-      const caps = [...lines.join("\n").matchAll(/vars\.(DISPOSABLE_TESTS_\w+_JOBS)/g)].map(
-        (match) => match[1],
-      );
-      for (const cap of caps) admitted.vars[cap] = "0";
-      admitted.vars[/vars\.(DISPOSABLE_TESTS_\w+_JOBS)/.exec(routing)[1]] = "1";
-      const outputs = [...condition.matchAll(/needs\.changes\.outputs\.(\w+)/g)].map(
-        (match) => match[1],
-      );
-      for (const output of Object.keys(admitted.needs.changes.outputs))
-        admitted.needs.changes.outputs[output] = "false";
-      for (const output of outputs) admitted.needs.changes.outputs[output] = "true";
-      if (!row.matrix) delete admitted.matrix;
-      expect(jobCondition(body, admitted), row.id).toBe(true);
-      expect(expressionValue(routing, admitted), row.id).toEqual([
+      expect(row.count).toBe(matrixShards(body)?.length ?? 1);
+      expect(row.matrix).toBe(matrixShards(body) !== undefined);
+      expect(jobCondition(body, context), row.id).toBe(true);
+      expect(expressionValue(routing, context), row.id).toEqual([
         "self-hosted",
         `dt-42-1234-1-${row.id}-1`,
       ]);
-      expect(jobCondition(watchdog, admitted), row.id).toBe(true);
-      admitted.needs.changes.result = "failure";
-      admitted.needs.changes.outputs = {};
-      if (jobCondition(body, admitted)) expect(jobCondition(watchdog, admitted), row.id).toBe(true);
+      expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(true);
+      context.needs.changes.result = "failure";
+      context.needs.changes.outputs = {};
+      if (jobCondition(body, context))
+        expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
     }
   });
 
-  it("starts the watchdog only for admitted, uncancelled attempts", () => {
+  it("keeps the watchdog on GitHub and starts it for every admitted event and attempt", () => {
     const body = job("server-queue-watchdog").body;
-    const context = routingContext();
-    expect(jobCondition(body, context)).toBe(true);
-    context.vars.DISPOSABLE_TESTS_HEAD = "a".repeat(40);
-    expect(jobCondition(body, context)).toBe(true);
-    for (const reject of [
-      (c) => {
-        c.cancelled = () => true;
+    expect(body).toContain("    runs-on: ubuntu-latest");
+    for (const event of ["pull_request", "push", "schedule", "workflow_dispatch"]) {
+      for (const attempt of [1, 2, 7]) {
+        const context = routingContext();
+        context.github.event_name = event;
+        context.github.run_attempt = attempt;
+        expect(jobCondition(body, context), `${event} ${attempt}`).toBe(true);
+        expect(
+          expressionValue(
+            body.find((line) => line.includes("SHOULD_WATCH:")),
+            context,
+          ),
+        ).toBe(true);
+      }
+    }
+    for (const change of [
+      (context) => {
+        context.cancelled = () => true;
       },
-      (c) => {
-        c.github.run_attempt = 2;
+      (context) => {
+        context.github.event.pull_request.head.repo.id = 9;
       },
-      (c) => {
-        c.github.event_name = "push";
+      (context) => {
+        context.github.event.pull_request.head.repo.full_name = "other/repo";
       },
-      (c) => {
-        c.github.event_name = "workflow_dispatch";
+      (context) => {
+        context.vars.DISPOSABLE_TESTS_MODE = "hosted";
       },
-      (c) => {
-        c.github.event_name = "schedule";
+      (context) => {
+        context.vars.DISPOSABLE_TESTS_HEAD = "b".repeat(40);
       },
-      (c) => {
-        c.github.event.pull_request.head.repo.id = 9;
-      },
-      (c) => {
-        c.github.event.pull_request.head.repo.full_name = "other/repo";
-      },
-      (c) => {
-        c.vars.DISPOSABLE_TESTS_MODE = "hosted";
-      },
-      (c) => {
-        c.vars.DISPOSABLE_TESTS_HEAD = "b".repeat(40);
+      (context) => {
+        context.vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS = '{"1234":1}';
       },
     ]) {
-      const rejected = routingContext();
-      reject(rejected);
-      expect(jobCondition(body, rejected)).toBe(false);
+      const context = routingContext();
+      change(context);
+      expect(jobCondition(body, context)).toBe(false);
     }
-  });
-
-  it("watches scope and cap together and keeps other families hosted", () => {
-    const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
-    const context = routingContext("ui");
-    context.vars.DISPOSABLE_TESTS_UI_JOBS = "0";
-    context.vars.DISPOSABLE_TESTS_SERVER_JOBS = "1";
-    expect(
-      expressionValue(watch, context) && watchFamilies(context).some((row) => row.enabled),
-    ).toBe(false);
-    context.vars.DISPOSABLE_TESTS_UI_JOBS = "1";
-    context.vars.DISPOSABLE_TESTS_HEAVY_JOBS = "1";
-    context.needs.changes.outputs.heavy = "true";
-    expect(
-      expressionValue(watch, context) && watchFamilies(context).some((row) => row.enabled),
-    ).toBe(true);
-    expect(
-      watchFamilies(context)
-        .filter((entry) => entry.enabled)
-        .map((entry) => entry.id)
-        .sort(),
-    ).toEqual(["test-heavy", "test-ui"]);
-    const till = job("test-till").body.find((line) => /^ {4}runs-on:/.test(line));
-    expect(expressionValue(till, context)).toBe("ubuntu-latest");
   });
 });
 
-describe("remaining disposable PR jobs", () => {
+describe("remaining disposable jobs", () => {
   it.each(ADDITIONAL_ROUTES)(
-    "routes %s under its cap and watches the same admitted scope",
+    "routes %s without a type cap and watches its scope",
     (id, suffix, scope, requiresCode = true) => {
       const body = job(id).body;
       const routing = body.find((line) => /^ {4}runs-on:/.test(line));
-      const cap = `DISPOSABLE_TESTS_${suffix}_JOBS`;
       const context = routingContext();
-      context.vars.DISPOSABLE_TESTS_SERVER_JOBS = "0";
-      context.needs.changes.outputs.server = "false";
-      for (const [, name, output] of ADDITIONAL_ROUTES) {
-        context.vars[`DISPOSABLE_TESTS_${name}_JOBS`] = "0";
-        if (output) context.needs.changes.outputs[output] = "false";
-      }
-      context.vars[cap] = "1";
       if (scope) context.needs.changes.outputs[scope] = "true";
-      const shards = matrixShards(body);
-      if (!shards) delete context.matrix;
-      const watched = () => watchFamilies(context).filter((row) => row.enabled);
-      expect(expressionValue(routing, context)).toEqual(["self-hosted", `dt-42-1234-1-${id}-1`]);
-      expect(watched()).toEqual([
-        { id, count: shards?.length ?? 1, matrix: !!shards, enabled: true },
-      ]);
-      context.vars.DISPOSABLE_TESTS_HEAD = "a".repeat(40);
-      expect(expressionValue(routing, context)).toEqual(["self-hosted", `dt-42-1234-1-${id}-1`]);
-      context.vars.DISPOSABLE_TESTS_HEAD = "";
-      const baseline = structuredClone({
-        github: context.github,
-        vars: context.vars,
-        needs: context.needs,
-        matrix: context.matrix,
-      });
-      for (const reject of [
-        (c) => {
-          delete c.vars[cap];
-        },
-        (c) => {
-          c.vars[cap] = "";
-        },
-        (c) => {
-          c.vars[cap] = "0";
-        },
-        (c) => {
-          c.vars[cap] = "invalid";
-        },
-        (c) => {
-          c.github.run_attempt = 2;
-        },
-        (c) => {
-          c.github.event_name = "push";
-        },
-        (c) => {
-          c.github.event_name = "workflow_dispatch";
-        },
-        (c) => {
-          c.github.event.pull_request.head.repo.id = 9;
-        },
-        (c) => {
-          c.github.event.pull_request.head.repo.full_name = "other/repo";
-        },
-        (c) => {
-          c.vars.DISPOSABLE_TESTS_MODE = "hosted";
-        },
-        (c) => {
-          c.vars.DISPOSABLE_TESTS_HEAD = "b".repeat(40);
-        },
-      ]) {
-        Object.assign(context, structuredClone(baseline));
-        reject(context);
-        expect(expressionValue(routing, context)).toBe("ubuntu-latest");
-        const admission = job("server-queue-watchdog").body.find((line) =>
-          line.includes("SHOULD_WATCH:"),
-        );
-        expect(expressionValue(admission, context) && watched().length > 0).toBe(false);
+      const row = () => watchFamilies(context).find((value) => value.id === id);
+      for (const cap of ["", "0", "1", "invalid"]) {
+        context.vars[`DISPOSABLE_TESTS_${suffix}_JOBS`] = cap;
+        expect(expressionValue(routing, context)).toEqual(["self-hosted", `dt-42-1234-1-${id}-1`]);
+        expect(row().enabled).toBe(true);
       }
-      Object.assign(context, structuredClone(baseline));
       if (scope) {
         context.needs.changes.outputs[scope] = "false";
-        expect(watched()).toEqual([]);
+        expect(row().enabled).toBe(false);
+        context.needs.changes.outputs[scope] = "true";
       }
       context.needs.changes.outputs.code = "false";
-      expect(watched().map((row) => row.id)).toEqual(requiresCode ? [] : [id]);
-      Object.assign(context, structuredClone(baseline));
-      if (shards) {
-        context.matrix.shard = 2;
-        expect(expressionValue(routing, context)).toBe("ubuntu-latest");
-      }
-      context.vars[cap] = "0";
-      context.vars.DISPOSABLE_TESTS_SERVER_JOBS = "24";
-      expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+      expect(row().enabled).toBe(!requiresCode);
     },
   );
 });
 
 describe("disposable server routing", () => {
-  // GitHub supplies an unset vars key as ""; see the CI guide's contexts provenance.
   it.each([
     ["", true],
     ["a".repeat(40), true],
     ["b".repeat(40), false],
   ])("admits configured head %j only when empty or matching", (selectedHead, admitted) => {
     const routing = job("test-server").body.find((line) => /^ {4}runs-on:/.test(line));
-    const condition = routing.slice(routing.indexOf("${{ ") + 4, routing.indexOf(" && fromJSON("));
-    const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
-    const watchCondition = watch.slice(watch.indexOf("${{ ") + 4, watch.lastIndexOf(" }}"));
     const context = routingContext();
     context.vars.DISPOSABLE_TESTS_HEAD = selectedHead;
-    expect(runInNewContext(condition, context)).toBe(admitted);
-    expect(runInNewContext(watchCondition, context)).toBe(admitted);
+    expect(Array.isArray(expressionValue(routing, context))).toBe(admitted);
+    expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(admitted);
   });
 
-  it("routes only the first attempt of same-repository server PR shards within the configured budget", () => {
-    expect(job("test-server").body).toContain(
-      "    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('[\"self-hosted\",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}",
-    );
-    for (const entry of jobs.filter(
-      ({ id }) =>
-        !DISPOSABLE_FAMILIES.some((family) => id === `test-${family}`) &&
-        !ADDITIONAL_ROUTES.some(([routed]) => id === routed),
-    )) {
-      const runner = entry.body.find((line) => /^ {4}runs-on:/.test(line));
-      if (runner !== undefined) expect(runner, entry.id).toBe("    runs-on: ubuntu-latest");
+  it("keeps the independent routing job hosted and routes other jobs without old first-attempt limits", () => {
+    expect(job("changes").body).toContain("    runs-on: ubuntu-latest");
+    for (const entry of jobs) {
+      const routing = entry.body.find((line) => /^ {4}runs-on:/.test(line));
+      if (
+        !routing ||
+        ["changes", "server-queue-watchdog", "publish", "ci", "server-probe"].includes(entry.id)
+      )
+        continue;
+      for (const event of ["pull_request", "push", "workflow_dispatch", "schedule"]) {
+        const context = routingContext();
+        context.github.event_name = event;
+        context.github.run_attempt = 2;
+        expect(expressionValue(routing, context), entry.id).toEqual([
+          "self-hosted",
+          `dt-42-1234-2-${entry.id}-1`,
+        ]);
+      }
     }
   });
 
-  it("keeps server admission, prefix and shard count in the shared watch", () => {
-    const server = job("test-server").body;
-    const watchdog = job("server-queue-watchdog").body;
+  it("keeps watch inventory, prefix, permissions and bounded cleanup", () => {
+    const server = job("test-server").body,
+      watchdog = job("server-queue-watchdog").body;
     expect(jobCondition(server, routingContext())).toBe(true);
     expect(jobCondition(watchdog, routingContext())).toBe(true);
-    const routing = server.find((line) => /^ {4}runs-on:/.test(line));
-    const condition = routing.slice(routing.indexOf("${{ ") + 4, routing.indexOf(" && fromJSON("));
-    const watch = watchdog.find((line) => line.includes("SHOULD_WATCH:"));
-    expect(expressionValue(watch, routingContext())).toBe(true);
-    expect(condition).toContain("matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0')");
-    const prefix = /vars\.DISPOSABLE_TESTS_LABEL_PREFIX \|\| 'dt'/.exec(routing)?.[0];
-    expect(prefix).toBeDefined();
-    expect(watchdog).toContain(`          LABEL_PREFIX: \u0024{{ ${prefix} }}`);
-    const count = watchFamilies(routingContext()).find(
-      (family) => family.id === "test-server",
-    ).count;
-    expect(count).toBe(matrixShards(server).length);
+    expect(watchdog).toContain(
+      "          LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}",
+    );
+    expect(
+      watchFamilies(routingContext()).find((family) => family.id === "test-server").count,
+    ).toBe(matrixShards(server).length);
     expect(needsOf(job("ci").body)).toContain("server-queue-watchdog");
     expect(jobPermissions(watchdog)).toEqual(["actions: write"]);
     expect(watchdog).toContain("    timeout-minutes: 22");
@@ -542,7 +382,7 @@ case "$endpoint" in
     response="$STUB_DIR/jobs.$selected.$page"
     if [ -f "$STUB_DIR/jobs-error.status" ]; then response="$STUB_DIR/jobs-error"; fi
     ;;
-  repos/o/r/actions/runs/1234/cancel)
+  repos/o/r/actions/runs/1234/cancel|repos/o/r/actions/workflows/server-health.yml/dispatches)
     case " $* " in *' POST '*) ;; *) echo 'Expected POST' >&2; exit 1 ;; esac
     advance cancel; response="$STUB_DIR/cancel.$selected" ;;
   repos/o/r/actions/runs/1234)
@@ -667,7 +507,22 @@ exit "$status"
       elapsed,
     };
   }
-  const cancellations = (result) => result.calls.filter((args) => args.includes("POST"));
+  const recoveryDispatches = (result) => result.calls.filter((args) => args.includes("POST"));
+
+  it("delegates recovery to trusted main without cancelling its own workflow", () => {
+    const result = runWatch({}, { SLEEP_OVERRUN: "0" });
+    expect(result.status, result.output).toBe(0);
+    expect(recoveryDispatches(result)).toEqual([
+      [
+        "api",
+        "--method",
+        "POST",
+        "repos/o/r/actions/workflows/server-health.yml/dispatches",
+        "-f",
+        "ref=main",
+      ],
+    ]);
+  });
 
   const familyRows = (id, count, matrix, firstId) =>
     Array.from({ length: count }, (_, at) => ({
@@ -696,8 +551,8 @@ exit "$status"
           { id: "test-server", count: 24, matrix: true, enabled: false },
         ),
       );
-      expect(result.status === 0, result.output).toBe(both);
-      expect(cancellations(result)).toHaveLength(both ? 0 : 1);
+      expect(result.status, result.output).toBe(0);
+      expect(recoveryDispatches(result)).toHaveLength(both ? 0 : 1);
       if (!both) expect(result.output).toContain("test-ui");
     },
   );
@@ -716,7 +571,7 @@ exit "$status"
     );
     expect(result.status, result.output).not.toBe(0);
     expect(result.calls).toHaveLength(1);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it("matches an unsharded API name exactly while excluding its merge job", () => {
     const ui = familyRows("test-ui", 1, false, 100);
@@ -726,7 +581,7 @@ exit "$status"
       familyEnvironment({ id: "test-ui", count: 1, matrix: false, enabled: true }),
     );
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it("names the waiting browser family when both cancellation requests fail", () => {
     const ui = familyRows("test-ui", 1, false, 100);
@@ -741,8 +596,10 @@ exit "$status"
       familyEnvironment({ id: "test-ui", count: 1, matrix: false, enabled: true }),
     );
     expect(result.status, result.output).not.toBe(0);
-    expect(cancellations(result)).toHaveLength(2);
-    expect(result.output).toContain("Could not request cancellation of the queued test-ui jobs");
+    expect(recoveryDispatches(result)).toHaveLength(2);
+    expect(result.output).toContain(
+      "Could not request independent recovery of the queued test-ui jobs",
+    );
   });
   it.each(["name", "head", "attempt", "label", "missing"])(
     "does not hide a browser %s fault behind assigned server jobs",
@@ -765,7 +622,7 @@ exit "$status"
         ),
       );
       expect(result.status, result.output).not.toBe(0);
-      expect(cancellations(result)).toHaveLength(1);
+      expect(recoveryDispatches(result)).toHaveLength(1);
     },
   );
 
@@ -813,7 +670,7 @@ exit "$status"
       { CHECK_STDIN: "true" },
     );
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it.each(["assigned", "completed"])(
     "accepts a complete inventory with the routed job %s",
@@ -826,7 +683,7 @@ exit "$status"
       });
       const result = runWatch({ polls: [pages(entries)] });
       expect(result.status, result.output).toBe(0);
-      expect(cancellations(result)).toEqual([]);
+      expect(recoveryDispatches(result)).toEqual([]);
     },
   );
   it.each([true, false])(
@@ -838,8 +695,8 @@ exit "$status"
         if (both) Object.assign(entries[1], { status: "in_progress", runner_id: 10 });
       });
       const result = runWatch({ polls: [pages(rows)] });
-      expect(result.status === 0, result.output).toBe(both);
-      expect(cancellations(result)).toHaveLength(both ? 0 : 1);
+      expect(result.status, result.output).toBe(0);
+      expect(recoveryDispatches(result)).toHaveLength(both ? 0 : 1);
     },
   );
   it("does not call an in-progress shard assigned without a positive runner ID", () => {
@@ -852,8 +709,8 @@ exit "$status"
         ),
       ],
     });
-    expect(result.status, result.output).not.toBe(0);
-    expect(cancellations(result)).toHaveLength(1);
+    expect(result.status, result.output).toBe(0);
+    expect(recoveryDispatches(result)).toHaveLength(1);
   });
   it("allows an initial empty listing and legitimate inventory growth between paginated polls", () => {
     const ready = inventory((rows) => {
@@ -868,7 +725,7 @@ exit "$status"
     );
     expect(result.status, result.output).toBe(0);
     expect(result.calls.some((args) => args.some((arg) => arg.endsWith("&page=2")))).toBe(true);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it("compares the configured label prefix as data", () => {
     const result = runWatch(
@@ -885,7 +742,7 @@ exit "$status"
       { LABEL_PREFIX: 'dt"quoted' },
     );
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it.each([
     "missing",
@@ -921,7 +778,7 @@ exit "$status"
       if (fault === "changing total") listing[1].total_count++;
       const result = runWatch({ polls: [listing] });
       expect(result.status, result.output).not.toBe(0);
-      expect(cancellations(result)).toHaveLength(1);
+      expect(recoveryDispatches(result)).toHaveLength(1);
     },
   );
   it("refuses more than thirty records in one API page", () => {
@@ -931,7 +788,7 @@ exit "$status"
     });
     const result = runWatch({ polls: [[{ total_count: entries.length, jobs: entries }]] });
     expect(result.status, result.output).not.toBe(0);
-    expect(cancellations(result)).toHaveLength(1);
+    expect(recoveryDispatches(result)).toHaveLength(1);
   });
   it("uses the remainder of one ten-second budget for subsequent pages", () => {
     const entries = inventory((rows) => {
@@ -960,48 +817,48 @@ exit "$status"
     });
     expect(result.status, result.output).not.toBe(0);
     expect(result.calls).toHaveLength(1);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
-  it("cannot turn API failures or a still-unassigned job into success", () => {
+  it("fails unreadable inventory but delegates a valid waiting queue", () => {
     for (const jobsError of [false, true]) {
       const result = runWatch({ jobsError });
-      expect(result.status, result.output).not.toBe(0);
-      expect(cancellations(result)).toHaveLength(1);
+      expect(result.status, result.output).toBe(jobsError ? 1 : 0);
+      expect(recoveryDispatches(result)).toHaveLength(1);
     }
   });
-  it("makes no more than forty inventory polls even when the clock does not advance", () => {
+  it("makes no more than ten inventory polls even when the clock does not advance", () => {
     const result = runWatch({}, { FREEZE_CLOCK: "true" });
-    expect(result.status, result.output).not.toBe(0);
+    expect(result.status, result.output).toBe(0);
     expect(result.calls.filter((args) => args.some((arg) => arg.includes("/jobs?")))).toHaveLength(
-      40,
+      10,
     );
-    expect(cancellations(result)).toHaveLength(1);
-    expect(result.sleeps).toEqual(Array(40).fill("30"));
+    expect(recoveryDispatches(result)).toHaveLength(1);
+    expect(result.sleeps).toEqual(Array(10).fill("30"));
   });
-  it("waits twenty minutes before requesting cancellation of a queued run", () => {
+  it("waits five minutes before requesting independent recovery of a queued run", () => {
     const result = runWatch({}, { SLEEP_OVERRUN: "0" });
-    expect(result.status, result.output).not.toBe(0);
-    expect(result.elapsed).toBe(1200);
-    expect(result.sleeps).toEqual(Array(40).fill("30"));
-    expect(cancellations(result)).toHaveLength(1);
+    expect(result.status, result.output).toBe(0);
+    expect(result.elapsed).toBe(300);
+    expect(result.sleeps).toEqual(Array(10).fill("30"));
+    expect(recoveryDispatches(result)).toHaveLength(1);
   });
   it("does not cancel a matching attempt that has already completed", () => {
     const result = runWatch({ runs: [{ out: { ...identity, status: "completed" } }] });
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toEqual([]);
+    expect(recoveryDispatches(result)).toEqual([]);
   });
   it.each([{ id: 999 }, { run_attempt: 2 }, { head_sha: "b".repeat(40) }])(
     "refuses cancellation after an identity change %j",
     (change) => {
       const result = runWatch({ runs: [{ out: { ...identity, ...change } }] });
       expect(result.status, result.output).not.toBe(0);
-      expect(cancellations(result)).toEqual([]);
+      expect(recoveryDispatches(result)).toEqual([]);
     },
   );
-  it("retries a failed cancellation once, and an accepted request still cannot pass", () => {
+  it("retries a failed recovery dispatch once and passes only after it is accepted", () => {
     const result = runWatch({ cancel: [{ status: 1, error: "HTTP 503" }, {}] });
-    expect(result.status, result.output).not.toBe(0);
-    expect(cancellations(result)).toHaveLength(2);
+    expect(result.status, result.output).toBe(0);
+    expect(recoveryDispatches(result)).toHaveLength(2);
   });
   it("accepts a 409 only when the same run attempt is read back completed", () => {
     const result = runWatch({
@@ -1009,10 +866,10 @@ exit "$status"
       runs: [{ out: identity }, { out: { ...identity, status: "completed" } }],
     });
     expect(result.status, result.output).toBe(0);
-    expect(cancellations(result)).toHaveLength(1);
+    expect(recoveryDispatches(result)).toHaveLength(1);
     const rejected = runWatch({ cancel: [{ status: 1, error: "HTTP 409" }] });
     expect(rejected.status, rejected.output).not.toBe(0);
-    expect(cancellations(rejected)).toHaveLength(2);
+    expect(recoveryDispatches(rejected)).toHaveLength(2);
   });
   it("caps the complete watchdog at 200 HTTP requests, including pagination", () => {
     const entries = inventory((rows) => {
@@ -3884,7 +3741,7 @@ describe("the lint and root-guards jobs", () => {
       expect(
         job(id).body.filter((line) => /^ {4}(if|needs):/.test(line)),
         id,
-      ).toEqual(["    needs: changes", "    if: always()"]);
+      ).toEqual(["    needs: changes", "    if: ${{ always() && !inputs.server_probe }}"]);
     }
   });
 
@@ -5962,6 +5819,7 @@ describe("scoped tests and nightly full verification", () => {
         outputs: {
           full,
           code: "true",
+          server_route: "server",
           ...Object.fromEntries(SCOPE_GATES.map(({ output }) => [output, "true"])),
         },
       },

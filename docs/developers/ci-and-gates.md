@@ -123,101 +123,75 @@ External provenance, read 2026-11-06:
 
 ## Disposable server-test runners
 
-When hosted jobs spend longer waiting than testing, you can move selected server, heavy and
-browser test jobs, mutation jobs and PR checks to Lane I's disposable Linux runners. Routing
-is disabled by default.
-After the runner qualification below, set `DISPOSABLE_TESTS_MODE=server` and
-`DISPOSABLE_TESTS_SERVER_JOBS=1` for the first measured slot. Increase the job count only
-from measured capacity; one runner slot does not make several shards run in parallel. Count
-the routed jobs across every selected family against that measured capacity. Choose caps
-whose combined jobs can all start within twenty minutes. Otherwise the watchdog requests
-cancellation of the entire workflow run even when another shard is already running.
+Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
+runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
+ordinary reruns use the server route. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
+GitHub so routing, recovery and the required result can still run when server assignment
+stops (watcher, 2026-11-08 16:00). The reusable image smoke job uses this route when
+called by CI; its other callers retain their existing routing.
 
-Set `DISPOSABLE_TESTS_HEAD` to the chosen pull request's full head SHA to route only that
-commit. Unset it to admit every otherwise eligible head. Every family and the queue watchdog
-use the same selection, so other commits stay on hosted runners and the watchdog makes no
-API calls for them.
+The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controller's
+measured global pool limits simultaneous guests. Removing a workflow cap does not add
+memory or runner slots. Publish matching controller and host job-key support before
+activating this workflow; the controller must recognise stream, merge and image
+jobs as well as package shards.
 
-`DISPOSABLE_TESTS_MODE=server` also enables the following families when their own cap is
-positive. Each cap defaults to zero. Set only the families Lane I has qualified; each cap
-limits that job family independently. `test-ui` includes both ui and ui-core.
+Set `DISPOSABLE_TESTS_HEAD` to one full source SHA to select that commit, or unset it
+for ordinary traffic. The watchdog uses the same selection. The selection reads the PR
+head for a pull request and `github.sha` for the other events.
 
-| Cap variable | Existing job family |
-| --- | --- |
-| `DISPOSABLE_TESTS_SERVER_JOBS` | `test-server` |
-| `DISPOSABLE_TESTS_HEAVY_JOBS` | `test-heavy` |
-| `DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS` | `test-fiscal-verifactu` |
-| `DISPOSABLE_TESTS_UI_JOBS` | `test-ui` |
-| `DISPOSABLE_TESTS_TILL_JOBS` | `test-till` |
-| `DISPOSABLE_TESTS_DASHBOARD_JOBS` | `test-dashboard` |
-| `DISPOSABLE_TESTS_SETUP_JOBS` | `test-setup` |
-| `DISPOSABLE_TESTS_VENUE_SERVICE_JOBS` | `test-venue-service` |
-| `DISPOSABLE_TESTS_ADJUSTMENTS_JOBS` | `test-adjustments` |
-| `DISPOSABLE_TESTS_STAFFING_JOBS` | `test-staffing` |
-| `DISPOSABLE_TESTS_BOOKINGS_JOBS` | `test-bookings` |
-| `DISPOSABLE_TESTS_MEDIA_JOBS` | `test-media` |
-| `DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS` | `test-payments-stripe` |
-| `DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS` | `test-payments-sumup` |
-| `DISPOSABLE_TESTS_PROVISIONING_JOBS` | `test-provisioning` |
-| `DISPOSABLE_TESTS_IDENTITY_JOBS` | `test-identity` |
-| `DISPOSABLE_TESTS_WORKFORCE_JOBS` | `test-workforce` |
-| `DISPOSABLE_TESTS_LIGHT_A_JOBS` | `test-light-a` |
-| `DISPOSABLE_TESTS_LIGHT_B_JOBS` | `test-light-b` |
-| `DISPOSABLE_TESTS_MUTATION_SHARED_JOBS` | `mutation-shared` |
-| `DISPOSABLE_TESTS_TYPECHECK_JOBS` | `typecheck` |
-| `DISPOSABLE_TESTS_LINT_JOBS` | `lint` |
-| `DISPOSABLE_TESTS_ROOT_GUARDS_JOBS` | `root-guards` |
-| `DISPOSABLE_TESTS_BUNDLE_SMOKE_JOBS` | `bundle-smoke` |
+`DISPOSABLE_TESTS_HOSTED_ATTEMPTS` is a JSON object mapping run IDs to the exact next
+attempt selected for hosted fallback. An unmarked user rerun remains eligible for the server, subject to the health check below. The
+controller writes and reads back a marker before cancelling its owned attempt; a later
+attempt does not inherit an earlier attempt's marker. Verify this on an actual rerun:
+local expression checks do not establish when GitHub reads a changed repository variable.
 
-Only the first attempt of a same-repository pull request uses this route. Main pushes, tags,
-manual runs, forks and every retry use GitHub-hosted runners. This includes retries that
-retain the successful `changes` job's outputs: routing reads the current attempt directly.
-Same-repository bot branches also satisfy the routing condition; confirm their admission
-with the controller before enabling it. The planner, final CI summary and queue watchdog stay
-hosted, as does mutation scoring after its shards finish. Full-only coverage merges cannot
-use this PR-only route, and image builds and
-publication retain their hosted runners. The stream job also stays hosted until its guest
-setup is qualified, including loopback MTU, shared memory and the backup test binaries.
+`DISPOSABLE_TESTS_LABEL_PREFIX` defaults to `dt`. A server job requests `self-hosted`
+and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-JOB-N`, with its existing shard number or 1 for a
+single job. The reusable image job uses logical key `image-smoke-1`; GitHub reports its
+job name as `image / smoke`. Existing check names, test commands, coverage merges,
+setup retries and execution limits remain unchanged.
 
-`DISPOSABLE_TESTS_LABEL_PREFIX` defaults to `dt`. Each selected shard requests `self-hosted`
-and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-JOB-N`, where JOB is the job name in the
-table and N is its existing shard number, or 1 for an unsharded job. Lane I currently
-provisions the `dt` prefix. Use a deliberately unavailable prefix only for the fallback
-drill; do not register a runner for that prefix. The settings affect the existing jobs,
-including any Node projects in a browser package. Their check names, test commands, coverage
-merges, setup retries and execution limits stay the same.
+The routing job checks this repository's queued and running workflows with its own
+read-only Actions token. If a server job has waited five minutes and no server job is
+assigned or running, this run uses GitHub and records the reason in its summary. An
+unverifiable inventory also chooses GitHub. This does not change the human routing switch.
+A retry reads the previous attempt: an unassigned server job cancelled after that wait
+keeps the retry hosted even after the old queue has disappeared.
 
-The hosted `server-queue-watchdog` checks the actual attempt's job assignments. It reads 30
-records per API page, retaining the smaller page size qualified after A1340's HTTP 502
-failures. Each complete paginated read has ten seconds. It polls at thirty-second intervals
-for up to twenty minutes, at most forty polls and 200 API calls including pagination and
-cancellation. It requires every member of each enabled family, unique job IDs, consistent
-totals within that read and matching run, attempt, head and routing labels. Totals may grow
-between reads. A family is enabled only when its ordinary job condition holds and its cap is
-positive. Lint and root guards run even when classification fails, so their watcher entries do
-too. Unsharded jobs match their exact API name; sharded jobs match their numbered
-names. Each enabled family must contain a routed job; an entirely hosted enabled family
-fails immediately without cancellation, even when another family is assigned. A routed job
-is assigned when it is in progress with a positive runner ID; a completed job also ends its
-queue wait. The aggregate still checks its result.
+The hosted queue watchdog reads its configured families in pages of 30, allowing ten
+seconds for each complete read. It waits up to five minutes, with at most ten polls and
+200 API calls including the recovery dispatch. Reads require complete family membership,
+unique job IDs and matching run, attempt, head and labels. After the wait it dispatches
+`server-health.yml` on `main`. A valid waiting inventory and accepted dispatch pass this
+watchdog; incomplete inventories and refused dispatches fail it. The shell retains its
+1,260-second outer deadline inside a 22-minute job. Timeout selection prefers
+`gnutimeout`, then `gtimeout`, then `timeout`.
 
-If jobs remain unassigned, the watchdog verifies the current run's identity and requests
-normal cancellation, with one retry. The cancellation message names the waiting families. An
-accepted cancellation request still fails the watchdog. A 409 response passes only after
-completion of the same run attempt is read back. The shell has a 1,260-second deadline
-inside a 22-minute job, reserving a minute for cancellation. A complete inventory with no
-routed jobs fails immediately without cancelling. Exhausted API calls, unreadable metadata
-and refused cancellation end red. If cancellation cannot reach GitHub, the aggregate can
-remain pending until queued jobs expire. The watchdog itself must also obtain a hosted
-runner, so this is not a bound on total elapsed time during a GitHub outage. Both deadlines
-prefer `gnutimeout`, then `gtimeout`, then `timeout`. Run the root shell checks with one of
-these commands installed; the selection test wraps the actual timeout command and checks
-which executable the workflow chooses.
+The independent Server health workflow runs on GitHub every five minutes, or by manual
+dispatch, on trusted `main` only. With its own Actions write token it rechecks that no
+server work is assigned or running, force-cancels a stuck run, waits for that cancellation
+to complete, then reruns the whole workflow so routing runs again. It reports the affected
+run IDs in its summary. A changed run identity or an incomplete inventory refuses recovery.
+It does not restart ordinary failed runs. If the recovery job stops after cancellation
+but before rerun, you must rerun that cancelled run yourself. GitHub scheduling and hosted
+runner availability can delay both watchdogs; five minutes is the observed queue threshold,
+not a wall-clock recovery guarantee.
 
-The watchdog job starts only for an admitted attempt that is not cancelled. It keeps the same
-admission in `SHOULD_WATCH` and each family's scope and cap in `FAMILIES`. With no enabled family,
-the shell exits successfully without an API call. The aggregate accepts a skipped watchdog on
-other attempts.
+Every fifteen minutes, Server health also checks for idle server capacity when the human
+switch is `server`. It suppresses its probe while server work is queued or assigned, or
+when current active runs or the latest 100 completed runs contain assigned server work completed
+within fifteen minutes. An unassigned cancellation or a hosted retry is not server traffic. Otherwise it dispatches CI with `server_probe=true`: only a tiny
+Node job and the final aggregate run. Its first attempt requests a server; later attempts
+use GitHub, allowing the independent recovery workflow to finish a failed pickup drill.
+A successful hosted retry proves recovery only; it does not establish server health.
+You can dispatch this explicit probe while the human switch is hosted. The controller
+must recognise `server-probe-1` before the first attempt can be picked up.
+
+The controller's separate full-pool overflow waits about a minute and preserves runs
+that already have server work. Job-by-job capacity routing remains open. Retain actual
+run, attempt, source, runner IDs and results when qualifying activation; local tests do
+not establish GitHub scheduling, a queue-time improvement or workflow-token permission.
 
 The watch-list evaluator withholds the four job-status functions from step environment
 expressions. Its “evaluates watch-list environment expressions without job-status functions”
@@ -232,11 +206,10 @@ libraries; all browser families need full Chromium and its system libraries. Ven
 also uses `TMPDIR=/dev/shm` and `sudo dmesg`. Qualify an actual till browser-family job,
 including its existing deadline, before enabling that family. Read back
 `all_external_contributors`. Qualify an actual server-scoped PR on the rented runner,
-retaining its runner ID/name/labels, source head and coverage/aggregate results. Then take
-the label away and stop the server for the requested fallback drills. Read the visible
+retaining its runner ID/name/labels, source head and coverage/aggregate results. Use a controlled unavailable-label drill without stopping other lanes' server work. Read the visible
 first-attempt failure or cancellation and an unchanged-head second attempt finishing on
-GitHub. Lane I owns automatic retry of attempts it admitted; an unowned label requires an
-explicit rerun. These live qualifications remain open; local shell tests do not establish
+GitHub. The independent watchdog recovers matching queued labels even before the controller has
+admitted them. These live qualifications remain open; local shell tests do not establish
 GitHub scheduling, VM isolation or a speed improvement.
 
 The public repository still exposes the runner VM, host and reachable network to code that
