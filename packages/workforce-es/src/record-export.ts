@@ -70,9 +70,18 @@ const LABELS: Record<string, readonly [string, string]> = {
   closureHash: ["Closure hash", "Huella del cierre"],
   summaryAvailable: ["Summary available", "Resumen disponible"],
   contractedMinutes: ["Contracted minutes", "Minutos contratados"],
-  dailyAccrualOvertimeMinutes: ["Daily overtime minutes", "Minutos extra por día"],
-  periodNetOvertimeMinutes: ["Net period overtime minutes", "Minutos extra netos del período"],
-  overtimeMinutes: ["Headline overtime minutes", "Minutos extra de referencia"],
+  dailyAccrualOvertimeMinutes: [
+    "Above daily target (minutes)",
+    "Sobre el objetivo diario (minutos)",
+  ],
+  periodNetOvertimeMinutes: [
+    "Above period target (minutes)",
+    "Sobre el objetivo del período (minutos)",
+  ],
+  overtimeMinutes: [
+    "Above selected daily or period target (minutes)",
+    "Sobre el objetivo diario o del período seleccionado (minutos)",
+  ],
   contractedTargetMinutes: ["Daily target minutes", "Minutos previstos del día"],
   beforeWorkedMinutes: ["Frozen worked minutes", "Minutos trabajados al cierre"],
   afterWorkedMinutes: ["Current worked minutes", "Minutos trabajados actuales"],
@@ -198,7 +207,15 @@ export function formatTimeRecordExport(
     key,
     title: TITLES[key]![language],
     layout,
-    columns: keys.map((key) => ({ key, label: LABELS[key]![language] })),
+    columns: keys.map((column) => ({
+      key: column,
+      label:
+        LABELS[
+          key === "frozen-days" && column === "overtimeMinutes"
+            ? "dailyAccrualOvertimeMinutes"
+            : column
+        ]![language],
+    })),
     rows: data.map((cells, index) => ({ key: `${key}:${index}`, cells })),
   });
   const sessionRows = (value: TimeRecord, lines: LineaJornada[]): Cells[] => {
