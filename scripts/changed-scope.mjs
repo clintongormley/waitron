@@ -339,7 +339,7 @@ export const LIGHT_B_PACKAGES = [
  * member NOT listed here that declares no such script is a mistake, and that guard fails on it.
  *
  * `changed-scope.test.mjs` pins this list against the real workspace in both directions. A scoped
- * `pnpm --filter "...<member>" test:coverage` over a listed member prints `None of the selected
+ * `pnpm --filter "<member>" test:coverage` over a listed member prints `None of the selected
  * packages has a "test:coverage" script` on STDOUT and exits **0**.
  */
 export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-sqlite-failover"];
@@ -365,12 +365,15 @@ const lightGate = (bin) => (inScope) => [...inScope].some(runsInLightShard(bin))
  * shard subtracts OWN_SHARD_PACKAGES and the other bin, so it has work exactly when the scope holds a
  * member of its own bin that is not in PACKAGES_WITHOUT_TESTS.
  *
+ * `test-ui` runs two packages, so it reads two gates, `ui` and `ui_core`, and runs when either is on.
+ *
  * The `inScope === null` fail-closed case is applied by `gateOutputs` before any predicate is called,
  * so a predicate only ever sees a real Set.
  */
 export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
-  { output: "ui", covers: (scope) => scope.has(UI_PACKAGE) || scope.has(UI_CORE_PACKAGE) },
+  { output: "ui", covers: membership(UI_PACKAGE) },
+  { output: "ui_core", covers: membership(UI_CORE_PACKAGE) },
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "setup", covers: membership(SETUP_PACKAGE) },
@@ -432,14 +435,10 @@ export function packagesInScope(scopedPackagesJson) {
  * needed costs runner time while skipping one that was needed ships an untested package. That check
  * lives HERE rather than in the gates, so no gate can be written without it.
  *
- * The RESOLVED SCOPE — changed packages and their dependents — is the only thing worth asking about.
- * The scoped-CI design (#27) measured the two obvious alternatives for `@waitron/db`:
- *
- *   - a second inclusion filter (`--filter "<scope>" --filter "@waitron/db"`) is OR-ed, not
- *     intersected, so it runs db's suite on every code change whether or not db is involved;
- *   - `@waitron/db[<base>]` intersects with the CHANGED set rather than changed-plus-dependents,
- *     so it selects NOTHING when one of db's own dependencies changed — a false skip, which is the
- *     dangerous direction.
+ * The RESOLVED SCOPE — on a pull request, the changed packages themselves — is the only thing worth
+ * asking about. The scoped-CI design (#27) found that a second inclusion filter
+ * (`--filter "<scope>" --filter "@waitron/db"`) is OR-ed, not intersected, so it runs db's suite on
+ * every code change whether or not db is involved.
  */
 export function gateOutputs(inScope) {
   return SCOPE_GATES.map(

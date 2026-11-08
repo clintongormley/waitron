@@ -71,6 +71,7 @@ jobs:
       deploy: ${{ steps.classify.outputs.deploy }}
       heavy: ${{ steps.gates.outputs.heavy }}
       ui: ${{ steps.gates.outputs.ui }}
+      ui_core: ${{ steps.gates.outputs.ui_core }}
       till: ${{ steps.gates.outputs.till }}
       dashboard: ${{ steps.gates.outputs.dashboard }}
       setup: ${{ steps.gates.outputs.setup }}
@@ -236,7 +237,7 @@ jobs:
 
       # Which scope-gated jobs have anything to do? None can be expressed as a filter on the job
       # itself; see
-      # gateOutputs' own comment for the two wrong formulations and why each fails.
+      # gateOutputs' own comment for the wrong formulation and why it fails.
       #
       # Most ask whether one named package is in the resolved scope. The light-bin gates do not:
       # their own filters SUBTRACT every package that has a shard of its own, so each has work
@@ -247,13 +248,13 @@ jobs:
       # ONE `pnpm ls` for all gates. The gates are answers about the SAME resolved scope. Resolving it once makes
       # them consistent by construction, and keeps this step from growing a stanza per gated job.
       #
-      # That query is where the EXPANSION happens, and it is still pnpm's: one `--filter "...<pkg>"`
-      # per attributed package, whose LEFT-hand ellipsis selects that package AND ITS DEPENDENTS
-      # (`<pkg>...` is the other direction, a package and its dependencies, and would gate on the
-      # wrong set). Only the attribution moved out of pnpm's hands.
+      # The query takes one exact `--filter "<pkg>"` per attributed package, never `"...<pkg>"`:
+      # a pull request tests the changed packages themselves, not their dependents (owner,
+      # 2026-11-08, A1461). The `typecheck` job still checks the whole workspace, and a dependent's
+      # behaviour break surfaces at the next full run.
       #
-      # Ordinary main pushes leave package testing to PRs and full runs. For other events,
-      # brand scope uses exact readers; packages scope includes dependents. Other scopes run unscoped:
+      # Ordinary main pushes leave package testing to PRs and full runs. Brand and packages scopes
+      # select exactly their packages. Other scopes run unscoped:
       # `global` because an unattributable path could affect anything, `documentation` and `root`
       # because the gates are ANDed with `code`
       # anyway, and an empty or unexpected value because a scope nobody can read is not a reason to
@@ -283,8 +284,8 @@ jobs:
             # in .husky/pre-push beside the same loop.
             #
             # It matters more here than in the hook, because here NOTHING catches it. Measured end
-            # to end on 2026-08-01 in a throwaway pnpm workspace holding a member named `pack*`:
-            # the rewritten filters `--filter "...package.json" --filter "...packages"` make
+            # to end on 2026-08-01 in a throwaway pnpm workspace holding a member named `pack*`
+            # (measured with the former `...` prefix): the rewritten filters `--filter "...package.json" --filter "...packages"` make
             # `pnpm ls --depth -1 --json` print zero bytes on both streams at exit 0, and piping
             # that into `node scripts/changed-scope.mjs` prints
             # every gate false — because `packagesInScope("")` is the empty Set, the DEFINITE answer
@@ -300,9 +301,7 @@ jobs:
             # exits 1 when the corrupted name was the whole scope. This job has no equivalent.
             set -f
             set --
-            prefix="..."
-            [ "$SCOPE" != "brand" ] || prefix=""
-            for pkg in $PACKAGES; do set -- "$@" --filter "$prefix$pkg"; done
+            for pkg in $PACKAGES; do set -- "$@" --filter "$pkg"; done
             set +f
 
             # stderr is deliberately NOT discarded: only stdout is piped, so anything pnpm says goes
@@ -1680,13 +1679,13 @@ jobs:
       - name: Merge the fiscal-verifactu coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/fiscal-verifactu" test:merge
 
-  # packages/ui alone, with its own browser runner.
+  # packages/ui and packages/ui-core, with their own browser runner.
   #
-  # It was part of test-light until 2026-08-01, when that shard HUNG on it twice — the receipts, and
-  # what they do and do not establish, are on UI_PACKAGE in scripts/changed-scope.mjs. In short:
-  # both times Chromium had installed, the other twelve packages finished, @waitron/ui printed
-  # passing test files and then stopped, and the runner named `chrome-headless-shell` among the
-  # orphan processes it killed at cancellation. Whether isolating it FIXES that can only be read off
+  # packages/ui was part of test-light until 2026-08-01, when that shard HUNG on it twice — the
+  # receipts, and what they do and do not establish, are on UI_PACKAGE in scripts/changed-scope.mjs.
+  # In short: both times Chromium had installed, the other twelve packages finished, @waitron/ui
+  # printed passing test files and then stopped, and the runner named `chrome-headless-shell` among
+  # the orphan processes it killed at cancellation. Whether isolating it FIXES that can only be read off
   # future runs; nothing here demonstrates it.
   #
   # What isolating it does buy with certainty is that a wedged browser can no longer take twelve
@@ -1694,7 +1693,7 @@ jobs:
   test-ui:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true')
+    if: (needs.changes.outputs.code == 'true' && (needs.changes.outputs.ui == 'true' || needs.changes.outputs.ui_core == 'true'))
     runs-on: ${{ needs.changes.outputs.server_route == 'server' && vars.DISPOSABLE_TESTS_MODE == 'server' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == (github.event.pull_request.head.sha || github.sha)) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-ui-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, 1)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -1786,31 +1785,36 @@ jobs:
       - run: pnpm --filter @waitron/ui exec playwright install chromium
       - run: pnpm --filter @waitron/ui-core exec playwright install chromium
 
+      # Each package runs when its own gate, `ui` or `ui_core`, is on; the job runs when either is.
+      #
       # The guard first, for the same reason as the other two shards: pnpm answers "nothing to do"
       # with exit 0 and a line on stdout, so a shard whose filter selects nothing reports success
       # having run no tests.
       - name: Run the ui shard
+        env:
+          UI: ${{ needs.changes.outputs.ui }}
+          UI_CORE: ${{ needs.changes.outputs.ui_core }}
         run: |
           set -euo pipefail
-          if [ "${{ needs.changes.outputs.scope }}" = "brand" ]; then
-            pnpm --filter "@waitron/ui" ls --depth -1 --json \
-              | node scripts/changed-packages.mjs runnable test:coverage
-            node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
-              --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
-            exit 0
+          set --
+          if [ "$UI" = "true" ]; then
+            set -- "$@" --filter "@waitron/ui"
           fi
-          pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" ls --depth -1 --json \
+          if [ "$UI_CORE" = "true" ]; then
+            set -- "$@" --filter "@waitron/ui-core"
+          fi
+          pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm "$@" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - run: pnpm --filter @waitron/ui-core test:package
-        if: needs.changes.outputs.scope != 'brand'
+        if: needs.changes.outputs.ui_core == 'true'
 
-  # apps/till alone: the Counter POS browser app, the workspace's SECOND Chromium consumer after
-  # packages/ui. It has a shard of its own for the same reason test-ui does — a browser-mode
-  # Playwright package sharing test-light with the rest of the workspace is the shape that hung that
-  # shard on packages/ui, twice (the receipts are on UI_PACKAGE in scripts/changed-scope.mjs). This
+  # apps/till alone: the Counter POS browser app. It has a shard of its own for the same reason
+  # test-ui does — a browser-mode Playwright package sharing test-light with the rest of the
+  # workspace is the shape that hung that shard on packages/ui, twice (the receipts are on
+  # UI_PACKAGE in scripts/changed-scope.mjs). This
   # split is PREEMPTIVE: apps/till has never run in test-light and so has never hung it, and nothing
   # here proves it would — see TILL_PACKAGE in scripts/changed-scope.mjs for the honest framing. What
   # it buys with certainty is that a second wedged browser can never take the other packages'
@@ -3448,7 +3452,7 @@ jobs:
           set -f
           set --
           if [ "$SCOPE" = "packages" ] && [ -n "$PACKAGES" ]; then
-            for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
+            for pkg in $PACKAGES; do set -- "$@" --filter "$pkg"; done
           fi
           set +f
           # OWN_SHARD_PACKAGES — subtracted by both light shards.
@@ -3565,7 +3569,7 @@ jobs:
           set -f
           set --
           if [ "$SCOPE" = "packages" ] && [ -n "$PACKAGES" ]; then
-            for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
+            for pkg in $PACKAGES; do set -- "$@" --filter "$pkg"; done
           fi
           set +f
           # OWN_SHARD_PACKAGES — subtracted by both light shards.
@@ -3796,7 +3800,7 @@ jobs:
             {"id":"test-server","count":24,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')) }}},
             {"id":"test-heavy","count":3,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true')) }}},
             {"id":"test-fiscal-verifactu","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')) }}},
-            {"id":"test-ui","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true')) }}},
+            {"id":"test-ui","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && (needs.changes.outputs.ui == 'true' || needs.changes.outputs.ui_core == 'true'))) }}},
             {"id":"test-till","count":7,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true')) }}},
             {"id":"test-dashboard","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')) }}},
             {"id":"test-setup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true')) }}},

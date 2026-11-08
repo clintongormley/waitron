@@ -261,6 +261,21 @@ describe("disposable family routing", () => {
   });
 });
 
+describe("the test-ui watch row", () => {
+  it.each([
+    ["true", "false"],
+    ["false", "true"],
+    ["true", "true"],
+    ["false", "false"],
+  ])("matches the job's own condition when ui=%s and ui_core=%s", (ui, uiCore) => {
+    const context = routingContext("ui");
+    Object.assign(context.needs.changes.outputs, { ui, ui_core: uiCore });
+    const row = watchFamilies(context).find((value) => value.id === "test-ui");
+    expect(row.enabled).toBe(ui === "true" || uiCore === "true");
+    expect(jobCondition(job("test-ui").body, context)).toBe(row.enabled);
+  });
+});
+
 describe("remaining disposable jobs", () => {
   it.each(ADDITIONAL_ROUTES)(
     "routes %s without a type cap and watches its scope",
@@ -1024,7 +1039,7 @@ function shardStep(body) {
  *   COMMENTS. ci.yml's prose quotes filter spellings that were tried and REJECTED; reading those as
  *   arguments would assert against a filter list nothing runs.
  *
- *   ANYTHING HOLDING A `$`. The scoped path builds `--filter "...$pkg"` in a shell loop, one per
+ *   ANYTHING HOLDING A `$`. The scoped path builds `--filter "$pkg"` in a shell loop, one per
  *   changed package. On a GLOBAL scope that loop runs zero times, and a global scope is the case
  *   this suite is about: it is the run that has to cover every package.
  */
@@ -2938,9 +2953,7 @@ describe("the test shards", () => {
       "@waitron/ui",
       "@waitron/ui-core",
     ]);
-    expect(body).toContain(
-      'pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage',
-    );
+    expect(body).toContain('pnpm "$@" --workspace-concurrency=1 test:coverage');
     expect(body.split("\n").map((line) => line.trim())).toContain(
       "- run: pnpm --filter @waitron/ui-core test:package",
     );
@@ -3447,9 +3460,14 @@ describe("the scope gates", () => {
     for (const gate of SCOPE_GATES) expect([...read]).toContain(gate.output);
   });
 
-  // A shard gated on `code` alone runs on every code change.
-  it("gate every shard on `code` plus one gate of its own", () => {
-    for (const shard of shards) expectGatedOnCodePlusOneScope(gatesRead(job(shard.id).body));
+  // A shard gated on `code` alone runs on every code change. test-ui holds two packages and runs
+  // when either one's gate is on.
+  it("gate every shard on `code` plus its own package gate (test-ui: one per package)", () => {
+    for (const shard of shards) {
+      const read = gatesRead(job(shard.id).body);
+      if (shard.id === "test-ui") expect(read).toEqual(["code", "ui", "ui_core"]);
+      else expectGatedOnCodePlusOneScope(read);
+    }
   });
 });
 
@@ -6075,8 +6093,9 @@ describe("scoped shards retain their empty-selection guard", () => {
   );
 });
 
-describe("brand selection commands", () => {
-  it.each(["brand", "packages"])("%s gates preserve their package selection", (scope) => {
+describe("scoped selection commands", () => {
+  /** The `changes` job's gates step, run for real over `scope` and `packages`. */
+  const gateLines = (scope, packages) => {
     const command = workflowSteps(job("changes").body.join("\n")).find(
       (step) => step.id === "gates",
     ).command;
@@ -6087,46 +6106,101 @@ describe("brand selection commands", () => {
         cwd: repoRoot,
         encoding: "utf8",
         timeout: 15000,
-        env: {
-          ...process.env,
-          SCOPE: scope,
-          PACKAGES: "@waitron/dashboard @waitron/setup @waitron/till @waitron/ui",
-          GITHUB_OUTPUT: output,
-        },
+        env: { ...process.env, SCOPE: scope, PACKAGES: packages, GITHUB_OUTPUT: output },
       });
       expect(result.status, result.stderr).toBe(0);
-      const enabled = readFileSync(output, "utf8")
-        .trim()
-        .split("\n")
-        .filter((line) => line.endsWith("=true"))
-        .sort();
-      if (scope === "brand")
-        expect(enabled).toEqual(["dashboard=true", "setup=true", "till=true", "ui=true"]);
-      else expect(enabled).toContain("server=true");
+      return readFileSync(output, "utf8").trim().split("\n");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  };
+  const enabledGates = (scope, packages) =>
+    gateLines(scope, packages)
+      .filter((line) => line.endsWith("=true"))
+      .sort();
+
+  it.each(["brand", "packages"])("%s gates select exactly the changed packages", (scope) => {
+    expect(
+      enabledGates(scope, "@waitron/dashboard @waitron/setup @waitron/till @waitron/ui"),
+    ).toEqual(["dashboard=true", "setup=true", "till=true", "ui=true"]);
   });
 
-  it.each(["brand", "packages"])("%s executes the intended UI tests", (scope) => {
-    const step = workflowSteps(job("test-ui").body.join("\n")).find(
-      (entry) => entry.step === "Run the ui shard",
+  it("packages gates leave a changed package's dependents untested", () => {
+    expect(enabledGates("packages", "@waitron/db")).toEqual(["heavy=true"]);
+  });
+
+  it.each(["test-light-a", "test-light-b"])(
+    "%s selects the changed packages without their dependents",
+    (id) => {
+      const step = workflowSteps(job(id).body.join("\n")).find((entry) =>
+        /^Run the light-[ab] shard$/.test(entry.step),
+      );
+      const record = 'pnpm() { printf "%s\\n" "$*"; }; node() { :; };\n';
+      const command = step.command.replaceAll("${{ needs.changes.outputs.full }}", "false");
+      const result = spawnSync("bash", ["-c", record + command], {
+        env: {
+          ...process.env,
+          GITHUB_WORKSPACE: repoRoot,
+          SCOPE: "packages",
+          PACKAGES: "@waitron/shared @waitron/catalogue",
+        },
+        encoding: "utf8",
+        timeout: 15000,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const filters = result.stdout.split("\n")[0].match(/--filter [^!\s]\S*/g);
+      expect(filters).toEqual(["--filter @waitron/shared", "--filter @waitron/catalogue"]);
+    },
+  );
+
+  it("typechecks the whole workspace, never a scoped selection", () => {
+    const commands = workflowSteps(job("typecheck").body.join("\n"))
+      .map((entry) => entry.command)
+      .filter((command) => /\btypecheck\b/.test(command ?? ""));
+    expect(commands).toEqual(["pnpm typecheck"]);
+  });
+
+  // The gates step runs for real, and its answers feed the test-ui job's condition, its shard
+  // step and its package check, as they would in a run.
+  it.each([
+    ["brand", "@waitron/ui", ["@waitron/ui"]],
+    ["brand", "@waitron/dashboard @waitron/setup @waitron/till @waitron/ui", ["@waitron/ui"]],
+    ["packages", "@waitron/ui", ["@waitron/ui"]],
+    ["packages", "@waitron/ui-core", ["@waitron/ui-core"]],
+    ["packages", "@waitron/db @waitron/ui-core", ["@waitron/ui-core"]],
+    ["packages", "@waitron/ui-core @waitron/ui", ["@waitron/ui", "@waitron/ui-core"]],
+    ["packages", "@waitron/dashboard", []],
+    ["global", "", ["@waitron/ui", "@waitron/ui-core"]],
+  ])("%s scope over %j executes the intended UI tests", (scope, packages, want) => {
+    const outputs = {
+      code: "true",
+      full: "false",
+      ...Object.fromEntries(gateLines(scope, packages).map((line) => line.split("="))),
+    };
+    const needs = { changes: { outputs } };
+    expect(jobCondition(job("test-ui").body, { needs })).toBe(want.length > 0);
+    if (want.length === 0) return;
+    const expand = (text) =>
+      text.replace(/\$\{\{ needs\.changes\.outputs\.(\w+) \}\}/g, (_, name) => outputs[name]);
+    const ui = workflowSteps(job("test-ui").body.join("\n"));
+    const step = ui.find((entry) => entry.step === "Run the ui shard");
+    const env = Object.fromEntries(
+      Object.entries(step.env).map(([name, value]) => [name, expand(value)]),
     );
-    const command = step.command
-      .replaceAll("${{ needs.changes.outputs.scope }}", scope)
-      .replaceAll("${{ needs.changes.outputs.full }}", "false");
     const record =
       'pnpm() { :; }; node() { case "$*" in *run-with-deadline*) printf "%s\\n" "$*";; esac; };\n';
-    const result = spawnSync("bash", ["-c", record + command], {
-      env: { ...process.env, GITHUB_WORKSPACE: repoRoot },
+    const result = spawnSync("bash", ["-c", record + expand(step.command)], {
+      env: { ...process.env, GITHUB_WORKSPACE: repoRoot, ...env },
       encoding: "utf8",
       timeout: 15000,
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.match(/--filter @waitron\/[a-z-]+/g)).toEqual(
-      scope === "brand"
-        ? ["--filter @waitron/ui"]
-        : ["--filter @waitron/ui", "--filter @waitron/ui-core"],
+      want.map((name) => `--filter ${name}`),
+    );
+    const packageCheck = ui.find((entry) => /ui-core test:package/.test(entry.command ?? ""));
+    expect(Boolean(runInNewContext(packageCheck.if, { needs }))).toBe(
+      want.includes("@waitron/ui-core"),
     );
   });
 });
