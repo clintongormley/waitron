@@ -100,6 +100,7 @@ function routingContext(family = "server") {
     },
     needs: {
       changes: {
+        result: "success",
         outputs: {
           code: "true",
           server_route: "server",
@@ -128,6 +129,34 @@ function expressionValue(line, context) {
 function jobCondition(body, context) {
   const expression = body.find((line) => /^ {4}if:/.test(line)).slice(8);
   return runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), context);
+}
+function neededJobs(body) {
+  const inline = body.find((line) => /^ {4}needs:\s*\S/.test(line));
+  if (inline === undefined) return needsOf(body);
+  return inline
+    .replace(/^ {4}needs:\s*/, "")
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((entry) => entry.trim());
+}
+// GitHub puts `success() &&` in front of an `if:` that calls no status function, and `success()`
+// is false once any needed job did not succeed.
+function runsAtGitHub(body, context) {
+  let expression = body
+    .find((line) => /^ {4}if:/.test(line))
+    .slice(8)
+    .replace(/^\$\{\{\s*|\s*\}\}$/g, "");
+  if (!/\b(success|always|failure|cancelled)\(\)/.test(expression))
+    expression = `success() && (${expression})`;
+  const results = neededJobs(body).map((id) => context.needs[id]?.result);
+  return runInNewContext(expression, {
+    ...context,
+    success: () => results.every((result) => result === "success"),
+    failure: () => results.some((result) => result === "failure"),
+    always: () => true,
+    cancelled: () => false,
+    startsWith: (text, prefix) => String(text ?? "").startsWith(prefix),
+  });
 }
 function watchFamilies(context) {
   const body = job("server-queue-watchdog").body;
@@ -214,6 +243,31 @@ describe("disposable family routing", () => {
       context.needs.changes.outputs = {};
       if (jobCondition(body, context))
         expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
+    }
+  });
+
+  // The licence and sign-off steps run after `gates`, so `changes` can fail with every output set.
+  it("watches only the families whose jobs still run when changes failed with outputs intact", () => {
+    const context = routingContext();
+    for (const key of Object.keys(context.needs.changes.outputs))
+      context.needs.changes.outputs[key] = "true";
+    for (const { id } of watchFamilies(context))
+      for (const match of job(id)
+        .body.join("\n")
+        .matchAll(/needs\.changes\.outputs\.(\w+)/g))
+        context.needs.changes.outputs[match[1]] = "true";
+    context.needs.changes.outputs.server_route = "server";
+    for (const result of ["success", "failure"]) {
+      context.needs.changes.result = result;
+      expect(jobCondition(job("server-queue-watchdog").body, context), result).toBe(true);
+      const rows = watchFamilies(context);
+      for (const row of rows)
+        expect(row.enabled, `${row.id} after ${result}`).toBe(
+          runsAtGitHub(job(row.id).body, context),
+        );
+      const enabled = rows.filter((row) => row.enabled).map((row) => row.id);
+      if (result === "success") expect(enabled).toHaveLength(rows.length);
+      else expect(enabled.sort()).toEqual(["lint", "root-guards"]);
     }
   });
 
@@ -2915,13 +2969,38 @@ describe("the test shards", () => {
         .split("\n")
         .find((line) => line.startsWith("    if: "))
         .slice(8);
-    expect(condition(aggregate)).toBe(`always() && ${condition(shard)}`);
+    expect(condition(aggregate)).toBe(
+      `always() && needs.changes.result == 'success' && ${condition(shard)}`,
+    );
     expect(aggregate).toContain("pattern: mutation-report-shared-shard-*");
     expect(aggregate).not.toContain("merge-multiple: true");
     expect(aggregate).toContain(
       "run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 4 --break 90",
     );
     expect(job("ci").body).toContain("      - mutation-shared-aggregate");
+  });
+
+  // `changes` can fail after setting every output, because its licence and sign-off steps come last.
+  it("runs only lint, root-guards, the watchdog and ci after changes failed with outputs set", () => {
+    const context = routingContext();
+    for (const { body } of jobs)
+      for (const match of body.join("\n").matchAll(/needs\.changes\.outputs\.(\w+)/g))
+        context.needs.changes.outputs[match[1]] = "true";
+    context.needs.changes.outputs.server_route = "server";
+    const downstream = jobs.filter(({ body }) => neededJobs(body).includes("changes"));
+    expect(downstream.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(["lint", "test-server", "mutation-shared-aggregate", "ci", "publish"]),
+    );
+    const run = () =>
+      downstream.filter(({ body }) => runsAtGitHub(body, context)).map(({ id }) => id);
+
+    context.needs["mutation-shared"] = { result: "failure" };
+    expect(run()).toContain("mutation-shared-aggregate");
+
+    context.needs.changes.result = "failure";
+    for (const { id } of downstream) context.needs[id] = { result: "skipped" };
+    context.needs.ci = { result: "failure" };
+    expect(run().sort()).toEqual(["ci", "lint", "root-guards", "server-queue-watchdog"]);
   });
 
   // A case's `pnpm ls` calls run side by side; when the case ends, pass or fail, the ones still
@@ -3623,7 +3702,7 @@ describe("main push package gates", () => {
           ).toBe(true);
         const outputs = { ...gates, code, full };
         const context = {
-          needs: { changes: { outputs } },
+          needs: { changes: { result: "success", outputs } },
           always: () => true,
           cancelled: () => false,
         };

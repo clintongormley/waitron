@@ -384,6 +384,11 @@ the checkout does not have, name no range the job can list, and each fails rathe
 unchecked; `scripts/check-signoff.test.mjs` runs the step against both. The LICENSE step's hash
 and both steps' place after `gates` are held by “the licence and sign-off checks” in
 `scripts/ci-workflow.test.mjs`, weaker than its name: it reads text and runs neither step.
+Because they come last, `changes` can fail with every scope output set, so the two jobs that would
+otherwise act on that scope after a failure check `needs.changes.result` as well: the queue watchdog
+then watches only `lint` and `root-guards`, and `mutation-shared-aggregate` does not run. Two cases in the same file hold this,
+weaker than the rule: they evaluate each job's condition against a hand-written model of GitHub's
+implicit `success()`, not a real run.
 
 ### Built applications in `bundle-smoke`
 
@@ -710,10 +715,11 @@ full report cannot contribute results outside a shard's selected files. The ordi
 Each CI shard writes one JSON report and has no separate score floor. The five-minute
 `mutation-shared-aggregate` job requires four report directories and enforces 90% on their combined
 score. Both jobs report to `ci`; the aggregate uses the same shared-package conditions
-as the shards, and still runs after a failed shard to refuse incomplete reports. The final `ci`
+as the shards and runs only when `changes` succeeded, but still runs after a failed shard to refuse
+incomplete reports. The final `ci`
 verdict refuses a skipped mutation aggregate when shared was selected. Its executable jq cases cover that refusal and the unselected,
 documentation paths. The workflow guard also requires the aggregate's condition
-to be `always() && ` followed by the shards' condition. Downloads and
+to be `always() && needs.changes.result == 'success' && ` followed by the shards' condition. Downloads and
 uploads use the existing bounded two-attempt patterns. The download action keeps each artifact
 in its own directory because the aggregate counts those directories. No new Actions cache is added.
 
