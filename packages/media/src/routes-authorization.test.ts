@@ -16,11 +16,11 @@ import { MEDIA_ROUTES } from "./routes.js";
 import { sampleImage } from "./testing/sample-image.js";
 
 /**
- * Every image route refuses a caller without `image.manage`, and refusing leaves the library
+ * Every image route refuses a caller without `catalogue.manage`, and refusing leaves the library
  * untouched. The accepting control in the other direction is inside `fixture` below, where the
  * manager's own upload must answer 201.
  */
-registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
+registerModulePermissions([{ permission: "catalogue.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });
@@ -126,7 +126,7 @@ it("denies every library operation to a staff caller and preserves existing imag
     const response = await app.request(path, options);
     expect(response.status, `${options.method ?? "GET"} ${path}`).toBe(403);
     expect(await response.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "image.manage" } },
+      error: { code: "authorization.not_permitted", params: { permission: "catalogue.manage" } },
     });
   }
 
@@ -165,7 +165,7 @@ function watchWriteLock(beforeLock: () => Promise<void> = async () => {}) {
   return { db, watched };
 }
 
-it("refuses an upload without image.manage without taking the write lock", async () => {
+it("refuses an upload without catalogue.manage without taking the write lock", async () => {
   await seedTenant(suite.db);
   const headers = await session("staff");
   const { db, watched } = watchWriteLock();

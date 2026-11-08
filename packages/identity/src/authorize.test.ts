@@ -254,7 +254,7 @@ describe("authorize with a limit on wrong override PINs", () => {
 });
 
 describe("module permission authorization", () => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
 
   it("authorizes a module action through a manager override on a staff session", async () => {
     const deviceId = await seedSessionDevice(suite.db);
@@ -265,11 +265,11 @@ describe("module permission authorization", () => {
       await run((tx) =>
         authorize(tx, {
           sessionId,
-          permission: "venue_service.manage",
+          permission: "venue.configure",
           override: { personId: managerId, pin: "1234" },
         }),
       ),
-    ).toEqual({ authorizedBy: managerId, permission: "venue_service.manage", viaOverride: true });
+    ).toEqual({ authorizedBy: managerId, permission: "venue.configure", viaOverride: true });
   });
 
   it("authorizes a manager PIN without any session, including a check taken ahead", async () => {
@@ -280,7 +280,7 @@ describe("module permission authorization", () => {
         authorizeByPin(
           tx,
           {
-            permission: "venue_service.manage",
+            permission: "venue.configure",
             override: { personId: managerId, pin: "1234", checked },
           },
           { throttle: createPinThrottle(), slot: "station:device" },
@@ -288,7 +288,7 @@ describe("module permission authorization", () => {
       ),
     ).toEqual({
       authorizedBy: managerId,
-      permission: "venue_service.manage",
+      permission: "venue.configure",
       viaOverride: true,
     });
   });
@@ -301,7 +301,7 @@ describe("module permission authorization", () => {
           authorizeByPin(
             tx,
             {
-              permission: "venue_service.manage",
+              permission: "venue.configure",
               override: { personId: staffId, pin: "1234" },
             },
             { throttle: createPinThrottle(), slot: "station:device" },
@@ -322,7 +322,7 @@ describe("module permission authorization", () => {
             authorizeByPin(
               tx,
               {
-                permission: "venue_service.manage",
+                permission: "venue.configure",
                 override: { personId, pin: "1234" },
               },
               { throttle: createPinThrottle(), slot: "station:device" },
@@ -342,7 +342,7 @@ describe("module permission authorization", () => {
         authorizeByPin(
           tx,
           {
-            permission: "venue_service.manage",
+            permission: "venue.configure",
             override: { personId: managerId, pin },
           },
           attempts,
@@ -353,13 +353,13 @@ describe("module permission authorization", () => {
     now += 31_000;
     expect(await call("1234")).toEqual({
       authorizedBy: managerId,
-      permission: "venue_service.manage",
+      permission: "venue.configure",
       viaOverride: true,
     });
     expect(await codeOf(() => call("9999"))).toBe("pin.invalid");
     expect(await call("1234")).toEqual({
       authorizedBy: managerId,
-      permission: "venue_service.manage",
+      permission: "venue.configure",
       viaOverride: true,
     });
   });

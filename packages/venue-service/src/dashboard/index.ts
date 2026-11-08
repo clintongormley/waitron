@@ -19,7 +19,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
     navLabelKey: "nav.departments_zones",
     group: "operations",
     order: 10,
-    requiresPermission: "venue_service.manage",
+    requiresPermission: "venue.configure",
   },
   searchDestinations: [
     {
@@ -80,7 +80,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
         navLabelKey: "nav.prep_stations",
         group: "operations",
         order: 12,
-        requiresPermission: "venue_service.manage",
+        requiresPermission: "venue.configure",
       },
       create(ctx) {
         const api = new PrepStationsApi(ctx.request, ctx.liveData);
@@ -116,7 +116,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
         navLabelKey: "nav.calendar",
         group: "operations",
         order: 15,
-        requiresPermission: "venue_service.manage",
+        requiresPermission: "venue.configure",
         readPermission: "venue.view",
       },
       create(ctx) {

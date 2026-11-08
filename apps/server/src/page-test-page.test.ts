@@ -298,7 +298,7 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
 }
 
 describe("requesting a test page", () => {
-  it("needs printer.manage to request or read one, and a staff refusal queues nothing", async () => {
+  it("needs hardware.manage to request or read one, and a staff refusal queues nothing", async () => {
     const v = await venue();
     const office = await printer(v, v.agentOne);
 

@@ -1925,7 +1925,7 @@ describe("the Edit dialog", () => {
     },
   );
 
-  it("not told up front, a reader read the server refuses for want of payments.manage drops the reader field, and nothing else is refused", async () => {
+  it("not told up front, a reader read the server refuses for want of hardware.manage drops the reader field, and nothing else is refused", async () => {
     const notPermitted = { code: "authorization.not_permitted" };
     const api = editApi({
       getDeviceReader: vi.fn().mockRejectedValue(notPermitted),
@@ -1986,7 +1986,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-reader").value).toBe("r2");
   });
 
-  it("losing payments.manage while Edit is open removes the reader field and Save leaves the reader alone", async () => {
+  it("losing hardware.manage while Edit is open removes the reader field and Save leaves the reader alone", async () => {
     const api = editApi();
     const el = await openEdit(api);
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
@@ -2003,7 +2003,7 @@ describe("the Edit dialog", () => {
     expect(api.setDeviceReader).not.toHaveBeenCalled();
   });
 
-  it("a reader read still pending when payments.manage is lost does not bring the field back", async () => {
+  it("a reader read still pending when hardware.manage is lost does not bring the field back", async () => {
     let answer!: (value: { readerId: string | null }) => void;
     const api = editApi({
       getDeviceReader: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
@@ -2017,7 +2017,7 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
   });
 
-  it("regaining payments.manage while Edit is open does not draw the reader until Edit is opened again", async () => {
+  it("regaining hardware.manage while Edit is open does not draw the reader until Edit is opened again", async () => {
     let answer!: (value: { readerId: string | null }) => void;
     const api = editApi({
       getDeviceReader: vi
@@ -2043,7 +2043,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-reader").value).toBe("r1");
   });
 
-  it("losing payments.manage clears a reader read's failure from the bottom of Edit", async () => {
+  it("losing hardware.manage clears a reader read's failure from the bottom of Edit", async () => {
     const api = editApi({
       getDeviceReader: vi.fn().mockRejectedValue({ code: "connection.failed" }),
     });
@@ -2054,7 +2054,7 @@ describe("the Edit dialog", () => {
     expect(await bottom(el)).toBe("");
   });
 
-  it("losing payments.manage clears a refused reader save, and Save then closes Edit", async () => {
+  it("losing hardware.manage clears a refused reader save, and Save then closes Edit", async () => {
     const api = editApi({
       setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
     });
@@ -2626,7 +2626,7 @@ describe("the Edit dialog", () => {
       expect(api.setDeviceReader).toHaveBeenCalledExactlyOnceWith("t1", "r1");
     });
 
-    it("a reader save refused after payments.manage was lost closes Edit as a saved edit", async () => {
+    it("a reader save refused after hardware.manage was lost closes Edit as a saved edit", async () => {
       const pending = deferred<undefined>();
       const api = editApi({ setDeviceReader: vi.fn().mockReturnValue(pending.promise) });
       const el = await openEdit(api);

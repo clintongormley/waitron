@@ -2293,7 +2293,7 @@ export class TillApp extends LitElement {
       this.operatorName === "" ||
       this.#loginPending ||
       this.deviceMode ||
-      !this.permissions.includes("sale.take_payment")
+      !this.permissions.includes("payment.take")
     ) {
       this.#stopDepartmentTransfers();
       return;

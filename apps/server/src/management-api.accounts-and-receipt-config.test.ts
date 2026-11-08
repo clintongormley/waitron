@@ -1322,7 +1322,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   it("refuses both routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
     await setupTenant();
     const app = mountApp();
-    // A staff person can log in but holds no `layout.configure`.
+    // A staff person can log in but holds no `venue.configure`.
     const cookie = await login(app, STAFF_EMAIL);
     const json = { "content-type": "application/json" };
 
@@ -2395,7 +2395,7 @@ describe("independent department receipt routes", () => {
   });
 
   it.each(["department", "primary department"])(
-    "requires layout permission for %s GET and PUT",
+    "requires venue permission for %s GET and PUT",
     async (kind) => {
       await setupTenant();
       const app = mountApp();

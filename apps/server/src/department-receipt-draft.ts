@@ -26,7 +26,7 @@ export async function checkedDepartmentReceiptWrite(
 ) {
   await authorizeManager(tx, {
     managementSessionId,
-    permission: "layout.configure",
+    permission: "venue.configure",
     touch: options.touch,
   });
   const languages = await departmentReceiptLanguages(tx);
@@ -39,17 +39,6 @@ export async function checkedDepartmentReceiptWrite(
     validateOperationDescription,
     options.allowEmptyDescription,
   );
-  const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, departmentId);
-  if (
-    policy.receiptPrintMode !== checked.policy.receiptPrintMode ||
-    policy.printTradingName !== checked.policy.printTradingName
-  ) {
-    await authorizeManager(tx, {
-      managementSessionId,
-      permission: "venue_service.manage",
-      touch: options.touch,
-    });
-  }
   return { input: checked, scope };
 }
 

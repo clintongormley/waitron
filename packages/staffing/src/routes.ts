@@ -33,7 +33,6 @@ import {
   type SeasonStaffingEdit,
   type SpecialDayStaffingEdit,
 } from "./paint.js";
-import { STAFFING_PERMISSIONS } from "./permissions.js";
 import {
   createStaffRole,
   deleteStaffRole,
@@ -46,7 +45,6 @@ import {
 } from "./staff-roles.js";
 import "./errors.js";
 
-const [{ permission: MANAGE_STAFFING }] = STAFFING_PERMISSIONS;
 const VIEW_VENUE: Permission = "venue.view";
 const ROOT = "/management-api/staffing";
 const BASE = `${ROOT}/staff-roles`;
@@ -159,7 +157,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         return fn(tx);
       });
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-      gatedBy(MANAGE_STAFFING, sessionId, fn);
+      gatedBy("schedule.manage", sessionId, fn);
     const staffRoleIdParam = (raw: string) => normaliseUuid(raw, "StaffRoleId");
     const cutoverOf = async (tx: Transaction) => (await readVenueClock(tx)).dayCutover;
 

@@ -178,7 +178,7 @@ export async function createDeviceProfile(
 ): Promise<DeviceProfileRow> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "layout.configure",
+    permission: "venue.configure",
   });
   const capabilities = validateCapabilities(input.capabilities, input.formFactor);
   const startingScreen = validateStartingScreen(input.startingScreen ?? null, capabilities);
@@ -224,7 +224,7 @@ export async function updateDeviceProfile(
 ): Promise<DeviceProfileRow> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "layout.configure",
+    permission: "venue.configure",
   });
   const capabilities = validateCapabilities(input.capabilities, input.formFactor);
   const startingScreen = validateStartingScreen(
@@ -275,7 +275,7 @@ export async function deleteDeviceProfile(
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "layout.configure",
+    permission: "venue.configure",
   });
   const [profile] = await tx
     .select({ id: deviceProfiles.id })

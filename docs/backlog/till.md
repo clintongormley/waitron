@@ -981,9 +981,8 @@ Left open by W97 (#1311), found in its review and not fixed on the branch:
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:
 
-- The profile editor reads people and the venue's departments and zones, so it needs
-  `person.manage` and `venue_service.manage` beside `layout.configure`; no role holds only the
-  last today. Edit and Duplicate fail with a read error when the departments and zones read
+- The profile editor also reads people, so it needs `person.manage` beside
+  `venue.configure`; no role holds only the latter today. Edit and Duplicate fail with a read error when the departments and zones read
   fails, and its lists do not update while the editor is open.
 
 ## The till's menu reads (Task 7, #719)
@@ -4129,6 +4128,11 @@ rejection at `apps/till/src/till-app.ts:4468` through `#readIdentity` / `#enterS
 Reproduce which profile-switch test answers null and determine whether the fixture or the
 public identity response needs correction; keep the existing profile and login assertions.
 Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
+
+2026-11-08 occurrence: A1002 cut 1's selected till run passed 2,855 tests while Chromium logged
+`Cannot read properties of null (reading 'approvedProfiles')` through `#holdIdentity`,
+`#readIdentity` and `#enterSwitchedProfile`. The cause remains unverified. Receipt: Lane K
+`receipts/a1002-cut1-20261108/till-focused.log`; the same reproduction question above remains open.
 
 ## Loose ends left by A718
 

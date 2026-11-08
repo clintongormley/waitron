@@ -578,7 +578,7 @@ describe("independent venue receipt defaults", () => {
     expect(await storedJson()).toEqual({ email: "live@venue.test" });
   });
 
-  it("refuses a defaults write without layout permission", async () => {
+  it("refuses a defaults write without venue permission", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("staff");
     expect(

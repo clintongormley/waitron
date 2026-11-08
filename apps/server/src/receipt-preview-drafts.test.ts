@@ -1,4 +1,3 @@
-import { registerModulePermissions } from "@waitron/identity";
 import { contentLanguages } from "@waitron/catalogue";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -21,7 +20,6 @@ const suite = useVenueDb({
 let venue: Venue;
 let departmentId: string;
 beforeEach(async () => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
   venue = await setupVenue(suite.db);
   await suite.db
     .update(contentLanguages)

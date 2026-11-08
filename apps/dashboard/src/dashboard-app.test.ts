@@ -974,7 +974,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
         modules: [],
       }),
     });
@@ -994,7 +994,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
         modules: [],
       }),
     });
@@ -1017,7 +1017,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
         modules: [],
       }),
     });
@@ -1037,7 +1037,7 @@ describe("dashboard-app", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: ["sale.take_payment"],
+          permissions: ["payment.take"],
           modules: [],
         }),
     });
@@ -1062,7 +1062,7 @@ describe("dashboard-app", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: ["sale.take_payment"],
+          permissions: ["payment.take"],
           modules: [],
         }),
     });
@@ -2161,7 +2161,7 @@ describe("dashboard-app", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "venue-service"],
-        permissions: ["booking.manage", "venue_service.manage", "venue.view"],
+        permissions: ["booking.manage", "venue.configure", "venue.view"],
       }),
       getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -2187,7 +2187,7 @@ describe("dashboard-app", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "venue-service"],
-        permissions: ["booking.manage", "venue_service.manage", "venue.view"],
+        permissions: ["booking.manage", "venue.configure", "venue.view"],
       }),
       getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
     });
@@ -2206,7 +2206,7 @@ describe("dashboard-app", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings"],
-        permissions: ["booking.manage", "venue_service.manage", "venue.view"],
+        permissions: ["booking.manage", "venue.configure", "venue.view"],
       }),
       getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
     });
@@ -2244,7 +2244,7 @@ describe("dashboard-app", () => {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
           modules: ["bookings", "venue-service"],
-          permissions: ["booking.manage", "venue_service.manage", "venue.view"],
+          permissions: ["booking.manage", "venue.configure", "venue.view"],
         }),
         getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
         listStaff: vi.fn().mockResolvedValue([]),
@@ -2310,7 +2310,7 @@ describe("dashboard-app", () => {
           "booking.manage",
           "adjustment.manage",
           "report.view",
-          "venue_service.manage",
+          "venue.configure",
           "venue.view",
         ],
       }),
@@ -2369,7 +2369,7 @@ describe("dashboard-app", () => {
 
   it.each([
     { permissions: ["booking.manage"], canManageReaders: false },
-    { permissions: ["booking.manage", "payments.manage"], canManageReaders: true },
+    { permissions: ["booking.manage", "hardware.manage"], canManageReaders: true },
   ])(
     "tells the devices screen whether the session may manage card readers ($permissions)",
     async ({ permissions, canManageReaders }) => {
@@ -2389,7 +2389,7 @@ describe("dashboard-app", () => {
 
   it.each([
     { permissions: ["booking.manage"], canManage: false },
-    { permissions: ["booking.manage", "printer.manage"], canManage: true },
+    { permissions: ["booking.manage", "hardware.manage"], canManage: true },
   ])(
     "tells the printers screen whether the session may manage printers ($permissions)",
     async ({ permissions, canManage }) => {
@@ -2444,10 +2444,10 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("tells the open devices screen when a session re-read finds payments.manage gone", async () => {
+  it("tells the open devices screen when a session re-read finds hardware.manage gone", async () => {
     const getMe = vi
       .fn()
-      .mockResolvedValueOnce({ ...meResponse, permissions: ["booking.manage", "payments.manage"] })
+      .mockResolvedValueOnce({ ...meResponse, permissions: ["booking.manage", "hardware.manage"] })
       .mockResolvedValue({ ...meResponse, permissions: ["booking.manage"] });
     // After the re-read the alert and content-language reads stay unanswered, so neither redraws the
     // shell; `setLocale` in `#applyMe` still does, so this case passes without `#applyMe`'s own redraw.
@@ -3671,7 +3671,7 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    [["venue.view", "layout.configure"], true],
+    [["venue.view", "venue.configure"], true],
     [["venue.view"], false],
   ])("lets the Appearance page edit with %j: %s", async (permissions, canEdit) => {
     history.replaceState(null, "", "/manage/appearance");
@@ -3712,7 +3712,7 @@ describe("dashboard-app", () => {
   it.each([
     ["supervisor", []],
     ["manager", ["booking.manage"]],
-    ["manager", ["layout.configure"]],
+    ["manager", ["venue.configure"]],
   ])("does not offer Appearance to a %s session without venue.view", async (role, permissions) => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
@@ -3727,9 +3727,9 @@ describe("dashboard-app", () => {
 
   it.each([
     ["manager", ["venue.view"], "dashboard-appearance-screen", "/manage/appearance"],
-    ["manager", ["layout.configure"], "dashboard-overview-screen", "/manage/overview"],
+    ["manager", ["venue.configure"], "dashboard-overview-screen", "/manage/overview"],
     ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
-    ["staff", ["sale.take_payment"], "dashboard-my-schedule-screen", "/manage/my-schedule"],
+    ["staff", ["payment.take"], "dashboard-my-schedule-screen", "/manage/my-schedule"],
   ])(
     "opens /manage/appearance for a %s session only when it holds venue.view",
     async (role, permissions, tag, path) => {
@@ -4120,7 +4120,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
         modules: [],
       }),
     });
@@ -4137,7 +4137,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
         modules: [],
       }),
     });
@@ -4415,7 +4415,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         locale: "en-GB",
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
         modules: [],
       }),
       getLocales,
@@ -4707,7 +4707,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
 describe("dashboard URL navigation", () => {
   it.each([
-    ["manager", ["venue_service.manage"], ["venue-service"], "/manage/prep-stations/view/stations"],
+    ["manager", ["venue.configure"], ["venue-service"], "/manage/prep-stations/view/stations"],
     ["supervisor", ["venue.view"], ["venue-service"], "/manage/overview"],
     ["manager", [], [], "/manage/overview"],
   ] as const)(
@@ -4811,7 +4811,7 @@ describe("dashboard URL navigation", () => {
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
-          permissions: ["venue_service.manage"],
+          permissions: ["venue.configure"],
           modules: ["venue-service"],
           venueName: "Venue",
         }),
@@ -4857,7 +4857,7 @@ describe("dashboard URL navigation", () => {
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
-          permissions: ["venue_service.manage"],
+          permissions: ["venue.configure"],
           modules: ["venue-service"],
           venueName: "Venue",
         }),
@@ -4892,7 +4892,7 @@ describe("dashboard URL navigation", () => {
   });
   it.each([
     { modules: ["venue-service"], permissions: [] },
-    { modules: [], permissions: ["venue_service.manage"] },
+    { modules: [], permissions: ["venue.configure"] },
   ])(
     "denies a saved venue tab unless both module and permission are present: %j",
     async ({ modules, permissions }) => {
@@ -4933,7 +4933,7 @@ describe("dashboard URL navigation", () => {
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
-        permissions: ["venue_service.manage"],
+        permissions: ["venue.configure"],
         modules: ["venue-service"],
         venueName: "Venue",
       }),
@@ -5043,7 +5043,7 @@ describe("dashboard URL navigation", () => {
       locale: "en-GB",
       venueLocale: "en-GB",
       sessionDefault: "en-GB",
-      permissions: ["venue_service.manage"],
+      permissions: ["venue.configure"],
       modules: ["venue-service"],
       venueName: "Venue",
     });
@@ -6801,7 +6801,7 @@ describe("alerts in the shell", () => {
     const api = alertsApi({
       getMe: vi
         .fn()
-        .mockResolvedValue({ ...meResponse, role: "staff", permissions: ["sale.take_payment"] }),
+        .mockResolvedValue({ ...meResponse, role: "staff", permissions: ["payment.take"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
@@ -6890,7 +6890,7 @@ describe("alerts in the shell", () => {
         ...meResponse,
         sessionDefault: "en-GB",
         role: "staff",
-        permissions: ["sale.take_payment"],
+        permissions: ["payment.take"],
       });
     const api = alertsApi({
       getMe,
@@ -6912,7 +6912,7 @@ describe("alerts in the shell", () => {
     const getMe = vi
       .fn()
       .mockResolvedValueOnce(manager)
-      .mockResolvedValueOnce({ ...manager, role: "staff", permissions: ["sale.take_payment"] })
+      .mockResolvedValueOnce({ ...manager, role: "staff", permissions: ["payment.take"] })
       .mockResolvedValue(manager);
     const api = alertsApi({
       getMe,
@@ -7499,7 +7499,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "venue-service"],
-        permissions: ["booking.manage", "venue_service.manage"],
+        permissions: ["booking.manage", "venue.configure"],
       }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
@@ -7525,6 +7525,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(items("operations")).toEqual([
       "nav-venue-operations",
       "nav-prep-stations",
+      "nav-floor-plans",
       "nav-opening-hours",
       "nav-venue-settings",
     ]);
@@ -7568,7 +7569,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     const api = stubApi({
       getMe: vi
         .fn()
-        .mockResolvedValue({ ...meResponse, role: "staff", permissions: ["sale.take_payment"] }),
+        .mockResolvedValue({ ...meResponse, role: "staff", permissions: ["payment.take"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -8830,7 +8831,7 @@ describe("mounted public department dialogs", () => {
   }
   async function mountDepartments(
     path = "/manage/venue-operations",
-    permissions = ["venue_service.manage"],
+    permissions = ["venue.configure"],
     missingPeriods = false,
     liveDeli = false,
   ) {
@@ -9011,10 +9012,9 @@ describe("mounted public department dialogs", () => {
   });
   it("an address naming the Receipts tab opens it with no question and keeps a Details draft", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1", [
-      "venue_service.manage",
+      "venue.configure",
       "venue.view",
       "venue.configure",
-      "layout.configure",
     ]);
     const box = await draft(app);
     void navigationGuardFor(window)!.write("/manage/venue-operations/department/d1/view/receipt");
@@ -9099,7 +9099,7 @@ describe("mounted public department dialogs", () => {
   it.each(["d1", "d2"])("Receipt opens the authoritative live department %s", async (id) => {
     const app = await mountDepartments(
       `/manage/venue-operations/department/${id}/view/receipt?departmentId=d1`,
-      ["venue_service.manage", "layout.configure"],
+      ["venue.configure"],
       false,
       true,
     );
@@ -9124,8 +9124,7 @@ describe("mounted public department dialogs", () => {
     "the Receipts tab's %s Keeps then Discards one draft and returns to the list",
     async (destination) => {
       const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
-        "venue_service.manage",
-        "layout.configure",
+        "venue.configure",
       ]);
       await expect.poll(() => find(app, 'wt-input[name="email"]')).not.toBeNull();
       const field = find(app, 'wt-input[name="email"]') as WtInput;
@@ -9153,8 +9152,7 @@ describe("mounted public department dialogs", () => {
   );
   it("a missing department Receipt URL does not borrow another department", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/gone/view/receipt", [
-      "venue_service.manage",
-      "layout.configure",
+      "venue.configure",
     ]);
     expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
     expect(
@@ -9162,20 +9160,15 @@ describe("mounted public department dialogs", () => {
         .textContent,
     ).toBe("This department no longer exists.");
   });
-  it("the department dialog offers no Receipts tab when the host cannot offer Receipt", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1", [
-      "venue_service.manage",
-      "venue.view",
-      "venue.configure",
-    ]);
-    const form = find(app, "department-settings")!;
-    expect(form).not.toBeNull();
-    const strip = form.shadowRoot!.querySelector("wt-tabs")!;
-    expect(strip.items.map(({ key }) => key)).not.toContain("receipt");
+  it("the department dialog and Receipts tab need venue permission", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", ["venue.view"]);
+    expect(find(app, "department-settings")).toBeNull();
+    expect(find(app, "dashboard-overview-screen")).not.toBeNull();
+    expect(find(app, 'button[data-key="receipt"]')).toBeNull();
     expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
   });
-  it.each([["venue_service.manage"], ["layout.configure"], []])(
-    "a Receipt deep link cannot bypass either permission: %j",
+  it.each([["venue.view"], ["booking.manage"], []])(
+    "a Receipt deep link cannot bypass venue permission: %j",
     async (...permissions) => {
       const app = await mountDepartments(
         "/manage/venue-operations/department/d1/view/receipt",
@@ -9183,10 +9176,8 @@ describe("mounted public department dialogs", () => {
       );
       expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
       expect(find(app, 'button[data-key="receipt"]')).toBeNull();
-      if (permissions.some((permission: string) => permission === "venue_service.manage")) {
-        expect(find(app, "department-settings")).not.toBeNull();
-        expect((find(app, 'wt-input[name="name"]') as WtInput).value).toBe("Restaurant");
-      }
+      expect(find(app, "department-settings")).toBeNull();
+      expect(find(app, "dashboard-overview-screen")).not.toBeNull();
     },
   );
   it("the real sidebar returns to the bare list after accepting the department draft", async () => {

@@ -241,7 +241,7 @@ async function onePrinter(app: Hono, host = "10.61.0.1") {
 }
 
 describe("page-printer management routes", () => {
-  it("refuses every route to a role without printer.manage, and serves a manager", async () => {
+  it("refuses every route to a role without hardware.manage, and serves a manager", async () => {
     const app = mountApp();
     const { agentId, id, host } = await onePrinter(app);
     const routes: { method: "GET" | "POST" | "PATCH"; path: string; body?: unknown }[] = [

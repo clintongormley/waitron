@@ -297,7 +297,7 @@ describe("atomic unusable-zone confirmation", () => {
     ]);
     expect(
       await withTransaction(suite.db, (tx) =>
-        readHandledAlerts(tx, deps, new Set(["venue.view", "diagnostics.view"])),
+        readHandledAlerts(tx, deps, new Set(["venue.view", "system.manage"])),
       ),
     ).toEqual([]);
     expect(

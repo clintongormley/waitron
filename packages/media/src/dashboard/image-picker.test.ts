@@ -31,7 +31,7 @@ it("contributes the image library screen and localized navigation", async () => 
   const request = vi.fn().mockResolvedValue({ images: [], total: 0 });
   const screen = MEDIA_DASHBOARD.create({ request });
   render(screen.render(), host);
-  expect(MEDIA_DASHBOARD.screen.requiresPermission).toBe("image.manage");
+  expect(MEDIA_DASHBOARD.screen.requiresPermission).toBe("catalogue.manage");
   expect(MEDIA_DASHBOARD.strings.es["nav.images"]).toBe("Biblioteca de imágenes");
   await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
 });

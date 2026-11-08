@@ -165,7 +165,7 @@ it("a name typed before the panel is taken out of the page still counts once it 
   expect((await question(app)).open).toBe(true);
 });
 
-it("losing printer.manage drops an open rename from the unsaved-changes check", async () => {
+it("losing hardware.manage drops an open rename from the unsaved-changes check", async () => {
   const { app, panel } = await mount();
   await openRename(panel);
   await type(panel, "Upstairs");

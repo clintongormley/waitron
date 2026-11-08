@@ -846,7 +846,7 @@ export class PrepStationsScreen extends LitElement {
     const station =
       this.view.stations.find((candidate) => candidate.id === edit.station.id) ?? edit.station;
     const { token } = edit;
-    // The load reads the printers through a route that needs printer.manage, so a loaded editable
+    // The load reads the printers through a route that needs hardware.manage, so a loaded editable
     // screen's person holds it; a refusal of it still lands under Printers.
     const canManagePrinters = true;
     return keyed(

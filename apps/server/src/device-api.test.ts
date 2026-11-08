@@ -1764,8 +1764,8 @@ describe("Device API — the device-guarded routes", () => {
   });
 });
 
-describe("Device management routes (device.manage)", () => {
-  it("require device.manage — 401 unauthenticated, 403 for a staff session", async () => {
+describe("Device management routes (hardware.manage)", () => {
+  it("require hardware.manage — 401 unauthenticated, 403 for a staff session", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const DUMMY = "00000000-0000-0000-0000-000000000000";
@@ -1936,7 +1936,7 @@ describe("Device management routes (device.manage)", () => {
   });
 });
 
-describe("PATCH /management-api/devices/:id (device.manage)", () => {
+describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
   type EditBody = {
     name: string;
     profileId: string;
@@ -3230,7 +3230,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     expect(await labelOf(deviceId)).toBe("Till");
   });
 
-  it("needs device.manage — 401 unauthenticated, 403 for a staff session", async () => {
+  it("needs hardware.manage — 401 unauthenticated, 403 for a staff session", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Till");

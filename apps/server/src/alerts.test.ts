@@ -37,7 +37,7 @@ const registry = createAlertRegistry({
   claims: ALL_ALERT_CLAIMS,
   sources: [],
 });
-const EVERYTHING = new Set(["fiscal.view", "payments.manage", "diagnostics.view"]);
+const EVERYTHING = new Set(["fiscal.view", "hardware.manage", "system.manage"]);
 
 async function seedVenueWithTill(): Promise<{ deviceId: DeviceId }> {
   await seedVenue(db, {
@@ -76,7 +76,7 @@ describe("claims", () => {
   it("takes the longest matching prefix and falls back to diagnostics", () => {
     const r = createAlertRegistry({
       claims: [
-        { prefix: "payment.", area: "payments", permission: "payments.manage" },
+        { prefix: "payment.", area: "payments", permission: "hardware.manage" },
         { prefix: "payment.reconcile_", area: "reconcile", permission: "fiscal.view" },
       ],
       sources: [],
@@ -90,8 +90,8 @@ describe("claims", () => {
     expect(() =>
       createAlertRegistry({
         claims: [
-          { prefix: "payment.", area: "a", permission: "payments.manage" },
-          { prefix: "payment.", area: "b", permission: "payments.manage" },
+          { prefix: "payment.", area: "a", permission: "hardware.manage" },
+          { prefix: "payment.", area: "b", permission: "hardware.manage" },
         ],
         sources: [],
       }),
@@ -113,8 +113,8 @@ describe("claims", () => {
   });
 
   it("is visible to a session holding any claim or source permission, including diagnostics", () => {
-    expect(alertsVisible(registry, new Set(["payments.manage"]))).toBe(true);
-    expect(alertsVisible(registry, new Set(["diagnostics.view"]))).toBe(true);
+    expect(alertsVisible(registry, new Set(["hardware.manage"]))).toBe(true);
+    expect(alertsVisible(registry, new Set(["system.manage"]))).toBe(true);
     expect(alertsVisible(registry, new Set(["report.view"]))).toBe(false);
   });
 });
@@ -128,7 +128,7 @@ describe("readOpenAlerts", () => {
     await raise(v, "printing.mystery", "warning", NOW);
     const deps = { registry, now: NOW, log: noopLog };
     const paymentsOnly = await asApp((tx) =>
-      readOpenAlerts(tx, deps, new Set(["payments.manage"])),
+      readOpenAlerts(tx, deps, new Set(["hardware.manage"])),
     );
     expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
     const all = await asApp((tx) => readOpenAlerts(tx, deps, EVERYTHING));
@@ -166,7 +166,7 @@ describe("readOpenAlerts", () => {
     await raise(v, "payment.reconcile_held", "error", NOW);
     await raise(v, "payment.reconcile_orphan", "error", NOW);
     const alerts = await asApp((tx) =>
-      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["payments.manage"])),
+      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["hardware.manage"])),
     );
     const byCode = new Map(alerts.map((a) => [a.code, a]));
     expect(byCode.get("payment.reconcile_held")).toMatchObject({
@@ -203,7 +203,11 @@ describe("readOpenAlerts", () => {
       params: { count: 2, date: "2026-09-14", lastDate: "2026-09-14", severalDays: false },
     });
     const withoutIt = await asApp((tx) =>
-      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
+      readOpenAlerts(
+        tx,
+        { registry, now: NOW, log: noopLog },
+        new Set(["fiscal.view", "hardware.manage"]),
+      ),
     );
     expect(withoutIt).toEqual([]);
   });
@@ -227,7 +231,7 @@ describe("readOpenAlerts", () => {
     const at = "2026-09-14T11:00:00.000Z";
     const source: AlertSource = {
       area: "printing",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       read: async () => [
         // Its key sorts first, so only the null-last rule can put it last.
         { key: "a:0", code: "printing.x", params: {}, severity: "warning", since: null },
@@ -237,7 +241,7 @@ describe("readOpenAlerts", () => {
     };
     const r = createAlertRegistry({ claims: [], sources: [source] });
     const alerts = await asApp((tx) =>
-      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["system.manage"])),
     );
     expect(alerts.map((a) => a.key)).toEqual(["a:1", "b:1", "a:0"]);
   });
@@ -245,7 +249,7 @@ describe("readOpenAlerts", () => {
   it("puts notices after warnings and errors, however new", async () => {
     const source: AlertSource = {
       area: "printing",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       read: async () => [
         {
           key: "notice",
@@ -272,7 +276,7 @@ describe("readOpenAlerts", () => {
     };
     const r = createAlertRegistry({ claims: [], sources: [source] });
     const alerts = await asApp((tx) =>
-      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["system.manage"])),
     );
     expect(alerts.map((a) => a.key)).toEqual(["error", "warning", "notice"]);
   });
@@ -280,7 +284,7 @@ describe("readOpenAlerts", () => {
   it("orders since by instant, not by text", async () => {
     const source: AlertSource = {
       area: "printing",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       read: async () => [
         // 11:00Z written with an offset: as text it sorts after 11:30Z, as an instant before it.
         {
@@ -301,7 +305,7 @@ describe("readOpenAlerts", () => {
     };
     const r = createAlertRegistry({ claims: [], sources: [source] });
     const alerts = await asApp((tx) =>
-      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["system.manage"])),
     );
     expect(alerts.map((a) => a.key)).toEqual(["utc", "offset"]);
   });
@@ -309,7 +313,7 @@ describe("readOpenAlerts", () => {
   it("asks only the sources whose permission the session holds, and stamps kind and area", async () => {
     const held: AlertSource = {
       area: "printing",
-      permission: "payments.manage",
+      permission: "hardware.manage",
       read: vi.fn(async () => [
         {
           key: "printing.agent_silent:a1",
@@ -328,7 +332,7 @@ describe("readOpenAlerts", () => {
     };
     const r = createAlertRegistry({ claims: [], sources: [held, notHeld] });
     const alerts = await asApp((tx) =>
-      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["payments.manage"])),
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["hardware.manage"])),
     );
     expect(alerts).toEqual([
       {
@@ -350,7 +354,7 @@ describe("readOpenAlerts", () => {
     const log = vi.fn<Logger>();
     const failing: AlertSource = {
       area: "backup",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       // A failed QUERY, not just a throw: a source that dies in the database, not in JavaScript,
       // is the case `readOpenAlerts` wraps each source for.
       read: async ({ tx }) => {
@@ -360,7 +364,7 @@ describe("readOpenAlerts", () => {
     };
     const healthy: AlertSource = {
       area: "printing",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       read: async ({ tx }) => {
         await tx.execute(sql`select 1`);
         return [
@@ -377,7 +381,7 @@ describe("readOpenAlerts", () => {
     const r = createAlertRegistry({ claims: [], sources: [failing, healthy] });
     await raise(v, "payment.offline_forward_declined", "warning", NOW);
     const alerts = await asApp((tx) =>
-      readOpenAlerts(tx, { registry: r, now: NOW, log }, new Set(["diagnostics.view"])),
+      readOpenAlerts(tx, { registry: r, now: NOW, log }, new Set(["system.manage"])),
     );
     // This registry claims nothing, so the payment incident shows under diagnostics.
     expect(alerts.map((a) => a.code).sort()).toEqual([
@@ -403,14 +407,14 @@ describe("readOpenAlerts", () => {
   it("replaces a source that throws before returning a promise, and keeps reading the others", async () => {
     const throwing: AlertSource = {
       area: "backup",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       read: () => {
         throw new AppError("server.internal", {});
       },
     };
     const healthy: AlertSource = {
       area: "printing",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       read: async () => [
         {
           key: "printing.jobs_waiting:p1",
@@ -423,7 +427,7 @@ describe("readOpenAlerts", () => {
     };
     const r = createAlertRegistry({ claims: [], sources: [throwing, healthy] });
     const alerts = await asApp((tx) =>
-      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["system.manage"])),
     );
     expect(alerts.map((a) => a.key)).toEqual([
       "alert.source_unavailable:backup",
@@ -485,7 +489,7 @@ describe("readOpenAlerts", () => {
     const at = "2026-09-14T11:00:00.000Z";
     const source: AlertSource = {
       area: "printing",
-      permission: "diagnostics.view",
+      permission: "system.manage",
       read: async () => [
         { key: "same", code: "printing.x", params: { n: 1 }, severity: "warning", since: at },
         { key: "same", code: "printing.x", params: { n: 2 }, severity: "warning", since: at },
@@ -493,7 +497,7 @@ describe("readOpenAlerts", () => {
     };
     const r = createAlertRegistry({ claims: [], sources: [source] });
     const alerts = await asApp((tx) =>
-      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["system.manage"])),
     );
     expect(alerts.map((a) => a.params)).toEqual([{ n: 1 }, { n: 2 }]);
   });
@@ -535,7 +539,7 @@ describe("readHandledAlerts", () => {
     ]);
     expect(handled[1]!.handledAt).toBe(new Date(NOW.getTime() - 29 * DAY).toISOString());
     const paymentsOnly = await asApp((tx) =>
-      readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["payments.manage"])),
+      readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["hardware.manage"])),
     );
     expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
   });

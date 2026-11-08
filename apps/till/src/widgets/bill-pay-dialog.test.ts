@@ -663,7 +663,7 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
 
   it("says the operator may not take payments when refused the payment permission", async () => {
     const el = await mount({
-      refusal: { code: "authorization.not_permitted", permission: "sale.take_payment" },
+      refusal: { code: "authorization.not_permitted", permission: "payment.take" },
     });
     expect(actions(el).error).toBe(t("take_payment.not_permitted"));
   });

@@ -22,9 +22,7 @@ export const MEDIA_CONFIGURATION_TRANSFER = {
     { name: "media_image_edits", before: ["products", "sections", "section_members"] },
   ],
 } as const;
-export const MEDIA_PERMISSIONS: readonly ModulePermission[] = [
-  { permission: "image.manage", grantedFrom: "manager" },
-];
+export const MEDIA_PERMISSIONS: readonly ModulePermission[] = [];
 export const MEDIA_MODULE: WaitronModule = {
   name: "media",
   version: "0.0.0",

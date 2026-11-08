@@ -54,7 +54,7 @@ them: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
 ## A recorded incident code needs an area claim and English and Spanish alert wording
 
 An incident whose code no module claims (`alerts.events` on its module descriptor, matched by the
-longest prefix) is shown under diagnostics, to `diagnostics.view` only
+longest prefix) is shown under diagnostics, to `system.manage` only
 (`UNCLAIMED` in `apps/server/src/alerts.ts`). A code with no entry in
 `apps/dashboard/src/i18n/alert-messages.ts` is shown as a generic sentence with the raw code beneath
 it. The guard, `scripts/alert-codes.test.ts` (root project), collects code-shaped string literals
@@ -649,7 +649,7 @@ behaviour. A new dish whose period ended earlier the same business day (`endedMe
 exception: `priceOrderLines` accepts it at its taken price when a menu the running period offers
 in the zone also sells its product and variant on its own, and otherwise refuses it
 `menu_period.ended` (409) unless the request's `lateSend` names its menu and, where its department's
-`late_send_needs_manager` is on, someone holding `venue_service.manage` authorises it — the
+`late_send_needs_manager` is on, someone holding `venue.configure` authorises it — the
 sender, or a manager's PIN (`apps/server/src/late-send.ts`). A confirmed dish's service context
 rows (`working_line_contexts.late_period_name` and `late_confirmed_by`) record the period and who
 confirmed; the kitchen ticket and the kitchen screen read them through `readLateSendMarks`. Plan

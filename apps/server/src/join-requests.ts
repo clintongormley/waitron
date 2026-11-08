@@ -356,7 +356,7 @@ async function requirePending(
  * ask replaces it under the same id with a later createdAt ({@link createJoinRequest}).
  *
  * Deliberately not {@link requirePending}'s throw: the by-id routes (`join-api.ts`) read the kind
- * BEFORE they authorize, and must refuse a caller holding neither permission whether or not the id
+ * BEFORE they authorize, and must refuse a caller without hardware administration whether or not the id
  * is live, or the status code enumerates pending requests. So the miss is a VALUE held until after
  * the gate.
  */

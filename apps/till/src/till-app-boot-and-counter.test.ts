@@ -3869,7 +3869,7 @@ describe("department transfers across operator lifetimes", () => {
       },
     };
   }
-  async function signIn(el: TillApp, permissions = ["sale.take_payment"], displayName = "Ana") {
+  async function signIn(el: TillApp, permissions = ["payment.take"], displayName = "Ana") {
     emit(lock(el)!, "logged-in", { personId: "p1", displayName, permissions });
     await vi.waitFor(() => expect(shell(el)).not.toBeNull());
     await flush(el);
@@ -4348,7 +4348,7 @@ describe("department transfers across operator lifetimes", () => {
     emit(shell(el)!, "logged-in", {
       personId: "p2",
       displayName: "Bea",
-      permissions: ["sale.take_payment"],
+      permissions: ["payment.take"],
     });
     await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
     expect(desk.signals[0]?.aborted).toBe(true);
@@ -4440,7 +4440,7 @@ describe("department transfers across operator lifetimes", () => {
                 ),
             });
             host.setAttribute("data-theme", theme);
-            await signIn(el, ["sale.take_payment"], "Ana Isabel García López");
+            await signIn(el, ["payment.take"], "Ana Isabel García López");
             setLocale(locale);
             await flush(el);
             await vi.waitFor(() => expect(pendingCount(el)).not.toBeNull());
@@ -6343,7 +6343,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
               emit(lock(el)!, "logged-in", {
                 personId: "p1",
                 displayName: "Ana",
-                permissions: ["sale.take_payment"],
+                permissions: ["payment.take"],
               });
               await flush(el);
               emit(shell(el)!, "screen-select", { screen: view.screen });

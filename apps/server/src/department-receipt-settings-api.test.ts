@@ -7,7 +7,7 @@ import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@wai
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { contentLanguages } from "@waitron/catalogue";
-import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import {
   MEDIA_MODULE,
   mediaImages,
@@ -40,14 +40,8 @@ const savedReceipt = {
 };
 afterEach(() => {
   vi.restoreAllMocks();
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
 });
-async function fixture(
-  role: "manager" | "staff" = "manager",
-  managementFloor: "manager" | "admin" = "manager",
-  withFiscal = true,
-) {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: managementFloor }]);
+async function fixture(role: "manager" | "staff" = "manager", withFiscal = true) {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" });
@@ -180,7 +174,7 @@ describe("the fiscal seat's default description", () => {
 
 describe("replacement department receipt HTTP contract", () => {
   it.each([true, false])("reports the installed description field (%s)", async (withFiscal) => {
-    const f = await fixture("manager", "manager", withFiscal);
+    const f = await fixture("manager", withFiscal);
     const response = await f.app.request(f.path, { headers: f.headers });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ operationDescriptionRequired: withFiscal });
@@ -215,15 +209,19 @@ describe("replacement department receipt HTTP contract", () => {
     expect(saved.receipts[0]!.receipt).toEqual(input.receipt);
     expect(saved.policies[0]).toMatchObject(input.policy);
   });
-  it("allows decoration changes without policy permission and refuses a policy change atomically", async () => {
-    const f = await fixture("manager", "admin");
+  it("uses the same venue permission for decoration and policy changes, refusing a later loss atomically", async () => {
+    const f = await fixture();
     expect((await f.put(body())).status).toBe(204);
+    const changedPolicy = { ...policy, receiptPrintMode: "on_request" as const };
+    expect((await f.put(body({ policy: changedPolicy }))).status).toBe(204);
+    expect((await rows()).policies[0]).toMatchObject(changedPolicy);
+    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
     const before = await rows();
     await refusal(
       await f.put(body({ policy: { ...policy, printTradingName: false } })),
       403,
       "authorization.not_permitted",
-      { permission: "venue_service.manage" },
+      { permission: "venue.configure" },
     );
     expect(await rows()).toEqual(before);
   });
@@ -242,12 +240,12 @@ describe("replacement department receipt HTTP contract", () => {
     },
   );
   it("allows an empty authored receipt when no fiscal description contribution is installed", async () => {
-    const f = await fixture("manager", "manager", false);
+    const f = await fixture("manager", false);
     expect((await f.put(body({ receipt: {} }))).status).toBe(204);
     expect((await rows()).receipts[0]!.receipt).toEqual({});
   });
   it("a description without a fiscal field round trips its readable 500-character bound", async () => {
-    const f = await fixture("manager", "manager", false);
+    const f = await fixture("manager", false);
     const operationDescription = "x".repeat(500);
     expect((await f.put(body({ receipt: { operationDescription } }))).status).toBe(204);
     const read = await f.app.request(f.path, { headers: f.headers });
@@ -257,7 +255,7 @@ describe("replacement department receipt HTTP contract", () => {
   it.each(["x".repeat(501), "bad\u0000text"])(
     "a description without a fiscal field still refuses unreadable authored text %j",
     async (operationDescription) => {
-      const f = await fixture("manager", "manager", false);
+      const f = await fixture("manager", false);
       const before = await rows();
       const response = await f.put(body({ receipt: { operationDescription } }));
       expect(response.status).toBe(400);
@@ -456,10 +454,6 @@ describe("replacement department receipt HTTP contract", () => {
     f: Awaited<ReturnType<typeof fixture>>,
     render: (bytes: Uint8Array) => ReturnType<typeof logoModule.drawLogoRasters>,
   ) {
-    registerModulePermissions([
-      ...(MEDIA_MODULE.permissions ?? []),
-      { permission: "venue_service.manage", grantedFrom: "manager" },
-    ]);
     const app = new Hono();
     MEDIA_MODULE.routes!.mount(
       app,
@@ -613,7 +607,7 @@ describe("replacement department receipt HTTP contract", () => {
   it.each(["permission", "department", "languages", "policy", "hidden-text", "image"])(
     "rechecks %s after logo decoding and preserves the concurrent change",
     async (kind) => {
-      const f = await fixture("manager", kind === "policy" ? "admin" : "manager");
+      const f = await fixture();
       const logo = await libraryImage();
       const input = body({
         receipt: {
@@ -635,11 +629,13 @@ describe("replacement department receipt HTTP contract", () => {
               .where(eq(departments.id, f.departmentId));
           if (kind === "languages")
             await tx.update(contentLanguages).set({ languages: ["es", "en"] });
-          if (kind === "policy")
+          if (kind === "policy") {
+            await tx.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
             await tx
               .update(departmentSalePolicies)
               .set({ printTradingName: false })
               .where(eq(departmentSalePolicies.departmentId, f.departmentId));
+          }
           if (kind === "hidden-text")
             await tx
               .update(departmentReceipts)
@@ -653,7 +649,7 @@ describe("replacement department receipt HTTP contract", () => {
       const response = await f.put(input);
       if (kind === "permission" || kind === "policy")
         await refusal(response, 403, "authorization.not_permitted", {
-          permission: kind === "permission" ? "layout.configure" : "venue_service.manage",
+          permission: "venue.configure",
         });
       if (kind === "department")
         await refusal(response, 404, "department.not_found", { departmentId: f.departmentId });
@@ -706,7 +702,7 @@ describe("replacement department receipt HTTP contract", () => {
     expect(await rows()).toEqual(before);
   });
   it("does not decode a logo for a policy change without permission", async () => {
-    const f = await fixture("manager", "admin");
+    const f = await fixture("staff");
     const logo = await libraryImage();
     const before = await rows();
     const decode = vi.spyOn(logoModule, "drawLogoRasters");
@@ -719,7 +715,7 @@ describe("replacement department receipt HTTP contract", () => {
       ),
       403,
       "authorization.not_permitted",
-      { permission: "venue_service.manage" },
+      { permission: "venue.configure" },
     );
     expect(decode).not.toHaveBeenCalled();
     expect(await rows()).toEqual(before);
@@ -739,10 +735,10 @@ describe("replacement department receipt HTTP contract", () => {
       await f.app.request(f.path, { headers: f.headers }),
       403,
       "authorization.not_permitted",
-      { permission: "layout.configure" },
+      { permission: "venue.configure" },
     );
     await refusal(await f.put(body()), 403, "authorization.not_permitted", {
-      permission: "layout.configure",
+      permission: "venue.configure",
     });
   });
 });

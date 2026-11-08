@@ -2250,7 +2250,7 @@ so there is nothing on the document that says who each *duplicado* belongs to.
   `apps/server/src/till-sale.ts`). In a venue that does not print automatically (Q22), the till
   first offers a Print receipt button, which prints the ticket as an original. The till hides that
   button once one print has been queued (`#onPrintReceipt`, `apps/till/src/till-app.ts`); the server
-  does not refuse a second original. A person with `print.resend` can resend a job from the
+  does not refuse a second original. A person with `hardware.manage` can resend a job from the
   dashboard's Printers screen once its automatic delivery has ended, whether it failed or
   succeeded (`canResendPrintJob`, `packages/printing/src/outbox.ts`). A resend sends the same bytes
   again, so an original that failed to print comes out as an original. That is the case (d) asks

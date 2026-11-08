@@ -109,7 +109,6 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#close();
     this.#open(this.subject.id);
   }
-  @property({ type: Boolean }) canManagePolicy = true;
   @property({ type: Boolean }) requiresDescription = true;
   @state() private department: { id: string } | null = null;
   @state() private model?: DepartmentReceiptModel;
@@ -402,7 +401,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#queuePreview();
   }
   #policy(field: "receiptPrintMode" | "printTradingName", checked: boolean): void {
-    if (!this.canManagePolicy || this.busy) return;
+    if (this.busy) return;
     this.draft = {
       ...this.draft,
       policy: {
@@ -658,7 +657,7 @@ export class DepartmentReceiptEditor extends LitElement {
                     label=${t("receipts.print_receipt")}
                     .description=${errors.receiptPrintMode ?? ""}
                     .checked=${this.draft.policy.receiptPrintMode === "auto"}
-                    ?disabled=${this.busy || !this.canManagePolicy}
+                    ?disabled=${this.busy}
                     @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                       event.stopPropagation();
                       this.#policy("receiptPrintMode", event.detail.checked);
@@ -672,7 +671,7 @@ export class DepartmentReceiptEditor extends LitElement {
                     label=${t("receipts.print_trading_name")}
                     .description=${errors.printTradingName ?? ""}
                     .checked=${this.draft.policy.printTradingName}
-                    ?disabled=${this.busy || !this.canManagePolicy}
+                    ?disabled=${this.busy}
                     @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                       event.stopPropagation();
                       this.#policy("printTradingName", event.detail.checked);

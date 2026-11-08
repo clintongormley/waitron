@@ -384,7 +384,7 @@ export const AGENT_SILENT_MS = 5 * 60 * 1000;
 export function printingAlertSource(): AlertSource {
   return {
     area: "printing",
-    permission: "printer.manage",
+    permission: "hardware.manage",
     async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       const alerts: OngoingAlert[] = [];
 
@@ -681,7 +681,7 @@ export function stationOutputAlertSource(deps: {
 }): AlertSource {
   return {
     area: "kitchen",
-    permission: "venue_service.manage",
+    permission: "venue.configure",
     async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       const printersDown = await stationPrintersDown(tx, now);
       const screensDark = await stationScreensDark(tx, now);
@@ -724,7 +724,7 @@ export function stationOutputAlertSource(deps: {
 export function passScreenAlertSource(): AlertSource {
   return {
     area: "kitchen",
-    permission: "venue_service.manage",
+    permission: "venue.configure",
     async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       return (await passScreensDark(tx, now)).map((p) => ({
         key: `kitchen_screen.pass_dark:${p.deviceId}`,
@@ -760,7 +760,7 @@ export function batteryAlertSource(deps: {
 }): AlertSource {
   return {
     area: "card_reader",
-    permission: "payments.manage",
+    permission: "hardware.manage",
     readOutsideTransaction: true,
     async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       const readers = await tx

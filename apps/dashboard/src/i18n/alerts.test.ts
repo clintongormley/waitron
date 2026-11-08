@@ -168,7 +168,7 @@ it("names the undelivered full invoice, and says how to hand an unclaimed one to
   expect(es).toContain("Back office");
   expect(es).toContain("Añadir impresora");
   expect(es).toContain("«Usar este agente»");
-  // Only a manager holds `printer.manage`; a supervisor sees this alert too.
+  // Only a manager holds `hardware.manage`; a supervisor sees this alert too.
   expect(en).toContain("A manager can open Add a printer");
   expect(es).toContain("Un responsable puede abrir Añadir impresora");
 });

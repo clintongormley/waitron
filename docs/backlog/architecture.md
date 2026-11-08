@@ -129,9 +129,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course definition; `fireCourse` calls `requireCourse`
 
-- `packages/provisioning/src/venue-apply.ts`
-  names a `till.configure` gate for `createDeviceProfile`; the gate is `layout.configure`
-  (`packages/layouts/src/device-profile-store.ts`). `docs/developers/conventions-data.md` names a
+- `docs/developers/conventions-data.md` names a
   `print-api.printer-wiring.test.ts` case "refuses another tenant's manager…" that #378 removed.
   `docs/developers/testing-guide.md` says the concurrent Enable/unpair payments test "locks the
   reader before deciding"; there are no row locks, the enable waits behind the unpair's write

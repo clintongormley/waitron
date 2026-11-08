@@ -180,7 +180,7 @@ it("offers every active printer, and keeps a chosen disabled one", async () => {
 });
 
 it.each([
-  ["without printer.manage", GRILL, false],
+  ["without hardware.manage", GRILL, false],
   ["for a switched-off station", { ...GRILL, active: false }, true],
 ] as const)("shows printers as a read-out %s and never sends them", async (_, station, can) => {
   const el = await mount({ ...station, printerIds: ["epson", "star"] }, { canManagePrinters: can });
@@ -232,10 +232,10 @@ it.each([
   expect(formMessage(el)).toBe("");
 });
 
-it("puts a printer.manage refusal under Printers", async () => {
+it("puts a hardware.manage refusal under Printers", async () => {
   const el = await mount();
   await pickPrinters(el, ["star"]);
-  el.refusal = { code: "authorization.not_permitted", params: { permission: "printer.manage" } };
+  el.refusal = { code: "authorization.not_permitted", params: { permission: "hardware.manage" } };
   await el.updateComplete;
   expect(printersField(el)!.error).toBe("You can't change printers.");
   expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");

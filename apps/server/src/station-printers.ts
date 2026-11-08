@@ -7,7 +7,7 @@ import { kitchenStations, printers, stationPrinters } from "@waitron/db";
 import type { SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 
-// The station → printer mapping verbs. The `printer.manage` gate is applied at the route, not here.
+// The station → printer mapping verbs. The `hardware.manage` gate is applied at the route, not here.
 
 export interface StationPrinter {
   stationId: string;

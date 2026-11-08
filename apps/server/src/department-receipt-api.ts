@@ -40,7 +40,7 @@ function logoNotFound() {
 }
 
 async function authorize(tx: Transaction, managementSessionId: string) {
-  await authorizeManager(tx, { managementSessionId, permission: "layout.configure" });
+  await authorizeManager(tx, { managementSessionId, permission: "venue.configure" });
 }
 
 async function prepareLogo(

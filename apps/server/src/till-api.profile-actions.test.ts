@@ -653,7 +653,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "matching request (tested)",
     actions: [],
     basis:
-      "Request proof: till-api.request-device.test.ts. Station and zone-extension choices govern the venue day; they require venue_service.manage or a permitted PIN, not an ordering or preparation action.",
+      "Request proof: till-api.request-device.test.ts. Station and zone-extension choices govern the venue day; they require venue.configure or a permitted PIN, not an ordering or preparation action.",
     routes: ["PUT /api/service-zones/:zoneId/zone-extension", "PUT /api/stations/:stationId/today"],
   },
   {
@@ -696,7 +696,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "matching request (tested)",
     actions: [],
     basis:
-      "Request proof: till-api.request-device.test.ts. Registered only for the simulator; cancellation requires sale.take_payment permission and moves no real money.",
+      "Request proof: till-api.request-device.test.ts. Registered only for the simulator; cancellation requires payment.take permission and moves no real money.",
     routes: ["POST /api/demo-reader/cancel"],
   },
 ];

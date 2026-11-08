@@ -573,7 +573,7 @@ removal before restart because firmware can ignore that order, and a stick that 
 starts it after 15 seconds unless a key is pressed. The encrypted disk, Chromium under `cage`,
 no desktop, dashboard/till choice and separate later maintenance feature remain in the design.
 The local-screen marker only displays the till card; a foreign browser lacks it. Even a forged
-marker still needs `device.manage` and manager acceptance.
+marker still needs `hardware.manage` and manager acceptance.
 
 Every first/later recovery sheet includes the correct disk key and LUKS UUID; restore/spare add a
 separate page for the actual destination disk. Proposed storage is a host-root-only `0600` file

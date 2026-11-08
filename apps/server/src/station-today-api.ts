@@ -58,7 +58,7 @@ export function mountStationTodayApi(
         await withTransaction(deps.db, async (tx) => {
           await assertScreenShowsStation(tx, device.deviceId, id);
           const destinations = await VENUE_SERVICE.stationDestinations(tx, id, new Date());
-          const authorizers = await listActivePersonsWithPermission(tx, "venue_service.manage");
+          const authorizers = await listActivePersonsWithPermission(tx, "venue.configure");
           return {
             destinations,
             authorizers,
@@ -86,7 +86,7 @@ export function mountStationTodayApi(
       }
       const authorizer = parseOverrideField(body.authorizer);
       if (authorizer === undefined)
-        throw new AppError("authorization.not_permitted", { permission: "venue_service.manage" });
+        throw new AppError("authorization.not_permitted", { permission: "venue.configure" });
       const attempts = overridePinAttempts(pinThrottle, device.deviceId);
       await withPinCheckAhead(deps.db, authorizer, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
@@ -94,7 +94,7 @@ export function mountStationTodayApi(
           const { authorizedBy } = await authorizeByPin(
             tx,
             {
-              permission: "venue_service.manage",
+              permission: "venue.configure",
               override: withCheck(authorizer, checked)!,
             },
             attempts,
@@ -120,7 +120,7 @@ export function mountStationTodayApi(
       await requireSession(deps, c);
       return c.json(
         await withTransaction(deps.db, (tx) =>
-          listActivePersonsWithPermission(tx, "venue_service.manage"),
+          listActivePersonsWithPermission(tx, "venue.configure"),
         ),
       );
     }),
@@ -154,7 +154,7 @@ export function mountStationTodayApi(
         destination = body.sendsToStationId.toLowerCase();
       }
       const override = parseOverrideField(body.override);
-      const authz = { sessionId: session.sessionId, permission: "venue_service.manage" };
+      const authz = { sessionId: session.sessionId, permission: "venue.configure" };
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await overrideToCheck(deps.db, authz, override);
       await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>

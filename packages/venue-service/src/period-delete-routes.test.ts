@@ -418,7 +418,7 @@ describe("the period-delete routes", () => {
         expectedClockRevision: 0,
       }),
       403,
-      { code: "authorization.not_permitted", params: { permission: "venue_service.manage" } },
+      { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     );
     expect(await stored(r)).toEqual(before);
   });

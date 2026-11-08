@@ -41,11 +41,11 @@ function nextNif(): string {
 }
 
 interface Venue {
-  /** A live MANAGEMENT session cookie for a `manager` (holds `diagnostics.view`). */
+  /** A live MANAGEMENT session cookie for a `manager` (holds `system.manage`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds no `diagnostics.view`). */
+  /** A live MANAGEMENT session cookie for a `staff` person (holds no `system.manage`). */
   staffCookie: string;
-  /** A live MANAGEMENT session cookie for a `supervisor` (holds no `diagnostics.view` either). */
+  /** A live MANAGEMENT session cookie for a `supervisor` (holds no `system.manage` either). */
   supervisorCookie: string;
 }
 
@@ -163,7 +163,7 @@ async function post(app: Hono, path: string, cookie: string, body: unknown): Pro
   });
 }
 
-describe("mountDiagnosticsApi — diagnostics.view gate + verbosity", () => {
+describe("mountDiagnosticsApi — system.manage gate + verbosity", () => {
   it("rejects an unauthenticated caller with 401", async () => {
     const { app } = mountApp(stubReader().reader);
     const res = await get(app, "/management-api/diagnostics/recent");

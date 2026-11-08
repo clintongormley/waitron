@@ -3606,7 +3606,7 @@ describe("atomic zone editor save", () => {
     },
   );
 
-  it("requires service authority and a separate rename permission", async () => {
+  it("requires the shared venue permission for service settings and renaming", async () => {
     const fx = await settingsFixture();
     const before = await rawSettingsSnapshot();
     for (const [cookie, status, code] of [
@@ -3618,37 +3618,41 @@ describe("atomic zone editor save", () => {
       expect(await response.json()).toMatchObject({ error: { code } });
     }
     expect(await rawSettingsSnapshot()).toEqual(before);
-    // Grant only the module permission to exercise the independent rename boundary.
-    registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "supervisor" }]);
-    try {
-      const response = await send(fx.app, "PUT", path(fx.zoneId), fx.supervisorCookie, edited);
-      expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({
-        error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
-      });
-      expect(await rawSettingsSnapshot()).toEqual(before);
-      expect(
-        (
-          await send(fx.app, "PUT", path(fx.zoneId), fx.supervisorCookie, {
-            ...edited,
-            name: "Terrace",
-          })
-        ).status,
-      ).toBe(204);
-      expect(
-        (await db.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, fx.zoneId)))[0],
-      ).toEqual({ zoneId: fx.zoneId, ...zoneSettings });
-      expect(
-        (
-          await db
-            .select({ name: floorZones.name })
-            .from(floorZones)
-            .where(eq(floorZones.id, fx.zoneId))
-        )[0],
-      ).toEqual({ name: "Terrace" });
-    } finally {
-      registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
-    }
+    const refused = await send(fx.app, "PUT", path(fx.zoneId), fx.supervisorCookie, edited);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+    });
+    expect(await rawSettingsSnapshot()).toEqual(before);
+    const renamed = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, edited);
+    expect(renamed.status).toBe(204);
+    expect(
+      (
+        await db
+          .select({ name: floorZones.name })
+          .from(floorZones)
+          .where(eq(floorZones.id, fx.zoneId))
+      )[0],
+    ).toEqual({ name: edited.name });
+    expect(
+      (
+        await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, {
+          ...edited,
+          name: "Terrace",
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (await db.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, fx.zoneId)))[0],
+    ).toEqual({ zoneId: fx.zoneId, ...zoneSettings });
+    expect(
+      (
+        await db
+          .select({ name: floorZones.name })
+          .from(floorZones)
+          .where(eq(floorZones.id, fx.zoneId))
+      )[0],
+    ).toEqual({ name: "Terrace" });
   });
   it("a refused policy write rolls back the earlier name write", async () => {
     const fx = await settingsFixture();

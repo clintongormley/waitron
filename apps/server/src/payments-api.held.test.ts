@@ -260,7 +260,7 @@ describe("GET /management-api/payments/held", () => {
     ]);
   });
 
-  it("refuses a session without payments.manage", async () => {
+  it("refuses a session without hardware.manage", async () => {
     const v = await setup();
     await twoHeld(v);
 
@@ -488,7 +488,7 @@ describe("the held payment outcome checks the manager's PIN before the write loc
     ]);
   });
 
-  it("derives no key for a session without payments.manage", async () => {
+  it("derives no key for a session without hardware.manage", async () => {
     const v = await setup();
     const { earlier } = await twoHeld(v);
     watchDerivationsAndLock(suite.db, "5678", anotherWriter);

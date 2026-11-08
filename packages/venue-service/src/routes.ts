@@ -55,7 +55,6 @@ import {
   type LocalDate,
 } from "./hours-types.js";
 import type { ClosedWeekDay, MenuWeekDay } from "./menu-timetable-types.js";
-import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
   clearRoutingCell,
   routingModel,
@@ -480,7 +479,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       withTransaction(ctx.db, async (tx) => {
         const { role } = await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: MANAGE_VENUE_SERVICE,
+          permission: "venue.configure",
         });
         return fn(tx, role);
       });

@@ -35,7 +35,7 @@ const ROWS = [
 
 const states = [
   "populated",
-  "without printer.manage",
+  "without hardware.manage",
   "re-read failed",
   "rename open",
   "rename refused blank",
@@ -93,7 +93,7 @@ describe.each(["light", "dark"] as const)("page printers panel (%s)", (theme) =>
       {
         api,
         rows: ROWS,
-        canManage: state !== "without printer.manage",
+        canManage: state !== "without hardware.manage",
         reload,
         testPagePollMs: 1,
       } as Partial<PagePrintersPanel>,

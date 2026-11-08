@@ -14,7 +14,7 @@ export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen 
     id: "staff-roles",
     navLabelKey: "nav.staff_roles",
     group: "team",
-    requiresPermission: "staffing.manage",
+    requiresPermission: "schedule.manage",
     readPermission: "venue.view",
   },
   strings: STAFFING_STRINGS,
@@ -23,7 +23,7 @@ export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen 
       id: "staffing",
       labelKey: "staffing.view.tab",
       order: 10,
-      requiresPermission: "staffing.manage",
+      requiresPermission: "schedule.manage",
       readPermission: "venue.view",
       create(ctx, host) {
         const api = new StaffingApi(ctx.request, ctx.liveData);

@@ -39,7 +39,7 @@ export function mountKeepOpenApi(
       if (body.until !== null && typeof body.until !== "string") throw invalid("until");
       const input = { until: body.until };
       const override = parseOverrideField(body.override);
-      const authz = { sessionId: session.sessionId, permission: "venue_service.manage" };
+      const authz = { sessionId: session.sessionId, permission: "venue.configure" };
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await overrideToCheck(deps.db, authz, override);
       await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>

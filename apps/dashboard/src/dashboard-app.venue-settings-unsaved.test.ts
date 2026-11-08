@@ -1016,7 +1016,7 @@ it("Venue details hosts the Defaults card, whose Save stays quiet until the draf
   await expect.poll(() => savedLanguage(panel)).toBe(receiptLanguageName("ca-ES"));
 });
 
-it.each([["venue.view"], ["layout.configure"], ["venue.configure"]])(
+it.each([["venue.view"], ["venue.configure"], ["booking.manage"]])(
   "the hosted Defaults card gate matches the server for %j",
   async (permission) => {
     const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {}, [

@@ -235,7 +235,7 @@ export class StaffingApi {
     return this.request(path(staffRoleId), "DELETE");
   }
 
-  /** The route is gated by `person.manage`, not by `staffing.manage`. */
+  /** The route is gated by `person.manage`, not by `schedule.manage`. */
   async listPeople(): Promise<StaffPerson[]> {
     const people = await this.request<StaffPerson[]>("/management-api/staff", "GET");
     return people.map(({ personId, displayName, status }) => ({ personId, displayName, status }));

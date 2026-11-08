@@ -446,7 +446,7 @@ export class DevicesScreen extends LitElement {
 
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
   /**
-   * Whether the session holds `payments.manage`. While false Edit draws no card reader and sends
+   * Whether the session holds `hardware.manage`. While false Edit draws no card reader and sends
    * none; turned back on, the reader shows from the next Edit. A reader read refused with
    * `authorization.not_permitted` also hides it, because the server may know of a change before
    * this flag does; any other failure of that read is shown at the bottom of Edit.
@@ -1270,7 +1270,6 @@ export class DevicesScreen extends LitElement {
     if (this.canManageReaders) void this.#loadReader(device, epoch);
   }
 
-  /** The reader is the payments module's, under its own permission: without it the field is gone. */
   async #loadReader(device: DeviceRow, epoch: number): Promise<void> {
     const profileId = device.deviceProfileId;
     try {
@@ -1656,7 +1655,7 @@ export class DevicesScreen extends LitElement {
     };
     const readerId = submittedReader === "" ? null : submittedReader;
     if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
-      // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
+      // Saved separately: the reader belongs to the payments module.
       try {
         await this.api.setDeviceReader(device.id, readerId);
         if (epoch !== this.#editEpoch) return;

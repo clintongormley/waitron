@@ -4,7 +4,6 @@ import { beforeEach, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
-import { registerModulePermissions } from "@waitron/identity";
 import { tenantReceipts } from "@waitron/db";
 import { mountManagementApi, type ManagementApiDeps } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -17,7 +16,6 @@ let venue: Venue;
 let id: string;
 const policy = { receiptPrintMode: "on_request", printTradingName: false } as const;
 beforeEach(async () => {
-  registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }]);
   venue = await setupVenue(suite.db);
   const [row] = await suite.db
     .select()
@@ -119,7 +117,7 @@ it.each(["/management-api/receipt", "/management-api/receipt-settings"])(
     expect(await suite.db.select().from(tenantReceipts)).toEqual(before);
   },
 );
-it("the mounted department receipt retains the layout permission gate", async () => {
+it("the mounted department receipt retains the venue permission gate", async () => {
   const response = await request("GET", path(), undefined, venue.staffCookie);
   expect(response.status).toBe(403);
   expect((await response.json()).error.code).toBe("authorization.not_permitted");

@@ -124,13 +124,12 @@ it("permits a 500-character description and validates the telephone before writi
     "a".repeat(500),
   );
 });
-it("keeps receipt policies read-only without service management permission", async () => {
+it("edits receipt policies with the same venue authority as receipt text", async () => {
   const { el, api } = await mountReceiptEditor();
-  el.canManagePolicy = false;
   await el.updateComplete;
   const toggle =
     receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=printTradingName]")!;
-  expect(toggle.disabled).toBe(true);
+  expect(toggle.disabled).toBe(false);
   toggle.dispatchEvent(
     new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
   );
@@ -139,7 +138,7 @@ it("keeps receipt policies read-only without service management permission", asy
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].policy).toEqual({
     receiptPrintMode: "auto",
-    printTradingName: true,
+    printTradingName: false,
   });
 });
 it("puts a server refusal beside its translated field and keeps the retry enabled", async () => {

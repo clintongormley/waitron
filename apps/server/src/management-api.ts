@@ -397,14 +397,14 @@ function parseStationPrinterIds(value: unknown): string[] | undefined {
   return value.map((id: string) => requireUuidParam(id, "PrinterId"));
 }
 
-/** A station's printers need `printer.manage` beside the `venue.configure` the route checks. */
+/** A station's printers need `hardware.manage` beside the `venue.configure` the route checks. */
 async function authorizeStationPrinters(
   tx: Transaction,
   sessionId: string,
   printerIds: readonly string[] | undefined,
 ): Promise<void> {
   if (printerIds === undefined) return;
-  await authorizeManager(tx, { managementSessionId: sessionId, permission: "printer.manage" });
+  await authorizeManager(tx, { managementSessionId: sessionId, permission: "hardware.manage" });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -675,7 +675,7 @@ async function withProfileAccess(
 
 /**
  * Refuses a listed or default printer that does not exist or is deleted, after the manager gate so
- * a session without `layout.configure` learns nothing about printer ids. Only the invoice list and
+ * a session without `venue.configure` learns nothing about printer ids. Only the invoice list and
  * default may name a page printer. The store's own writes authorize again.
  */
 async function requireListedPrinters(
@@ -701,7 +701,7 @@ async function requireListedPrinters(
     ]),
   ];
   if (ids.length === 0 && invoiceIds.length === 0) return;
-  await authorizeManager(tx, { managementSessionId: sessionId, permission: "layout.configure" });
+  await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.configure" });
   const all = [...new Set([...ids, ...invoiceIds])];
   const found = await tx
     .select({ id: printers.id })
@@ -1301,7 +1301,7 @@ export function mountManagementApi(
       const deviceProfiles = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "layout.configure",
+          permission: "venue.configure",
         });
         return withProfileAccess(tx, await listDeviceProfiles(tx));
       });
@@ -1315,7 +1315,7 @@ export function mountManagementApi(
       const profiles = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "layout.configure",
+          permission: "venue.configure",
         });
         return VENUE_SERVICE.readProfileKitchenScreens(tx);
       });
@@ -1330,7 +1330,7 @@ export function mountManagementApi(
       const profile = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "layout.configure",
+          permission: "venue.configure",
         });
         const row = await getDeviceProfileWithPrinters(tx, id);
         return row === undefined ? undefined : (await withProfileAccess(tx, [row]))[0];
@@ -1356,7 +1356,7 @@ export function mountManagementApi(
         if (sourceId !== undefined) {
           await authorizeManager(tx, {
             managementSessionId: sessionId,
-            permission: "layout.configure",
+            permission: "venue.configure",
           });
           if ((await getDeviceProfileWithPrinters(tx, sourceId)) === undefined)
             throw new AppError("device_profile.not_found", {});

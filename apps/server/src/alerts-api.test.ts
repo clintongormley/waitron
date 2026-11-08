@@ -46,7 +46,7 @@ import {
 } from "./alert-sources.js";
 import { createTtlCache } from "./ttl-cache.js";
 
-// No real role holds payments.manage without fiscal.view and diagnostics.view, so a test replaces
+// No real role holds hardware.manage without fiscal.view and system.manage, so a test replaces
 // one role's held set while the real alert claims stay in force.
 const roleOverride = vi.hoisted(() => new Map<string, string[]>());
 vi.mock("@waitron/identity", async (importOriginal) => {
@@ -259,7 +259,7 @@ describe("alert routes", () => {
     const registry = createAlertRegistry({
       claims: [
         { prefix: "fiscal.", area: "fiscal", permission: "node.promote" },
-        { prefix: "payment.", area: "payments", permission: "payments.manage" },
+        { prefix: "payment.", area: "payments", permission: "hardware.manage" },
       ],
       sources: [],
     });
@@ -276,8 +276,8 @@ describe("alert routes", () => {
     ).toBe(204);
   });
 
-  it("shows and lets handle only payment alerts to a session holding payments.manage alone", async () => {
-    roleOverride.set("supervisor", ["payments.manage"]);
+  it("shows and lets handle only payment alerts to a session holding hardware.manage alone", async () => {
+    roleOverride.set("supervisor", ["hardware.manage"]);
     const v = await seedVenueWithStaff();
     const payment = await raise(v, "payment.offline_forward_declined");
     const others = [
@@ -293,7 +293,7 @@ describe("alert routes", () => {
         .sort();
     expect(await codes("/management-api/alerts")).toEqual(["payment.offline_forward_declined"]);
 
-    const expected = ["fiscal.view", "fiscal.view", "fiscal.view", "diagnostics.view"];
+    const expected = ["fiscal.view", "fiscal.view", "fiscal.view", "system.manage"];
     for (const [i, id] of others.entries()) {
       const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.supervisor);
       expect(res.status).toBe(403);
@@ -474,7 +474,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
       code: "alert.not_found",
       params: { id },
     });
-    roleOverride.set("supervisor", ["payments.manage"]);
+    roleOverride.set("supervisor", ["hardware.manage"]);
     await expectError(await postBody(app, id, v.supervisor, long), 403, {
       code: "authorization.not_permitted",
       params: { permission: "system.manage" },
@@ -630,7 +630,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
       code: "management_session.required",
       params: {},
     });
-    roleOverride.set("supervisor", ["payments.manage"]);
+    roleOverride.set("supervisor", ["hardware.manage"]);
     await expectError(await postNote(app, id, v.supervisor, note("")), 403, {
       code: "authorization.not_permitted",
       params: { permission: "system.manage" },
@@ -939,16 +939,13 @@ describe("ongoing alert sources through the route", () => {
     expect(paths).toContain("/v0.1/merchants/MABC123/readers/rdr_low/status");
   });
 
-  it("filters ongoing sources by permission: a payments.manage-only session sees only card_reader alerts", async () => {
-    // Give the supervisor exactly the battery source's permission, then fire all four areas.
-    roleOverride.set("supervisor", ["payments.manage"]);
+  it("filters ongoing sources by permission: hardware.manage sees printing and card_reader alerts", async () => {
+    roleOverride.set("supervisor", ["hardware.manage"]);
     const v = await seedVenueWithStaff();
     await seedLowReader();
     await seedStuckPrintJob();
     const app = appFor(ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
 
-    // Control: a manager holds every source permission, so all four areas actually fire — the
-    // payments-only assertion below is filtering at work, not four empty sources.
     const managerAreas = (
       (await (await get(app, "/management-api/alerts", v.manager)).json()) as {
         alerts: { area: string }[];
@@ -956,20 +953,18 @@ describe("ongoing alert sources through the route", () => {
     ).alerts.map((a) => a.area);
     expect(new Set(managerAreas)).toEqual(new Set(["backup", "fiscal", "printing", "card_reader"]));
 
-    // The payments.manage session reads only the source whose permission it holds; the fiscal, backup
-    // and printing ongoing alerts — each on a permission it lacks — never reach it.
     const body = (await (await get(app, "/management-api/alerts", v.supervisor)).json()) as {
       alerts: { code: string; area: string }[];
     };
-    expect(body.alerts.map((a) => a.area)).toEqual(["card_reader"]);
-    expect(body.alerts.map((a) => a.code)).toEqual(["reader.battery_low"]);
+    expect(body.alerts.map((a) => a.area)).toEqual(["printing", "card_reader"]);
+    expect(body.alerts.map((a) => a.code)).toEqual(["printer.jobs_waiting", "reader.battery_low"]);
   });
 
   it("isolates a throwing ongoing source: its area yields exactly one alert.source_unavailable and the others survive", async () => {
     const v = await seedVenueWithStaff();
     const working: AlertSource = {
       area: "printing",
-      permission: "printer.manage",
+      permission: "hardware.manage",
       read: async () => [
         {
           key: "agent.silent:a1",
@@ -982,7 +977,7 @@ describe("ongoing alert sources through the route", () => {
     };
     const failing: AlertSource = {
       area: "card_reader",
-      permission: "payments.manage",
+      permission: "hardware.manage",
       read: async () => {
         throw new Error("stub battery probe failed");
       },
@@ -1011,7 +1006,7 @@ describe("ongoing alert sources through the route", () => {
     const v = await seedVenueWithStaff();
     const failing = (readOutsideTransaction: boolean): AlertSource => ({
       area: "card_reader",
-      permission: "payments.manage",
+      permission: "hardware.manage",
       readOutsideTransaction,
       read: async () => {
         throw new Error("provider unavailable");

@@ -46,7 +46,7 @@ import type { Logger } from "./logger.js";
 import "./errors.js";
 
 /**
- * The card-provider and card-reader management routes: the `payments.manage` gate, credential
+ * The card-provider and card-reader management routes: the `hardware.manage` gate, credential
  * sealing, and reader add/adopt/enable/unpair against fake provider seats.
  */
 const noopLog: Logger = () => {};
@@ -2245,7 +2245,7 @@ describe("reader delete", () => {
     return paired;
   }
 
-  it("refuses a caller without payments.manage, a malformed id, an unknown id and the demo reader, changing nothing", async () => {
+  it("refuses a caller without hardware.manage, a malformed id, an unknown id and the demo reader, changing nothing", async () => {
     const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);

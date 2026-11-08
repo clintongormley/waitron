@@ -2270,7 +2270,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     const takeBillPayment = vi.fn().mockRejectedValue({
       code: "authorization.not_permitted",
       status: 403,
-      permission: "sale.take_payment",
+      permission: "payment.take",
     });
     const { el } = await mountApp({ takeBillPayment });
     await openTable(el);
