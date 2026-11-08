@@ -75,6 +75,7 @@ import {
   softwareVersion,
 } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
+import { refuseProducerChange } from "./producer-change.js";
 
 /** `FiscalRecordRef.backend`/`NodeRegistration.backend` — the regime-neutral interface's own
  * "which module produced this" tag. */
@@ -723,6 +724,10 @@ export class VerifactuBackend implements FiscalBackend {
   /** Delegates to `verifyChain` (art. 7.i), on the node whose chain the caller is about to extend. */
   async checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport> {
     return verifyChain(tx, nodeId);
+  }
+
+  checkFilingIdentity(tx: Transaction, nodeId: NodeId): Promise<void> {
+    return refuseProducerChange(tx, nodeId, this.identity, this.deploymentEnvironment);
   }
 
   /**

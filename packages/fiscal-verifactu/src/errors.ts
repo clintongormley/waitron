@@ -80,6 +80,9 @@ declare module "@waitron/shared" {
       setting: "WAITRON_PRODUCER_NAME" | "WAITRON_PRODUCER_TAX_ID";
       reason: "too_long" | "wrong_length" | "check_failed" | "rejected";
     };
+    /** A production node's open chain was filed under another producer's tax number
+     * (./producer-change.ts). */
+    "sif.producer_changed": Record<string, never>;
 
     /**
      * Thrown by `appendToChain` (./chain.ts) once `MAX_APPEND_ATTEMPTS` attempts have each lost a
