@@ -1309,19 +1309,30 @@ built from its [plan](../superpowers/plans/2026-10-22-a940-1-software-identity.m
 build's version (`0.0.0-dev`, plus the build's commit on a published build) instead of `0.0.0`,
 and `TipoUsoPosibleMultiOT = N`. The producer is a marked placeholder until the owner supplies
 his name and NIF: meanwhile records still carry the taxpayer's name and NIF there, and a
-published build set to production refuses to trade (`sif.producer_unset`). Two test checks
+published build set to production refuses to trade (`sif.producer_unset`; 2026-11-08: Task 8
+replaces this — see below). Two test checks
 changed with it: the Spanish practice sales were re-recorded (only their software block moved),
 and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-identity.test.ts`
-changed (the owner accepted it on 2026-10-23). Still open: [Task 8](../superpowers/plans/2026-10-22-a940-1-software-identity.md),
-rewritten on 2026-11-06 for the owner's answers of 4 and 6 November and not built. The name, tax
-number and postal address are public; they are three settings named for the software's producer
+changed (the owner accepted it on 2026-10-23). [Task 8](../superpowers/plans/2026-10-22-a940-1-software-identity.md),
+rewritten on 2026-11-06 for the owner's answers of 4 and 6 November, was built on 2026-11-08 on
+branch `feat/a940-task8-producer-settings` and is parked for the owner. The name, tax number and
+postal address are public; they are three settings named for the software's producer
 (`WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID`, `WAITRON_PRODUCER_ADDRESS`), carried by each
 official image from repository secrets of the same names and never committed, so a fork builds with
-its own. A production start with none refuses whether or not the build is stamped, and a production
-start whose open chain was made under another tax number refuses (`sif.producer_changed`) until A993
-can open the new installation, so a change of producer is blocked in production until A993 lands
-and the tax number is not changed before then. The owner or the watcher sets the three secrets
-before Task 8 lands.
+its own. A production start with none refuses (`sif.producer_unset`) whether or not the build is
+published; a partly set or malformed value refuses in every environment; and a production start
+whose open chain was made under another tax number refuses (`sif.producer_changed`) until A993 can
+open the new installation, so a change of producer is blocked in production until A993 lands.
+Before Task 8 lands, the owner or the watcher sets the three secrets:
+`gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`
+(after landing, every full run's publish job fails while they are missing). After that, the tax
+number must not change until A993 lands: the publish job runs on every full run (the nightly, a
+manual run on `main`, a `v*` tag), so a changed name or address reaches boxes as they update, but a
+changed tax number fails the publish unless the repository variable
+`WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Watch the first nightly or manual publish after landing:
+the job now builds with `load: true`, checks the three values inside the image, then pushes from
+the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
+plan's 8g Step 5) waits for the secrets.
 Then slices 1b to 6, and A993's plan. Still needed from outside: the asesor's answer to Q53. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 
@@ -1354,9 +1365,13 @@ picture 6). A947's slice 4a landed as #1990 and A940's slice 1 as #2000; its pla
 after slice 1's, and it lands before the first production venue goes live. A move between fiscal modules stays a refused start
 until the first non-Veri\*Factu mode. Since 2026-11-06 the producer is a setting each image
 carries (A940 Task 8), so a start that opened a new installation on any producer difference would
-let a hand override do it with nobody present; Task 8 refuses instead, and A993's plan has to
-decide whether a start may ever make a producer change itself (recommended: only when the upgrade's
-own marker names that producer; an owner question).
+let a hand override do it with nobody present; Task 8 refuses instead. **Constraint on A993's
+plan, decided by the owner on 2026-11-06** (about 18:13, relayed by the watcher; recorded in the
+A940 plan's "What A993 inherits" and design §5.6): (1) a change of producer stays blocked in
+production until A993 exists; (2) once it exists, a start opens a new installation for a producer
+difference only when the upgrade's own marker names that same new producer; otherwise it keeps
+refusing. What a preproduction box does before A993 (it trades on, the new producer on the same
+chain) is settled as built: the owner does not mind, since such a box can be reset.
 [Design](../superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
 
 ## Can a simplified invoice carry an operation date different from its issue date?

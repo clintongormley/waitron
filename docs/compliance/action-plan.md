@@ -209,6 +209,12 @@ We offered reciprocity in the message. Send it.
 > public; each official image carries them from repository secrets and they are never committed.
 > Building that is Task 8 of the plan, rewritten the same day; until it lands, records still name the
 > taxpayer there.
+>
+> **2026-11-08:** Task 8 is built and parked for the owner. Once it lands, the records name the
+> producer from the image's three settings, and a production start with none of them refuses
+> whether or not the build is published, replacing the 2026-10-23 note's "a published production
+> build will not trade". Before it lands the three repository secrets must be set, and the tax
+> number must not change until A993 lands.
 
 Needed before anyone else uses the software; already overdue in principle, since the producer
 deadline passed on 29 July 2025.

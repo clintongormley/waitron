@@ -366,8 +366,8 @@ disk is full.
 
 ### Trying a branch before it merges
 
-CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to
-GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
+CI does not publish an image for a pull request (only the nightly run, a manual run on `main` and
+`v*` tags publish to GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
 instead of relying on the default `main`, and it builds that ref's image on the box instead of
 pulling. The script resolves the ref once through GitHub's commit API, then builds both Waitron
 images from that full commit. No checkout or `pnpm` is needed; a failed resolution stops the builds.
