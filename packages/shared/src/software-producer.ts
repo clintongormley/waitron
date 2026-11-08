@@ -1,3 +1,4 @@
+import { isUnset } from "./env-value.js";
 import { AppError, type ErrorParams } from "./errors.js";
 
 export interface SoftwareProducer {
@@ -38,10 +39,6 @@ function checked(setting: Setting, raw: string): string {
   if (/[\r\n]/.test(raw)) refuse(setting, "line_break");
   if ([...value].length > MAX_LENGTH) refuse(setting, "too_long");
   return value;
-}
-
-function isUnset(raw: string | undefined): raw is undefined | "" {
-  return raw === undefined || raw === "";
 }
 
 function refuse(
