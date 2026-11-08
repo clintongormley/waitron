@@ -449,6 +449,7 @@ import type {
   ReadOptions,
   KitchenScreenKind,
   ResolvedKitchenScreen,
+  SessionPerson,
 } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -2406,6 +2407,7 @@ export class TillApp extends LitElement {
     diag.record("info", "server-switch", { from, to });
     this.operatorPersonId = "";
     this.#sessionPersonId = "";
+    this.#tabPerson = null;
     this.operatorName = "";
     this.#loginPending = false;
     this.permissions = [];
@@ -3168,6 +3170,10 @@ export class TillApp extends LitElement {
   /** The person the server session now belongs to, and so the person any draft save goes in as. It
    * moves at the start of a sign-in; {@link operatorPersonId} moves only once that sign-in loads. */
   #sessionPersonId = "";
+  /** The person every request names, one object per sign-in: a refusal hands back the object its
+   * request was sent with, so one for an earlier sign-in, even the same person's, is told apart. A
+   * sign-out keeps it, so the sign-out itself names who is leaving. */
+  #tabPerson: SessionPerson | null = null;
   @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
   @state() private deviceSettingsOpen = false;
   @state() private deviceZonesOpen = false;
@@ -4497,6 +4503,13 @@ export class TillApp extends LitElement {
     this.#syncEditDeadEnds();
     if (changed.has("api")) {
       this.api.onMadeHere?.(this.#onMadeHere);
+      const api = this.api;
+      api.namePersonFrom?.(
+        () => this.#tabPerson,
+        (person) => {
+          if (api === this.api) this.#onPersonRefused(person);
+        },
+      );
       this.#stopFloorPoll();
       this.#endSplitRefusalReads();
     }
@@ -5439,7 +5452,13 @@ export class TillApp extends LitElement {
     const { locale, ...signedIn } = (event as CustomEvent<LoggedInDetail>).detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
     this.#preLoginChoice = undefined;
+    this.#tabPerson = { personId: signedIn.personId };
     await this.#enterSignedIn(signedIn);
+  }
+
+  /** The device's session belongs to someone else now, so this person has none to end. */
+  #onPersonRefused(person: SessionPerson): void {
+    if (person === this.#tabPerson && this.operatorName !== "") void this.#onLogout(false);
   }
 
   /** `switched`: a profile switch, which leaves the screen the old profile was on. */
@@ -12066,11 +12085,8 @@ export class TillApp extends LitElement {
   }
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
-    if (refusal.refused === SESSION_PERSON_REFUSAL) {
-      // The device's session belongs to someone else now, so this person has none to end.
-      if (this.operatorName !== "") void this.#onLogout(false);
-      return;
-    }
+    // The client's refusal listener has already locked the till for this one.
+    if (refusal.refused === SESSION_PERSON_REFUSAL) return;
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
     if (this.#billLeft(sync, refusal)) {
       void this.#followLeftBill(sync, refusal);
@@ -13277,23 +13293,13 @@ export class TillApp extends LitElement {
     }
     const composition = this.#billComposition([billId]);
     if (composition === null) return;
-    const signIns = this.#signIns;
     const live = () =>
       this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
-    await this.#onGroupRequest(async (party, command) => {
-      try {
-        return await composition.api.splitHeldLineIntoUnits(party.id, lineId, {
-          ...command,
-          expectedEdit,
-        });
-      } catch (error) {
-        const refusal = asRefusal(error);
-        // A later sign-in, even the same person's, is not what the server refused.
-        if (refusal?.refused === SESSION_PERSON_REFUSAL && signIns === this.#signIns)
-          this.#onDraftRefused(composition.sync!, refusal);
-        throw error;
-      }
-    }, live);
+    await this.#onGroupRequest(
+      (party, command) =>
+        composition.api.splitHeldLineIntoUnits(party.id, lineId, { ...command, expectedEdit }),
+      live,
+    );
   }
 
   async #onSplitDraftSource(event: Event): Promise<void> {

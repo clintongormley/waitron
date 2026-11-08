@@ -8,6 +8,7 @@ import {
   floorPartyBills,
   draftServer,
   mountWidget,
+  notingPersonRefusals,
   type DraftServer,
 } from "../src/widgets/test-helpers.js";
 import { TillApp } from "../src/till-app.js";
@@ -197,10 +198,12 @@ export function till(formFactor: FormFactor) {
 export let server: DraftServer;
 export let api: Record<string, ReturnType<typeof vi.fn>>;
 
-export function stubApi(overrides: Record<string, unknown> = {}) {
+export function stubApi(
+  overrides: Record<string, unknown> = {},
+): Record<string, ReturnType<typeof vi.fn>> {
   server.bills.add("wo-7");
   server.bills.add("wo-new");
-  return {
+  return notingPersonRefusals({
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
@@ -282,7 +285,7 @@ export function stubApi(overrides: Record<string, unknown> = {}) {
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireHeldLine: vi.fn().mockResolvedValue({ revision: 4 }),
     ...overrides,
-  } as Record<string, ReturnType<typeof vi.fn>>;
+  } as Record<string, ReturnType<typeof vi.fn>>);
 }
 
 export async function mountApp(

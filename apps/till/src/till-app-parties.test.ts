@@ -22,6 +22,7 @@ import {
   expectNoA11yViolations,
   draftServer,
   mountWidget,
+  notingPersonRefusals,
   servedMenus,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -258,7 +259,7 @@ const offers: ZoneOfferCatalogue = {
 
 let api: TillApi;
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
-  return {
+  return notingPersonRefusals({
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
@@ -344,7 +345,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     saveDraft: drafts.saveDraft,
     submitDraft: drafts.submitDraft,
     ...overrides,
-  } as unknown as TillApi;
+  } as unknown as TillApi);
 }
 
 /** The server's side of the party's drafts, fresh for each test. */

@@ -3,6 +3,7 @@ import { commands, page } from "vitest/browser";
 import { beforeEach, expect, vi, type Mock } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { normaliseDraftLines, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { SESSION_PERSON_REFUSAL } from "../api/client.js";
 import type {
   AdjustmentReason,
   Draft,
@@ -17,6 +18,7 @@ import type {
   TableState,
   GroupLine,
   GroupRelease,
+  SessionPerson,
   SubmittedDraft,
   SubmittedGroups,
 } from "../api/client.js";
@@ -876,5 +878,47 @@ export function floorPartyBills(
         ids.length === 1 && party ? { outstanding: party.outstanding } : {},
       ),
     );
+  });
+}
+
+/**
+ * A method-level API stub given what `TillApi` does at its fetch: a call made while
+ * `namePersonFrom`'s source gives a person, refused with the person code, hands that person to the
+ * refusal listener before the caller sees the refusal. As in the client, a call naming nobody returns
+ * the stub's own answer, with no extra step.
+ */
+export function notingPersonRefusals<T extends object>(api: T): T {
+  let source: () => SessionPerson | null = () => null;
+  let onRefused: (person: SessionPerson) => void = () => {};
+  const namePersonFrom = (
+    personSource: () => SessionPerson | null,
+    listener: (person: SessionPerson) => void,
+  ): void => {
+    source = personSource;
+    onRefused = listener;
+  };
+  // An own property, so a copy spread from this stub registers with the same listener.
+  Object.assign(api, { namePersonFrom });
+  const wrapped = new WeakMap<object, unknown>();
+  const wrap = (method: (...args: unknown[]) => unknown) =>
+    new Proxy(method, {
+      apply(target, thisArg, args) {
+        const person = source();
+        const answer: unknown = Reflect.apply(target, thisArg, args);
+        if (person === null || !(answer instanceof Promise)) return answer;
+        return answer.catch((error: unknown) => {
+          if ((error as { code?: unknown } | null)?.code === SESSION_PERSON_REFUSAL)
+            onRefused(person);
+          throw error;
+        });
+      },
+    });
+  return new Proxy(api, {
+    get(target, key, receiver) {
+      const value: unknown = Reflect.get(target, key, receiver);
+      if (typeof value !== "function" || key === "namePersonFrom") return value;
+      if (!wrapped.has(value)) wrapped.set(value, wrap(value as (...args: unknown[]) => unknown));
+      return wrapped.get(value);
+    },
   });
 }

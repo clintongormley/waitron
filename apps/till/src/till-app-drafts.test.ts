@@ -18,6 +18,7 @@ import {
   draftServer,
   floorPartyBills,
   mountWidget,
+  notingPersonRefusals,
   partyBillOf,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -226,7 +227,7 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
 function stubApi(overrides: Record<string, unknown> = {}) {
   server.bills.add("wo-7");
   server.bills.add("wo-new");
-  return {
+  return notingPersonRefusals({
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
@@ -293,7 +294,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     takeOverDraft: server.takeOverDraft,
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as Record<string, ReturnType<typeof vi.fn>>;
+  } as Record<string, ReturnType<typeof vi.fn>>);
 }
 
 /** A bills read in which a new bill, `wo-check`, joins the party once dishes have been sent to a new
@@ -3239,7 +3240,7 @@ describe("till-app: signing out while a save is out", () => {
     expect(api.logout).toHaveBeenCalledOnce();
   });
 
-  it("names the person signing out, with the next person's sign-in under way, once the save answers", async () => {
+  it("sends the sign-out only once the save answers, with the next person's sign-in under way", async () => {
     let answer!: () => void;
     const { el } = await mountApp({
       listStaff: vi.fn().mockResolvedValue([
@@ -3276,7 +3277,7 @@ describe("till-app: signing out while a save is out", () => {
     expect(api.logout).toHaveBeenCalledWith();
   });
 
-  it("names whoever signed in last, on a tab with no sign-out between them", async () => {
+  it("sends one sign-out for whoever signed in last, on a tab with no sign-out between them", async () => {
     const { el } = await mountApp();
     await openTable(el);
     emit(shell(el), "device-unauthorized");
