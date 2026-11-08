@@ -1130,12 +1130,24 @@ jobs:
       # tests, the S3 rehearsal scenarios, the send gate's and the rehearsal interrupt's versitygw
       # suites, the suite of the S3 test server they start, the full-disk start tests and the backup-room,
       # handover and restore real-disk cases run in test-server-stream instead; `--exclude` adds to the config's own excludes.
+      - name: Restore experimental server module cache
+        id: a1446-cache
+        if: needs.changes.outputs.full != 'true' && github.head_ref == 'perf/a1446-server-module-cache'
+        uses: actions/cache/restore@v6
+        timeout-minutes: 1
+        with:
+          path: node_modules/.experimental-vitest-cache
+          key: exp-a1446-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.workspace }}-${{ matrix.shard }}-${{ hashFiles('pnpm-lock.yaml', '.nvmrc', 'apps/server/vitest.config.ts', '**/tsconfig*.json') }}
+
       - name: Run the server shard
+        env:
+          DEBUG: vitest:cache:fs
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
           pnpm --filter "@waitron/server" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
+            --experimental.fsModuleCache=${{ needs.changes.outputs.full != 'true' }} \
             --shard=${{ matrix.shard }}/24 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
@@ -1152,6 +1164,27 @@ jobs:
             --exclude src/restore-full-disk.e2e.test.ts \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+
+      - name: Measure experimental server module cache
+        id: a1446-size
+        if: needs.changes.outputs.full != 'true' && github.head_ref == 'perf/a1446-server-module-cache'
+        run: |
+          set -euo pipefail
+          bytes=$(du -sb node_modules/.experimental-vitest-cache | cut -f1)
+          tar -czf "$RUNNER_TEMP/a1446-cache.tgz" -C node_modules .experimental-vitest-cache
+          compressed=$(wc -c < "$RUNNER_TEMP/a1446-cache.tgz")
+          echo "A1446 cache bytes=$bytes gzip_bytes=$compressed workspace=$GITHUB_WORKSPACE node=$(node --version)"
+          if [ "$bytes" -le 104857600 ]; then
+            echo "save=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save experimental server module cache
+        if: steps.a1446-size.outputs.save == 'true' && steps.a1446-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        timeout-minutes: 1
+        with:
+          path: node_modules/.experimental-vitest-cache
+          key: exp-a1446-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.workspace }}-${{ matrix.shard }}-${{ hashFiles('pnpm-lock.yaml', '.nvmrc', 'apps/server/vitest.config.ts', '**/tsconfig*.json') }}
 
       # `if-no-files-found: error` guards a shard that silently ran nothing: no blob → the upload fails
       # the shard, rather than a green that tested nothing (see test-heavy's upload step).
