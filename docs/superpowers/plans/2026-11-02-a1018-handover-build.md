@@ -2917,7 +2917,7 @@ boxes in one process, not physical qualification.
   table is on M2; M2's sweep, not M1's, resolves the card payment; a till router pointed at both
   moves to M2; **M1 is then switched off and M2 restarted: M2 starts selling, without waiting**
   (it does not count M1 as a peer, Task 3.4); and the install record M2 cannot find, which the
-  test records as `it.fails` (Slice 5's Ruling R51: wider than the certificate card, see
+  test recorded as `it.fails` until A1425 fixed it on 2026-11-08 (Slice 5's Ruling R51: wider than the certificate card, see
   "Slice 5 as built").
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control, corrected after the 5.10b review: with the restricted start's early return left out alone, M1's start check also waits (an open source operation gives `wait`), so the "no new filing" case still passes (3 failed, 7 passed, M2's cases only, on the 10-case half). The control that fails it removes the early return and also makes the start check answer proceed: 6 failed, with "no new filing" at `expected [3 entries] to deeply equal [2]`.
 - [ ] **Step 3: Commit** `git commit -s -m "server: a controlled handover between two simulated boxes, end to end"`.

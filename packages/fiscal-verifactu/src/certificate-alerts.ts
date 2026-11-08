@@ -9,7 +9,7 @@ const SCREEN = "venue-settings";
 
 type CertificateAlert = OngoingAlert & { severity: "warning" | "error" };
 
-/** The expiry alerts for the certificate this node installed last. Only dates and a day count
+/** The expiry alerts for the certificate `latestInstall` finds. Only dates and a day count
  * leave here: nothing that names the certificate's holder or serial. */
 export async function certificateAlerts(
   tx: Transaction,

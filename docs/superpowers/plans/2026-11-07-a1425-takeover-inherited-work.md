@@ -50,7 +50,7 @@ chart names as the serving primary appends to a chain.
    replaced" already names one row: `registros_identidad_uq` (`packages/fiscal-verifactu/src/schema/registros.ts:123-125`).
    **As built (2026-11-08):** one exception. An original that is held (`detenido`) holds back its
    cancellation only when both are on the same chain: the outbox keeps `original.sif_id = r.sif_id`
-   (and its `prior_original` twin) on the `detenido` branch only (`packages/fiscal-verifactu/src/drain.ts:670, 691`),
+   (and its `prior_original` twin) on the `detenido` branch only (`originalSettled` in `packages/fiscal-verifactu/src/drain.ts`),
    and `heldRecords` keeps its original-to-case map per chain (`packages/fiscal-verifactu/src/filing-cases.ts:274-285`),
    not across chains as Task 5c below says.
 4. **The append guard reads the held chart, not clocks.** `handover_activations.activated_at` comes
@@ -63,7 +63,9 @@ chart names as the serving primary appends to a chain.
    `refuseNewIssuance`, so a sale or bill payment is refused before money moves; refunds call a new
    `refuseNewRefund`, which checks only for an active conflict, so a box the chart no longer names
    main still gives refunds. `fiscal.chain_handed_over` answers 409 on the till, payments and remedy
-   routes. A controller ruling, not an owner decision.
+   routes. The owner confirmed the refusal before money moves on 2026-11-08 (`docs/backlog/fiscal.md`,
+   Decisions and deliberate limits); the refund split, the 409 answers and the wording are controller
+   rulings.
 5. **The recorded daily close is left alone**; A1325 replaces it. Nothing outside
    `packages/reporting` calls `recordDailyClose` (plan review, grep). The daily-close REPORT reads the
    list like every other report. This replaces the spec's "if part 1 lands before A1325" call; Task 9

@@ -88,6 +88,10 @@ never remembered the sale being cancelled. That fix belongs in the build.
 `readTakenOverFrom` already walks every box this one took over from, and every box those took over
 from. Today only card payments read it. This design makes it the one answer to "whose history is
 mine?", and records a restore into it the same way a handover activation does.
+**2026-11-08, as built for part 1:** the walk is `readHistoryNodes` in `@waitron/db` (this box and the
+boxes it took over from), which reports, reconciliation and the certificate read. Card payments still
+call `readTakenOverFrom`, the same list without this box, and the backup check has its own copy of the
+walk.
 
 Each reader that today filters by "this box" is judged on its own, into one of three kinds:
 
@@ -121,6 +125,9 @@ the plan. A reader that genuinely needs a fourth answer comes back to the owner.
 - **A handed-over or replaced box's chain takes nothing more.** `refuseNewIssuance` refuses any box in
   the taken-over-from list, wherever the request comes from. Today it did not refuse M1 after M1
   relinquished (§1).
+  **2026-11-08, as built for part 1:** a box in that list may have taken back, so the check reads the
+  held membership chart instead and refuses a box the chart does not name `serving-primary` (plan
+  decision 4, `docs/superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md`).
 - **Old records are still sent and reconciled.** Sending is already venue-wide (`drain.ts:151, 474`),
   and records waiting under the old identity are filed under it, as the handover test already shows.
   Reconciliation reads the list (§2, kind 2).
@@ -220,7 +227,7 @@ built: no backlog entry needs a staff route that cancels a sale before go-live.
 ## 9. Left to the builder
 
 - How a restore is written into the taken-over-from list: a handover activation row or a row of its
-  own, as long as `readTakenOverFrom` reads both.
+  own, as long as `readTakenOverFrom` and `readHistoryNodes` (§2) read both.
 - Order numbers continue from the highest number any box in the list gave out (my call; one counter
   for the venue is also fine). Either way, no number repeats. Numbers the dead box gave out after the
   backup are lost with the rest of that tail, as a restore already accepts.

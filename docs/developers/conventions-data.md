@@ -1475,8 +1475,8 @@ takes part in (`node_handover_operations`), what it decided and received during 
 (`node_handover_events`), and why it no longer acts as the main box (`node_handover_restriction`) — so a spare holding a copy of the main box's `venue.db`
 still knows who it is (A947 slice 3a). `node.db` is never streamed (`packages/stream/src/litestream.ts`
 names only `venue.db`); a backup file carries it whole as `node.dump`, and the bucket's sealed state
-carries a `node.dump` entry. Every other `local` table stays in `venue.db`. A `local` row means
-nothing to another node, so no venue row may depend on one, and a key in either direction would
+carries a `node.dump` entry. Every other `local` table stays in `venue.db`. No venue row may depend
+on a `local` row, and a key in either direction would
 block moving a `local` table into `node.db`. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker
 than its name: it sides tables by class, not by file, so a key from a `node.db` table into one of
 `venue.db`'s `local` tables passes it; SQLite refuses the write instead (`no such table`), because

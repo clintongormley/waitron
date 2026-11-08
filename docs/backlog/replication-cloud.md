@@ -512,14 +512,22 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 A1342. The owner chose on 2026-11-05: settle it before A947 3b lands, and a box that sees another
 main box stops selling. Left open by A1018 Slice 5 (Ruling R42). `apps/server/src/node-membership-api.ts` and
 `apps/server/src/boot-peer-check.ts` stop a box only when the chart fences it (`isFencedStanding`),
-and a third box's promotion leaves a box `serving-secondary`, which does not fence. Since A1425 the
-Veri\*Factu backend's `refuseNewIssuance` and `appendToChain` refuse a box the held chart does not
-name `serving-primary` (`fiscal.chain_handed_over`), so such a box writes no new record and refuses
-sales and bill payments before money moves; refunds call `refuseNewRefund`, which does not read the
-chart, so they still go through. The filing loop (`packages/fiscal-verifactu/src/drain.ts`) does not
-read the chart, so it still sends the records it wrote before. Until then the till does not leave such a box: it still answers that it accepts sales, at the same term as the main box, and the till's server router stays where it is on a tie, so the till's 'Wait for the till to move to the main server' does not come true there. Run through real
+and a third box's promotion leaves a box `serving-secondary`, which does not fence. Run through real
 starts on the Slice 5 branch; on main since #2436. It needs a third box promoted over a running main
 box, so no real venue reaches it before 3b.
+
+Since A1425 the Veri\*Factu backend's `refuseNewIssuance` and `appendToChain` refuse a box the held
+chart does not name `serving-primary` (`fiscal.chain_handed_over`), so such a box writes no new record
+and refuses sales and bill payments before money moves; refunds call `refuseNewRefund`, which does not
+read the chart, so they still go through. The filing loop (`packages/fiscal-verifactu/src/drain.ts`)
+does not read the chart, so it still sends the records it wrote before.
+
+Such a box also keeps its tills, because it still answers that it accepts sales, at the same term as
+the main box, and the till's server router stays where it is on a tie. So the till's 'Wait for the
+till to move to the main server' does not come true there until this entry is done. In #2570's review
+on 2026-11-08 the real `/api/node` handler and `ServerRouter`, given those answers, stayed on the old
+box for ten polling rounds, and moved to the main box when the old box answered `acceptingSales:
+false`. A real three-box start has not been run for this.
 
 The same class, from the 5.8b review: a chart naming a third box main with M2 `serving-secondary`,
 saved after the role, then a kill: the real start answers `acceptingSales: true`, with M2 `activated`
