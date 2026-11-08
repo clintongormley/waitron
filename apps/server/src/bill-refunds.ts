@@ -20,7 +20,13 @@ import {
   recordRefund,
   recordedRefundRefs,
 } from "@waitron/payments";
-import type { PaymentProvider, RefundAnswer, RefundLookup, RefundOutcome } from "@waitron/payments";
+import type {
+  PaymentProvider,
+  RefundAnswer,
+  RefundLookup,
+  RefundOutcome,
+  RefundRefusalReason,
+} from "@waitron/payments";
 import {
   AppError,
   centsToDecimal,
@@ -340,6 +346,7 @@ async function sendCardRefund(
   provider: PaymentProvider,
   refundId: string,
   raisedBy: AlertOrigin,
+  refused?: (reason: RefundRefusalReason) => void,
 ): Promise<RefundRow> {
   // The row is pending: this process claimed it, and every writer of its outcome claims it too.
   const before = await withTransaction(deps.db, async (tx) => {
@@ -384,7 +391,18 @@ async function sendCardRefund(
   }
   if (answer.kind !== "accepted") {
     const evidence: RefundEvidence = { kind: "answer", answer, sendCount: refund.sendCount };
-    return recordRefundOutcome(deps, refundId, evidence, raisedBy);
+    const recorded = await recordRefundOutcome(deps, refundId, evidence, raisedBy);
+    if (
+      refund.state === "pending" &&
+      refund.sendCount === 1 &&
+      recorded.state === "failed" &&
+      answer.kind === "refused" &&
+      answer.documented &&
+      answer.reason === "provider_balance_unavailable"
+    ) {
+      refused?.(answer.reason);
+    }
+    return recorded;
   }
   const lookup = await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt!);
   if (lookup === "stopped") return refund;
@@ -468,6 +486,7 @@ export async function resumeCardRefund(
   refundId: string,
   resolver: RefundResolver,
   raisedBy: AlertOrigin,
+  refused?: (reason: RefundRefusalReason) => void,
 ): Promise<ResumedRefund> {
   const live = liveRefundsOf(deps.db);
   const target = await withTransaction(deps.db, async (tx) => {
@@ -489,7 +508,7 @@ export async function resumeCardRefund(
       const sent =
         provider?.sendRefund === undefined
           ? refund
-          : await sendCardRefund(deps, provider, refundId, raisedBy);
+          : await sendCardRefund(deps, provider, refundId, raisedBy, refused);
       return { claimed: true, refund: sent, lookup: null, resent: false };
     }
     const lookup =
@@ -508,7 +527,7 @@ export async function resumeCardRefund(
       age >= 0 &&
       age < window
     ) {
-      const resent = await sendCardRefund(deps, provider, refundId, raisedBy);
+      const resent = await sendCardRefund(deps, provider, refundId, raisedBy, refused);
       return { claimed: true, refund: resent, lookup, resent: true };
     }
     const settled = await recordRefundOutcome(deps, refundId, { kind: "lookup", lookup }, raisedBy);
@@ -789,10 +808,14 @@ export async function refundBillPayment(
       });
     });
     if (begun.kind === "done") return begun.result;
+    let refusalReason: RefundRefusalReason | undefined;
+    const refused = (reason: RefundRefusalReason) => {
+      refusalReason = reason;
+    };
     if (begun.kind === "send") {
-      await sendCardRefund(deps, begun.provider, begun.refundId, cfg.origin);
+      await sendCardRefund(deps, begun.provider, begun.refundId, cfg.origin, refused);
     } else {
-      await resumeCardRefund(deps, begun.refundId, "retry", cfg.origin);
+      await resumeCardRefund(deps, begun.refundId, "retry", cfg.origin, refused);
     }
     const refundId = begun.refundId;
     return await withTransaction(deps.db, async (tx) => {
@@ -800,7 +823,11 @@ export async function refundBillPayment(
         .select()
         .from(billPaymentRefunds)
         .where(eq(billPaymentRefunds.id, refundId));
-      return resultOf(tx, refund!, workingOrderId);
+      const result = await resultOf(tx, refund!, workingOrderId);
+      if (result.refund.state === "failed" && refusalReason !== undefined) {
+        result.refund.refusalReason = refusalReason;
+      }
+      return result;
     });
   } finally {
     release();

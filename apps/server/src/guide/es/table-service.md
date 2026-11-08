@@ -78,6 +78,9 @@ pago, se abre su ventana de devolución con el importe que sobra seleccionado. S
 devolver varios pagos, elige cuál quieres devolver. Si no se pueden consultar los pagos, la
 ventana explica el problema; ciérrala y vuelve a abrirla antes de elegir un pago.
 
+Si el proveedor de pagos aún no puede hacer la devolución, este intento no ha devuelto dinero.
+Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
+
 El justificante de devolución usa por defecto el idioma de ticket de la venta original, aunque tu pantalla use otro idioma.
 
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
@@ -154,6 +157,9 @@ resto, elige otra vez **Devolver un pago** y escoge un pago. Esa ventana no vien
 importe y el motivo. Si no puedes hacer devoluciones, pide el PIN, y las entradas de esos platos en
 el informe no muestran esa parte. Si ese pago no se puede devolver en este dispositivo, la ventana te indica que lo
 devuelvas en una caja.
+
+Si el proveedor de pagos aún no puede hacer la devolución, este intento no ha devuelto dinero.
+Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
 
 ## Devolver una tarjeta en un datáfono aparte {#separate-terminal}
 

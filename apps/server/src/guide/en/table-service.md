@@ -74,6 +74,9 @@ can be refunded, its refund window opens with the excess amount selected. If sev
 can be refunded, choose which one to refund. If the payments cannot be read, the window explains
 the failure; close it and open it again before choosing a payment.
 
+If the card provider cannot refund the payment yet, this attempt returned no money.
+You can close the window and start a new refund later.
+
 The refund acknowledgment uses the original sale’s receipt language by default, even when your screen uses another language.
 
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
@@ -148,6 +151,9 @@ in the window, so it also appears, or grows, when you lower the amount. To refun
 and reason yourself. If you cannot give refunds, it asks for the PIN, and the dishes' entries in the
 report do not show that part. If that payment cannot be refunded on this device, the window tells
 you to refund it at a till.
+
+If the card provider cannot refund the payment yet, this attempt returned no money.
+You can close the window and start a new refund later.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
 

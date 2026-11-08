@@ -165,6 +165,8 @@ export interface RefundSend {
 /** What a refund's evidence says of it: made, not made, or not yet known. */
 export type RefundOutcome = "completed" | "failed" | "pending";
 
+export type RefundRefusalReason = "provider_balance_unavailable";
+
 /**
  * The processor's own answer to one refund request, as data; never thrown.
  * - `outcome`: the processor returned its refund record, whose status it maps to an outcome.
@@ -172,6 +174,7 @@ export type RefundOutcome = "completed" | "failed" | "pending";
  *   `201 {}`), so only a lookup can say what became of it.
  * - `refused`: an HTTP refusal. `documented` is true only for a status the processor's own
  *   documentation says means the refund was not made; it settles nothing about an earlier request.
+ *   Its optional reason explains this answer and never decides the refund's outcome.
  * - `uncertain`: no answer that says anything — a timeout, a network failure, a server error.
  */
 export type RefundAnswer =
@@ -182,7 +185,7 @@ export type RefundAnswer =
       providerStatus: string;
     }
   | { kind: "accepted" }
-  | { kind: "refused"; httpStatus: number; documented: boolean }
+  | { kind: "refused"; httpStatus: number; documented: boolean; reason?: RefundRefusalReason }
   | {
       kind: "uncertain";
       reason: "timeout" | "network" | "server_error";

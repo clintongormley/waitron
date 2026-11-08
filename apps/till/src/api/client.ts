@@ -1154,6 +1154,7 @@ export type AllocationPreview =
   | { kind: "choose"; options: { choice: AllocationChoice; applied: string; tip: string }[] };
 
 export interface BillRefundView {
+  refusalReason?: "provider_balance_unavailable";
   id: string;
   paymentId: string;
   submissionId: string;

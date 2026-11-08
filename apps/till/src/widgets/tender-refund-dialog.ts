@@ -493,7 +493,9 @@ export class TillTenderRefundDialog extends LitElement {
       }
       ${
         this.result
-          ? html`<p data-outcome role="status">${t(`tender_refund.${this.result.state}`)}</p>
+          ? html`<p data-outcome role="status">
+                ${t(`tender_refund.${this.result.state}`)}${this.result.state === "failed" && this.result.refusalReason === "provider_balance_unavailable" ? ` ${t("refund.provider_balance_unavailable")}` : ""}
+              </p>
               <p>${this.#money(moneyPlus(this.result.appliedAmount, this.result.tipAmount))}</p>`
           : selected || this.attempt
             ? html`

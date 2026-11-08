@@ -1,4 +1,4 @@
-import type { ReaderStatus } from "@waitron/payments";
+import type { ReaderStatus, RefundRefusalReason } from "@waitron/payments";
 import { decimal, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 
@@ -73,7 +73,10 @@ export interface SumUpClient {
     transactionId: string;
     amount?: Decimal;
   }): Promise<{ status: "accepted" | "refused" }>;
-  sendRefund(params: { transactionId: string; amount: Decimal }): Promise<{ httpStatus: number }>;
+  sendRefund(params: {
+    transactionId: string;
+    amount: Decimal;
+  }): Promise<{ httpStatus: number; reason?: RefundRefusalReason }>;
   /** Every reader paired to the merchant account. */
   listReaders(): Promise<(SumUpReader & { name: string })[]>;
   /** Completes pairing for a reader already showing a pairing code on its screen (Connections →

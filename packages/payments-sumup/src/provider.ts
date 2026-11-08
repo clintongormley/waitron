@@ -16,6 +16,7 @@ import type {
   RefundLookup,
   RefundLookupQuery,
   RefundOutcome,
+  RefundRefusalReason,
   RefundSend,
 } from "@waitron/payments";
 import {
@@ -417,8 +418,9 @@ export class SumUpCloudProvider implements PaymentProvider {
    * `lookupRefund` can find it. */
   async sendRefund(req: RefundSend): Promise<RefundAnswer> {
     let httpStatus: number;
+    let reason: RefundRefusalReason | undefined;
     try {
-      ({ httpStatus } = await this.opts.client.sendRefund({
+      ({ httpStatus, reason } = await this.opts.client.sendRefund({
         transactionId: req.processorRef,
         amount: req.amount,
       }));
@@ -428,7 +430,12 @@ export class SumUpCloudProvider implements PaymentProvider {
     }
     if (httpStatus >= 200 && httpStatus < 300) return { kind: "accepted" };
     if (httpStatus >= 500) return { kind: "uncertain", reason: "server_error", httpStatus };
-    return { kind: "refused", httpStatus, documented: DOCUMENTED_REFUND_REFUSALS.has(httpStatus) };
+    return {
+      kind: "refused",
+      httpStatus,
+      documented: DOCUMENTED_REFUND_REFUSALS.has(httpStatus),
+      ...(httpStatus === 409 && reason === "provider_balance_unavailable" ? { reason } : {}),
+    };
   }
 
   /** SumUp's refunds carry none of our ids, so an event can be told from an earlier refund only by

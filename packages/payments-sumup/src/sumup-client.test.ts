@@ -581,6 +581,7 @@ describe("sumupClient sendRefund", () => {
     handler: Parameters<typeof createServer>[1],
     use: (client: SumUpClient) => Promise<T>,
     timeoutMs?: number,
+    transport?: typeof fetch,
   ): Promise<T> {
     const server = createServer(handler);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -592,6 +593,7 @@ describe("sumupClient sendRefund", () => {
           merchantCode: "MC",
           baseUrl: `http://127.0.0.1:${port}`,
           ...(timeoutMs === undefined ? {} : { timeoutMs }),
+          ...(transport === undefined ? {} : { fetch: transport }),
         }),
       );
     } finally {
@@ -599,6 +601,111 @@ describe("sumupClient sendRefund", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }
+
+  describe("temporary balance refusal", () => {
+    const detail = "Not enough available balance to perform the operation at the moment";
+
+    it("recognises the exact explanation from a real HTTP 409 body", async () => {
+      const answer = await againstServer(
+        (_req, res) =>
+          res
+            .writeHead(409, { "content-type": "application/problem+json" })
+            .end(JSON.stringify({ status: 409, title: "Conflict", detail })),
+        (client) => client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
+      );
+      expect(answer).toEqual({ httpStatus: 409, reason: "provider_balance_unavailable" });
+    });
+
+    it.each([
+      ["a different problem", 409, JSON.stringify({ detail: "Refund already exists" })],
+      ["another status", 422, JSON.stringify({ detail })],
+      ["an array", 409, JSON.stringify([{ detail }])],
+      ["a null body", 409, "null"],
+      ["malformed JSON", 409, "{"],
+      ["an oversized valid problem", 409, JSON.stringify({ detail, padding: "x".repeat(4096) })],
+    ])("keeps %s generic without losing its status", async (_label, status, body) => {
+      const answer = await againstServer(
+        (_req, res) => res.writeHead(status, { "content-type": "application/json" }).end(body),
+        (client) => client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
+      );
+      expect(answer).toEqual({ httpStatus: status });
+    });
+
+    it("retains prompt 409 headers when the body stalls, within the tender response budget", async () => {
+      const started = performance.now();
+      const answer = await againstServer(
+        (_req, res) => {
+          res.writeHead(409, { "content-type": "application/json" });
+          res.write('{"detail":');
+        },
+        (client) => client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
+        8_000,
+      );
+      expect(answer).toEqual({ httpStatus: 409 });
+      expect(performance.now() - started).toBeLessThan(5_000);
+    }, 15_000);
+
+    it("retains a known 409 after the real response body is truncated", async () => {
+      let truncate!: () => void;
+      const answer = await againstServer(
+        (_req, res) => {
+          truncate = () => res.destroy();
+          res.writeHead(409, { "content-type": "application/json" });
+          res.write('{"detail":');
+        },
+        (client) => client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
+        undefined,
+        async (input, init) => {
+          const response = await fetch(input, init);
+          truncate();
+          return response;
+        },
+      );
+      expect(answer).toEqual({ httpStatus: 409 });
+    });
+
+    it.each(["absent", "locked", "invalid UTF-8", "cancel rejects", "aborted before body"])(
+      "keeps a known refusal with optional body %s",
+      async (shape) => {
+        const body =
+          shape === "absent"
+            ? null
+            : new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(
+                    new TextEncoder().encode(
+                      shape === "cancel rejects" ? "x".repeat(4097) : JSON.stringify({ detail }),
+                    ),
+                  );
+                  if (shape === "invalid UTF-8") controller.enqueue(new Uint8Array([255]));
+                  if (shape !== "cancel rejects") controller.close();
+                },
+                cancel() {
+                  if (shape === "cancel rejects") throw new Error("cancel failed");
+                },
+              });
+        const response = new Response(body, { status: 409 });
+        const lock = shape === "locked" ? response.body!.getReader() : null;
+        try {
+          const client = sumupClient({
+            apiKey: "k",
+            merchantCode: "MC",
+            timeoutMs: 5,
+            fetch: async () => {
+              if (shape === "aborted before body")
+                await new Promise((done) => setTimeout(done, 20));
+              return response;
+            },
+          });
+          expect(await client.sendRefund({ transactionId: "t", amount: decimal("1.00") })).toEqual({
+            httpStatus: 409,
+          });
+        } finally {
+          lock?.releaseLock();
+        }
+      },
+    );
+  });
 
   it.each([
     { status: 404, contentType: "text/html", body: "<html>nope</html>" },

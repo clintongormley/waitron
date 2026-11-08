@@ -18,6 +18,7 @@ export type {
   RefundLookup,
   RefundLookupQuery,
   RefundOutcome,
+  RefundRefusalReason,
   RefundSend,
 } from "./provider.js";
 // The test doubles under ./testing/ are NOT re-exported, so importing the package root cannot

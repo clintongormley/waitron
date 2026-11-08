@@ -163,6 +163,7 @@ export interface BillPaymentRequest extends BillPaymentAsk {
 
 /** Money given back from one bill payment before the invoice. */
 export interface BillRefundView {
+  refusalReason?: import("@waitron/payments").RefundRefusalReason;
   id: string;
   paymentId: string;
   submissionId: string;

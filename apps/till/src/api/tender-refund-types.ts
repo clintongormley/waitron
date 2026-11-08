@@ -23,6 +23,7 @@ export interface RefundableTender {
 }
 
 export interface TenderRefundView {
+  refusalReason?: "provider_balance_unavailable";
   id: string;
   saleId: string;
   tenderId: string;
