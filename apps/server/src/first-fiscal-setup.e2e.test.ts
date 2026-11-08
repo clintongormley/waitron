@@ -34,6 +34,9 @@ import {
   selectPastWaits,
   type HourTestClock,
 } from "./testing/hour-test-clock.js";
+import { useTestProducer } from "./testing/test-producer.js";
+
+useTestProducer();
 
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();

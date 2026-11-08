@@ -34,6 +34,9 @@ import { freePorts } from "./testing/free-ports.js";
 import { mountSetup } from "./setup-api.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createHourTestClock, type HourTestClock } from "./testing/hour-test-clock.js";
+import { useTestProducer } from "./testing/test-producer.js";
+
+useTestProducer();
 
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();

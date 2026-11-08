@@ -126,6 +126,9 @@ import {
   startFakeSmtp,
   seedTradingVenue,
 } from "./testing/boot-harness.js";
+import { useTestProducer } from "./testing/test-producer.js";
+
+useTestProducer();
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");

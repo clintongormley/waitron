@@ -18,6 +18,8 @@ export default defineConfig({
   test: {
     // scripts/fiscal-test-budget.test.ts pins this; outer, never inside a project.
     maxWorkers: 4,
+    // A developer's shell never names a producer to a test; a file that needs one sets it itself.
+    env: { WAITRON_PRODUCER_NAME: "", WAITRON_PRODUCER_TAX_ID: "", WAITRON_PRODUCER_ADDRESS: "" },
     projects: [
       {
         extends: true,

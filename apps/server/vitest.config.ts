@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
+    // A developer's shell never names a producer to a test; a file that needs one says so
+    // (`src/testing/test-producer.ts`).
+    env: { WAITRON_PRODUCER_NAME: "", WAITRON_PRODUCER_TAX_ID: "", WAITRON_PRODUCER_ADDRESS: "" },
     setupFiles: [
       "src/testing/byte-equality-setup.ts",
       "src/testing/derived-key-cache-setup.ts",

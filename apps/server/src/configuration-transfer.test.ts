@@ -169,6 +169,9 @@ import { selfEnrolNodeAgent } from "./join-requests.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deletePrinter } from "./printer-delete.js";
 import { stageConfigurationImport } from "./configuration-import.js";
+import { useTestProducer } from "./testing/test-producer.js";
+
+useTestProducer();
 
 // TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
 // production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the

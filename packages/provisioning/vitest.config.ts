@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
+    // A developer's shell never names a producer to a test; a file that needs one sets it itself.
+    env: { WAITRON_PRODUCER_NAME: "", WAITRON_PRODUCER_TAX_ID: "", WAITRON_PRODUCER_ADDRESS: "" },
     // Headroom for the suites that open and migrate a venue directory. `hookTimeout` does not bound
     // a hook given a timeout of its OWN: `schema-ahead.migrate.test.ts`'s `beforeAll`, and
     // `useVenueDb`'s (60s by default, `packages/db/src/testing/venue-db.ts`).
