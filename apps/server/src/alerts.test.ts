@@ -203,7 +203,11 @@ describe("readOpenAlerts", () => {
       params: { count: 2, date: "2026-09-14", lastDate: "2026-09-14", severalDays: false },
     });
     const withoutIt = await asApp((tx) =>
-      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
+      readOpenAlerts(
+        tx,
+        { registry, now: NOW, log: noopLog },
+        new Set(["fiscal.view", "hardware.manage"]),
+      ),
     );
     expect(withoutIt).toEqual([]);
   });

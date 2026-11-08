@@ -1,5 +1,3 @@
 import type { ModulePermission } from "@waitron/module";
 
-export const MANAGE_VENUE_SERVICE = "venue.configure";
-
 export const VENUE_SERVICE_PERMISSIONS: readonly ModulePermission[] = [];

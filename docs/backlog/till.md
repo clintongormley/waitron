@@ -4129,6 +4129,11 @@ Reproduce which profile-switch test answers null and determine whether the fixtu
 public identity response needs correction; keep the existing profile and login assertions.
 Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
 
+2026-11-08 occurrence: A1002 cut 1's selected till run passed 2,855 tests while Chromium logged
+`Cannot read properties of null (reading 'approvedProfiles')` through `#holdIdentity`,
+`#readIdentity` and `#enterSwitchedProfile`. The cause remains unverified. Receipt: Lane K
+`receipts/a1002-cut1-20261108/till-focused.log`; the same reproduction question above remains open.
+
 ## Loose ends left by A718
 
 - **`wt-floor-plan-preview` has no product user.** It remains in `packages/ui/demo/main.ts`, with

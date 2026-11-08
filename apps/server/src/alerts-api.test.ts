@@ -939,16 +939,13 @@ describe("ongoing alert sources through the route", () => {
     expect(paths).toContain("/v0.1/merchants/MABC123/readers/rdr_low/status");
   });
 
-  it("filters ongoing sources by permission: a hardware.manage-only session sees only card_reader alerts", async () => {
-    // Give the supervisor exactly the battery source's permission, then fire all four areas.
+  it("filters ongoing sources by permission: hardware.manage sees printing and card_reader alerts", async () => {
     roleOverride.set("supervisor", ["hardware.manage"]);
     const v = await seedVenueWithStaff();
     await seedLowReader();
     await seedStuckPrintJob();
     const app = appFor(ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
 
-    // Control: a manager holds every source permission, so all four areas actually fire — the
-    // payments-only assertion below is filtering at work, not four empty sources.
     const managerAreas = (
       (await (await get(app, "/management-api/alerts", v.manager)).json()) as {
         alerts: { area: string }[];
@@ -956,13 +953,11 @@ describe("ongoing alert sources through the route", () => {
     ).alerts.map((a) => a.area);
     expect(new Set(managerAreas)).toEqual(new Set(["backup", "fiscal", "printing", "card_reader"]));
 
-    // The hardware.manage session reads only the source whose permission it holds; the fiscal, backup
-    // and printing ongoing alerts — each on a permission it lacks — never reach it.
     const body = (await (await get(app, "/management-api/alerts", v.supervisor)).json()) as {
       alerts: { code: string; area: string }[];
     };
-    expect(body.alerts.map((a) => a.area)).toEqual(["card_reader"]);
-    expect(body.alerts.map((a) => a.code)).toEqual(["reader.battery_low"]);
+    expect(body.alerts.map((a) => a.area)).toEqual(["printing", "card_reader"]);
+    expect(body.alerts.map((a) => a.code)).toEqual(["printer.jobs_waiting", "reader.battery_low"]);
   });
 
   it("isolates a throwing ongoing source: its area yields exactly one alert.source_unavailable and the others survive", async () => {

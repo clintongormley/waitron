@@ -39,17 +39,6 @@ export async function checkedDepartmentReceiptWrite(
     validateOperationDescription,
     options.allowEmptyDescription,
   );
-  const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, departmentId);
-  if (
-    policy.receiptPrintMode !== checked.policy.receiptPrintMode ||
-    policy.printTradingName !== checked.policy.printTradingName
-  ) {
-    await authorizeManager(tx, {
-      managementSessionId,
-      permission: "venue.configure",
-      touch: options.touch,
-    });
-  }
   return { input: checked, scope };
 }
 

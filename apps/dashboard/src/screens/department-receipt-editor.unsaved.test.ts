@@ -41,6 +41,17 @@ it("pending Save blocks a duplicate request", async () => {
   await editReceipt(el, "email", "sent@example.com");
   await clickReceiptSave(el);
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
+  for (const name of ["receiptPrintMode", "printTradingName"]) {
+    const toggle = receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      `[name=${name}]`,
+    )!;
+    expect(toggle.disabled).toBe(true);
+    toggle.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(toggle.checked).toBe(true);
+  }
   receiptSave(el).click();
   expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
   expect(app.leave.coordinator.isDirty()).toBe(true);

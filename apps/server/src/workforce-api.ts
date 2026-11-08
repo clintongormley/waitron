@@ -33,8 +33,6 @@ export interface WorkforceApiDeps {
 }
 
 const SCHEDULE_PERMISSION: Permission = "schedule.manage";
-const SWAP_APPROVE_PERMISSION: Permission = "schedule.manage";
-const ABSENCE_DECIDE_PERMISSION: Permission = "schedule.manage";
 
 // ±14h — the wall-offset domain the `shifts_*_offset_ck` check constraints enforce
 // (`packages/workforce/src/schema/shifts.ts`); an offset outside it is refused by that CHECK at the
@@ -313,7 +311,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.get("/management-api/swaps", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, SWAP_APPROVE_PERMISSION, (tx) => listPendingSwaps(tx));
+      const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) => listPendingSwaps(tx));
       return c.json(rows);
     }),
   );
@@ -329,7 +327,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: SWAP_APPROVE_PERMISSION,
+          permission: SCHEDULE_PERMISSION,
         });
         await decideSwap(tx, {
           swapId,
@@ -345,9 +343,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.get("/management-api/absences", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, ABSENCE_DECIDE_PERMISSION, (tx) =>
-        listPendingAbsences(tx),
-      );
+      const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) => listPendingAbsences(tx));
       return c.json(rows);
     }),
   );
@@ -361,7 +357,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: ABSENCE_DECIDE_PERMISSION,
+          permission: SCHEDULE_PERMISSION,
         });
         // setAbsenceStatus accepts any AbsenceStatus; "approved"/"rejected" are two of its three values.
         await setAbsenceStatus(tx, {

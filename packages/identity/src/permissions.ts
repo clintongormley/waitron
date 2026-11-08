@@ -1,9 +1,5 @@
 import type { PersonRoleValue } from "@waitron/shared";
 
-/**
- * Call sites gate on a PERMISSION, never a role string, so the role→permission map below can change
- * in one place.
- */
 export const PERMISSIONS = [
   "payment.take",
   "sale.void",

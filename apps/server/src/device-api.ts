@@ -14,7 +14,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, profilesAdmitting, sessions, type Permission } from "@waitron/identity";
+import { authorizeManager, profilesAdmitting, sessions } from "@waitron/identity";
 import {
   chosenPrinterOf,
   kindOfFormFactor,
@@ -160,8 +160,6 @@ export interface DeviceApiDeps {
   attendanceClock?: TrustedClock;
 }
 
-const DEVICE_MANAGE_PERMISSION: Permission = "hardware.manage";
-
 /** Milliseconds since the epoch, written as digits only; anything else is not a reading. */
 function deviceClockOf(value: string | undefined): number | undefined {
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
@@ -256,7 +254,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, {
         managementSessionId: sessionId,
-        permission: DEVICE_MANAGE_PERMISSION,
+        permission: "hardware.manage",
       });
       return fn(tx);
     });

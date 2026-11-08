@@ -314,26 +314,24 @@ its pending-approval wording is superseded by the 2026-11-07 full approval recor
   A494 (2026-10-11), `catalogue.manage` (manager and above, the roles that hold `person.manage`)
   gates the catalogue, units and content languages; the "VAT class for new products" default is set
   under `venue.configure` (owner, 2026-10-16, A755). Input
-  since C128 (#1031): `sale.take_payment` gates every till payment route and is held by every role,
-  staff included, chosen so nobody lost the ability to take payment; the review decides who keeps
-  it, and whether to rename it — it is the only permission whose action is two words (a reviewer
-  suggested e.g. `payment.take`). The list in
+  since C128 (#1031): every till payment route checks the permission held by every role, staff
+  included. A1002 cut 1 names it `payment.take` and keeps those holders. The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
   `node.promote` split today (adding a machine, promoting a standby and, since #708, removing a
   standby that never finished joining all use one or the other). Machine permissions are to be named
   `node.*`, not `mirror.*` — the owner's preference. The review should propose the whole list: which
   permissions to merge, the names, and which role holds each, and then rename the call sites in one
-  change. **Renaming is allowed now:** the file's header says permission ids are "never renamed once
-  shipped", but a search (2026-09-26, reading, not running) found them stored nowhere — the database
+  change. **Renaming is allowed now:** A1002 cut 1 removes the obsolete permanent-name header.
+  A search (2026-09-26, reading, not running) found them stored nowhere — the database
   stores a person's ROLE (`packages/db/src/schema/identity/persons.ts`), and the names appear only in
   code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
   backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
   by running it, then drop or narrow that header sentence. **Do it before the editable-roles item
   below** (owner, 2026-09-26): once an admin can make roles and give them permissions, the stored
   roles would name their permissions, so a rename after that has to rewrite those rows as well.
-  The roles design was not written when this review was requested; A1002 now proposes those rows
-  in the design linked above, still awaiting approval and implementation.
+  The roles design was not written when this review was requested; the approved A1002 design
+  linked above proposes those rows in the still-unbuilt roles cut.
   **2026-11-08 pointer:** that approval status is historical; design §11 records full approval,
   and the [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) records corrections
   and the remaining build blockers. Implementation is still open.
@@ -342,9 +340,9 @@ its pending-approval wording is superseded by the 2026-11-07 full approval recor
   role questions from that morning's dashboard Orders screen answers (B27s, lane C questions.md
   2026-10-02 ~09:40 and ~09:50) belong in it: the staff role holds no `report.view`, so the Orders
   screen gave staff a narrower view of their own (unfinished bills plus today's finished ones) rather
-  than the permission deciding; and `print.resend`, held only by managers and admins, was the name
-  that first came up for the dashboard's DUPLICADO copy until it was settled that the copy uses the
-  till copy's own permission — two permissions for one kind of print is a merge candidate.
+  than the permission deciding. Dashboard resends now use `hardware.manage`, held only by managers
+  and admins; the copy follows the till copy's permission. The approved permission merges are
+  implemented in cut 1; role storage and changed authority stay in cut 2.
 
 ## Roles are something an admin can add and edit; the four built-ins are only defaults
 

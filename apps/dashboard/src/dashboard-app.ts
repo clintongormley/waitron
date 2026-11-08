@@ -1641,7 +1641,6 @@ export class DashboardApp extends LitElement {
             ? html`<dashboard-department-receipt-editor
                 .api=${this.api}
                 .subject=${subject}
-                .canManagePolicy=${this.#sessionPermissions.includes("venue.configure")}
               ></dashboard-department-receipt-editor>`
             : null,
         calendarViews,
