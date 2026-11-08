@@ -21,7 +21,7 @@ import {
   deviceProfileJoin,
   toDeviceBinding,
 } from "./device-session.js";
-import { assertStillSignedIn, requireSession } from "./till-session.js";
+import { assertStillSignedIn, requireSession, SESSION_STATUS } from "./till-session.js";
 import { readTillClockState, type TillClockState } from "./till-clock-state.js";
 import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 
@@ -33,8 +33,7 @@ export interface TillClockApiDeps {
 
 const run = createErrorBoundary(
   {
-    "session.required": 401,
-    "session.person_not_signed_in": 409,
+    ...SESSION_STATUS,
     "session.not_open": 401,
     "device.unauthorized": 403,
     "device.forbidden_action": 403,

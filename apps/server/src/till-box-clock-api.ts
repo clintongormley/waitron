@@ -35,7 +35,12 @@ import type { Logger } from "./logger.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestAddress, requestFromBox } from "./request-from-box.js";
 import { parseOverrideField } from "./till-api.js";
-import { assertRequestDevice, assertStillSignedIn, requireSession } from "./till-session.js";
+import {
+  assertRequestDevice,
+  assertStillSignedIn,
+  requireSession,
+  SESSION_STATUS,
+} from "./till-session.js";
 
 export interface TillBoxClockDeps {
   correction: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "set" | "steps">;
@@ -53,8 +58,7 @@ export interface TillBoxClockDeps {
 
 const run = createErrorBoundary(
   {
-    "session.required": 401,
-    "session.person_not_signed_in": 409,
+    ...SESSION_STATUS,
     "session.not_open": 401,
     "device.unauthorized": 403,
     "device_profile.not_admitted": 403,

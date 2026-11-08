@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
 import {
@@ -27,6 +28,12 @@ import {
 import "./errors.js";
 
 export const SESSION_COOKIE = "waitron_till_session";
+
+/** The statuses of `requireSession`'s refusals of the session itself, for a surface's status map. */
+export const SESSION_STATUS = {
+  "session.required": 401,
+  "session.person_not_signed_in": 409,
+} as const satisfies Record<string, ContentfulStatusCode>;
 
 export { isUuid };
 

@@ -225,6 +225,7 @@ import {
   assertRequestDevice,
   requireSession,
   assertStillSignedIn,
+  SESSION_STATUS,
   setSessionCookie,
 } from "./till-session.js";
 import {
@@ -448,10 +449,10 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // Authenticated device lacks the action capability or is excluded from the workflow.
   "device.forbidden_action": 403,
   "device.cash_not_allowed": 403,
+  "session.not_open": 401,
   // The same codes and statuses `device-api.ts`'s map assigns.
   "device.unauthorized": 401,
-  "session.not_open": 401,
-  "session.required": 401,
+  ...SESSION_STATUS,
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
   "sale.charged_not_recorded": 507,
@@ -627,7 +628,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "draft.already_submitted": 409,
   "draft.out_of_date": 409,
   "draft.not_found": 404,
-  "session.person_not_signed_in": 409,
   "group.not_held": 409,
   "group.not_waiting": 409,
   "group.not_found": 404,

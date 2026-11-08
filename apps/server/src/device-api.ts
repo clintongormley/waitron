@@ -86,6 +86,7 @@ import {
   assertStillSignedIn,
   isUuid,
   requireSession,
+  SESSION_STATUS,
   signedInPersonOn,
 } from "./till-session.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
@@ -173,8 +174,7 @@ function deviceClockOf(value: string | undefined): number | undefined {
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
-  "session.required": 401,
-  "session.person_not_signed_in": 409,
+  ...SESSION_STATUS,
   "device.forbidden_station": 403,
   "device.forbidden_action": 403,
   "device_profile.not_approved": 403,
