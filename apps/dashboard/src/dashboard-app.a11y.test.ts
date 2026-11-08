@@ -227,7 +227,9 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       expect(line).not.toBeNull();
       await line.updateComplete;
       await vi.waitFor(() =>
-        expect(line.shadowRoot!.querySelector("img")?.naturalWidth).toBeGreaterThan(0),
+        expect(
+          line.shadowRoot!.querySelector("wt-waitron-lockup")?.shadowRoot?.querySelector("svg"),
+        ).toBeTruthy(),
       );
       await expectNoA11yViolations(host);
     } finally {
@@ -265,7 +267,9 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       expect(line).not.toBeNull();
       await line.updateComplete;
       await vi.waitFor(() =>
-        expect(line.shadowRoot!.querySelector("img")?.naturalWidth).toBeGreaterThan(0),
+        expect(
+          line.shadowRoot!.querySelector("wt-waitron-lockup")?.shadowRoot?.querySelector("svg"),
+        ).toBeTruthy(),
       );
       await expectNoA11yViolations(host);
     } finally {
