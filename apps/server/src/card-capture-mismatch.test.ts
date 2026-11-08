@@ -20,7 +20,7 @@ import { releaseStalePaymentAttempts } from "./till-sale.js";
 import {
   paymentRows,
   provisionBillVenue,
-  registroCount,
+  fiscalRecordCount,
   send,
   statusOf,
   tabWith,
@@ -131,7 +131,7 @@ for (const providerId of ["stripe", "sumup"]) {
       expect(refund).not.toHaveBeenCalled();
       expect(voidPayment).not.toHaveBeenCalled();
       expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toEqual([]);
-      expect(registroCount(venue, id)).toBe(0);
+      expect(fiscalRecordCount(venue, id)).toBe(0);
       expect(await tendersOfBill(venue, id)).toEqual([]);
       expect(await statusOf(venue, id)).toBe("open");
       if (path === "bill contribution")
@@ -219,7 +219,7 @@ it.each(["stripe", "sumup"])(
     expect(starts()).toBe(1);
     expect((await pay(other, "cash", "5.00")).status).toBe(200);
     expect((await paymentRows(venue, other)).filter((row) => row.state === "pending")).toEqual([]);
-    expect(registroCount(venue, id)).toBe(0);
+    expect(fiscalRecordCount(venue, id)).toBe(0);
     expect(await tendersOfBill(venue, id)).toEqual([]);
   },
 );
