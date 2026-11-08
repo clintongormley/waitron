@@ -444,6 +444,18 @@ describe("remaining disposable PR jobs", () => {
 });
 
 describe("disposable server routing", () => {
+  it("watches other disposable families while A1446 server shards are hosted", () => {
+    const context = routingContext("heavy");
+    context.needs.changes.outputs.server = "true";
+    context.vars.DISPOSABLE_TESTS_SERVER_JOBS = "6";
+    context.github.head_ref = "perf/a1446-server-module-cache";
+    expect(watchFamilies(context).find((row) => row.id === "test-server").enabled).toBe(false);
+    expect(watchFamilies(context).find((row) => row.id === "test-heavy").enabled).toBe(true);
+    expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(true);
+    context.github.head_ref = "another-branch";
+    expect(watchFamilies(context).find((row) => row.id === "test-server").enabled).toBe(true);
+  });
+
   it("keeps the A1446 experiment on hosted server runners", () => {
     const routing = job("test-server").body.find((line) => /^ {4}runs-on:/.test(line));
     const context = routingContext();

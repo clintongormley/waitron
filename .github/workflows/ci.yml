@@ -3734,7 +3734,7 @@ jobs:
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
           FAMILIES: >-
             [
-            {"id":"test-server","count":24,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') }}},
+            {"id":"test-server","count":24,"matrix":true,"enabled":${{ github.head_ref != 'perf/a1446-server-module-cache' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') }}},
             {"id":"test-heavy","count":3,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_HEAVY_JOBS || '0') }}},
             {"id":"test-fiscal-verifactu","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS || '0') }}},
             {"id":"test-ui","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_UI_JOBS || '0') }}},
