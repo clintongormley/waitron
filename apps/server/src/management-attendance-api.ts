@@ -85,7 +85,11 @@ export function mountManagementAttendanceApi(
           const scope = parseHoursQuery(new URL(c.req.url).searchParams, "own");
           const now = deps.now();
           const clock = await readVenueClock(tx);
-          return readPersonHours(tx, { ...scope, personId: viewer.personId, clock, now });
+          return readPersonHours(
+            tx,
+            { ...scope, personId: viewer.personId, clock, now },
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
+          );
         }),
       );
     }),
@@ -97,7 +101,11 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx) => {
           const viewer = await resolveManagementSession(tx, token);
           const scope = parseAttendanceDayQuery(new URL(c.req.url).searchParams, "worker");
-          return readAttendanceDay(tx, { ...scope, personId: viewer.personId });
+          return readAttendanceDay(
+            tx,
+            { ...scope, personId: viewer.personId },
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
+          );
         }),
       );
     }),
@@ -145,7 +153,11 @@ export function mountManagementAttendanceApi(
           const scope = parseHoursQuery(new URL(c.req.url).searchParams, "manager");
           const now = deps.now();
           const clock = await readVenueClock(tx);
-          return readManagerHours(tx, { ...scope, clock, now });
+          return readManagerHours(
+            tx,
+            { ...scope, clock, now },
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
+          );
         }),
       );
     }),
@@ -188,7 +200,11 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx) => {
           await authorize(tx, token);
           const scope = parseAttendanceDayQuery(new URL(c.req.url).searchParams, "manager");
-          return readAttendanceDay(tx, { ...scope, personId: scope.personId! });
+          return readAttendanceDay(
+            tx,
+            { ...scope, personId: scope.personId! },
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
+          );
         }),
       );
     }),

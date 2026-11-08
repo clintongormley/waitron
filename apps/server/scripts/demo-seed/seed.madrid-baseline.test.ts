@@ -245,6 +245,16 @@ for (const locale of ["en", "es"] as const) {
         table.columns.push(column);
         for (const row of Object.values(table.rows)) row[column.name] = value;
       }
+      for (const name of [
+        "split_min_segment_minutes",
+        "split_max_segment_minutes",
+        "split_min_gap_minutes",
+        "continuous_paid_break_minutes",
+      ]) {
+        const table = expected[phase].tables.convenio_config!;
+        table.columns.push({ name, type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(table.rows)) row[name] = null;
+      }
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {

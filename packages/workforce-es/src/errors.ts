@@ -4,6 +4,7 @@ import "@waitron/shared";
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "setup.request_invalid": { field: string };
     /** No `convenio_config` row: the venue has not configured its working-time rules. */
     "convenio.not_found": Record<string, never>;
   }

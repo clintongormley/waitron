@@ -46,6 +46,7 @@ const event = (at: string, personId = worker) => ({
 const close = (patch: Partial<Parameters<typeof api.closePayPeriod>[1]> = {}) =>
   run((tx) =>
     api.closePayPeriod(tx, {
+      paidBreakPolicy: null,
       nodeId,
       period,
       clock,
@@ -470,4 +471,22 @@ it.each([
 });
 it.each([null, "bad"])("refuses a malformed closure instant %j", async (bad) => {
   await expect(close({ now: bad as string })).rejects.toMatchObject({ code: "pay_period.invalid" });
+});
+
+it("freezes explicit paid-break totals and replays the saved closure unchanged", async () => {
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await run((tx) => backend[kind](tx, event(`2026-10-05T${at}:00Z`)));
+  const saved = await close({
+    paidBreakPolicy: { thresholdMinutes: 300, allowanceMinutes: 20, splitGapMinutes: 90 },
+  });
+  expect(saved.snapshot.sessions[0]).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
+  expect(
+    saved.snapshot.summaries.find((row) => row.personId === worker)!.summary!.workedMinutes,
+  ).toBe(400);
+  expect(await close({ paidBreakPolicy: null })).toEqual(saved);
 });

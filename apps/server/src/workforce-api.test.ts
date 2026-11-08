@@ -1,3 +1,6 @@
+import { WorkforceBackend } from "@waitron/workforce";
+import { jobOrigin } from "@waitron/shared";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { makeRuleset } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -724,6 +727,50 @@ describe("roster warnings while planning", () => {
   const read = (period = "2026-03-02", cookie = managerCookie) =>
     send(mountApp(), "GET", `/management-api/roster/breaches?period=${period}`, { cookie });
 
+  it("keeps split warnings in the selected week and leaves adjacent weeks out", async () => {
+    const loc = await warningLocation(true, {
+      splitMinSegmentMinutes: 180,
+      splitMaxSegmentMinutes: 300,
+      splitMinGapMinutes: 90,
+    });
+    let first = "",
+      later = "";
+    for (const date of ["2026-03-01", "2026-03-03", "2026-03-09"]) {
+      const a = await planned(loc, `${date}T09:00:00Z`, `${date}T11:59:00Z`);
+      const b = await planned(loc, `${date}T13:28:00Z`, `${date}T18:29:00Z`);
+      if (date === "2026-03-03") {
+        first = a;
+        later = b;
+      }
+    }
+    const response = await read();
+    expect(response.status).toBe(200);
+    const { breaches } = await response.json();
+    expect(breaches.filter((b: { kind: string }) => b.kind.startsWith("split_"))).toEqual([
+      {
+        kind: "split_gap_too_short",
+        personId,
+        shiftId: later,
+        gapMinutes: 89,
+        requiredMinutes: 90,
+      },
+      {
+        kind: "split_segment_too_short",
+        personId,
+        shiftId: first,
+        plannedMinutes: 179,
+        limitMinutes: 180,
+      },
+      {
+        kind: "split_segment_too_long",
+        personId,
+        shiftId: later,
+        plannedMinutes: 301,
+        limitMinutes: 300,
+      },
+    ]);
+  });
+
   it("uses preferred drafts and adjacent weeks, keeps boundary rest warnings and returns the resolved rules", async () => {
     const loc = await warningLocation();
     const previous = await version(loc, "2026-02-23", "published");
@@ -759,7 +806,12 @@ describe("roster warnings while planning", () => {
       ruleset: unknown;
       breaches: Array<Record<string, unknown>>;
     };
-    expect(body.ruleset).toEqual(makeRuleset());
+    expect(body.ruleset).toEqual({
+      ...makeRuleset(),
+      splitMinSegmentMinutes: null,
+      splitMaxSegmentMinutes: null,
+      splitMinGapMinutes: null,
+    });
     expect(body.breaches.filter((b) => b.kind === "rest_too_short")).toEqual([
       {
         kind: "rest_too_short",
@@ -904,4 +956,48 @@ describe("roster warnings while planning", () => {
     await warningLocation();
     expect((await read(period)).status).toBe(400);
   });
+});
+
+it("uses the enabled provider for planned-versus-actual paid time", async () => {
+  const nodeId = await seedNode(suite.db, locationId);
+  await suite.db.delete(convenioConfig);
+  await suite.db.insert(convenioConfig).values({
+    locationId,
+    breakThresholdMinutes: 300,
+    splitMinSegmentMinutes: 180,
+    splitMaxSegmentMinutes: 300,
+    splitMinGapMinutes: 90,
+    continuousPaidBreakMinutes: 20,
+  });
+  const backend = new WorkforceBackend();
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await withTransaction(suite.db, (tx) =>
+      backend[kind](tx, {
+        nodeId,
+        personId,
+        at: `2026-08-05T${at}:00Z`,
+        offsetMinutes: 0,
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+  const app = new Hono();
+  mountWorkforceApi(
+    app,
+    { db: suite.db, cfg: { nodeId }, exporter: workforceEs.WORKFORCE_ES_RECORD_EXPORT },
+    noopLog,
+  );
+  const response = await send(
+    app,
+    "GET",
+    "/management-api/planned-vs-actual?from=2026-08-05&to=2026-08-06",
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toContainEqual(
+    expect.objectContaining({ personId, workedMinutes: 400 }),
+  );
 });

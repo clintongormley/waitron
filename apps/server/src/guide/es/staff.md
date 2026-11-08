@@ -94,3 +94,7 @@ registros del local. El plazo de un mes para responder y las demás obligaciones
 En la lista de roles de personal, elige **Eliminar** en el menú del rol. La ventana muestra
 **Comprobando qué cambia…** mientras consulta las consecuencias. Revisa **Trabajo que finaliza**
 y **Configuración que se elimina** cuando aparezcan esas secciones antes de confirmar la eliminación.
+
+## Horas y descansos {#hours}
+
+Usa **Iniciar descanso** y **Terminar descanso** para una pausa durante tu turno. Usa **Fichar salida** cuando termines de trabajar.

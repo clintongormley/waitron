@@ -1,3 +1,4 @@
+import { convenioConfig, WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
@@ -321,4 +322,67 @@ it("a different permitted manager cannot recover another requester's command rec
   const response = await request(`commands/${body.commandId}`, undefined, staffCookie);
   expect(response.status).toBe(200);
   expect(await response.json()).toBeNull();
+});
+
+it("delivers paid totals through every attendance read route", async () => {
+  await suite.db.insert(convenioConfig).values({
+    locationId: venue.cfg.locationId,
+    breakThresholdMinutes: 300,
+    splitMinSegmentMinutes: 180,
+    splitMaxSegmentMinutes: 300,
+    splitMinGapMinutes: 90,
+    continuousPaidBreakMinutes: 20,
+  });
+  const backend = new WorkforceBackend();
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await withTransaction(suite.db, (tx) =>
+      backend[kind](tx, {
+        nodeId: venue.cfg.nodeId,
+        personId: venue.personId,
+        at: `2026-01-06T${at}:00Z`,
+        offsetMinutes: 0,
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+  const paid = new Hono();
+  mountManagementAttendanceApi(
+    paid,
+    {
+      db: suite.db,
+      cfg: venue.cfg,
+      now: () => new Date("2026-01-07T09:00:00Z"),
+      exporter: WORKFORCE_ES_RECORD_EXPORT,
+    },
+    () => {},
+  );
+  for (const [path, cookie] of [
+    [`/management-api/me/attendance/day?date=2026-01-06`, staffCookie],
+    [`/management-api/attendance/day?personId=${venue.personId}&date=2026-01-06`, managerCookie],
+  ] as const) {
+    const response = await paid.request(path, { headers: { cookie } });
+    expect(response.status).toBe(200);
+    expect((await response.json()).record.sessions[0]).toMatchObject({
+      workedMinutes: 400,
+      breakMinutes: 20,
+    });
+  }
+  for (const [path, cookie] of [
+    ["/management-api/me/attendance/hours?kind=month&date=2026-01-06", staffCookie],
+    ["/management-api/attendance/hours?kind=pay-period&date=2026-01-06", managerCookie],
+  ] as const) {
+    const response = await paid.request(path, { headers: { cookie } });
+    expect(response.status).toBe(200);
+    const value = await response.json();
+    const hours = value.people
+      ? value.people.find((p: { personId: string }) => p.personId === venue.personId).hours
+      : value;
+    expect(hours.days.find((d: { date: string }) => d.date === "2026-01-06").workedMinutes).toBe(
+      400,
+    );
+  }
 });

@@ -86,3 +86,7 @@ venue's other duties, see [Data protection](data-protection.md#who-does-what).
 In the staff roles list, choose **Delete** from the role's row menu. The window shows
 **Checking what changes…** while it reads the impact. Review **Work that ends** and
 **Settings that are removed** when those sections appear before confirming the deletion.
+
+## Hours and breaks {#hours}
+
+Use **Start break** and **End break** for a pause during your shift. Use **Clock out** when your work ends.

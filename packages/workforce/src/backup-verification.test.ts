@@ -123,6 +123,7 @@ beforeEach(async () => {
   ] as const) {
     await original.db.transaction((tx) =>
       closePayPeriod(tx, {
+        paidBreakPolicy: null,
         nodeId: node,
         period: { start, end },
         clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
@@ -134,6 +135,7 @@ beforeEach(async () => {
   }
   await original.db.transaction((tx) =>
     closePayPeriod(tx, {
+      paidBreakPolicy: null,
       nodeId: retired,
       period: { start: "2026-04-01", end: "2026-05-01" },
       clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
@@ -259,6 +261,7 @@ describe("complete captured workforce backup evidence", () => {
   it("verifies a node's closures as one chain", async () => {
     await original.db.transaction((tx) =>
       closePayPeriod(tx, {
+        paidBreakPolicy: null,
         nodeId: node,
         period: { start: "2026-05-01", end: "2026-06-01" },
         clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },

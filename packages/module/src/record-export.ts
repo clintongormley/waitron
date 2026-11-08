@@ -4,6 +4,11 @@ import type { WaitronModule } from "./module.js";
 import "./errors.js";
 
 export interface ModuleTimeRecordExport {
+  paidBreakPolicy?(tx: Transaction): Promise<{
+    thresholdMinutes: number;
+    allowanceMinutes: number;
+    splitGapMinutes: number;
+  } | null>;
   prepare(tx: Transaction, input: RecordExportInput): Promise<() => Promise<RecordExportDocument>>;
 }
 export function selectTimeRecordExport(

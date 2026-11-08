@@ -1,3 +1,4 @@
+import type { PaidBreakPolicy } from "./ruleset.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { readVenue, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -116,6 +117,7 @@ export async function readAttendanceInbox(
 export async function readAttendanceDay(
   tx: Transaction,
   scope: { personId: string; date: string },
+  policy: PaidBreakPolicy | null = null,
 ): Promise<AttendanceDayView> {
   requireId(scope.personId);
   if (!isRecordDate(scope.date)) throw invalid();
@@ -129,10 +131,14 @@ export async function readAttendanceDay(
     .select()
     .from(attendanceResponseCommands)
     .where(eq(attendanceResponseCommands.personId, scope.personId));
-  const record = await readTimeRecord(tx, {
-    personId: scope.personId,
-    period: { start: scope.date, end },
-  });
+  const record = await readTimeRecord(
+    tx,
+    {
+      personId: scope.personId,
+      period: { start: scope.date, end },
+    },
+    policy,
+  );
   const shown = new Set(record.entries.map((e) => e.entry.entryId));
   const items = projectCorrectionItems(entries, commands).filter((item) =>
     item.history.some((e) => shown.has(e.entryId)),

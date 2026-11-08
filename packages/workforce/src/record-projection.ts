@@ -1,3 +1,4 @@
+import type { PaidBreakPolicy } from "./ruleset.js";
 import { AppError } from "@waitron/shared";
 import { projectWorkSessions, type TimeEntryRecord } from "./projection.js";
 import { compareRecording, effectiveClockEntries, sameSubject } from "./effective-entries.js";
@@ -33,6 +34,7 @@ function authorFor(entry: TimeEntryRecord): EntryAuthor {
 export function projectTimeRecord(
   entries: readonly TimeEntryRecord[],
   closures: readonly PayPeriodClosure[] = [],
+  policy: PaidBreakPolicy | null = null,
 ): TimeRecord {
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const groups = new Map<string, TimeEntryRecord[]>();
@@ -44,7 +46,7 @@ export function projectTimeRecord(
   }
   const effectiveIds = new Set(effectiveClockEntries(entries).map((e) => e.entryId));
   const record: TimeRecord = {
-    sessions: projectWorkSessions(entries).sort(
+    sessions: projectWorkSessions(entries, policy).sort(
       (a, b) => a.personId.localeCompare(b.personId) || a.startedAt.localeCompare(b.startedAt),
     ),
     entries: [...entries].sort(compareRecording).map((entry) => {

@@ -195,6 +195,7 @@ it.each(GUIDE_LANGUAGES)(
       "person-data",
       "invoice-customer-data",
       "delete-staff-role",
+      "hours",
     ]);
   },
 );

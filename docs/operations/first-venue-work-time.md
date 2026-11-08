@@ -1,7 +1,7 @@
 # First venue: working-time configuration
 
-For the first venue's agreement, add the rest and break-warning limits to its prepared
-configuration before importing it during setup. A fresh export has no agreement row. The
+For the first venue's agreement, add its rest, break and split-shift rules to the prepared
+configuration before importing it during setup. The command adds an agreement row if the export has none. The
 [labour research](../compliance/research/2026-11-06-adviser-labour.md#limits-to-load-into-the-configuration-l23-to-l26-answered)
 identifies the first venue's figures.
 
@@ -38,12 +38,16 @@ Object.assign(rows[0], {
   weekly_rest_minutes: 2880,
   break_threshold_minutes: 300,
   min_break_minutes: 20,
+  split_min_segment_minutes: 180,
+  split_max_segment_minutes: 300,
+  split_min_gap_minutes: 90,
+  continuous_paid_break_minutes: 20,
 });
 writeFileSync(process.env.WAITRON_RULES_OUTPUT, encodeConfigurationBundle(bundle, passphrase), {
   flag: "wx",
   mode: 0o600,
 });
-console.log("Prepared configuration: weekly rest 2880; break threshold 300; minimum break 20 minutes.");
+console.log("Prepared configuration: weekly rest 2880; break threshold 300; minimum break 20; split stretches 180–300; split gap 90; paid continuous break up to 20 minutes.");
 '
 SHELL
 ```
@@ -60,15 +64,25 @@ Weekly-rest warnings compare against 48 hours only for a person with shifts in b
 and a later week; a one-week rota alone does not get this check. You can still publish a rota
 with warnings.
 
-Paid-break accounting is still open in A1406-2. The existing `breaks_count_as_worked` field describes
-split-shift policy; changing it does not currently add a recorded break to worked minutes.
-Keep it unchanged when preparing these limits. The separate continuous paid-break policy must
-also distinguish the break from the unpaid gap between split shifts.
+A completed continuous session longer than five hours counts up to 20 minutes of its recorded
+pauses as worked time. Each session qualifies separately. A single pause of 90 minutes or more
+makes the session split, with no break credit. Shorter pauses share one 20-minute allowance.
+Use Start break and End break for pauses; clock out when work ends. The recorded pause duration
+stays visible beside the worked total. Keep `breaks_count_as_worked` unchanged.
+
+For a person with split stretches on the same local start day, the rota warns about stretches
+shorter than 180 or longer than 300 minutes, or gaps shorter than 90 minutes. Touching assignments
+form one continuous stretch. These warnings do not prevent publishing a rota.
 
 Working-time PDF summaries call the calculated amounts minutes above their daily or period target.
 These figures do not decide whether the excess is overtime or complementary hours. Existing record
 keys and recorded amounts stay the same, including the raw CSV column keys.
 
-The row-to-warning case is exercised by `packages/workforce-es/src/convenio-roster.test.ts`.
-The configured source row and imported values are exercised by the “copies declared configuration”
-and “first venue” cases in `apps/server/src/configuration-transfer.test.ts`.
+The additive migration was rehearsed on one populated agreement row with `node:sqlite`: its
+original fields survived and the four new fields were null before configuration. No table was
+rebuilt. This rehearsal measures that table, not every venue row.
+
+The boundary and warning cases are exercised by `packages/workforce/src/projection.test.ts`
+and `packages/workforce/src/roster-validation.test.ts`. The configured source row and imported
+values are exercised by the “imports a current-version paid-break policy” cases in
+`apps/server/src/configuration-transfer.test.ts`.

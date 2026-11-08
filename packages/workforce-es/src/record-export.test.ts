@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import { CORE_MIGRATIONS, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
@@ -23,7 +23,7 @@ const prepare = (
   }
 ).prepareTimeRecordExport;
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, api.WORKFORCE_ES_MIGRATIONS],
 });
 const backend = new WorkforceBackend();
 afterEach(() => vi.useRealTimers());
@@ -89,6 +89,7 @@ async function day(automatic = false, personId = worker) {
 const close = () =>
   run((tx) =>
     closePayPeriod(tx, {
+      paidBreakPolicy: null,
       nodeId,
       period,
       clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
@@ -561,3 +562,34 @@ it.each([
     expect((await read()).closures[0]).toEqual(before);
   },
 );
+
+it("exports credited work and raw pauses using the enabled agreement policy", async () => {
+  await suite.db.insert(api.convenioConfig).values({
+    locationId: await venueLocationId(suite.db),
+    breakThresholdMinutes: 300,
+    splitMinSegmentMinutes: 180,
+    splitMaxSegmentMinutes: 300,
+    splitMinGapMinutes: 90,
+    continuousPaidBreakMinutes: 20,
+  });
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await run((tx) => backend[kind](tx, event(`2026-01-05T${at}:00Z`)));
+  const value = await doc();
+  expect(cells(value, "sessions")[0]).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
+  expect(await run((tx) => api.WORKFORCE_ES_RECORD_EXPORT.paidBreakPolicy(tx))).toEqual({
+    thresholdMinutes: 300,
+    allowanceMinutes: 20,
+    splitGapMinutes: 90,
+  });
+});
+it.each([
+  ["en", "Paid totals may include breaks; recorded pauses stay visible."],
+  ["es", "Los totales pagados pueden incluir descansos; las pausas registradas siguen visibles."],
+] as const)("explains paid and recorded breaks in the %s export", async (locale, note) => {
+  expect((await doc({ locale })).notes).toContain(note);
+});

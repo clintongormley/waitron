@@ -428,3 +428,19 @@ it("gives one person each closure's snapshot cut to her", async () => {
   ]);
   expect(snapshot.sessions.map((s) => s.personId)).toContain(other);
 });
+
+it("carries the paid policy through direct and backend record reads", async () => {
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await run((tx) => backend[kind](tx, event(`2026-01-05T${at}:00Z`)));
+  const policy = { thresholdMinutes: 300, allowanceMinutes: 20, splitGapMinutes: 90 };
+  for (const read of [readTimeRecord, backend.timeRecord.bind(backend)]) {
+    const record = await run((tx) => read(tx, { personId, period: january }, policy));
+    expect(record.sessions[0]).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
+  }
+  expect((await query()).sessions[0]!.workedMinutes).toBe(380);
+});

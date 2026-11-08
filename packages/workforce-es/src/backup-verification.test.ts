@@ -229,3 +229,45 @@ describe("agreement backup evidence", () => {
     ).rejects.toThrow(failure);
   });
 });
+
+it("accepts an older policy-free source only when migrated policy columns stay null", async () => {
+  const columns = [
+    "split_min_segment_minutes",
+    "split_max_segment_minutes",
+    "split_min_gap_minutes",
+    "continuous_paid_break_minutes",
+  ];
+  for (const name of columns)
+    original.db.run(sql.raw(`alter table convenio_config drop column ${name}`));
+  try {
+    expect(await run()).toEqual(passed);
+    await corrupt(restored.db, "update convenio_config set split_min_gap_minutes=90");
+    expect((await run()).status).toBe("invalid");
+  } finally {
+    for (const name of columns)
+      original.db.run(sql.raw(`alter table convenio_config add column ${name} integer`));
+  }
+});
+
+it.each([
+  "continuous_paid_break_minutes=-1",
+  "continuous_paid_break_minutes=0",
+  "continuous_paid_break_minutes=0.5",
+  "split_min_segment_minutes=180",
+  "continuous_paid_break_minutes=20",
+  "split_min_segment_minutes=300, split_max_segment_minutes=180, split_min_gap_minutes=90",
+])("refuses matching but invalid policy rows: %s", async (values) => {
+  for (const db of [original.db, restored.db])
+    await corrupt(db, `update convenio_config set ${values}`);
+  expect((await run()).status).toBe("invalid");
+});
+it("preserves a configured paid-break policy and refuses a changed copy", async () => {
+  for (const db of [original.db, restored.db])
+    await corrupt(
+      db,
+      "update convenio_config set split_min_segment_minutes=180, split_max_segment_minutes=300, split_min_gap_minutes=90, continuous_paid_break_minutes=20",
+    );
+  expect(await run()).toEqual(passed);
+  await corrupt(restored.db, "update convenio_config set continuous_paid_break_minutes=10");
+  expect((await run()).status).toBe("invalid");
+});

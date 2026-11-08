@@ -85,6 +85,11 @@ export const convenioConfig = table(
      * default. */
     breaksCountAsWorked: flag("breaks_count_as_worked").notNull().default(false),
 
+    splitMinSegmentMinutes: count("split_min_segment_minutes"),
+    splitMaxSegmentMinutes: count("split_max_segment_minutes"),
+    splitMinGapMinutes: count("split_min_gap_minutes"),
+    continuousPaidBreakMinutes: count("continuous_paid_break_minutes"),
+
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

@@ -28,4 +28,13 @@ export interface WorkTimeRuleset {
   /** A per-day amount in tenant currency. */
   splitShiftPremium: number | null;
   breaksCountAsWorked: boolean;
+  splitMinSegmentMinutes?: number | null;
+  splitMaxSegmentMinutes?: number | null;
+  splitMinGapMinutes?: number | null;
+}
+
+export interface PaidBreakPolicy {
+  thresholdMinutes: number;
+  allowanceMinutes: number;
+  splitGapMinutes: number;
 }

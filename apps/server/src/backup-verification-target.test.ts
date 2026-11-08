@@ -422,7 +422,7 @@ it("gives today's real modules, set-less ones hosted in core's and workforce's s
     runtime,
   });
   expect(createHash("sha256").update(JSON.stringify(actual)).digest("hex")).toBe(
-    "c8a9b6ea4dfea22415444be2a81994b41ac3fa4b6c609d14d2c651e828d529ec",
+    "33f57efe4d4ab58a98f327493123e61821b0dbd11f4721ed569d75df31a73972",
   );
 });
 

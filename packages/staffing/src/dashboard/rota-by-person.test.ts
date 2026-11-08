@@ -136,7 +136,7 @@ describe("the Rota by person", () => {
     await grid.updateComplete;
     const shift = root.querySelector("[data-shift=filled]")!.textContent!;
     expect(shift).toContain("9 h rest");
-    expect(shift).toContain("0.25 h break owed");
+    expect(shift).toContain("15 min break owed");
     expect(shift).toContain("2 h night work");
     expect(root.querySelector('[data-person=ana] [data-day="2026-12-01"]')!.textContent).toContain(
       "daily maximum 9 h",

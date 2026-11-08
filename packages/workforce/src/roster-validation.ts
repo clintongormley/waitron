@@ -25,7 +25,10 @@ export type RosterBreachKind =
   | "overtime_cap_exceeded"
   | "weekly_rest_insufficient"
   | "break_owed"
-  | "night_work";
+  | "night_work"
+  | "split_segment_too_short"
+  | "split_segment_too_long"
+  | "split_gap_too_short";
 
 /** Rest is measured between working days (art. 34.3), not between the same-day segments of a split
  * shift. `previousShiftId` ends the earlier working day; `shiftId` opens the next. */
@@ -94,6 +97,20 @@ export interface NightWorkBreach {
   nightMinutes: number;
 }
 
+export interface SplitSegmentBreach {
+  kind: "split_segment_too_short" | "split_segment_too_long";
+  personId: string;
+  shiftId: string;
+  plannedMinutes: number;
+  limitMinutes: number;
+}
+export interface SplitGapBreach {
+  kind: "split_gap_too_short";
+  personId: string;
+  shiftId: string;
+  gapMinutes: number;
+  requiredMinutes: number;
+}
 export type RosterBreach =
   | RestTooShortBreach
   | ExceedsDailyMaxBreach
@@ -101,7 +118,9 @@ export type RosterBreach =
   | OvertimeCapExceededBreach
   | WeeklyRestInsufficientBreach
   | BreakOwedBreach
-  | NightWorkBreach;
+  | NightWorkBreach
+  | SplitSegmentBreach
+  | SplitGapBreach;
 
 export const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_DAY = 1_440;
@@ -378,6 +397,65 @@ function checkNightWindow(
   return breaches;
 }
 
+function checkSplitStretches(
+  byPerson: ReadonlyMap<string, PlannedShift[]>,
+  rules: WorkTimeRuleset,
+): RosterBreach[] {
+  const min = rules.splitMinSegmentMinutes,
+    max = rules.splitMaxSegmentMinutes,
+    gap = rules.splitMinGapMinutes;
+  if (min == null || max == null || gap == null) return [];
+  const breaches: RosterBreach[] = [];
+  for (const [personId, shifts] of byPerson) {
+    const days = new Map<string, PlannedShift[]>();
+    for (const shift of shifts) {
+      const day = localDate(shift.startsAt, shift.startsOffsetMinutes);
+      const rows = days.get(day) ?? [];
+      rows.push(shift);
+      days.set(day, rows);
+    }
+    for (const rows of days.values()) {
+      const stretches: PlannedShift[] = [];
+      for (const shift of rows) {
+        const previous = stretches.at(-1);
+        if (previous === undefined) {
+          stretches.push({ ...shift });
+          continue;
+        }
+        const gapMs = Date.parse(shift.startsAt) - Date.parse(previous.endsAt);
+        if (gapMs !== 0 && gapMs < gap * MS_PER_MINUTE)
+          breaches.push({
+            kind: "split_gap_too_short",
+            personId,
+            shiftId: shift.shiftId,
+            gapMinutes: Math.round(gapMs / MS_PER_MINUTE),
+            requiredMinutes: gap,
+          });
+        if (gapMs <= 0) {
+          if (Date.parse(shift.endsAt) > Date.parse(previous.endsAt)) {
+            previous.endsAt = shift.endsAt;
+            previous.endsOffsetMinutes = shift.endsOffsetMinutes;
+          }
+        } else stretches.push({ ...shift });
+      }
+      if (stretches.length < 2) continue;
+      for (const stretch of stretches) {
+        const spanMs = Date.parse(stretch.endsAt) - Date.parse(stretch.startsAt);
+        if (spanMs < min * MS_PER_MINUTE || spanMs > max * MS_PER_MINUTE)
+          breaches.push({
+            kind:
+              spanMs < min * MS_PER_MINUTE ? "split_segment_too_short" : "split_segment_too_long",
+            personId,
+            shiftId: stretch.shiftId,
+            plannedMinutes: Math.round(spanMs / MS_PER_MINUTE),
+            limitMinutes: spanMs < min * MS_PER_MINUTE ? min : max,
+          });
+      }
+    }
+  }
+  return breaches;
+}
+
 export function validateRoster(
   shifts: readonly PlannedShift[],
   ruleset: WorkTimeRuleset,
@@ -392,5 +470,6 @@ export function validateRoster(
     ...checkWeeklyRest(byPerson, ruleset),
     ...checkBreakThreshold(shifts, ruleset),
     ...checkNightWindow(shifts, ruleset),
+    ...checkSplitStretches(byPerson, ruleset),
   ];
 }

@@ -58,6 +58,7 @@ async function day(automatic = false) {
 const close = () =>
   run((tx) =>
     closePayPeriod(tx, {
+      paidBreakPolicy: null,
       nodeId,
       period,
       clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },

@@ -301,3 +301,22 @@ describe("workSummary", () => {
     expect(code).toBe("employment.not_found");
   });
 });
+
+it("uses paid breaks in planned versus actual totals", async () => {
+  const personId = await freshPerson("Paid break worker");
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await run((tx) => backend[kind](tx, event(personId, `2026-01-05T${at}:00Z`)));
+  const rows = await run((tx) =>
+    backend.getPlannedVsActual(
+      tx,
+      { period: { start: "2026-01-05", end: "2026-01-06" } },
+      { thresholdMinutes: 300, allowanceMinutes: 20, splitGapMinutes: 90 },
+    ),
+  );
+  expect(rows.find((row) => row.personId === personId)!.workedMinutes).toBe(400);
+});

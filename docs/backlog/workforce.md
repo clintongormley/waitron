@@ -164,6 +164,8 @@ moving them per person reaches every reader, so start from `packages/workforce/s
 grep `convenio`. Still to decide: whether the owner can change a ready-made set or only pick one,
 and which sets ship first.
 
+A586 also owns the yearly-hours ceiling and rota warning, and distinguishing overtime from complementary hours.
+
 Then a running total of hours worked and rostered against hours due, holiday counted
 ([spec open point 6](../superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md)).
 
@@ -216,7 +218,7 @@ module's `closePayPeriod` (`packages/workforce/src/pay-period-close.ts:76`) is c
 files (among them the fixture `apps/server/test/attendance-export-fixture.ts:77`); no route,
 scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one. Next: decide
 with the owner who closes a period and when (a manager's button, or automatically once it is
-due), then build it.
+due), then build it. Also decide how a later paid-break policy change affects the comparison with a saved closure; keep the saved totals intact.
 
 ## Loose ends left by A585-7 (#1766)
 
@@ -495,3 +497,13 @@ remains unfilled. A shift filled from Sunday's slot instead attaches to that slo
 The approved plan retains this limit. Part 7's editor
 must retain the overflow label; changing membership to the business week requires changing that
 agreed rule. Published-week edits and deletion remain refused even for an unattached shift.
+
+
+### Paid breaks and split warnings (A1406-2, owner 2026-11-08)
+
+The first venue configures continuous-break credit separately from the existing split-break flag.
+Annual limits and their rota warning remain with A586. Changes to a policy after a saved closure
+remain with the future closure decision above.
+
+The additive migration leaves existing agreement values in place; configure the new policy with
+the [first-venue recipe](../operations/first-venue-work-time.md).

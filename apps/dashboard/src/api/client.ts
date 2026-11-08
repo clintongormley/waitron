@@ -1055,7 +1055,10 @@ export type RosterBreachKind =
   | "overtime_cap_exceeded"
   | "weekly_rest_insufficient"
   | "break_owed"
-  | "night_work";
+  | "night_work"
+  | "split_segment_too_short"
+  | "split_segment_too_long"
+  | "split_gap_too_short";
 
 export interface RosterBreach {
   kind: RosterBreachKind;

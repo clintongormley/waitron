@@ -70,6 +70,7 @@ export async function seedAttendanceExport(db: Database) {
   );
   const closure = await run((tx) =>
     closePayPeriod(tx, {
+      paidBreakPolicy: null,
       nodeId,
       period,
       clock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
