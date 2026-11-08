@@ -227,6 +227,7 @@ describe("server health recovery", () => {
       request = f.request;
     f.job.status = "completed";
     f.job.completed_at = date(14);
+    f.job.runner_id = 7;
     f.run.status = "completed";
     f.options.request = async (path, options) =>
       path.includes("/actions/runs?")
@@ -238,6 +239,35 @@ describe("server health recovery", () => {
     expect(await health.needsServerProbe(f.options)).toBe(false);
     f.job.completed_at = date(16);
     expect(await health.needsServerProbe(f.options)).toBe(true);
+  });
+
+  it("does not count an unassigned cancellation or a hosted retry as server traffic", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.run.status = "completed";
+    f.job.status = "completed";
+    f.job.conclusion = "cancelled";
+    f.job.completed_at = date(1);
+    f.options.request = async (path, options) =>
+      path.includes("/actions/runs?")
+        ? {
+            total_count: path.includes("status=completed") ? 1 : 0,
+            workflow_runs: path.includes("status=completed") ? [f.run] : [],
+          }
+        : request(path, options);
+    expect(await health.needsServerProbe(f.options)).toBe(true);
+    f.job.labels = ["ubuntu-latest"];
+    f.job.runner_id = 8;
+    f.job.conclusion = "success";
+    expect(await health.needsServerProbe(f.options)).toBe(true);
+  });
+
+  it("recognises completed server traffic while the workflow's hosted summary still runs", async () => {
+    const f = fixture();
+    f.job.status = "completed";
+    f.job.runner_id = 7;
+    f.job.completed_at = date(1);
+    expect(await health.needsServerProbe(f.options)).toBe(false);
   });
 
   it("does not retry before cancellation settles", async () => {

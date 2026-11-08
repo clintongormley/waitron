@@ -88,7 +88,9 @@ export async function serverHealth(options) {
     running += jobs.filter(assigned).length;
     recent ||= jobs.some(
       (job) =>
-        job.status === "queued" || assigned(job) || now - Date.parse(job.completed_at) < 900_000,
+        job.status === "queued" ||
+        assigned(job) ||
+        (job.runner_id > 0 && now - Date.parse(job.completed_at) < 900_000),
     );
     if (jobs.some((job) => job.status === "queued" && !job.runner_id && old(job, run, now)))
       stuck.push(run);
@@ -182,7 +184,9 @@ export async function needsServerProbe(options) {
   for (const run of runs) {
     if (!owned(run, repositoryId)) continue;
     if (
-      (await serverJobs(options, run)).some((job) => now - Date.parse(job.completed_at) < 900_000)
+      (await serverJobs(options, run)).some(
+        (job) => job.runner_id > 0 && now - Date.parse(job.completed_at) < 900_000,
+      )
     )
       return false;
   }

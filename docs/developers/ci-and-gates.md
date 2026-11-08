@@ -180,10 +180,11 @@ not a wall-clock recovery guarantee.
 
 Every fifteen minutes, Server health also checks for idle server capacity when the human
 switch is `server`. It suppresses its probe while server work is queued or assigned, or
-when current active runs or the latest 100 completed runs contain server work completed
-within fifteen minutes. Otherwise it dispatches CI with `server_probe=true`: only a tiny
+when current active runs or the latest 100 completed runs contain assigned server work completed
+within fifteen minutes. An unassigned cancellation or a hosted retry is not server traffic. Otherwise it dispatches CI with `server_probe=true`: only a tiny
 Node job and the final aggregate run. Its first attempt requests a server; later attempts
 use GitHub, allowing the independent recovery workflow to finish a failed pickup drill.
+A successful hosted retry proves recovery only; it does not establish server health.
 You can dispatch this explicit probe while the human switch is hosted. The controller
 must recognise `server-probe-1` before the first attempt can be picked up.
 
