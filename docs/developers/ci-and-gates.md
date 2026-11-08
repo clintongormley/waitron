@@ -1,5 +1,41 @@
 # CI and gates
 
+## Scoped tests and full verification
+
+To reduce repeated work, pull requests and main landings run only selected packages, without
+collecting package-wide coverage. Check `changes` outputs `code`, `scope`, `packages` and `full`
+before treating a green run as evidence about the workspace. Root coverage, mutation floors and
+other selected checks remain in place. Till changes also select the server: its handover test
+loads the till router by path, outside the workspace dependency graph.
+
+The full CI run starts nightly at 02:00 UTC, on manual dispatch and on `v*` releases. It tests all
+packages, collects coverage and requires the existing merged `98/98/98/95` thresholds. Scoped
+runs skip coverage transfers and merge jobs. Shards retain their existing allocation and check
+that their test script exists before running, including when result uploads are skipped.
+
+After full verification on main, the run publishes its pinned SHA images and asks the existing
+`main-tag-guard.sh` before moving `:main`. Ordinary main pushes publish no container image.
+A manual full run on another branch verifies without publishing. The private UI-package workflow
+`publish-ui.yml` retains its separate publication policy. `image-nightly.yml` remains available
+for manual smoke checks; its former nightly schedule is replaced by full CI.
+
+Each non-PR run has a unique concurrency group. Only a newer PR run cancels its predecessor.
+Equal-tree PR reuse has been removed. Main selects changes since the newest completed successful
+push, scheduled or manual main ancestor among the latest 100 runs. Queued, running, failed and
+cancelled runs do not become baselines. Missing history or an unreadable API selects all packages;
+failed, partial, unsafe or oversized path output also selects all packages. A successful docs run
+cannot hide failed code: that code is included in its range before the docs run can succeed.
+
+For immediate full verification, run `gh workflow run ci.yml --ref main`, record the selected SHA
+and run ID, then read the final result. A failed nightly needs a fix followed by this manual run;
+a passing retry alone is not a repair. On main this command also publishes after verification.
+
+The local guards execute classification, aggregate and watchdog shells with controlled external
+commands. Their workflow-expression checks establish wiring, not hosted scheduling or publication.
+The watcher stopped the file-level prototype for cost on 7 November. Keep package-level selection;
+the measurement is retained in [CI decisions](../backlog/ci.md#decisions-and-deliberate-limits).
+
+
 This file holds the evidence behind Waitron's test gates: the mechanisms, the measurements, the
 exact commands, and the incident that paid for each rule. The one-line versions of these rules
 live in the repo root `CLAUDE.md`, section 2 ("The gate"), which points here. Read this file
@@ -151,11 +187,9 @@ prefer `gnutimeout`, then `gtimeout`, then `timeout`. Run the root shell checks 
 these commands installed; the selection test wraps the actual timeout command and checks
 which executable the workflow chooses.
 
-The watchdog covers the code, package and reuse gates of every family in the table. Outside
-a routed attempt it exits successfully without an API call. This costs one small hosted job
-on selected server, browser or heavy runs, including a zero-API no-op when all caps are
-zero, and preserves the reuse verifier's requirement that every job in the previous full
-main run succeeded. The verifier and existing reuse assertions are unchanged.
+The watchdog keeps common admission in `SHOULD_WATCH` and each family's scope and cap in
+`FAMILIES`. Outside an admitted attempt, or when no family is enabled, the shell exits successfully
+without an API call. The job still reports to the aggregate.
 
 Before activation, have I confirm Linux tools, `/proc`, Node/pnpm/cache support, measured
 global capacity and ordinary PR admission. Server jobs need Chromium headless-shell
@@ -325,8 +359,8 @@ root `build` script does run all three, which is how this branch got its evidenc
 
 Three hedges, because the gap is both narrower and wider than it first reads. Narrower on the
 trigger: `image` builds all three on a pull request that happens to change an image input, and on
-every code-gated main push. Narrower again: the Dockerfile is also built by `publish` on a push and nightly
-by `image-nightly.yml`, which exists precisely as the safety net for this scoping and says so in its
+full nightly/manual verification. Narrower again: the Dockerfile is also built by `publish` after full verification and by manual
+`image-nightly.yml` dispatches, which exists precisely as the safety net for this scoping and says so in its
 own header — so all three SPAs are built daily against the default branch. Wider, and this is the
 part a reader is most likely to assume away: every one of those paths only BUILDS them. Nothing
 opens one, so a bundle that compiles and then renders nothing passes everywhere.
@@ -374,7 +408,7 @@ The shell regressions in `scripts/pre-push.test.mjs` exercise scope and failure 
 **Claude never pushes with `--no-verify`**; the owner may, in an emergency (owner decision
 2026-10-03), and the failure still has to be fixed because CI runs the same checks. The hook's
 failure message says so beside its skip hint, pinned by `scripts/pre-push.test.mjs`. A hook failure
-the PR does not reproduce still needs investigation. PR scoping or verified reuse may skip that
+the PR does not reproduce still needs investigation. package scoping may skip that
 check; a green scoped run does not overrule the hook's failure.
 
 ## Coverage thresholds: one bar for every package
@@ -561,7 +595,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
-| `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, unless verified equal-tree PR CI is reused |
+| `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on main it uses the same resolved package scope; full runs select every package |
 | `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
@@ -629,11 +663,11 @@ full report cannot contribute results outside a shard's selected files. The ordi
 
 Each CI shard writes one JSON report and has no separate score floor. The five-minute
 `mutation-shared-aggregate` job requires four report directories and enforces 90% on their combined
-score. Both jobs report to `ci`; the aggregate uses the same shared-package and reuse conditions
+score. Both jobs report to `ci`; the aggregate uses the same shared-package conditions
 as the shards, and still runs after a failed shard to refuse incomplete reports. The final `ci`
 verdict refuses a skipped mutation aggregate when shared was selected, except when verified reuse
 supplies the earlier result. Its executable jq cases cover that refusal and the unselected,
-documentation and verified-reuse paths. The workflow guard also requires the aggregate's condition
+documentation paths. The workflow guard also requires the aggregate's condition
 to be `always() && ` followed by the shards' condition. Downloads and
 uploads use the existing bounded two-attempt patterns. The download action keeps each artifact
 in its own directory because the aggregate counts those directories. No new Actions cache is added.
@@ -930,10 +964,11 @@ on the actual CI head to check those.
 
 ## CI job layout and scheduling
 
-### CI's test jobs measure coverage, never plain `test`
+### Full verification measures coverage
 
-Before calling a package green, verify its CI coverage result on the current head. Run
-`pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
+For nightly, manual and release full verification, check the selected head’s coverage results.
+PR and landing runs use the scoped mode described above. Run `pnpm --filter <pkg> test:coverage`
+locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way and twenty-four-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal
@@ -1478,11 +1513,15 @@ before treating a green PR as evidence about the workspace. Designed and built i
 
 ### Main can reuse an identical pull-request tree
 
+> Historical, retired by A1427 on 7 November 2026. The helper and its consumers were removed.
+> Use [scoped tests and full verification](#scoped-tests-and-full-verification) for current behavior.
+> The [retired source](https://github.com/clintongormley/waitron/blob/dca99e25b4b16e9c0dcb5b85a1f29ca35c8d97d5/scripts/ci-reuse.mjs) records the implementation described below.
+
 When you squash an up-to-date PR, its commit can have the same Git tree as the PR head.
 A tree identifies the complete tracked file contents and modes. A different commit id alone
 does not require another test run; additional main changes do.
 
-On a push to `refs/heads/main`, `scripts/ci-reuse.mjs` reads GitHub's API before allowing reuse.
+On a push to `refs/heads/main`, the former reuse helper reads GitHub's API before allowing reuse.
 Every checkout defined directly in `ci.yml` explicitly selects the PR head on PR events and the
 pushed commit otherwise. The called image-smoke workflow keeps its existing checkout policy;
 main runs that smoke for its own pushed commit before publishing. This avoids claiming that a
@@ -1567,6 +1606,10 @@ Keep that result distinct from a run proving publication after this correction.
 | [GitHub job dependencies](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-jobs) | “a failure or skip applies to all jobs in the dependency chain” | Override implicit status evaluation after intentional skips while retaining the explicit successful aggregate requirement. |
 
 ### Smaller job-list pages after HTTP 502 responses (A1340)
+
+> 7 November 2026, A1427: the reuse verifier and its test were retired. This section keeps their
+> historical measurements. Run `pnpm exec vitest run scripts/ci-workflow.test.mjs` for the remaining
+> aggregate and watchdog API guards; the old two-file command below is no longer a current command.
 
 On 5 November 2026, [main run 42051923779](https://github.com/clintongormley/waitron/actions/runs/42051923779),
 attempt 2, reached its twelve-minute summary limit while the jobs API returned HTTP 502.
@@ -1656,47 +1699,23 @@ returned `total_count: 0`. The following docs commit `5ca72a619` had CI run `398
 which skipped the server suite and image. Why GitHub created no run is unverified. This differs
 from the cancellation above: there is no run to rerun.
 
-Main pushes compare against the nearest eligible ancestor instead of the preceding push.
-`scripts/ci-diff-paths.sh` reads the latest 100 main CI runs. It accepts push or manual runs on
-main that are queued, in progress or completed successfully, then checks ancestry locally.
-It selects by ancestry even when a newer manual run names an older commit. Failed, cancelled
-and other completed results cannot supply the baseline. A missing baseline or failed API read
-selects the full suite and image. The API call uses `gtimeout` or `timeout` with a 30-second
-deadline and a five-second kill grace; neither command available also selects the full run.
-A docs push runs the packages and can publish when its range includes code with no eligible run.
-For example, if a code merge's run is queued and you push only `docs/backlog.md`, the later run
-reports `code=false` and skips package suites and publishing. The earlier code run keeps its
-independent concurrency group and continues checking that code.
+Main pushes compare against the newest completed successful main ancestor among the latest 100
+push, schedule and dispatch runs. The range includes failed or unfinished changes, so a later docs
+push still selects their packages. No eligible ancestor, unavailable API/history, or unsafe,
+oversized or partial diff output selects all packages. PRs retain merge-base scope.
 
-If the earlier run later fails or is cancelled, keep that result with the code's validation
-record. A passing docs run does not qualify the earlier tree. The next code push runs the full
-package suite over the current tree, even if its nearest eligible baseline is a passing docs run. For an immediate
-recheck without another code change, use manual recovery below. Keep the earlier run's ID with
-your checkpoint until you have read its final result; a queued baseline is not a passing check.
-Pull requests retain their merge-base scope; release tags and manual dispatches run everything.
+Use `gh workflow run ci.yml --ref main` for an immediate full run. Record its SHA and run ID and
+read its result; the run verifies the selected tree and publishes its images after success.
+Every main push still needs its own run. See [current modes](#scoped-tests-and-full-verification).
 
-If a main run is missing, start a full validation of current main. Let an existing manual recovery
-finish before starting another:
-
-```sh
-gh workflow run ci.yml --ref main
-gh run list --workflow ci.yml --branch main --event workflow_dispatch \
-  --json databaseId,headSha,status,conclusion
-```
-
-Record the dispatched SHA and run ID, check that the missing commit is its ancestor, and read
-back the required result. This qualifies the current tree, not a historical exact-SHA run.
-Manual recovery runs the image smoke but does not publish. Push publishing retains its existing
-`main-tag-guard.sh` check. Keep checking that each merge gets its own run: with no later push,
-the baseline mechanism has no event on which to recover a dropped run.
-
-`scripts/ci-main-recovery.test.mjs` runs the extracted classification step against a real Git
-history and the real package classifier, with the runs API replaced by fixtures. It checks a
-missing code run followed by docs, queued and running ancestors, nearest-ancestor choice,
-self-exclusion, failed baseline reads, ancestry, manual recovery and PR scope.
-Its trigger, token wiring and publishing assertions read workflow text; they do not run Actions.
+`scripts/ci-main-recovery.test.mjs` exercises the extracted classification shell with real Git
+history and the package classifier, replacing only the runs API. Its mode and publication checks
+read workflow expressions; they do not execute Actions.
 
 ### Separated pushes overlap, so publishing asks before it takes `:main`
+
+> 7 November 2026: publication now follows full scheduled/manual main runs and release verification.
+> Ordinary main pushes no longer publish. The guard and its race limits below remain.
 
 Two `main` runs now build at the same time, and the one that finishes LAST is not always the one
 carrying the newest commit. A registry tag is last-write-wins, so the older run's publish would
@@ -3437,15 +3456,11 @@ same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=pa
 `packages=@waitron/server`; and `pnpm --filter "...@waitron/server" ls --depth -1 --json | node
 scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
 every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for `code` and
-`server` both true. On `main` the `changes` job forces `scope=global`, whose gate step prints every gate true. On a real pull
-request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
-installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
-that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
-in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven from A801, sixteen from A938, twenty from A1137, twenty-four since A1297),
-`test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
-`code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
-the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless
-`scripts/main-tag-guard.sh` holds it for a newer commit.
+`server` both true. PR and ordinary main ranges now select those server jobs without package
+coverage; their merge job runs only in full verification. Type checks and bundle checks also run
+when code is selected. Full scheduled/manual verification selects all packages and image smoke,
+then publishes main images through the existing tag guard. The PR #682 runs above record the
+older job layout, before A1427 scoped main landings and moved full coverage to the nightly run.
 
 **What the guard does not see.** `scripts/ci-workflow.test.mjs` is weaker than its name for the
 `TMPDIR=/dev/shm` setting: it reads `ci.yml` as text, so a step an `if:` switches off, or a `run:`

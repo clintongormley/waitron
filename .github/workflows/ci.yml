@@ -36,75 +36,19 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
 
 concurrency:
-  # A PUSH IS NEVER GROUPED: its group is unique to the run, so no push can cancel or delay another.
-  #
-  # Without verified equal-tree PR reuse, a code push runs the unfiltered suite over the merged tree.
-  # A manual recovery also runs that suite, without publishing. Grouping pushes
-  # together cannot leave that alone, whatever `cancel-in-progress` says: GitHub allows only one
-  # PENDING run per group and a newer arrival cancels the one already waiting, while
-  # `cancel-in-progress` governs a run that has already STARTED and so never reaches that case. The
-  # merge that queued behind the previous merge was thrown away by the docs commit a minute later,
-  # and nothing was red. Receipt: `docs/developers/ci-and-gates.md`.
-  #
-  # What the separation costs: two `main` runs now overlap, and a registry tag is last-write-wins,
-  # so the publish job asks `scripts/main-tag-guard.sh` whether a newer commit already holds `:main`
-  # before it moves that tag. A pull request still groups by ref, so a force-push supersedes the run
-  # it made stale.
-  #
-  # Guard: `scripts/ci-workflow.test.mjs`, which reads this block as TEXT — it pins how the
-  # expression is written, not what GitHub evaluates it to.
-  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.run_id || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  # Every non-PR run keeps its place; only a newer PR head supersedes its previous run.
+  group: ${{ github.workflow }}-${{ github.event_name != 'pull_request' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
-  # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
-  #
-  # Two independent decisions, deliberately not merged into one:
-  #   `code`  — does anything here reach a code-gated job? If not, absent reuse only `lint` (eslint and
-  #             format:check) and `root-guards` (the repo-level Vitest project) jobs run, on pull requests
-  #             AND on main, so an inert change — prose, or root config no code-gated job reads —
-  #             costs nothing in either place, and neither does a change to the repository's OWN
-  #             machinery (`scripts/`, `.husky/`, `.github/`, `scope=root`), which gives no package
-  #             any CI work — except a file members read or their test job runs, which
-  #             ROOT_SCOPE_CONSUMERS in `scripts/changed-scope.mjs` attributes to those members, so
-  #             it is `code=true`, and a reporter every test command loads (GLOBAL_ROOT_FILES there),
-  #             which runs everything.
-  #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
-  #             packages that depend on them. Without reuse, main runs everything, because that unfiltered run
-  #             is what verifies the narrowing was right.
-  #
-  # Both come out of ONE `scripts/changed-packages.mjs` call, which is the same call and the same
-  # file `.husky/pre-push` runs. Until 2026-08-01 this job resolved the scope a second way — pnpm's
-  # own changed-since filter, `pnpm --filter "...[origin/$BASE_REF]" ls` — and the two mechanisms
-  # disagreed in the silent direction. Reproduced on 2026-08-01 in a `git clone --no-hardlinks` of
-  # this repository, one commit on top of `main` touching only `tsconfig.base.json`:
-  #
-  #   git diff --name-only main...HEAD               → tsconfig.base.json
-  #   pnpm --filter "...[main]" ls --depth -1 --json → one entry, {"name": "waitron"}
-  #   … | node .github/scripts/changed-scope.mjs gates
-  #                                                  → heavy=false light=true verifactu=false
-  #                                                    shared=false
-  #
-  # (that last command is spelled as it was on `main` at the time — the file has since moved to
-  # `scripts/` and lost the `gates` subcommand, in the same change as this comment)
-  #
-  # A `pnpm-lock.yaml`-only commit gave byte-identical output; a `packages/ui`-only commit gave one
-  # entry and a `packages/shared` one gave twelve, so the narrowing itself was right — it was
-  # unattributable paths that resolved to the workspace ROOT, the one member that runs no tests.
-  # `test-heavy` and both mutation jobs skipped outright, and `test-light` was gated true but
-  # selected nothing to run: `pnpm --filter "waitron" --no-sort format:check` prints `No projects
-  # matched the filters in "…"` and exits 0 (run in this workspace, same date). So on a
-  # root-config-only or lockfile-only pull request, no package's suite ran at all.
-  #
-  # scripts/changed-packages.mjs attributes each path to the workspace member whose directory
-  # contains it and fails CLOSED — anything outside every member, bar the repository's own
-  # machinery other than a file `GLOBAL_ROOT_FILES` lists, is `scope=global`, which is no filter at all. Expanding a changed package to its DEPENDENTS is still pnpm's job, via the
-  # `--filter "...<pkg>"` arguments built below.
+  # Package scope is shared with the push hook. Full verification also enables coverage.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -113,9 +57,7 @@ jobs:
       actions: read
       pull-requests: read
     outputs:
-      reuse: ${{ steps.reuse.outputs.reuse }}
-      reuse_run: ${{ steps.reuse.outputs.reuse_run }}
-      reuse_sha: ${{ steps.reuse.outputs.reuse_sha }}
+      full: ${{ steps.classify.outputs.full }}
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
       packages: ${{ steps.classify.outputs.packages }}
@@ -217,15 +159,9 @@ jobs:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
-      - id: reuse
-        name: Verify equal-tree pull-request CI evidence
-        timeout-minutes: 3
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/ci-reuse.mjs
-
       - id: classify
         env:
+          FULL: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
           BASE_REF: ${{ github.base_ref }}
           SHA: ${{ github.sha }}
           EVENT: ${{ github.event_name }}
@@ -241,7 +177,7 @@ jobs:
           # `packages=`, `root=` and `deploy=` — from ONE classifier call, which is also the one
           # `.husky/pre-push` makes. Four become job outputs: `root=` is emitted for the record and
           # read by no consumer today — the hook routes a root-only push on `scope=root` — while
-          # `deploy=` is read by the `image` job. Reuse leaves these publishing inputs intact.
+          # `deploy=` is read by the `image` job.
           # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
@@ -266,15 +202,15 @@ jobs:
           scope=$(printf '%s\n' "$out" | sed -n 's/^scope=//p')
           packages=$(printf '%s\n' "$out" | sed -n 's/^packages=//p')
           # Whether the box image's inputs (deploy/, and the files image-smoke runs that IMAGE_SMOKE_FILES names) changed.
-          # The `image` job runs on it; a main push also runs it on `code` alone.
           deploy=$(printf '%s\n' "$out" | sed -n 's/^deploy=//p')
 
-          if [ "$EVENT" != "pull_request" ]; then
+          if [ "$FULL" = "true" ]; then
             scope="global"
             packages=""
           fi
 
           {
+            echo "full=$FULL"
             echo "code=$code"
             echo "scope=$scope"
             echo "packages=$packages"
@@ -358,7 +294,7 @@ jobs:
   # path and a clean path identically, so the obvious probe proves nothing.
   lint:
     needs: changes
-    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.reuse != 'true')
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -419,7 +355,7 @@ jobs:
 
   root-guards:
     needs: changes
-    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.reuse != 'true')
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -493,7 +429,7 @@ jobs:
   # TypeScript source. Gated on `code` because a Markdown edit cannot change an esbuild bundle.
   bundle-smoke:
     needs: changes
-    if: (needs.changes.outputs.code == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true')
     runs-on: ubuntu-latest
     # One of the steps below now starts a server that runs until it is killed. Its own `timeout`
     # bounds it, and this bounds the job if that ever stops working — without it a hung step waits
@@ -740,7 +676,7 @@ jobs:
 
   # The image a restaurant actually runs: built, brought up on blank volumes, and smoke-tested. The
   # build + smoke themselves live in the reusable `.github/workflows/image-smoke.yml`, called from
-  # here AND from the nightly `image-nightly.yml`, so those ~90 lines exist in exactly one place.
+  # here and from the manual `image-nightly.yml`, so those ~90 lines exist in exactly one place.
   # Publishing the image is the separate `publish` job below.
   #
   # It earns its place by proving two things no developer's machine can — a non-root process
@@ -752,15 +688,12 @@ jobs:
   # WHEN IT RUNS. Whenever an image input changed (`needs.changes.outputs.deploy`, fed by
   # `isImageInputPath` in scripts/changed-scope.mjs: `deploy/`, plus the files image-smoke runs that
   # `IMAGE_SMOKE_FILES` names, such as scripts/fake-bluez.py) — on its own, because a change to such a file under `scripts/` is
-  # root scope, which answers `code=false`. Otherwise, most PRs skip it. On a PUSH to `main` or a
-  # `v*` tag it also runs on `code` alone, because `publish` ships the image off this smoke
-  # passing, so every published image was booted first. Drift on quiet days, and an edit to the image
-  # workflow itself, are covered by image-nightly.yml (a schedule plus a manual `workflow_dispatch`).
-  # ONE `if:` line, so the line-based guard in scripts/ci-workflow.test.mjs reads it — that guard
-  # pins the deploy wiring and this pull-request-only event split.
+  # root scope, which answers code=false. Full verification also smokes before publication.
+  # Guard: scripts/ci-workflow.test.mjs reads the condition as text and evaluates its truth table.
+
   image:
     needs: changes
-    if: needs.changes.outputs.deploy == 'true' || (needs.changes.outputs.code == 'true' && github.event_name != 'pull_request')
+    if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.full == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/image-smoke.yml
@@ -768,7 +701,7 @@ jobs:
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:
     needs: changes
-    if: (needs.changes.outputs.code == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -866,7 +799,7 @@ jobs:
     # every code change; and `@waitron/db[<base>]` — pnpm's changed-since form, which this workflow no
     # longer uses at all — misses db when one of db's own dependencies changed. The `changes` job
     # resolves membership properly and answers here with a boolean.
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_HEAVY_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-heavy-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -937,7 +870,9 @@ jobs:
       - name: Run the db shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/db" test:shard \
+          pnpm --filter "@waitron/db" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:shard
+          pnpm --filter "@waitron/db" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/3 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
@@ -947,7 +882,7 @@ jobs:
       # writes no blob, so the upload FAILS the shard rather than reporting a green that tested nothing.
       - id: upload_blob
         name: Upload the db coverage blob
-        if: always()
+        if: always() && needs.changes.outputs.full == 'true'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         continue-on-error: true
@@ -958,7 +893,7 @@ jobs:
           retention-days: 1
 
       - name: Retry artifact upload
-        if: always() && steps.upload_blob.outcome == 'failure'
+        if: always() && needs.changes.outputs.full == 'true' && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         with:
@@ -980,7 +915,7 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-heavy]
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -1072,7 +1007,7 @@ jobs:
   test-server:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -1164,7 +1099,9 @@ jobs:
       - name: Run the server shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/server" test:shard \
+          pnpm --filter "@waitron/server" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:shard
+          pnpm --filter "@waitron/server" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/24 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
@@ -1186,7 +1123,7 @@ jobs:
       # the shard, rather than a green that tested nothing (see test-heavy's upload step).
       - id: upload_blob
         name: Upload the server coverage blob
-        if: always()
+        if: always() && needs.changes.outputs.full == 'true'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         continue-on-error: true
@@ -1197,7 +1134,7 @@ jobs:
           retention-days: 1
 
       - name: Retry artifact upload
-        if: always() && steps.upload_blob.outcome == 'failure'
+        if: always() && needs.changes.outputs.full == 'true' && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         with:
@@ -1219,7 +1156,7 @@ jobs:
   test-server-stream:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -1326,7 +1263,9 @@ jobs:
           WAITRON_FULL_DISK_DIR_RESTORE: ${{ runner.temp }}/full-disk-restore
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/server" test:shard \
+          pnpm --filter "@waitron/server" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:shard
+          pnpm --filter "@waitron/server" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             src/stream-loop.e2e.test.ts \
             src/stream-pause.e2e.test.ts \
             src/s3-rehearsal-scenarios.e2e.test.ts \
@@ -1345,7 +1284,7 @@ jobs:
 
       - id: upload_blob
         name: Upload the stream tests' coverage blob
-        if: always()
+        if: always() && needs.changes.outputs.full == 'true'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         continue-on-error: true
@@ -1356,7 +1295,7 @@ jobs:
           retention-days: 1
 
       - name: Retry artifact upload
-        if: always() && steps.upload_blob.outcome == 'failure'
+        if: always() && needs.changes.outputs.full == 'true' && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         with:
@@ -1376,7 +1315,7 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-server, test-server-stream]
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -1457,7 +1396,7 @@ jobs:
   test-fiscal-verifactu:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-fiscal-verifactu-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -1545,14 +1484,14 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
-          node scripts/run-with-deadline.mjs 420 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:shard \
+          node scripts/run-with-deadline.mjs 420 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - id: upload_blob
         name: Upload the fiscal-verifactu coverage blob
-        if: always()
+        if: always() && needs.changes.outputs.full == 'true'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         continue-on-error: true
@@ -1563,7 +1502,7 @@ jobs:
           retention-days: 1
 
       - name: Retry artifact upload
-        if: always() && steps.upload_blob.outcome == 'failure'
+        if: always() && needs.changes.outputs.full == 'true' && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         with:
@@ -1579,7 +1518,7 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-fiscal-verifactu]
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -1670,7 +1609,7 @@ jobs:
   test-ui:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_UI_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-ui-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -1770,7 +1709,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - run: pnpm --filter @waitron/ui-core test:package
@@ -1789,7 +1728,7 @@ jobs:
   test-till:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_TILL_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-till-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -1872,7 +1811,9 @@ jobs:
           DEBUG: pw:api
         run: |
           set -euo pipefail
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/till" test:shard \
+          pnpm --filter "@waitron/till" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:shard
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/till" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/7 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
@@ -1880,7 +1821,7 @@ jobs:
       # No blob means the shard ran nothing; see test-heavy's upload step.
       - id: upload_blob
         name: Upload the till coverage blob
-        if: always()
+        if: always() && needs.changes.outputs.full == 'true'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         continue-on-error: true
@@ -1891,7 +1832,7 @@ jobs:
           retention-days: 1
 
       - name: Retry artifact upload
-        if: always() && steps.upload_blob.outcome == 'failure'
+        if: always() && needs.changes.outputs.full == 'true' && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         with:
@@ -1909,7 +1850,7 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-till]
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -1997,7 +1938,7 @@ jobs:
   test-dashboard:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_DASHBOARD_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-dashboard-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -2080,7 +2021,9 @@ jobs:
           DEBUG: pw:api
         run: |
           set -euo pipefail
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/dashboard" test:shard \
+          pnpm --filter "@waitron/dashboard" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:shard
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/dashboard" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
@@ -2088,7 +2031,7 @@ jobs:
       # No blob means the shard ran nothing; see test-heavy's upload step.
       - id: upload_blob
         name: Upload the dashboard coverage blob
-        if: always()
+        if: always() && needs.changes.outputs.full == 'true'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         continue-on-error: true
@@ -2099,7 +2042,7 @@ jobs:
           retention-days: 1
 
       - name: Retry artifact upload
-        if: always() && steps.upload_blob.outcome == 'failure'
+        if: always() && needs.changes.outputs.full == 'true' && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         with:
@@ -2117,7 +2060,7 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-dashboard]
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2205,7 +2148,7 @@ jobs:
   test-setup:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_SETUP_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-setup-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -2283,7 +2226,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/setup" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/setup" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/setup" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Venue service combines server-side configuration tests with a Chromium dashboard project.
@@ -2291,7 +2234,7 @@ jobs:
   test-venue-service:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_VENUE_SERVICE_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-venue-service-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -2386,7 +2329,9 @@ jobs:
           VITEST_PW_DEBUG: "1"
         run: |
           set -euo pipefail
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/venue-service" test:shard \
+          pnpm --filter "@waitron/venue-service" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:shard
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/venue-service" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs" \
@@ -2396,7 +2341,7 @@ jobs:
       # No blob means the shard ran nothing; see test-heavy's upload step.
       - id: upload_blob
         name: Upload the venue-service coverage blob
-        if: always()
+        if: always() && needs.changes.outputs.full == 'true'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         continue-on-error: true
@@ -2407,7 +2352,7 @@ jobs:
           retention-days: 1
 
       - name: Retry artifact upload
-        if: always() && steps.upload_blob.outcome == 'failure'
+        if: always() && needs.changes.outputs.full == 'true' && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         with:
@@ -2457,7 +2402,7 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-venue-service]
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2539,7 +2484,7 @@ jobs:
   test-adjustments:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_ADJUSTMENTS_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-adjustments-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -2610,7 +2555,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/adjustments" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/adjustments" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/adjustments" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Staffing has a database project and a Chromium dashboard project, as adjustments does.
@@ -2618,7 +2563,7 @@ jobs:
   test-staffing:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_STAFFING_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-staffing-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -2689,7 +2634,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/staffing" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/staffing" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/staffing" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Bookings owns both a browser project and a database project. Its own runner keeps
@@ -2697,7 +2642,7 @@ jobs:
   test-bookings:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_BOOKINGS_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-bookings-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -2772,7 +2717,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/bookings" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/bookings" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/bookings" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Media splits into a database project and a Chromium one, so its runner installs both test
@@ -2780,7 +2725,7 @@ jobs:
   test-media:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_MEDIA_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-media-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -2855,7 +2800,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/media" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/media" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/media" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The Stripe payment module, like bookings, owns both a database-backed node project and a Chromium
@@ -2864,7 +2809,7 @@ jobs:
   test-payments-stripe:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-payments-stripe-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -2939,7 +2884,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/payments-stripe" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/payments-stripe" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/payments-stripe" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The SumUp payment module, same shape as payments-stripe: a database-backed node project plus a
@@ -2947,7 +2892,7 @@ jobs:
   test-payments-sumup:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true')
     runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-payments-sumup-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
@@ -3022,13 +2967,13 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/payments-sumup" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/payments-sumup" test:coverage \
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/payments-sumup" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   test-provisioning:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -3089,14 +3034,16 @@ jobs:
       - name: Run the provisioning shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/provisioning" test:shard \
+          pnpm --filter "@waitron/provisioning" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:shard
+          pnpm --filter "@waitron/provisioning" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/6 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - id: upload_blob
         name: Upload the provisioning coverage blob
-        if: always()
+        if: always() && needs.changes.outputs.full == 'true'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         continue-on-error: true
@@ -3107,7 +3054,7 @@ jobs:
           retention-days: 1
 
       - name: Retry artifact upload
-        if: always() && steps.upload_blob.outcome == 'failure'
+        if: always() && needs.changes.outputs.full == 'true' && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
         with:
@@ -3123,7 +3070,7 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-provisioning]
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true') && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -3203,7 +3150,7 @@ jobs:
   test-identity:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true')
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -3264,13 +3211,13 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/identity" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/identity" test:coverage \
+          pnpm --filter "@waitron/identity" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   test-workforce:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true')
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -3331,7 +3278,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/workforce" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/workforce" test:coverage \
+          pnpm --filter "@waitron/workforce" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The remaining packages partition into two bins, with at most two package runners per bin.
@@ -3341,7 +3288,7 @@ jobs:
   test-light-a:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true')
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -3453,14 +3400,14 @@ jobs:
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage \
+          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The second bin subtracts OWN_SHARD_PACKAGES and LIGHT_A_PACKAGES.
   test-light-b:
     timeout-minutes: 10
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true')
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -3567,13 +3514,13 @@ jobs:
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage \
+          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Whole-file shards preserve every mutation target; the aggregate enforces the package floor.
   mutation-shared:
     needs: changes
-    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true') && needs.changes.outputs.reuse != 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -3671,7 +3618,7 @@ jobs:
 
   mutation-shared-aggregate:
     needs: [changes, mutation-shared]
-    if: always() && (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true') && needs.changes.outputs.reuse != 'true'
+    if: always() && (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -3742,31 +3689,31 @@ jobs:
   server-queue-watchdog:
     timeout-minutes: 22
     needs: changes
-    if: ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true') || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true')
+    if: ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
       - name: Bound the disposable test queues
         env:
-          SHOULD_WATCH: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && ((((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_HEAVY_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_UI_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_TILL_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_DASHBOARD_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_SETUP_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_VENUE_SERVICE_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_ADJUSTMENTS_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_STAFFING_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_BOOKINGS_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_MEDIA_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS || '0')) || (((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0'))) }}
+          SHOULD_WATCH: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) }}
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
           FAMILIES: >-
             [
-            {"id":"test-server","count":24,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') }}},
-            {"id":"test-heavy","count":3,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_HEAVY_JOBS || '0') }}},
-            {"id":"test-fiscal-verifactu","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS || '0') }}},
-            {"id":"test-ui","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_UI_JOBS || '0') }}},
-            {"id":"test-till","count":7,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_TILL_JOBS || '0') }}},
-            {"id":"test-dashboard","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_DASHBOARD_JOBS || '0') }}},
-            {"id":"test-setup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_SETUP_JOBS || '0') }}},
-            {"id":"test-venue-service","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_VENUE_SERVICE_JOBS || '0') }}},
-            {"id":"test-adjustments","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_ADJUSTMENTS_JOBS || '0') }}},
-            {"id":"test-staffing","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_STAFFING_JOBS || '0') }}},
-            {"id":"test-bookings","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_BOOKINGS_JOBS || '0') }}},
-            {"id":"test-media","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_MEDIA_JOBS || '0') }}},
-            {"id":"test-payments-stripe","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS || '0') }}},
-            {"id":"test-payments-sumup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true') && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0') }}}
+            {"id":"test-server","count":24,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') }}},
+            {"id":"test-heavy","count":3,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_HEAVY_JOBS || '0') }}},
+            {"id":"test-fiscal-verifactu","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_FISCAL_VERIFACTU_JOBS || '0') }}},
+            {"id":"test-ui","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_UI_JOBS || '0') }}},
+            {"id":"test-till","count":7,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_TILL_JOBS || '0') }}},
+            {"id":"test-dashboard","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_DASHBOARD_JOBS || '0') }}},
+            {"id":"test-setup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_SETUP_JOBS || '0') }}},
+            {"id":"test-venue-service","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_VENUE_SERVICE_JOBS || '0') }}},
+            {"id":"test-adjustments","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_ADJUSTMENTS_JOBS || '0') }}},
+            {"id":"test-staffing","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_STAFFING_JOBS || '0') }}},
+            {"id":"test-bookings","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_BOOKINGS_JOBS || '0') }}},
+            {"id":"test-media","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_MEDIA_JOBS || '0') }}},
+            {"id":"test-payments-stripe","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS || '0') }}},
+            {"id":"test-payments-sumup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0') }}}
             ]
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -3776,6 +3723,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           if [ "$SHOULD_WATCH" != true ]; then exit 0; fi
+          enabled=$(printf '%s' "$FAMILIES" | jq 'map(select(.enabled)) | length')
+          if [ "$enabled" -eq 0 ]; then exit 0; fi
           QUEUE_TIMEOUT=$(command -v gnutimeout || command -v gtimeout || command -v timeout)
           export QUEUE_TIMEOUT
           exec "$QUEUE_TIMEOUT" -k 2s 1260 bash -e <<'WATCHDOG'
@@ -3969,18 +3918,14 @@ jobs:
             | $ENV.NEEDS | fromjson
             | if type != "object" or length == 0 then error("no needed job results to read") else . end
             | (.changes.outputs // {}) as $scope
-            | if $scope.reuse == "true" and
-                 (($scope.reuse_run // "" | test("^[1-9][0-9]*$")) | not)
-                 then error("verified reuse needs a source run id") else . end
-            | if $scope.reuse == "true" and
-                 (($scope.reuse_sha // "" | test("^[a-f0-9]{40}$")) | not)
-                 then error("verified reuse needs a source head SHA") else . end
+            | if has("changes") and ($scope.full != "true" and $scope.full != "false")
+              then error("changes must name the full coverage mode") else . end
             | to_entries
             | (.[] | "\(.key): \(.value.result)"),
               (map(select(.value.result != "success" and .value.result != "skipped") | .key)
                | if length > 0 then error("not succeeded or skipped: \(join(", "))") else empty end),
               (map(select(.value.result == "skipped" and $merges[.key] != null
-                          and $scope.reuse != "true"
+                          and ($merges[.key].kind == "mutation score" or $scope.full == "true")
                           and $scope.code == "true" and $scope[$merges[.key].gate] == "true")
                    | "\($merges[.key].package) was selected but its \($merges[.key].kind // "coverage merge") job \(.key) was skipped")
                | if length > 0 then error(join("; ")) else empty end)
@@ -4098,7 +4043,7 @@ jobs:
   publish:
     needs: [changes, ci]
     # Intentional upstream skips must not suppress publishing after the aggregate succeeds.
-    if: github.event_name == 'push' && needs.changes.outputs.code == 'true' && needs.ci.result == 'success' && always() && !cancelled()
+    if: needs.changes.outputs.full == 'true' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.ci.result == 'success' && always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Naming any permission drops every default. `packages: write` is for the GHCR push.
@@ -4163,8 +4108,7 @@ jobs:
           agent_tags="$agent_repo:$short"
           case "$REF" in
             # What deploy/compose.yml defaults to: `docker compose pull` on a box follows main.
-            # Two pushes to `main` build at the same time (the concurrency block at the top of this
-            # file), and a tag is last-write-wins, so ask whether a NEWER commit already holds it.
+            # Full runs can overlap; never move the stable tag behind an already published commit.
             # `hold` still publishes this commit's immutable `sha-` tag; it only declines to move
             # `:main` backwards. Guard: `scripts/main-tag-guard.sh` and its suite.
             refs/heads/main)

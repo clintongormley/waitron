@@ -2133,12 +2133,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-
-- **A change to the till alone does not run the handover's end-to-end test.** The test loads the
-  till's router by path, and a till-only change selects no `@waitron/server` (`scripts/changed-scope.mjs`),
-  so it can pass and a main push can reuse that pass; the next server pull request then fails for a
-  reason it did not cause. Left open by A1018 Slice 5.
-
 - **Add a control to each check that cannot fail** (bundle of 4, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
 
 - **The logo retry checks' deadline and counting** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-the-logo-retry-checks-deadline-and-counting)

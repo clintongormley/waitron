@@ -42,7 +42,7 @@ import {
 // file ever starts disagreeing with the workflow.
 
 // eslint.config.js gives `scripts/**/*.mjs` only `console` and `process` as globals.
-const { AbortController, structuredClone } = globalThis;
+const { AbortController } = globalThis;
 
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
@@ -87,7 +87,6 @@ function routingContext(family = "server") {
       changes: {
         outputs: {
           code: "true",
-          reuse: "false",
           ...Object.fromEntries(
             DISPOSABLE_FAMILIES.map((name) => [
               name.replaceAll("-", "_"),
@@ -131,7 +130,9 @@ describe("disposable family routing", () => {
     const routing = job(`test-${family}`).body.find((line) => /^ {4}runs-on:/.test(line));
     const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
     const context = routingContext(family);
-    expect(expressionValue(watch, context)).toBe(true);
+    expect(
+      expressionValue(watch, context) && watchFamilies(context).some((row) => row.enabled),
+    ).toBe(true);
     if (matrixShards(job(`test-${family}`).body) === undefined) {
       delete context.matrix;
       expect(routing).not.toContain("matrix.");
@@ -183,7 +184,9 @@ describe("disposable family routing", () => {
       if (context.matrix === undefined) delete rejected.matrix;
       change(rejected);
       expect(expressionValue(routing, rejected)).toBe("ubuntu-latest");
-      expect(expressionValue(watch, rejected)).toBe(false);
+      expect(
+        expressionValue(watch, rejected) && watchFamilies(rejected).some((row) => row.enabled),
+      ).toBe(false);
     }
     context.vars.DISPOSABLE_TESTS_HEAD = "a".repeat(40);
     expect(expressionValue(routing, context)).toEqual([
@@ -231,11 +234,15 @@ describe("disposable family routing", () => {
     const context = routingContext("ui");
     context.vars.DISPOSABLE_TESTS_UI_JOBS = "0";
     context.vars.DISPOSABLE_TESTS_SERVER_JOBS = "1";
-    expect(expressionValue(watch, context)).toBe(false);
+    expect(
+      expressionValue(watch, context) && watchFamilies(context).some((row) => row.enabled),
+    ).toBe(false);
     context.vars.DISPOSABLE_TESTS_UI_JOBS = "1";
     context.vars.DISPOSABLE_TESTS_HEAVY_JOBS = "1";
     context.needs.changes.outputs.heavy = "true";
-    expect(expressionValue(watch, context)).toBe(true);
+    expect(
+      expressionValue(watch, context) && watchFamilies(context).some((row) => row.enabled),
+    ).toBe(true);
     expect(
       watchFamilies(context)
         .filter((entry) => entry.enabled)
@@ -572,6 +579,11 @@ exit "$status"
     },
   );
 
+  it("is a successful zero-API no-op with admission but no enabled family", () => {
+    const result = runWatch({}, { SHOULD_WATCH: "true", FAMILIES: "[]" });
+    expect(result.status, result.output).toBe(0);
+    expect(result.calls).toEqual([]);
+  });
   it("is a successful zero-API no-op when routing is disabled for this attempt", () => {
     const result = runWatch({}, { SHOULD_WATCH: "false" });
     expect(result.status, result.output).toBe(0);
@@ -938,12 +950,12 @@ function outputsOf(body) {
   return keys;
 }
 
-/** Classification gates; verified reuse is checked separately across every upstream job. */
+/** Package membership gates; coverage mode is checked separately. */
 function gatesRead(body) {
   const ifLine = body.find((line) => /^ {4}if:/.test(line)) ?? "";
   return [...ifLine.matchAll(/needs\.changes\.outputs\.([A-Za-z0-9_-]+)/g)]
     .map(([, name]) => name)
-    .filter((name) => name !== "reuse");
+    .filter((name) => name !== "full");
 }
 
 /**
@@ -1374,14 +1386,14 @@ describe("the workflow's concurrency group", () => {
   // plausibly, mentions both, and puts every push back into one group per branch.
   it("gives every push a group of its own, so one push cannot displace another", () => {
     expect(concurrency.group).toMatch(
-      /github\.event_name\s*==\s*'push'\s*&&\s*github\.run_id\s*\|\|\s*github\.ref/,
+      /github\.event_name\s*!=\s*'pull_request'\s*&&\s*github\.run_id\s*\|\|\s*github\.ref/,
     );
   });
 
   // Anchored at both ends, so an appended `|| true` — which would cancel pushes again — fails here.
   it("still lets a pull request's newer run supersede its own older one", () => {
     expect(concurrency.cancelInProgress).toMatch(
-      /^\$\{\{\s*github\.event_name\s*!=\s*'push'\s*\}\}$/,
+      /^\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*\}\}$/,
     );
   });
 
@@ -1432,11 +1444,11 @@ describe("ci.yml's job graph", () => {
   });
 
   it.each([
-    ["ordinary main", "push", "true", "success", true, false, true],
-    ["main with skipped ancestors", "push", "true", "success", false, false, true],
+    ["ordinary main", "push", "false", "success", true, false, false],
+    ["full main with skipped ancestors", "schedule", "true", "success", false, false, true],
     ["documentation", "push", "false", "success", false, false, false],
-    ["pull request", "pull_request", "true", "success", false, false, false],
-    ["manual recovery", "workflow_dispatch", "true", "success", true, false, false],
+    ["pull request", "pull_request", "false", "success", false, false, false],
+    ["manual recovery", "workflow_dispatch", "true", "success", true, false, true],
     ["failed aggregate", "push", "true", "failure", false, false, false],
     ["cancelled aggregate", "push", "true", "cancelled", false, false, false],
     ["skipped aggregate", "push", "true", "skipped", false, false, false],
@@ -1452,14 +1464,22 @@ describe("ci.yml's job graph", () => {
         condition = `success() && (${condition})`;
       const expression = condition
         .replace(/github\.event_name/g, JSON.stringify(event))
-        .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
+        .replace(/needs\.changes\.outputs\.full/g, JSON.stringify(code))
+        .replace(/github\.ref/g, JSON.stringify("refs/heads/main"))
+        .replace(/startsWith\(github.ref, [^)]*\)/g, "false")
         .replace(/needs\.ci\.result/g, JSON.stringify(ci))
         .replace(/always\(\)/g, "true")
         .replace(/success\(\)/g, JSON.stringify(ancestorsSucceeded && !cancelled))
         .replace(/cancelled\(\)/g, JSON.stringify(cancelled))
         .replace(/==/g, "===")
         .replace(/!=/g, "!==");
-      expect(Boolean(new Function(`return (${expression});`)())).toBe(expected);
+      expect(
+        Boolean(
+          new Function("startsWith", `return (${expression});`)((text, prefix) =>
+            text.startsWith(prefix),
+          ),
+        ),
+      ).toBe(expected);
     },
   );
 
@@ -1693,16 +1713,16 @@ describe("the `ci` aggregate's verdict", () => {
     const needs = Object.fromEntries(
       needsOf(job("ci").body).map((id) => [id, { result: "success", outputs: {} }]),
     );
-    needs.changes.outputs = outputs;
+    needs.changes.outputs = { full: "true", ...outputs };
     needs[merge].result = mergeResult;
     return needs;
   };
 
-  it(
-    "refuses a skipped shared mutation score when shared was selected",
-    () => {
+  it.each(["false", "true"])(
+    "refuses a skipped shared mutation score when shared was selected with full=%s",
+    (full) => {
       const { status, output } = runVerdict(
-        scoped({ code: "true", shared: "true" }, "mutation-shared-aggregate"),
+        scoped({ full, code: "true", shared: "true" }, "mutation-shared-aggregate"),
       );
       expect(status).toBe(JQ_REFUSED);
       expect(output).toContain(
@@ -1715,7 +1735,6 @@ describe("the `ci` aggregate's verdict", () => {
   it.each([
     { code: "true", shared: "false" },
     { code: "false", shared: "true" },
-    { code: "true", shared: "true", reuse: "true", reuse_run: "42", reuse_sha: "b".repeat(40) },
   ])(
     "accepts a skipped shared mutation score with scope %j",
     (outputs) => {
@@ -1724,23 +1743,19 @@ describe("the `ci` aggregate's verdict", () => {
     ONE_RUN_TEST_TIMEOUT_MS,
   );
 
-  it("accepts skipped selected coverage only with a concrete verified reuse receipt", () => {
+  it.each([undefined, "", null, "TRUE"])("refuses an unreadable coverage mode %s", (full) => {
     const [{ id, gate }] = ciMergeJobs;
-    const needs = scoped(
-      { code: "true", [gate]: "true", reuse: "true", reuse_run: "42", reuse_sha: "b".repeat(40) },
-      id,
-    );
-    for (const [name, value] of Object.entries(needs))
-      if (name !== "changes") value.result = "skipped";
+    const needs = scoped({ code: "true", [gate]: "true" }, id, "success");
+    if (full === undefined) delete needs.changes.outputs.full;
+    else needs.changes.outputs.full = full;
+    expect(runVerdict(needs).status).toBe(JQ_REFUSED);
+  });
+  it("accepts skipped selected coverage in scoped mode and still refuses failed changes", () => {
+    const [{ id, gate }] = ciMergeJobs;
+    const needs = scoped({ full: "false", code: "true", [gate]: "true" }, id);
     expect(runVerdict(needs).status).toBe(0);
-    for (const bad of [{ reuse_run: "" }, { reuse_run: "0" }, { reuse_sha: "bad" }]) {
-      const malformed = structuredClone(needs);
-      Object.assign(malformed.changes.outputs, bad);
-      expect(runVerdict(malformed).status, JSON.stringify(bad)).toBe(JQ_REFUSED);
-    }
-    const failed = structuredClone(needs);
-    failed.changes.result = "failure";
-    expect(runVerdict(failed).status).toBe(JQ_REFUSED);
+    needs.changes.result = "failure";
+    expect(runVerdict(needs).status).toBe(JQ_REFUSED);
   });
 
   it(
@@ -2907,6 +2922,7 @@ describe("the test shards", () => {
       const needs = Object.fromEntries(
         needsOf(job("ci").body).map((needed) => [needed, { result: "success" }]),
       );
+      needs.changes.outputs = { full: "false" };
       expect(runVerdict(needs).status).toBe(0);
       needs[id] = { result: "failure" };
       const refused = runVerdict(needs);
@@ -3142,20 +3158,19 @@ describe("the scope gates", () => {
 
 describe("the image smoke's scoping", () => {
   // A pull request runs the image smoke only when an image input changed; a push to `main` still
-  // smokes on `code` alone, because `publish` ships the image off this smoke passing.
+  // Full verification smokes its image before publication.
   it("declares a `deploy` output on the `changes` job", () => {
     expect(outputsOf(job("changes").body)).toContain("deploy");
   });
 
-  it("gates the image job on `code` and reads `deploy` to scope its pull-request runs", () => {
+  it("reads `deploy` to scope image-input runs", () => {
     const gates = gatesRead(job("image").body);
-    expect(gates).toContain("code");
     expect(gates).toContain("deploy");
   });
 
-  it("scopes the `deploy` narrowing to pull requests, so every main push is still smoked", () => {
+  it("smokes full verification even without image-input changes", () => {
     const ifLine = job("image").body.find((line) => /^ {4}if:/.test(line)) ?? "";
-    expect(ifLine).toMatch(/github\.event_name != 'pull_request'/);
+    expect(ifLine).toContain("needs.changes.outputs.full == 'true'");
   });
 
   // The cases above check that `code`, `deploy` and the event guard are PRESENT, not how they
@@ -3166,11 +3181,11 @@ describe("the image smoke's scoping", () => {
     const line = job("image").body.find((entry) => /^ {4}if:/.test(entry)) ?? "";
     return line.replace(/^ {4}if:\s*/, "").trim();
   };
-  const runsWhen = (expr, { event_name, code, deploy, reuse = "false" }) => {
+  const runsWhen = (expr, { event_name, code, deploy, full = "false" }) => {
     const js = expr
       .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
       .replace(/needs\.changes\.outputs\.deploy/g, JSON.stringify(deploy))
-      .replace(/needs\.changes\.outputs\.reuse/g, JSON.stringify(reuse))
+      .replace(/needs\.changes\.outputs\.full/g, JSON.stringify(full))
       .replace(/github\.event_name/g, JSON.stringify(event_name))
       .replace(/==/g, "===")
       .replace(/!=/g, "!==");
@@ -3181,8 +3196,8 @@ describe("the image smoke's scoping", () => {
 
   const cases = [
     {
-      name: "verified reuse still smokes the current main image",
-      ctx: { event_name: "push", code: "true", deploy: "true", reuse: "true" },
+      name: "full verification smokes its image",
+      ctx: { event_name: "schedule", code: "true", deploy: "false", full: "true" },
       run: true,
     },
     {
@@ -3212,9 +3227,9 @@ describe("the image smoke's scoping", () => {
       run: false,
     },
     {
-      name: "a code push to main runs even without an image input",
+      name: "a code push to main skips without an image input",
       ctx: { event_name: "push", code: "true", deploy: "false" },
-      run: true,
+      run: false,
     },
     {
       name: "a deploy push to main runs",
@@ -3233,10 +3248,7 @@ describe("the image smoke's scoping", () => {
   });
 
   // The negative control: otherwise the truth table above could measure nothing.
-  it.each([
-    ["||", "&&"],
-    ["&&", "||"],
-  ])("would catch the %s being flipped to %s", (from, to) => {
+  it.each([["||", "&&"]])("would catch the %s being flipped to %s", (from, to) => {
     const real = imageIf();
     const mutated = real.replace(from, to);
     expect(mutated).not.toBe(real);
@@ -3247,28 +3259,23 @@ describe("the image smoke's scoping", () => {
 
 describe("main push package gates", () => {
   it.each([
-    ["docs behind a queued code run", "false", "false", false],
-    ["docs behind a cancelled code run", "true", "false", true],
-    ["a code push", "true", "false", true],
-    ["verified reuse", "true", "true", false],
-  ])(
-    "evaluates shard gates with the supplied code output for %s",
-    (_name, code, reuse, expected) => {
-      expect(testShardJobs.length).toBeGreaterThan(0);
-      for (const { id, body } of testShardJobs) {
-        const line = body.find((entry) => /^ {4}if:/.test(entry));
-        expect(line, id).toBeDefined();
-        const expression = line
-          .replace(/^ {4}if:\s*/, "")
-          .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
-          .replace(/needs\.changes\.outputs\.reuse/g, JSON.stringify(reuse))
-          .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
-          .replace(/==/g, "===")
-          .replace(/!=/g, "!==");
-        expect(Boolean(new Function(`return (${expression});`)()), id).toBe(expected);
-      }
-    },
-  );
+    ["docs after verified code", "false", false],
+    ["docs behind a cancelled code run", "true", true],
+    ["a code push", "true", true],
+  ])("evaluates shard gates with the supplied code output for %s", (_name, code, expected) => {
+    expect(testShardJobs.length).toBeGreaterThan(0);
+    for (const { id, body } of testShardJobs) {
+      const line = body.find((entry) => /^ {4}if:/.test(entry));
+      expect(line, id).toBeDefined();
+      const expression = line
+        .replace(/^ {4}if:\s*/, "")
+        .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
+        .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
+        .replace(/==/g, "===")
+        .replace(/!=/g, "!==");
+      expect(Boolean(new Function(`return (${expression});`)()), id).toBe(expected);
+    }
+  });
 });
 
 describe("the sharded jobs", () => {
@@ -3426,7 +3433,7 @@ describe("the sharded jobs", () => {
 describe("the lint and root-guards jobs", () => {
   // The repo-level project runs in a job of its own so its time runs beside lint's rather than
   // inside it.
-  it("run the repo-level Vitest project only in root-guards, with only verified reuse gating it", () => {
+  it("run the repo-level Vitest project only in root-guards, including failed classification", () => {
     const runsRoot = (body) =>
       body.some((line) => !line.trim().startsWith("#") && /pnpm vitest run --coverage/.test(line));
     expect(jobs.filter(({ body }) => runsRoot(body)).map(({ id }) => id)).toEqual(["root-guards"]);
@@ -3434,10 +3441,7 @@ describe("the lint and root-guards jobs", () => {
       expect(
         job(id).body.filter((line) => /^ {4}(if|needs):/.test(line)),
         id,
-      ).toEqual([
-        "    needs: changes",
-        "    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.reuse != 'true')",
-      ]);
+      ).toEqual(["    needs: changes", "    if: always()"]);
     }
   });
 
@@ -3449,22 +3453,7 @@ describe("the lint and root-guards jobs", () => {
   });
 });
 
-describe("verified equal-tree main CI reuse", () => {
-  it("still runs root diagnostics if changes fails after emitting a reuse decision", () => {
-    for (const id of ["lint", "root-guards"]) {
-      const line = job(id).body.find((entry) => /^ {4}if:/.test(entry));
-      expect(line, id).toContain("always()");
-      const expression = line
-        .replace(/^ {4}if:\s*/, "")
-        .replace(/always\(\)/g, "true")
-        .replace(/needs\.changes\.result/g, '"failure"')
-        .replace(/needs\.changes\.outputs\.reuse/g, '"true"')
-        .replace(/==/g, "===")
-        .replace(/!=/g, "!==");
-      expect(Boolean(new Function(`return (${expression});`)()), id).toBe(true);
-    }
-  });
-
+describe("pinned CI checkouts", () => {
   it("tests the PR head itself in every CI checkout and admits PR events only for main", () => {
     expect(lines.join("\n")).toMatch(/\n {2}pull_request:\n {4}branches: \[main\]/);
     let count = 0;
@@ -3481,54 +3470,6 @@ describe("verified equal-tree main CI reuse", () => {
     }
     expect(count).toBeGreaterThan(0);
   });
-
-  it("cannot tolerate a verifier crash in changes", () => {
-    const body = job("changes").body;
-    const start = body.findIndex((line) => line === "      - id: reuse");
-    expect(start).toBeGreaterThan(-1);
-    const end = body.findIndex((line, at) => at > start && /^ {6}- /.test(line));
-    expect(body.slice(start, end).join("\n")).not.toContain("continue-on-error:");
-  });
-
-  it("runs the verifier with read-only API permissions and publishes its independent decision", () => {
-    const body = job("changes").body.join("\n");
-    expect(body).toContain("run: node scripts/ci-reuse.mjs");
-    expect(body).toContain("pull-requests: read");
-    for (const key of ["reuse", "reuse_run", "reuse_sha"]) {
-      expect(outputsOf(job("changes").body)).toContain(key);
-      expect(body).toContain(`${key}: \u0024{{ steps.reuse.outputs.${key} }}`);
-    }
-  });
-
-  it("skips every upstream check only on the verified reuse output, preserving publish and concurrency", () => {
-    for (const { id, body } of jobs) {
-      if (["changes", "ci", "publish", "image"].includes(id)) continue;
-      expect(
-        body.find((line) => /^ {4}if:/.test(line)),
-        id,
-      ).toContain("needs.changes.outputs.reuse != 'true'");
-      expect(body.join("\n"), id).toMatch(/needs:(?: changes|\s*\[changes|\n\s*- changes)/);
-      for (const reuse of ["false", "true"]) {
-        const expression = body
-          .find((line) => /^ {4}if:/.test(line))
-          .replace(/^ {4}if:\s*/, "")
-          .replace(/needs\.changes\.outputs\.reuse/g, JSON.stringify(reuse))
-          .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
-          .replace(/needs\.changes\.result/g, '"success"')
-          .replace(/always\(\)/g, "true")
-          .replace(/github\.event_name/g, '"push"')
-          .replace(/==/g, "===")
-          .replace(/!=/g, "!==");
-        expect(Boolean(new Function(`return (${expression});`)()), `${id} reuse=${reuse}`).toBe(
-          reuse === "false",
-        );
-      }
-    }
-    expect(job("image").body.join("\n")).not.toContain("outputs.reuse");
-    expect(job("publish").body.join("\n")).not.toContain("outputs.reuse");
-    expect(job("publish").body.join("\n")).toContain("decision=$(scripts/main-tag-guard.sh");
-    expect(concurrency.group).toContain("github.event_name == 'push' && github.run_id");
-  });
 });
 
 /**
@@ -3536,7 +3477,9 @@ describe("verified equal-tree main CI reuse", () => {
  * `run:` key, setting TMPDIR to the in-memory /dev/shm. Reads the job's lines as TEXT.
  */
 function expectTestShardStepTmpdirInMemory(body, what) {
-  const run = body.findIndex((line) => !line.trim().startsWith("#") && line.includes("test:shard"));
+  const run = body.findIndex(
+    (line) => !line.trim().startsWith("#") && /pnpm .*\btest:shard\b/.test(line),
+  );
   const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
   expect(stepStart, `no step runs ${what}`).toBeGreaterThan(-1);
   const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
@@ -3651,7 +3594,7 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
     expect(streamText()).toContain('pnpm --filter "@waitron/server" test:shard');
     const body = stream().body;
     const start = body.findIndex(
-      (line) => !line.trim().startsWith("#") && line.includes("test:shard"),
+      (line) => !line.trim().startsWith("#") && /pnpm .*\btest:shard\b/.test(line),
     );
     expect(start).toBeGreaterThan(-1);
     const step = body.slice(start);
@@ -3675,7 +3618,7 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
   it("gives loopback a 1500-byte packet size before it runs them", () => {
     const body = stream().body;
     const code = (line) => !line.trim().startsWith("#");
-    const run = body.findIndex((line) => code(line) && line.includes("test:shard"));
+    const run = body.findIndex((line) => code(line) && /pnpm .*\btest:shard\b/.test(line));
     const mtu = body.findIndex(
       (line) => code(line) && /^\s*(run:\s*)?sudo ip link set dev lo mtu 1500\s*$/.test(line),
     );
@@ -3697,7 +3640,7 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
     (dir, variable, size) => {
       const body = stream().body;
       const code = (line) => !line.trim().startsWith("#");
-      const run = body.findIndex((line) => code(line) && line.includes("test:shard"));
+      const run = body.findIndex((line) => code(line) && /pnpm .*\btest:shard\b/.test(line));
       const mount = body.findIndex(
         (line) =>
           code(line) &&
@@ -5354,11 +5297,12 @@ function uploadAttempts(text) {
     for (let at = 0; at < steps.length; at += 1) {
       const [first, second] = steps.slice(at, at + 2);
       if (!isUpload(first)) continue;
-      const failed = `always() && steps.${first.id}.outcome == 'failure'`;
+      const mode = "always() && needs.changes.outputs.full == 'true'";
+      const failed = `${first.if === mode ? mode : "always()"} && steps.${first.id}.outcome == 'failure'`;
       const valid =
         /^[A-Za-z_][\w-]*$/.test(first.id ?? "") &&
         steps.filter((step) => step.id === first.id).length === 1 &&
-        [undefined, "always()", "failure() || cancelled()"].includes(first.if) &&
+        [undefined, "always()", "failure() || cancelled()", mode].includes(first.if) &&
         bounded(first) &&
         first.continueOnError === "true" &&
         Boolean(first.with.name) &&
@@ -5563,6 +5507,145 @@ describe("the workflows' Node setups", () => {
         }
         at += 1;
       }
+    },
+  );
+});
+
+describe("scoped tests and nightly full verification", () => {
+  const context = (event, ref = "refs/heads/main", full = "false") => ({
+    github: { event_name: event, ref, run_id: 123, workflow: "CI" },
+    needs: {
+      changes: {
+        outputs: {
+          full,
+          code: "true",
+          ...Object.fromEntries(SCOPE_GATES.map(({ output }) => [output, "true"])),
+        },
+      },
+      ci: { result: "success" },
+    },
+    startsWith: (text, prefix) => text.startsWith(prefix),
+    always: () => true,
+    cancelled: () => false,
+  });
+  it.each([
+    ["pull_request", "refs/pull/1/merge", false],
+    ["push", "refs/heads/main", false],
+    ["schedule", "refs/heads/main", true],
+    ["workflow_dispatch", "refs/heads/main", true],
+    ["push", "refs/tags/v1.0.0", true],
+  ])("uses full coverage for %s on %s: %s", (event, ref, want) => {
+    const line = job("changes").body.find((line) => /^ {10}FULL:/.test(line));
+    expect(line).toBeDefined();
+    expect(expressionValue(line, context(event, ref))).toBe(want);
+  });
+  it.each(["false", "true"])(
+    "carries coverage mode %s through the declared job output to coverage merges and the verdict",
+    (full) => {
+      const output = job("changes").body.find((line) => /^ {6}full:/.test(line));
+      const propagated = output
+        ? expressionValue(output, { steps: { classify: { outputs: { full } } } })
+        : "";
+      const c = context("workflow_dispatch", "refs/heads/main", propagated);
+      for (const { id, body } of mergeJobs) {
+        const expression = body.find((line) => /^ {4}if:/.test(line)).replace(/^ {4}if: /, "");
+        expect(Boolean(runInNewContext(expression, c)), id).toBe(full === "true");
+      }
+      const needs = Object.fromEntries(
+        needsOf(job("ci").body).map((id) => [
+          id,
+          {
+            result:
+              full === "false" && mergeJobs.some((merge) => merge.id === id)
+                ? "skipped"
+                : "success",
+            outputs: {},
+          },
+        ]),
+      );
+      needs.changes.outputs = c.needs.changes.outputs;
+      expect(runVerdict(needs).status).toBe(0);
+    },
+  );
+  it("schedules the full suite nightly", () => {
+    expect(lines.join("\n")).toMatch(/\n {2}schedule:\n {4}- cron: "0 2 \* \* \*"/);
+  });
+  it.each(["push", "schedule", "workflow_dispatch"])(
+    "gives %s its own concurrency group",
+    (event) => {
+      const a = context(event);
+      const b = context(event);
+      b.github.run_id++;
+      const group = (c) =>
+        concurrency.group.replace(/\$\{\{ (.*?) \}\}/g, (_, expression) =>
+          String(runInNewContext(expression, c)),
+        );
+      expect(group(a)).not.toBe(group(b));
+      expect(expressionValue(concurrency.cancelInProgress, a)).toBe(false);
+    },
+  );
+  it.each(mergeJobs)("runs $id coverage merge only in full mode", ({ id, body }) => {
+    const line = body.find((line) => /^ {4}if:/.test(line));
+    for (const [full, want] of [
+      ["false", false],
+      ["true", true],
+    ]) {
+      const expression = line.replace(/^ {4}if: /, "");
+      expect(
+        Boolean(runInNewContext(expression, context("push", "refs/heads/main", full))),
+        id,
+      ).toBe(want);
+    }
+  });
+  it("disables coverage collection for every scoped package command", () => {
+    const commands = jobs.flatMap(({ id, body }) =>
+      body
+        .filter(
+          (line) => !line.trim().startsWith("#") && /pnpm .*\btest:(coverage|shard)\b/.test(line),
+        )
+        .map((line) => ({ id, line })),
+    );
+    expect(commands.length).toBeGreaterThan(0);
+    for (const { id, line } of commands)
+      expect(line, id).toContain("--coverage.enabled=${{ needs.changes.outputs.full }}");
+  });
+  it("gates coverage uploads with the same full mode as merge jobs", () => {
+    for (const shard of [...shardedJobs, job("test-server-stream")]) {
+      const at = shard.body.indexOf("      - id: upload_blob");
+      const end = shard.body.findIndex((line, index) => index > at && /^ {6}- /.test(line));
+      const step = at < 0 ? undefined : shard.body.slice(at, end < 0 ? undefined : end);
+      expect(step, shard.id).toBeDefined();
+      const line = step.find((line) => /^ {8}if:/.test(line));
+      expect(line, shard.id).toContain("needs.changes.outputs.full == 'true'");
+    }
+  });
+  it.each([
+    ["push", "refs/heads/main", "false", false],
+    ["pull_request", "refs/pull/1/merge", "false", false],
+    ["workflow_dispatch", "refs/heads/feature", "true", false],
+    ["schedule", "refs/heads/main", "true", true],
+    ["workflow_dispatch", "refs/heads/main", "true", true],
+    ["push", "refs/tags/v1.0.0", "true", true],
+  ])("publishes verified images for %s on %s only when appropriate", (event, ref, full, want) => {
+    const line = job("publish")
+      .body.find((line) => /^ {4}if:/.test(line))
+      .replace(/^ {4}if: /, "");
+    expect(Boolean(runInNewContext(line, context(event, ref, full)))).toBe(want);
+  });
+});
+
+describe("scoped shards retain their empty-selection guard", () => {
+  it.each([...shardedJobs, job("test-server-stream")])(
+    "refuses a missing test:shard script in $id before testing",
+    ({ id, body }) => {
+      const guard = body.findIndex((line) =>
+        line.includes("| node scripts/changed-packages.mjs runnable test:shard"),
+      );
+      const run = body.findIndex(
+        (line) => /pnpm .*\btest:shard\b/.test(line) && !line.trim().startsWith("#"),
+      );
+      expect(guard, id).toBeGreaterThan(-1);
+      expect(guard, id).toBeLessThan(run);
     },
   );
 });

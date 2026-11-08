@@ -75,7 +75,7 @@ The instances behind each rule are in [writing-claims.md](docs/developers/writin
 ## 2. The gate
 
 Run focused behavioral tests while implementing, including a failing test before a fix. Let the
-normal pre-push hook run the local checks once; mandatory package tests and coverage run in CI.
+normal pre-push hook run the local checks once; scoped package tests run in PR and landing CI; the nightly or manual full run enforces package coverage.
 Do not add a whole-workspace local run solely to finish a branch. Broader local runs remain useful
 for investigating failures or behavior across packages. Required CI checks must pass on the current head.
 
@@ -107,13 +107,12 @@ hook, or how tests are scheduled:
   `"ignored": true`.
 - **Check every command's exit status.** A shell sequence separated by newlines reports only its
   LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
-- **CI's test jobs measure coverage, never plain `test`**: `test:coverage`, or `test:shard` with
-  the package's `-merge` job enforcing the bar. Verify that package’s coverage or merge job on the
-  current head. Vitest `--shard` splits by FILE COUNT (`apps/server` excepted), so `N` must never
-  exceed a package's test-file count. Guard: the "run no more shards than the package has test
-  files" case in `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named
-  `*.test.ts` under the package, not what the package's Vitest config includes.
-  [Receipt](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-02).
+- **PR and landing CI run scoped package tests without package-wide coverage; nightly, manual and
+  release runs enforce `98/98/98/95` coverage.** Root coverage remains on every run. Verify the
+  current head's selected jobs, and the full run's coverage or merge jobs before claiming full
+  coverage. Shard counts must not exceed the package's test-file count. Guard:
+  `scripts/ci-workflow.test.mjs`, weaker than the rule: workflow text and controlled shell fixtures,
+  not a hosted Actions run. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
 - **`apps/server`'s shards are packed by the committed duration table, not Vitest's hash split.**
   Refresh it with `scripts/test-durations.mjs` when a shard drifts past 4 minutes. Guard:
   `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
@@ -130,10 +129,11 @@ hook, or how tests are scheduled:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
-- **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
-  `packages` outputs before treating a green PR as evidence about the workspace. A main push reuses
-  a same-repository PR's successful CI only after API verification.
-  [Details and limits](docs/developers/ci-and-gates.md#main-can-reuse-an-identical-pull-request-tree).
+- **CI does not run every check on every push.** Read `changes` outputs `code`, `scope`, `packages`
+  and `full`. Main uses the newest completed successful main ancestor as its baseline; no baseline
+  runs all packages. PR evidence is not reused. Container publication, including `:main`, follows
+  full scheduled/manual main verification or a fully checked release tag, never an ordinary main
+  push. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
 - **No front-end bundle is built by a pull request that changed no image input**, and wherever one
   is built nothing opens it, so a bundle that renders nothing passes anyway.
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image
@@ -212,7 +212,7 @@ hook, or how tests are scheduled:
 **Claude never pushes with `--no-verify`**; the owner may, in an emergency (owner decision
 2026-10-03), and the failure still has to be fixed because CI runs the same checks. The hook's
 failure message says so beside its skip hint, pinned by `scripts/pre-push.test.mjs`. A hook failure
-the PR does not reproduce still needs investigation: PR scoping or verified reuse may skip that
+the PR does not reproduce still needs investigation: package scoping may skip that
 check in CI. A green scoped run does not overrule the hook's failure.
 
 ---

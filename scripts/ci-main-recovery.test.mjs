@@ -35,11 +35,17 @@ git("config", "commit.gpgsign", "false");
 mkdirSync(join(fixture, "apps/server/src"), { recursive: true });
 mkdirSync(join(fixture, "docs"));
 writeFileSync(join(fixture, "package.json"), JSON.stringify({ name: "fixture", private: true }));
-writeFileSync(join(fixture, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n");
+writeFileSync(join(fixture, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n  - packages/*\n");
 writeFileSync(
   join(fixture, "apps/server/package.json"),
   JSON.stringify({ name: "@waitron/server", private: true }),
 );
+mkdirSync(join(fixture, "packages/payments/src"), { recursive: true });
+writeFileSync(
+  join(fixture, "packages/payments/package.json"),
+  JSON.stringify({ name: "@waitron/payments", private: true }),
+);
+writeFileSync(join(fixture, "packages/payments/src/status.ts"), "export const ready = false;\n");
 writeFileSync(join(fixture, "apps/server/src/mail.ts"), "export const ready = false;\n");
 git("add", ".");
 git("commit", "-m", "successful baseline");
@@ -57,6 +63,18 @@ writeFileSync(join(fixture, "apps/server/src/mail.ts"), "export const ready = 'r
 git("add", ".");
 git("commit", "-m", "next code push");
 const nextCodeHead = git("rev-parse", "HEAD");
+mkdirSync(join(fixture, " docs"));
+writeFileSync(join(fixture, " docs/note.md"), "This is outside the inert docs directory.\n");
+git("add", ".");
+git("commit", "-m", "path with leading whitespace");
+const unsafeHead = git("rev-parse", "HEAD");
+git("reset", "--hard", nextCodeHead);
+git("checkout", "-b", "payments-change", docsHead);
+writeFileSync(join(fixture, "packages/payments/src/status.ts"), "export const ready = true;\n");
+git("add", ".");
+git("commit", "-m", "payment change after unchecked server code");
+const paymentsHead = git("rev-parse", "HEAD");
+git("checkout", "main");
 git("remote", "add", "origin", fixture);
 git("fetch", "origin", "main");
 symlinkSync(join(root, "scripts"), join(fixture, "scripts"));
@@ -134,6 +152,9 @@ function classifyRun({
       REF: ref,
       SHA: sha,
       BEFORE: before,
+      FULL: String(
+        event === "workflow_dispatch" || event === "schedule" || ref.startsWith("refs/tags/v"),
+      ),
       BASE_REF: "target",
       REPOSITORY: "example/waitron",
       GITHUB_OUTPUT: output,
@@ -164,34 +185,40 @@ function classifyRun({
 describe("main CI recovery", () => {
   it("includes a code merge with no run when the next push changes only docs", () => {
     const result = classifyRun();
-    expect(result.values).toMatchObject({ code: "true", scope: "global", packages: "" });
+    expect(result.values).toMatchObject({
+      code: "true",
+      scope: "packages",
+      packages: "@waitron/server",
+    });
     expect(result.args).toContain("actions/workflows/ci.yml/runs?branch=main&per_page=100");
   });
   it("keeps a docs push cheap once its code ancestor has succeeded", () => {
     expect(classifyRun({ runs: [successful(codeHead)] }).values).toMatchObject({
       code: "false",
-      scope: "global",
+      scope: "documentation",
     });
   });
-  it.each(["queued", "in_progress"])(
-    "keeps a docs push cheap while its code ancestor's own run is %s",
-    (status) => {
-      const result = classifyRun({
-        runs: [successful(codeHead, { status, conclusion: null }), successful(baseline)],
-      });
-      expect(result.values).toMatchObject({ code: "false", scope: "global", deploy: "false" });
-      expect(result.stderr).toContain(`main CI baseline: ${codeHead}`);
-    },
-  );
-  it("selects the nearest ancestor even when an older manual run appears first", () => {
+  it.each(["queued", "in_progress"])("rechecks earlier code while its only run is %s", (status) => {
+    const result = classifyRun({
+      runs: [successful(codeHead, { status, conclusion: null }), successful(baseline)],
+    });
+    expect(result.values).toMatchObject({
+      code: "true",
+      scope: "packages",
+      packages: "@waitron/server",
+      deploy: "false",
+    });
+    expect(result.stderr).toContain(`main CI baseline: ${baseline}`);
+  });
+  it("ignores a queued ancestor after a successful manual baseline", () => {
     const result = classifyRun({
       runs: [
         successful(baseline, { event: "workflow_dispatch" }),
         successful(codeHead, { status: "queued", conclusion: null }),
       ],
     });
-    expect(result.values.code).toBe("false");
-    expect(result.stderr).toContain(`main CI baseline: ${codeHead}`);
+    expect(result.values.code).toBe("true");
+    expect(result.stderr).toContain(`main CI baseline: ${baseline}`);
   });
   it("ignores its own in-progress run beside an eligible code ancestor", () => {
     const result = classifyRun({
@@ -200,7 +227,7 @@ describe("main CI recovery", () => {
         successful(codeHead),
       ],
     });
-    expect(result.values).toMatchObject({ code: "false", scope: "global", deploy: "false" });
+    expect(result.values).toMatchObject({ code: "false", scope: "documentation", deploy: "false" });
     expect(result.stderr).toContain(`main CI baseline: ${codeHead}`);
   });
   it.each(["cancelled", "failure", "timed_out", "skipped", "neutral", "action_required"])(
@@ -208,31 +235,46 @@ describe("main CI recovery", () => {
     (conclusion) => {
       expect(
         classifyRun({ runs: [successful(codeHead, { conclusion }), successful(baseline)] }).values,
-      ).toMatchObject({ code: "true", scope: "global", deploy: "false" });
+      ).toMatchObject({
+        code: "true",
+        scope: "packages",
+        packages: "@waitron/server",
+        deploy: "false",
+      });
     },
   );
   it.each(["queued", "in_progress", "completed"])(
-    "runs a code push in full behind a %s ancestor run",
+    "selects a code push conservatively behind a %s ancestor run",
     (status) => {
       expect(
         classifyRun({
           sha: codeHead,
+          before: baseline,
           runs: [
             successful(baseline, { status, conclusion: status === "completed" ? "success" : null }),
           ],
         }).values,
-      ).toMatchObject({ code: "true", scope: "global", packages: "", deploy: "false" });
+      ).toMatchObject(
+        status === "completed"
+          ? { code: "true", scope: "packages", packages: "@waitron/server", deploy: "false" }
+          : { code: "true", scope: "global", packages: "", deploy: "true" },
+      );
     },
   );
   it.each(["failure", "cancelled"])(
-    "rechecks the full tree on the next code push after an earlier %s and a passing docs run",
+    "rechecks the next code push after an earlier %s and a passing docs run",
     (conclusion) => {
       expect(
         classifyRun({
           sha: nextCodeHead,
           runs: [successful(docsHead), successful(codeHead, { conclusion })],
         }).values,
-      ).toMatchObject({ code: "true", scope: "global", packages: "", deploy: "false" });
+      ).toMatchObject({
+        code: "true",
+        scope: "packages",
+        packages: "@waitron/server",
+        deploy: "false",
+      });
     },
   );
   it("can read the baseline when coreutils exposes only gtimeout", () => {
@@ -240,11 +282,22 @@ describe("main CI recovery", () => {
       "false",
     );
   });
-  it("fails classification rather than accepting partial paths from a failed diff", () => {
-    const result = classifyRun({ diffFail: true, expectedStatus: 1 });
-    expect(result.values).not.toHaveProperty("code");
+  it("runs everything rather than accepting partial paths from a failed diff", () => {
+    const result = classifyRun({ diffFail: true });
+    expect(result.values).toMatchObject({
+      code: "true",
+      scope: "global",
+      packages: "",
+      deploy: "true",
+    });
     expect(result.stderr).toContain("cannot diff the main CI baseline");
   });
+  it("runs everything for a path whose leading whitespace could disguise it as docs", () => {
+    expect(classifyRun({ sha: unsafeHead, runs: [successful(nextCodeHead)] }).values).toMatchObject(
+      { code: "true", scope: "global", packages: "", deploy: "true" },
+    );
+  });
+
   it.each([
     ["API refusal", { status: 1 }],
     ["no completed baseline", { runs: [] }],
@@ -296,6 +349,34 @@ describe("main CI recovery", () => {
       classifyRun({ runs: [successful(codeHead, { event: "workflow_dispatch" })] }).values.code,
     ).toBe("false");
   });
+  it("keeps a failed server change when a later push changes a different package", () => {
+    const result = classifyRun({
+      sha: paymentsHead,
+      runs: [successful(codeHead, { conclusion: "failure" }), successful(baseline)],
+    });
+    expect(result.values).toMatchObject({
+      code: "true",
+      scope: "packages",
+      packages: "@waitron/payments @waitron/server",
+      deploy: "false",
+    });
+    expect(result.stderr).toContain(`main CI baseline: ${baseline}`);
+  });
+  it("uses a completed successful scheduled main run as a baseline", () => {
+    const result = classifyRun({ runs: [successful(codeHead, { event: "schedule" })] });
+    expect(result.values).toMatchObject({ code: "false", scope: "documentation", full: "false" });
+    expect(result.stderr).toContain(`main CI baseline: ${codeHead}`);
+  });
+  it("runs scheduled verification in full without consulting earlier main runs", () => {
+    const result = classifyRun({ event: "schedule" });
+    expect(result.values).toMatchObject({
+      code: "true",
+      scope: "global",
+      packages: "",
+      full: "true",
+    });
+    expect(result.args).toBe("");
+  });
   it("runs the full suite and image on a manual dispatch without consulting a baseline", () => {
     const result = classifyRun({ event: "workflow_dispatch" });
     expect(result.values).toMatchObject({
@@ -320,7 +401,7 @@ describe("main CI recovery", () => {
     expect(result.values).toMatchObject({ code: "true", scope: "global", deploy: "true" });
     expect(result.args).toBe("");
   });
-  it("exposes manual recovery while retaining push-only publishing and the main tag guard", () => {
+  it("exposes full recovery and keeps publishing downstream of verification and the main tag guard", () => {
     expect(workflow.split("\nconcurrency:")[0]).toMatch(/^ {2}workflow_dispatch:/m);
     const changes = workflow.split("\n  changes:\n")[1].split(/^ {2}[a-z]/m)[0];
     expect(changes).toContain("      actions: read");
@@ -329,7 +410,7 @@ describe("main CI recovery", () => {
     expect(changes).toContain("REPOSITORY: ${{ github.repository }}");
     const publishing = workflow.split("\n  publish:\n")[1];
     expect(publishing).toMatch(
-      /if: github.event_name == 'push' && needs.changes.outputs.code == 'true' && needs.ci.result == 'success'/,
+      /if: needs.changes.outputs.full == 'true'.*needs.ci.result == 'success'/,
     );
     expect(publishing).toContain("scripts/main-tag-guard.sh");
   });

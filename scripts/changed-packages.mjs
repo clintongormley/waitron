@@ -192,6 +192,19 @@ export function scopeForPaths(changedPaths, loadPackages) {
       };
     }
     attributed.add(owner.name);
+    // The handover suite loads the till router by path, outside pnpm's dependency graph.
+    if (owner.dir === "apps/till") {
+      const reader = packages.find((pkg) => pkg.dir === "apps/server");
+      if (reader === undefined)
+        return {
+          kind: "global",
+          packages: [],
+          root,
+          deploy,
+          reason: "the till's server test reader is not a workspace member — running everything",
+        };
+      attributed.add(reader.name);
+    }
   }
 
   for (const path of consumed) {

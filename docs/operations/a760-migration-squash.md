@@ -1,5 +1,10 @@
 # A760 migration squash operator plan
 
+> **7 November 2026, A1427:** ordinary main pushes no longer publish SHA images. Use a successful
+> full nightly or manual main run's pinned image, or a fully verified release. See
+> [CI modes](../developers/ci-and-gates.md#scoped-tests-and-full-verification).
+
+
 > **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
 > deleted on the owner's word; the files are readable at commit f519799de0.
 
