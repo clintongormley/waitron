@@ -11,7 +11,7 @@ import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { cleanupWidgets, menuDocument, mountWidget } from "./widgets/test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { formMessageOf, lockupWordBaseline, textBaseline } from "@waitron/ui/src/test-helpers.js";
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
@@ -873,6 +873,31 @@ describe("dashboard-app", () => {
         toggle.getBoundingClientRect().right + parseFloat(getComputedStyle(identity).columnGap),
         0,
       );
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it("sets the venue's name on the lockup word's baseline, the lockup centred on the navigation toggle", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+
+    const banner = brandBanner(el)!;
+    const logo = banner.querySelector<WtWaitronLockup>(".brand-logo")!;
+    const toggle = banner.querySelector<HTMLElement>("[data-test=nav-toggle]")!;
+    const name = banner.querySelector<HTMLElement>("[data-test=venue-name]")!;
+    const middle = (e: Element) => {
+      const box = e.getBoundingClientRect();
+      return (box.top + box.bottom) / 2;
+    };
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(1280, 800);
+      await logo.updateComplete;
+      expect(name.textContent!.trim()).not.toBe("");
+      expect(textBaseline(name)).toBeCloseTo(lockupWordBaseline(logo), 0);
+      expect(Math.abs(middle(logo) - middle(toggle))).toBeLessThanOrEqual(1);
     } finally {
       await page.viewport(width, height);
     }

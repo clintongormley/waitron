@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { mountThemed } from "../a11y-helpers.js";
-import { cleanup, host, mount } from "../test-helpers.js";
+import { cleanup, host, lockupWordBaseline, mount, textBaseline } from "../test-helpers.js";
 import type { WtWaitronLockup } from "./wt-waitron-lockup.js";
 import "./wt-waitron-lockup.js";
 import lockupSource from "../../brand/waitron-lockup.svg?raw";
@@ -80,6 +80,26 @@ describe("wt-waitron-lockup", () => {
     expect(box.height).toBe(40);
     expect(box.width).toBeCloseTo((40 * w!) / h!, 1);
   });
+
+  it.each([
+    ["its width", "width: 256px"],
+    ["its height", "height: 44px"],
+  ])(
+    "lines up text set beside it by baseline with the word's baseline, sized by %s",
+    async (_, size) => {
+      await mount(
+        `<div style="display: flex; align-items: baseline; font-size: 14px">` +
+          `<wt-waitron-lockup style="${size}"></wt-waitron-lockup><span>Casa Delgado</span></div>`,
+      );
+      const el = host.querySelector<WtWaitronLockup>("wt-waitron-lockup")!;
+      await el.updateComplete;
+      expect(textBaseline(host.querySelector("span")!)).toBeCloseTo(lockupWordBaseline(el), 0);
+      expect(el.getBoundingClientRect().height).toBeCloseTo(
+        svg(el).getBoundingClientRect().height,
+        1,
+      );
+    },
+  );
 
   it("is an image named Waitron by default", async () => {
     const el = await lockup();

@@ -2,7 +2,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { commands, page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
+import {
+  lockupWordBaseline,
+  mediaTestReference,
+  textBaseline,
+} from "@waitron/ui/src/test-helpers.js";
 import { THEME_STORAGE_KEY, chooseTheme } from "@waitron/ui/src/theme-choice.js";
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import {
@@ -51,6 +55,24 @@ const strip = (el: Preview, mode: "light" | "dark") =>
 const logoOf = (el: Preview, mode: "light" | "dark") =>
   strip(el, mode).querySelector<HTMLElementTagNameMap["wt-venue-logo"]>("wt-venue-logo")!;
 const boxOf = (logo: HTMLElement) => logo.shadowRoot!.querySelector<HTMLElement>(".box")!;
+
+it("with no logo, the legal name sits on the lockup word's baseline", async () => {
+  const { el } = await mountWithLogo(null);
+  for (const mode of ["light", "dark"] as const) {
+    const lockup = strip(el, mode).querySelector<WtWaitronLockup>("wt-waitron-lockup.lockup")!;
+    await lockup.updateComplete;
+    const name = strip(el, mode).querySelector(".legal-name")!;
+    expect(textBaseline(name)).toBeCloseTo(lockupWordBaseline(lockup), 0);
+  }
+});
+
+it("with a logo, the legal name is centred on it", async () => {
+  const { el } = await mountWithLogo({ light: L });
+  const logo = await loaded(el, "light");
+  const middle = (r: DOMRect) => (r.top + r.bottom) / 2;
+  const name = strip(el, "light").querySelector(".legal-name")!;
+  expect(middle(name.getBoundingClientRect())).toBeCloseTo(middle(logo.getBoundingClientRect()), 0);
+});
 
 /** Waits until the panel's logo has its image and has measured it. */
 async function loaded(el: Preview, mode: "light" | "dark"): Promise<HTMLElement> {

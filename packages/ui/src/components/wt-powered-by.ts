@@ -11,7 +11,7 @@ export class WtPoweredBy extends LitElement {
     css`
       :host {
         display: flex;
-        align-items: center;
+        align-items: baseline;
         justify-content: center;
         gap: var(--wt-space-2);
         font-size: var(--wt-font-size-sm);

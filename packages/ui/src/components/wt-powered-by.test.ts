@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands } from "vitest/browser";
 import { mountThemed } from "../a11y-helpers.js";
-import { cleanup, host, mount } from "../test-helpers.js";
+import { cleanup, host, lockupWordBaseline, mount, textBaseline } from "../test-helpers.js";
 import { THEME_STORAGE_KEY, chooseTheme, startThemeChoice } from "../theme-choice.js";
 import type { WtPoweredBy } from "./wt-powered-by.js";
 import type { WtWaitronLockup } from "./wt-waitron-lockup.js";
@@ -51,6 +51,13 @@ afterEach(async () => {
 });
 
 describe("wt-powered-by", () => {
+  it.each(["12px", "24px"])("sets %s words on the lockup word's baseline", async (size) => {
+    const el = await poweredBy("light");
+    el.style.setProperty("--wt-font-size-sm", size);
+    await lockup(el).updateComplete;
+    expect(textBaseline(label(el))).toBeCloseTo(lockupWordBaseline(lockup(el)), 0);
+  });
+
   it("paints its words from its tokens", async () => {
     const el = await poweredBy("light");
     el.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
@@ -60,12 +67,11 @@ describe("wt-powered-by", () => {
     expect(style.fontSize).toBe("17px");
   });
 
-  it("lays its words and lockup out in a centred row", async () => {
+  it("lays its words and lockup out in a row centred across its width", async () => {
     const el = await poweredBy("light");
     el.style.setProperty("--wt-space-2", "11px");
     const style = getComputedStyle(el);
     expect(style.display).toBe("flex");
-    expect(style.alignItems).toBe("center");
     expect(style.justifyContent).toBe("center");
     expect(style.columnGap).toBe("11px");
   });

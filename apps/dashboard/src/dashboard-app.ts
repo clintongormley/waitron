@@ -649,8 +649,21 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      /* Lockup and name line up by baseline in a row of their own: in .brand-identity, the taller
+         navigation toggle would set the line and push both to its top. */
+      .brand-line {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        min-width: 0;
+        gap: var(--wt-space-3);
+      }
+
+      .brand-line:has(> .brand-logo) {
+        align-items: baseline;
+      }
+
       .brand-logo {
-        display: block;
         flex: 0 0 auto;
         width: calc(var(--wt-space-6) * 4);
       }
@@ -670,6 +683,7 @@ export class DashboardApp extends LitElement {
 
       .banner-powered-by {
         flex: 0 0 auto;
+        align-self: center;
         margin-inline-start: auto;
         padding-inline-end: var(--wt-space-3);
         border-inline-end: 1px solid var(--wt-color-border);
@@ -762,7 +776,8 @@ export class DashboardApp extends LitElement {
             "venue venue venue venue";
           gap: var(--wt-space-2) 0;
         }
-        .brand-identity {
+        .brand-identity,
+        .brand-line {
           display: contents;
         }
         .nav-toggle {
@@ -2114,20 +2129,22 @@ export class DashboardApp extends LitElement {
               ></wt-button>`
             : nothing
         }
-        ${this.#brandMark()}
-        <span class="venue-row"
-          ><span class="venue">
-            <span class="venue-name" data-test="venue-name">${this.venueName}</span>
-            ${
-              this.onboardingIntent === "live"
-                ? html`<span class="mode-indicator" data-test="mode-indicator"
-                    >${t("mode.live")}</span
-                  >`
-                : nothing
-            }
-          </span>
-          ${authenticated ? this.#poweredBy("banner-powered-by") : nothing}</span
-        >
+        <div class="brand-line">
+          ${this.#brandMark()}
+          <span class="venue-row"
+            ><span class="venue">
+              <span class="venue-name" data-test="venue-name">${this.venueName}</span>
+              ${
+                this.onboardingIntent === "live"
+                  ? html`<span class="mode-indicator" data-test="mode-indicator"
+                      >${t("mode.live")}</span
+                    >`
+                  : nothing
+              }
+            </span>
+            ${authenticated ? this.#poweredBy("banner-powered-by") : nothing}</span
+          >
+        </div>
       </div>
       <div class="banner-actions">
         ${

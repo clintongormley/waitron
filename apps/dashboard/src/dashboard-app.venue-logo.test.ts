@@ -122,6 +122,27 @@ it.each([
   },
 );
 
+it("the legal name is centred on the venue's logo", async () => {
+  store(withLogo(LIGHT, DARK));
+  startVenueTheme(document.documentElement, { fetchImpl: never });
+  const loads = nextLogoLoad();
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await page.viewport(1280, 800);
+    const { el } = await mount(stubApi(true));
+    await loads;
+    const middle = (e: Element) => {
+      const box = e.getBoundingClientRect();
+      return (box.top + box.bottom) / 2;
+    };
+    const name = banner(el).querySelector("[data-test=venue-name]")!;
+    expect(middle(name)).toBeCloseTo(middle(venueLogo(el)!), 0);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
 it("an empty place until the answer, never Waitron's first", async () => {
   const first = byHand();
   startVenueTheme(document.documentElement, { fetchImpl: first.fetchImpl });

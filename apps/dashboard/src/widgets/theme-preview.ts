@@ -84,8 +84,10 @@ export class ThemePreview extends LitElement {
         padding: 0 var(--wt-space-3) var(--wt-space-3);
         border-bottom: 1px solid var(--wt-color-border);
       }
+      .strip:has(> .lockup) {
+        align-items: baseline;
+      }
       .lockup {
-        display: block;
         flex: none;
         height: var(--wt-space-5);
       }
@@ -308,9 +310,7 @@ export class ThemePreview extends LitElement {
     return html`<figure data-mode=${mode}>
       <h4>${t(`appearance.preview_${mode}`)}</h4>
       <div class="panel" data-theme=${mode} aria-hidden="true">
-        <div class="strip">
-          ${this.#logo()}<span class="legal-name">${this.legalName}</span>
-        </div>
+        <div class="strip">${this.#logo()}<span class="legal-name">${this.legalName}</span></div>
         <div class="nav">
           <span class="nav-item selected">${t("nav.appearance")}</span>
           <span class="nav-item">${t("nav.devices")}</span>
