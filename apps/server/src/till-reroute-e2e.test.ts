@@ -73,7 +73,7 @@ vi.mock("./promote-api.js", async (original) => {
 //
 //   1. A answers `acceptingSales:true`, B `:false` — the truth a till's `ServerRouter` routes on, taken
 //      from the REAL boot posture, not a stub.
-//   2. B (a standby) refuses a till login (read-only gate → `node.read_only`) and mounts no device group.
+//   2. B (a standby) refuses a till login (read-only gate → `node.read_only`) and refuses private device reads.
 //   3. The seeded device cookie authenticates on A (the selling node); A logs a till in.
 //   4. A goes down (its listener closes; a till sees an unreachable box). B is promoted (the deployment
 //      flip a human's promote performs) and RESTARTED — `acceptingSales` is boot-captured, so an
@@ -326,13 +326,13 @@ describe("till reroute — two instances, one venue", () => {
       expect(await probe(portA)).toEqual(FIXTURE.aPrimary);
       expect(await probe(portB)).toEqual(FIXTURE.bStandby);
 
-      // 2. B is a standby: it refuses a till login at the door (the read-only gate 403s every write on a
-      // mirror) and mounts no device group (404). FAILING CASE: were the read-only gate to miss POST, B
-      // would 200 the login and a standby would be selling.
+      // A spare refuses till writes and private reads even with a device cookie.
       const refused = await post(portB, "/api/session", { personId: PERSON, pin: "5555" });
       expect(refused.status).toBe(403);
       expect((await refused.json()).error.code).toBe("node.read_only");
-      expect((await get(portB, "/api/device/me", DEVICE_COOKIE_HEADER)).status).toBe(404);
+      const meOnB = await get(portB, "/api/device/me", DEVICE_COOKIE_HEADER);
+      expect(meOnB.status).toBe(403);
+      expect((await meOnB.json()).error.code).toBe("node.spare");
 
       // 3. The seeded device cookie authenticates on A (the selling node), and A logs the till in.
       const meOnA = await get(portA, "/api/device/me", DEVICE_COOKIE_HEADER);

@@ -189,6 +189,11 @@ for (const enabled of [true, false]) {
               if (mode === "setup" && path.startsWith("/api/")) {
                 expect(response.status).toBe(200);
                 expect(response.headers.get("content-type")).toContain("text/html");
+              } else if (mode === "mirror") {
+                expect(response.status, path).toBe(403);
+                expect(await response.json()).toMatchObject({
+                  error: { code: "node.spare", params: {} },
+                });
               } else expect(response.status, path).toBe(404);
             }
             const response = await fetch(`${origin}/management-api/me/attendance/commands`, {

@@ -705,7 +705,6 @@
   "src/mirror-bundle-api.test.ts": 19.8,
   "src/mirror-bundle-fetch.test.ts": 5.8,
   "src/mirror-bundle.test.ts": 14.9,
-  "src/mirror-session.test.ts": 5.2,
   "src/misdated-sales-csv.test.ts": 0.8,
   "src/modifier-selection.test.ts": 1.1,
   "src/modifier-selection.unit-fallback.test.ts": 1.3,

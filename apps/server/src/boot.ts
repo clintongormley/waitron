@@ -407,8 +407,9 @@ import { loadBoxEnv } from "./box-env.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
-import { endMirrorViewer, ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
+import { endMirrorViewer } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
+import { spareReadGate } from "./spare-read-gate.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
@@ -1702,7 +1703,6 @@ async function bootServer(
   // no deployment axes or membership.
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
-    // Unauthenticated and deliberately minimal: no ambient viewer exists yet.
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
     mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: config.node.nodeId }, log);
     mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
@@ -2028,12 +2028,7 @@ async function bootServer(
   // Asked on each call, unlike `isSingletonPrimary`: the role can change while the box runs.
   const filesRecords = () =>
     fiscalDrainEnabled(config) && holders.singletonRole.current === "primary";
-  // FAIL CLOSED before the mirror's ambient full-admin viewer is seeded below: the loopback default
-  // of `config.httpHost` is the only thing keeping it off the network, so a non-loopback bind is
-  // refused unless the operator opts in (`WAITRON_MIRROR_ALLOW_EXPOSED`).
   assertMirrorBindSafe(config, isMirror, env);
-  // Resolved once so the mirror's ambient session and every mounted login surface agree with the
-  // listener about whether cookies require HTTPS.
   const secureCookies = resolveTradingTls(config) !== undefined;
   const isReadOnly = () => holders.mode.current === "mirror" || fenced;
   if (fencedOrMirror) {
@@ -2046,15 +2041,8 @@ async function bootServer(
       ),
     );
   }
-  if (isMirror) {
-    const viewerToken = await ensureMirrorViewer(db);
-    app.use(
-      "*",
-      mirrorSession(db, secureCookies, () => holders.mode.current, viewerToken),
-    );
-  } else {
-    await endMirrorViewer(db);
-  }
+  await endMirrorViewer(db);
+  if (isMirror) app.use("*", spareReadGate());
 
   // The node whose DATA the node-scoped read paths display. On a mirror it is the ORIGIN primary,
   // whose node_id the venue's sales carry; `config.node.nodeId` stays the node's own identity for

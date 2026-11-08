@@ -142,6 +142,13 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
             expect(await refused.json()).toMatchObject({
               error: { code: "authorization.not_permitted" },
             });
+          } else if (mode === "mirror") {
+            for (const response of [options, await get(own), await get(manager)]) {
+              expect(response.status).toBe(403);
+              expect(await response.json()).toMatchObject({
+                error: { code: "node.spare", params: {} },
+              });
+            }
           } else {
             expect(options.status).toBe(404);
             expect((await get(own)).status).toBe(404);

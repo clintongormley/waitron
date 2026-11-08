@@ -69,8 +69,7 @@ function stripLiteral(host: string): string {
 }
 
 /**
- * `localhost`, 127.0.0.0/8 or `::1`. Fail-closed for the mirror-bind guard, which passes the raw
- * `WAITRON_HTTP_HOST`: any spelling not recognised as loopback returns `false`.
+ * `localhost`, 127.0.0.0/8 or `::1`; any spelling not recognised as loopback returns `false`.
  */
 export function isLoopbackHost(host: string): boolean {
   const h = stripLiteral(host.toLowerCase());

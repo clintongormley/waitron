@@ -1,5 +1,8 @@
 # A980 slice S3: find an invoice customer by tax number, and download what the box holds about them
 
+> **2026-11-08, A1113:** the mirror's ambient administrator and dashboard are retired. All private
+> mirror reads now refuse; the mirror-access observations below are historical.
+
 **Status: plan, 2026-10-26, rounds 1 and 3 of review folded. Nothing was built when this was
 written.** **2026-10-26 pointer:** the owner withdrew A1111 the same morning (a mirror serves no
 dashboard; lane B's `questions.md`, "OWNER DECISION (2026-10-26 ~04:25 CET)"), so decision 14's

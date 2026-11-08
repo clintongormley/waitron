@@ -304,7 +304,15 @@ describe("the running server's Box status read and free-space deletion", () => {
         }
       });
 
-      expect((await box.get()).canFree).toBe(false);
+      if (mode === "mirror") {
+        const read = await fetch(`${box.origin}/api/box/health`, {
+          headers: { cookie: box.venue.managerCookie },
+        });
+        expect(read.status).toBe(403);
+        expect(await read.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
+      } else {
+        expect((await box.get()).canFree).toBe(false);
+      }
       const refused = await box.free();
       expect(refused.status).toBe(403);
       expect(await refused.json()).toEqual({ error: { code: "node.read_only", params: {} } });

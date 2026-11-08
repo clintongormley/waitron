@@ -47,8 +47,6 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
           createdAt: persons.createdAt,
         },
         signIn: {
-          // Only a value `hashSecret` wrote can match a PIN; placeholders such as the import's or
-          // the mirror viewer's cannot.
           pinSet: truth(
             sql`${persons.pinHash} is not null and substr(${persons.pinHash}, 1, ${SECRET_HASH_PREFIX.length}) = ${SECRET_HASH_PREFIX}`,
           ),

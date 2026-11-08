@@ -2,6 +2,12 @@
 
 # Environment variables — a rationalised design
 
+> **2026-11-08, A1113:** the ambient mirror viewer and its keepalive are removed. Existing viewer-session
+> revocation remains at boot. The bind guard and `WAITRON_MIRROR_ALLOW_EXPOSED` remain for the
+> promotion routes; how a spare listens on the network stays with A947 slice3b.
+> The authenticated spare switch screen belongs to A947.
+
+
 Read-only review, with cites carried to `main` at `e0da0ad18a` (4 November 2026). Every claim below cites the code or
 the grep behind it. "Set nowhere outside tests" comes from the inventory's own greps, rechecked
 here for the names that change fate (a per-name `grep -rl` over `apps packages scripts bench

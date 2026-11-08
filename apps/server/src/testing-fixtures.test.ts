@@ -4,7 +4,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { seedFiscalRegistro, insertFiscalRegistro } from "./testing/fiscal-fixtures.js";
-import { ensureMirrorViewer, MIRROR_VIEWER_SESSION_ID } from "./mirror-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
 /**
@@ -73,25 +72,5 @@ describe("the shared fixtures seed a real migrated venue", () => {
       sql`select cast(count(*) as int) as n from registros_facturacion where node_id = ${first.nodeId}`,
     );
     expect(rows[0]!.n).toBe(2);
-  });
-});
-
-describe("the mirror's ambient viewer is seeded on a real migrated venue", () => {
-  it("creates the viewer and its live session, and a second call revives rather than duplicates", async () => {
-    await ensureMirrorViewer(db);
-    await ensureMirrorViewer(db);
-    const { rows } = await db.execute<{
-      n: number;
-      last_seen_at: string;
-      ended_at: string | null;
-    }>(sql`
-      select cast(count(*) as int) as n, max(s.last_seen_at) as last_seen_at,
-             max(s.ended_at) as ended_at
-      from management_sessions s
-      join persons p on p.id = s.person_id
-      where s.id = ${MIRROR_VIEWER_SESSION_ID} and p.role = 'admin'`);
-    expect(rows[0]!.n).toBe(1);
-    expect(rows[0]!.ended_at).toBeNull();
-    expect(Number.isNaN(Date.parse(rows[0]!.last_seen_at))).toBe(false);
   });
 });

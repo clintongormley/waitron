@@ -226,8 +226,7 @@ controls remain open; no provider work is authorised.
   stamped `venue.db` with none of the box's `node.db` rows (since A947 slice 3a its mode, signing
   key, link, recovery-key check and pinned key share one `node.db` transaction); the restore guard's repeated-destination check
   compares resolved path text, so two names reaching one file through a symlink may pass;
-  `mirror-session.ts`'s keepalive keeps an `isNull(lastSeenAt)` arm on a `not null` column (dead,
-  kept on purpose); `MirrorBundle.wireguardPublicKey` is set by no production caller and read by
+  `MirrorBundle.wireguardPublicKey` is set by no production caller and read by
   nothing outside tests; `recovery-race.test.ts`'s header has no "weaker than its name" hedge
   though CLAUDE.md describes the guard that way. Test titles #625 could not touch:
   "…even when the retired variable is set" (`backup-config.test.ts`, still sets a `postgres://`
@@ -942,6 +941,12 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   as a refactor larger than that PR (its simplify review, 2026-10-15).
 
 ## Decisions and deliberate limits
+
+**A mirror serves no dashboard (owner, 2026-10-26; scope narrowed by the watcher, 2026-11-08).**
+A spare shows its status and refuses restaurant screens and data. Its ambient administrator is
+retired; an already-issued viewer token is revoked at trading boot. The authenticated switch
+screen belongs to A947. Promotion and signed-peer endpoints retain their own authentication.
+
 
 **Owner decision 2026-11-04 — a minute name the old box selected but never activated counts as
 used** (A1018 Slice 4's Ruling R3, landed in #2442). The handover manifest marks

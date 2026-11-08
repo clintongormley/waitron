@@ -241,7 +241,7 @@ describe("clock handler absence with workforce absent", () => {
 describe("read-only real boot clocking", () => {
   const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
   it.each(["mirror", "fenced"] as const)(
-    "a %s advertises no clocking and refuses clock writes",
+    "a %s offers no clocking and refuses clock writes",
     async (mode) => {
       beforeServerStarts();
       const venue = await createClockVenue(suite.db, () => new Date());
@@ -290,8 +290,13 @@ describe("read-only real boot clocking", () => {
         await awaitListening(port);
         const origin = `http://127.0.0.1:${port}`;
         const boot = await fetch(`${origin}/api/till`, { headers: { cookie: venue.cookie } });
-        expect(boot.status).toBe(200);
-        expect(await boot.json()).toMatchObject({ clockingAvailable: false });
+        if (mode === "mirror") {
+          expect(boot.status).toBe(403);
+          expect(await boot.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
+        } else {
+          expect(boot.status).toBe(200);
+          expect(await boot.json()).toMatchObject({ clockingAvailable: false });
+        }
         for (const path of ["in", "out", "break-start", "break-end"]) {
           const response = await fetch(`${origin}/api/clock/${path}`, {
             method: "POST",

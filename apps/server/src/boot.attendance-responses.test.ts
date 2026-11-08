@@ -218,6 +218,11 @@ for (const enabled of [true, false]) {
                 expect(response.status).toBe(200);
                 expect(response.headers.get("content-type")).toContain("text/html");
                 expect(await response.text()).toMatch(/set ?up/i);
+              } else if (mode === "mirror") {
+                expect(response.status, path).toBe(403);
+                expect(await response.json()).toMatchObject({
+                  error: { code: "node.spare", params: {} },
+                });
               } else expect(response.status, path).toBe(404);
             }
             for (const path of [

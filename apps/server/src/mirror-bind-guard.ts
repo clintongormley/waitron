@@ -1,6 +1,3 @@
-// A mirror serves an unauthenticated full-admin dashboard (`mirrorSession`); the only thing keeping
-// it off the network is binding a loopback `httpHost`. The opt-in silences this guard; it does not
-// add authentication. A primary may bind non-loopback, so the guard is mirror-only.
 import { AppError } from "@waitron/shared";
 import type { ServerConfig } from "./config.js";
 import { isLoopbackHost } from "./primary-url.js";
@@ -8,8 +5,7 @@ import "./errors.js";
 
 /**
  * Call before the listener binds. `config.httpHost` is the raw env value; `isLoopbackHost` treats
- * any form it does not recognise as non-loopback, so this can refuse a loopback bind but never
- * allow a non-loopback one.
+ * unrecognised forms as non-loopback, requiring an explicit exposure opt-in.
  */
 export function assertMirrorBindSafe(
   config: Pick<ServerConfig, "httpHost">,

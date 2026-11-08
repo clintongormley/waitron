@@ -1,3 +1,10 @@
+> **2026-11-08, A1113:** the ambient administrator, dashboard and keepalive are removed;
+> existing viewer tokens are revoked at boot. Fact6 and Task1 below describe the earlier code.
+> The bind guard and `WAITRON_MIRROR_ALLOW_EXPOSED` remain: the A1113 execution review reached
+> legacy promotion over plain HTTP and handover sign-ins without a password limit. A947 still
+> owns how a spare listens on the network and the authenticated switch screen. See the
+> [narrowed A1113 plan](2026-11-08-a1113-spare-screen.md).
+
 > **2026-11-08: A1321 design pending OWNER approval.**
 > [Retire a dead or reset spare](../specs/2026-11-08-a1321-retire-spare-design.md) already tracks
 > D17/Task 6.10's proposed backlog filing; do not create a duplicate. Its build waits for 3b-6

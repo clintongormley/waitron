@@ -1,5 +1,10 @@
 # Servers
 
+## When you open the spare box {#spare}
+
+If you see **This box is the spare**, open the main box’s address to use the restaurant screens
+and data. The spare’s page shows its status; it takes no sales and offers no dashboard sign-in.
+
 ## When a box no longer runs the venue {#handed-over}
 
 If you open a box's address in a browser and see a page titled **This box no longer runs the

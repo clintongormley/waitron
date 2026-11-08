@@ -281,7 +281,7 @@ it.each([
 );
 
 it.each(["mirror", "primary"] as const)(
-  "%s reads the correct node's rows while retaining its own box identity",
+  "%s retains its own box identity and gates report reads",
   async (mode) => {
     const originNode = "77777777-7777-4777-8777-777777777777";
     await source.db
@@ -351,19 +351,24 @@ it.each(["mirror", "primary"] as const)(
         `${base}/management-api/reports/period?from=2026-06-10&to=2026-06-10`,
         { headers },
       );
-      expect(response.status).toBe(200);
-      const amount = mode === "mirror" ? "10.00" : "90.00";
-      expect(await response.json()).toStrictEqual({
-        from: "2026-06-10",
-        to: "2026-06-10",
-        vat: {
-          byRate: [{ rate: "0.00", base: amount, tax: "0.00" }],
-          baseTotal: amount,
-          taxTotal: "0.00",
-          grossTotal: amount,
-        },
-        topSellers: [],
-      });
+      if (mode === "mirror") {
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
+      } else {
+        expect(response.status).toBe(200);
+        const amount = "90.00";
+        expect(await response.json()).toStrictEqual({
+          from: "2026-06-10",
+          to: "2026-06-10",
+          vat: {
+            byRate: [{ rate: "0.00", base: amount, tax: "0.00" }],
+            baseTotal: amount,
+            taxTotal: "0.00",
+            grossTotal: amount,
+          },
+          topSellers: [],
+        });
+      }
       const probe = await fetch(`${base}/api/node`);
       expect(probe.status).toBe(200);
       expect(await probe.json()).toMatchObject({
