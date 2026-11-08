@@ -193,15 +193,9 @@ lease design; the controlled Hono/transport probe is not a hardware throughput m
 A1372 checks the claim against delivered history using the existing printer/status index.
 Its local synthetic database measurement excludes authentication, discovery and physical output.
 Measure those costs on the box, and measure large retained queues separately. The status ranges
-still include failed jobs with no attempts left and drawer claims that never expire, as well as
+still include failed jobs with no attempts left and drawer claims awaiting a result, as well as
 live document leases. The review measured higher claim cost with both queued work and exhausted
 failures present; it did not isolate which part of the statement caused that increase.
-
-## Make an unreported drawer outcome explicit without repeating its pulse
-
-A drawer whose claim or done report was lost stays listed as “printing”, without Resend or an
-automatic expiry. Preserve single-attempt delivery while deciding how to show that unknown
-outcome. A517's lost-report route case pins the current row and its non-resendable listing.
 
 ## Waitron carries two QR encoders; consolidate on `qrcode-generator`
 
@@ -476,12 +470,6 @@ actually happened.
   case, after a server restart (the command store is held in memory), and for a printer unpaired
   outside Waitron; Disable keeps them too.
 
-## A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not covered")
-
-- **A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not
-  covered")**, as a USB printer no agent sees does. If no agent currently reports that printer
-  as visible, its jobs remain waiting.
-
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
 A268 discards a waiting device's request when the last Add dialog closes. An agent told
@@ -512,12 +500,6 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 
 Since A841 slice 7, a theme's logo (`theme_logo` in `listImageUsages`) is a second logo use that
 only the app keeps from deletion; no trigger protects it either.
-
-## A drawer kick for a USB printer that is not connected waits with no expiry
-
-- **A drawer kick for a USB printer that is not connected waits with no expiry**, and is claimed when
-  the printer reappears, so the drawer can open long after the sale (`packages/printing/src/runtime.ts`). (A Bluetooth printer's jobs end when
-  it is unpaired or the agent reports no Bluetooth printing; the design's §11 says "USB or Bluetooth".) [Design §11](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
 
 ## Loose ends left by #367
 
@@ -710,21 +692,6 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   because the check sent nothing; that reasoning no longer covers the follow-up query.
 - **While a discovery window is open, a device not reported within 45 seconds drops off the list**
   until its next report; 45 seconds does not cover every scan pass (C102, #953).
-
-## Bundle: A drawer or print job always ends, and says why it waits
-
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A drawer kick for a USB printer that is not connected waits with no expiry**, and is claimed when
-  the printer reappears, so the drawer can open long after the sale (`packages/printing/src/runtime.ts`).
-  [Detail](printers.md#a-drawer-kick-for-a-usb-printer-that-is-not-connected-waits-with-no-expiry)
-- **Make an unreported drawer outcome explicit without repeating its pulse** — a lost claim or
-  done report remains “printing”, with no resend or automatic expiry.
-  [Detail](printers.md#make-an-unreported-drawer-outcome-explicit-without-repeating-its-pulse)
-- **A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not
-  covered")**, as a USB printer no agent sees does. No agent currently reporting the printer as
-  visible leaves its jobs waiting.
-  [Detail](printers.md#a-bluetooth-printer-no-agent-reports-paired-still-waits-with-no-reason-on-the-job-a139s-not-covered)
 
 ## Bundle: Bluetooth pairing commands
 

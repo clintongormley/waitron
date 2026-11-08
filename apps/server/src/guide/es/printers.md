@@ -32,3 +32,13 @@ impresora** en los detalles de la impresora la repite.
 Elige el nombre de una impresora en la pestaña **Impresoras** o en la **Cola de impresión** para
 abrir sus detalles. **Activa** la enciende o la apaga al momento. **Editar** cambia su nombre y, si
 es de red, su dirección. **Calibrar impresora** repite la calibración.
+
+## Cola de impresión {#print-queue}
+
+Abre **Cola de impresión** para ver por qué espera un trabajo. Si ningún agente ve una impresora
+USB o Bluetooth, comprueba la conexión de la impresora y su agente de impresión. El mensaje de
+conexión puede aparecer junto al último error de impresión comunicado.
+
+Las órdenes del cajón no se pueden reenviar. Si una orden caducó antes de enviarse, vuelve a
+abrir el cajón si hace falta. Si no se recibió el resultado, comprueba si el cajón se abrió antes
+de volver a abrirlo.

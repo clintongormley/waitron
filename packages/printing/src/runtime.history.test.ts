@@ -61,11 +61,22 @@ async function measuredClaim(
 ) {
   const statements = vi.spyOn(tx, "execute");
   const candidates = new Set<string>();
+  const settlementCandidates = new Set<string>();
   const prepare = DatabaseSync.prototype.prepare;
   const observer = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (
     this: DatabaseSync,
     text,
   ) {
+    if (text.trimStart().startsWith("update print_jobs as j")) {
+      this.function("observe_settlement_kind", (id, kind) => {
+        settlementCandidates.add(String(id));
+        return kind;
+      });
+      return prepare.call(
+        this,
+        text.replaceAll("pending.kind", "observe_settlement_kind(pending.id, pending.kind)"),
+      );
+    }
     if (!text.trimStart().startsWith('update "print_jobs"')) return prepare.call(this, text);
     this.function("observe_claim_kind", (id, kind) => {
       candidates.add(String(id));
@@ -95,11 +106,22 @@ async function measuredClaim(
     .filter((query) => typeof query !== "string")
     .filter((query) => dialect.sqlToQuery(query.getSQL()).sql.includes('update "print_jobs"'));
   expect(claims).toHaveLength(1);
+  const settlements = calls
+    .filter((query) => typeof query !== "string")
+    .filter((query) =>
+      dialect.sqlToQuery(query.getSQL()).sql.trimStart().startsWith("update print_jobs as j"),
+    );
+  expect(settlements).toHaveLength(1);
+  const settlementPlan = tx.execute<{ detail: string }>(
+    sql`explain query plan ${settlements[0]!}`,
+  ).rows;
   const query = claims[0]!;
   const plan = tx.execute<{ detail: string }>(sql`explain query plan ${query}`).rows;
   return {
     jobs,
     candidates,
+    settlementCandidates,
+    settlementPlan: settlementPlan.map((row) => row.detail),
     plan: plan.map((row) => row.detail),
   };
 }
@@ -125,8 +147,10 @@ describe("print claims with delivered history", () => {
           transport: "network_tcp",
           host: "other-printer.test",
         });
+        const otherJobId = randomUUID();
         if (specific)
           await tx.insert(printJobs).values({
+            id: otherJobId,
             locationId: venueId,
             printerId: other.id,
             payload: Buffer.from([1]),
@@ -137,6 +161,11 @@ describe("print claims with delivered history", () => {
         const result = await measuredClaim(tx, agentId, specific ? printerId : undefined, invoice);
         expect(result.jobs).toEqual([]);
         expect([...result.candidates]).toEqual([]);
+        expect([...result.settlementCandidates]).toEqual(specific ? [otherJobId] : []);
+        expect(result.settlementPlan.join("\n")).toMatch(
+          /SEARCH pending USING INDEX print_jobs_pull_idx \(printer_id=\? AND status=\?\)/,
+        );
+        expect(result.settlementPlan.join("\n")).not.toMatch(/SCAN (?:j|pending)\b/);
         expect(result.plan.join("\n")).toMatch(
           /SEARCH (?:j|pending) USING INDEX print_jobs_pull_idx \(printer_id=\? AND status=\?\)/,
         );
@@ -189,7 +218,9 @@ describe("print claims with delivered history", () => {
       expect(await claimPrintJobs(tx, agentId, { visibleKeys: [] })).toEqual([]);
       const [uncertainDrawer] = await tx.select().from(printJobs).where(eq(printJobs.id, drawer!));
       expect(uncertainDrawer).toMatchObject({
-        status: "printing",
+        status: "failed",
+        lastError: "print_job.drawer_outcome_unknown",
+        attempts: 0,
         claimedAt: "2025-01-01T00:00:00.000Z",
         claimedBy: null,
       });

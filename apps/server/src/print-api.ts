@@ -1141,7 +1141,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         }>(sql`
           select printer_id,
             cast(count(*) filter (where status in ('queued', 'printing')
-              or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS})) as int) as pending_jobs,
+              or (kind = 'document' and status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS})) as int) as pending_jobs,
             max(delivered_at) as last_print_at,
             (select latest.claimed_by from print_jobs latest
               where latest.printer_id = jobs.printer_id and latest.delivered_at is not null
@@ -1446,6 +1446,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             printerId: printJobs.printerId,
             printerName: printers.name,
             printerDeletedAt: printers.deletedAt,
+            printerActive: printers.active,
+            printerTransport: printers.transport,
+            printerLocalKey: printers.localKey,
             status: printJobs.status,
             kind: printJobs.kind,
             receiptCopy: printJobs.receiptCopy,
@@ -1491,13 +1494,42 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ),
           );
         const reservedSales = new Set(reserved.map((job) => job.saleId));
-        return jobs.map(({ kind, printerDeletedAt, receiptCopy, saleId, ...job }) => ({
-          ...job,
-          canResend:
+        const checkedAt = Date.now();
+        const visible = new Set(
+          [...discovered.values()]
+            .filter((entry) => isFresh(entry.visibleAt, checkedAt))
+            .map((entry) => `${entry.transport}:${entry.localKey}`),
+        );
+        return jobs.map(
+          ({
+            kind,
+            printerDeletedAt,
+            printerActive,
+            printerTransport,
+            printerLocalKey,
+            receiptCopy,
+            saleId,
+            ...job
+          }) => ({
+            ...job,
+            ...(printerActive &&
             printerDeletedAt === null &&
-            !(receiptCopy === false && reservedSales.has(saleId)) &&
-            canResendPrintJob({ ...job, kind, receiptCopy }),
-        }));
+            printerLocalKey !== DEMO_PRINTER_KEY &&
+            (printerTransport === "usb" || printerTransport === "bluetooth") &&
+            (job.status === "queued" ||
+              job.status === "printing" ||
+              (kind === "document" &&
+                job.status === "failed" &&
+                job.attempts < MAX_DELIVERY_ATTEMPTS)) &&
+            !visible.has(`${printerTransport}:${printerLocalKey}`)
+              ? { waitReason: "printer.not_visible" as const }
+              : {}),
+            canResend:
+              printerDeletedAt === null &&
+              !(receiptCopy === false && reservedSales.has(saleId)) &&
+              canResendPrintJob({ ...job, kind, receiptCopy }),
+          }),
+        );
       });
       return c.json(rows);
     }),

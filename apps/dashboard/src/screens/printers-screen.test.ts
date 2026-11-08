@@ -9871,6 +9871,66 @@ describe("Bluetooth calibration transport outcomes", () => {
     }
   });
 
+  for (const theme of ["light", "dark"] as const)
+    for (const locale of ["en", "es-ES"] as const) {
+      it.each([390, 1280])(
+        `explains drawer expiry and invisible printer waits in ${locale} ${theme} at %ipx`,
+        async (width) => {
+          const before = currentLocale();
+          setLocale(locale);
+          await page.viewport(width, 900);
+          try {
+            const { el } = await mountWith(
+              {
+                listRecentJobs: vi.fn().mockResolvedValue([
+                  job({ id: "expired", status: "failed", lastError: "print_job.drawer_expired" }),
+                  job({
+                    id: "unknown",
+                    status: "failed",
+                    lastError: "print_job.drawer_outcome_unknown",
+                  }),
+                  job({
+                    id: "waiting",
+                    status: "failed",
+                    attempts: 1,
+                    lastError: "paper out",
+                    waitReason: "printer.not_visible",
+                  }),
+                ]),
+              },
+              theme,
+            );
+            expect(text(el, "[data-test=job-error-expired]")).toBe(
+              locale === "en"
+                ? "The drawer command expired before it was sent. Open the drawer again if needed."
+                : "La orden del cajón caducó antes de enviarse. Vuelve a abrirlo si hace falta.",
+            );
+            expect(text(el, "[data-test=job-error-unknown]")).toBe(
+              locale === "en"
+                ? "No result was reported. The drawer may have opened. This command will not be retried."
+                : "No se recibió el resultado. El cajón puede haberse abierto. Esta orden no se volverá a intentar.",
+            );
+            expect(text(el, "[data-test=job-wait-waiting]")).toBe(
+              locale === "en"
+                ? "No print agent currently sees this printer. Check the printer connection and print agent."
+                : "Ningún agente de impresión ve esta impresora ahora. Comprueba la conexión de la impresora y el agente.",
+            );
+            expect(text(el, "[data-test=job-error-waiting]")).toBe("paper out");
+            expect(text(el, "[data-test=job-attempts-expired]")).toBe("0");
+            expect(text(el, "[data-test=job-attempts-unknown]")).toBe("0");
+            expect(q(el, "[data-test=resend-job-expired]")).toBeNull();
+            expect(q(el, "[data-test=resend-job-unknown]")).toBeNull();
+            await page.screenshot({
+              path: `__screenshots__/d1-jobs-${theme}-${locale}-${width}.png`,
+            });
+          } finally {
+            setLocale(before);
+            await page.viewport(1280, 900);
+          }
+        },
+      );
+    }
+
   it("shows a transport failure and its actual attempt count", async () => {
     const { el } = await mountWith({ listRecentJobs: vi.fn().mockResolvedValue([ended, jobs[0]]) });
 

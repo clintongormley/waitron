@@ -7,6 +7,10 @@ declare module "@waitron/shared" {
     "print_job.not_found": { id: string };
     /** The job is a drawer command or remains eligible for automatic delivery. */
     "print_job.not_resendable": { id: string };
+    /** An unsent drawer command expired; stored in print_jobs.last_error, never retried. */
+    "print_job.drawer_expired": Record<string, never>;
+    /** A claimed drawer has no reported outcome; repeating its pulse is forbidden. */
+    "print_job.drawer_outcome_unknown": Record<string, never>;
     /** No printer carries this id. `id` is the id looked up. */
     "printer.not_found": { id: string };
     /** A transport is missing a connection field it requires. `reason` is a stable English
@@ -20,6 +24,8 @@ declare module "@waitron/shared" {
      * and jobs a later resend of the same job has printed. Not thrown; raised by the printing alert
      * source. */
     "printer.jobs_waiting": { printer: string; count: number };
+    /** A queue-only reason: no fresh visible report names this USB/Bluetooth printer. */
+    "printer.not_visible": Record<string, never>;
     /** A print job ended because its Bluetooth printer was unpaired; it may already have printed, if
      * the agent had sent it and its report was lost. Not thrown; stored as the job's `last_error` by
      * `endUnpairedPrinterJobs`. */

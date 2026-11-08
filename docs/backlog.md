@@ -1260,7 +1260,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Department receipt preview** (bundle of 2, size S). [Detail](backlog/printers.md#bundle-department-receipt-preview)
 
-- **A drawer or print job always ends, and says why it waits** (bundle of 3, 2 important, size M). [Detail](backlog/printers.md#bundle-a-drawer-or-print-job-always-ends-and-says-why-it-waits)
 
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic

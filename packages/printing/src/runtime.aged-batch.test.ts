@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   printAgents,
   printJobs,
+  printers,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
@@ -43,11 +44,11 @@ async function fixture(kind: "document" | "drawer", separatePrinter = false) {
     const tail = await enqueuePrintJob(tx, tailPrinter.id, new Uint8Array([2]), kind);
     await tx
       .update(printJobs)
-      .set({ createdAt: "2026-10-11T00:00:00.000Z" })
+      .set({ createdAt: new Date(Date.now() - 2_000).toISOString() })
       .where(eq(printJobs.id, first.jobId));
     await tx
       .update(printJobs)
-      .set({ createdAt: "2026-10-11T00:00:01.000Z" })
+      .set({ createdAt: new Date(Date.now() - 1_000).toISOString() })
       .where(eq(printJobs.id, tail.jobId));
     return { first: first.jobId, tail: tail.jobId };
   });
@@ -206,11 +207,13 @@ describe("aged print batches", () => {
     "keeps the older failed ticket ahead on the same printer (same timestamp: %s)",
     async (sameTime) => {
       const ctx = await fixture("document");
-      if (sameTime)
+      if (sameTime) {
+        const [first] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.first));
         await suite.db
           .update(printJobs)
-          .set({ createdAt: "2026-10-11T00:00:00.000Z" })
+          .set({ createdAt: first!.createdAt })
           .where(eq(printJobs.id, ctx.tail));
+      }
       const pull = () =>
         withTransaction(suite.db, (tx) =>
           claimPrintJobs(tx, ctx.a, {
@@ -236,4 +239,141 @@ describe("aged print batches", () => {
       expect((await pull()).map((job) => job.id)).toEqual([ctx.tail]);
     },
   );
+});
+
+describe("drawer delivery time limits", () => {
+  afterEach(() => vi.useRealTimers());
+
+  async function drawer(transport: "usb" | "bluetooth" = "usb") {
+    const ctx = await fixture("drawer");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-08T12:00:00.000Z"));
+    await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, ctx.first));
+    const [row] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.tail));
+    await suite.db
+      .update(printers)
+      .set({ transport, localKey: "DRAWER" })
+      .where(eq(printers.id, row!.printerId));
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: new Date().toISOString() })
+      .where(eq(printJobs.id, ctx.tail));
+    return { ...ctx, printerId: row!.printerId };
+  }
+
+  const pull = (agentId: string, visibleKeys = ["DRAWER"]) =>
+    withTransaction(suite.db, (tx) => claimPrintJobs(tx, agentId, { visibleKeys }));
+
+  it.each(["usb", "bluetooth"] as const)(
+    "expires an unseen %s drawer before reconnection",
+    async (transport) => {
+      const ctx = await drawer(transport);
+      expect(await pull(ctx.a, [])).toEqual([]);
+      vi.setSystemTime(new Date("2026-11-08T12:00:30.000Z"));
+      const claimed = await pull(ctx.b);
+      const sent = new FakeSink();
+      for (const job of claimed)
+        await sent.send(
+          {
+            id: job.printer_id,
+            transport: job.transport,
+            host: job.host,
+            port: job.port,
+            devicePath: job.local_key,
+          },
+          new Uint8Array(job.payload),
+        );
+      expect(sent.written).toEqual([]);
+      const [row] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.tail));
+      expect(row).toMatchObject({
+        status: "failed",
+        lastError: "print_job.drawer_expired",
+        attempts: 0,
+        claimedAt: null,
+        claimedBy: null,
+      });
+    },
+  );
+
+  it("still hands out a drawer just before thirty seconds", async () => {
+    const ctx = await drawer();
+    vi.setSystemTime(new Date("2026-11-08T12:00:29.999Z"));
+    expect((await pull(ctx.a)).map((job) => job.id)).toEqual([ctx.tail]);
+  });
+
+  it("ends a disabled printer's drawer before it is enabled again without ending its document", async () => {
+    const ctx = await drawer();
+    const document = await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(tx, ctx.printerId, new Uint8Array([3])),
+    );
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, ctx.printerId));
+    vi.setSystemTime(new Date("2026-11-08T12:00:30.000Z"));
+    expect(await pull(ctx.a, [])).toEqual([]);
+    const [ended] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.tail));
+    expect(ended).toMatchObject({
+      status: "failed",
+      attempts: 0,
+      lastError: "print_job.drawer_expired",
+    });
+    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, ctx.printerId));
+    expect((await pull(ctx.b)).map((job) => job.id)).toEqual([document.jobId]);
+  });
+
+  it.each([
+    { age: 59_999, status: "printing", error: null },
+    { age: 60_000, status: "failed", error: "print_job.drawer_outcome_unknown" },
+    { age: -60_001, status: "failed", error: "print_job.drawer_outcome_unknown" },
+  ])(
+    "makes an unreported drawer explicit at claim age $age without repeating it",
+    async ({ age, status, error }) => {
+      const ctx = await drawer();
+      expect((await pull(ctx.a)).map((job) => job.id)).toEqual([ctx.tail]);
+      vi.setSystemTime(new Date(Date.parse("2026-11-08T12:00:00.000Z") + age));
+      expect(await pull(ctx.b)).toEqual([]);
+      const [row] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.tail));
+      expect(row).toMatchObject({
+        status,
+        lastError: error,
+        attempts: 0,
+        claimedBy: ctx.a,
+        claimedAt: "2026-11-08T12:00:00.000Z",
+      });
+      if (status === "failed")
+        for (const agentId of [ctx.a, ctx.b])
+          for (const outcome of [{ status: "done" }, { status: "failed", error: "late" }] as const)
+            expect(
+              await withTransaction(suite.db, (tx) =>
+                reportPrintJob(tx, { agentId, jobId: ctx.tail, outcome }),
+              ),
+            ).toEqual({ updated: false });
+    },
+  );
+
+  it("ends a drawer with a missing claim stamp without another delivery", async () => {
+    const ctx = await drawer();
+    await suite.db
+      .update(printJobs)
+      .set({ status: "printing", claimedAt: null, claimedBy: ctx.a })
+      .where(eq(printJobs.id, ctx.tail));
+    expect(await pull(ctx.b)).toEqual([]);
+    const [row] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.tail));
+    expect(row).toMatchObject({
+      status: "failed",
+      lastError: "print_job.drawer_outcome_unknown",
+      attempts: 0,
+      claimedBy: ctx.a,
+    });
+  });
+
+  it("expires a queued drawer stamped beyond its wait after a clock step back", async () => {
+    const ctx = await drawer();
+    vi.setSystemTime(new Date("2026-11-08T11:59:29.999Z"));
+    expect(await pull(ctx.b)).toEqual([]);
+    const [row] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.tail));
+    expect(row).toMatchObject({
+      status: "failed",
+      lastError: "print_job.drawer_expired",
+      attempts: 0,
+    });
+  });
 });
