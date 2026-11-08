@@ -2769,7 +2769,9 @@ export class TillApi {
   }
 
   login(personId: string, pin: string): Promise<SessionResult> {
-    return this.#request<SessionResult>("/api/session", "POST", { personId, pin });
+    return this.#request<SessionResult>("/api/session", "POST", { personId, pin }, undefined, {
+      namesPerson: false,
+    });
   }
 
   async logout(): Promise<void> {
@@ -3618,7 +3620,7 @@ export class TillApi {
       "GET",
       undefined,
       options.signal,
-      { "x-waitron-device-clock": String(Date.now()) },
+      { headers: { "x-waitron-device-clock": String(Date.now()) } },
     );
   }
 
@@ -4897,7 +4899,10 @@ export class TillApi {
     method: string,
     body?: unknown,
     signal?: AbortSignal,
-    headers?: Record<string, string>,
+    {
+      headers,
+      namesPerson = true,
+    }: { headers?: Record<string, string>; namesPerson?: boolean } = {},
   ): Promise<T> {
     const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
@@ -4909,8 +4914,7 @@ export class TillApi {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           };
-    const signIn = path === "/api/session" && method === "POST";
-    const person = signIn ? null : (this.#personSource?.() ?? null);
+    const person = namesPerson ? (this.#personSource?.() ?? null) : null;
     if (person !== null) headers = { ...headers, [PERSON_HEADER]: person.personId };
     if (headers !== undefined)
       init.headers = { ...(init.headers as Record<string, string> | undefined), ...headers };
