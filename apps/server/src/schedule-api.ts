@@ -37,6 +37,7 @@ export interface ScheduleApiDeps {
 /** The surface's whole 4xx contract; a registered code absent here defaults to 400. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "session.required": 401,
+  "session.person_not_signed_in": 409,
   "device.unauthorized": 401,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,

@@ -54,6 +54,7 @@ export interface TillBoxClockDeps {
 const run = createErrorBoundary(
   {
     "session.required": 401,
+    "session.person_not_signed_in": 409,
     "session.not_open": 401,
     "device.unauthorized": 403,
     "device_profile.not_admitted": 403,
