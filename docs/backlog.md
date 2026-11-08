@@ -1616,7 +1616,7 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
-- **A1406-2. Complete the first venue's working-time rules (go-live).** Add the yearly-hours limit and split-shift rules, plus a separate policy for the continuous shift's 20 paid break minutes after five hours. Keep `breaks_count_as_worked` as the split-shift setting; it does not currently pay a recorded break. The existing configuration import carries the rest and break-warning thresholds as [row values](operations/first-venue-work-time.md). [Findings](compliance/research/2026-11-06-adviser-labour.md)
+- **A1406-2. Complete the first venue's working-time rules (go-live).** Add split-shift rules and a separate policy for the continuous shift's 20 paid break minutes after five hours. The yearly-hours ceiling and its rota warning remain with [A586](backlog/workforce.md#a586-each-persons-contract-terms). Keep `breaks_count_as_worked` as the split-shift setting; it does not currently pay a recorded break. The existing configuration import carries the rest and break-warning thresholds as [row values](operations/first-venue-work-time.md). [Findings](compliance/research/2026-11-06-adviser-labour.md)
 
 - **Staffing reads the day start in force on each date** (bundle of 3, 1 important, size M, needs the owner). Holds A851, A644, A708. [Detail](backlog/workforce.md#bundle-staffing-reads-the-day-start-in-force-on-each-date)
 
